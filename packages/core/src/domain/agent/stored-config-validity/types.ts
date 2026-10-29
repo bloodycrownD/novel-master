@@ -1,7 +1,7 @@
 /**
  * 存储配置有效性判定类型与版本常量。
  *
- * @module config-forms/stored-config-validity/types
+ * @module domain/agent/stored-config-validity/types
  */
 
 /** 失效原因分类（用户可见文案由 labels 映射）。 */

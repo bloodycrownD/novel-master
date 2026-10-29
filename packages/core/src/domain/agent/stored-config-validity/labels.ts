@@ -1,10 +1,9 @@
 /**
  * 存储配置失效面板与列表统一文案。
  *
- * @module config-forms/stored-config-validity/labels
+ * @module domain/agent/stored-config-validity/labels
  */
 
-import { AGENT_LIST_LABELS as BASE_AGENT_LIST_LABELS } from "../shared/ui-labels.js";
 import type { StoredConfigInvalidCode } from "./types.js";
 
 /** 失效原因 → 用户可读说明。 */
@@ -34,8 +33,9 @@ export const STORED_CONFIG_LABELS = {
   agentBack: "返回",
 } as const;
 
-/** Agent 列表文案（含失效标签）。 */
+/** Agent 列表文案（含失效标签；基础项自表单层 ui-labels 并入）。 */
 export const AGENT_LIST_LABELS = {
-  ...BASE_AGENT_LIST_LABELS,
+  needsRepair: "需修复",
+  maxSteps: (n: number) => `最大步数 ${n}`,
   configInvalid: "配置已失效",
 } as const;

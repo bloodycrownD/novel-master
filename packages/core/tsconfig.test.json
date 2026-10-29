@@ -28,11 +28,7 @@
       "@novel-master/core/session-kkv": ["./src/public/session-kkv.ts"],
       "@novel-master/core/session-run-state": ["./src/public/session-run-state.ts"],
       "@novel-master/core/skills": ["./src/public/skills.ts"],
-      "@novel-master/core/config-forms": ["./src/config-forms/index.ts"],
-      "@novel-master/core/config-forms/agent": ["./src/config-forms/agent/index.ts"],
-      "@novel-master/core/config-forms/events": ["./src/config-forms/events/index.ts"],
-      "@novel-master/core/config-forms/shared": ["./src/config-forms/shared/index.ts"],
-      "@novel-master/core/config-forms/stored-config-validity": ["./src/config-forms/stored-config-validity/index.ts"]
+      "@novel-master/core/stored-config-validity": ["./src/domain/agent/stored-config-validity/index.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"]

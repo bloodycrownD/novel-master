@@ -1,5 +1,6 @@
 [
   "ALLOWED_DYNAMIC_ROOT_MACROS",
+  "DEFAULT_SKILLS_INDEX_PREFIX",
   "DEFAULT_WORKPLACE_ASSISTANT_TEXT",
   "PromptError",
   "WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT",
@@ -12,8 +13,10 @@
   "expandDynamicMacros",
   "formatPromptLlmInputForCliFromLayout",
   "formatToolUsePreviewJson",
+  "layoutHasCustomAttach",
   "layoutHasWorkplace",
   "messageBodyTextFromBlocks",
+  "normalizeAgentPromptLayoutDomain",
   "normalizeForLlmExport",
   "resolvePreviewThinkingContext",
   "resolveWorkplaceFromWire",

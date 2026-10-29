@@ -1,7 +1,7 @@
 /**
  * 存储配置有效性判定与恢复辅助（对外子入口）。
  *
- * @module config-forms/stored-config-validity
+ * @module domain/agent/stored-config-validity
  */
 
 export * from "./types.js";

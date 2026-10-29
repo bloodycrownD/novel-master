@@ -94,21 +94,9 @@
       "types": "./dist/public/skills.d.ts",
       "import": "./dist/public/skills.js"
     },
-    "./config-forms": {
-      "types": "./dist/config-forms/index.d.ts",
-      "import": "./dist/config-forms/index.js"
-    },
-    "./config-forms/agent": {
-      "types": "./dist/config-forms/agent/index.d.ts",
-      "import": "./dist/config-forms/agent/index.js"
-    },
-    "./config-forms/shared": {
-      "types": "./dist/config-forms/shared/index.d.ts",
-      "import": "./dist/config-forms/shared/index.js"
-    },
-    "./config-forms/stored-config-validity": {
-      "types": "./dist/config-forms/stored-config-validity/index.d.ts",
-      "import": "./dist/config-forms/stored-config-validity/index.js"
+    "./stored-config-validity": {
+      "types": "./dist/domain/agent/stored-config-validity/index.d.ts",
+      "import": "./dist/domain/agent/stored-config-validity/index.js"
     },
     "./locales/*": "./locales/*",
     "./presentation/chat/*": {

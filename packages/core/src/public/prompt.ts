@@ -14,8 +14,10 @@ export type {
   PersistWorktreePromptBlock,
 } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
+  layoutHasCustomAttach,
   layoutHasWorkplace,
 } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
@@ -26,6 +28,7 @@ export {
   validateAgentPromptLayout,
   resolveWorkplaceFromWire,
 } from "../domain/prompt/logic/validate-agent-prompt-layout.js";
+export { normalizeAgentPromptLayoutDomain } from "../domain/prompt/logic/normalize-agent-prompt-layout.js";
 export { normalizeForLlmExport } from "../domain/prompt/logic/normalize-for-llm-export.js";
 export type {
   LlmExportZones,

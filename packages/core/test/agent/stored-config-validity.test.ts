@@ -3,15 +3,12 @@ import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import {
+  AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
   resolveAgentDefinitionFromStorage,
   STORED_CONFIG_LABELS,
-} from "../../src/config-forms/stored-config-validity/index.js";
-import {
-  createDefaultAgentEditorPrompts,
-  layoutFromFormInput,
-} from "../../src/config-forms/agent/agent-editor-state.js";
+} from "../../src/domain/agent/stored-config-validity/index.js";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,
@@ -87,7 +84,8 @@ describe("buildDefaultAgentDefinitionPreservingName", () => {
   it("T-A3: 保留 name、默认 prompts 与 maxSteps", () => {
     const def = buildDefaultAgentDefinitionPreservingName("  我的 Agent  ");
     assert.equal(def.name, "我的 Agent");
-    assert.deepEqual(def.prompts, layoutFromFormInput(createDefaultAgentEditorPrompts()));
+    // 等价表单侧 layoutFromFormInput(createDefaultAgentEditorPrompts())（全空表单 → 空 layout）
+    assert.deepEqual(def.prompts, { persist: [], dynamic: [] });
     assert.deepEqual(def.runtime, { maxSteps: 20 });
     assert.doesNotThrow(() => {
       decode(encode(def, agentDefinitionSchema), agentDefinitionSchema);
@@ -100,6 +98,13 @@ describe("STORED_CONFIG_LABELS", () => {
     assert.equal(STORED_CONFIG_LABELS.invalidTitle, "配置已失效");
     assert.equal(STORED_CONFIG_LABELS.eventsRestoreAndSave, "恢复默认并保存");
     assert.equal(STORED_CONFIG_LABELS.agentOverwriteDefault, "用默认模板覆盖并保存");
+  });
+});
+
+describe("AGENT_LIST_LABELS", () => {
+  it("提供需修复与最大步数文案", () => {
+    assert.equal(AGENT_LIST_LABELS.needsRepair, "需修复");
+    assert.equal(AGENT_LIST_LABELS.maxSteps(12), "最大步数 12");
   });
 });
 

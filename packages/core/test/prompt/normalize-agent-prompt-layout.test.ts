@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { normalizeAgentPromptLayoutDomain } from "../../src/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import { resolveAgentDefinitionFromStorage } from "../../src/config-forms/stored-config-validity/index.js";
+import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/index.js";
 
 const BASE_LAYOUT: AgentPromptLayout = {
   persist: [],

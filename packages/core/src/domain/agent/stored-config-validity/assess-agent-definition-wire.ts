@@ -1,7 +1,7 @@
 /**
  * 智能体配置 wire 有效性判定。
  *
- * @module config-forms/stored-config-validity/assess-agent-definition-wire
+ * @module domain/agent/stored-config-validity/assess-agent-definition-wire
  */
 
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";

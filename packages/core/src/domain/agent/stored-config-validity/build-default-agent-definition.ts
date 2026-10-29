@@ -1,13 +1,9 @@
 /**
  * 用默认模板构建智能体定义（保留显示名称）。
  *
- * @module config-forms/stored-config-validity/build-default-agent-definition
+ * @module domain/agent/stored-config-validity/build-default-agent-definition
  */
 
-import {
-  createDefaultAgentEditorPrompts,
-  layoutFromFormInput,
-} from "@/config-forms/agent/agent-editor-state.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 
 /**
@@ -19,7 +15,8 @@ export function buildDefaultAgentDefinitionPreservingName(
 ): AgentDefinition {
   return {
     name: name.trim(),
-    prompts: layoutFromFormInput(createDefaultAgentEditorPrompts()),
+    // 表单层已迁出 core；此值等价 layoutFromFormInput(createDefaultAgentEditorPrompts())
+    prompts: { persist: [], dynamic: [] },
     runtime: { maxSteps: 20 },
   };
 }
