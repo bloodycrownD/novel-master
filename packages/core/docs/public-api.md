@@ -12,7 +12,7 @@
 |------|------|------|
 | 主入口 | `@novel-master/core` | 应用/bootstrap、TDBC、Tool、PersistentState、serde 等横切能力 |
 | Public 收口 | `@novel-master/core/{agent,chat,...}` | 按领域划分的 **12** 个子模块（见 `src/public/*`） |
-| 辅助子路径 | `./kkv`、`./config-forms/*`、`./tdbc`、`./sksp`、`./nmtp` | 偏好存储、UI 表单、驱动直连等 |
+| 辅助子路径 | `./kkv`、`./stored-config-validity`、`./tdbc`、`./sksp`、`./nmtp` | 偏好存储、落库配置健康判定、驱动直连等 |
 
 主入口 **不** re-export 各 public 子入口的工厂函数（见 `test/package-exports-t0.test.ts` denylist）。
 
@@ -42,14 +42,14 @@
 | `./events` | Events 配置存储 |
 | `./feature-flags` | 用户 VFS 统一 tool turn 等功能开关 |
 | `./message-checkpoint` | 消息 checkpoint 捕获与回滚工厂、类型 |
-| `./prompt` | Prompt 组装、校验与 LLM 导出（不含 config-forms 编辑器块操作） |
+| `./prompt` | Prompt 组装、校验与 LLM 导出（agent 编辑器表单变换已迁 apps 端本地副本，不在 core） |
 | `./provider` | Provider CRUD / 模型配置服务 |
 | `./regex` | Regex 配置服务 |
 | `./session-fs` | Session 文件系统回滚门面与相关错误 |
 | `./vfs` | scoped VFS 服务与工具 |
 | `./workplace` | Workplace 与 front matter 解析（`parseMarkdownFrontMatter`） |
 
-架构守卫：`public/*` 源文件 **禁止** 对 `config-forms` 的 import（`KNOWN_LEAKS` 为空）。
+架构守卫：`public/*` 源文件 **禁止** 对 `config-forms` 的 import（`KNOWN_LEAKS` 为空），且 `src/config-forms` 目录不得存在（2026-10 表单层迁出 core 后的防复活断言，见 `test/package-exports/public-no-config-forms.test.ts`）。
 
 ---
 
@@ -58,7 +58,7 @@
 | 路径 | 说明 |
 |------|------|
 | `./kkv` | App 级键值偏好（`createKkvService`） |
-| `./config-forms` 及子路径 | UI 配置表单专用 re-export |
+| `./stored-config-validity` | 落库配置健康判定（zod 解码评估、失效码、schema 版本常量）；表单层已迁 apps/mobile/src/config-forms 与 apps/desktop/shared/config-forms 本地副本 |
 | `./tdbc` / `./sksp` / `./nmtp` | SQLite / SKSP / NMTP 驱动注册与底层 API |
 
 ---
@@ -70,7 +70,7 @@
 | depth slice 工具 | `@novel-master/core/compaction` | — |
 | feature-flags（user VFS unified tool turn） | `@novel-master/core/feature-flags` | `@novel-master/core/provider` |
 | tokenizer 驱动注册 | `@novel-master/core/nmtp` | `@novel-master/core/provider` |
-| agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt` |
+| agent 编辑器块操作 | 已迁出 core：apps/mobile/src/config-forms 与 apps/desktop/shared/config-forms 各持本地副本 | `@novel-master/core/config-forms/agent`、`@novel-master/core/prompt` |
 | front matter 解析 | `@novel-master/core/workplace` | `@novel-master/core/front-matter`（已删除 export） |
 | message checkpoint | `@novel-master/core/message-checkpoint` | `@novel-master/core/session-fs` |
 
