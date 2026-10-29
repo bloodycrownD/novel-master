@@ -13,7 +13,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
-import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/config-forms/stored-config-validity";
+import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/stored-config-validity";
 import { serializeRuleSnapshot } from "@novel-master/core/workplace";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";

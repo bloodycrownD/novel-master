@@ -6,8 +6,8 @@ import {
   allocateAgentDisplayName,
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
-} from "@novel-master/core/config-forms/agent";
-import { assessAgentDefinitionWire } from "@novel-master/core/config-forms/stored-config-validity";
+} from "../../../../shared/config-forms/agent.js";
+import { assessAgentDefinitionWire } from "@novel-master/core/stored-config-validity";
 import type {
   AgentRegistryCreateBlankRequest,
   AgentRegistryDeleteRequest,

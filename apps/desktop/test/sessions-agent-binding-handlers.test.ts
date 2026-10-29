@@ -6,7 +6,7 @@ import { after, before, describe, it } from "node:test";
 import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
-} from "@novel-master/core/config-forms/agent";
+} from "../shared/config-forms/agent.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import {
   handleSessionsCreate,

@@ -72,7 +72,7 @@ import {
 import {
   agentModeMatchesTab,
   type AgentSettingsTab,
-} from "@shared/logic/config-forms-agent";
+} from "@shared/config-forms/agent";
 import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
@@ -91,7 +91,7 @@ import {
 import {
   AGENT_LIST_LABELS,
   storedConfigInvalidReason,
-} from "@shared/logic/config-forms-stored-config-validity";
+} from "@shared/logic/stored-config-validity";
 import type {
   AgentRegistryListItemDto,
   DbStatsResult,

@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
-} from "@novel-master/core/config-forms/agent";
+} from "../shared/config-forms/agent.js";
 import { resolveDesktopSavedModelId } from "../src/main/services/agent-run.service.js";
 import { createDesktopNovelMasterRuntime } from "../src/main/runtime/create-desktop-runtime.js";
 import {

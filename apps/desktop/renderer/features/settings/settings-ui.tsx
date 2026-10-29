@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { API_KEY_STATUS_LABELS } from "@shared/logic/config-forms-shared";
+import { API_KEY_STATUS_LABELS } from "@shared/config-forms/ui-labels";
 import { Switch } from "@/components/ui/Switch";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 

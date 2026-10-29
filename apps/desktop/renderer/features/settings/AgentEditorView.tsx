@@ -39,7 +39,7 @@ import {
   withWorkplaceToggle,
   type AgentMode,
   type ToolsMode,
-} from "@shared/logic/config-forms-agent";
+} from "@shared/config-forms/agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
 import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
@@ -63,7 +63,7 @@ import {
   buildDefaultAgentDefinitionPreservingName,
   STORED_CONFIG_LABELS,
   storedConfigInvalidReason,
-} from "@shared/logic/config-forms-stored-config-validity";
+} from "@shared/logic/stored-config-validity";
 import type {
   AgentDefinitionPlain,
   StoredConfigHealthDto,

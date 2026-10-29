@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BUILTIN_TOOL_CATALOG } from "@shared/logic/config-forms-agent";
+import { BUILTIN_TOOL_CATALOG } from "@shared/config-forms/agent";
 import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 type Props = {

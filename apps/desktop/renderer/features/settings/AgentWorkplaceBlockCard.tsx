@@ -7,7 +7,7 @@ import {
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
-} from "@shared/logic/config-forms-agent";
+} from "@shared/config-forms/agent";
 import { Switch } from "@/components/ui/Switch";
 import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { SettingsField } from "./settings-ui";

@@ -1324,7 +1324,7 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     // 轮卡片联合含三成员（text/thinking、toolGroup、workplace）
     assert.match(
       src,
-      /export type PromptTurnCardDto =\r?\n  \| PromptTextCardDto\r?\n  \| PromptToolGroupDto\r?\n  \| PromptWorkplaceDto;/,
+      /export type PromptTurnCardDto =\r?\n {2}\| PromptTextCardDto\r?\n {2}\| PromptToolGroupDto\r?\n {2}\| PromptWorkplaceDto;/,
     );
     // 反向：旧形态的段 DTO 与可选字段全部退役
     assert.doesNotMatch(src, /PromptPreviewSegmentDto/);

@@ -1,7 +1,7 @@
 /**
  * core StoredConfigHealth → IPC StoredConfigHealthDto。
  */
-import type { StoredConfigHealth } from "@novel-master/core/config-forms/stored-config-validity";
+import type { StoredConfigHealth } from "@novel-master/core/stored-config-validity";
 import type { StoredConfigHealthDto } from "../../../../shared/ipc-types.js";
 
 export function toStoredConfigHealthDto<TValue extends object>(
