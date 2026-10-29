@@ -15,10 +15,10 @@
 
 import { unzlibSync, zlibSync } from "fflate";
 import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
-import { base64ToBytes } from "@/common/base64.js";
+import { base64ToBytes } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { errorText } from "../../../../common/error-text.js";
+import { errorText } from "../../../../common/error.js";
 import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "./blob-bytes-codec.js";
 
 /** 本模块的领域失败：blob 字节损坏或 encoding 不识别。 */

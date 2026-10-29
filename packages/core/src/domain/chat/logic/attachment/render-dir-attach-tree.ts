@@ -5,7 +5,7 @@
  * @module domain/chat/logic/attachment/dir-attach-tree-renderer
  */
 
-import {utf8ByteLength} from "@/common/utf8.js";
+import {utf8ByteLength} from "@/common/encoding.js";
 import type {VfsService} from "@/domain/vfs/ports/vfs-service.port.js";
 import type {SessionKkvService} from "@/service/session-kkv/session-kkv.port.js";
 

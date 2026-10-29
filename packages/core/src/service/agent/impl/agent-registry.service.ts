@@ -6,7 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
-import { applyMergePatch } from "@/common/merge-patch.js";
+import { applyMergePatch } from "@/common/json.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
 import {
   validateAgentDefinition,

@@ -11,7 +11,7 @@ import {
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
-import { applyMergePatch } from "../../src/common/merge-patch.js";
+import { applyMergePatch } from "../../src/common/json.js";
 import { AppError } from "../../src/errors/app-error.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";

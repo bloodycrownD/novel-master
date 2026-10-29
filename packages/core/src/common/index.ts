@@ -3,18 +3,17 @@
  *
  * 这些函数原本在 desktop / mobile 各自的 utils 里抄了一份，现在统一收敛到这里，
  * 通过 `@novel-master/core/common` 子路径暴露给三端（desktop main、desktop
- * renderer、mobile）共享。
+ * renderer、mobile）共享。文件按类别组织（encoding / error / json / release…），
+ * 新工具优先并进已有类别文件。
  */
-export {compareAppVersions} from "./compare-app-versions.js";
-export {base64ToBytes, bytesToBase64} from "./base64.js";
-export {parseJsonText} from "./json.js";
-export {utf8ByteLength} from "./utf8.js";
+export {base64ToBytes, bytesToBase64, utf8ByteLength} from "./encoding.js";
+export {parseJsonText, applyMergePatch} from "./json.js";
 export {truncateText} from "./text.js";
 export {isBinaryFilePath, isImageFilePath} from "./file.js";
 export {integerAtLeast, nullableText, stringOrEmpty} from "./coerce.js";
-export {errorText} from "./error-text.js";
+export {errorText, normalizeYamlError, normalizeSmartSortImportError} from "./error.js";
 export {isRecord} from "./guards.js";
-export {excerptReleaseNotes} from "./excerpt-release-notes.js";
+export {compareAppVersions, excerptReleaseNotes} from "./release.js";
 export {
     formatTokenCount,
     // token-source-label：badge 与完整占用标签的单源（infra/tokenizer 与
@@ -23,10 +22,6 @@ export {
     formatContextUsageLabel,
     type TokenSourceBadge,
 } from "./format-token-count.js";
-export {normalizeYamlError} from "./normalize-yaml-error.js";
-// 智能排序规则 YAML 导入通道的错误归一（把 desktop + mobile 两份字面量三元
-// 收敛成一处，测试直接测它 ⇒ 顺带把「测试只重演、不守接线」的缺口闭上）。
-export {normalizeSmartSortImportError} from "./normalize-smart-sort-import-error.js";
 export {
     formatDurationMs,
     formatRequestTime,

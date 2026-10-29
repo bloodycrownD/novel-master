@@ -9,7 +9,7 @@
  */
 
 import { isRecord } from "@/common/guards.js";
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 import type { SkillToolRef, ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import { formatToolErrorForLlm, formatToolOutputForLlm } from "./format-tool-output.js";

@@ -16,7 +16,7 @@ import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/charac
 import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_INPUT_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES, CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
 import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { assertLogicalPathAllowed, scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";

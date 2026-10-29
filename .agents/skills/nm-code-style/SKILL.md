@@ -88,7 +88,7 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/sr
 ## 5. 通用工具与命名
 
 - 通用谓词/纯工具统一放 `packages/core/src/common/`，经 `@novel-master/core/common` 给三端共用。发现**第二份**就地实现时就收敛，不等到第三份。
-- 文件名按**类别**起（`guards.ts`、`merge-patch.ts`），不要按单个函数起（`is-record.ts`）。下一个小工具应该能并进已有类别文件。
+- 文件名按**类别**起（`guards.ts`、`json.ts`），不要按单个函数起（`is-record.ts`）。下一个小工具应该能并进已有类别文件。
 - 模块名要能看出职责；`is-record.ts` 这种抽象名会让下一个守卫又新开一个文件。
 
 ## 6. 类型与不可达守卫

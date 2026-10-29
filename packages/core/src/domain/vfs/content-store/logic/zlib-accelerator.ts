@@ -13,7 +13,7 @@
  * @module domain/vfs/content-store/logic/zlib-accelerator
  */
 
-import { errorText } from "../../../../common/error-text.js";
+import { errorText } from "../../../../common/error.js";
 
 /**
  * 加速器契约：两个同步方法，入出均为 `Uint8Array`（实现可返回 Buffer——

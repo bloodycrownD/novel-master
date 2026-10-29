@@ -4,7 +4,7 @@
  * @module domain/tool/logic/tool-output-limits
  */
 
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 
 export const TOOL_OUTPUT_MAX_LINES = 2000;
 export const TOOL_OUTPUT_MAX_LINE_LENGTH = 2000;

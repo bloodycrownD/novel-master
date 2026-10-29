@@ -74,7 +74,7 @@ const WEBVIEW_CORE_ALLOWLIST = {
     'common/text.js',
     // tool-output-limits / curl 在 webview 内也要按 UTF-8 字节算预算；
     // 删了会退化成按字符数估算，中文/emoji 场景会超预算。
-    'common/utf8.js',
+    'common/encoding.js',
     'bootstrap/skills/skills-schema.js',
     'bootstrap/smart-sort-rule/builtin-smart-sort-rules.js',
     'bootstrap/smart-sort-rule/smart-sort-rule-schema.js',

@@ -21,7 +21,7 @@
  */
 
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import { ensureDirRulesForNewPath, upsertFileCacheAfterWrite } from "./vfs-tools.js";
 

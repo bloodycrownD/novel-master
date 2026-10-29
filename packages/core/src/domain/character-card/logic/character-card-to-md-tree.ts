@@ -8,7 +8,7 @@
  * @module domain/character-card/logic/character-card-to-md-tree
  */
 
-import { base64ToBytes } from "@/common/base64.js";
+import { base64ToBytes } from "@/common/encoding.js";
 import { isRecord } from "@/common/guards.js";
 import { parseJsonText } from "@/common/json.js";
 import { AppError } from "@/errors/app-error.js";

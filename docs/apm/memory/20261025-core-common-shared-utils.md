@@ -29,3 +29,23 @@ assistant:
 按类别改名为 `common/guards.ts`，`isRecord` 只是第一个成员；模块头注释写明「只放输入 unknown、输出类型收窄或布尔的小函数，序列化/格式化另开同层模块」。同步改 barrel、11 个 core 内部 import、webview 白名单；mobile 侧从公共 barrel 引，不受影响。复跑 typecheck、280 项测试、mobile tsc、webview 门 B/C、lint，全绿。
 
 判据：一行函数最容易「顺手再写一份」，所以判断标准不是「短不短」，而是「第二处出现没」。出现即收敛到 `core/common`，业务文件里只留 import；文件名按类别（guards / merge-patch / …），不按单个函数名。
+
+## 2026-10-29 追加：单函数文件按类别归并（18 → 13）
+
+user:
+我更新了下代码格式，然后就是这里面一些文件只有一个导出函数，这些文件能不能合一合？（指 `packages/core/src/common`）
+
+assistant:
+先探明引用面：三端全部走 barrel `@novel-master/core/common`（无深路径穿透），硬耦合只有 webview allowlist 的逐文件精确匹配与 core 内部约 26 处 `@/common/xxx.js` 别名导入。按类别归并：
+
+- `encoding.ts` ← base64.ts + utf8.ts（字节/编码类，TextEncoder 惰性单例随迁）
+- `error.ts` ← error-text.ts + normalize-yaml-error.ts + normalize-smart-sort-import-error.ts（错误→文案归一层，tdbc 导入深度不变）
+- `release.ts` ← compare-app-versions.ts + excerpt-release-notes.ts（更新检查/发布域）
+- `json.ts` 扩容 ← merge-patch.ts（applyMergePatch 本就是 JSON 语义）
+- 保留 guards/text/coerce/file/xml/i18n/format-token-count/usage-stats-format（本身即类别宿主或多导出）；函数体逐字搬移，barrel 重写后对外符号集不变，desktop/mobile 消费面零改动。
+
+坑①：`npm run clean` 只删 dist 不删 `packages/core/tsconfig.tsbuildinfo`，`tsc --build` 据陈旧 buildinfo 判「未变更」跳过发射，dist 只剩本轮触达文件的传递闭包（domain 只出 7/20 个子目录）——症状是 dist-artifacts / X4 dist 守卫红。修法：删 tsbuildinfo 再全量 rebuild。以后 clean rebuild 一律连 tsbuildinfo 一起删。
+
+坑②：core 测试套的 T-S5 DST 归桶（`usage-stats.service.test.ts`）与 C2-3 copy 事务两条在本轮改动前就红（stash 验证基线），与归并无关，挂账待修。
+
+验证：core typecheck + 全测（仅上述 2 条既存红）、desktop 654/654 + typecheck、mobile 两套 tsc + build:webview（allowlist 同步 `common/utf8.js`→`common/encoding.js`）+ 全套 jest 与基线完全一致（7 条既存红 = `presentation/chat/attachment-chip.js` dist 解析，1 条 AppState flake 单跑即绿）。用户 4 空格格式化与仓库 prettier（2 空格）冲突，保留用户格式未擅改，已上报。check-style 触达面 findings 均为既存（character-card-import 的 DEAD 类型、zlib-accelerator OOP_CANDIDATE），非本轮引入，未处理项见交付报告。

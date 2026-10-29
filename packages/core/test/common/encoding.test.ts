@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { utf8ByteLength } from "../../src/common/utf8.js";
+import { base64ToBytes, bytesToBase64, utf8ByteLength } from "../../src/common/encoding.js";
 
-describe("utf8ByteLength", () => {
+describe("common/encoding · base64", () => {
+  it("bytesToBase64 / base64ToBytes 往返", () => {
+    const bytes = Uint8Array.from([0, 1, 2, 254, 255]);
+    assert.deepEqual(base64ToBytes(bytesToBase64(bytes)), bytes);
+  });
+
+  it("跨 0x8000 分片仍保持字节序", () => {
+    const bytes = Uint8Array.from({ length: 0x8000 * 2 + 3 }, (_, index) => index % 256);
+    assert.deepEqual(base64ToBytes(bytesToBase64(bytes)), bytes);
+  });
+});
+
+describe("common/encoding · utf8ByteLength", () => {
   it("与 TextEncoder 基准一致：ASCII / 中文 / emoji / 落单代理", () => {
     const reference = new TextEncoder();
     const samples = [

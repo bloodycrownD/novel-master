@@ -2,7 +2,7 @@
  * 通用判断工具（type guards / predicates）。
  *
  * 只放「输入 unknown、输出类型收窄或布尔」的小函数；序列化、格式化等
- * 其他类别各开同层模块（如 `merge-patch.ts`），不往这里堆。
+ * 其他类别各开同层模块（如 `json.ts`、`encoding.ts`），不往这里堆。
  *
  * @module common/guards
  */

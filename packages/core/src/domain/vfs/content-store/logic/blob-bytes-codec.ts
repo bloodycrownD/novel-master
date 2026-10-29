@@ -2,7 +2,7 @@
  * ContentStore 存量 base64 编码标记。
  *
  * 写侧已全面去 base64（RN 端同样落二进制 BLOB），本模块仅保留读侧存量兜底
- * 需要的 encoding 常量；base64 解码统一走 `@/common/base64.js`。
+ * 需要的 encoding 常量；base64 解码统一走 `@/common/encoding.js`。
  *
  * @module domain/vfs/content-store/logic/blob-bytes-codec
  */

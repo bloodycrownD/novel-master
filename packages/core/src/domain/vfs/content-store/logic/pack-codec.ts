@@ -23,7 +23,7 @@
 import { applyDelta, createDelta, getDeltaTargetSize } from "fossil-delta";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { errorText } from "../../../../common/error-text.js";
+import { errorText } from "../../../../common/error.js";
 import { compressZlib, decompressZlib } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */

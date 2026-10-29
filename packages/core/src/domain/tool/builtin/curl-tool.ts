@@ -30,7 +30,7 @@
 
 import { z } from "zod";
 
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 import { toolFailed } from "@/errors/tool-errors.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";

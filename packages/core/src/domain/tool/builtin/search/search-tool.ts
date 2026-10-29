@@ -26,7 +26,7 @@
  * @module domain/tool/builtin/search/search-tool
  */
 
-import { utf8ByteLength } from "@/common/utf8.js";
+import { utf8ByteLength } from "@/common/encoding.js";
 import { z } from "zod";
 
 import { toolFailed } from "@/errors/tool-errors.js";
