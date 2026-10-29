@@ -5,7 +5,7 @@ import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {AgentSettingsTab} from '@novel-master/core/config-forms/agent';
+import type {AgentSettingsTab} from '@/config-forms/agent';
 import {AgentList} from '@/components/agent/AgentList';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';

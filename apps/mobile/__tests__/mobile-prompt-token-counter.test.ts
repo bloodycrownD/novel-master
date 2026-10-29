@@ -38,9 +38,6 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 jest.mock('@novel-master/core', () => ({
   CHARACTERS_PER_TOKEN_RATIO: 3.35,
-  parseApplicationModelId: (id: string) => ({
-    vendorModelId: id.split('/').pop() ?? id,
-  }),
   resolveTokenizerFamily: () => mockResolveFamily,
   mapVendorModelIdToTiktokenModel: () => 'gpt-4o',
   serializePromptLlmInput: () => '',

@@ -26,11 +26,11 @@ import {
   movePersistTextBlock,
   toolsSelectionFromDefinition,
   type AgentEditorFormInput,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 import {
   assessAgentDefinitionWire,
   type StoredConfigInvalidCode,
-} from '@novel-master/core/config-forms/stored-config-validity';
+} from '@novel-master/core/stored-config-validity';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
 
 import {useRuntime} from '../../../hooks/useRuntime';

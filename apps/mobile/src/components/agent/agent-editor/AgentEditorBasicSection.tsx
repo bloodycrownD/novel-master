@@ -8,7 +8,7 @@ import {Pressable, Text, View} from 'react-native';
 import {
   MODE_OPTIONS,
   type AgentMode,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';

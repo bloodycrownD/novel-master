@@ -23,12 +23,12 @@ import {
 import {
   agentModeMatchesTab,
   type AgentSettingsTab,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   storedConfigInvalidReason,
-} from '@novel-master/core/config-forms/stored-config-validity';
+} from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';

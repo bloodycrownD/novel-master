@@ -1,0 +1,1199 @@
+import assert from "node:assert/strict";
+import { it } from "@jest/globals";
+import { buildAgentDefinitionFromForm, buildToolsPolicyFromSelection, countEffectiveFormPromptSources, countFormPromptSources, countMinimumPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, toolsSelectionFromDefinition, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE, DEFAULT_WORKPLACE_ASSISTANT_TEXT, withWorkplaceToggle } from "@/config-forms/agent/agent-editor-state";
+import { validateAgentPromptLayout } from "@novel-master/core/prompt";
+
+it("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
+  assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
+  assert.equal(PROMPT_REGION_LABELS.apiSystemField, "系统提示词");
+  assert.equal(PROMPT_REGION_LABELS.systemPromptTitle, "系统提示词");
+  assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
+  assert.equal(PROMPT_REGION_LABELS.maxStepsHint, "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。");
+  assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
+  assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
+  assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(PROMPT_REGION_LABELS.persistDisabledHint, "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。");
+  assert.equal(PROMPT_REGION_LABELS.dynamicDisabledHint, "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。");
+  assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
+  assert.equal(PROMPT_REGION_LABELS.layoutOrder, "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区");
+  assert.equal(PROMPT_REGION_LABELS.skills, "技能索引");
+  assert.equal(PROMPT_REGION_LABELS.skillsTag, "技能");
+  assert.equal(PROMPT_REGION_LABELS.skillsBlocks, "技能索引区");
+  assert.equal(PROMPT_REGION_LABELS.skillsReadonlyHint, "运行时注入生效技能索引。");
+  assert.equal(PROMPT_REGION_LABELS.skillsDisabledHint, "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。");
+  assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止使用宏。");
+  // lifecycle 常驻开关已下线：文案表不再有 dynamicLifecycleOnceHint。
+  assert.equal("dynamicLifecycleOnceHint" in PROMPT_REGION_LABELS, false);
+
+  const values = Object.values(PROMPT_REGION_LABELS).filter((value): value is string => typeof value === "string");
+  for (const value of values) {
+    assert.doesNotMatch(value, /API system/i);
+    assert.doesNotMatch(value, /Prompt 布局/i);
+    assert.doesNotMatch(value, /prompts\.system/i);
+    assert.doesNotMatch(value, /LLM system/i);
+    assert.doesNotMatch(value, /lifecycle/i);
+    assert.doesNotMatch(value, /agent step/i);
+    assert.doesNotMatch(value, /\bwire\b/i);
+    assert.doesNotMatch(value, /materialize/i);
+    assert.doesNotMatch(value, /\bCore\b/);
+    assert.doesNotMatch(value, /\brun\b/i);
+  }
+});
+
+it("WORKPLACE_BLOCK_HINT 新文案", () => {
+  assert.equal(WORKPLACE_BLOCK_HINT, "可编辑助手确认语。");
+  assert.equal(WORKPLACE_DISABLED_HINT, "关闭时不注入项目文件树。");
+});
+
+it("buildToolsPolicyFromSelection returns undefined for default mode", () => {
+  assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);
+});
+
+it("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
+  assert.deepEqual(buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
+    allow: ["read", "grep"],
+  });
+  assert.deepEqual(buildToolsPolicyFromSelection("deny", ["write"]), {
+    deny: ["write"],
+  });
+});
+
+it("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
+  assert.deepEqual(
+    toolsSelectionFromDefinition({
+      name: "a",
+      prompts: { persist: [], dynamic: [] },
+      tools: { allow: ["read"] },
+    }),
+    { mode: "allow", selected: ["read"] }
+  );
+  assert.deepEqual(
+    toolsSelectionFromDefinition({
+      name: "a",
+      prompts: { persist: [], dynamic: [] },
+    }),
+    {
+      mode: "default",
+      selected: [],
+    }
+  );
+});
+
+it("definitionToForm maps system toggle and three regions", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      system: "sys",
+      persistEnabled: true,
+      dynamicEnabled: true,
+      workplace: "【done】",
+      persist: [],
+      dynamic: [
+        {
+          name: "state",
+          type: "text",
+          role: "user",
+          content: "{{$time}}",
+        },
+      ],
+    },
+  });
+  assert.equal(form.mode, "all");
+  assert.equal(form.systemEnabled, true);
+  assert.equal(form.systemContent, "sys");
+  assert.equal(form.persistEnabled, true);
+  assert.equal(form.dynamicEnabled, true);
+  assert.equal(form.workplaceEnabled, true);
+  assert.equal(form.persist.length, 0);
+  // dynamic 块 round-trip 保持内容，域对象恒无 lifecycle 键。
+  assert.deepEqual(form.dynamic[0], {
+    name: "state",
+    type: "text",
+    role: "user",
+    content: "{{$time}}",
+  });
+});
+
+it("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [],
+    },
+  });
+  assert.equal(form.persistEnabled, false);
+  assert.equal(form.dynamicEnabled, false);
+  assert.equal(form.workplaceEnabled, false);
+});
+
+it("layoutFromFormInput omits system when switch off", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "ignored",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [],
+  });
+  assert.equal(layout.system, undefined);
+  assert.equal(layout.persistEnabled, undefined);
+  assert.equal(layout.dynamicEnabled, undefined);
+});
+
+it("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
+    dynamic: [
+      { name: "d1", type: "text", role: "assistant", content: "a" },
+      { name: "d2", type: "text", role: "user", content: "b" },
+    ],
+  });
+  assert.equal(layout.persistEnabled, true);
+  assert.equal(layout.dynamicEnabled, true);
+});
+
+it("splitPersistBlocksForEditor strips legacy worktree blocks", () => {
+  const split = splitPersistBlocksForEditor([
+    { name: "persona", type: "text", role: "user", content: "x" },
+    { name: "custom", type: "worktree" },
+  ]);
+  assert.equal(split.textBlocks.length, 1);
+  assert.deepEqual(split.blocks, [{ name: "persona", type: "text", role: "user", content: "x" }]);
+});
+
+it("layoutFromFormInput maps workplace boolean and strips legacy worktree", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [
+      { name: "custom", type: "worktree", role: "assistant" },
+      { name: "persona", type: "text", role: "user", content: "x" },
+    ],
+    dynamic: [],
+  });
+  assert.equal(layout.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+  assert.deepEqual(layout.persist, [{ name: "persona", type: "text", role: "user", content: "x" }]);
+});
+
+it("movePersistBlock swaps text blocks", () => {
+  const blocks = [
+    { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
+    {
+      name: "p2",
+      type: "text" as const,
+      role: "assistant" as const,
+      content: "b",
+    },
+  ];
+  const movedDown = movePersistBlock(blocks, 0, 1);
+  assert.deepEqual(
+    movedDown.map((block) => block.name),
+    ["p2", "p1"]
+  );
+});
+
+it("buildAgentDefinitionFromForm maps workplace boolean", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [{ name: "p1", type: "text", role: "user", content: "after tree" }],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+    assert.deepEqual(
+      result.definition.prompts.persist.map((block) => block.type),
+      ["text"]
+    );
+    assert.equal(result.definition.prompts.persist[0]?.name, "p1");
+  }
+});
+
+it("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () => {
+  const formOn = definitionToForm({
+    name: "writer",
+    prompts: {
+      workplace: "【done】",
+      persist: [],
+      dynamic: [],
+    },
+  });
+  assert.equal(formOn.workplaceEnabled, true);
+  assert.equal(formOn.workplaceAssistantText, "【done】");
+  assert.equal(layoutFromFormInput(formOn).workplace, "【done】");
+
+  const formOff = {
+    ...formOn,
+    workplaceEnabled: false,
+  };
+  assert.equal(layoutFromFormInput(formOff).workplace, undefined);
+
+  const roundTrip = definitionToForm({
+    name: "writer",
+    prompts: layoutFromFormInput(formOn),
+  });
+  assert.equal(roundTrip.workplaceEnabled, true);
+  assert.equal(roundTrip.workplaceAssistantText, "【done】");
+});
+
+it("createDefaultAgentEditorPrompts persist 无 worktree", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  assert.equal(defaults.persist.length, 0);
+  assert.equal(defaults.workplaceEnabled, false);
+  assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
+});
+
+it("definitionToForm workplace 非空 string 可 derive Switch 开", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      workplace: "【done】",
+      persist: [],
+      dynamic: [],
+    },
+  });
+  assert.equal(form.workplaceEnabled, true);
+  assert.equal(form.persist.length, 0);
+});
+
+it("createDefaultAgentEditorPrompts starts with empty persist", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  assert.equal(defaults.systemEnabled, false);
+  assert.equal(defaults.persistEnabled, false);
+  assert.equal(defaults.dynamicEnabled, false);
+  assert.equal(defaults.persist.length, 0);
+  assert.equal(defaults.dynamic.length, 0);
+});
+
+it("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () => {
+  const json = formSnapshotJson({
+    name: "agent",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...createDefaultAgentEditorPrompts(),
+    persistEnabled: true,
+    dynamicEnabled: false,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.persistEnabled, true);
+  assert.equal(parsed.dynamicEnabled, false);
+  assert.equal(parsed.workplaceEnabled, true);
+  assert.equal(parsed.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+});
+
+it("formSnapshotJson omits model fields when disabled", () => {
+  const json = formSnapshotJson({
+    name: "agent",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...createDefaultAgentEditorPrompts(),
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.providerId, undefined);
+  assert.equal(parsed.savedModelId, undefined);
+});
+
+it("T-CA2a: definitionToForm 从 prompts.customAttach 非空反推 enabled=true", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      customAttach: "附加笔记",
+      persist: [],
+      dynamic: [],
+    },
+  });
+  assert.equal(form.customAttachEnabled, true);
+  assert.equal(form.customAttachText, "附加笔记");
+});
+
+it("T-CA2b: layoutFromFormInput 在 trim 空时不 emit customAttach", () => {
+  const base = createDefaultAgentEditorPrompts();
+  // 开关开但文本为空 → 不 emit
+  const layoutEmpty = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "",
+  });
+  assert.equal(layoutEmpty.customAttach, undefined);
+  // 开关开但仅空白 → trim 后为空，同样不 emit
+  const layoutBlank = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "   \n  ",
+  });
+  assert.equal(layoutBlank.customAttach, undefined);
+  // 关时即便有文本也不 emit
+  const layoutOff = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: false,
+    customAttachText: "附加笔记",
+  });
+  assert.equal(layoutOff.customAttach, undefined);
+  // 正常开 + 非空才 emit
+  const layoutOn = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "附加笔记",
+  });
+  assert.equal(layoutOn.customAttach, "附加笔记");
+});
+
+it("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "agent",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "附加笔记",
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.customAttachEnabled, true);
+  assert.equal(parsed.customAttachText, "附加笔记");
+});
+
+it("T-CA2e: formSnapshotJson 将 mode 纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const a = formSnapshotJson({
+    name: "agent",
+    mode: "primary",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  const b = formSnapshotJson({
+    name: "agent",
+    mode: "subagent",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  // 牙齿：`mode` 不进输出时两者逐字节相等，用例立刻红。
+  assert.notEqual(a, b, "改「作用域」必须产生 dirty");
+});
+
+it("T-CA2f: formSnapshotJson 的 mode 缺省显式为 all（不得被 JSON.stringify 丢键）", () => {
+  // 这条直接锁住「基线侧一旦漏传 mode」的失败形态：undefined 会被 stringify 丢掉，
+  // 于是基线 JSON 缺 `mode` 键、实时快照有 `mode:"all"` ⇒ 两个 JSON 永不相等 ⇒
+  // 打开任意智能体即显示「· 未保存」。
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "agent",
+    mode: undefined as never,
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.mode, "all");
+});
+
+it("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门闩", () => {
+  const base = createDefaultAgentEditorPrompts();
+  // 三区全关，仅 customAttach 开 → 门闩仍为 false（customAttach 不是区域）
+  assert.equal(hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }), false);
+  // 同时打开 system 才变 true
+  assert.equal(
+    hasAnyPromptRegionEnabled({
+      ...base,
+      systemEnabled: true,
+      customAttachEnabled: true,
+    }),
+    true
+  );
+});
+
+it("buildAgentDefinitionFromForm validates required fields", () => {
+  assert.equal(
+    buildAgentDefinitionFromForm({
+      name: "",
+      mode: "all",
+      maxSteps: "20",
+      modelEnabled: false,
+      providerId: "",
+      savedModelId: "",
+      toolsMode: "default",
+      toolsSelected: [],
+      ...createDefaultAgentEditorPrompts(),
+    }).ok,
+    false
+  );
+  assert.equal(
+    buildAgentDefinitionFromForm({
+      name: "writer",
+      mode: "all",
+      maxSteps: "20",
+      modelEnabled: false,
+      providerId: "",
+      savedModelId: "",
+      toolsMode: "default",
+      toolsSelected: [],
+      ...createDefaultAgentEditorPrompts(),
+    }).ok,
+    true
+  );
+});
+
+it("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...createDefaultAgentEditorPrompts(),
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.system, undefined);
+    assert.deepEqual(result.definition.prompts.persist, []);
+    assert.deepEqual(result.definition.prompts.dynamic, []);
+  }
+});
+
+it("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: true,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.message, "至少保留一个 Prompt 块");
+  }
+});
+
+it("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+      persist: [],
+      dynamic: [],
+    }),
+    0
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: true,
+      systemContent: "sys",
+      persistEnabled: true,
+      dynamicEnabled: true,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+    }),
+    3
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      persistEnabled: true,
+      dynamicEnabled: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+      persist: [],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+    }),
+    0
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "ignored",
+      persistEnabled: true,
+      dynamicEnabled: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [],
+    }),
+    1
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      workplaceEnabled: true,
+      workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+      persist: [],
+      dynamic: [],
+    }),
+    1
+  );
+});
+
+it("buildAgentDefinitionFromForm allows empty persist with system content", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: true,
+    systemContent: "你是写作助手",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.system, "你是写作助手");
+    assert.deepEqual(result.definition.prompts.persist, []);
+  }
+});
+
+it("buildAgentDefinitionFromForm allows empty persist with dynamic block", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [],
+    dynamic: [{ name: "state", type: "text", role: "user", content: "{{$time}}" }],
+  });
+  assert.equal(result.ok, true);
+});
+
+it("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+});
+
+it("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
+  assert.equal(
+    countMinimumPromptSources({
+      systemEnabled: true,
+      systemContent: "sys",
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+    }),
+    2
+  );
+  assert.equal(
+    countMinimumPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      dynamic: [],
+    }),
+    0
+  );
+  assert.equal(
+    countMinimumPromptSources(
+      {
+        systemEnabled: false,
+        systemContent: "",
+        dynamic: [
+          { name: "d1", type: "text", role: "user", content: "a" },
+          { name: "d2", type: "text", role: "user", content: "b" },
+        ],
+      },
+      { excludeDynamicIndex: 0 }
+    ),
+    1
+  );
+});
+
+it("countFormPromptSources ignores enabled system without content", () => {
+  assert.equal(
+    countFormPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+      persist: [],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+    }),
+    1
+  );
+  assert.equal(
+    countFormPromptSources(
+      {
+        systemEnabled: true,
+        systemContent: "sys",
+        workplaceEnabled: false,
+        workplaceAssistantText: "",
+        persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+        dynamic: [],
+      },
+      { excludePersistTextIndex: 0 }
+    ),
+    1
+  );
+});
+
+it("countFormPromptSources counts all regions and respects exclusions", () => {
+  const input = {
+    systemEnabled: true,
+    systemContent: "sys",
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [{ name: "p1", type: "text", role: "user", content: "a" }],
+    dynamic: [
+      {
+        name: "d1",
+        type: "text" as const,
+        role: "user" as const,
+        content: "b",
+      },
+      {
+        name: "d2",
+        type: "text" as const,
+        role: "user" as const,
+        content: "c",
+      },
+    ],
+  };
+  assert.equal(countFormPromptSources(input), 5);
+  assert.equal(countFormPromptSources(input, { excludeDynamicIndex: 1 }), 4);
+  assert.equal(
+    countFormPromptSources({
+      ...input,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+    }),
+    4
+  );
+  assert.equal(
+    countFormPromptSources(input, {
+      excludePersistTextIndex: 0,
+      excludeDynamicIndex: 0,
+    }),
+    3
+  );
+});
+
+it("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", () => {
+  const input = {
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default" as const,
+    toolsSelected: [] as string[],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [
+      {
+        name: "p1",
+        type: "text" as const,
+        role: "assistant" as const,
+        content: "我将遵守",
+      },
+    ],
+    dynamic: [
+      {
+        name: "d1",
+        type: "text" as const,
+        role: "assistant" as const,
+        content: "a",
+      },
+      {
+        name: "d2",
+        type: "text" as const,
+        role: "user" as const,
+        content: "b",
+      },
+    ],
+  };
+  const result = buildAgentDefinitionFromForm(input);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.mode, "all");
+    assert.equal(result.definition.prompts.persistEnabled, true);
+    assert.equal(result.definition.prompts.dynamicEnabled, true);
+    const form = definitionToForm(result.definition);
+    assert.equal(form.mode, "all");
+    assert.equal(form.persistEnabled, true);
+    assert.equal(form.dynamicEnabled, true);
+  }
+});
+
+it("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.persistEnabled, undefined);
+    assert.equal(result.definition.prompts.dynamicEnabled, undefined);
+  }
+});
+
+it("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /助手/);
+  }
+});
+
+it("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末块 assistant 可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: false,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [
+      { name: "p1", type: "text", role: "user", content: "x" },
+      { name: "tail", type: "text", role: "assistant", content: "ok" },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+});
+
+it("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: true,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /两个块/);
+  }
+});
+
+it("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+  });
+  assert.equal(result.ok, true);
+});
+
+it("buildAgentDefinitionFromForm rejects persist macros", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [
+      {
+        name: "bad",
+        type: "text",
+        role: "user",
+        content: "时间 {{$time}}",
+      },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /persist|macro|宏/i);
+  }
+});
+
+it("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "ok" }],
+    dynamic: [
+      {
+        name: "d1",
+        type: "text",
+        role: "user",
+        content: "{{.filetree}}",
+      },
+    ],
+  });
+  assert.equal(result.ok, false);
+});
+
+it("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  const toggled = withWorkplaceToggle(true, defaults.workplaceAssistantText);
+  assert.equal(toggled.workplaceEnabled, true);
+  assert.equal(toggled.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+
+  const ok = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...defaults,
+    ...toggled,
+  });
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.definition.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+  }
+
+  const empty = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...defaults,
+    workplaceEnabled: true,
+    workplaceAssistantText: "   ",
+  });
+  assert.equal(empty.ok, false);
+  if (!empty.ok) {
+    assert.equal(empty.message, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE);
+  }
+});
+
+it("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
+  const on = withWorkplaceToggle(true, "");
+  assert.equal(on.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+
+  const custom = withWorkplaceToggle(true, "custom-done");
+  assert.equal(custom.workplaceAssistantText, "custom-done");
+
+  const off = withWorkplaceToggle(false, custom.workplaceAssistantText);
+  assert.equal(off.workplaceEnabled, false);
+  assert.equal(off.workplaceAssistantText, "custom-done");
+  assert.equal(
+    layoutFromFormInput({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      ...off,
+      persist: [],
+      dynamic: [],
+    }).workplace,
+    undefined
+  );
+
+  const clearedThenOn = withWorkplaceToggle(true, "");
+  assert.equal(clearedThenOn.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+});
+
+it("layoutFromFormInput output passes validateAgentPromptLayout", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: true,
+    systemContent: "sys",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
+    dynamic: [
+      { name: "d1", type: "text", role: "assistant", content: "a" },
+      { name: "d2", type: "text", role: "user", content: "b" },
+    ],
+  });
+  const validated = validateAgentPromptLayout(layout);
+  assert.ok(validated.ok, validated.ok ? "" : validated.error.message);
+});
+
+it("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+    description: "擅长检索代码库。",
+  });
+  assert.equal(form.description, "擅长检索代码库。");
+});
+
+it("T-DESC2: definitionToForm 对缺省 description 返回空串", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+  });
+  assert.equal(form.description, "");
+});
+
+it("T-DESC3: buildAgentDefinitionFromForm 在 description 非空时透传", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "  擅长写测试  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    // 非空但 trim 后有内容才透传，且透传值会 trim。
+    assert.equal(result.definition.description, "擅长写测试");
+  }
+});
+
+it("T-DESC4: buildAgentDefinitionFromForm 在 description trim 空时省略字段", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "   \n  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.description, undefined);
+  }
+});
+
+it("T-DESC5: formSnapshotJson 将 description 纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "a",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+    description: "desc-a",
+  });
+  assert.equal(JSON.parse(json).description, "desc-a");
+  // 缺省时序列化为空串，与显式空串等价。
+  const jsonEmpty = formSnapshotJson({
+    name: "a",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  assert.equal(JSON.parse(jsonEmpty).description, "");
+});

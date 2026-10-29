@@ -26,7 +26,7 @@
  */
 import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
-import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
+import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
 
 import {
   buildSessionPromptInput,

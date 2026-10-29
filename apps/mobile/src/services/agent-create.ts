@@ -6,7 +6,7 @@ import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
   type AgentMode,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 async function listAgentDisplayNameSlots(runtime: MobileNovelMasterRuntime) {

@@ -1,5 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
+import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
 import {AppError} from '@novel-master/core/agent';
 import {
   isAgentDeleted,

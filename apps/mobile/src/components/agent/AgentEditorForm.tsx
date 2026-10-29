@@ -13,12 +13,12 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   buildAgentDefinitionFromForm,
   PROMPT_REGION_LABELS,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 import {
   STORED_CONFIG_LABELS,
   buildDefaultAgentDefinitionPreservingName,
   storedConfigInvalidReason,
-} from '@novel-master/core/config-forms/stored-config-validity';
+} from '@novel-master/core/stored-config-validity';
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 
 import {FormField} from '../form/FormField';

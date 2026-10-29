@@ -5,7 +5,7 @@
 import React from 'react';
 import {Pressable, Text, View} from 'react-native';
 
-import {STORED_CONFIG_LABELS} from '@novel-master/core/config-forms/stored-config-validity';
+import {STORED_CONFIG_LABELS} from '@novel-master/core/stored-config-validity';
 
 import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';

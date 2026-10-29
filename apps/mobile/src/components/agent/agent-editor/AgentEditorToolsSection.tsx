@@ -10,7 +10,7 @@ import {Text} from 'react-native';
 import {
   TOOL_MODE_OPTIONS,
   type ToolsMode,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';

@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {API_KEY_STATUS_LABELS} from '@novel-master/core/config-forms/shared';
+import {API_KEY_STATUS_LABELS} from '@/config-forms/ui-labels';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {

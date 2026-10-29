@@ -199,21 +199,11 @@ module.exports = {
       repoRoot,
       'packages/tokenizer-driver-rn/dist/index.js',
     ),
-    '^@novel-master/core/config-forms/shared$': path.join(
+    // stored-config-validity 留守 core（config-forms 迁两端后的新子路径）：
+    // 直连 dist 真实文件，同其它 core 子路径口径。
+    '^@novel-master/core/stored-config-validity$': path.join(
       repoRoot,
-      'packages/core/dist/config-forms/shared/index.js',
-    ),
-    '^@novel-master/core/config-forms/events$': path.join(
-      repoRoot,
-      'packages/core/dist/config-forms/events/index.js',
-    ),
-    '^@novel-master/core/config-forms/agent$': path.join(
-      repoRoot,
-      'packages/core/dist/config-forms/agent/index.js',
-    ),
-    '^@novel-master/core/config-forms/stored-config-validity$': path.join(
-      repoRoot,
-      'packages/core/dist/config-forms/stored-config-validity/index.js',
+      'packages/core/dist/domain/agent/stored-config-validity/index.js',
     ),
     '^@novel-master/core/session-fs$': path.join(
       repoRoot,
@@ -226,10 +216,6 @@ module.exports = {
     '^@novel-master/core/provider$': path.join(
       repoRoot,
       'packages/core/dist/public/provider.js',
-    ),
-    '^@novel-master/core/config-forms$': path.join(
-      repoRoot,
-      'packages/core/dist/config-forms/index.js',
     ),
     '^@novel-master/cloud-sync-driver-s3$': path.join(
       repoRoot,

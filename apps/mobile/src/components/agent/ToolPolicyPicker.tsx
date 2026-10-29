@@ -21,7 +21,7 @@ import React, {
 } from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG} from '@/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
 import {useFormOverlay} from '../form/FormOverlayHost';
 import {ModalShell} from '../ui/ModalShell';

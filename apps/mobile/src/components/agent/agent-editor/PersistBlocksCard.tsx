@@ -13,7 +13,7 @@ import {
   PROMPT_REGION_LABELS,
   ROLE_OPTIONS,
   mapPersistTextBlocks,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';

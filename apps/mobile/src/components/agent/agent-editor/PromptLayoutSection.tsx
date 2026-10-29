@@ -14,7 +14,7 @@ import {
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_DISABLED_HINT,
   withWorkplaceToggle,
-} from '@novel-master/core/config-forms/agent';
+} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormSectionCard} from '../../form/FormSectionCard';

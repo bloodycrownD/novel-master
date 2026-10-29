@@ -6,7 +6,7 @@ import React from 'react';
 import {Text, View} from 'react-native';
 
 import type {DynamicPromptBlock} from '@novel-master/core/prompt';
-import {PROMPT_REGION_LABELS, ROLE_OPTIONS} from '@novel-master/core/config-forms/agent';
+import {PROMPT_REGION_LABELS, ROLE_OPTIONS} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';

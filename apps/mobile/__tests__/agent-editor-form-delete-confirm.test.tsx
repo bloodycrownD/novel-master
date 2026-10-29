@@ -2,7 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Alert} from 'react-native';
-import {STORED_CONFIG_LABELS} from '@novel-master/core/config-forms/stored-config-validity';
+import {STORED_CONFIG_LABELS} from '@novel-master/core/stored-config-validity';
 
 const mockGetRawWire = jest.fn();
 const mockListAgentIds = jest.fn();

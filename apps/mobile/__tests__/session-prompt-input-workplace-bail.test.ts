@@ -13,7 +13,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import {textBlocks} from '@novel-master/core/chat';
 import {
   buildDefaultAgentDefinitionPreservingName,
-} from '@novel-master/core/config-forms/stored-config-validity';
+} from '@novel-master/core/stored-config-validity';
 import {WorkplaceAssemblyAbortedError} from '@novel-master/core/workplace';
 
 const mockAssemble = jest.fn();
