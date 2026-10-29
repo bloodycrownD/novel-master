@@ -13,8 +13,8 @@ import type {
   DynamicPromptBlock,
   PersistPromptBlock,
 } from '@novel-master/core/prompt';
+import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
 import {
-  DEFAULT_SKILLS_INDEX_PREFIX,
   countFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,

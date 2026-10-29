@@ -13,12 +13,12 @@ import {
 } from "@shared/logic/agent";
 
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   type DynamicPromptBlock,
   type PersistPromptBlock,
   type PersistTextPromptBlock,
 } from "@shared/logic/prompt";
 import {
-  DEFAULT_SKILLS_INDEX_PREFIX,
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   MODE_OPTIONS,

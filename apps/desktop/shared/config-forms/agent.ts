@@ -4,7 +4,4 @@ export {
   agentModeMatchesTab,
   type AgentSettingsTab,
 } from "./agent-mode-tab.js";
-export {
-  allocateAgentDisplayName,
-  type AgentDisplayNameSlot,
-} from "./allocate-agent-display-name.js";
+export { allocateAgentDisplayName } from "./allocate-agent-display-name.js";

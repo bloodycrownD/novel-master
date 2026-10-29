@@ -5,7 +5,7 @@
  */
 
 /** 已有 Agent 的 id 与显示名（decode 失败时可回退为 id）。 */
-export type AgentDisplayNameSlot = {
+type AgentDisplayNameSlot = {
   readonly id: string;
   readonly name: string;
 };
@@ -13,9 +13,7 @@ export type AgentDisplayNameSlot = {
 /**
  * 返回 `agent1`、`agent2`… 中首个未被占用的显示名（trim 后精确匹配）。
  */
-export function allocateAgentDisplayName(
-  slots: readonly AgentDisplayNameSlot[]
-): string {
+export function allocateAgentDisplayName(slots: readonly AgentDisplayNameSlot[]): string {
   const used = new Set<string>();
   for (const slot of slots) {
     const trimmed = slot.name.trim();

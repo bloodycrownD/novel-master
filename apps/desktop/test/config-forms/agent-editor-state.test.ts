@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildAgentDefinitionFromForm, buildToolsPolicyFromSelection, countEffectiveFormPromptSources, countFormPromptSources, countMinimumPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, toolsSelectionFromDefinition, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE, DEFAULT_WORKPLACE_ASSISTANT_TEXT, withWorkplaceToggle } from "../../shared/config-forms/agent-editor-state.js";
-import { validateAgentPromptLayout } from "@novel-master/core/prompt";
+import { buildAgentDefinitionFromForm, countEffectiveFormPromptSources, countFormPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistTextBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, withWorkplaceToggle } from "../../shared/config-forms/agent-editor-state.js";
+import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "../../shared/config-forms/agent-tool-catalog.js";
+import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, validateAgentPromptLayout } from "@novel-master/core/prompt";
 
 test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
   assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
@@ -188,7 +189,7 @@ test("layoutFromFormInput maps workplace boolean and strips legacy worktree", ()
   assert.deepEqual(layout.persist, [{ name: "persona", type: "text", role: "user", content: "x" }]);
 });
 
-test("movePersistBlock swaps text blocks", () => {
+test("movePersistTextBlock swaps text blocks", () => {
   const blocks = [
     { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
     {
@@ -198,7 +199,7 @@ test("movePersistBlock swaps text blocks", () => {
       content: "b",
     },
   ];
-  const movedDown = movePersistBlock(blocks, 0, 1);
+  const movedDown = movePersistTextBlock(blocks, 0, 1);
   assert.deepEqual(
     movedDown.map((block) => block.name),
     ["p2", "p1"]
@@ -672,39 +673,6 @@ test("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可
   assert.equal(result.ok, true);
 });
 
-test("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
-  assert.equal(
-    countMinimumPromptSources({
-      systemEnabled: true,
-      systemContent: "sys",
-      dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
-    }),
-    2
-  );
-  assert.equal(
-    countMinimumPromptSources({
-      systemEnabled: true,
-      systemContent: "   ",
-      dynamic: [],
-    }),
-    0
-  );
-  assert.equal(
-    countMinimumPromptSources(
-      {
-        systemEnabled: false,
-        systemContent: "",
-        dynamic: [
-          { name: "d1", type: "text", role: "user", content: "a" },
-          { name: "d2", type: "text", role: "user", content: "b" },
-        ],
-      },
-      { excludeDynamicIndex: 0 }
-    ),
-    1
-  );
-});
-
 test("countFormPromptSources ignores enabled system without content", () => {
   assert.equal(
     countFormPromptSources({
@@ -1048,7 +1016,7 @@ test("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
   });
   assert.equal(empty.ok, false);
   if (!empty.ok) {
-    assert.equal(empty.message, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE);
+    assert.equal(empty.message, "请填写常驻工作区助手确认语");
   }
 });
 

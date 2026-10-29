@@ -8,7 +8,7 @@ import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.sch
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import { normalizeAgentPromptLayoutDomain } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import { decode } from "@/infra/serialization/decode.js";
-import type { StoredConfigHealth, StoredConfigInvalidCode } from "./types.js";
+import type { StoredConfigHealth } from "./types.js";
 
 const REMOVED_FEATURE_KEYWORDS = [
   "prompts.blocks",
@@ -18,50 +18,16 @@ const REMOVED_FEATURE_KEYWORDS = [
   "legacy nested model",
 ] as const;
 
-function isRemovedFeatureError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword));
-}
-
-function isAgentDefinitionDomainShape(
-  value: unknown
-): value is AgentDefinition {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  if ("schemaVersion" in value) {
-    return false;
-  }
-  const record = value as AgentDefinition;
-  if (typeof record.name !== "string" || record.name.trim().length === 0) {
-    return false;
-  }
-  const prompts = record.prompts;
-  if (
-    prompts == null ||
-    typeof prompts !== "object" ||
-    Array.isArray(prompts)
-  ) {
-    return false;
-  }
-  return Array.isArray(prompts.persist) && Array.isArray(prompts.dynamic);
-}
-
 /**
  * 将智能体配置 wire 判定为 valid / invalid。
  */
-export function assessAgentDefinitionWire(
-  raw: unknown
-): StoredConfigHealth<AgentDefinition> {
+export function assessAgentDefinitionWire(raw: unknown): StoredConfigHealth<AgentDefinition> {
   try {
     const value = decode(raw, agentDefinitionSchema);
     return { status: "valid", value };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const code: StoredConfigInvalidCode = isRemovedFeatureError(error)
-      ? "removed_feature"
-      : "broken_wire";
-    return { status: "invalid", code, message };
+    return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };
   }
 }
 
@@ -71,17 +37,12 @@ export function assessAgentDefinitionWire(
  * 项目 `agent_config_json.definition` 与 registry `get()` 返回领域形态
  *（`prompts.persist` 为数组），不可直接走 wire 判定。
  */
-export function resolveAgentDefinitionFromStorage(
-  stored: unknown
-): StoredConfigHealth<AgentDefinition> {
-  if (isAgentDefinitionDomainShape(stored)) {
-    return {
-      status: "valid",
-      value: {
-        ...stored,
-        prompts: normalizeAgentPromptLayoutDomain(stored.prompts),
-      },
-    };
+export function resolveAgentDefinitionFromStorage(stored: unknown): StoredConfigHealth<AgentDefinition> {
+  if (stored != null && typeof stored === "object" && !Array.isArray(stored) && !("schemaVersion" in stored)) {
+    const record = stored as AgentDefinition;
+    if (typeof record.name === "string" && record.name.trim().length > 0 && record.prompts != null && typeof record.prompts === "object" && !Array.isArray(record.prompts) && Array.isArray(record.prompts.persist) && Array.isArray(record.prompts.dynamic)) {
+      return { status: "valid", value: { ...record, prompts: normalizeAgentPromptLayoutDomain(record.prompts) } };
+    }
   }
   return assessAgentDefinitionWire(stored);
 }

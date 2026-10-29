@@ -6,8 +6,8 @@
 import React from 'react';
 import {Text, View} from 'react-native';
 
+import {DEFAULT_SKILLS_INDEX_PREFIX} from '@novel-master/core/prompt';
 import {
-  DEFAULT_SKILLS_INDEX_PREFIX,
   PROMPT_REGION_LABELS,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
   WORKPLACE_BLOCK_HINT,

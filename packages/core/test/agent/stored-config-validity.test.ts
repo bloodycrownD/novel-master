@@ -6,9 +6,9 @@ import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
-  resolveAgentDefinitionFromStorage,
   STORED_CONFIG_LABELS,
 } from "../../src/domain/agent/stored-config-validity/index.js";
+import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,

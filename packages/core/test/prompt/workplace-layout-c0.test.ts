@@ -10,7 +10,7 @@ import {
   assembleWorkplaceDisplay,
   layoutHasWorkplace,
 } from "@novel-master/core/workplace";
-import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/index.js";
+import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
   createMemorySessionKkv,

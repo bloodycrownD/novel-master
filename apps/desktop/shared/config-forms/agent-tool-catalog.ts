@@ -1,7 +1,4 @@
-import type {
-  AgentDefinition,
-  AgentToolPolicy,
-} from "@novel-master/core/agent";
+import type { AgentDefinition, AgentToolPolicy } from "@novel-master/core/agent";
 import type { ToolsMode } from "./agent-editor-state.js";
 
 /** Catalog of V2 builtin tools for Agent policy UI（与 registerBuiltinTools 同步）。 */
@@ -53,10 +50,7 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   },
 ] as const;
 
-export function buildToolsPolicyFromSelection(
-  mode: ToolsMode,
-  selected: readonly string[]
-): AgentToolPolicy | undefined {
+export function buildToolsPolicyFromSelection(mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined {
   if (mode === "default") {
     return undefined;
   }
