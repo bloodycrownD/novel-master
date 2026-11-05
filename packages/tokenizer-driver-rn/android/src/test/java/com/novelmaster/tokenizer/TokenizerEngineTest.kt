@@ -72,6 +72,53 @@ class TokenizerEngineTest {
     }
   }
 
+  /**
+   * tokenizer-sp-chunked-cancel：分段计数与整串计数的精度对拍。
+   *
+   * 真机 gemini 长会话单轮 8.4s 逼出了分段，但分段会在每处切点把跨界子词
+   * 拆成两段各自成词（每段多 1~2 token）。这里用 22K 字符的长文本把边界
+   * 成本量化，锁在 1% 容差内——与 `TokenizerParityTest.parityTolerance`
+   * 同一口径，压缩阈值另带 0.85 安全系数。
+   */
+  @Test
+  fun spChunkedMatchesWholeWithinTolerance() {
+    val asset = resolveAsset("tokenizers/gemma.model")
+    assumeTrue("gemma.model asset missing", asset != null)
+    val longText = (1..500).joinToString("\n") { i ->
+      "第 $i 段：这是一段用于验证 SentencePiece 分段计数精度的中文正文，混入 English words、数字 $i 与标点。"
+    }
+
+    SpTokenizer(Paths.get(asset!!.absolutePath)).use { tokenizer ->
+      val whole = tokenizer.processor.encode(longText).size
+      val chunked = TokenizerEngine.countSpChunked(longText, { text -> tokenizer.processor.encode(text).size })
+      val tolerance = maxOf(3, whole / 100 + 1)
+      assertTrue("chunked=$chunked whole=$whole tolerance=$tolerance", kotlin.math.abs(chunked - whole) <= tolerance)
+    }
+  }
+
+  /**
+   * tokenizer-sp-chunked-cancel：取消标记必须在**第一段 encode 之前**生效。
+   *
+   * 这正是真机缺的那一环——整串 encode 是一块不可中断的 JNI，切模型下发的
+   * cancelCount 只能干等 8.4s。分段后第一个检查点就能短路，`calls` 必须为 0。
+   */
+  @Test
+  fun spChunkedHonoursCancelBetweenChunks() {
+    val asset = resolveAsset("tokenizers/gemma.model")
+    assumeTrue("gemma.model asset missing", asset != null)
+    val longText = (1..500).joinToString("\n") { i -> "第 $i 段：取消检查点在段间，用于验证分段短路。" }
+
+    SpTokenizer(Paths.get(asset!!.absolutePath)).use { tokenizer ->
+      var calls = 0
+      try {
+        TokenizerEngine.countSpChunked(longText, { text -> calls += 1; tokenizer.processor.encode(text).size }, { true })
+        fail("expected TokenizerCountCancelledException")
+      } catch (e: TokenizerCountCancelledException) {
+        assertEquals("取消必须在第一段 encode 之前命中，不能先算完", 0, calls)
+      }
+    }
+  }
+
   @Test
   fun resolveAssetSpecForFamilyWithoutAssetsThrowsInsteadOfHeuristic() {
     // 新契约：无资产家族不再折算 heuristic，直接抛异常（T-FA5）。

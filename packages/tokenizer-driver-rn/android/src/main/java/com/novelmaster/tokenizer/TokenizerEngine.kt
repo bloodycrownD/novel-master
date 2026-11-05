@@ -220,8 +220,13 @@ internal class TokenizerEngine(private val context: Context) {
     if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
     val encodeStartNs = System.nanoTime()
     return try {
-      val ids = tokenizer.processor.encode(serialized)
-      CountResult(ids.size, family, estimated = false)
+      // 分段 encode（tokenizer-sp-chunked-cancel，2026-11-05）：SP 的 unigram
+      // 编码是**单次不可中断 JNI**，十几万字符的 gemini/gemma 会话实测单轮
+      // resolve 8.4s（真机 `[nm-chip] resolve done +8568ms`），期间切模型下发的
+      // cancelCount 只能等到它跑完——这正是「切模型频繁时卡住线程」的本体。
+      // 按换行优先的安全边界切片后，段间可查取消标记，静默期收敛到单段。
+      val count = countSpChunked(serialized, { text -> tokenizer.processor.encode(text).size }, shouldCancel)
+      CountResult(count, family, estimated = false)
     } catch (e: TokenizerCountCancelledException) {
       throw e
     } catch (e: Throwable) {
@@ -301,6 +306,50 @@ internal class TokenizerEngine(private val context: Context) {
 
   companion object {
     private const val LOG_TAG = "nm-tok"
+
+    /** SP 分段计数的单段字符上限：gemma/gemini 长会话下每段约 0.5~0.8s，取消静默期随之上界。 */
+    private const val SP_CHUNK_CHARS = 8000
+
+    /** 换行优先切点的回看窗口，同时是段长下限（避免切出碎片段）。 */
+    private const val SP_BREAK_WINDOW = 2000
+
+    /**
+     * SP 分段计数（纯函数、JVM 直测：`encode` 以回调注入，与
+     * `WebPromptConverter.countWebSerialized` 同款手法——Engine 实例需要
+     * android Context，纯逻辑留在这里才能进单元测试）。
+     *
+     * 整串不超过 [SP_CHUNK_CHARS] 时走整串原路径（逐 token 等值，存量短文本
+     * 行为零变化）；超过才切片，每段 encode 前查一次取消标记。切点在目标位置
+     * 往前 [SP_BREAK_WINDOW] 字符内**最近的换行**上（文本自然边界，跨界子词
+     * 损失最小），找不到就硬切；段长下限由同一个窗口保证。
+     *
+     * 精度：段边界把跨界子词拆成两段各自成词，每段多算 1~2 token，落在 1%
+     * 对拍容差内（`TokenizerParityTest.parityTolerance`，压缩阈值另带 0.85
+     * 安全系数）。
+     */
+    fun countSpChunked(text: String, encode: (String) -> Int, shouldCancel: () -> Boolean = { false }): Int {
+      if (text.length <= SP_CHUNK_CHARS) {
+        return encode(text)
+      }
+      var total = 0
+      var start = 0
+      while (start < text.length) {
+        if (shouldCancel()) {
+          throw TokenizerCountCancelledException("SP 分段计数在 encode 途中被取消")
+        }
+        val target = minOf(start + SP_CHUNK_CHARS, text.length)
+        val end = if (target >= text.length) text.length else safeBreakAt(text, start, target)
+        total += encode(text.substring(start, end))
+        start = end
+      }
+      return total
+    }
+
+    /** 在 [target] 往前 [SP_BREAK_WINDOW] 字符内找最近换行（返回其后一位），找不到硬切。 */
+    private fun safeBreakAt(text: String, start: Int, target: Int): Int {
+      val newline = text.lastIndexOf('\n', target)
+      return if (newline >= start + SP_BREAK_WINDOW) newline + 1 else target
+    }
 
     /**
      * 静态纯函数：解析家族对应的资产 spec（不持有 android Context，可 JVM 直测）。

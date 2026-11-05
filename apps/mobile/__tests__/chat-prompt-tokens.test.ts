@@ -1223,7 +1223,8 @@ describe('chat-prompt-tokens.service', () => {
       {projectId: 'p', sessionId: 's-switch-model'},
       l => upgrades.push(l),
     );
-    // ② 切到 model B 并刷新：新首帧（推进新鲜度代数）；B 的升级请求进补跑槽。
+    // ② 切到 model B 并刷新：新首帧（推进新鲜度代数）；旧轮按「切模型」路径
+    //    被主动取消（tokenizer-switch-stall），B 的升级轮立刻起跑。
     family = 'tiktoken';
     const afterSwitch = await loadChatPromptTokenLabelResilient(
       runtime,
@@ -1231,14 +1232,16 @@ describe('chat-prompt-tokens.service', () => {
       l => upgrades.push(l),
     );
     expect(afterSwitch).toBe('gpt ≈ 30k / 128k (23%)');
-    // ③ 放行 A 的升级：gen 已变 → 丢弃，不回调旧家族标签；补跑轮随即起步
-    //    （按补跑槽里的 B 请求重跑，模型解析发生在重跑起步时 → 取到 B）。
+    // 切模型必须下发原生取消：gemini 的 SP 整串 encode 实测 8.4s，光靠 gen 闸
+    // 丢弃结果仍要白跑一整轮，占着单线程 executor 把后续刷新全堵在队列里。
+    expect(mockCancelSessionNativeCounts).toHaveBeenCalledWith('s-switch-model');
+    // ③ 放行 A 的升级：gen 已变 → 丢弃，不回调旧家族标签；B 轮已在跑。
     releaseQueue[0]!();
     await new Promise(resolve => setImmediate(resolve));
     await new Promise(resolve => setImmediate(resolve));
     expect(upgrades).toEqual([]);
     expect(releaseQueue.length).toBe(2);
-    // ④ 放行补跑轮：它是 B 的计数，gen 未再推进 → 到位的是 B 的家族标签。
+    // ④ 放行 B 轮：它是 B 的计数，gen 未再推进 → 到位的是 B 的家族标签。
     releaseQueue[1]!();
     await new Promise(resolve => setImmediate(resolve));
     await new Promise(resolve => setImmediate(resolve));

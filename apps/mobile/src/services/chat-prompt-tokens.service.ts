@@ -135,7 +135,7 @@ async function loadChatTokenLabelWithFlag(
   scope: SessionPromptScope,
   preferEstimate: boolean,
   shouldBail?: () => boolean,
-): Promise<{label: string; upgradeWorthy: boolean}> {
+): Promise<{label: string; upgradeWorthy: boolean; savedModelId?: string}> {
   // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
   // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
   const diagT0 = Date.now();
@@ -251,11 +251,24 @@ async function loadChatTokenLabelWithFlag(
   return {
     label: formatChatTokenLabel(result, contextWindow ?? undefined),
     upgradeWorthy: result.source === 'local' && result.estimated,
+    // 模型身份随首帧带出：升级轮用它区分「切模型」（旧轮读数必被丢弃，可取消）
+    // 与「同模型的内容变化」（旧轮仍值得跑完，靠补跑槽收敛）。
+    savedModelId,
   };
 }
 
-/** 后台精确升级在途标记（按 sessionId）：避免事件风暴下堆叠重复整串计数。 */
-const preciseUpgradeInflight = new Set<string>();
+/**
+ * 后台精确升级在途登记（按 sessionId）：值是**这一轮的轮次号与模型身份**。
+ *
+ * 从 Set<string> 升成 Map（tokenizer-switch-stall，2026-11-05）的原因是切模型
+ * 要能主动取消在途轮：取消后新轮立刻起跑，旧轮 finally 若按 sessionId 无条件
+ * `delete`，会把新轮的标记一起抹掉（后续升级请求全部被当成「无在途」而并发
+ * 堆叠）。按轮次号比对后，旧轮只能摘自己的标记。
+ */
+const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: string}>();
+
+/** 轮次号自增源：只在 `loadChatPromptTokenLabelResilient` 构造请求时消费。 */
+let preciseUpgradeRoundSeq = 0;
 
 /**
  * 精确升级的启动延迟（2026-10-01 设 2500：升级轮是秒级重活且不可中断，首帧后
@@ -354,6 +367,10 @@ type PreciseUpgradeRequest = {
   readonly onPreciseUpgrade: (label: string) => void;
   /** 升级轮的中途弃权判定（run 起步即撤——升级永远不该与发送链竞争）。 */
   readonly shouldBail?: () => boolean;
+  /** 本轮轮次号：在途登记与 finally 清理都按它比对，切模型取消后旧轮不会误删新轮标记。 */
+  readonly round: number;
+  /** 本轮计数针对的模型身份（空串=无模型早退分支）：切模型判据。 */
+  readonly savedModelId: string;
 };
 
 /**
@@ -400,7 +417,7 @@ function startPreciseUpgrade(
     preciseUpgradeDelayTimers.delete(sessionId);
     preciseUpgradeInflight.delete(sessionId);
   }
-  preciseUpgradeInflight.add(sessionId);
+  preciseUpgradeInflight.set(sessionId, {round: request.round, savedModelId: request.savedModelId});
   if (preciseUpgradeStartDelayMs <= 0) {
     void runPreciseUpgrade(sessionId, request);
     return;
@@ -422,8 +439,14 @@ async function runPreciseUpgrade(
 ): Promise<void> {
   // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
   const gen = sessionRefreshGen.get(sessionId) ?? 0;
+  // 代数已变 = 期间已有更新的首帧（切模型/新消息）：本轮读数必被下面的新鲜度闸
+  // 丢弃，于是在 build 分段与整串计数之前就弃权，切模型的旧轮不再白跑一整轮
+  // 装配（真机实证：白跑轮 `settle gen=4 current=5` 烧掉 1004ms）。这是纯增量
+  // 判据，run 在途与视图切走的既有弃权照旧。
+  const shouldBail = () =>
+    request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
   try {
-    if (request.shouldBail?.() === true) {
+    if (shouldBail()) {
       if (__DEV__) {
         console.log('[nm-chip] precise upgrade bailed before start');
       }
@@ -433,7 +456,7 @@ async function runPreciseUpgrade(
       request.runtime,
       request.scope,
       false,
-      request.shouldBail,
+      shouldBail,
     );
     if (
       // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
@@ -450,7 +473,11 @@ async function runPreciseUpgrade(
       console.warn('[chat] prompt token precise upgrade failed', error);
     }
   } finally {
-    preciseUpgradeInflight.delete(sessionId);
+    // 只摘自己这一轮：切模型取消后新轮已用新轮次号登记，无条件 delete 会把
+    // 新轮的标记一起抹掉，后续升级请求就再无在途去重可用。
+    if (preciseUpgradeInflight.get(sessionId)?.round === request.round) {
+      preciseUpgradeInflight.delete(sessionId);
+    }
     const queued = preciseUpgradeQueued.get(sessionId);
     if (queued != null) {
       preciseUpgradeQueued.delete(sessionId);
@@ -483,7 +510,7 @@ export async function loadChatPromptTokenLabelResilient(
     readonly shouldBailPrecise?: () => boolean;
   },
 ): Promise<string> {
-  let first: {label: string; upgradeWorthy: boolean};
+  let first: {label: string; upgradeWorthy: boolean; savedModelId?: string};
   try {
     first = await loadChatTokenLabelWithFlag(
       runtime,
@@ -526,11 +553,22 @@ export async function loadChatPromptTokenLabelResilient(
       shouldBail: () =>
         runtime.abortRegistry.has(scope.sessionId) ||
         options?.shouldBailPrecise?.() === true,
+      round: ++preciseUpgradeRoundSeq,
+      savedModelId: first.savedModelId ?? '',
     };
-    if (preciseUpgradeInflight.has(sessionId)) {
-      // 在途轮的去重语义不变（不并发堆叠整串计数）：本次首帧的升级请求排队，
-      // 在途轮落定后补跑——否则它既不会被在途轮覆盖（gen 闸会丢），也没有
-      // 任何一轮会跑，chip 就停在估算档（见 startPreciseUpgrade 注释）。
+    const inFlight = preciseUpgradeInflight.get(sessionId);
+    if (inFlight != null && inFlight.savedModelId !== request.savedModelId) {
+      // 切模型（tokenizer-switch-stall）：旧轮的读数必被新鲜度闸丢弃，而它正
+      // 占着单线程原生 executor——gemini 走 SentencePiece，整串 encode 实测
+      // 8.4s，期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
+      // 先撤在途轮再起新轮：取消指令配合原生分段检查点，一段之内就能收场。
+      cancelPreciseUpgrade(sessionId);
+      preciseUpgradeQueued.delete(sessionId);
+      preciseUpgradeInflight.delete(sessionId);
+      startPreciseUpgrade(sessionId, request);
+    } else if (inFlight != null) {
+      // 同模型的内容变化：在途轮虽然产物过期，词表与前缀仍复用得上，不取消；
+      // 请求排进补跑槽，在途轮落定后立刻补跑。
       preciseUpgradeQueued.set(sessionId, request);
     } else {
       startPreciseUpgrade(sessionId, request);
