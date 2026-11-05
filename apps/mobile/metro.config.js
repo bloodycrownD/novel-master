@@ -98,6 +98,19 @@ function resolveZodModule(moduleName) {
 
 const mobileSrcRoot = path.resolve(__dirname, 'src');
 
+/**
+ * 只认文件，不认目录。别名候选的第一个是 `src/<rel>` 原样路径，`@/config-forms/agent`
+ * 这类**目录别名**（内含 index.ts）会让 existsSync 命中目录本身——Metro 随后把目录
+ * 当文件求 SHA-1，抛 `Failed to get the SHA-1 for: ...\config-forms\agent`。
+ */
+function isFile(candidate) {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** Mobile `@/` → apps/mobile/src（优先于 core fallback）。 */
 function resolveMobilePathAlias(moduleName) {
   if (!moduleName.startsWith('@/')) {
@@ -111,9 +124,12 @@ function resolveMobilePathAlias(moduleName) {
     path.join(mobileSrcRoot, `${withoutExt}.ts`),
     path.join(mobileSrcRoot, `${withoutExt}.jsx`),
     path.join(mobileSrcRoot, `${withoutExt}.js`),
+    path.join(mobileSrcRoot, withoutExt, 'index.tsx'),
+    path.join(mobileSrcRoot, withoutExt, 'index.ts'),
+    path.join(mobileSrcRoot, withoutExt, 'index.js'),
   ];
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (isFile(candidate)) {
       return candidate;
     }
   }
@@ -130,11 +146,13 @@ function resolveCorePathAlias(moduleName) {
   const candidates = [
     path.join(coreDistRoot, rel),
     path.join(coreDistRoot, `${withoutJs}.js`),
+    path.join(coreDistRoot, withoutJs, 'index.js'),
     path.join(coreSrcRoot, rel),
     path.join(coreSrcRoot, `${withoutJs}.ts`),
+    path.join(coreSrcRoot, withoutJs, 'index.ts'),
   ];
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (isFile(candidate)) {
       return candidate;
     }
   }
