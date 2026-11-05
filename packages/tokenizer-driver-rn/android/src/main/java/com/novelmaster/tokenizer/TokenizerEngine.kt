@@ -59,6 +59,13 @@ internal class TokenizerEngine(private val context: Context) {
   private val spCache = LruCache<String, SpTokenizer>(4)
 
   /**
+   * SP native 不可用的家族（进程内记忆）：DJL 的 SentencePiece 无 Android native
+   * 产物，构造必失败——失败过的家族直接短路，不再每次重付 JNI 失败开销。
+   * 语义与恢复条件见 [loadSpTokenizer]。
+   */
+  private val spUnavailable = mutableSetOf<String>()
+
+  /**
    * @param shouldCancel 取消检查回调，命中即抛 [TokenizerCountCancelledException]。
    *   缺省 `{ false }` 是为了保持既有调用方（[TokenizerModule.countPrompt] 等）
    *   逐字兼容——可取消的轮才显式传入。
@@ -220,13 +227,8 @@ internal class TokenizerEngine(private val context: Context) {
     if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
     val encodeStartNs = System.nanoTime()
     return try {
-      // 分段 encode（tokenizer-sp-chunked-cancel，2026-11-05）：SP 的 unigram
-      // 编码是**单次不可中断 JNI**，十几万字符的 gemini/gemma 会话实测单轮
-      // resolve 8.4s（真机 `[nm-chip] resolve done +8568ms`），期间切模型下发的
-      // cancelCount 只能等到它跑完——这正是「切模型频繁时卡住线程」的本体。
-      // 按换行优先的安全边界切片后，段间可查取消标记，静默期收敛到单段。
-      val count = countSpChunked(serialized, { text -> tokenizer.processor.encode(text).size }, shouldCancel)
-      CountResult(count, family, estimated = false)
+      val ids = tokenizer.processor.encode(serialized)
+      CountResult(ids.size, family, estimated = false)
     } catch (e: TokenizerCountCancelledException) {
       throw e
     } catch (e: Throwable) {
@@ -241,6 +243,15 @@ internal class TokenizerEngine(private val context: Context) {
     spec: AssetPathSpec,
     timings: CountTimings? = null,
   ): SpTokenizer? {
+    // SP native 不可用的家族（进程内记忆，2026-11-06 真机实测）：DJL 的
+    // SentencePiece 没有 Android native 产物，`SpTokenizer` 构造必抛
+    // UnsatisfiedLinkError——每次重试白付 ~42ms JNI 失败，而 JS 侧本轮最终
+    // 会落到原生 cl100k 近似。失败一次后直接短路；老进程内不会自愈，将来
+    // 若把 .so 补进 jniLibs，重启即恢复重试。只在模块的单线程 executor 上
+    // 读写，无需加锁。
+    if (family in spUnavailable) {
+      return null
+    }
     spCache.get(family)?.let { return it }
     val copyStartNs = System.nanoTime()
     val path = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
@@ -249,6 +260,7 @@ internal class TokenizerEngine(private val context: Context) {
     return try {
       SpTokenizer(Paths.get(path)).also { spCache.put(family, it) }
     } catch (_: Throwable) {
+      spUnavailable.add(family)
       null
     } finally {
       timings?.jniMs = elapsedMs(jniStartNs)
@@ -306,50 +318,6 @@ internal class TokenizerEngine(private val context: Context) {
 
   companion object {
     private const val LOG_TAG = "nm-tok"
-
-    /** SP 分段计数的单段字符上限：gemma/gemini 长会话下每段约 0.5~0.8s，取消静默期随之上界。 */
-    private const val SP_CHUNK_CHARS = 8000
-
-    /** 换行优先切点的回看窗口，同时是段长下限（避免切出碎片段）。 */
-    private const val SP_BREAK_WINDOW = 2000
-
-    /**
-     * SP 分段计数（纯函数、JVM 直测：`encode` 以回调注入，与
-     * `WebPromptConverter.countWebSerialized` 同款手法——Engine 实例需要
-     * android Context，纯逻辑留在这里才能进单元测试）。
-     *
-     * 整串不超过 [SP_CHUNK_CHARS] 时走整串原路径（逐 token 等值，存量短文本
-     * 行为零变化）；超过才切片，每段 encode 前查一次取消标记。切点在目标位置
-     * 往前 [SP_BREAK_WINDOW] 字符内**最近的换行**上（文本自然边界，跨界子词
-     * 损失最小），找不到就硬切；段长下限由同一个窗口保证。
-     *
-     * 精度：段边界把跨界子词拆成两段各自成词，每段多算 1~2 token，落在 1%
-     * 对拍容差内（`TokenizerParityTest.parityTolerance`，压缩阈值另带 0.85
-     * 安全系数）。
-     */
-    fun countSpChunked(text: String, encode: (String) -> Int, shouldCancel: () -> Boolean = { false }): Int {
-      if (text.length <= SP_CHUNK_CHARS) {
-        return encode(text)
-      }
-      var total = 0
-      var start = 0
-      while (start < text.length) {
-        if (shouldCancel()) {
-          throw TokenizerCountCancelledException("SP 分段计数在 encode 途中被取消")
-        }
-        val target = minOf(start + SP_CHUNK_CHARS, text.length)
-        val end = if (target >= text.length) text.length else safeBreakAt(text, start, target)
-        total += encode(text.substring(start, end))
-        start = end
-      }
-      return total
-    }
-
-    /** 在 [target] 往前 [SP_BREAK_WINDOW] 字符内找最近换行（返回其后一位），找不到硬切。 */
-    private fun safeBreakAt(text: String, start: Int, target: Int): Int {
-      val newline = text.lastIndexOf('\n', target)
-      return if (newline >= start + SP_BREAK_WINDOW) newline + 1 else target
-    }
 
     /**
      * 静态纯函数：解析家族对应的资产 spec（不持有 android Context，可 JVM 直测）。
