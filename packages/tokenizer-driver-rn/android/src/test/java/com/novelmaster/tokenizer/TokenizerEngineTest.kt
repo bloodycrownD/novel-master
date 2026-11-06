@@ -128,6 +128,18 @@ class TokenizerEngineTest {
     // 改用 convert_slow_tokenizer 转出的 tokenizer.json，走已有的 HF native。
     assertEquals("gemma.json", gemma.primary)
     assertEquals("json", gemma.kind)
+    assertTrue("SP 转 HF 家族必须裸编码", gemma.bare)
+
+    for (family in listOf("llama", "mistral")) {
+      val spec = TokenizerEngine.resolveAssetSpecFor(family)
+      assertEquals("$family.json", spec.primary)
+      assertEquals("json", spec.kind)
+      assertTrue("SP 转 HF 家族必须裸编码: $family", spec.bare)
+    }
+
+    // WEB 家族相反：必须走包装（buildSerialized 会追加 `\n\nAssistant:`），
+    // 标成 bare 反而错。
+    assertFalse("WEB 家族不该标 bare", TokenizerEngine.resolveAssetSpecFor("claude").bare)
 
     val qwen2 = TokenizerEngine.resolveAssetSpecFor("qwen2")
     assertEquals("web/qwen2.json", qwen2.primary)
@@ -143,10 +155,14 @@ class TokenizerEngineTest {
     val cl = TokenizerEngine.resolveTiktokenAssetSpec("cl100k_base")
     assertEquals("cl100k.json", cl.primary)
     assertEquals("json", cl.kind)
+    // 裸编码标记：dispatch 只认 spec.bare（不再有 `family == "tiktoken"` 旁路），
+    // 漏标就会静默走 WEB 包装、多算 3~5 token。
+    assertTrue("tiktoken 两表必须标 bare", cl.bare)
 
     val o2 = TokenizerEngine.resolveTiktokenAssetSpec("o200k_base")
     assertEquals("o200k.json", o2.primary)
     assertEquals("json", o2.kind)
+    assertTrue("tiktoken 两表必须标 bare", o2.bare)
 
     // 两表域外（p50k 等）与空缺编码名都必须抛：JS 侧出界模型本就不发起原生
     // 调用，这里是防御线。

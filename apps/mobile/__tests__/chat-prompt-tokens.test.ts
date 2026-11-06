@@ -23,7 +23,9 @@ const mockBuildSessionPromptInput = jest.fn();
 // 形参写成 rest（而非零参实现）：mock 工厂里要把 unknown[] 原样转发进来，
 // 零参签名会让 tsc 报 TS2556（spread 必须有 tuple/ rest 目标）——既有的类型
 // 欠账，本轮顺手清掉，免得本文件的 typecheck 信号被这一条常年占着。
-const mockSerializePromptLlmInput = jest.fn((..._args: unknown[]) => 'serialized');
+const mockSerializePromptLlmInput = jest.fn(
+  (..._args: unknown[]) => 'serialized',
+);
 // 兜底路径（无模型早退 / build 失败）改走 RN 驱动的 cl100k 真分词器，不再走
 // `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/provider`，
 // 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
@@ -368,8 +370,9 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
-        const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
-          ?.preferEstimate;
+        const preferEstimate = (
+          options as {preferEstimate?: boolean} | undefined
+        )?.preferEstimate;
         if (preferEstimate === true) {
           return Promise.resolve({
             tokenCount: 30_000,
@@ -400,8 +403,11 @@ describe('chat-prompt-tokens.service', () => {
     expect(first).toBe('gpt ≈ 30k / 128k (23%)');
     // 首帧确实带 preferEstimate
     expect(
-      (mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {preferEstimate?: boolean})
-        .preferEstimate,
+      (
+        mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
+          preferEstimate?: boolean;
+        }
+      ).preferEstimate,
     ).toBe(true);
 
     // 后台升级轮：完整口径（家族真分词器）→ 回调换上 glm = 精确标签
@@ -423,8 +429,9 @@ describe('chat-prompt-tokens.service', () => {
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
-          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
-            ?.preferEstimate;
+          const preferEstimate = (
+            options as {preferEstimate?: boolean} | undefined
+          )?.preferEstimate;
           if (preferEstimate === true) {
             return Promise.resolve({
               tokenCount: 30_000,
@@ -479,8 +486,9 @@ describe('chat-prompt-tokens.service', () => {
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
-          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
-            ?.preferEstimate;
+          const preferEstimate = (
+            options as {preferEstimate?: boolean} | undefined
+          )?.preferEstimate;
           if (preferEstimate === true) {
             return Promise.resolve({
               tokenCount: 30_000,
@@ -536,8 +544,9 @@ describe('chat-prompt-tokens.service', () => {
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
-          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
-            ?.preferEstimate;
+          const preferEstimate = (
+            options as {preferEstimate?: boolean} | undefined
+          )?.preferEstimate;
           if (preferEstimate === true) {
             return Promise.resolve({
               tokenCount: 30_000,
@@ -566,7 +575,10 @@ describe('chat-prompt-tokens.service', () => {
         },
         // hook 侧 `chatSubviewRef.current !== 'conversation' ||
         //            tokenLabelSessionRef.current !== sessionId` 的等价物
-        {shouldBailPrecise: () => !inConversation || shownSessionId !== 's-identity'},
+        {
+          shouldBailPrecise: () =>
+            !inConversation || shownSessionId !== 's-identity',
+        },
       );
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 首帧窗口内用户切到了别的会话（视图没切，仍在 conversation）
@@ -606,7 +618,9 @@ describe('chat-prompt-tokens.service', () => {
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 延迟窗口内：升级还挂着（只有首帧那一次 resolve）。
       // （Part D 起窗口=800ms，1000 会越窗——改引常量半窗。）
-      await jest.advanceTimersByTimeAsync(Math.floor(PRECISE_UPGRADE_START_DELAY_MS / 2));
+      await jest.advanceTimersByTimeAsync(
+        Math.floor(PRECISE_UPGRADE_START_DELAY_MS / 2),
+      );
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
 
       // 收口（换会话 / 卸载时 service 的正式出口）。
@@ -680,10 +694,8 @@ describe('chat-prompt-tokens.service', () => {
     const scope = {projectId: 'p', sessionId: 's-cancel-inflight'};
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const first = await loadChatPromptTokenLabelResilient(
-        runtime,
-        scope,
-        l => upgrades.push(l),
+      const first = await loadChatPromptTokenLabelResilient(runtime, scope, l =>
+        upgrades.push(l),
       );
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 精确轮已起跑并挂在整串计数上（在途）。
@@ -746,7 +758,9 @@ describe('chat-prompt-tokens.service', () => {
 
       // 两阶段轮：升级轮的取消同样被 resolve 段 catch 收口 —— 不回调，且
       // runPreciseUpgrade 的 catch（:386）一行都没碰，故无失败 warn。
-      mockTwoPhaseResolve(() => Promise.reject(new PromptCountCancelledError()));
+      mockTwoPhaseResolve(() =>
+        Promise.reject(new PromptCountCancelledError()),
+      );
       const first = await loadChatPromptTokenLabelResilient(
         runtime,
         {projectId: 'p', sessionId: 's-cancel-upgrade'},
@@ -771,8 +785,9 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
-        const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
-          ?.preferEstimate;
+        const preferEstimate = (
+          options as {preferEstimate?: boolean} | undefined
+        )?.preferEstimate;
         if (preferEstimate === true) {
           return Promise.resolve({
             tokenCount: 30_000,
@@ -961,9 +976,11 @@ describe('chat-prompt-tokens.service', () => {
       {shouldBail},
     );
     expect(
-      (mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
-        shouldBail?: () => boolean;
-      }).shouldBail,
+      (
+        mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
+          shouldBail?: () => boolean;
+        }
+      ).shouldBail,
     ).toBe(shouldBail);
 
     // ② 不传 → options 里连这个键都不出现（core 缺省「恒不弃权」，
@@ -1014,7 +1031,7 @@ describe('chat-prompt-tokens.service', () => {
       estimated: boolean;
       counterKind: string;
       source: 'local';
-    }>
+    }>,
   ): void {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'zai/glm-4.6'},
@@ -1232,9 +1249,12 @@ describe('chat-prompt-tokens.service', () => {
       l => upgrades.push(l),
     );
     expect(afterSwitch).toBe('gpt ≈ 30k / 128k (23%)');
-    // 切模型必须下发原生取消：gemini 的 SP 整串 encode 实测 8.4s，光靠 gen 闸
+    // 切模型必须下发原生取消：切模型前 gemini/gemma 走 SP 整串 encode 实测 8.4s
+    // （已转 HF，但 13.7MB 词表首次加载 + 整串 encode 仍是秒级），光靠 gen 闸
     // 丢弃结果仍要白跑一整轮，占着单线程 executor 把后续刷新全堵在队列里。
-    expect(mockCancelSessionNativeCounts).toHaveBeenCalledWith('s-switch-model');
+    expect(mockCancelSessionNativeCounts).toHaveBeenCalledWith(
+      's-switch-model',
+    );
     // ③ 放行 A 的升级：gen 已变 → 丢弃，不回调旧家族标签；B 轮已在跑。
     releaseQueue[0]!();
     await new Promise(resolve => setImmediate(resolve));

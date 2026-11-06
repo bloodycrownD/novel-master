@@ -459,6 +459,37 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     });
   });
 
+  it('家族词表原生失败 → 原生 cl100k 近似（不落 JS 兜底）', async () => {
+    // 2026-11-06 兜底路由：SP 家族构造失败时先过桥一次 tiktoken/cl100k_base，
+    // 算力留在原生 executor 上（真机 107K 字符 7.9s → 757ms）。N 故意取与
+    // cl100kCount 不同的值——读数等于 N 才证明它来自原生第二次过桥，而不是
+    // JS 侧那条同样算 cl100k、结果却分不清的兜底路径。
+    const nativeApprox = cl100kCount('short prompt') + 7;
+    mockCountPrompt
+      .mockRejectedValueOnce(new Error('TOKENIZER_COUNT_FAILED'))
+      .mockResolvedValueOnce({tokenCount: nativeApprox, counterKind: 'tiktoken'});
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    // 不带 sessionId：带了会走 countPromptCancelable，mockCountPrompt 恒 0。
+    const result = await __test__.countSerialized(
+      'gemma',
+      'short prompt',
+      'gemini-2.0-flash',
+    );
+
+    expect(result).toEqual({
+      count: nativeApprox,
+      counterKind: 'heuristic',
+      estimated: true,
+    });
+    expect(mockCountPrompt).toHaveBeenCalledTimes(2);
+    expect(mockCountPrompt).toHaveBeenLastCalledWith(
+      'short prompt',
+      'tiktoken',
+      'cl100k_base',
+    );
+  });
+
   it('字符折算仅剩最后一降级：3.35 口径本身不变（编码表建不起来时才用）', () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
     expect(__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));

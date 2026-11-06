@@ -13,7 +13,7 @@ Canonical tokenizer model files for Kotlin `TokenizerEngine` (WEB/SP families + 
 | 文件 | 家族/编码 | 来源 | 说明 |
 |---|---|---|---|
 | claude.json / llama3.json / yi.model / jamba.model 及 `web/` 下 6 份 | WEB/SP 家族 | SillyTavern / SillyTavern-Tokenizers（见 LICENSE.md） | 历史资产，与 node 侧字节级一致 |
-| gemma.json / llama.json / mistral.json | SP 家族转 HF | `scripts/convert-sp-to-hf.py` 从 node 侧同名 `.model` 转出（transformers 4.48.3 `convert_slow_tokenizer`） | **与 node 侧有意分叉**：Android 无 SentencePiece native，改走 HF 路径；`AssetPathSpec.bare` 裸编码，六组文本对拍逐 token 等值 |
+| gemma.json / llama.json / mistral.json | SP 家族转 HF | `scripts/convert-sp-to-hf.py` 从 node 侧同名 `.model` 转出（transformers 4.48.3 `convert_slow_tokenizer`） | **与 node 侧有意分叉**：Android 无 SentencePiece native，改走 HF 路径；`AssetPathSpec.bare` 裸编码，六组文本 token 数全等（gemma 另经 `TokenizerParityTest` 精确对拍） |
 | cl100k.json | tiktoken / cl100k_base | HF `Xenova/gpt-4` `tokenizer.json` @ `1d9f1f1b1fae88c0e4df1dab0a397f8de6229075`（2026-10-03 获取） | 紧凑化（3.9→2.6MB，入库实测 2,730,931B）；无 post_processor/normalizer，直编码不注特殊 token |
 | o200k.json | tiktoken / o200k_base | HF `Xenova/gpt-4o` `tokenizer.json` @ `7956d98f2a83b2751a98ea7136fdf7fe6cf54e69`（2026-10-03 获取） | 紧凑化（8.1→6.4MB，入库实测 6,730,442B）；同上 |
 

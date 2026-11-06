@@ -3,6 +3,7 @@ package com.novelmaster.tokenizer
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
 import ai.djl.sentencepiece.SpTokenizer
 import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -64,6 +65,18 @@ class TokenizerParityTest {
       assertFalse("${c.getString("id")}: native must not be estimated", native.estimated)
       assertTrue("${c.getString("id")}: native count > 0", native.tokenCount > 0)
 
+      // bare 家族（SP 转 HF）与 Node 侧同为裸编码，金标可精确对齐——不能用容差：
+      // gemma 金标 160，走 WEB 包装是 163，容差 max(3, ceil(1%)) 正好也是 3，
+      // 「3 <= 3」测不出「是不是又退回包装」，这条断言才是口径的护栏。
+      if (TokenizerEngine.resolveAssetSpecFor(family).bare) {
+        assertEquals(
+          "${c.getString("id")}: bare 家族必须与 CLI 金标逐 token 等值",
+          cli,
+          native.tokenCount,
+        )
+        continue
+      }
+
       val tol = parityTolerance(cli)
       val delta = abs(native.tokenCount - cli)
       assertTrue(
@@ -102,11 +115,35 @@ class TokenizerParityTest {
   private fun countNative(serialized: String, family: String): NativeCount {
     // 失败（无资产 spec / kind 未知）由 resolveAssetSpecFor 直接抛异常传播。
     val spec = TokenizerEngine.resolveAssetSpecFor(family)
-    return when (spec.kind) {
-      "json" -> countWebNative(serialized, family, spec)
-      "model" -> countSpNative(serialized, family, spec)
+    return when {
+      // 与生产 dispatch 同构：bare 优先——SP 转 HF 家族若在这里走 countWebNative，
+      // 会加上 `\n\nAssistant:` 包装，与 Node 侧裸编码口径差 3~5 token。
+      spec.bare -> countBareNative(serialized, family, spec)
+      spec.kind == "json" -> countWebNative(serialized, family, spec)
+      spec.kind == "model" -> countSpNative(serialized, family, spec)
       else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
     }
+  }
+
+  private fun countBareNative(
+    serialized: String,
+    family: String,
+    spec: AssetPathSpec,
+  ): NativeCount {
+    val asset =
+      resolveAssetFile("tokenizers/${spec.primary}")
+        ?: throw IllegalStateException("家族 $family 的裸编码词表资产缺失")
+    val tokenizer =
+      try {
+        HuggingFaceTokenizer.newInstance(
+          Paths.get(asset.absolutePath),
+          mapOf("truncation" to "false"),
+        )
+      } catch (e: Throwable) {
+        throw IllegalStateException("家族 $family 的裸编码词表加载失败: ${e.message}", e)
+      }
+    // 与生产 countBareJsonFamily 同口径：直编码整串、不包装、不加特殊 token。
+    return NativeCount(tokenizer.encode(serialized, false, false).ids.size, estimated = false)
   }
 
   private fun countGptNative(serialized: String, encodingName: String): NativeCount {

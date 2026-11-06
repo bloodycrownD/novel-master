@@ -49,11 +49,11 @@ internal class TokenizerEngine(private val context: Context) {
     var spUnavailable: Boolean = false
   }
 
-  // 缓存容量 6（token-count-perf-r2 由 4→6）：WEB 家族 8 个 + tiktoken 两表
-  // （cl100k/o200k）常驻共 10 条目，容量 4 时切模型会频繁 LRU 互踢、每踢一次
-  // 重付秒级词表加载。+2 槽内存代价数十 MB/家族（与 2026-09-29「4 种模型合理」
-  // 拍板同族的量级权衡）。词表 JSON 解析后内存可达数十 MB/家族（glm 词表 15 万
-  // 词 + 31.8 万合并），LRU 淘汰后下次使用再懒加载一次即可。
+  // 缓存容量 6（token-count-perf-r2 由 4→6）：常驻条目现为 13 个——WEB 家族 8 个
+  // + tiktoken 两表（cl100k/o200k）+ SP 转 HF 的 gemma/llama/mistral（2026-11-06
+  // 起后者也走 webCache）。6 槽只兜最常用的 6 个家族，跨家族频繁切换仍会 LRU 互踢、
+  // 每踢一次重付秒级词表加载（gemma.json 13.7MB / 58 万 merges，解析比 WEB 家族更重）。
+  // 是否上调容量待真机内存与互踢重载耗时数据拍板。LRU 淘汰后下次使用再懒加载一次即可。
   private val webCache = LruCache<String, HuggingFaceTokenizer>(6)
 
   // SP 家族只剩 yi/jamba 两个（gemma/llama/mistral 于 2026-11-06 转 HF json，
@@ -91,10 +91,11 @@ internal class TokenizerEngine(private val context: Context) {
       }
     return try {
       when {
-        // 裸编码档：gpt 家族（tiktoken 两表）+ SP 转 HF 家族（bare=true）——
-        // 与 Node 侧「裸 encode」口径对齐，不做 WEB 的 system 包装。
-        family == "tiktoken" || spec.bare ->
-          countBareJsonFamily(serialized, family, spec, shouldCancel, timings)
+        // 裸编码档：spec.bare 为真即直编码整串、不做 WEB 的 system 包装。tiktoken
+        // 两表与 SP 转 HF 家族都在 spec 上标了 bare——新增裸编码家族只标 spec 即可，
+        // 不必再改这里（曾经 `family == "tiktoken" || spec.bare` 两套表达并存，
+        // 新家族漏改 dispatch 就会静默走成包装、多算 3~5 token）。
+        spec.bare -> countBareJsonFamily(serialized, family, spec, shouldCancel, timings)
         spec.kind == "json" -> countWebFamily(serialized, family, spec, shouldCancel, timings)
         spec.kind == "model" -> countSpFamily(serialized, family, spec, shouldCancel, timings)
         // resolveAssetSpecFor 已校验 kind，此分支仅为防御性兜底。
@@ -270,8 +271,15 @@ internal class TokenizerEngine(private val context: Context) {
     val jniStartNs = System.nanoTime()
     return try {
       SpTokenizer(Paths.get(path)).also { spCache.put(family, it) }
-    } catch (_: Throwable) {
+    } catch (e: LinkageError) {
+      // UnsatisfiedLinkError / NoClassDefFoundError：native 库缺失，永久性——
+      // 记忆后不再重试（每次重试白付 ~42ms JNI 失败），重启进程或补上 .so 后恢复。
       spUnavailable.add(family)
+      Log.w(LOG_TAG, "SP native unavailable for family=$family", e)
+      null
+    } catch (e: Throwable) {
+      // OOM / 拷贝中断 / DJL 初始化异常：可能是瞬时的，**不**记忆，下次照常重试。
+      Log.w(LOG_TAG, "SP tokenizer load failed for family=$family", e)
       null
     } finally {
       timings?.jniMs = elapsedMs(jniStartNs)

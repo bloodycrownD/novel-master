@@ -272,6 +272,10 @@ export function useChatTabScope({
       }
     } catch {
       // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
+      // 这里**刻意不过 runInFlightWithLabel**：真失败（DB 读取抛错、家族解析
+      // 异常）时宁可清空，也不留一个可能过时的精确值。代价是 run 在途且本次
+      // 刷新恰好 reject 的窗口里 chip 仍会被清空——已知边界，见 cr-fix-spec
+      // K 节 P3；触发概率极低（该路径只在底层读取整体失败时走到）。
       if (tokenLabelSessionRef.current === sessionId) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       }

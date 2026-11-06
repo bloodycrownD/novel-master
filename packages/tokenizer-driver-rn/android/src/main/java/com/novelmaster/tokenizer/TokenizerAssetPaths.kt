@@ -58,8 +58,8 @@ internal object TokenizerAssetPaths {
    */
   fun forTiktokenEncoding(encodingName: String): AssetPathSpec? {
     return when (encodingName) {
-      "cl100k_base" -> AssetPathSpec("cl100k.json", kind = "json")
-      "o200k_base" -> AssetPathSpec("o200k.json", kind = "json")
+      "cl100k_base" -> AssetPathSpec("cl100k.json", kind = "json", bare = true)
+      "o200k_base" -> AssetPathSpec("o200k.json", kind = "json", bare = true)
       else -> null
     }
   }

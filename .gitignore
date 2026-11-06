@@ -83,3 +83,7 @@ docs/Iterations/*/cache/
 
 # 本地测试证据（截图 / uiautomator dump，按需重跑生成，不入库）
 docs/Iterations/*/evidence/
+
+# Python 缓存（转换脚本运行时生成）
+__pycache__/
+*.pyc

@@ -161,7 +161,9 @@ async function loadChatTokenLabelWithFlag(
   const {definition, layout, ctx, rawMessages} = bundle;
   if (__DEV__) {
     console.log(
-      `[nm-chip] build done +${Date.now() - diagT0}ms (preferEstimate=${preferEstimate})`,
+      `[nm-chip] build done +${
+        Date.now() - diagT0
+      }ms (preferEstimate=${preferEstimate})`,
     );
   }
   // 弃权检查点（build/resolve 关键边界，r3-chip-1）：build 的分段 bail 只管得到
@@ -188,7 +190,12 @@ async function loadChatTokenLabelWithFlag(
     const count = countFallbackTokens(runtime, serialized);
     return {
       label: formatChatTokenLabel(
-        {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
+        {
+          tokenCount: count,
+          estimated: true,
+          counterKind: 'heuristic',
+          source: 'local',
+        },
         undefined,
       ),
       upgradeWorthy: false,
@@ -242,10 +249,14 @@ async function loadChatTokenLabelWithFlag(
     }
     throw error;
   }
-  const contextWindow = await runtime.providerModels.getContextWindow(savedModelId);
+  const contextWindow = await runtime.providerModels.getContextWindow(
+    savedModelId,
+  );
   if (__DEV__) {
     console.log(
-      `[nm-chip] resolve done +${Date.now() - diagT0}ms (preferEstimate=${preferEstimate})`,
+      `[nm-chip] resolve done +${
+        Date.now() - diagT0
+      }ms (preferEstimate=${preferEstimate})`,
     );
   }
   return {
@@ -265,7 +276,10 @@ async function loadChatTokenLabelWithFlag(
  * `delete`，会把新轮的标记一起抹掉（后续升级请求全部被当成「无在途」而并发
  * 堆叠）。按轮次号比对后，旧轮只能摘自己的标记。
  */
-const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: string}>();
+const preciseUpgradeInflight = new Map<
+  string,
+  {round: number; savedModelId: string}
+>();
 
 /** 轮次号自增源：只在 `loadChatPromptTokenLabelResilient` 构造请求时消费。 */
 let preciseUpgradeRoundSeq = 0;
@@ -296,7 +310,10 @@ export function __setPreciseUpgradeDelayForTests(ms: number): void {
 }
 
 /** 升级轮启动延迟计时器（按 sessionId）：由 {@link cancelPreciseUpgradeDelay} 收口。 */
-const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const preciseUpgradeDelayTimers = new Map<
+  string,
+  ReturnType<typeof setTimeout>
+>();
 
 /**
  * 收口某会话**仍挂起**的精确升级延迟计时（换会话 / hook 卸载时调用）。
@@ -307,8 +324,10 @@ const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>
  * finally 永不跑，于是该会话的精确升级被**永久楔死在估算档**（后续所有升级请求
  * 只往补跑槽里排队、无人排空）——比原 bug 更隐蔽的回归。
  *
- * 「仅当计时器仍挂起才收口」：timer == null 说明这一轮已经起跑（延迟已到期、
- * 回调已把 timer 摘掉），此时动 inflight 会踩掉在途轮自己的 finally，交给它。
+ * 「仅当计时器仍挂起才收口」：timer == null 有两种情形——这一轮已经起跑
+ * （延迟到期、回调把 timer 摘掉），或回调已出队但还没轮到执行。两种都交给
+ * runPreciseUpgrade 一侧收口：前者由它的 finally 清理，后者被回调入口的归属
+ * 守卫挡掉、根本不跑。
  * 会话 id 传 null/undefined 同理无事可做（该会话没有挂起计时）。
  */
 export function cancelPreciseUpgradeDelay(
@@ -417,12 +436,23 @@ function startPreciseUpgrade(
     preciseUpgradeDelayTimers.delete(sessionId);
     preciseUpgradeInflight.delete(sessionId);
   }
-  preciseUpgradeInflight.set(sessionId, {round: request.round, savedModelId: request.savedModelId});
+  preciseUpgradeInflight.set(sessionId, {
+    round: request.round,
+    savedModelId: request.savedModelId,
+  });
   if (preciseUpgradeStartDelayMs <= 0) {
     void runPreciseUpgrade(sessionId, request);
     return;
   }
   const timer = setTimeout(() => {
+    // 已被新轮顶替（切模型/换会话）的旧计时器，即便回调已入队也不得起飞：
+    // clearTimeout 只能撤回**未到期**的，回调入队后照样执行。旧 request 起步时
+    // 才取代数（取到的是新代数），gen 闸会放行，于是与新轮并发跑整串计数；
+    // 且这里的 delete 会抹掉新轮刚登记的 timer 条目，cancelPreciseUpgradeDelay
+    // 随后误判「无挂起计时」，不再收口新轮的 inflight/补跑槽。
+    if (preciseUpgradeDelayTimers.get(sessionId) !== timer) {
+      return;
+    }
     preciseUpgradeDelayTimers.delete(sessionId);
     void runPreciseUpgrade(sessionId, request);
   }, preciseUpgradeStartDelayMs);
@@ -437,6 +467,11 @@ async function runPreciseUpgrade(
   sessionId: string,
   request: PreciseUpgradeRequest,
 ): Promise<void> {
+  // 只有仍是自己的轮次才继续：被顶替/被取消的旧轮（含「计时器回调已入队才被
+  // clearTimeout」那条路径）在这里就退出，与 finally 的 stillOwner 同判据。
+  if (preciseUpgradeInflight.get(sessionId)?.round !== request.round) {
+    return;
+  }
   // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
   const gen = sessionRefreshGen.get(sessionId) ?? 0;
   // 代数已变 = 期间已有更新的首帧（切模型/新消息）：本轮读数必被下面的新鲜度闸
@@ -444,7 +479,8 @@ async function runPreciseUpgrade(
   // 装配（真机实证：白跑轮 `settle gen=4 current=5` 烧掉 1004ms）。这是纯增量
   // 判据，run 在途与视图切走的既有弃权照旧。
   const shouldBail = () =>
-    request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
+    request.shouldBail?.() === true ||
+    (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
   try {
     if (shouldBail()) {
       if (__DEV__) {
@@ -475,7 +511,8 @@ async function runPreciseUpgrade(
   } finally {
     // 只摘自己这一轮：切模型取消后新轮已用新轮次号登记，无条件 delete 会把
     // 新轮的标记一起抹掉，后续升级请求就再无在途去重可用。
-    const stillOwner = preciseUpgradeInflight.get(sessionId)?.round === request.round;
+    const inflight = preciseUpgradeInflight.get(sessionId);
+    const stillOwner = inflight?.round === request.round;
     if (stillOwner) {
       preciseUpgradeInflight.delete(sessionId);
     }
@@ -564,8 +601,9 @@ export async function loadChatPromptTokenLabelResilient(
     const inFlight = preciseUpgradeInflight.get(sessionId);
     if (inFlight != null && inFlight.savedModelId !== request.savedModelId) {
       // 切模型（tokenizer-switch-stall）：旧轮的读数必被新鲜度闸丢弃，而它正
-      // 占着单线程原生 executor——gemini 走 SentencePiece，整串 encode 实测
-      // 8.4s，期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
+      // 占着单线程原生 executor——切模型前 gemini/gemma 走 SP 整串 encode 实测
+      // 8.4s（本 PR 起转 HF，但 13.7MB 词表的首次加载与整串 encode 仍是秒级），
+      // 期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
       // 先撤在途轮再起新轮。取消的生效边界要说清：原生侧只有「任务出队时」和
       // 「词表加载后、encode 之前」两个检查点（分段计数已于 2026-11-06 移除，
       // 那条路径走不到）——已经进 encode 的那一轮仍会把新轮挡在单线程
@@ -621,7 +659,12 @@ async function loadChatPromptTokenLabelFallback(
   }
 
   return formatChatTokenLabel(
-    {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
+    {
+      tokenCount: count,
+      estimated: true,
+      counterKind: 'heuristic',
+      source: 'local',
+    },
     contextWindow,
   );
 }
