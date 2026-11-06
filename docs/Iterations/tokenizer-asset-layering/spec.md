@@ -180,7 +180,7 @@ internal fun isBareCaliber(family: String): Boolean =
 | 类别 | 数量 | 处置 |
 |---|---|---|
 | FAKE_PUBLIC | 4 | 撤 `provider` + `index` 导出，**模块内同时去掉 `export`** 降级为本地 `const`；同步删快照 4 条；`TOKEN_COUNTER_MODE_PREF_KEY` 模块内零使用，直接删符号 |
-| DEAD（类型） | 11 + 4 | 11 个去 `export`（撤 `provider`/`index` 转出 + 声明处去 export，保留本地声明供同文件签名）。两个易漏项：`ChatTokenEstimateMemoEntry`（只在模块层导出）、`SessionApiPromptTokenEntry`（只在 `index.ts:60` 导出）。**另 4 个是 `countTokens` 的签名类型**（`ChatTokenEncoder` / `ChatTokenMessage` / `ChatTokenCountKind` / `CountTokensOptions`）→ 标 `keep-public` 保留，见下方「必须保留」 |
+| DEAD（类型） | 11 + 4 | 11 个去 `export`（撤 `provider`/`index` 转出 + 声明处去 export，保留本地声明供同文件签名）。两个易漏项：`ChatTokenEstimateMemoEntry`（只在模块层导出）、`SessionApiPromptTokenEntry`（只在 `index.ts:60` 导出）。**另 4 个是 `countTokens` 的签名类型**（`ChatTokenEncoder` / `ChatTokenMessage` / `ChatTokenCountKind` / `CountTokensOptions`）→ 标 `keep-public` 保留，见下方「必须保留」。**例外**：`CountOpenAiStyleMessageOptions` 同文件零使用，保留本地声明会触发 `noUnusedLocals` 的 TS6196，**整删**（实现期已确认） |
 | DEAD（变量 `DEFAULT_*`） | 3 | 撤 `public/format.ts` 转出，**模块内去掉 `export`**。无快照保护，属静默收窄 |
 | TEST_ONLY | 7 | 5 个规格常量/类型（`CJK_TOKENS_PER_CHAR`、`ENCODING_RETRY_TTL_MS`、`SENTENCE_END_CHARS`、`SOFT_BOUNDARY_CHARS`、`IncrementalTokenCounterDeps`）改为测试本地常量/本地类型，**模块内去掉 `export`**；`clearChatTokenEstimateMemo`、`setClockForTests` 保留导出（真测试钩子） |
 | INLINE_CANDIDATE | 11 | 逐条判定，见 T5。其中 4 个 public 项**必须离开 provider**，否则 A3 的 82 不成立 |
@@ -224,7 +224,7 @@ internal fun isBareCaliber(family: String): Boolean =
 ### E. nm-style
 
 - **E1** `node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/src/infra/tokenizer` 输出 `FAKE_PUBLIC=0`、`TEST_ONLY=2`（`clearChatTokenEstimateMemo`、`setClockForTests`）、`DEAD` 为 0、`INLINE_CANDIDATE` 为 0（或全部已写 `keep-local` / `keep-public` 注记）；若选择保留 `DEFAULT_*` 导出则 `DEAD=3`，须在 E3 表格逐条说明
-- **E2** `check-style.mjs --changed` 对改动文件的三项子检查（`signatures` / `inline` / `methods`）PASS；**整体退出码不要求 0**——它还会带上 exports 审计（`--strict`），而 E3 允许部分 DEAD 登记在案
+- **E2** `check-style.mjs --changed` 对改动文件的三项子检查（`signatures` / `inline` / `methods`）PASS；**整体退出码不要求 0**——它还会带上 exports 审计（`--strict`），而 E3 允许部分 DEAD 登记在案。**口径澄清（实现期实测）**：三项子检查是**整文件口径**，不按 added-line 过滤，所以对「只改少量行」的文件会把该文件全部既有问题都算进来。判定标准是「**新增行上零 finding**」（`git diff -U0` 新增行区间与脚本输出做交集为空），并把整文件口径的噪音数量写进交付报告
 - **E3** 未处理的每一项在交付报告表格中列出（符号 / verdict / prod-test / 理由 / 证据）
 
 ### F. 测试
