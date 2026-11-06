@@ -30,6 +30,7 @@ const VALID_FAMILIES: ReadonlySet<string> = new Set([
 ]);
 
 /** True when `raw` is a known token counter mode (schema / patch validation). */
+// nm-style: keep-local — VALID_FAMILIES 是私有白名单，本函数是 schema/patch 校验的公开谓词入口，转发即封装。
 export function isValidTokenCounterModePref(raw: string): boolean {
   return VALID_FAMILIES.has(raw);
 }
@@ -39,9 +40,7 @@ export function isValidTokenCounterModePref(raw: string): boolean {
  *
  * nm-style: keep-local — 家族白名单与旧 heuristic 归一化是 saved-model 模式的领域口径，schema 只做转接
  */
-export function parseTokenCounterModePref(
-  raw: string | undefined
-): TokenizerOverride {
+export function parseTokenCounterModePref(raw: string | undefined): TokenizerOverride {
   if (raw == null || raw === "" || raw === "auto") {
     return "auto";
   }

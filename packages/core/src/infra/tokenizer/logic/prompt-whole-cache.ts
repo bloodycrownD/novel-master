@@ -32,10 +32,7 @@
  * @module infra/tokenizer/logic/prompt-whole-cache
  */
 
-import {
-  PROMPT_WHOLE_CACHE_KEY,
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_TOKEN_CHUNKS } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenCounterKind } from "../ports/token-counter.port.js";
 
@@ -98,11 +95,7 @@ const persistedItems = new Map<string, PersistItem[]>();
 const seededSessions = new Set<string>();
 
 /** 完整缓存键：`l1:${sessionId}:${scope}:${contentHash}`。 */
-function buildWholeCacheKey(
-  sessionId: string,
-  scope: string,
-  contentHash: string
-): string {
+function buildWholeCacheKey(sessionId: string, scope: string, contentHash: string): string {
   return `l1:${sessionId}:${scope}:${contentHash}`;
 }
 
@@ -127,32 +120,11 @@ function evictToLimit(bucket: Map<string, PromptWholeCacheEntry>): void {
   }
 }
 
-/** record 的去重路径：只写桶，不收集 pending（seed 回放不产生新持久化）。 */
-function recordEntryIntoBucket(
-  sessionId: string,
-  scope: string,
-  contentHash: string,
-  entry: PromptWholeCacheEntry
-): void {
-  const bucket = ensureBucket(sessionId);
-  const key = buildWholeCacheKey(sessionId, scope, contentHash);
-  bucket.delete(key);
-  bucket.set(key, entry);
-  evictToLimit(bucket);
-}
-
-/** 两张持久化表是否同序同值（判定「无变化不写库」）。 */
-function sameItems(a: readonly PersistItem[], b: readonly PersistItem[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  return a.every((item, i) => JSON.stringify(item) === JSON.stringify(b[i]));
-}
-
 /**
  * 解析持久化 payload；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体
  * null（静默按 miss）。只接受 `est===false` 形态（写入侧同样只收精确档）。
  */
+// nm-style: keep-local — payload 校验是独立的反序列化管线（版本/形状/字段三段守卫），内联会拆散 seed 的失败分支。
 function parsePersistPayload(raw: string | null | undefined): PersistItem[] | null {
   if (raw == null || raw.length === 0) {
     return null;
@@ -175,13 +147,7 @@ function parsePersistPayload(raw: string | null | undefined): PersistItem[] | nu
     if (!Array.isArray(item) || item.length !== 5) {
       return null;
     }
-    const [hash16, scope, count, kind, est] = item as [
-      unknown,
-      unknown,
-      unknown,
-      unknown,
-      unknown
-    ];
+    const [hash16, scope, count, kind, est] = item as [unknown, unknown, unknown, unknown, unknown];
     if (
       typeof hash16 !== "string" ||
       !/^[0-9a-f]{16}$/.test(hash16) ||
@@ -210,11 +176,7 @@ export const promptWholeCache = {
    * 查一条整串计数。命中即把该键提升为会话桶内最新（LRU）；miss 返回
    * `undefined`，由调用方进入 L2 分块路径。
    */
-  lookup(
-    sessionId: string,
-    scope: string,
-    contentHash: string
-  ): PromptWholeCacheEntry | undefined {
+  lookup(sessionId: string, scope: string, contentHash: string): PromptWholeCacheEntry | undefined {
     const bucket = buckets.get(sessionId);
     if (bucket == null) {
       return undefined;
@@ -231,12 +193,7 @@ export const promptWholeCache = {
   },
 
   /** 写一条整串计数（覆盖同键旧值并提升新鲜度），随后按会话级 LRU 淘汰。 */
-  record(
-    sessionId: string,
-    scope: string,
-    contentHash: string,
-    entry: PromptWholeCacheEntry
-  ): void {
+  record(sessionId: string, scope: string, contentHash: string, entry: PromptWholeCacheEntry): void {
     const bucket = ensureBucket(sessionId);
     const key = buildWholeCacheKey(sessionId, scope, contentHash);
     bucket.delete(key);
@@ -264,10 +221,7 @@ export const promptWholeCache = {
    * 「这次读确实成功，或库里确实没这一行」时才有资格留下，一次瞬时读错不该
    * 锁死整个进程内该会话的 L1 续命。
    */
-  async seedFromKkv(
-    sessionKkv: SessionKkvService | null | undefined,
-    sessionId: string
-  ): Promise<number> {
+  async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
     if (sessionKkv == null) {
       return 0;
     }
@@ -278,11 +232,7 @@ export const promptWholeCache = {
     seededSessions.add(sessionId);
     let raw: string | null;
     try {
-      raw = await sessionKkv.get(
-        sessionId,
-        SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-        PROMPT_WHOLE_CACHE_KEY
-      );
+      raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY);
     } catch (error) {
       console.warn("[nm/whole-cache] promptWhole KKV 读取失败，按无种子处理", error);
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
@@ -301,11 +251,11 @@ export const promptWholeCache = {
       return 0;
     }
     for (const [hash16, scope, count, kind] of items) {
-      recordEntryIntoBucket("", scope, hash16, {
-        tokenCount: count,
-        counterKind: kind as TokenCounterKind,
-        estimated: false,
-      });
+      const bucket = ensureBucket("");
+      const key = buildWholeCacheKey("", scope, hash16);
+      bucket.delete(key);
+      bucket.set(key, { tokenCount: count, counterKind: kind as TokenCounterKind, estimated: false });
+      evictToLimit(bucket);
     }
     persistedItems.set(sessionId, items);
     return items.length;
@@ -316,10 +266,7 @@ export const promptWholeCache = {
    * 上限 16 条）并覆盖写 KKV。payload 无变化（本轮全是 L1 命中、无新条目）
    * 时不写库。fire-and-forget：写失败只 warn（缓存持久化不打断计数路径）。
    */
-  persistPendingWrites(
-    sessionKkv: SessionKkvService | null | undefined,
-    sessionId: string
-  ): void {
+  persistPendingWrites(sessionKkv: SessionKkvService | null | undefined, sessionId: string): void {
     const batch = pendingWrites.splice(0, pendingWrites.length);
     if (sessionKkv == null || batch.length === 0) {
       return;
@@ -344,17 +291,17 @@ export const promptWholeCache = {
       merged.push(item);
     }
     merged.splice(PERSIST_MAX_ITEMS);
-    if (sameItems(merged, items)) {
+    const unchanged = merged.length === items.length && merged.every((item, i) => JSON.stringify(item) === JSON.stringify(items[i]));
+    if (unchanged) {
       persistedItems.set(sessionId, merged);
       return;
     }
     persistedItems.set(sessionId, merged);
     const payload = JSON.stringify({ v: PERSIST_PAYLOAD_VERSION, items: merged });
-    void sessionKkv
-      .set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload)
-      .catch((error) => {
-        console.warn("[nm/whole-cache] promptWhole KKV 写入失败", error);
-      });
+    const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload);
+    void write.catch((error) => {
+      console.warn("[nm/whole-cache] promptWhole KKV 写入失败", error);
+    });
   },
 
   /** 清掉一个会话的全部 L1 条目（会话删除 / 失效路径）。 */

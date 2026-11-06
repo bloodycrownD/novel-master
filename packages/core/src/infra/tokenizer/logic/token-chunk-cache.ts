@@ -40,10 +40,7 @@
  * @module infra/tokenizer/logic/token-chunk-cache
  */
 
-import {
-  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-  TOKEN_CHUNKS_CACHE_KEY,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
@@ -81,12 +78,8 @@ interface CounterScopeInput {
  * 一次性 miss。
  */
 export function buildCounterScope(input: CounterScopeInput): string {
-  return [
-    input.vendorModelId,
-    input.tokenizerOverride ?? "",
-    input.tokenizerFamily ?? "",
-    input.driverName ?? "",
-  ].join("\\u0000");
+  const parts = [input.vendorModelId, input.tokenizerOverride ?? "", input.tokenizerFamily ?? "", input.driverName ?? ""];
+  return parts.join("\\u0000");
 }
 
 /**
@@ -128,6 +121,7 @@ function fastHash16(text: string): string {
  * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
  * 与块级（数千次小哈希）同源。
  */
+// nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口，fastHash16 是内部实现细节，直接暴露会让调用方耦合哈希实现。
 export function chunkHash16(chunk: string): string {
   return fastHash16(chunk);
 }
@@ -135,11 +129,6 @@ export function chunkHash16(chunk: string): string {
 /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
 function buildEntryKey(hash16: string, scope: string): string {
   return `l2:${hash16}:${scope}`;
-}
-
-/** 从完整键拆回 [hash16, scope]（依赖 hash16 定长 16 的事实）。 */
-function splitEntryKey(key: string): [string, string] {
-  return [key.slice(3, 3 + CHUNK_HASH_HEX_LENGTH), key.slice(4 + CHUNK_HASH_HEX_LENGTH)];
 }
 
 /** advanceGeneration 的持久化选项。 */
@@ -217,35 +206,12 @@ function enforceTotalCap(): void {
 }
 
 /**
- * 序列化当前代整表为紧凑 JSON：`{v:1, items:[[hash16,scope,count],...]}`。
- * 当前代为空时返回 `null`（空表不落库）。
- *
- * 归属语义与 promptWholeCache 同形态（CR 收窄口径）：缓存平面跨会话共享
- * （键 = 内容指纹 × scope），整表按当前调用方 sessionId 落行——落哪个会话
- * 行只影响加速续命位置、无脏读；会话删除级联只丢加速不丢正确性。tc spec
- * 「把当前代整表写 session KKV」为该形态的字面背书。
- */
-function serializeCurrentGeneration(): string | null {
-  if (genCurrent.size === 0) {
-    return null;
-  }
-  const items: [string, string, number][] = [];
-  for (const [key, count] of genCurrent) {
-    const [hash16, scope] = splitEntryKey(key);
-    items.push([hash16, scope, count]);
-  }
-  return JSON.stringify({ v: TOKEN_CHUNKS_PAYLOAD_VERSION, items });
-}
-
-/**
  * 解析持久化整表；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体 null
  * （静默按 miss，不抛错、不造数）。未知键一律忽略（兼容未来加字段）。
  *
  * nm-style: keep-local — KKV 载荷 v2 版本守卫与 16-hex 键形态是持久化契约，seed 与解析共用同一份
  */
-export function parseTokenChunkCachePayload(
-  raw: string | null | undefined
-): TokenChunkCacheItem[] | null {
+export function parseTokenChunkCachePayload(raw: string | null | undefined): TokenChunkCacheItem[] | null {
   if (raw == null || raw.length === 0) {
     return null;
   }
@@ -342,15 +308,17 @@ export const tokenChunkCache = {
    * 无新记录的轮次跳过序列化与写入（整表内容与上次落盘逐条相同）；**代际
    * 轮换在任何分支都照旧执行**，内存语义与优化前完全一致。
    */
-  advanceGeneration(
-    sessionId: string,
-    options?: AdvanceGenerationOptions
-  ): void {
+  advanceGeneration(sessionId: string, options?: AdvanceGenerationOptions): void {
     const sessionKkv = options?.persist?.sessionKkv;
-    const payload =
-      sessionKkv != null && options?.realRefresh === true && currentGenDirty
-        ? serializeCurrentGeneration()
-        : null;
+    let payload: string | null = null;
+    if (sessionKkv != null && options?.realRefresh === true && currentGenDirty && genCurrent.size > 0) {
+      const items: [string, string, number][] = [];
+      for (const [key, count] of genCurrent) {
+        const [hash16, scope] = [key.slice(3, 3 + CHUNK_HASH_HEX_LENGTH), key.slice(4 + CHUNK_HASH_HEX_LENGTH)];
+        items.push([hash16, scope, count]);
+      }
+      payload = JSON.stringify({ v: TOKEN_CHUNKS_PAYLOAD_VERSION, items });
+    }
 
     // 三代环形轮换：第三代淘汰后清空复用为新当前代（省一次分配）。
     const evicted = genThird;
@@ -363,11 +331,10 @@ export const tokenChunkCache = {
       // 脏标记在**安排**写入后即清（不等落库结果）：整表写入是 fire-and-forget
       // 的覆盖写，没有重试语义；等落库反而会让写失败时下一轮又付一次整表代价。
       currentGenDirty = false;
-      void sessionKkv
-        .set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload)
-        .catch((error) => {
-          console.warn(`[nm/chunk] KKV 写入失败（session=${sessionId}）`, error);
-        });
+      const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload);
+      void write.catch((error) => {
+        console.warn(`[nm/chunk] KKV 写入失败（session=${sessionId}）`, error);
+      });
     }
   },
 
@@ -390,10 +357,7 @@ export const tokenChunkCache = {
    * 坏行时每轮都会重试一次整表读（与 12.5s 止血目标相反），但「加速」让位于
    * 「正确性」，且坏行属于应当被上游写侧修掉的异常形态，不是常态。
    */
-  async seedFromKkv(
-    sessionKkv: SessionKkvService | null | undefined,
-    sessionId: string
-  ): Promise<number> {
+  async seedFromKkv(sessionKkv: SessionKkvService | null | undefined, sessionId: string): Promise<number> {
     if (sessionKkv == null) {
       return 0;
     }
@@ -404,11 +368,7 @@ export const tokenChunkCache = {
     seededSessions.add(sessionId);
     let raw: string | null;
     try {
-      raw = await sessionKkv.get(
-        sessionId,
-        SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
-        TOKEN_CHUNKS_CACHE_KEY
-      );
+      raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY);
     } catch (error) {
       console.warn(`[nm/chunk] KKV 读取失败（session=${sessionId}），按无种子处理`, error);
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。

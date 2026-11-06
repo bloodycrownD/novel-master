@@ -71,11 +71,8 @@ const encodingByKey = new Map<string, RegistryEntry>();
 let encodingFactory: EncodingFactory | null = null;
 
 /** 时钟（仅测试可通过 {@link setClockForTests} 替换为假时钟）。 */
+// nm-style: keep-local — 可替换时钟是测试冻结时间的状态旋钮（模块级可变量），不是转手 wrapper。
 let clock: () => number = () => Date.now();
-
-function toKey(encodingName: string): string {
-  return `enc:${encodingName}`;
-}
 
 /**
  * 按**编码名**取（单例）编码表；构造失败返回 `null`（TTL 内不重试）。
@@ -83,11 +80,8 @@ function toKey(encodingName: string): string {
  * `build` 由调用方注入（各端各自的分词器构造方式）；缓存命中时 `build` 不会被
  * 调用。返回的是**共享句柄**，调用方不得 `free()`（见模块头注释）。
  */
-export function getEncoding<T extends EncodingHandle>(
-  encodingName: string,
-  build: () => T,
-): T | null {
-  const key = toKey(encodingName);
+export function getEncoding<T extends EncodingHandle>(encodingName: string, build: () => T): T | null {
+  const key = `enc:${encodingName}`;
   const cached = encodingByKey.get(key);
   if (cached !== undefined) {
     if (cached.encoding !== null) {
@@ -134,9 +128,7 @@ export function clearForTests(): void {
  * 测试钩子：覆盖编码表构造器（传 `null` 还原为调用方注入的 `build`）。
  * 构造器换了，已缓存的表不再由它产出，必须一并作废。
  */
-export function setFactoryForTests<T extends EncodingHandle>(
-  factory: EncodingFactory<T> | null,
-): void {
+export function setFactoryForTests<T extends EncodingHandle>(factory: EncodingFactory<T> | null): void {
   encodingFactory = factory as EncodingFactory | null;
   encodingByKey.clear();
 }

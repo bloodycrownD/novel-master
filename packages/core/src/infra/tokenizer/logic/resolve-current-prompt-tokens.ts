@@ -27,11 +27,8 @@
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
-import {
-  countPromptLlmInput,
-  resolveVendorModelIdFromSaved,
-  type CountPromptLlmInputParams,
-} from "./count-prompt-llm-input.js";
+import { countPromptLlmInput, resolveVendorModelIdFromSaved } from "./count-prompt-llm-input.js";
+import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
 import type { PromptWholeCacheEntry } from "./prompt-whole-cache.js";
@@ -45,11 +42,7 @@ import {
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
-import {
-  buildCounterScope,
-  chunkHash16,
-  tokenChunkCache,
-} from "./token-chunk-cache.js";
+import { buildCounterScope, chunkHash16, tokenChunkCache } from "./token-chunk-cache.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
 import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
@@ -134,20 +127,6 @@ export interface ResolveCurrentPromptTokensOptions {
 }
 
 /**
- * 弃权检查点的执行器：未传 `shouldBail` 时是一个恒假的空判定（调用点写
- * `bail()` 即可，缺省路径零分支成本可言）。
- */
-function makeBailCheck(
-  shouldBail: (() => boolean) | undefined
-): () => void {
-  return () => {
-    if (shouldBail?.() === true) {
-      throw new PromptTokenResolveBailedError();
-    }
-  };
-}
-
-/**
  * API 命中时的增量估算：锚点之后追加的可见消息折算 token。
  *
  * 口径说明：
@@ -164,10 +143,8 @@ function makeBailCheck(
  *   过滤结果为空、delta=0，基线原样使用，下一次 usage 自愈（回滚路径本身
  *   会失效该条目，此为双保险）。
  */
-function estimateAnchoredDelta(
-  anchorSeq: number | undefined,
-  params: CountPromptLlmInputParams
-): number {
+// nm-style: keep-local — 增量口径（锚点过滤 + CJK 下限）是 API 命中分支的独立估算阶段，内联进返回对象会拆散口径。
+function estimateAnchoredDelta(anchorSeq: number | undefined, params: CountPromptLlmInputParams): number {
   if (anchorSeq == null) {
     return 0;
   }
@@ -179,20 +156,14 @@ function estimateAnchoredDelta(
   if (tail.length === 0) {
     return 0;
   }
-  const text = tail
-    .map((m) =>
-      formatChatMessageForCliPreview(m)
-        .map((segment) => `${segment.role}: ${segment.body}`)
-        .join("\n\n")
-    )
-    .join("\n\n");
+  const segments = tail.map((m) => formatChatMessageForCliPreview(m));
+  const lines = segments.map((parts) => parts.map((p) => `${p.role}: ${p.body}`).join("\n\n"));
+  const text = lines.join("\n\n");
   if (text.length === 0) {
     return 0;
   }
-  return Math.max(
-    params.registry.heuristic.countText(text),
-    estimateTokensCjkAware(text)
-  );
+  const heuristic = params.registry.heuristic.countText(text);
+  return Math.max(heuristic, estimateTokensCjkAware(text));
 }
 
 /**
@@ -205,12 +176,8 @@ function estimateAnchoredDelta(
  * 驱动未注册（触发器测试等无驱动场景）返回 null——没有 L1 可查，也不该
  * 在估算档里抛错。
  */
-async function lookupWholeCacheEntry(
-  sessionId: string,
-  params: CountPromptLlmInputParams,
-  serialized: string,
-  sessionKkv: SessionKkvService | null
-): Promise<PromptWholeCacheEntry | null> {
+// nm-style: keep-local — L1 预查是独立 IO 管线（驱动解析 + KKV 种子 + 双层缓存查），内联会把整段 try/catch 塞进估算分支。
+async function lookupWholeCacheEntry(sessionId: string, params: CountPromptLlmInputParams, serialized: string, sessionKkv: SessionKkvService | null): Promise<PromptWholeCacheEntry | null> {
   // 预查是纯优化：任何一步失败（驱动解析异常 / registry 抛错 / KKV 种子
   // 失败）都静默按 miss 走估算——估算路径是首帧与压缩评估的关键路径，
   // 不能被 L1 预查带崩。
@@ -221,14 +188,8 @@ async function lookupWholeCacheEntry(
     } catch {
       return null;
     }
-    const override =
-      params.tokenizerOverride ??
-      (await params.registry.getTokenizerOverride?.()) ??
-      "auto";
-    const vendorModelId = await resolveVendorModelIdFromSaved(
-      params.savedModelId,
-      params.savedModels
-    );
+    const override = params.tokenizerOverride ?? (await params.registry.getTokenizerOverride?.()) ?? "auto";
+    const vendorModelId = await resolveVendorModelIdFromSaved(params.savedModelId, params.savedModels);
     const family = resolveTokenizerFamily(vendorModelId, override);
     const scope = buildCounterScope({
       vendorModelId,
@@ -259,18 +220,17 @@ async function lookupWholeCacheEntry(
  * （换模型后旧口径的占用不再适用，且避免把上一个模型的精确值喂给新模型的
  * 阈值判定）；无指纹（旧格式值）按兼容处理照常采用。
  */
-export async function resolveCurrentPromptTokens(
-  sessionId: string,
-  params: CountPromptLlmInputParams,
-  options?: ResolveCurrentPromptTokensOptions
-): Promise<ResolvedPromptTokens> {
+export async function resolveCurrentPromptTokens(sessionId: string, params: CountPromptLlmInputParams, options?: ResolveCurrentPromptTokensOptions): Promise<ResolvedPromptTokens> {
   // r3-chip-1 弃权检查点执行器（api 命中分支不用：只一次 KKV 读 + 小增量
   // 估算，无整串级重活，不值得为它加判据）。
-  const bail = makeBailCheck(options?.shouldBail);
-  const entry = await readSessionApiPromptTokenEntry(
-    options?.sessionKkv,
-    sessionId
-  );
+  // 弃权检查点执行器：未传 shouldBail 时恒假；api 命中分支不调用。
+  const shouldBail = options?.shouldBail;
+  const bail = (): void => {
+    if (shouldBail?.() === true) {
+      throw new PromptTokenResolveBailedError();
+    }
+  };
+  const entry = await readSessionApiPromptTokenEntry(options?.sessionKkv, sessionId);
   if (
     entry != null &&
     (entry.savedModelId == null || entry.savedModelId === params.savedModelId)
@@ -374,15 +334,9 @@ export async function resolveCurrentPromptTokens(
         rememberWorkplaceEstimateByFingerprint(fingerprint, wpEstimate);
       }
       const WP_SENTINEL = "W";
-      const sentinelSerialized =
-        (await serializePromptLlmInput(params.layout, {
-          ...params.ctx,
-          workplaceDisplay: WP_SENTINEL,
-        })) + serializeToolsForTokenCount(params.tools);
-      const tokenCount =
-        wpEstimate +
-        estimateTokensCjkAware(sentinelSerialized) -
-        estimateTokensCjkAware(WP_SENTINEL);
+      const sentinelInput = { ...params.ctx, workplaceDisplay: WP_SENTINEL };
+      const sentinelSerialized = (await serializePromptLlmInput(params.layout, sentinelInput)) + serializeToolsForTokenCount(params.tools);
+      const tokenCount = wpEstimate + estimateTokensCjkAware(sentinelSerialized) - estimateTokensCjkAware(WP_SENTINEL);
       rememberChatTokenEstimateMemo(sessionId, memoKey!, {
         tokenCount,
         estimated: true,
@@ -395,9 +349,7 @@ export async function resolveCurrentPromptTokens(
         counterKind: "heuristic",
       };
     }
-    const serialized =
-      (await serializePromptLlmInput(params.layout, params.ctx)) +
-      serializeToolsForTokenCount(params.tools);
+    const serialized = (await serializePromptLlmInput(params.layout, params.ctx)) + serializeToolsForTokenCount(params.tools);
     const cached = await lookupWholeCacheEntry(sessionId, params, serialized, sessionKkv);
     if (cached != null) {
       // 命中即原样返回（与驱动层 L1 命中同语义；条目可能是精确档或

@@ -7,10 +7,7 @@
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { HeuristicTokenCounter } from "../impl/heuristic-token-counter.js";
 import type { TokenCounter } from "../ports/token-counter.port.js";
-import type {
-  ForVendorModelOptions,
-  TokenCounterRegistry,
-} from "../ports/token-counter-registry.port.js";
+import type { ForVendorModelOptions, TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
 /** Registry construction options. */
@@ -33,10 +30,10 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
     this.savedModels = deps.savedModels;
   }
 
-  async forSavedModel(
-    savedModelId: string,
-    _options?: ForVendorModelOptions
-  ): Promise<TokenCounter> {
+  /**
+   * nm-style: keep-public — TokenCounterRegistry 端口实现，调用方按接口多态调用，不能内联到单一调用点。
+   */
+  async forSavedModel(savedModelId: string, _options?: ForVendorModelOptions): Promise<TokenCounter> {
     if (this.savedModels != null) {
       const saved = await this.savedModels.findById(savedModelId.trim());
       if (saved != null) {
@@ -46,17 +43,12 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
     return this.heuristic;
   }
 
-  forVendorModel(
-    _vendorModelId: string,
-    _options?: ForVendorModelOptions
-  ): TokenCounter {
+  forVendorModel(_vendorModelId: string, _options?: ForVendorModelOptions): TokenCounter {
     return this.heuristic;
   }
 }
 
 /** Creates a heuristic-only registry. */
-export function createDefaultTokenCounterRegistry(
-  deps: CreateDefaultTokenCounterRegistryDeps = {}
-): TokenCounterRegistry {
+export function createDefaultTokenCounterRegistry(deps: CreateDefaultTokenCounterRegistryDeps = {}): TokenCounterRegistry {
   return new DefaultTokenCounterRegistry(deps);
 }

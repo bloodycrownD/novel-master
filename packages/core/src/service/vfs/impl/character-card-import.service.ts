@@ -45,23 +45,6 @@ export type CharacterCardImportTestHook = {
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
-async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
-  const sk = scopeKey(scope);
-  if (logical === "/") {
-    return;
-  }
-  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
-  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
-  const existing = await repo.findByPath(sk, logical);
-  if (existing == null) {
-    await repo.insertDirectory(sk, logical);
-    return;
-  }
-  if (existing.entryKind !== "directory") {
-    throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${logical}`);
-  }
-}
-
 /**
  * 导入失败的错误包装：保留测试钩子直抛与 AppError 原形，其余包成
  * `VFS_CHARACTER_CARD_IMPORT_FAILED`，并在消息里带上分片进度。
@@ -79,13 +62,6 @@ function wrapCardImportError(error: unknown, committedShards?: number, failedSha
   const base = error instanceof Error ? error.message : "import transaction failed";
   const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
   return new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", `${base}${progress}`);
-}
-
-async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
-  const existing = await repo.findByPath(scopeKey(scope), directoryPath);
-  if (existing != null && existing.entryKind === "file") {
-    throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
-  }
 }
 
 export type DefaultCharacterCardImportServiceOptions = {
@@ -120,7 +96,10 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);
-    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
+    if (directoryRow != null && directoryRow.entryKind === "file") {
+      throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
+    }
 
     // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
     // 任何 delete 之前失败，保证零写库。
@@ -180,19 +159,6 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     const sk = scopeKey(scope);
     const fileEntries = [...files];
 
-    // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。口径与 ZIP
-    // 侧统一用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC 无引用
-    // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
-    const compensate = async (): Promise<void> => {
-      try {
-        await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
-        });
-      } catch (error) {
-        console.warn("[character-card] import compensation failed", error);
-      }
-    };
-
     // 段 B0（独立短事务）：删旧子树 + 目标目录行。
     try {
       await this.conn.transaction(async (tx) => {
@@ -200,7 +166,16 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
-        await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
+        if (directoryPath !== "/") {
+          const parentCheck = await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`);
+          if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+          const existing = await repoTx.findByPath(sk, directoryPath);
+          if (existing == null) {
+            await repoTx.insertDirectory(sk, directoryPath);
+          } else if (existing.entryKind !== "directory") {
+            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
+          }
+        }
       });
     } catch (error) {
       throw wrapCardImportError(error);
@@ -233,7 +208,16 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         committedShards += 1;
         shardIndex += 1;
       } catch (error) {
-        await compensate();
+        // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。口径与 ZIP
+        // 侧统一用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC 无引用
+        // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
+        try {
+          await this.conn.transaction(async (tx) => {
+            await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
+          });
+        } catch (compensateError) {
+          console.warn("[character-card] import compensation failed", compensateError);
+        }
         throw wrapCardImportError(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。

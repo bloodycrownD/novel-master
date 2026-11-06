@@ -57,20 +57,6 @@ export function extensionForContentType(contentType: string): "html" | "json" | 
   return "txt";
 }
 
-/** 生成本地日期戳 `yyyyMMdd`。 */
-function localDateStamp(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}${month}${day}`;
-}
-
-/** 生成落盘文件路径 `/tmp/{tool}-{yyyyMMdd}-{rand4}.{ext}`。 */
-function buildSinkPath(tool: string, contentType: string): string {
-  const randHex = Math.floor(Math.random() * 0x10000).toString(16);
-  const rand4 = randHex.padStart(4, "0");
-  return `${OVERFLOW_SINK_DIR}/${tool}-${localDateStamp(new Date())}-${rand4}.${extensionForContentType(contentType)}`;
-}
-
 /**
  * 把超预算输出全文落盘到会话工作区 `/tmp/`，返回 `{savedPath, message}`。
  *
@@ -78,7 +64,12 @@ function buildSinkPath(tool: string, contentType: string): string {
  * `file_cache` upsert 与目录规则补齐失败只吞错不阻断。
  */
 export async function sinkOversizedOutput(ctx: BuiltinToolContext, input: SinkOversizedInput): Promise<OversizedSinkResult> {
-  const savedPath = buildSinkPath(input.tool, input.contentType);
+  const randHex = Math.floor(Math.random() * 0x10000).toString(16);
+  const rand4 = randHex.padStart(4, "0");
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const savedPath = `${OVERFLOW_SINK_DIR}/${input.tool}-${now.getFullYear()}${month}${day}-${rand4}.${extensionForContentType(input.contentType)}`;
   await ctx.vfs.write(savedPath, input.content);
   // 配套动作失败不阻断（照 write 工具口径）：file_cache 是加速缓存，
   // 目录规则是辅助展示配置——文件已落盘，返回路径仍有效。

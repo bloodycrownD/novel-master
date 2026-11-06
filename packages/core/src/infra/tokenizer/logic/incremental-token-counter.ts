@@ -151,12 +151,7 @@ function isBoundaryCharCode(code: number): boolean {
  * 切点语义：返回 i 表示切成 `text[0, i)` + `text[i, ...)`，`text[i]` 是边界
  * 字符（空白/标点）——空白归下一段，与 BPE 预分词「前导空格随词」的口径一致。
  */
-function chooseCut(
-  text: string,
-  from: number,
-  to: number,
-  lookback: number,
-): number {
+function chooseCut(text: string, from: number, to: number, lookback: number): number {
   const lower = Math.max(from, to - lookback);
   const upper = Math.min(to, text.length - 1);
   for (let i = upper; i >= lower; i -= 1) {
@@ -170,35 +165,17 @@ function chooseCut(
   return to;
 }
 
-/** 区间 `[from, to)` 内是否有自然边界字符（含 to 处？不含——只看段内）。 */
-function hasBoundaryInRange(text: string, from: number, to: number): boolean {
-  for (let i = Math.max(0, from); i < Math.min(text.length, to); i += 1) {
-    if (isBoundaryCharCode(text.charCodeAt(i))) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
  * 建一个尾窗增量计数器。
  *
  * 内部只保留尾窗片段（≤ `tailChars + commitStepChars`，且无边界串会更快被
  * 固化），不持有全文；`tokens` 读值重算尾窗（分段 encode，单段 ≤64 字符）。
  */
-export function createIncrementalTokenCounter(
-  deps: IncrementalTokenCounterDeps,
-): IncrementalTokenCounter {
+export function createIncrementalTokenCounter(deps: IncrementalTokenCounterDeps): IncrementalTokenCounter {
   const encode = deps.encode;
   const tailChars = Math.max(0, Math.floor(deps.tailChars ?? DEFAULT_TAIL_CHARS));
-  const lookbackChars = Math.max(
-    0,
-    Math.floor(deps.lookbackChars ?? DEFAULT_LOOKBACK_CHARS),
-  );
-  const commitStepChars = Math.max(
-    1,
-    Math.floor(deps.commitStepChars ?? DEFAULT_COMMIT_STEP_CHARS),
-  );
+  const lookbackChars = Math.max(0, Math.floor(deps.lookbackChars ?? DEFAULT_LOOKBACK_CHARS));
+  const commitStepChars = Math.max(1, Math.floor(deps.commitStepChars ?? DEFAULT_COMMIT_STEP_CHARS));
 
   /** 已固化前缀的 token 数（只增不减）。 */
   let committedTokens = 0;
@@ -223,15 +200,6 @@ export function createIncrementalTokenCounter(
   let warnedCommitFailure = false;
   let warnedReadFailure = false;
 
-  /** 单次 encode 的失败安全包装：抛错 → null。 */
-  const encodeChunk = (text: string): number | null => {
-    try {
-      return encode(text);
-    } catch {
-      return null;
-    }
-  };
-
   /**
    * 把一段文本按「自然边界优先、固定步长兜底」拆成 ≤
    * {@link MAX_ENCODE_CHARS} 字符的小段逐一 encode；任一小段失败即返回 null
@@ -246,7 +214,12 @@ export function createIncrementalTokenCounter(
     while (start < text.length) {
       const hardEnd = Math.min(text.length, start + MAX_ENCODE_CHARS);
       const end = chooseCut(text, start + 1, hardEnd, lookbackChars);
-      const chunkTokens = encodeChunk(text.slice(start, end));
+      let chunkTokens: number | null;
+      try {
+        chunkTokens = encode(text.slice(start, end));
+      } catch {
+        chunkTokens = null;
+      }
       if (chunkTokens === null) {
         return null;
       }
@@ -255,24 +228,8 @@ export function createIncrementalTokenCounter(
     }
     return total;
   };
-
-  /** 读尾窗 token 数（脏了才重算；失败保持 null）。 */
-  const readTailTokens = (): number | null => {
-    if (tailDirty) {
-      tailTokens = encodePiece(tail);
-      tailDirty = false;
-      if (tailTokens === null && !warnedReadFailure) {
-        warnedReadFailure = true;
-        // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
-        // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
-        // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
-        console.warn('[nm/incremental] 尾窗不可编码，保持上一次读值');
-      }
-    }
-    return tailTokens;
-  };
-
   /** 固化：把尾窗超出部分（≥1 字符）切下来计入 committedTokens。 */
+  // nm-style: keep-local — 固化路径读写 committedTokens/tail/unencodableChars/warnedCommitFailure 这组计数器状态，内联会拆散失败兜底的不变量。
   const commitOnce = (): void => {
     const target = tail.length - tailChars;
     const cut = chooseCut(tail, 1, target, lookbackChars);
@@ -308,21 +265,36 @@ export function createIncrementalTokenCounter(
       const tightLimit = tailChars + MAX_ENCODE_CHARS;
       // 收紧仅在「固化步长比单次 encode 上限更大」时有意义（默认两者相等，
       // 不做无谓的边界扫描）。
-      const tightMode =
-        tightLimit < normalLimit &&
-        tail.length > tightLimit &&
-        !hasBoundaryInRange(
-          tail,
-          tail.length - tailChars - lookbackChars,
-          tail.length,
-        );
+      let tightMode = false;
+      if (tightLimit < normalLimit && tail.length > tightLimit) {
+        const from = tail.length - tailChars - lookbackChars;
+        let hasBoundary = false;
+        for (let i = Math.max(0, from); i < tail.length; i += 1) {
+          if (isBoundaryCharCode(tail.charCodeAt(i))) {
+            hasBoundary = true;
+            break;
+          }
+        }
+        tightMode = !hasBoundary;
+      }
       while (tail.length > normalLimit || (tightMode && tail.length > tightLimit)) {
         commitOnce();
       }
       tailDirty = true;
     },
     get tokens(): number {
-      const current = readTailTokens();
+      if (tailDirty) {
+        tailTokens = encodePiece(tail);
+        tailDirty = false;
+        if (tailTokens === null && !warnedReadFailure) {
+          warnedReadFailure = true;
+          // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
+          // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
+          // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
+          console.warn('[nm/incremental] 尾窗不可编码，保持上一次读值');
+        }
+      }
+      const current = tailTokens;
       if (current === null) {
         // 本次尾窗不可编码（特殊 token 文本等）：保持上一次成功读值。
         return lastGoodTokens;

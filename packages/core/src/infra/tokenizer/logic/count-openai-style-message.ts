@@ -37,11 +37,7 @@ export interface OpenAiStyleMessage {
  * 这里只负责把 tiktoken encoding 适配成 `ChatTokenEncoder`。
  * 与 SillyTavern `/api/tokenizers/openai/count` 行为一致。
  */
-export function countOpenAiStyleMessages(
-  encoding: TokenEncoder,
-  messages: readonly OpenAiStyleMessage[],
-  tiktokenModel: string,
-): number {
+export function countOpenAiStyleMessages(encoding: TokenEncoder, messages: readonly OpenAiStyleMessage[], tiktokenModel: string): number {
   // message-token-cache 分块接入（唯一落点）：传入 countTokens 的 encode 函数
   // 包上 {@link countTextWithIncrementalTokenizer}——单次 encode 被内部切成
   // ≤64 字符的自然边界段逐段求和，「无空白长中文串」的 O(len²) 病态由这里
@@ -50,21 +46,13 @@ export function countOpenAiStyleMessages(
   // 数值口径因此从「整串 encode」变为「边界段加和」——正常文本误差
   // -0.02%~+0.35%（spec 实测），T-FA2 的逐字节基准已按 spec 时序迁移至
   // T-TC5 的 ≤1% 容差口径。
-  const baseEncode = (text: string): number => encoding.encode(text).length;
-  return countTokens(
-    (text) => countTextWithIncrementalTokenizer(baseEncode, text),
-    messages,
-    "precise",
-    { tiktokenModel },
-  );
+  return countTokens((text) => countTextWithIncrementalTokenizer((chunk) => encoding.encode(chunk).length, text), messages, "precise", { tiktokenModel });
 }
 
 /**
  * Wraps serialized prompt as a single system message for ST-aligned counting.
  */
-export function wrapSerializedPromptAsSystemMessage(
-  serialized: string,
-): OpenAiStyleMessage {
+export function wrapSerializedPromptAsSystemMessage(serialized: string): OpenAiStyleMessage {
   return { role: "system", content: serialized };
 }
 
@@ -73,9 +61,7 @@ export function wrapSerializedPromptAsSystemMessage(
  *
  * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
  */
-export function convertMessagesForWebTokenizer(
-  messages: readonly OpenAiStyleMessage[],
-): string {
+export function convertMessagesForWebTokenizer(messages: readonly OpenAiStyleMessage[]): string {
   const parts: string[] = [];
   for (const msg of messages) {
     const role = msg.role.toLowerCase();
@@ -101,10 +87,7 @@ export function convertMessagesForWebTokenizer(
  *
  * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
  */
-export function countWebTokenizerMessages(
-  encode: (text: string) => { length: number },
-  messages: readonly OpenAiStyleMessage[],
-): number {
+export function countWebTokenizerMessages(encode: (text: string) => { length: number }, messages: readonly OpenAiStyleMessage[]): number {
   const converted = convertMessagesForWebTokenizer(messages);
   return encode(converted).length;
 }

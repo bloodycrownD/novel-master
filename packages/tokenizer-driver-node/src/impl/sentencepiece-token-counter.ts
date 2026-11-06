@@ -15,6 +15,15 @@ import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 
+/** SentencePiece 家族（`constructor` 与 `countSentencePieceFamilyPrompt` 的 cast 共用）。 */
+type SentencePieceFamily = Extract<
+  TokenizerFamily,
+  "llama" | "mistral" | "yi" | "gemma" | "jamba"
+>;
+
+/** 家族 prompt 计数结果（真计数或加载失败后的兜底估算）。 */
+type TokenCountEstimate = { readonly count: number; readonly estimated: boolean };
+
 const heuristic = new HeuristicTokenCounter();
 
 /**
@@ -38,12 +47,7 @@ export class SentencePieceTokenCounter implements TokenCounter {
   private processor: SentencePieceProcessor | null = null;
   private loadError = false;
 
-  constructor(
-    private readonly family: Extract<
-      TokenizerFamily,
-      "llama" | "mistral" | "yi" | "gemma" | "jamba"
-    >,
-  ) {
+  constructor(private readonly family: SentencePieceFamily) {
     this.kind = family;
   }
 
@@ -103,13 +107,8 @@ export class SentencePieceTokenCounter implements TokenCounter {
   }
 }
 
-export async function countSentencePieceFamilyPrompt(
-  family: TokenizerFamily,
-  serialized: string,
-): Promise<{ readonly count: number; readonly estimated: boolean }> {
-  const counter = new SentencePieceTokenCounter(
-    family as Extract<TokenizerFamily, "llama" | "mistral" | "yi" | "gemma" | "jamba">,
-  );
+export async function countSentencePieceFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+  const counter = new SentencePieceTokenCounter(family as SentencePieceFamily);
   const count = await counter.countSerializedPrompt(serialized);
   return { count, estimated: counter.failedLoad };
 }

@@ -8,10 +8,8 @@ import { AppError } from "@/errors/app-error.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import { applyMergePatch } from "@/common/json.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
-import {
-  validateAgentDefinition,
-  type ValidateAgentDefinitionOptions,
-} from "@/domain/agent/logic/validate-agent-definition.js";
+import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import { DEFAULT_SUBAGENT_DEFINITION } from "../default-subagent-definition.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
@@ -30,6 +28,7 @@ export interface DefaultAgentRegistryServiceDeps {
  *（字符串 / 数字 / 数组、显式 null）不兜底——原样返回 def，直接交
  * validateAgentDefinition 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
  */
+// nm-style: keep-local — prompts 缺省补空布局是 create 前独立的四段形状归一化（undefined/null/对象/半缺省），内联会让 upsert 同时承担归一化与校验。
 function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
   const prompts = def.prompts as AgentPromptLayout | undefined;
   // 仅 undefined（真缺省）补空布局；null 与非对象形状（字符串 / 数字 /
@@ -88,11 +87,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     return def;
   }
 
-  async upsert(
-    agentId: string,
-    def: AgentDefinition,
-    options: ValidateAgentDefinitionOptions = {}
-  ): Promise<void> {
+  async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<void> {
     const defaulted = withDefaultPromptLayouts(def);
     const validation = await validateAgentDefinition(defaulted, options);
     if (!validation.ok) throw validation.error;
@@ -104,23 +99,6 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AppError("AGENT_INVALID_SCHEMA", `"${DEFAULT_SUBAGENT_DEFINITION.name}" 是内置智能体名称，不可使用`);
     }
-    await this.assertUniqueDisplayName(agentId, trimmedName);
-
-    const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
-    await this.deps.repository.upsert(agentId, normalized);
-  }
-
-  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<AgentDefinition> {
-    const current = await this.get(agentId);
-    const merged = applyMergePatch(current, patch);
-    await this.upsert(agentId, merged, options);
-    return merged;
-  }
-
-  private async assertUniqueDisplayName(
-    agentId: string,
-    name: string
-  ): Promise<void> {
     const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
       if (otherId === agentId) {
@@ -133,10 +111,20 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
       } catch {
         otherName = otherId.trim();
       }
-      if (otherName.length > 0 && otherName === name) {
+      if (otherName.length > 0 && otherName === trimmedName) {
         throw new AppError("AGENT_DUPLICATE_NAME", "Agent 名称已存在");
       }
     }
+
+    const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
+    await this.deps.repository.upsert(agentId, normalized);
+  }
+
+  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<AgentDefinition> {
+    const current = await this.get(agentId);
+    const merged = applyMergePatch(current, patch);
+    await this.upsert(agentId, merged, options);
+    return merged;
   }
 
   async delete(agentId: string): Promise<void> {
@@ -147,10 +135,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
     // 否则非法 prompts_json 的 agent 永远卡在库里删不掉。
     const wire = await this.deps.repository.getRawWire(agentId);
-    const wireName =
-      wire != null && typeof wire === "object" && !Array.isArray(wire)
-        ? (wire as { name?: unknown }).name
-        : undefined;
+    const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
     if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AppError("AGENT_INVALID_SCHEMA", `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`);
     }

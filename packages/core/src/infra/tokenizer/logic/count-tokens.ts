@@ -64,33 +64,17 @@ export interface CountTokensOptions {
  *
  * nm-style: keep-public — 三端共用入口（文档契约），签名类型随同 keep-public
  */
-export function countTokens(
-  encode: ChatTokenEncoder,
-  messages: readonly ChatTokenMessage[],
-  kind: ChatTokenCountKind,
-  options?: CountTokensOptions
-): number {
+export function countTokens(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], kind: ChatTokenCountKind, options?: CountTokensOptions): number {
   if (kind === "heuristic") {
-    return countHeuristic(encode, messages);
+    let numTokens = 0;
+    for (const msg of messages) {
+      numTokens += 3;
+      numTokens += encode(msg.content);
+    }
+    numTokens += 3;
+    return numTokens;
   }
   return countPrecise(encode, messages, options?.tiktokenModel);
-}
-
-/**
- * 简化 +3+3：每条消息 +3、只 encode content、尾部 +3。
- * 不区分 0301，因为 heuristic 本就是粗估，区分模型开销没意义。
- */
-function countHeuristic(
-  encode: ChatTokenEncoder,
-  messages: readonly ChatTokenMessage[]
-): number {
-  let numTokens = 0;
-  for (const msg of messages) {
-    numTokens += 3;
-    numTokens += encode(msg.content);
-  }
-  numTokens += 3;
-  return numTokens;
 }
 
 /**
@@ -98,13 +82,9 @@ function countHeuristic(
  * encode role+content+name，name 额外 +tokensPerName（0301: -1 / 否则 1），
  * 尾部 +3（0301 再 +9）。
  */
-function countPrecise(
-  encode: ChatTokenEncoder,
-  messages: readonly ChatTokenMessage[],
-  tiktokenModel?: string
-): number {
-  const is0301 =
-    tiktokenModel != null ? isGpt0301TiktokenModel(tiktokenModel) : false;
+// nm-style: keep-local — 完整 ST 包装公式（0301 三处调整 + 尾部 +3/+9）是精确档的独立口径，内联会把两条档位分支揉在一起。
+function countPrecise(encode: ChatTokenEncoder, messages: readonly ChatTokenMessage[], tiktokenModel?: string): number {
+  const is0301 = tiktokenModel != null ? isGpt0301TiktokenModel(tiktokenModel) : false;
   const tokensPerMessage = is0301 ? 4 : 3;
   const tokensPerName = is0301 ? -1 : 1;
 

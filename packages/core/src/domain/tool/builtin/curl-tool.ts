@@ -108,28 +108,8 @@ export interface CurlToolOutput {
   readonly message?: string;
 }
 
-/**
- * 解析 content-length 头：缺失或非法（非数字 / 负数等）时返回 null。
- * 预检与非文本占位两处共用，避免各自直读原始头。
- */
-function parseContentLength(response: Response): number | null {
-  const header = response.headers.get("content-length");
-  if (header == null) return null;
-  const value = Number(header);
-  return Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-/**
- * 判断 Content-Type 是否按文本处理：主类型 `text/`，或 subtype含
- * json / xml / javascript / svg / yaml / urlencoded 关键字。
- * 缺省（空串）按文本处理。
- */
-function isTextualContentType(contentType: string): boolean {
-  if (contentType.length === 0) return true;
-  const lower = contentType.toLowerCase();
-  if (lower.startsWith("text/")) return true;
-  return lower.includes("json") || lower.includes("xml") || lower.includes("javascript") || lower.includes("svg") || lower.includes("yaml") || lower.includes("urlencoded");
-}
+/** 非 `text/` 主类型里按文本处理的 subtype 关键字（与工具描述同口径）。 */
+const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", "urlencoded"];
 
 /**
  * fetch / text() 两个阶段的错误统一映射：超时 abort 给可读超时文案
@@ -155,6 +135,7 @@ function curlPhaseError(e: unknown, aborted: boolean, url: string, timeoutMs: nu
  * 不能按字符数切：含多字节字符时等量字符可膨胀到远超预算
  * （如中文 3 字节/字符）。代理对成对推进，避免切在半个字符上。
  */
+// nm-style: keep-local — 字节预算截断是独立的 26 行两段扫描（整块累加 + 块内码位推进），内联会拆散代理对成对推进的不变量。
 function truncateToByteBudget(text: string, maxBytes: number): string {
   const encoder = new TextEncoder();
   const CHUNK = 8192;
@@ -180,11 +161,6 @@ function truncateToByteBudget(text: string, maxBytes: number): string {
     return text.slice(0, i + chunk.length);
   }
   return text;
-}
-
-/** 请求头 key 是否为 content-type（大小写不敏感）。 */
-function isContentTypeKey(name: string): boolean {
-  return name.toLowerCase() === "content-type";
 }
 
 /**
@@ -313,7 +289,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
     const requestHeaders = new Headers();
     let hasExplicitContentType = false;
     for (const [name, value] of Object.entries(input.headers ?? {})) {
-      if (isContentTypeKey(name)) {
+      if (name.toLowerCase() === "content-type") {
         hasExplicitContentType = true;
       }
       requestHeaders.set(name, value);
@@ -348,7 +324,9 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 
       // content-length 预检：声明的正文超过上限时不读 body（防巨响应内存峰值），
       // 直接返回占位 + 截断标注；originalBytes 回填 content-length 头数值。
-      const declaredLength = parseContentLength(response);
+      const declaredLengthHeader = response.headers.get("content-length");
+      const declaredLengthValue = declaredLengthHeader == null ? null : Number(declaredLengthHeader);
+      const declaredLength = declaredLengthValue != null && Number.isFinite(declaredLengthValue) && declaredLengthValue >= 0 ? declaredLengthValue : null;
       if (declaredLength != null && declaredLength > CURL_MAX_RESPONSE_BYTES) {
         return {
           url: normalizedUrl,
@@ -364,7 +342,10 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 
       // 非文本 Content-Type：contentType 响应头阶段即已知，无需下载正文——
       // 直接占位说明，体积回填 content-length 头（缺失时无法得知，标 unknown）。
-      if (!isTextualContentType(contentType)) {
+      const lowerContentType = contentType.toLowerCase();
+      const textualMain = contentType.length === 0 || lowerContentType.startsWith("text/");
+      const textualSubtype = TEXTUAL_CONTENT_TYPE_HINTS.some((hint) => lowerContentType.includes(hint));
+      if (!textualMain && !textualSubtype) {
         const binaryBytes = declaredLength;
         return {
           url: normalizedUrl,

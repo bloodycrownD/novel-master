@@ -29,10 +29,13 @@ const MESSAGE_COUNT = 500;
 /**
  * 性能上限：seedCheckpoints 批量实现远低于此；退化到逐条会超时失败。
  *
- * 逐条 insertCheckpoint 在这个规模下约 1.8s；批量 seedCheckpoints 约 170ms。
- * 阈值给 800ms，留 4 倍余量吸收 CI 环境抖动，同时仍能捕捉「退化回逐条」的回归。
+ * 逐条 insertCheckpoint 在这个规模下约 1.8s；批量 seedCheckpoints 参考机约 170ms、
+ * 本机单跑约 0.4s。全量 runner 的 `node --test` 会按文件并行，本机在并行负载下
+ * 实测到 885ms（2026-11-06 全量门控），800ms 预算会被并发噪声打穿。故按「性能护栏
+ * 卡数量级回归、不卡环境噪声」的口径给 1500ms：仍明显低于逐条实现的 1.8s+，
+ * 退化回逐条照样会红，同时留出并行抖动的余量。
  */
-const SEED_BUDGET_MS = 800;
+const SEED_BUDGET_MS = 1500;
 
 describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => {
   it("T-PERF-BATCH：500 条消息各 insertCheckpoint（200 文件指针）应在预算内完成", async () => {

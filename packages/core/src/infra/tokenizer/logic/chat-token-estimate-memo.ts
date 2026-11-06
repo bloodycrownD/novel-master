@@ -72,19 +72,14 @@ const workplaceEstimateByFp = new Map<string, number>();
 
 /** 指纹估读命中；miss 返回 null（调用方现算并回填）。 */
 // nm-style: keep-local — workplaceEstimateByFp 的读口，与回填成对维护该表的不变量
-export function lookupWorkplaceEstimateByFingerprint(
-  fingerprint: string
-): number | null {
+export function lookupWorkplaceEstimateByFingerprint(fingerprint: string): number | null {
   return workplaceEstimateByFp.get(fingerprint) ?? null;
 }
 
 /** 回填指纹估读（覆盖式）。容量上界：指纹随文件 mtime 演进，旧条目不再被
  * 查询——按 64 条 LRU 式截断（超限删最旧插入序），防长会话漂移累积。 */
 // nm-style: keep-local — workplaceEstimateByFp 的写口，负责 64 条容量上界不变量
-export function rememberWorkplaceEstimateByFingerprint(
-  fingerprint: string,
-  estimate: number
-): void {
+export function rememberWorkplaceEstimateByFingerprint(fingerprint: string, estimate: number): void {
   if (!workplaceEstimateByFp.has(fingerprint) && workplaceEstimateByFp.size >= 64) {
     const oldest = workplaceEstimateByFp.keys().next().value;
     if (oldest != null) {
@@ -95,10 +90,7 @@ export function rememberWorkplaceEstimateByFingerprint(
 }
 
 /** 命中条件 = 会话在册且键逐字符相同；否则 null（调用方按 miss 走全价路径）。 */
-export function lookupChatTokenEstimateMemo(
-  sessionId: string,
-  key: string
-): ChatTokenEstimateMemoEntry | null {
+export function lookupChatTokenEstimateMemo(sessionId: string, key: string): ChatTokenEstimateMemoEntry | null {
   const hit = memo.get(sessionId);
   if (hit != null && hit.key === key) {
     return hit.entry;
@@ -118,11 +110,7 @@ export function lookupChatTokenEstimateMemo(
  * - **容量（r4q-5）**：新会话使条目数超过 {@link MEMO_MAX_SESSIONS} 时逐出
  *   最旧插入序（已有会话的覆盖写不触发逐出）。
  */
-export function rememberChatTokenEstimateMemo(
-  sessionId: string,
-  key: string,
-  entry: ChatTokenEstimateMemoEntry
-): void {
+export function rememberChatTokenEstimateMemo(sessionId: string, key: string, entry: ChatTokenEstimateMemoEntry): void {
   const existing = memo.get(sessionId);
   if (
     existing != null &&
@@ -160,9 +148,7 @@ export function clearChatTokenEstimateMemo(sessionId?: string): void {
  *
  * nm-style: keep-local — 尾戳三段（数量/末 seq/长度和）是「同键 ⇒ 产物同值」的判定契约
  */
-export function stampMessagesForEstimateMemo(
-  messages: readonly ChatMessageData[]
-): string {
+export function stampMessagesForEstimateMemo(messages: readonly ChatMessageData[]): string {
   let lenSum = 0;
   let lastSeq = 0;
   for (const m of messages) {
@@ -187,19 +173,18 @@ export function stampMessagesForEstimateMemo(
  * serialize/hash/count 线性扫可忽略。
  */
 function digestLayoutForEstimateMemo(layout: AgentPromptLayout): string {
-  return hashContent(
-    JSON.stringify({
-      system: layout.system,
-      persistEnabled: layout.persistEnabled,
-      persist: layout.persist,
-      dynamicEnabled: layout.dynamicEnabled,
-      dynamic: layout.dynamic,
-      workplace: layout.workplace,
-      customAttach: layout.customAttach,
-      skillsEnabled: layout.skillsEnabled,
-      skillsPrefix: layout.skillsPrefix,
-    })
-  ).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
+  const serialized = JSON.stringify({
+    system: layout.system,
+    persistEnabled: layout.persistEnabled,
+    persist: layout.persist,
+    dynamicEnabled: layout.dynamicEnabled,
+    dynamic: layout.dynamic,
+    workplace: layout.workplace,
+    customAttach: layout.customAttach,
+    skillsEnabled: layout.skillsEnabled,
+    skillsPrefix: layout.skillsPrefix,
+  });
+  return hashContent(serialized).slice(0, LAYOUT_DIGEST_HEX_LENGTH);
 }
 
 /**
@@ -227,10 +212,7 @@ export function buildChatTokenEstimateMemoKey(params: {
   if (fp == null || params.layout == null) {
     return null;
   }
-  const msgStamp =
-    params.messages == null
-      ? "0::0"
-      : stampMessagesForEstimateMemo(params.messages);
+  const msgStamp = params.messages == null ? "0::0" : stampMessagesForEstimateMemo(params.messages);
   // tools 折算长度（tools 集随 agent 定义变，长度异即 miss；消息体同款取舍）。
   let toolsStamp: string;
   try {
@@ -238,11 +220,6 @@ export function buildChatTokenEstimateMemoKey(params: {
   } catch {
     toolsStamp = "unserializable";
   }
-  return [
-    params.savedModelId ?? "none",
-    fp,
-    msgStamp,
-    toolsStamp,
-    digestLayoutForEstimateMemo(params.layout),
-  ].join("|");
+  const parts = [params.savedModelId ?? "none", fp, msgStamp, toolsStamp, digestLayoutForEstimateMemo(params.layout)];
+  return parts.join("|");
 }

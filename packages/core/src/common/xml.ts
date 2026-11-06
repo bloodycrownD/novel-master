@@ -29,8 +29,7 @@ const XML_ENTITY_RE = /&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]+);/g;
 
 /** XML 文本节点转义；属性值在此基础上再转双引号。 */
 export function escapeXmlText(value: string): string {
-    return value.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** 双引号包裹的 XML 属性值转义。 */

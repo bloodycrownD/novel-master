@@ -10,7 +10,7 @@
 
 import { isRecord } from "@/common/guards.js";
 import { utf8ByteLength } from "@/common/encoding.js";
-import type { SkillToolRef, ToolResultBlock } from "@/domain/chat/model/content-block.js";
+import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import { formatToolErrorForLlm, formatToolOutputForLlm } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -56,6 +56,7 @@ function formatByteSize(bytes: number): string {
   return `${trimFraction(kb / 1024)}MB`;
 }
 
+// nm-style: keep-local — 144 行的 per-tool 摘要分派（read/edit/write/fs/skill/agent/search/curl + 泛化兜底）是独立展示口径，内联会吞掉整个成功分支。
 function summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
   if (!isRecord(output)) {
     return undefined;
@@ -209,10 +210,13 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     const content = formatToolOutputForLlm(outcome.output);
     const summary = summarizeToolSuccess(meta?.toolName, outcome.output);
     // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
-    const subagentSessionId = resolveSubagentSessionIdFromOutcome(outcome.output, meta?.subagentSessionId);
+    const subagentOutput = outcome.output;
+    const outputSubagentSessionId = isRecord(subagentOutput) && typeof subagentOutput.subagentSessionId === "string" ? subagentOutput.subagentSessionId : undefined;
+    const subagentSessionId = outputSubagentSessionId ?? (typeof meta?.subagentSessionId === "string" && meta.subagentSessionId.length > 0 ? meta.subagentSessionId : undefined);
     // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
     // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
-    const skillRef = resolveSkillToolRefFromOutcome(meta?.toolName, outcome.output, meta?.skillProjectId);
+    const skillToolName = meta?.toolName;
+    const skillRef = skillToolName == null ? undefined : skillToolRefResolver.fromOutput(skillToolName, outcome.output, meta?.skillProjectId);
 
     // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
     // 全文形态（`formatToolOutputForLlm` 直出），read / skill load / skill
@@ -227,7 +231,7 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
     // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
     // meta 额外带 failureReason（UI 卡片用）。
-    if (isStoppedTaskOutput(outcome.output)) {
+    if (isRecord(subagentOutput) && subagentOutput.stopped === true) {
       const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
       const failureReason = typeof rawReason === "string" ? rawReason : undefined;
       return {
@@ -282,39 +286,4 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     content,
     ...(summary != null ? { summary } : {}),
   };
-}
-
-/**
- * 检测 task 工具输出是否携带有「用户停止」标记（phase-1-abort-reflow）。
- *
- * outcome.ok=true 但 output.stopped=true 时，buildToolResultBlock 要把这条
- * tool_result 标成 ok=false。本函数只做窄义类型守卫，不复用 resolveSubagentSessionIdFromOutcome
- * 的 object 判定，语义上更直结。
- */
-function isStoppedTaskOutput(output: unknown): boolean {
-  return output != null && typeof output === "object" && !Array.isArray(output) && (output as { stopped?: unknown }).stopped === true;
-}
-
-/**
- * 从工具输出对象或显式 meta 提取 `subagentSessionId`。
- *
- * 优先 `outcome.output.subagentSessionId`（string 时生效）；否则回落到调用方显式传入的 meta。
- * 仅 task 工具有该字段，其他工具输出不含 subagentSessionId，返回 undefined。
- */
-function resolveSubagentSessionIdFromOutcome(output: unknown, fallback?: string): string | undefined {
-  if (output != null && typeof output === "object" && !Array.isArray(output) && typeof (output as { subagentSessionId?: unknown }).subagentSessionId === "string") {
-    return (output as { subagentSessionId: string }).subagentSessionId;
-  }
-  return typeof fallback === "string" && fallback.length > 0 ? fallback : undefined;
-}
-
-/**
- * 从 skill 成功输出提取跳转三元组（失败 outcome 一律 undefined）。
- *
- * 仅 `meta.toolName === "skill"` 时有意义；实际判定在
- * `resolveSkillToolRefFromOutput` 内（工具名 + 输出形态双门控）。
- */
-function resolveSkillToolRefFromOutcome(toolName: string | undefined, output: unknown, skillProjectId?: string): SkillToolRef | undefined {
-  if (toolName == null) return undefined;
-  return skillToolRefResolver.fromOutput(toolName, output, skillProjectId);
 }

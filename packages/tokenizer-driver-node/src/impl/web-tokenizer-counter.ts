@@ -11,14 +11,16 @@ import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/prov
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
-import {
-  countWebTokenizerMessages,
-  wrapSerializedPromptAsSystemMessage,
-  type OpenAiStyleMessage,
-} from "../logic/count-openai-style-message.js";
+import { countWebTokenizerMessages, wrapSerializedPromptAsSystemMessage, type OpenAiStyleMessage } from "../logic/count-openai-style-message.js";
 import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
+
+/** Web tokenizer 家族（`constructor` 与 `countWebFamilyPrompt` 的 cast 共用）。 */
+type WebTokenizerFamily = Exclude<TokenizerFamily, "heuristic" | "tiktoken">;
+
+/** 家族 prompt 计数结果（真计数或加载失败后的兜底估算）。 */
+type TokenCountEstimate = { readonly count: number; readonly estimated: boolean };
 
 const heuristic = new HeuristicTokenCounter();
 
@@ -46,10 +48,11 @@ export class WebTokenizerCounter implements TokenCounter {
   private instance: Tokenizer | null = null;
   private loadError = false;
 
-  constructor(private readonly family: Exclude<TokenizerFamily, "heuristic" | "tiktoken">) {
+  constructor(private readonly family: WebTokenizerFamily) {
     this.kind = family;
   }
 
+  /** nm-style: keep-local — 懒加载状态机（instance 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
   private async getInstance(): Promise<Tokenizer | null> {
     if (this.instance != null) {
       return this.instance;
@@ -110,10 +113,7 @@ export class WebTokenizerCounter implements TokenCounter {
       return fallbackCount(serialized);
     }
     const wrapped = wrapSerializedPromptAsSystemMessage(serialized);
-    return countWebTokenizerMessages(
-      (t) => instance.encode(t),
-      [wrapped],
-    );
+    return countWebTokenizerMessages((t) => instance.encode(t), [wrapped]);
   }
 
   /** Whether the last load attempt failed (for `estimated` flag). */
@@ -129,20 +129,13 @@ export class ClaudeWebTokenCounter extends WebTokenizerCounter {
   }
 }
 
-export async function countWebFamilyPrompt(
-  family: TokenizerFamily,
-  serialized: string,
-): Promise<{ readonly count: number; readonly estimated: boolean }> {
-  const counter = new WebTokenizerCounter(
-    family as Exclude<TokenizerFamily, "heuristic" | "tiktoken">,
-  );
+export async function countWebFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
+  const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
   const count = await counter.countSerializedPrompt(serialized);
   return { count, estimated: counter.failedLoad };
 }
 
 /** @internal test helper */
-export function messagesToOpenAiStyle(
-  messages: readonly { role: string; content: string }[],
-): OpenAiStyleMessage[] {
+export function messagesToOpenAiStyle(messages: readonly { role: string; content: string }[]): OpenAiStyleMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content }));
 }
