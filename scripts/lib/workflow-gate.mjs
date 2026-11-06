@@ -24,6 +24,7 @@ const GATES = {
   "test-node": ["test", "-w", "@novel-master/tokenizer-driver-node"],
   "typecheck-desktop": ["run", "typecheck", "-w", "@novel-master/desktop"],
   "typecheck-mobile": ["run", "typecheck", "-w", "@novel-master/mobile"],
+  "typecheck-cli": ["run", "typecheck", "-w", "@novel-master/cli"],
   "test-mobile": [
     "test",
     "-w",
