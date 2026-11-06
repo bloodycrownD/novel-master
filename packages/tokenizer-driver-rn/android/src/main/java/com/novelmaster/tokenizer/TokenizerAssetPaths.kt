@@ -1,6 +1,14 @@
 package com.novelmaster.tokenizer
 
-/** Asset paths under `assets/tokenizers/` — WEB/SP 段与 core `tokenizerAssetPaths` 镜像；tiktoken 两表（cl100k/o200k）为本目录独有（见 README 分叉声明）。 */
+/**
+ * Asset paths under `assets/tokenizers/`。
+ *
+ * 与 core `tokenizerAssetPaths` 的**已知分叉**（sp-to-hf，2026-11-06）：llama /
+ * mistral / gemma 在本端指向转换后的 `tokenizer.json`，core 侧仍指 `.model`——
+ * Node 驱动有 `@agnai/sentencepiece-js`（WASM）能真跑 SP，Android 没有
+ * SentencePiece native，只能借已有的 HF native 路径。tiktoken 两表
+ * （cl100k/o200k）为本目录独有。
+ */
 internal data class AssetPathSpec(
   val primary: String,
   val fallback: String? = null,
@@ -12,10 +20,16 @@ internal object TokenizerAssetPaths {
     return when (family) {
       "claude" -> AssetPathSpec("claude.json", kind = "json")
       "llama3" -> AssetPathSpec("llama3.json", kind = "json")
-      "llama" -> AssetPathSpec("llama.model", kind = "model")
-      "mistral" -> AssetPathSpec("mistral.model", kind = "model")
+      // SP 家族转 HF（sp-to-hf，2026-11-06）：Android 没有 SentencePiece native
+      // （DJL 无 ai.djl.android:sentencepiece-native），这些家族此前恒落 JS cl100k
+      // 兜底。`.model` 用 transformers 的 convert_slow_tokenizer 转成 tokenizer.json
+      // 后直接复用已有的 libdjl_tokenizer.so，全部对拍逐 token 等值（脚本见
+      // packages/tokenizer-driver-rn/scripts/convert-sp-to-hf.py）。
+      // yi / jamba 转换后偏差 ±1 token（normalizer 细节差异），暂留 model 档。
+      "llama" -> AssetPathSpec("llama.json", kind = "json")
+      "mistral" -> AssetPathSpec("mistral.json", kind = "json")
       "yi" -> AssetPathSpec("yi.model", kind = "model")
-      "gemma" -> AssetPathSpec("gemma.model", kind = "model")
+      "gemma" -> AssetPathSpec("gemma.json", kind = "json")
       "jamba" -> AssetPathSpec("jamba.model", kind = "model")
       "qwen2" -> AssetPathSpec("web/qwen2.json", "llama3.json", "json")
       "command-r" -> AssetPathSpec("web/command-r.json", "llama3.json", "json")

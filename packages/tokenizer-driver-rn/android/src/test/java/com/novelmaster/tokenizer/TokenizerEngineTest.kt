@@ -96,8 +96,10 @@ class TokenizerEngineTest {
     assertEquals("json", claude.kind)
 
     val gemma = TokenizerEngine.resolveAssetSpecFor("gemma")
-    assertEquals("gemma.model", gemma.primary)
-    assertEquals("model", gemma.kind)
+    // sp-to-hf（2026-11-06）：Android 无 SentencePiece native，gemma/llama/mistral
+    // 改用 convert_slow_tokenizer 转出的 tokenizer.json，走已有的 HF native。
+    assertEquals("gemma.json", gemma.primary)
+    assertEquals("json", gemma.kind)
 
     val qwen2 = TokenizerEngine.resolveAssetSpecFor("qwen2")
     assertEquals("web/qwen2.json", qwen2.primary)
