@@ -4,16 +4,16 @@
  * 两个必需性：
  *  ① world.run 的 stdout 有 256KB 上限，core 全量测试的 TAP 输出约 817KB，直连会把 run 打挂；
  *  ② world.run 的 cwd 是主仓库 novel-master，而改动都在 tokfix worktree —— 本脚本 chdir 到
- *     自身所在目录（worktree 根）再跑，否则测错树（错树假绿）。
+ *     仓库根（本文件在 scripts/lib/ 下，故上溯两级）再跑，否则测错树（错树假绿）。
  *
- * 用法：node nm-gate.mjs <gate>
+ * 用法：node scripts/lib/workflow-gate.mjs <gate>
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const WORKTREE = path.dirname(fileURLToPath(import.meta.url));
+const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 process.chdir(WORKTREE);
 
 const GATES = {
