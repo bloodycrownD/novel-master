@@ -141,8 +141,6 @@ export {
   serializePromptLlmInput,
   countPromptLlmInput,
   countPromptLlmInputHeuristicOnly,
-  formatTokenSourceBadge,
-  formatContextUsageLabel,
   resolveCurrentPromptTokens,
   resolvePromptTokensWithBackfill,
   promptWholeCache,
@@ -173,7 +171,6 @@ export {
   type TokenCounterKind,
   type TokenizerFamily,
   type TokenizerOverride,
-  type TokenSourceBadge,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
   type ResolvedPromptTokens,
@@ -185,4 +182,11 @@ export {
   type OpenAiStyleMessage,
   type EncodingHandle,
 } from "../infra/tokenizer/index.js";
+// token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
+// 这里直接转出（不经 infra 中转）。
+export {
+  formatTokenSourceBadge,
+  formatContextUsageLabel,
+  type TokenSourceBadge,
+} from "../common/format-token-count.js";
 export { isValidTokenCounterModePref } from "../infra/tokenizer/index.js";

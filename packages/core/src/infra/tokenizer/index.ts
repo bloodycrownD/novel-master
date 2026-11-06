@@ -29,12 +29,12 @@ export {
 export { countTextWithIncrementalTokenizer } from "./logic/count-text-with-tokenizer.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
 // token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
-// 此处经 logic 文件具名再导出（供 public/provider 链使用）。
+// 此处直接转出（供 public/provider 链使用）。
 export {
   formatTokenSourceBadge,
   formatContextUsageLabel,
   type TokenSourceBadge,
-} from "./logic/format-token-source-badge.js";
+} from "../../common/format-token-count.js";
 export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
   CONTEXT_WINDOW_RULES,

@@ -14,11 +14,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { formatContextUsageLabel, formatTokenSourceBadge, formatTokenCount } from "../../../src/common/format-token-count.js";
-// infra 导出面再导出的同一份实现（index → public/provider 链的源头）。
+// public/provider 直接转出的同一份实现（wrapper 已删，单源直连 common）。
 import {
-  formatContextUsageLabel as formatContextUsageLabelViaInfra,
-  formatTokenSourceBadge as formatTokenSourceBadgeViaInfra,
-} from "../../../src/infra/tokenizer/logic/format-token-source-badge.js";
+  formatContextUsageLabel as formatContextUsageLabelViaProvider,
+  formatTokenSourceBadge as formatTokenSourceBadgeViaProvider,
+} from "@novel-master/core/provider";
 
 describe("formatTokenSourceBadge（T-TL1 映射表逐行）", () => {
   it("source=api → 远程 =（api ⇒ est=false 恒成立，不看其余两参）", () => {
@@ -119,9 +119,9 @@ describe("formatTokenSourceBadge（T-TL1 映射表逐行）", () => {
     });
   });
 
-  it("infra/tokenizer/logic 再导出与 common 真身同源（单源，不是第二份实现）", () => {
-    assert.equal(formatTokenSourceBadgeViaInfra, formatTokenSourceBadge);
-    assert.equal(formatContextUsageLabelViaInfra, formatContextUsageLabel);
+  it("public/provider 再导出与 common 真身同源（单源，不是第二份实现）", () => {
+    assert.equal(formatTokenSourceBadgeViaProvider, formatTokenSourceBadge);
+    assert.equal(formatContextUsageLabelViaProvider, formatContextUsageLabel);
   });
 });
 
