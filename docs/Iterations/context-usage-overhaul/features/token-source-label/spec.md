@@ -6,6 +6,8 @@ date: 2026-09-28
 
 ## 设计目标
 
+> **注记**（2026-11-06）：本 SPEC 提到的 `infra/tokenizer/logic/format-token-source-badge.ts` 后来退化为**纯 re-export 壳**——实现真身在 `common/format-token-count.ts`。按 [tokenizer-asset-layering/spec.md](../../../tokenizer-asset-layering/spec.md) 的 T7，该壳将被删除，`provider` 直接从 `common` 转出，调用方语义不变。
+
 以 core 单源映射函数产出新标签（源记号 + =/≈ 连接符 + 百分比 + 上下文数），替换「预估/上次请求 + ~」旧体系；desktop 走「main 拼好下发」消除 renderer X1 违规；收敛 core 两份重复 usage label。依赖 `fallback-caliber-align`（rn countTiktoken 升级真值后，GPT 家族双端才能同显 `gpt =`）。需求来源：`docs/Iterations/context-usage-overhaul/features/token-source-label/prd.md`。
 
 ## 总体方案

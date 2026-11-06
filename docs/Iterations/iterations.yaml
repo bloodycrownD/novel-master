@@ -226,6 +226,19 @@ iterations:
       随桌面回归真跑。
 
 
+  # ---- 分词资产分层清理（2026-11-06 立项，spec-check-loop 收敛中）----
+  - id: tokenizer-asset-layering
+    status: active
+    notes: >
+      部分取代 nmtp 的「tokenizerAssetPaths 留 core」决策（nmtp/spec.md 第 28/181/283/351 行）：
+      资产路径表下沉到 node 驱动，core 只保留跨平台事实（TokenizerFamily /
+      resolveTokenizerFamily / 计数端口）。同时把 Android 的 SentencePiece 能力判断
+      从「运行时构造失败 + 记异常类型」改成构建期常量（DJL 抛 IllegalStateException
+      而非 LinkageError，原记忆永不生效），删 yi/jamba 死资产与 SP 代码路径，
+      按 nm-code-style 清 4 FAKE_PUBLIC / 14 DEAD（11 类型 + 3 变量）/ 11 INLINE_CANDIDATE，
+      并把 4 个 countTokens 签名类型标为 keep-public；收敛 provider 与 nmtp 的 4 个重复运行时导出。
+
+
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
 # #2 agent-prompt-abstract-block  —— fixed（superseded-by event-bus-compaction-conditions）

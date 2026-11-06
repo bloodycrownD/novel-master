@@ -2,6 +2,7 @@
 
 > **PRD**：[prd.md](./prd.md)  
 > **Supersedes**：无整体替代；本 SPEC **不改变** [model-aware-token-counting/spec.md](../model-aware-token-counting/spec.md) 中的计数口径、族解析、序列化规则，仅重构 **平台接入层**，对齐 [TDBC/spec.md](../TDBC/spec.md) / [SKSP](../sksp/prd.md) 的 driver + registry 模式。  
+> **部分被取代**（2026-11-06）：本 SPEC 中「`tokenizerAssetPaths` 留在 core」的决策（第 28、181、283、351 行）已由 [tokenizer-asset-layering/spec.md](../tokenizer-asset-layering/spec.md) **部分取代**——资产路径表下沉到平台驱动，core 只保留跨平台事实（`TokenizerFamily` / `resolveTokenizerFamily` / 计数端口）。本迭代其余设计（port + registry、双 driver、移除 global bridge）仍有效。  
 > **分支建议**：`feature/nmtp`
 
 ---
