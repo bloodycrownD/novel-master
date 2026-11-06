@@ -10,7 +10,8 @@ SP 家族（gemma/llama/mistral/yi/jamba）此前静默落 JS cl100k 兜底。�
     python scripts/convert-sp-to-hf.py --family yi --check   # 只对拍 yi
 
 退出码：0 = 无 FAIL；1 = 有 FAIL（默认 `--check` 会因 yi/jamba 的 ±1 偏差返回 1，
-那是**对拍结果、不是门禁**——这两族暂留 `.model` 档，见 cr-fix-spec C-3）。
+那是**对拍结果、不是门禁**——Android 侧已不保留这两族的任何资产，见
+`TokenizerCapabilities.kt`）。
 """
 
 from __future__ import annotations
@@ -36,8 +37,8 @@ FAMILIES = {
     "jamba": "jamba.model",
 }
 
-# 只有对拍逐 token 等值的三个家族才写盘——yi/jamba 转换后偏差 ±1，Kotlin 侧
-# 仍走 `.model`（`TokenizerAssetPaths`），写了没人读，白占 3~4MB 安装包。
+# 只有对拍逐 token 等值的三个家族才写盘——yi/jamba 转换后偏差 ±1，且 Android
+# 侧已无 SP native（`.model` 条目随能力位化删除），写了没有消费者，白占安装包。
 WRITE_FAMILIES = {"gemma", "llama", "mistral"}
 
 PARITY_TEXTS = [

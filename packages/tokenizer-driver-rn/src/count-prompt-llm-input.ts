@@ -527,9 +527,10 @@ async function countSerializedImpl(
       }
       // 家族词表不可用（2026-11-06 真机实证）：Android 包内只有 DJL 的
       // `libdjl_tokenizer.so`（HuggingFace 用），SentencePiece 没有 Android
-      // native —— `SpTokenizer` 构造必失败。gemma/llama/mistral 已在同轮转成
-      // HF tokenizer.json 走原生 HF 路径，走到这里的只剩 yi/jamba（转换后
-      // 偏差 ±1 token，暂留 model 档）。先试**原生 cl100k 近似**：口径与下面的
+      // native —— 构建期能力位 `SENTENCEPIECE_NATIVE_AVAILABLE = false`，
+      // yi/jamba 的 `.model` 条目与资产已删除，原生调用直接 reject。
+      // gemma/llama/mistral 已转成 HF tokenizer.json 走原生 HF 路径。先试
+      // **原生 cl100k 近似**：口径与下面的
       // fallbackCount 完全一致（同样是 cl100k、同样报 heuristic/estimated，
       // 压缩阈值照乘 0.85），但算力在原生 executor 上、毫秒级。
       // 真机实测 gemini 107K 字符落 JS 分块要 7.9s 且全程占住 Hermes 主线程

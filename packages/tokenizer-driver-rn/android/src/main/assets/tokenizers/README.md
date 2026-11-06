@@ -1,6 +1,6 @@
 # Tokenizer assets (Android NMTP driver)
 
-Canonical tokenizer model files for Kotlin `TokenizerEngine` (WEB/SP families + tiktoken).
+Canonical tokenizer model files for Kotlin `TokenizerEngine` (WEB families + 转换后的 SP 家族 + tiktoken).
 
 - Node/CLI uses `packages/tokenizer-driver-node/assets/tokenizers/` instead.
 - RN JS does not read this directory; only the native module loads these files.
@@ -12,10 +12,14 @@ Canonical tokenizer model files for Kotlin `TokenizerEngine` (WEB/SP families + 
 
 | 文件 | 家族/编码 | 来源 | 说明 |
 |---|---|---|---|
-| claude.json / llama3.json / yi.model / jamba.model 及 `web/` 下 6 份 | WEB/SP 家族 | SillyTavern / SillyTavern-Tokenizers（见 LICENSE.md） | 历史资产，与 node 侧字节级一致 |
-| gemma.json / llama.json / mistral.json | SP 家族转 HF | `scripts/convert-sp-to-hf.py` 从 node 侧同名 `.model` 转出（transformers 4.48.3 `convert_slow_tokenizer`） | **与 node 侧有意分叉**：Android 无 SentencePiece native，改走 HF 路径；`AssetPathSpec.bare` 裸编码，六组文本 token 数全等（gemma 另经 `TokenizerParityTest` 精确对拍） |
+| claude.json / llama3.json 及 `web/` 下 6 份 | WEB 家族 | SillyTavern / SillyTavern-Tokenizers（见 LICENSE.md） | 历史资产，与 node 侧字节级一致 |
+| gemma.json / llama.json / mistral.json | SP 家族转 HF | `scripts/convert-sp-to-hf.py` 从 node 侧同名 `.model` 转出（transformers 4.48.3 `convert_slow_tokenizer`） | **与 node 侧有意分叉**：Android 无 SentencePiece native，改走 HF 路径；裸编码口径由 `TokenizerEngine.isBareCaliber` 判定，六组文本 token 数全等（gemma 另经 `TokenizerParityTest` 精确对拍） |
 | cl100k.json | tiktoken / cl100k_base | HF `Xenova/gpt-4` `tokenizer.json` @ `1d9f1f1b1fae88c0e4df1dab0a397f8de6229075`（2026-10-03 获取） | 紧凑化（3.9→2.6MB，入库实测 2,730,931B）；无 post_processor/normalizer，直编码不注特殊 token |
 | o200k.json | tiktoken / o200k_base | HF `Xenova/gpt-4o` `tokenizer.json` @ `7956d98f2a83b2751a98ea7136fdf7fe6cf54e69`（2026-10-03 获取） | 紧凑化（8.1→6.4MB，入库实测 6,730,442B）；同上 |
+
+`yi.model` / `jamba.model` 已删除（2026-11-06）：Android 无 SentencePiece native
+（构建期能力位 `SENTENCEPIECE_NATIVE_AVAILABLE = false`），构造必失败；这两个家族
+改由 JS 侧回退「原生 cl100k 近似」，不再携带死资产。
 
 tiktoken 两表的计数一致性由 `TokenizerParityTest` 对拍门锁定（js-tiktoken 裸
 encode 同值域，容差 max(3, 0.5%)）；词表换版走「长度比对失效」既有机制

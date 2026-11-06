@@ -1,7 +1,6 @@
 package com.novelmaster.tokenizer
 
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
-import ai.djl.sentencepiece.SpTokenizer
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,7 +18,7 @@ import kotlin.math.max
  * M1-I1: native JVM counts vs CLI goldens (countPromptLlmInputNode) within tolerance.
  *
  * token-count-perf-r2 两处口径修正：
- * - WEB/SP 的 `HuggingFaceTokenizer.newInstance` 显式关 truncation——DJL 默认
+ * - WEB 家族的 `HuggingFaceTokenizer.newInstance` 显式关 truncation——DJL 默认
  *   truncation=true + maxLength=512，超过 512 token 的金标串会被静默截断给出
  *   偏小假读数（生产路径 `TokenizerEngine.tryLoadWebTokenizer` 一直带
  *   `truncation=false`，测试路径此前没对齐）。
@@ -68,7 +67,7 @@ class TokenizerParityTest {
       // bare 家族（SP 转 HF）与 Node 侧同为裸编码，金标可精确对齐——不能用容差：
       // gemma 金标 160，走 WEB 包装是 163，容差 max(3, ceil(1%)) 正好也是 3，
       // 「3 <= 3」测不出「是不是又退回包装」，这条断言才是口径的护栏。
-      if (TokenizerEngine.resolveAssetSpecFor(family).bare) {
+      if (isBareCaliber(family)) {
         assertEquals(
           "${c.getString("id")}: bare 家族必须与 CLI 金标逐 token 等值",
           cli,
@@ -116,11 +115,10 @@ class TokenizerParityTest {
     // 失败（无资产 spec / kind 未知）由 resolveAssetSpecFor 直接抛异常传播。
     val spec = TokenizerEngine.resolveAssetSpecFor(family)
     return when {
-      // 与生产 dispatch 同构：bare 优先——SP 转 HF 家族若在这里走 countWebNative，
-      // 会加上 `\n\nAssistant:` 包装，与 Node 侧裸编码口径差 3~5 token。
-      spec.bare -> countBareNative(serialized, family, spec)
+      // 与生产 dispatch 同构：裸编码口径优先——SP 转 HF 家族若在这里走
+      // countWebNative，会加上 `\n\nAssistant:` 包装，与 Node 侧裸编码口径差 3~5 token。
+      isBareCaliber(family) -> countBareNative(serialized, family, spec)
       spec.kind == "json" -> countWebNative(serialized, family, spec)
-      spec.kind == "model" -> countSpNative(serialized, family, spec)
       else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
     }
   }
@@ -186,24 +184,6 @@ class TokenizerParityTest {
         tokenizer.encode(text).ids.size
       }
     return NativeCount(count, estimated = false)
-  }
-
-  private fun countSpNative(
-    serialized: String,
-    family: String,
-    spec: AssetPathSpec,
-  ): NativeCount {
-    val asset =
-      resolveAssetFile("tokenizers/${spec.primary}")
-        ?: throw IllegalStateException("家族 $family 的 SP 分词器资产缺失")
-    return try {
-      SpTokenizer(Paths.get(asset.absolutePath)).use { tokenizer ->
-        val ids = tokenizer.processor.encode(serialized)
-        NativeCount(ids.size, estimated = false)
-      }
-    } catch (e: Throwable) {
-      throw IllegalStateException("家族 $family 的 SP 分词器加载或编码失败: ${e.message}", e)
-    }
   }
 
   private fun resolveAssetFile(relative: String): File? {

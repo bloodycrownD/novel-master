@@ -2,7 +2,6 @@ package com.novelmaster.tokenizer
 
 import ai.djl.huggingface.tokenizers.Encoding
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
-import ai.djl.sentencepiece.SpTokenizer
 import android.content.Context
 import android.util.Log
 import android.util.LruCache
@@ -12,8 +11,8 @@ import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
 /**
- * Native WEB (HF JSON) and SP (.model) counting — parity with core tokenizers.
- * SP uses DJL {@link SpTokenizer} (official SentencePiece JNI, matches @agnai encodeIds).
+ * Native counting via DJL HuggingFaceTokenizer (JSON assets) — parity with core
+ * tokenizers. SP (`.model`) 路径在本构建不可用，能力位见 `TokenizerCapabilities.kt`。
  * Missing assets / load failure / encode failure always throw (no heuristic fallback);
  * the bridge module converts them into a JS promise rejection.
  *
@@ -31,8 +30,8 @@ internal class TokenizerEngine(private val context: Context) {
   )
 
   /**
-   * 单轮计时的分段读数。词表加载耗时要等 WEB/SP 两条分支各自加载完才知道，故用
-   * 一个可变载体把子层读数带回 [count] 统一收尾输出，避免散落多条日志。
+   * 单轮计时的分段读数。词表加载耗时要等 WEB 分支加载完才知道，故用一个可变
+   * 载体把子层读数带回 [count] 统一收尾输出，避免散落多条日志。
    */
   private class CountTimings(
     val family: String,
@@ -45,27 +44,14 @@ internal class TokenizerEngine(private val context: Context) {
     var copyMs: Long = -1
     /** 词表加载拆细：DJL newInstance（含 .so 首载/解析/建表）段。无加载为 -1。 */
     var jniMs: Long = -1
-    /** 该家族被 `spUnavailable` 短路（未尝试加载）——与「LRU 命中」的 -1 区分开。 */
-    var spUnavailable: Boolean = false
   }
 
-  // 缓存容量 6（token-count-perf-r2 由 4→6）：常驻条目现为 13 个——WEB 家族 8 个
+  // 缓存容量 6（token-count-perf-r2 由 4→6）：常驻条目现为 11 个——WEB 家族 8 个
   // + tiktoken 两表（cl100k/o200k）+ SP 转 HF 的 gemma/llama/mistral（2026-11-06
   // 起后者也走 webCache）。6 槽只兜最常用的 6 个家族，跨家族频繁切换仍会 LRU 互踢、
   // 每踢一次重付秒级词表加载（gemma.json 13.7MB / 58 万 merges，解析比 WEB 家族更重）。
   // 是否上调容量待真机内存与互踢重载耗时数据拍板。LRU 淘汰后下次使用再懒加载一次即可。
   private val webCache = LruCache<String, HuggingFaceTokenizer>(6)
-
-  // SP 家族只剩 yi/jamba 两个（gemma/llama/mistral 于 2026-11-06 转 HF json，
-  // 改走 webCache），容量 4 富余——cr2-B-06 的「无需求无收益的扩容」口径不变。
-  private val spCache = LruCache<String, SpTokenizer>(4)
-
-  /**
-   * SP native 不可用的家族（进程内记忆）：DJL 的 SentencePiece 无 Android native
-   * 产物，构造必失败——失败过的家族直接短路，不再每次重付 JNI 失败开销。
-   * 语义与恢复条件见 [loadSpTokenizer]。
-   */
-  private val spUnavailable = mutableSetOf<String>()
 
   /**
    * @param shouldCancel 取消检查回调，命中即抛 [TokenizerCountCancelledException]。
@@ -91,13 +77,16 @@ internal class TokenizerEngine(private val context: Context) {
       }
     return try {
       when {
-        // 裸编码档：spec.bare 为真即直编码整串、不做 WEB 的 system 包装。tiktoken
-        // 两表与 SP 转 HF 家族都在 spec 上标了 bare——新增裸编码家族只标 spec 即可，
-        // 不必再改这里（曾经 `family == "tiktoken" || spec.bare` 两套表达并存，
-        // 新家族漏改 dispatch 就会静默走成包装、多算 3~5 token）。
-        spec.bare -> countBareJsonFamily(serialized, family, spec, shouldCancel, timings)
+        // 能力位先于资产读取：当前构建没有 SP native，命中 model 档直接抛，
+        // 省掉 `.model` 拷贝与一次必然失败的 JNI 构造（JS 侧照旧回退）。
+        isSpUnavailableSpec(spec) ->
+          throw IllegalStateException("SP native unavailable: ${spec.primary}")
+        // 裸编码档：直编码整串、不做 WEB 的 system 包装。口径由 [isBareCaliber]
+        // 单点定义——新增裸编码家族只改那一处，不必再动 dispatch（曾经
+        // `family == "tiktoken" || spec.bare` 两套表达并存，新家族漏改就会
+        // 静默走成包装、多算 3~5 token）。
+        isBareCaliber(family) -> countBareJsonFamily(serialized, family, spec, shouldCancel, timings)
         spec.kind == "json" -> countWebFamily(serialized, family, spec, shouldCancel, timings)
-        spec.kind == "model" -> countSpFamily(serialized, family, spec, shouldCancel, timings)
         // resolveAssetSpecFor 已校验 kind，此分支仅为防御性兜底。
         else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
       }
@@ -110,8 +99,7 @@ internal class TokenizerEngine(private val context: Context) {
   }
 
   /**
-   * 裸编码档（`AssetPathSpec.bare`，或 gpt 家族的 tiktoken 两表）：**直编码整串、
-   * 不包装**。
+   * 裸编码档（口径见 [isBareCaliber]）：**直编码整串、不包装**。
    *
    * - gpt 家族：与 js-tiktoken 的 `encoding.encode(text)` 对齐（token-count-perf-r2），
    *   per-message overhead（~7 token 常数）由 JS 侧用 core 公式补加，公式单源在 TS。
@@ -222,70 +210,6 @@ internal class TokenizerEngine(private val context: Context) {
     }
   }
 
-  private fun countSpFamily(
-    serialized: String,
-    family: String,
-    spec: AssetPathSpec,
-    shouldCancel: () -> Boolean = { false },
-    timings: CountTimings? = null,
-  ): CountResult {
-    val loadStartNs = System.nanoTime()
-    val tokenizer =
-      loadSpTokenizer(family, spec, timings)
-        ?: throw IllegalStateException("家族 $family 的 SP 分词器资产缺失或加载失败")
-    timings?.vocabLoadMs = elapsedMs(loadStartNs)
-    // 检查点：与 WEB 家族同款，词表就绪后、encode 前。
-    if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
-    val encodeStartNs = System.nanoTime()
-    return try {
-      val ids = tokenizer.processor.encode(serialized)
-      CountResult(ids.size, family, estimated = false)
-    } catch (e: TokenizerCountCancelledException) {
-      throw e
-    } catch (e: Throwable) {
-      throw IllegalStateException("家族 $family 的 SP 编码失败: ${e.message}", e)
-    } finally {
-      timings?.encodeMs = elapsedMs(encodeStartNs)
-    }
-  }
-
-  private fun loadSpTokenizer(
-    family: String,
-    spec: AssetPathSpec,
-    timings: CountTimings? = null,
-  ): SpTokenizer? {
-    // SP native 不可用的家族（进程内记忆，2026-11-06 真机实测）：DJL 的
-    // SentencePiece 没有 Android native 产物，`SpTokenizer` 构造必抛
-    // UnsatisfiedLinkError——每次重试白付 ~42ms JNI 失败，而 JS 侧本轮最终
-    // 会落到原生 cl100k 近似。失败一次后直接短路；老进程内不会自愈，将来
-    // 若把 .so 补进 jniLibs，重启即恢复重试。只在模块的单线程 executor 上
-    // 读写，无需加锁。
-    if (family in spUnavailable) {
-      timings?.spUnavailable = true
-      return null
-    }
-    spCache.get(family)?.let { return it }
-    val copyStartNs = System.nanoTime()
-    val path = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
-    timings?.copyMs = elapsedMs(copyStartNs)
-    val jniStartNs = System.nanoTime()
-    return try {
-      SpTokenizer(Paths.get(path)).also { spCache.put(family, it) }
-    } catch (e: LinkageError) {
-      // UnsatisfiedLinkError / NoClassDefFoundError：native 库缺失，永久性——
-      // 记忆后不再重试（每次重试白付 ~42ms JNI 失败），重启进程或补上 .so 后恢复。
-      spUnavailable.add(family)
-      Log.w(LOG_TAG, "SP native unavailable for family=$family", e)
-      null
-    } catch (e: Throwable) {
-      // OOM / 拷贝中断 / DJL 初始化异常：可能是瞬时的，**不**记忆，下次照常重试。
-      Log.w(LOG_TAG, "SP tokenizer load failed for family=$family", e)
-      null
-    } finally {
-      timings?.jniMs = elapsedMs(jniStartNs)
-    }
-  }
-
   private fun copyAssetToCache(assetPath: String): String? {
     val fileName = assetPath.replace('/', '_')
     val dest = File(context.cacheDir, "nm_tok_$fileName")
@@ -328,8 +252,7 @@ internal class TokenizerEngine(private val context: Context) {
         LOG_TAG,
         "family=${timings.family} chars=${timings.chars} " +
           "vocabLoadMs=${timings.vocabLoadMs} copyMs=${timings.copyMs} jniMs=${timings.jniMs} " +
-          "encodeMs=${timings.encodeMs} totalMs=${timings.totalMs}" +
-          if (timings.spUnavailable) " spUnavailable=true" else "",
+          "encodeMs=${timings.encodeMs} totalMs=${timings.totalMs}",
       )
     } catch (_: Throwable) {
       // 忽略：探针失败不影响计数结果。
@@ -369,3 +292,13 @@ internal class TokenizerEngine(private val context: Context) {
     }
   }
 }
+
+/**
+ * 裸编码家族：SP 转 HF 三族 + tiktoken 两表。
+ *
+ * 这些家族必须整串直编码，不能做 WEB 的 system 包装——同一份文本差 3~5 token。
+ * 口径从资产结构里拆出来单点定义：生产 dispatch 与两个测试共用，资产表只描述
+ * 「资产在哪」（`primary` / `fallback` / `kind`）。
+ */
+internal fun isBareCaliber(family: String): Boolean =
+  family in setOf("gemma", "llama", "mistral", "tiktoken")

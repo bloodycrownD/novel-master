@@ -44,7 +44,8 @@ dependencies {
   implementation("ai.djl.huggingface:tokenizers")
   implementation("ai.djl.android:core:${djlVersion}")
   implementation("ai.djl.android:tokenizer-native:${djlVersion}")
-  implementation("ai.djl.sentencepiece:sentencepiece")
+  // 不再引 ai.djl.sentencepiece:sentencepiece：Android 无 SP native，能力位
+  // 固定为 false，代码里已无 SpTokenizer 消费者（见 TokenizerCapabilities.kt）。
 
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.json:json:20240303")

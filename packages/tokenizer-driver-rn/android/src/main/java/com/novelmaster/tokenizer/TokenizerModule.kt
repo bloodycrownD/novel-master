@@ -11,12 +11,13 @@ import java.util.concurrent.Executors
  * Android native prompt tokenizer bridge (M1).
  *
  * Input is the serialized prompt string from `serializePromptLlmInput`. WEB families
- * wrap it as a single system message before encode (ST / core web path). SP families
- * encode plain serialized text. Failures reject the promise — JS side
- * (`countPromptViaNative`) catches and falls back to the cl100k path.
+ * wrap it as a single system message before encode (ST / core web path). Bare-caliber
+ * families (gemma / llama / mistral / tiktoken) encode the serialized text directly.
+ * Failures reject the promise — JS side (`countPromptViaNative`) catches and falls
+ * back to the cl100k path.
  *
  * **计数跑在模块自己的单线程 executor 上（2026-09-30）**：`@ReactMethod` 默认
- * 在 RN 的 NativeModules 队列上**内联**执行，而 WEB/SP 家族的整串计数在冷词表
+ * 在 RN 的 NativeModules 队列上**内联**执行，而 WEB 家族的整串计数在冷词表
  * 时可达数秒（glm.json 8.2MB 解析 + DJL 会话建立）——它会把同一条队列上的其它
  * 原生调用（含 llm-sse 的 `sseConnect` 派发）一起堵住，表现为「发完消息很久
  * 才开始出字」「进会话偶发卡死」。JS 侧本来就是 await Promise，换线程对调用方
