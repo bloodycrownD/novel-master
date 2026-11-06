@@ -4,6 +4,7 @@
 # - 只走 schedule（+ 手动 workflow_dispatch），不进 PR 路径，避免拖慢日常 CI
 # - setup 写法复用 release.yml 的 android-release job（Node / Java / Android SDK / Gradle cache）
 # - 失败通知走 GitHub Actions 默认通知（scheduled workflow 失败会邮件仓库 owner）
+# - 顺带跑 tokenizer 驱动的 Kotlin 单测（T11）：定位是 nightly smoke，不承诺 PR 拦截
 # - 注意：GitHub 会在仓库 60 天无活动后自动停用 scheduled workflow，push 任意提交即恢复
 
 name: Android Nightly
@@ -64,6 +65,16 @@ jobs:
           npm run build -w @novel-master/llm-sse-native -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
           # dist gitignore，CI 须逐包构建；漏列会让 metro 解析 exports（./native → dist/native.js）失败
           npm run build -w @novel-master/tdbc-driver-op-sqlite
+
+      # Kotlin 单测（spec F4）：只跑 tokenizer 驱动的 JVM 用例，不进 PR 路径。
+      # 不登记 scripts/check-ci-gates.mjs——该脚本只解析 ci.yml，登记 nightly
+      # step 会让主 CI 的 shape 门禁直接红。
+      - name: Tokenizer unit tests
+        working-directory: apps/mobile/android
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :novel-master_tokenizer-driver-rn:testDebugUnitTest --console=plain
 
       # WebView 产物 gitignore；assemble 前必须拷入 android_asset，否则聊天页 net::ERR_FILE_NOT_FOUND
       - name: Build WebView native assets

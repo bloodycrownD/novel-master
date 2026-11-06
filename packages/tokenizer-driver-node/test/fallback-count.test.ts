@@ -33,7 +33,7 @@ import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.j
 const CHINESE =
   "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(20);
 
-/** core 的 tokenizerAssetPaths 对这个家族返回 null ⇒ 加载必然失败 ⇒ 必走兜底。 */
+/** node 驱动的 `tokenizerAssetPaths` 对这个家族返回 null ⇒ 加载必然失败 ⇒ 必走兜底。 */
 const UNKNOWN_FAMILY = "no-such-family" as unknown as TokenizerFamily;
 
 describe("兜底计数口径", () => {
