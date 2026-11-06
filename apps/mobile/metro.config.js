@@ -21,6 +21,7 @@ const coreDistSmokeFiles = [
   'infra/tokenizer/logic/prompt-whole-cache.js',
   'infra/tokenizer/logic/token-chunk-cache.js',
   'infra/tokenizer/encoding-registry.js',
+  'infra/log/index.js',
   'infra/nmtp/logic/registry.js',
   'service/compaction-conditions/create-compaction-condition-evaluator.js',
 ];

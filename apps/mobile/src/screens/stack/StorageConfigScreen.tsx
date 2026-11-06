@@ -23,6 +23,7 @@ import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
 } from '../../services/db-maintenance.service';
+import {exportMobileLogs} from '../../services/log-export';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
   isMobileAgentActive,
@@ -177,6 +178,26 @@ export function StorageConfigScreen() {
             .then(result => {
               if (result === 'saved') {
                 showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
+              }
+            })
+            .catch(err => showToast(toastMessage('导出失败', err)))
+            .finally(() => setDbBusy(false));
+        }}
+      />
+      <ProfileMenuItem
+        icon="📝"
+        label="导出诊断日志"
+        value={dbBusy ? '处理中…' : '分享日志文件'}
+        tokens={tokens}
+        onPress={() => {
+          if (dbBusy) {
+            return;
+          }
+          setDbBusy(true);
+          exportMobileLogs()
+            .then(result => {
+              if (result === 'saved') {
+                showToast('诊断日志已导出');
               }
             })
             .catch(err => showToast(toastMessage('导出失败', err)))

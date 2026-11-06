@@ -151,6 +151,12 @@ module.exports = {
       repoRoot,
       'packages/core/dist/infra/tdbc/index.js',
     ),
+    // 日志端口：同其它 core 子路径直连 dist 真实文件（RN preset 的
+    // customExportConditions 不含 import，未映射的子路径在 jest-resolve 就抛）。
+    '^@novel-master/core/log$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/log/index.js',
+    ),
     '^@novel-master/sksp-android$': path.join(
       repoRoot,
       'packages/sksp-android/dist/index.js',
