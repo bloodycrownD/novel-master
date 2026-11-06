@@ -238,6 +238,20 @@ iterations:
       按 nm-code-style 清 4 FAKE_PUBLIC / 14 DEAD（11 类型 + 3 变量）/ 11 INLINE_CANDIDATE，
       并把 4 个 countTokens 签名类型标为 keep-public；收敛 provider 与 nmtp 的 4 个重复运行时导出。
 
+  # ---- 日志规范化（2026-11-07 立项）----
+  - id: logger-normalization
+    status: active
+    notes: >
+      core 新增 LogSink 端口 + createLogger（`@novel-master/core/log`），66 处裸 console
+      全部收口并有「core 零裸 console」守卫测试；默认 console sink 保持三端输出不断流，
+      端上启动时注入文件 sink：mobile 落 <filesDir>/logs（按天切、单文件 2MB、留 5 份，
+      JS ErrorUtils + Kotlin Thread.setDefaultUncaughtExceptionHandler 双崩溃钩子，
+      设置页「导出诊断日志」走现有 document picker）、desktop 落 app.getPath('logs')
+      （菜单「打开日志目录」/「导出诊断包」，desktopLog 三件套退役）、CLI 落 stderr +
+      可选 --log-file（stdout 是数据通道，64 处 console.log 不收口）。脱敏为硬要求：
+      key 黑名单 + 正文键只记 {chars, hash} + 深度/长度/条数三重截断，在 core emit 时统一执行。
+      不引新依赖（mobile 的 react-native-blob-util / @react-native-documents/picker 已在依赖里）。
+
 
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
