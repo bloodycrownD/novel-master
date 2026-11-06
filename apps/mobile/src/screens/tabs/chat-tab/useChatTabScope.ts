@@ -247,7 +247,20 @@ export function useChatTabScope({
       // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
       // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
       // 与升级回调（上方 upgraded 闸）同一口径。
-      if (tokenLabel && tokenLabelSessionRef.current === sessionId) {
+      // run 在途冻结（token-source-freeze，2026-11-06）：发送期间已有标签时，
+      // 本次读数不写——首帧估算档（cl100k 近似，标签 `gpt ≈`）会把上一轮精确的
+      // `deepseek =` 顶掉，用户看到的就是「一发消息 chip 就退回 gpt」。旧值只差
+      // 新增的一条消息，run 结束后的刷新（onSettled → transcript 变化）会算出
+      // 新的精确值；首刷（hasLabel=false）不冻，否则切进运行中会话时 chip 会
+      // 空白到 run 结束。
+      const runInFlightWithLabel =
+        chatTokenLabelDebounceRef.current.hasLabel &&
+        runtime.abortRegistry.has(sessionId);
+      if (
+        tokenLabel &&
+        tokenLabelSessionRef.current === sessionId &&
+        !runInFlightWithLabel
+      ) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
         // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
         if (
