@@ -34,7 +34,10 @@ describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
   });
 
   it("B-1：空态文案区分「加载失败」与「暂无规则」", () => {
-    assert.match(source, /\{loadFailed\s*\n\s*\? "加载失败，请重试。"\s*\n\s*: "暂无规则，点击上方按钮创建。"\}/);
+    assert.match(
+      source,
+      /\{loadFailed\s*\?\s*"加载失败，请重试。"\s*:\s*"暂无规则，点击上方按钮创建。"\}/,
+    );
   });
 
   it("B-2：ruleId 缺失时提示「规则不存在或已被删除」并回退新建语义", () => {
@@ -62,10 +65,18 @@ describe("SmartSortRuleEditorView 高亮切分单源（dtcli/G-1）", () => {
   it("G-1：高亮切分消费 shared/logic 再导出的 core 单源，本地实现已删", () => {
     // 本地实现删除（formerly line-by-line isomorphic copy）
     assert.doesNotMatch(source, /function splitSmartSortHighlightSegments\(/);
-    // renderer 经 @shared/logic/smart-sort 薄再导出消费（X1 gate：不直连 core）
+    // renderer 经 @shared/logic/smart-sort 薄再导出消费（X1 gate：不直连 core）；三个符号各自单行导入
     assert.match(
       source,
-      /import \{\s*formatPatternInput,\s*parsePatternInput,\s*splitSmartSortHighlightSegments,\s*\} from "@shared\/logic\/smart-sort";/,
+      /import \{ formatPatternInput \} from "@shared\/logic\/smart-sort";/,
+    );
+    assert.match(
+      source,
+      /import \{ parsePatternInput \} from "@shared\/logic\/smart-sort";/,
+    );
+    assert.match(
+      source,
+      /import \{ splitSmartSortHighlightSegments as splitHighlightSegments \} from "@shared\/logic\/smart-sort";/,
     );
     // shared 薄层确实再导出 core 单源
     const shared = readFileSync(sharedLogicSmartSortPath, "utf8");
@@ -90,10 +101,10 @@ describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", 
       source,
       /onChange=\{\(e\) => \{\s*setTestText\(e\.target\.value\);\s*invalidateMatchResult\(\);\s*\}\}/,
     );
-    // 正则输入 onChange
+    // 正则输入 onChange（内联解析：patternInput 与 parsePatternInput 同步落 draft）
     assert.match(
       source,
-      /setDraft\(applySmartSortPatternInput\(draft, e\.target\.value\)\);\s*invalidateMatchResult\(\);/,
+      /setDraft\(\{\s*\.\.\.draft,\s*patternInput: e\.target\.value,\s*\.\.\.parsePatternInput\(e\.target\.value\),\s*\}\);\s*invalidateMatchResult\(\);/,
     );
     // 捕获档 select onChange
     assert.match(

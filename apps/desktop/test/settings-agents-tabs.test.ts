@@ -48,11 +48,12 @@ describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
     assert.match(source, /label: "子智能体"/);
     // 过滤口径收口 core：agentModeMatchesTab(row.mode, tab)
     assert.match(source, /agentModeMatchesTab\(row\.mode, tab\)/);
-    // 新建默认作用域随 tab 落库
+    // 新建默认作用域随 tab 落库（mode 先按 tab 计算，再传 IPC）
     assert.match(
       source,
-      /ipcAgentRegistryCreateBlank\(\{\s*mode: tab === "primary" \? "primary" : "subagent",\s*\}\)/,
+      /const mode = tab === "primary" \? "primary" : "subagent";/,
     );
+    assert.match(source, /ipcAgentRegistryCreateBlank\(\{ mode \}\)/);
   });
 
   it("general 合成行：sentinel + 「内置」徽标 + 不进批量/删除（remaining 排除）", () => {
@@ -146,6 +147,6 @@ describe("S-D-04 dirty 上报与 ⚙ 关闭接线（弱观测兜底）", () => {
     const source = readFileSync(agentEditorPath, "utf8");
     assert.doesNotMatch(source, /pinned != null\s*\?\s*\{providerId/);
     // 新的第三形态必须真的存在于代码里（否则这条守卫是恒真的废断言）
-    assert.match(source, /unresolved: true as const, rawId: def\.model/);
+    assert.match(source, /pin = \{ unresolved: true, rawId: def\.model \};/);
   });
 });

@@ -19,8 +19,11 @@ describe("SettingsViews agent delete confirm (T-AC3-4)", () => {
     const source = readFileSync(settingsViewsPath, "utf8");
     assert.match(
       source,
-      /删除 Agent「\$\{deleteConfirm\?\.kind === "single" \? deleteConfirm\.name : ""\}」？/,
+      /删除 Agent「\$\{\s*deleteConfirm\?\.kind === "single" \? deleteConfirm\.name : ""\s*\}」？/,
     );
-    assert.match(source, /setDeleteConfirm\(\{ kind: "single", agentId: row\.agentId, name: row\.name \}\)/);
+    assert.match(
+      source,
+      /setDeleteConfirm\(\{\s*kind: "single",\s*agentId: row\.agentId,\s*name: row\.name,?\s*\}\)/,
+    );
   });
 });

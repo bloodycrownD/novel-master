@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { truncateText } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
 
-
 export { ModelSamplingView } from "./ModelSamplingView";
 import { AddModelModal } from "./AddModelModal";
 import { FetchModelsModal } from "./FetchModelsModal";
@@ -15,7 +14,8 @@ import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 import { ManageHeader } from "@/components/batch/ManageHeader";
 import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
-import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import { toastSettingsError } from "@/utils/settings-feedback";
+import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useNovelMaster } from "@/providers/NovelMasterProvider";
@@ -64,15 +64,11 @@ import {
   ipcSmartSortRuleYamlExport,
   ipcSmartSortRuleYamlImport,
 } from "@/ipc/client";
-import {
-  formatPatternInput,
-  parsePatternInput,
-  splitSmartSortHighlightSegments,
-} from "@shared/logic/smart-sort";
-import {
-  agentModeMatchesTab,
-  type AgentSettingsTab,
-} from "@shared/config-forms/agent";
+import { formatPatternInput } from "@shared/logic/smart-sort";
+import { parsePatternInput } from "@shared/logic/smart-sort";
+import { splitSmartSortHighlightSegments as splitHighlightSegments } from "@shared/logic/smart-sort";
+import { agentModeMatchesTab } from "@shared/config-forms/agent";
+import type { AgentSettingsTab } from "@shared/config-forms/agent";
 import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
@@ -88,10 +84,8 @@ import {
   ApiKeyStatusTag,
   SettingsPanel,
 } from "./settings-ui";
-import {
-  AGENT_LIST_LABELS,
-  storedConfigInvalidReason,
-} from "@shared/logic/stored-config-validity";
+import { AGENT_LIST_LABELS } from "@shared/logic/stored-config-validity";
+import { storedConfigInvalidReason as invalidReason } from "@shared/logic/stored-config-validity";
 import type {
   AgentRegistryListItemDto,
   DbStatsResult,
@@ -132,7 +126,8 @@ function formatStorageBytes(bytes: number): string {
     value /= 1024;
     unit += 1;
   } while (value >= 1024 && unit < units.length - 1);
-  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  const oneDecimal = Math.round(value * 10) / 10;
+  const rounded = value >= 100 ? Math.round(value) : oneDecimal;
   return `${rounded} ${units[unit]}`;
 }
 
@@ -164,6 +159,7 @@ export function DataManagementView() {
   const [dbStats, setDbStats] = useState<DbStatsResult | null>(null);
   const [confirmMaintenance, setConfirmMaintenance] = useState(false);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reloadStatus = useCallback(async () => {
     const res = await ipcCloudSyncGetLocalStatus();
     if (res.ok) {
@@ -172,6 +168,7 @@ export function DataManagementView() {
   }, []);
 
   /** 拉取库体积与可回收量；失败保持占位 '—'（静默，不打扰用户）。 */
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reloadDbStats = useCallback(async () => {
     try {
       const res = await ipcDbStats();
@@ -183,6 +180,7 @@ export function DataManagementView() {
     }
   }, []);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reloadConfig = useCallback(async () => {
     setConfigLoading(true);
     try {
@@ -204,6 +202,7 @@ export function DataManagementView() {
     }
   }, []);
 
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     void reloadConfig();
     void reloadStatus();
@@ -211,6 +210,7 @@ export function DataManagementView() {
   }, [reloadConfig, reloadStatus, reloadDbStats]);
 
   /** 轮询同步状态与库体积，使 Agent 运行中等标志与 main 进程一致 */
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     const timer = window.setInterval(() => {
       void reloadStatus();
@@ -221,25 +221,29 @@ export function DataManagementView() {
     };
   }, [reloadStatus, reloadDbStats]);
 
-  const controlsDisabled =
-    busy ||
-    status?.syncBusy === true ||
-    status?.agentActive === true ||
-    status?.maintenanceBusy === true;
+  const busyFlags = [
+    status?.syncBusy,
+    status?.agentActive,
+    status?.maintenanceBusy,
+  ];
+  const controlsDisabled = busy || busyFlags.some((flag) => flag === true);
 
+  const configPayload = () => ({
+    endpoint: endpoint.trim(),
+    bucket: bucket.trim(),
+    region: region.trim(),
+    pathPrefix: pathPrefix.trim(),
+    accessKeyId: accessKeyId.trim(),
+    secretAccessKey: secretAccessKey.trim() || undefined,
+    forcePathStyle,
+    deviceLabel: deviceLabel.trim() || undefined,
+  });
+
+  // nm-style: keep-local — 保存流程含状态机（busy/回读双接口），内联会拆散错误分支
   const saveConfig = async () => {
     setBusy(true);
     try {
-      const res = await ipcCloudSyncSetConfig({
-        endpoint: endpoint.trim(),
-        bucket: bucket.trim(),
-        region: region.trim(),
-        pathPrefix: pathPrefix.trim(),
-        accessKeyId: accessKeyId.trim(),
-        secretAccessKey: secretAccessKey.trim() || undefined,
-        forcePathStyle,
-        deviceLabel: deviceLabel.trim() || undefined,
-      });
+      const res = await ipcCloudSyncSetConfig(configPayload());
       if (res.ok) {
         toastSettingsSuccess("云同步配置已保存");
         setSecretAccessKey("");
@@ -254,6 +258,7 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 开关持久化要先落 UI 再回读失败态，内联会拆散 busy/回读状态机
   const setCloudSyncEnabledPersisted = async (next: boolean) => {
     setCloudSyncEnabled(next);
     setBusy(true);
@@ -270,19 +275,11 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 测试连接含保存失败短路与 busy 状态，内联会拆散错误分支
   const testConnection = async () => {
     setBusy(true);
     try {
-      const saveRes = await ipcCloudSyncSetConfig({
-        endpoint: endpoint.trim(),
-        bucket: bucket.trim(),
-        region: region.trim(),
-        pathPrefix: pathPrefix.trim(),
-        accessKeyId: accessKeyId.trim(),
-        secretAccessKey: secretAccessKey.trim() || undefined,
-        forcePathStyle,
-        deviceLabel: deviceLabel.trim() || undefined,
-      });
+      const saveRes = await ipcCloudSyncSetConfig(configPayload());
       if (!saveRes.ok) {
         toastSettingsError(saveRes.error.message);
         return;
@@ -299,6 +296,7 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 拉取含分支状态回读与 retry，内联进 JSX 会净增 >12 行
   const runPull = async () => {
     setConfirmPull(false);
     setBusy(true);
@@ -324,9 +322,8 @@ export function DataManagementView() {
     setConfirmPushOverwrite(false);
     setBusy(true);
     try {
-      const res = await ipcCloudSyncPush(
-        forceOverwriteRemote ? { forceOverwriteRemote: true } : undefined,
-      );
+      const opts = forceOverwriteRemote ? { forceOverwriteRemote } : undefined;
+      const res = await ipcCloudSyncPush(opts);
       if (res.ok) {
         toastSettingsSuccess(`已推送到云端（rev ${res.data.rev}）`);
         await reloadStatus();
@@ -341,14 +338,14 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 导出流程含 busy 状态与取消分支，内联进 JSX 会净增 >12 行
   const runExport = async () => {
     setBusy(true);
     try {
       const res = await ipcBackupExport();
       if (res.ok) {
-        toastSettingsSuccess(
-          res.data === "saved" ? "已导出数据库" : "已取消",
-        );
+        const message = res.data === "saved" ? "已导出数据库" : "已取消";
+        toastSettingsSuccess(message);
       } else {
         toastSettingsError(res.error.message);
       }
@@ -357,6 +354,7 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 导入流程含确认态、retry 与双分支提示，内联进 JSX 会净增 >12 行
   const runImport = async () => {
     setConfirmImport(false);
     setBusy(true);
@@ -377,6 +375,7 @@ export function DataManagementView() {
     }
   };
 
+  // nm-style: keep-local — 清理流程含 busy/回读与长文案拼接，内联进 JSX 会净增 >12 行
   const runMaintenance = async () => {
     setConfirmMaintenance(false);
     // better-sqlite3 同步 VACUUM 会冻住 main 事件循环，期间轮询与事件
@@ -385,9 +384,10 @@ export function DataManagementView() {
     try {
       const res = await ipcDbMaintenance();
       if (res.ok) {
-        toastSettingsSuccess(
-          `清理完成：库体积 ${formatStorageBytes(res.data.beforeBytes)} → ${formatStorageBytes(res.data.afterBytes)}`,
-        );
+        const before = formatStorageBytes(res.data.beforeBytes);
+        const after = formatStorageBytes(res.data.afterBytes);
+        const summary = `清理完成：库体积 ${before} → ${after}`;
+        toastSettingsSuccess(summary);
         await reloadDbStats();
       } else {
         toastSettingsError(res.error.message);
@@ -396,6 +396,20 @@ export function DataManagementView() {
       setBusy(false);
     }
   };
+
+  const syncLines = [
+    `云端 rev：${status?.remoteRev ?? "—"}`,
+    `本机已同步 rev：${status?.lastSyncedRev}`,
+    status?.lastPullAt
+      ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
+      : null,
+    status?.lastPushAt
+      ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
+      : null,
+    status?.lastPullResult ? `拉取结果：${status.lastPullResult}` : null,
+    status?.lastPushResult ? `推送结果：${status.lastPushResult}` : null,
+  ];
+  const syncText = syncLines.filter(Boolean).join(" · ");
 
   return (
     <SettingsPanel>
@@ -500,7 +514,9 @@ export function DataManagementView() {
 
             <div className="config-block-card config-block-card--sync">
               <div className="config-block-card__header">
-                <span className="config-block-card__section-label">同步状态</span>
+                <span className="config-block-card__section-label">
+                  同步状态
+                </span>
               </div>
               <div className="config-block-card__body">
                 <p className="config-block-card__hint config-block-card__hint--subtle">
@@ -515,28 +531,7 @@ export function DataManagementView() {
                   />
                 ) : null}
                 <SettingsStatus
-                  message={
-                    status == null
-                      ? "加载中…"
-                      : [
-                          `云端 rev：${status.remoteRev ?? "—"}`,
-                          `本机已同步 rev：${status.lastSyncedRev}`,
-                          status.lastPullAt
-                            ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
-                            : null,
-                          status.lastPushAt
-                            ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
-                            : null,
-                          status.lastPullResult
-                            ? `拉取结果：${status.lastPullResult}`
-                            : null,
-                          status.lastPushResult
-                            ? `推送结果：${status.lastPushResult}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
-                  }
+                  message={status == null ? "加载中…" : syncText}
                 />
                 <div className="settings-form-actions settings-form-actions--solo">
                   <Button
@@ -564,7 +559,11 @@ export function DataManagementView() {
         title="导出"
         desc="将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。"
         action={
-          <Button variant="primary" disabled={controlsDisabled} onClick={() => void runExport()}>
+          <Button
+            variant="primary"
+            disabled={controlsDisabled}
+            onClick={() => void runExport()}
+          >
             导出数据库
           </Button>
         }
@@ -573,16 +572,28 @@ export function DataManagementView() {
         title="导入"
         desc="用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。"
         action={
-          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmImport(true)}>
+          <Button
+            variant="primary"
+            disabled={controlsDisabled}
+            onClick={() => setConfirmImport(true)}
+          >
             导入数据库
           </Button>
         }
       />
       <SettingsActionSection
         title="数据清理"
-        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"} · 可回收约 ${dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}。`}
+        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${
+          dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"
+        } · 可回收约 ${
+          dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"
+        }。`}
         action={
-          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
+          <Button
+            variant="primary"
+            disabled={controlsDisabled}
+            onClick={() => setConfirmMaintenance(true)}
+          >
             清理
           </Button>
         }
@@ -638,26 +649,23 @@ export function DataManagementView() {
 /** 内置 general 合成行 sentinel（真实 agent id 均为 `agent-<ts>` 格式，不冲突）。 */
 const GENERAL_AGENT_ID = "general";
 
+type AgentMenuState = { agentId: string; x: number; y: number } | null;
+type AgentRenameState = { agentId: string; initialName: string } | null;
+type AgentDeleteState =
+  | { kind: "single"; agentId: string; name: string }
+  | { kind: "batch"; count: number }
+  | null;
+
 export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
   const [tab, setTab] = useState<AgentSettingsTab>("primary");
   const [rows, setRows] = useState<AgentRegistryListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [agentMenu, setAgentMenu] = useState<{
-    agentId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [renamePrompt, setRenamePrompt] = useState<{
-    agentId: string;
-    initialName: string;
-  } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<
-    | { kind: "single"; agentId: string; name: string }
-    | { kind: "batch"; count: number }
-    | null
-  >(null);
+  const [agentMenu, setAgentMenu] = useState<AgentMenuState>(null);
+  const [renamePrompt, setRenamePrompt] = useState<AgentRenameState>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<AgentDeleteState>(null);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -668,9 +676,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     }
   }, []);
 
-  useEffect(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
+  useEffect(() => void reload().catch(() => undefined), [reload]);
 
   const openAgentEditor = (agentId: string, displayName?: string) => {
     nav.navState.editingAgentId = agentId;
@@ -679,23 +685,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     nav.push("agentEditor");
   };
 
-  /** 切 tab 自动退出批量模式（对齐技能页模板）。 */
-  const switchTab = (next: AgentSettingsTab) => {
-    setTab(next);
-    batch.exit();
-  };
-
-  const createAgent = async () => {
-    // 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。
-    const res = await ipcAgentRegistryCreateBlank({
-      mode: tab === "primary" ? "primary" : "subagent",
-    });
-    if (res.ok) {
-      openAgentEditor(res.data.agentId);
-      await reload();
-    }
-  };
-
+  // nm-style: keep-local — 菜单分发是 52 行多分支状态机，内联会拆散菜单生命周期
   const handleAgentMenuSelect = async (action: string) => {
     const menu = agentMenu;
     setAgentMenu(null);
@@ -729,19 +719,21 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       }
       const copyId = `agent-${Date.now()}`;
       const def = getRes.data.value;
-      const saveRes = await ipcAgentRegistryUpsert({
-        agentId: copyId,
-        definition: { ...def, name: `${def.name ?? row.name}-copy` },
-      });
+      const copyName = `${def.name ?? row.name}-copy`;
+      const args = { agentId: copyId, definition: { ...def, name: copyName } };
+      const saveRes = await ipcAgentRegistryUpsert(args);
       if (saveRes.ok) {
-        const copyName = `${def.name ?? row.name}-copy`;
         openAgentEditor(copyId, copyName);
         await reload();
       }
       return;
     }
     if (action === "delete") {
-      setDeleteConfirm({ kind: "single", agentId: row.agentId, name: row.name });
+      setDeleteConfirm({
+        kind: "single",
+        agentId: row.agentId,
+        name: row.name,
+      });
       return;
     }
     if (action === "edit") {
@@ -772,23 +764,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       }
     }
     batch.exit();
-    toastSettingsSuccess(
-      agentIds.length > 1 ? `已删除 ${agentIds.length} 个 Agent` : "已删除 Agent",
-    );
+    const count = agentIds.length;
+    const message = count > 1 ? `已删除 ${count} 个 Agent` : "已删除 Agent";
+    toastSettingsSuccess(message);
     await reload();
-  };
-
-  const confirmDeleteAgent = async () => {
-    const target = deleteConfirm;
-    setDeleteConfirm(null);
-    if (!target) {
-      return;
-    }
-    if (target.kind === "batch") {
-      await confirmDeleteAgents([...batch.selectedIds]);
-      return;
-    }
-    await confirmDeleteAgents([target.agentId]);
   };
 
   const handleRename = async (name: string) => {
@@ -817,6 +796,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const visibleRows = rows.filter((row) => agentModeMatchesTab(row.mode, tab));
   // 子 tab 头部合成内置 general 只读行，不参与批量勾选与删除。
   const showGeneralRow = tab === "subagent";
+  const generalName = DEFAULT_SUBAGENT_DEFINITION.name;
 
   return (
     <SettingsPanel>
@@ -828,7 +808,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             { value: "primary", label: "主智能体" },
             { value: "subagent", label: "子智能体" },
           ]}
-          onChange={(next) => switchTab(next as AgentSettingsTab)}
+          onChange={(next) => {
+            setTab(next as AgentSettingsTab);
+            batch.exit();
+          }}
         />
       </div>
       <ManageHeader
@@ -849,7 +832,19 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             : "子智能体由主智能体委派调用；内置 general 为通用兜底，不可编辑。"
         }
         normalActions={
-          <button type="button" className="list-manage-header__btn list-manage-header__btn--primary" onClick={() => void createAgent()}>
+          <button
+            type="button"
+            className="list-manage-header__btn list-manage-header__btn--primary"
+            onClick={async () => {
+              // 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。
+              const mode = tab === "primary" ? "primary" : "subagent";
+              const res = await ipcAgentRegistryCreateBlank({ mode });
+              if (res.ok) {
+                openAgentEditor(res.data.agentId);
+                await reload();
+              }
+            }}
+          >
             新建 Agent
           </button>
         }
@@ -865,7 +860,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         ) : null}
         {showGeneralRow ? (
           <SettingsListItem
-            title={DEFAULT_SUBAGENT_DEFINITION.name}
+            title={generalName}
             meta={
               <span className="settings-list-item__meta-row">
                 <span className="settings-tag settings-tag--primary">内置</span>
@@ -873,9 +868,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                 <span>通用助手 · 不可编辑</span>
               </span>
             }
-            onClick={() =>
-              openAgentEditor(GENERAL_AGENT_ID, DEFAULT_SUBAGENT_DEFINITION.name)
-            }
+            onClick={() => openAgentEditor(GENERAL_AGENT_ID, generalName)}
             onMenu={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               setAgentMenu({
@@ -897,13 +890,15 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     {AGENT_LIST_LABELS.configInvalid}
                   </span>
                   {row.mode == null || row.mode === "all" ? (
-                    <span className="settings-tag settings-tag--muted">全部</span>
+                    <span className="settings-tag settings-tag--muted">
+                      全部
+                    </span>
                   ) : null}
                   <span
                     className="settings-list-item__meta-error"
                     title={row.invalid.message}
                   >
-                    {truncateText(storedConfigInvalidReason(row.invalid.code), 80)}
+                    {truncateText(invalidReason(row.invalid.code), 80)}
                   </span>
                 </span>
               ) : row.mode == null || row.mode === "all" ? (
@@ -957,44 +952,56 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         message={
           deleteConfirm?.kind === "batch"
             ? `确定删除选中的 ${deleteConfirm.count} 个 Agent？`
-            : `删除 Agent「${deleteConfirm?.kind === "single" ? deleteConfirm.name : ""}」？`
+            : `删除 Agent「${
+                deleteConfirm?.kind === "single" ? deleteConfirm.name : ""
+              }」？`
         }
         danger
-        onConfirm={() => void confirmDeleteAgent()}
+        onConfirm={async () => {
+          const target = deleteConfirm;
+          setDeleteConfirm(null);
+          if (!target) {
+            return;
+          }
+          if (target.kind === "batch") {
+            await confirmDeleteAgents([...batch.selectedIds]);
+            return;
+          }
+          await confirmDeleteAgents([target.agentId]);
+        }}
         onCancel={() => setDeleteConfirm(null)}
       />
     </SettingsPanel>
   );
 }
 
+type ProviderRow = {
+  id: string;
+  displayName: string;
+  savedCount: number;
+  apiKeyStatus: string;
+};
+type ProviderMenuState = { providerId: string; x: number; y: number } | null;
+type ProviderRenameState = { providerId: string; initialName: string } | null;
+type ProviderDeleteState =
+  | { kind: "single"; providerId: string; label: string }
+  | { kind: "batch"; count: number }
+  | null;
+
 export function ProvidersView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
-  const [rows, setRows] = useState<
-    Array<{ id: string; displayName: string; savedCount: number; apiKeyStatus: string }>
-  >([]);
-  const [providerMenu, setProviderMenu] = useState<{
-    providerId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [renamePrompt, setRenamePrompt] = useState<{
-    providerId: string;
-    initialName: string;
-  } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<
-    | { kind: "single"; providerId: string; label: string }
-    | { kind: "batch"; count: number }
-    | null
-  >(null);
+  const [rows, setRows] = useState<ProviderRow[]>([]);
+  const [providerMenu, setProviderMenu] = useState<ProviderMenuState>(null);
+  const [renamePrompt, setRenamePrompt] = useState<ProviderRenameState>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<ProviderDeleteState>(null);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reload = useCallback(async () => {
     const res = await ipcProvidersList();
     if (res.ok) setRows([...res.data]);
   }, []);
 
-  useEffect(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
+  useEffect(() => void reload().catch(() => undefined), [reload]);
 
   const deleteProviders = async (providerIds: readonly string[]) => {
     for (const providerId of providerIds) {
@@ -1005,14 +1012,13 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       }
     }
     batch.exit();
-    toastSettingsSuccess(
-      providerIds.length > 1
-        ? `已删除 ${providerIds.length} 个服务商`
-        : "已删除服务商",
-    );
+    const count = providerIds.length;
+    const message = count > 1 ? `已删除 ${count} 个服务商` : "已删除服务商";
+    toastSettingsSuccess(message);
     await reload();
   };
 
+  // nm-style: keep-local — 菜单分发是 25 行多分支状态机，内联会拆散菜单生命周期
   const handleProviderMenuSelect = (action: string) => {
     const menu = providerMenu;
     setProviderMenu(null);
@@ -1039,6 +1045,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
     }
   };
 
+  // nm-style: keep-local — 重命名含 prompt 快照与校验/回读流程，内联会拆散状态机
   const handleProviderRename = async (name: string) => {
     const prompt = renamePrompt;
     setRenamePrompt(null);
@@ -1050,10 +1057,8 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       toastSettingsError("服务商名称不能为空");
       return;
     }
-    const res = await ipcProvidersEdit({
-      providerId: prompt.providerId,
-      displayName: trimmed,
-    });
+    const patch = { providerId: prompt.providerId, displayName: trimmed };
+    const res = await ipcProvidersEdit(patch);
     if (!res.ok) {
       toastSettingsError(res.error.message);
       return;
@@ -1148,7 +1153,9 @@ export function ProvidersView({ nav }: { nav: Nav }) {
         message={
           deleteConfirm?.kind === "batch"
             ? `确定删除选中的 ${deleteConfirm.count} 个服务商？`
-            : `删除服务商「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
+            : `删除服务商「${
+                deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
+              }」？`
         }
         danger
         onConfirm={() => {
@@ -1169,6 +1176,8 @@ export function ProvidersView({ nav }: { nav: Nav }) {
   );
 }
 
+type ProviderProtocol = "openai" | "anthropic" | "gemini";
+
 export function ProviderFormView({
   nav,
   mode,
@@ -1177,7 +1186,7 @@ export function ProviderFormView({
   mode: "create" | "edit";
 }) {
   const providerId = nav.navState.editingProviderId;
-  const [protocol, setProtocol] = useState<"openai" | "anthropic" | "gemini">("openai");
+  const [protocol, setProtocol] = useState<ProviderProtocol>("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -1186,6 +1195,7 @@ export function ProviderFormView({
   const [isBuiltin, setIsBuiltin] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState("not set");
 
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     if (mode !== "edit" || !providerId) return;
     ipcProvidersGet({ providerId }).then((res) => {
@@ -1195,27 +1205,29 @@ export function ProviderFormView({
       setDisplayName(res.data.displayName);
       setIsBuiltin(res.data.isBuiltin);
       setApiKeyStatus(res.data.apiKeyStatus);
-      setHeadersJson(
-        Object.keys(res.data.headers).length
-          ? JSON.stringify(res.data.headers, null, 2)
-          : "",
-      );
-      setBodyParamsJson(
-        Object.keys(res.data.bodyParams ?? {}).length
-          ? JSON.stringify(res.data.bodyParams, null, 2)
-          : "",
-      );
+      const headers = res.data.headers;
+      const hasHeaders = Object.keys(headers).length > 0;
+      const headersText = hasHeaders ? JSON.stringify(headers, null, 2) : "";
+      setHeadersJson(headersText);
+      const body = res.data.bodyParams ?? {};
+      const hasBody = Object.keys(body).length > 0;
+      const bodyText = hasBody ? JSON.stringify(body, null, 2) : "";
+      setBodyParamsJson(bodyText);
     });
   }, [mode, providerId]);
 
   const submit = async () => {
     try {
       // 自定义参数：必须是 JSON 对象（值任意 JSON）；解析失败拖 toast 阻止保存
-      const parseBodyParams = (raw: string): Record<string, unknown> | undefined => {
+      const parseBodyParams = (raw: string) => {
         const trimmed = raw.trim();
         if (!trimmed) return undefined;
         const parsed = JSON.parse(trimmed) as unknown;
-        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        if (
+          parsed == null ||
+          typeof parsed !== "object" ||
+          Array.isArray(parsed)
+        ) {
           throw new Error("自定义参数必须是 JSON 对象");
         }
         return parsed as Record<string, unknown>;
@@ -1226,14 +1238,15 @@ export function ProviderFormView({
           toastSettingsError("请填写服务商名称");
           return;
         }
-        const res = await ipcProvidersCreate({
+        const payload = {
           protocol,
           baseUrl: baseUrl.trim(),
           displayName: name,
           apiKey: apiKey.trim(),
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
           bodyParams: parseBodyParams(bodyParamsJson),
-        });
+        };
+        const res = await ipcProvidersCreate(payload);
         if (!res.ok) {
           toastSettingsError(res.error.message);
           return;
@@ -1312,8 +1325,14 @@ export function ProviderFormView({
             onChange={(e) => setDisplayName(e.target.value)}
           />
         </SettingsField>
-        <SettingsField label={mode === "edit" ? "新 API Key（留空则不修改）" : "API Key"}>
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        <SettingsField
+          label={mode === "edit" ? "新 API Key（留空则不修改）" : "API Key"}
+        >
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
         </SettingsField>
         <SettingsField label="Headers JSON">
           <textarea
@@ -1341,58 +1360,56 @@ export function ProviderFormView({
   );
 }
 
+type ProviderModelRow = {
+  id: string;
+  vendorModelId: string;
+  modelName: string;
+  displayName: string;
+};
+type ModelMenuState = { savedModelId: string; x: number; y: number } | null;
+type ModelRenameState = { savedModelId: string; initialName: string } | null;
+type ModelDeleteState =
+  | { kind: "single"; savedModelId: string; label: string }
+  | { kind: "batch"; count: number }
+  | null;
+
 export function ProviderDetailView({ nav }: { nav: Nav }) {
   type ProviderTab = "config" | "models";
   // 默认「模型管理」（高频），与服务商配置 tab 并列；点服务商行进来后可直接切到「服务商配置」改连接信息。
   const [activeTab, setActiveTab] = useState<ProviderTab>("config");
   const batch = useBatchSelection();
   const providerId = nav.navState.editingProviderId;
-  const [models, setModels] = useState<
-    Array<{ id: string; vendorModelId: string; modelName: string; displayName: string }>
-  >([]);
-  const [modelMenu, setModelMenu] = useState<{
-    savedModelId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [renamePrompt, setRenamePrompt] = useState<{
-    savedModelId: string;
-    initialName: string;
-  } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<
-    | { kind: "single"; savedModelId: string; label: string }
-    | { kind: "batch"; count: number }
-    | null
-  >(null);
+  const [models, setModels] = useState<ProviderModelRow[]>([]);
+  const [modelMenu, setModelMenu] = useState<ModelMenuState>(null);
+  const [renamePrompt, setRenamePrompt] = useState<ModelRenameState>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<ModelDeleteState>(null);
   const [fetchModalOpen, setFetchModalOpen] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reload = useCallback(async () => {
     if (!providerId) return;
     const res = await ipcProviderModelsSavedList({ providerId });
     if (res.ok) setModels([...res.data]);
   }, [providerId]);
 
-  useEffect(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
+  useEffect(() => void reload().catch(() => undefined), [reload]);
 
   if (!providerId) return <p className="settings-hint">缺少 providerId</p>;
 
   const deleteModels = async (savedModelIds: readonly string[]) => {
     for (const savedModelId of savedModelIds) {
-      const res = await ipcProviderModelsDeleteSaved({ savedModelId, providerId });
+      const args = { savedModelId, providerId };
+      const res = await ipcProviderModelsDeleteSaved(args);
       if (!res.ok) {
         toastSettingsError(res.error.message);
         return;
       }
     }
     batch.exit();
-    toastSettingsSuccess(
-      savedModelIds.length > 1
-        ? `已删除 ${savedModelIds.length} 个模型`
-        : "已删除模型",
-    );
+    const count = savedModelIds.length;
+    const message = count > 1 ? `已删除 ${count} 个模型` : "已删除模型";
+    toastSettingsSuccess(message);
     await reload();
   };
 
@@ -1401,6 +1418,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     nav.push("modelSampling");
   };
 
+  // nm-style: keep-local — 重命名含 prompt 快照与校验/回读流程，内联会拆散状态机
   const handleRename = async (name: string) => {
     const target = renamePrompt;
     setRenamePrompt(null);
@@ -1412,10 +1430,8 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
       toastSettingsError("模型名称不能为空");
       return;
     }
-    const res = await ipcProviderModelsEditSaved({
-      savedModelId: target.savedModelId,
-      modelName: trimmed,
-    });
+    const patch = { savedModelId: target.savedModelId, modelName: trimmed };
+    const res = await ipcProviderModelsEditSaved(patch);
     if (!res.ok) {
       toastSettingsError(res.error.message);
       return;
@@ -1424,6 +1440,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     await reload();
   };
 
+  // nm-style: keep-local — 菜单分发是 29 行多分支状态机，内联会拆散菜单生命周期
   const handleModelMenuSelect = (action: string) => {
     const menu = modelMenu;
     setModelMenu(null);
@@ -1454,27 +1471,15 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     }
   };
 
-  const handleAddModel = async (vendorModelId: string, modelName?: string) => {
-    const res = await ipcProviderModelsSave({
-      providerId,
-      vendorModelId,
-      modelName,
-    });
-    if (!res.ok) {
-      toastSettingsError(res.error.message);
-      return;
-    }
-    showToast("已添加模型");
-    await reload();
-  };
+  const duplicateVendorCount: Record<string, number> = {};
+  for (const model of models) {
+    const id = model.vendorModelId;
+    duplicateVendorCount[id] = (duplicateVendorCount[id] ?? 0) + 1;
+  }
 
-  const duplicateVendorCount = models.reduce<Record<string, number>>((acc, m) => {
-    acc[m.vendorModelId] = (acc[m.vendorModelId] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const allModelsSelected =
-    models.length > 0 && models.every((m) => batch.selectedIds.has(m.id));
+  const everyModelSelected = models.every((m) => batch.selectedIds.has(m.id));
+  const allModelsSelected = models.length > 0 && everyModelSelected;
+  const modelIds = models.map((m) => m.id);
 
   return (
     <div className="provider-detail">
@@ -1493,130 +1498,144 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
         <ProviderFormView nav={nav} mode="edit" />
       ) : (
         <SettingsPanel>
-      <SettingsListSection
-        header={
-          <ManageHeader
-            title="已保存模型"
-            batchMode={batch.active}
-            selectedCount={batch.selectedCount}
-            onEnterBatch={batch.enter}
-            onCancelBatch={batch.exit}
-            allSelected={allModelsSelected}
-            onSelectAll={() =>
-              batch.selectRange(allModelsSelected ? [] : models.map((m) => m.id))
+          <SettingsListSection
+            header={
+              <ManageHeader
+                title="已保存模型"
+                batchMode={batch.active}
+                selectedCount={batch.selectedCount}
+                onEnterBatch={batch.enter}
+                onCancelBatch={batch.exit}
+                allSelected={allModelsSelected}
+                onSelectAll={() =>
+                  batch.selectRange(allModelsSelected ? [] : modelIds)
+                }
+                onDelete={() => {
+                  if (batch.selectedCount === 0) {
+                    return;
+                  }
+                  setDeleteConfirm({
+                    kind: "batch",
+                    count: batch.selectedCount,
+                  });
+                }}
+                hint="选择要删除的模型"
+                normalActions={
+                  <>
+                    <button
+                      type="button"
+                      className="list-manage-header__btn"
+                      onClick={() => setFetchModalOpen(true)}
+                    >
+                      拉取模型
+                    </button>
+                    <button
+                      type="button"
+                      className="list-manage-header__btn list-manage-header__btn--primary"
+                      onClick={() => setAddModelOpen(true)}
+                    >
+                      添加
+                    </button>
+                  </>
+                }
+              />
             }
-            onDelete={() => {
-              if (batch.selectedCount === 0) {
+          >
+            {models.map((m) => (
+              <SettingsListItem
+                key={m.id}
+                title={m.displayName || m.vendorModelId}
+                meta={
+                  duplicateVendorCount[m.vendorModelId]! > 1
+                    ? m.vendorModelId
+                    : m.modelName !== m.vendorModelId
+                    ? m.vendorModelId
+                    : undefined
+                }
+                batchMode={batch.active}
+                selected={batch.isSelected(m.id)}
+                onToggleSelect={() => batch.toggle(m.id)}
+                onClick={() => openModelEditor(m.id)}
+                onMenu={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setModelMenu({
+                    savedModelId: m.id,
+                    x: Math.max(8, rect.left),
+                    y: Math.max(8, rect.bottom + 4),
+                  });
+                }}
+              />
+            ))}
+          </SettingsListSection>
+          <FetchModelsModal
+            open={fetchModalOpen}
+            providerId={providerId}
+            savedVendorIds={models.map((m) => m.vendorModelId)}
+            onClose={() => setFetchModalOpen(false)}
+            onSaved={async () => {
+              showToast("已添加模型");
+              await reload();
+            }}
+            onError={(message) => toastSettingsError(message)}
+          />
+          <AddModelModal
+            open={addModelOpen}
+            onClose={() => setAddModelOpen(false)}
+            onConfirm={async (vendorModelId, modelName) => {
+              const args = { providerId, vendorModelId, modelName };
+              const res = await ipcProviderModelsSave(args);
+              if (!res.ok) {
+                toastSettingsError(res.error.message);
                 return;
               }
-              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
-            }}
-            hint="选择要删除的模型"
-            normalActions={
-              <>
-                <button
-                  type="button"
-                  className="list-manage-header__btn"
-                  onClick={() => setFetchModalOpen(true)}
-                >
-                  拉取模型
-                </button>
-                <button
-                  type="button"
-                  className="list-manage-header__btn list-manage-header__btn--primary"
-                  onClick={() => setAddModelOpen(true)}
-                >
-                  添加
-                </button>
-              </>
-            }
-          />
-        }
-      >
-        {models.map((m) => (
-          <SettingsListItem
-            key={m.id}
-            title={m.displayName || m.vendorModelId}
-            meta={
-              duplicateVendorCount[m.vendorModelId]! > 1
-                ? m.vendorModelId
-                : m.modelName !== m.vendorModelId
-                  ? m.vendorModelId
-                  : undefined
-            }
-            batchMode={batch.active}
-            selected={batch.isSelected(m.id)}
-            onToggleSelect={() => batch.toggle(m.id)}
-            onClick={() => openModelEditor(m.id)}
-            onMenu={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setModelMenu({
-                savedModelId: m.id,
-                x: Math.max(8, rect.left),
-                y: Math.max(8, rect.bottom + 4),
-              });
+              showToast("已添加模型");
+              await reload();
             }}
           />
-        ))}
-      </SettingsListSection>
-      <FetchModelsModal
-        open={fetchModalOpen}
-        providerId={providerId}
-        savedVendorIds={models.map((m) => m.vendorModelId)}
-        onClose={() => setFetchModalOpen(false)}
-        onSaved={async () => {
-          showToast("已添加模型");
-          await reload();
-        }}
-        onError={(message) => toastSettingsError(message)}
-      />
-      <AddModelModal
-        open={addModelOpen}
-        onClose={() => setAddModelOpen(false)}
-        onConfirm={handleAddModel}
-      />
-      <ContextMenu
-        open={modelMenu != null}
-        x={modelMenu?.x ?? 0}
-        y={modelMenu?.y ?? 0}
-        items={[
-          { label: "编辑", action: "edit" },
-          { label: "重命名", action: "rename" },
-          { label: "删除", action: "delete", danger: true },
-        ]}
-        onSelect={(action) => handleModelMenuSelect(action)}
-        onClose={() => setModelMenu(null)}
-      />
-      <TextPromptModal
-        open={renamePrompt != null}
-        title="重命名模型"
-        initialValue={renamePrompt?.initialName ?? ""}
-        onClose={() => setRenamePrompt(null)}
-        onConfirm={handleRename}
-      />
-      <ConfirmModal
-        open={deleteConfirm != null}
-        title="删除模型"
-        message={
-          deleteConfirm?.kind === "batch"
-            ? `确定删除选中的 ${deleteConfirm.count} 个模型？`
-            : `删除模型「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
-        }
-        danger
-        onConfirm={() => {
-          const target = deleteConfirm;
-          setDeleteConfirm(null);
-          if (!target) {
-            return;
-          }
-          if (target.kind === "batch") {
-            void deleteModels([...batch.selectedIds]);
-            return;
-          }
-          void deleteModels([target.savedModelId]);
-        }}
-        onCancel={() => setDeleteConfirm(null)}
-      />
+          <ContextMenu
+            open={modelMenu != null}
+            x={modelMenu?.x ?? 0}
+            y={modelMenu?.y ?? 0}
+            items={[
+              { label: "编辑", action: "edit" },
+              { label: "重命名", action: "rename" },
+              { label: "删除", action: "delete", danger: true },
+            ]}
+            onSelect={(action) => handleModelMenuSelect(action)}
+            onClose={() => setModelMenu(null)}
+          />
+          <TextPromptModal
+            open={renamePrompt != null}
+            title="重命名模型"
+            initialValue={renamePrompt?.initialName ?? ""}
+            onClose={() => setRenamePrompt(null)}
+            onConfirm={handleRename}
+          />
+          <ConfirmModal
+            open={deleteConfirm != null}
+            title="删除模型"
+            message={
+              deleteConfirm?.kind === "batch"
+                ? `确定删除选中的 ${deleteConfirm.count} 个模型？`
+                : `删除模型「${
+                    deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
+                  }」？`
+            }
+            danger
+            onConfirm={() => {
+              const target = deleteConfirm;
+              setDeleteConfirm(null);
+              if (!target) {
+                return;
+              }
+              if (target.kind === "batch") {
+                void deleteModels([...batch.selectedIds]);
+                return;
+              }
+              void deleteModels([target.savedModelId]);
+            }}
+            onCancel={() => setDeleteConfirm(null)}
+          />
         </SettingsPanel>
       )}
     </div>
@@ -1632,27 +1651,27 @@ function isBuiltinSmartSortRule(ruleId: string): boolean {
   return ruleId.startsWith(SMART_SORT_BUILTIN_PREFIX);
 }
 
+type RuleMenuState = { ruleId: string; x: number; y: number } | null;
+type RuleDeleteState =
+  | { kind: "single"; ruleId: string; label: string }
+  | { kind: "batch"; count: number }
+  | null;
+type MoveTo = SmartSortRuleMoveRequest["to"];
+
 export function SmartSortRulesView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
   const [rules, setRules] = useState<SmartSortRuleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [ruleMenu, setRuleMenu] = useState<{
-    ruleId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<
-    | { kind: "single"; ruleId: string; label: string }
-    | { kind: "batch"; count: number }
-    | null
-  >(null);
+  const [ruleMenu, setRuleMenu] = useState<RuleMenuState>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<RuleDeleteState>(null);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [importConfirm, setImportConfirm] = useState(false);
   const [dragRuleId, setDragRuleId] = useState<string | null>(null);
   const [dragOverRuleId, setDragOverRuleId] = useState<string | null>(null);
 
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -1670,34 +1689,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
   }, []);
 
-  useEffect(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
+  useEffect(() => void reload().catch(() => undefined), [reload]);
 
   const openEditor = (ruleId?: string) => {
     nav.navState.editingSmartSortRuleId = ruleId;
     nav.push("smartSortRuleEditor");
   };
 
-  const toggleEnabled = async (rule: SmartSortRuleDto, next: boolean) => {
-    const res = await ipcSmartSortRuleSetEnabled({
-      ruleId: rule.ruleId,
-      enabled: next,
-    });
-    if (!res.ok) {
-      toastSettingsError(res.error.message);
-      return;
-    }
-    const updated = res.data;
-    setRules((prev) =>
-      prev.map((r) => (r.ruleId === updated.ruleId ? updated : r)),
-    );
-  };
-
-  const moveRule = async (
-    ruleId: string,
-    to: SmartSortRuleMoveRequest["to"],
-  ) => {
+  const moveRule = async (ruleId: string, to: MoveTo) => {
     const res = await ipcSmartSortRuleMove({ ruleId, to });
     if (!res.ok) {
       toastSettingsError(res.error.message);
@@ -1707,18 +1706,20 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   };
 
   const runDeleteRules = async (ruleIds: readonly string[]) => {
-    const res =
-      ruleIds.length === 1
-        ? await ipcSmartSortRuleDelete({ ruleId: ruleIds[0]! })
-        : await ipcSmartSortRuleDeleteBatch({ ruleIds });
+    let res;
+    if (ruleIds.length === 1) {
+      res = await ipcSmartSortRuleDelete({ ruleId: ruleIds[0]! });
+    } else {
+      res = await ipcSmartSortRuleDeleteBatch({ ruleIds });
+    }
     if (!res.ok) {
       toastSettingsError(res.error.message);
       return;
     }
     batch.exit();
-    toastSettingsSuccess(
-      ruleIds.length > 1 ? `已删除 ${ruleIds.length} 条规则` : "已删除规则",
-    );
+    const count = ruleIds.length;
+    const message = count > 1 ? `已删除 ${count} 条规则` : "已删除规则";
+    toastSettingsSuccess(message);
     await reload();
   };
 
@@ -1726,10 +1727,8 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     if (batch.selectedCount === 0) {
       return;
     }
-    const res = await ipcSmartSortRuleSetEnabledBatch({
-      ruleIds: [...batch.selectedIds],
-      enabled,
-    });
+    const args = { ruleIds: [...batch.selectedIds], enabled };
+    const res = await ipcSmartSortRuleSetEnabledBatch(args);
     if (!res.ok) {
       toastSettingsError(res.error.message);
       return;
@@ -1738,12 +1737,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     await reload();
   };
 
+  // nm-style: keep-local — 导出流程含 busy 状态与取消分支，内联进 JSX 会净增 >12 行
   const runExportYaml = async () => {
     setBusy(true);
     try {
       const res = await ipcSmartSortRuleYamlExport();
       if (res.ok) {
-        toastSettingsSuccess(res.data === "saved" ? "已导出规则 YAML" : "已取消");
+        const message = res.data === "saved" ? "已导出规则 YAML" : "已取消";
+        toastSettingsSuccess(message);
       } else {
         toastSettingsError(res.error.message);
       }
@@ -1752,6 +1753,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
   };
 
+  // nm-style: keep-local — 导入流程含确认态、batch 退出与分支提示，内联进 JSX 会净增 >12 行
   const runImportYaml = async () => {
     setImportConfirm(false);
     setBusy(true);
@@ -1773,6 +1775,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
   };
 
+  // nm-style: keep-local — 恢复默认含确认态与 busy/回读，内联进 JSX 会净增 >12 行
   const runResetDefaults = async () => {
     setResetConfirm(false);
     setBusy(true);
@@ -1789,6 +1792,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
   };
 
+  // nm-style: keep-local — 菜单分发是 38 行多分支状态机，内联会拆散菜单生命周期
   const handleMenuSelect = (action: string) => {
     const menu = ruleMenu;
     setRuleMenu(null);
@@ -1832,6 +1836,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
    * HTML5 拖拽（spec D9）：源行插入到目标行之前，整表 reorder。
    * 源 id 优先读 dataTransfer（与 WorkspaceTree 惯例一致），state 闭包兜底。
    */
+  // nm-style: keep-local — 拖拽含拖动态清理与下标重排，内联进 onDrop 会拆散拖拽状态机
   const handleDrop = async (e: React.DragEvent, targetRuleId: string) => {
     const sourceId = e.dataTransfer.getData("text/plain") || dragRuleId;
     setDragRuleId(null);
@@ -1854,15 +1859,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     setRules([...res.data]);
   };
 
-  const menuRule = ruleMenu
-    ? rules.find((r) => r.ruleId === ruleMenu.ruleId)
-    : null;
-  const menuItems =
-    menuRule != null && isBuiltinSmartSortRule(menuRule.ruleId)
-      ? [] // 内置规则仅可禁用不可删除（spec D3），隐藏删除项
-      : [{ label: "删除", action: "delete", danger: true }];
-  const allSelected =
-    rules.length > 0 && rules.every((r) => batch.selectedIds.has(r.ruleId));
+  const menuRuleId = ruleMenu?.ruleId;
+  const menuRule = rules.find((r) => r.ruleId === menuRuleId);
+  // 内置规则仅可禁用不可删除（spec D3），隐藏删除项
+  const builtin = menuRule != null && isBuiltinSmartSortRule(menuRule.ruleId);
+  const deleteItem = { label: "删除", action: "delete", danger: true };
+  const menuItems = builtin ? [] : [deleteItem];
+  const everySelected = rules.every((r) => batch.selectedIds.has(r.ruleId));
+  const allSelected = rules.length > 0 && everySelected;
 
   return (
     <SettingsPanel>
@@ -1876,9 +1880,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
             onCancelBatch={batch.exit}
             allSelected={allSelected}
             onSelectAll={() =>
-              batch.selectRange(
-                allSelected ? [] : rules.map((r) => r.ruleId),
-              )
+              batch.selectRange(allSelected ? [] : rules.map((r) => r.ruleId))
             }
             onDelete={() => {
               if (batch.selectedCount === 0) {
@@ -1949,9 +1951,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
         {!loading && rules.length === 0 ? (
           <SettingsListEmpty>
-            {loadFailed
-              ? "加载失败，请重试。"
-              : "暂无规则，点击上方按钮创建。"}
+            {loadFailed ? "加载失败，请重试。" : "暂无规则，点击上方按钮创建。"}
           </SettingsListEmpty>
         ) : null}
         {rules.map((rule) => (
@@ -2034,7 +2034,20 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
               <div className="smart-sort-rule__switch">
                 <Switch
                   checked={rule.enabled}
-                  onChange={(next) => void toggleEnabled(rule, next)}
+                  onChange={async (next) => {
+                    const args = { ruleId: rule.ruleId, enabled: next };
+                    const res = await ipcSmartSortRuleSetEnabled(args);
+                    if (!res.ok) {
+                      toastSettingsError(res.error.message);
+                      return;
+                    }
+                    const updated = res.data;
+                    setRules((prev) =>
+                      prev.map((r) =>
+                        r.ruleId === updated.ruleId ? updated : r
+                      )
+                    );
+                  }}
                   aria-label={`启用 ${rule.name}`}
                 />
               </div>
@@ -2080,7 +2093,9 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         message={
           deleteConfirm?.kind === "batch"
             ? `确定删除选中的 ${deleteConfirm.count} 条规则？`
-            : `删除规则「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
+            : `删除规则「${
+                deleteConfirm?.kind === "single" ? deleteConfirm.label : ""
+              }」？`
         }
         danger
         onConfirm={() => {
@@ -2152,29 +2167,19 @@ const SMART_SORT_CAPTURE_KIND_OPTIONS: ReadonlyArray<{
   { value: "fixed_min", label: "固定最小" },
 ];
 
-/** 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）。 */
-function applySmartSortPatternInput(
-  draft: SmartSortRuleDraft,
-  text: string,
-): SmartSortRuleDraft {
-  return { ...draft, patternInput: text, ...parsePatternInput(text) };
-}
+type MatchResultState = SmartSortRuleMatchResultDto | null;
 
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   // ruleId 经本地 state 镜像 navState：规则缺失回退新建时 setRuleId(undefined)
   // 才能让本组件感知（直接改 navState 不触发渲染，desktop/B-2）。
-  const [ruleId, setRuleId] = useState<string | undefined>(
-    nav.navState.editingSmartSortRuleId,
-  );
-  const [draft, setDraft] = useState<SmartSortRuleDraft>(
-    DEFAULT_SMART_SORT_DRAFT,
-  );
+  const [ruleId, setRuleId] = useState(nav.navState.editingSmartSortRuleId);
+  const [draft, setDraft] = useState(DEFAULT_SMART_SORT_DRAFT);
   const [testText, setTestText] = useState("");
-  const [matchResult, setMatchResult] =
-    useState<SmartSortRuleMatchResultDto | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchResultState>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // nm-style: keep-local — 回调承载规则加载/缺失回退状态机，内联回 useEffect 会让调用参数跨行
+  const loadRule = () => {
     ipcSmartSortRuleList().then((res) => {
       if (!res.ok) {
         // 加载失败不可静默伪装成「空列表 + 默认草稿」（dtcli/B-3，
@@ -2208,7 +2213,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
         }
       }
     });
-  }, [ruleId, nav]);
+  };
+  useEffect(loadRule, [ruleId, nav]);
 
   let regexError: string | null = null;
   if (draft.pattern) {
@@ -2222,13 +2228,15 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   /** 结果只属于点击「测试」时的输入快照：任一输入（测试文本/正则/捕获档）
    *  变化即清空旧结果与错误，避免旧 matches 偏移对已编辑文本高亮错位、
    *  计数失真（dtcli/B-1，终审口径：三入口全清）。 */
+  // nm-style: keep-local — useCallback 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   const invalidateMatchResult = useCallback(() => {
     setMatchResult(null);
     setTestError(null);
   }, []);
 
   /** 正则匹配测试（fix ②：按钮手动触发，替代旧实时排序预览）。 */
-  const runMatchTest = useCallback(async () => {
+  // nm-style: keep-local — 回调承载正则测试与输入快照状态机，内联回 useCallback 会让调用参数跨行
+  const runMatchTestImpl = async () => {
     if (!testText.trim()) {
       setMatchResult(null);
       setTestError("请输入测试文本");
@@ -2242,12 +2250,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
     // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
     const parsed = parsePatternInput(draft.patternInput.trim());
-    const res = await ipcSmartSortRuleMatch({
+    const payload = {
       pattern: parsed.pattern,
       flags: parsed.flags,
       text: testText,
       captureKind: draft.captureKind,
-    });
+    };
+    const res = await ipcSmartSortRuleMatch(payload);
     if (res.ok) {
       setMatchResult(res.data);
       setTestError(null);
@@ -2255,8 +2264,11 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       setMatchResult(null);
       setTestError(res.error.message);
     }
-  }, [testText, draft.patternInput, draft.captureKind]);
+  };
+  const runMatchTestDeps = [testText, draft.patternInput, draft.captureKind];
+  const runMatchTest = useCallback(runMatchTestImpl, runMatchTestDeps);
 
+  // nm-style: keep-local — 保存流程含新建/更新分支与导航，内联进 JSX 会拆散保存状态机
   const save = async () => {
     // 与 mobile collectFields 对齐：name 本地 trim + 空名前置拦截，
     // 不把空名/纯空格发到 IPC 靠 core 兜底（dtcli/B-2）。
@@ -2277,10 +2289,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       enabled: draft.enabled,
     };
     if (ruleId) {
-      const res = await ipcSmartSortRuleUpdate({
-        ruleId,
-        patch: payload,
-      });
+      const res = await ipcSmartSortRuleUpdate({ ruleId, patch: payload });
       if (res.ok) {
         toastSettingsSuccess("已保存");
         nav.pop();
@@ -2301,10 +2310,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   /** 结果区渲染（fix-desc-and-highlight）：按匹配偏移高亮切分原文
    *  （匹配段 --primary 变色）+ 底部匹配计数；错误/非法正则照旧文案。 */
   const matchCount = matchResult?.ok ? matchResult.matches.length : 0;
-  const highlightSegments =
-    matchResult?.ok
-      ? splitSmartSortHighlightSegments(testText, matchResult.matches)
-      : null;
+  const matches = matchResult?.ok ? matchResult.matches : null;
+  const segments = matches && splitHighlightSegments(testText, matches);
 
   const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
 
@@ -2339,7 +2346,11 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
               spellCheck={false}
               onChange={(e) => {
-                setDraft(applySmartSortPatternInput(draft, e.target.value));
+                setDraft({
+                  ...draft,
+                  patternInput: e.target.value,
+                  ...parsePatternInput(e.target.value),
+                });
                 invalidateMatchResult();
               }}
             />
@@ -2348,7 +2359,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             <SettingsStatus error={`正则无效：${regexError}`} inline />
           ) : null}
           <p className="settings-hint">
-            支持 /正则/flags 格式，如 /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
+            支持 /正则/flags 格式，如
+            /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
           </p>
           <SettingsField
             label="捕获数字"
@@ -2356,8 +2368,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               draft.captureKind === "smart"
                 ? "从捕获组提取序号，中文数字自动转换"
                 : draft.captureKind === "fixed_min"
-                  ? "命中即排在所有序号之前（序章/楔子类）"
-                  : "命中即沉底排在所有序号之后（终章/番外类）"
+                ? "命中即排在所有序号之前（序章/楔子类）"
+                : "命中即沉底排在所有序号之后（终章/番外类）"
             }
           >
             <select
@@ -2415,17 +2427,18 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             }`}
           >
             {testError ??
-              (highlightSegments != null ? (
+              (segments != null ? (
                 <>
-                  {highlightSegments.map((seg, i) =>
+                  {segments.map((seg, i) =>
                     seg.matched ? (
                       <span key={i} style={{ color: "var(--primary)" }}>
                         {seg.text}
                       </span>
                     ) : (
                       <span key={i}>{seg.text}</span>
-                    ),
-                  )}{"\n"}
+                    )
+                  )}
+                  {"\n"}
                   {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
                       null 显「无序号」；固定档恒显哨兵文案。 */}
                   {matchResult?.ok

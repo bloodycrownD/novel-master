@@ -1,12 +1,9 @@
 /**
  * Agent registry CRUD IPC handlers.
  */
-import { registerBuiltinTools, ToolRegistry, type TdbcConnection } from "@novel-master/core";
-import {
-  allocateAgentDisplayName,
-  createDefaultAgentEditorPrompts,
-  layoutFromFormInput,
-} from "../../../../shared/config-forms/agent.js";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import type { TdbcConnection } from "@novel-master/core";
+import * as configForms from "../../../../shared/config-forms/agent.js";
 import { assessAgentDefinitionWire } from "@novel-master/core/stored-config-validity";
 import type {
   AgentRegistryCreateBlankRequest,
@@ -21,27 +18,15 @@ import type {
   IpcResult,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import {
-  exportAgentYamlWithDialog,
-  importAgentYamlWithDialog,
-} from "../../services/agent-yaml.service.js";
+import * as yamlIo from "../../services/agent-yaml.service.js";
 import { formatIpcError } from "../ipc-error.js";
 import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 import { BrowserWindow } from "electron";
 
-function parentWindow(): BrowserWindow | null {
-  return BrowserWindow.getFocusedWindow();
-}
-
 /** 从库读取智能体原始 wire（不解码）。 */
-async function getAgentRawWire(
-  conn: TdbcConnection,
-  agentId: string,
-): Promise<unknown | null> {
-  const rows = await conn.query<{ prompts_json: string }>(
-    `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
-    [agentId],
-  );
+async function getAgentRawWire(conn: TdbcConnection, agentId: string) {
+  const sql = `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`;
+  const rows = await conn.query<{ prompts_json: string }>(sql, [agentId]);
   if (rows.length === 0) {
     return null;
   }
@@ -75,10 +60,9 @@ export async function handleAgentRegistryList(): Promise<
         continue;
       }
       const health = assessAgentDefinitionWire(raw);
-      const name =
-        health.status === "valid"
-          ? health.value.name?.trim() || agentId
-          : readAgentNameFromWire(raw, agentId);
+      const fallback = readAgentNameFromWire(raw, agentId);
+      const valid = health.status === "valid";
+      const name = valid ? health.value.name?.trim() || agentId : fallback;
       if (health.status === "invalid") {
         rows.push({
           agentId,
@@ -98,9 +82,7 @@ export async function handleAgentRegistryList(): Promise<
         rows.push({
           agentId,
           name,
-          ...(health.value.mode != null
-            ? { mode: health.value.mode }
-            : {}),
+          ...(health.value.mode != null ? { mode: health.value.mode } : {}),
         });
       }
     }
@@ -110,9 +92,7 @@ export async function handleAgentRegistryList(): Promise<
   }
 }
 
-export async function handleAgentRegistryGet(
-  req: AgentRegistryGetRequest,
-): Promise<IpcResult<AgentRegistryGetResponse>> {
+export async function handleAgentRegistryGet(req: AgentRegistryGetRequest): Promise<IpcResult<AgentRegistryGetResponse>> {
   try {
     const rt = await getDesktopRuntime();
     const raw = await getAgentRawWire(rt.conn, req.agentId);
@@ -132,45 +112,35 @@ export async function handleAgentRegistryGet(
   }
 }
 
-export async function handleAgentRegistryUpsert(
-  req: AgentRegistryUpsertRequest,
-): Promise<IpcResult<void>> {
+export async function handleAgentRegistryUpsert(req: AgentRegistryUpsertRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
-    await rt.agentRegistry.upsert(req.agentId, req.definition as Parameters<
-      typeof rt.agentRegistry.upsert
-    >[1], {
-      registeredToolNames: probe.list(),
-    });
+    const def = req.definition as Parameters<typeof rt.agentRegistry.upsert>[1];
+    const opts = { registeredToolNames: probe.list() };
+    await rt.agentRegistry.upsert(req.agentId, def, opts);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-export async function handleAgentRegistryUpdate(
-  req: AgentRegistryUpdateRequest,
-): Promise<IpcResult<void>> {
+export async function handleAgentRegistryUpdate(req: AgentRegistryUpdateRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
-    await rt.agentRegistry.update(
-      req.agentId,
-      req.patch as Parameters<typeof rt.agentRegistry.update>[1],
-      { registeredToolNames: probe.list() },
-    );
+    const patch = req.patch as Parameters<typeof rt.agentRegistry.update>[1];
+    const opts = { registeredToolNames: probe.list() };
+    await rt.agentRegistry.update(req.agentId, patch, opts);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-export async function handleAgentRegistryDelete(
-  req: AgentRegistryDeleteRequest,
-): Promise<IpcResult<void>> {
+export async function handleAgentRegistryDelete(req: AgentRegistryDeleteRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
     await rt.agentRegistry.delete(req.agentId);
@@ -180,15 +150,13 @@ export async function handleAgentRegistryDelete(
   }
 }
 
-export async function handleAgentRegistryCreateBlank(
-  req?: AgentRegistryCreateBlankRequest,
-): Promise<IpcResult<{ agentId: string }>> {
+export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBlankRequest): Promise<IpcResult<{ agentId: string }>> {
   try {
     const rt = await getDesktopRuntime();
     const agentId = `agent-${Date.now()}`;
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
-    const defaultPrompts = createDefaultAgentEditorPrompts();
+    const defaultPrompts = configForms.createDefaultAgentEditorPrompts();
     const slots = [];
     for (const id of await rt.agentRegistry.listAgentIds()) {
       const raw = await getAgentRawWire(rt.conn, id);
@@ -197,56 +165,42 @@ export async function handleAgentRegistryCreateBlank(
         continue;
       }
       const health = assessAgentDefinitionWire(raw);
-      const name =
-        health.status === "valid"
-          ? health.value.name
-          : readAgentNameFromWire(raw, id);
+      const fallback = readAgentNameFromWire(raw, id);
+      const name = health.status === "valid" ? health.value.name : fallback;
       slots.push({ id, name });
     }
-    const name = allocateAgentDisplayName(slots);
-    await rt.agentRegistry.upsert(
-      agentId,
-      {
-        name,
-        // 可选作用域随 tab 落库；请求体缺省 / undefined 时容忍（= 现行为不设 mode）。
-        ...(req?.mode != null ? { mode: req.mode } : {}),
-        runtime: { maxSteps: 20 },
-        prompts: layoutFromFormInput(defaultPrompts),
-      },
-      { registeredToolNames: probe.list() },
-    );
+    const name = configForms.allocateAgentDisplayName(slots);
+    const definition = {
+      name,
+      // 可选作用域随 tab 落库；请求体缺省 / undefined 时容忍（= 现行为不设 mode）。
+      ...(req?.mode != null ? { mode: req.mode } : {}),
+      runtime: { maxSteps: 20 },
+      prompts: configForms.layoutFromFormInput(defaultPrompts),
+    };
+    const opts = { registeredToolNames: probe.list() };
+    await rt.agentRegistry.upsert(agentId, definition, opts);
     return { ok: true, data: { agentId } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-export async function handleAgentYamlExport(
-  req: AgentYamlExportRequest,
-): Promise<IpcResult<"saved" | "cancelled">> {
+export async function handleAgentYamlExport(req: AgentYamlExportRequest): Promise<IpcResult<"saved" | "cancelled">> {
   try {
     const rt = await getDesktopRuntime();
-    const result = await exportAgentYamlWithDialog(
-      rt,
-      req.agentId,
-      parentWindow(),
-    );
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await yamlIo.exportAgentYamlWithDialog(rt, req.agentId, win);
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-export async function handleAgentYamlImport(
-  req: AgentYamlImportRequest,
-): Promise<IpcResult<"imported" | "cancelled">> {
+export async function handleAgentYamlImport(req: AgentYamlImportRequest): Promise<IpcResult<"imported" | "cancelled">> {
   try {
     const rt = await getDesktopRuntime();
-    const result = await importAgentYamlWithDialog(
-      rt,
-      req.agentId,
-      parentWindow(),
-    );
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await yamlIo.importAgentYamlWithDialog(rt, req.agentId, win);
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

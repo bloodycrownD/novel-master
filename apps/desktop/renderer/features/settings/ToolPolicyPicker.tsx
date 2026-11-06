@@ -9,16 +9,6 @@ type Props = {
 
 const TOTAL = BUILTIN_TOOL_CATALOG.length;
 
-function buildTriggerLabel(selected: readonly string[]): string {
-  if (selected.length === 0) {
-    return `未选择工具（0/${TOTAL}）`;
-  }
-  if (selected.length >= TOTAL) {
-    return `全部工具（${TOTAL}/${TOTAL}）`;
-  }
-  return `已选工具（${selected.length}/${TOTAL}）`;
-}
-
 /**
  * 工具白名单/黑名单选择器：trigger 按钮 + 模态弹层多选。
  *
@@ -33,6 +23,7 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
   const [query, setQuery] = useState("");
 
   // draft 仅在弹层从关闭翻到打开时用 selected 初始化一次。
+  // nm-style: keep-local — useEffect 的 effect 回调带 deps 时必须多行；单行化需改运行语义
   const prevOpenRef = useMemo(() => ({ value: false }), []);
   useEffect(() => {
     if (open && !prevOpenRef.value) {
@@ -44,6 +35,7 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
 
   const draftSet = useMemo(() => new Set(draft), [draft]);
 
+  // nm-style: keep-local — useMemo 的回调带 deps 时必须多行；单行化需改运行语义
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q === "") {
@@ -52,7 +44,7 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
     return BUILTIN_TOOL_CATALOG.filter(
       (item) =>
         item.name.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q),
+        item.description.toLowerCase().includes(q)
     );
   }, [query]);
 
@@ -65,12 +57,6 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
   };
 
   const close = () => setOpen(false);
-  const confirm = () => {
-    onChange([...draft]);
-    close();
-  };
-
-  const triggerLabel = buildTriggerLabel(selected);
 
   return (
     <>
@@ -80,7 +66,11 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
         onClick={() => setOpen(true)}
       >
         <span className="tool-policy-picker__trigger-label">
-          {triggerLabel}
+          {selected.length === 0
+            ? `未选择工具（0/${TOTAL}）`
+            : selected.length >= TOTAL
+            ? `全部工具（${TOTAL}/${TOTAL}）`
+            : `已选工具（${selected.length}/${TOTAL}）`}
         </span>
         <span className="tool-policy-picker__trigger-caret" aria-hidden>
           ▼
@@ -138,7 +128,10 @@ export function ToolPolicyPicker({ selected, onChange }: Props) {
               <button
                 type="button"
                 className="tool-policy-picker__modal-confirm"
-                onClick={confirm}
+                onClick={() => {
+                  onChange([...draft]);
+                  close();
+                }}
               >
                 确定
               </button>

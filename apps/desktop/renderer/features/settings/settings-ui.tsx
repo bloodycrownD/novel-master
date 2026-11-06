@@ -100,7 +100,11 @@ export function SettingsToolbar({
   className?: string;
 }) {
   return (
-    <div className={className ? `settings-toolbar ${className}` : "settings-toolbar"}>
+    <div
+      className={
+        className ? `settings-toolbar ${className}` : "settings-toolbar"
+      }
+    >
       {children}
     </div>
   );
@@ -109,7 +113,11 @@ export function SettingsToolbar({
 export function ApiKeyStatusTag({ status }: { status: string }) {
   const connected = status === "set";
   return (
-    <span className={`settings-tag ${connected ? "settings-tag--ok" : "settings-tag--muted"}`}>
+    <span
+      className={`settings-tag ${
+        connected ? "settings-tag--ok" : "settings-tag--muted"
+      }`}
+    >
       {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}
     </span>
   );
@@ -141,25 +149,20 @@ export function SettingsListItem({
   selected?: boolean;
   onToggleSelect?: () => void;
 }) {
-  const handleClick = () => {
-    if (batchMode) {
-      onToggleSelect?.();
-      return;
-    }
-    onClick?.();
-  };
-
   const itemButton = (
     <button
       type="button"
       className={`settings-list-item${selected ? " is-selected" : ""}`}
-      onClick={handleClick}
+      onClick={() => {
+        if (batchMode) {
+          onToggleSelect?.();
+          return;
+        }
+        onClick?.();
+      }}
     >
       {batchMode ? (
-        <BatchCheckbox
-          checked={selected}
-          onToggle={() => onToggleSelect?.()}
-        />
+        <BatchCheckbox checked={selected} onToggle={() => onToggleSelect?.()} />
       ) : null}
       <span className="settings-list-item__label">
         {title}
@@ -213,13 +216,17 @@ export function SettingsFormSection({
     <section className="settings-section settings-section--form">
       <div className="settings-form-header">
         <h3 className="settings-section__title">{title}</h3>
-        {toolbar ? <div className="settings-form-toolbar">{toolbar}</div> : null}
+        {toolbar ? (
+          <div className="settings-form-toolbar">{toolbar}</div>
+        ) : null}
       </div>
       {desc ? (
         typeof desc === "string" ? (
           <p className="settings-section__desc">{desc}</p>
         ) : (
-          <div className="settings-section__desc settings-section__desc--inline">{desc}</div>
+          <div className="settings-section__desc settings-section__desc--inline">
+            {desc}
+          </div>
         )
       ) : null}
       <div className="settings-fields">{children}</div>
@@ -242,7 +249,9 @@ export function SettingsField({
 }) {
   return (
     <label
-      className={`settings-field${narrow ? " settings-field--narrow" : ""}${row ? " settings-field--row" : ""}`}
+      className={`settings-field${narrow ? " settings-field--narrow" : ""}${
+        row ? " settings-field--row" : ""
+      }`}
     >
       <span className="settings-field__label">{label}</span>
       {children}

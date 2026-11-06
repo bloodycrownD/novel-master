@@ -43,9 +43,10 @@ test("T-SA1: 删模型批量模式接入全选（ManageHeader 传 onSelectAll/al
   assert.match(source, /allSelected=\{allModelsSelected\}/);
   assert.match(source, /onSelectAll=\{\(\) =>/);
   // 全选 = 重置为全部模型 id；已全选 = 清空
+  assert.match(source, /const modelIds = models\.map\(\(m\) => m\.id\);/);
   assert.match(
     source,
-    /allModelsSelected \? \[\] : models\.map\(\(m\) => m\.id\)/,
+    /batch\.selectRange\(allModelsSelected \? \[\] : modelIds\)/,
   );
 });
 

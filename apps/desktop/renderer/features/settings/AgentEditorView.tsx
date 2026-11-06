@@ -6,11 +6,9 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import {
-  DEFAULT_SUBAGENT_DEFINITION,
-  type AgentDefinition,
-  type AgentDefinitionPatch,
-} from "@shared/logic/agent";
+import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
+import type { AgentDefinition } from "@shared/logic/agent";
+import type { AgentDefinitionPatch } from "@shared/logic/agent";
 
 import {
   DEFAULT_SKILLS_INDEX_PREFIX,
@@ -46,10 +44,8 @@ import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { showToast } from "@/components/ui/show-toast";
-import {
-  toastSettingsError,
-  toastSettingsSuccess,
-} from "@/utils/settings-feedback";
+import { toastSettingsError } from "@/utils/settings-feedback";
+import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
@@ -59,15 +55,11 @@ import {
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "@/ipc/client";
-import {
-  buildDefaultAgentDefinitionPreservingName,
-  STORED_CONFIG_LABELS,
-  storedConfigInvalidReason,
-} from "@shared/logic/stored-config-validity";
-import type {
-  AgentDefinitionPlain,
-  StoredConfigHealthDto,
-} from "@shared/ipc-types";
+import { buildDefaultAgentDefinitionPreservingName } from "@shared/logic/stored-config-validity";
+import { STORED_CONFIG_LABELS } from "@shared/logic/stored-config-validity";
+import { storedConfigInvalidReason } from "@shared/logic/stored-config-validity";
+import type { AgentDefinitionPlain } from "@shared/ipc-types";
+import type { StoredConfigHealthDto } from "@shared/ipc-types";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsField,
@@ -78,10 +70,8 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { PromptMacroTextarea } from "./PromptMacroTextarea";
-import {
-  PROMPT_INSERTABLE_MACROS,
-  insertTextAtSelection,
-} from "./prompt-macro-input";
+import { PROMPT_INSERTABLE_MACROS } from "./prompt-macro-input";
+import { insertTextAtSelection } from "./prompt-macro-input";
 import type { RefObject } from "react";
 
 /** 非当前编辑块共用的空 ref（芯片插入只针对聚焦块）。 */
@@ -100,31 +90,31 @@ const UNRESOLVED_MODEL_OPTION_VALUE = "__unresolved_original_model__";
 
 type Nav = SettingsNavHandle;
 
-/** 从 wire 尽力读取显示名称。 */
-function readAgentNameFromWire(raw: unknown, fallback: string): string {
-  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
-    const name = (raw as Record<string, unknown>).name;
-    if (typeof name === "string") {
-      const trimmed = name.trim();
-      if (trimmed.length > 0) {
-        return trimmed;
-      }
-    }
-  }
-  return fallback;
-}
+type ProviderOption = { id: string; label: string };
+type SavedModelOption = {
+  id: string;
+  vendorModelId: string;
+  displayName: string;
+  providerId: string;
+};
+type InvalidHealth = Extract<
+  StoredConfigHealthDto<AgentDefinitionPlain>,
+  { status: "invalid" }
+>;
+type TextareaKeyEvent = ReactKeyboardEvent<HTMLTextAreaElement>;
+type InvalidHealthState = InvalidHealth | null;
 
 /**
  * 编辑器保存是「整份文档」语义：表单未产出的可选字段用 `null` 显式清除，
  * 否则 patch 语义下这些字段会被保留，用户关掉开关也删不掉旧值。
  */
-function toAgentDefinitionPatch(definition: AgentDefinition): AgentDefinitionPatch {
+function toAgentDefinitionPatch(def: AgentDefinition): AgentDefinitionPatch {
   return {
-    ...definition,
-    model: definition.model ?? null,
-    runtime: definition.runtime ?? null,
-    tools: definition.tools ?? null,
-    description: definition.description ?? null,
+    ...def,
+    model: def.model ?? null,
+    runtime: def.runtime ?? null,
+    tools: def.tools ?? null,
+    description: def.description ?? null,
   };
 }
 
@@ -141,7 +131,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
    * def.model 有值、但当前模型列表里找不到它时的原串（服务商被删 / 列表加载失败）。
    * 非 null 时下拉停在置顶的「不可用」项，保存按「未被动过则保留原绑定」处理。
    */
-  const [unresolvedModelId, setUnresolvedModelId] = useState<string | null>(null);
+  const [unresolvedId, setUnresolvedId] = useState<string | null>(null);
   /** 用户是否显式动过「专属模型」下拉（动过之后保存不再自动保留 unresolved 原值）。 */
   const [modelTouchedByUser, setModelTouchedByUser] = useState(false);
   const [systemEnabled, setSystemEnabled] = useState(false);
@@ -156,9 +146,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   // 技能索引前缀语（索引段首行，缺省默认文案）。
-  const [skillsPrefixText, setSkillsPrefixText] = useState(
-    DEFAULT_SKILLS_INDEX_PREFIX
-  );
+  const [skillsPrefix, setSkillsPrefix] = useState(DEFAULT_SKILLS_INDEX_PREFIX);
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -166,81 +154,65 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
   const [mode, setMode] = useState<AgentMode>("all");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
-  const [providers, setProviders] = useState<
-    Array<{ id: string; label: string }>
-  >([]);
-  const [savedModels, setSavedModels] = useState<
-    Array<{
-      id: string;
-      vendorModelId: string;
-      displayName: string;
-      providerId: string;
-    }>
-  >([]);
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
+  const [savedModels, setSavedModels] = useState<SavedModelOption[]>([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [invalidHealth, setInvalidHealth] = useState<Extract<
-    StoredConfigHealthDto<AgentDefinitionPlain>,
-    { status: "invalid" }
-  > | null>(null);
+  const [invalidHealth, setInvalidHealth] = useState<InvalidHealthState>(null);
   const [storedWire, setStoredWire] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
   const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(
-    null
-  );
+  const [insertIndex, setInsertIndex] = useState<number | null>(null);
 
-  const snapshot = useMemo(
-    () =>
-      formSnapshotJson({
-        name,
-        maxSteps,
-        mode,
-        modelEnabled,
-        providerId,
-        savedModelId: savedModelId,
-        toolsMode,
-        toolsSelected,
-        systemEnabled,
-        systemContent,
-        persistEnabled,
-        dynamicEnabled,
-        workplaceEnabled,
-        workplaceAssistantText,
-        customAttachEnabled,
-        customAttachText,
-        skillsEnabled,
-        skillsPrefixText,
-        description,
-        persist,
-        dynamic,
-      }),
-    [
-      name,
-      maxSteps,
-      mode,
-      modelEnabled,
-      providerId,
-      savedModelId,
-      toolsMode,
-      toolsSelected,
-      systemEnabled,
-      systemContent,
-      persistEnabled,
-      dynamicEnabled,
-      workplaceEnabled,
-      workplaceAssistantText,
-      customAttachEnabled,
-      customAttachText,
-      skillsEnabled,
-      skillsPrefixText,
-      description,
-      persist,
-      dynamic,
-    ]
-  );
+  const formInput = {
+    name,
+    maxSteps,
+    mode,
+    modelEnabled,
+    providerId,
+    savedModelId: savedModelId,
+    toolsMode,
+    toolsSelected,
+    systemEnabled,
+    systemContent,
+    persistEnabled,
+    dynamicEnabled,
+    workplaceEnabled,
+    workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
+    skillsEnabled,
+    skillsPrefixText: skillsPrefix,
+    description,
+    persist,
+    dynamic,
+  };
+  const snapDeps = [
+    name,
+    maxSteps,
+    mode,
+    modelEnabled,
+    providerId,
+    savedModelId,
+    toolsMode,
+    toolsSelected,
+    systemEnabled,
+    systemContent,
+    persistEnabled,
+    dynamicEnabled,
+    workplaceEnabled,
+    workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
+    skillsEnabled,
+    skillsPrefix,
+    description,
+    persist,
+    dynamic,
+  ];
+  const snapshot = useMemo(() => formSnapshotJson(formInput), snapDeps);
 
   /**
    * 扁平化：一次性加载全服务商 savedModels，供「专属模型」下拉直接选。
@@ -250,45 +222,33 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
    * 调用方会把「列表没加载出来」误判成「本来就没绑定专属模型」，
    * 用户随手改个名字点保存就把原绑定从库里删掉。失败信息随返回值上抛。
    */
-  const loadAllSavedModels = useCallback(
-    async (
-      providerRows: Array<{ id: string; label: string }>,
-    ): Promise<{
-      models: Array<{
-        id: string;
-        vendorModelId: string;
-        displayName: string;
-        providerId: string;
-      }>;
-      failedProviderIds: string[];
-    }> => {
-      const settled = await Promise.all(
-        providerRows.map(async (p) => {
-          const res = await ipcProviderModelsSavedList({ providerId: p.id });
-          if (!res.ok) {
-            return { providerId: p.id, models: [], failed: true as const };
-          }
-          return {
-            providerId: p.id,
-            failed: false as const,
-            models: res.data.map((m) => ({
-              id: m.id,
-              vendorModelId: m.vendorModelId,
-              displayName: m.displayName?.trim() || m.vendorModelId,
-              providerId: p.id,
-            })),
-          };
-        }),
-      );
-      const models = settled.flatMap((r) => r.models);
-      const failedProviderIds = settled
-        .filter((r) => r.failed)
-        .map((r) => r.providerId);
-      setSavedModels(models);
-      return { models, failedProviderIds };
-    },
-    [],
-  );
+  // nm-style: keep-local — 回调承载模型列表装载与失败上抛的状态机，内联回 useCallback 会让调用参数跨行
+  const loadModels = async (providerRows: ProviderOption[]) => {
+    const requests = providerRows.map(async (p) => {
+      const res = await ipcProviderModelsSavedList({ providerId: p.id });
+      if (!res.ok) {
+        return { providerId: p.id, models: [], failed: true as const };
+      }
+      return {
+        providerId: p.id,
+        failed: false as const,
+        models: res.data.map((m) => ({
+          id: m.id,
+          vendorModelId: m.vendorModelId,
+          displayName: m.displayName?.trim() || m.vendorModelId,
+          providerId: p.id,
+        })),
+      };
+    });
+    const settled = await Promise.all(requests);
+    const models = settled.flatMap((r) => r.models);
+    const failedProviderIds = settled
+      .filter((r) => r.failed)
+      .map((r) => r.providerId);
+    setSavedModels(models);
+    return { models, failedProviderIds };
+  };
+  const loadAllSavedModels = useCallback(loadModels, []);
 
   /**
    * applyDefinition 的第二参（模型绑定形态）——刻意不加第三个位置参数：
@@ -304,78 +264,77 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     | { unresolved: true; rawId: string };
 
   /** 把 def 填入全部表单 state 并落 dirty 基线（普通加载与内置 general 共用）。 */
-  const applyDefinition = useCallback(
-    (
-      def: AgentDefinition,
-      pinned: ModelPin,
-    ) => {
-      const promptForm = definitionToForm(def);
-      setName(def.name ?? "");
-      setMode(promptForm.mode);
-      setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-      setSystemEnabled(promptForm.systemEnabled);
-      setSystemContent(promptForm.systemContent);
-      setPersistEnabled(promptForm.persistEnabled);
-      setDynamicEnabled(promptForm.dynamicEnabled);
-      setWorkplaceEnabled(promptForm.workplaceEnabled);
-      setWorkplaceAssistantText(promptForm.workplaceAssistantText);
-      // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
-      setCustomAttachEnabled(promptForm.customAttachEnabled);
-      setCustomAttachText(promptForm.customAttachText);
-      setSkillsEnabled(promptForm.skillsEnabled ?? true);
-      setSkillsPrefixText(
-        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX
-      );
-      setDescription(promptForm.description ?? "");
-      setPersist([...promptForm.persist]);
-      setDynamic([...promptForm.dynamic]);
+  // nm-style: keep-local — 回调承载表单回填与基线落位的状态机，内联回 useCallback 会让调用参数跨行
+  const applyDef = (def: AgentDefinition, pinned: ModelPin) => {
+    const promptForm = definitionToForm(def);
+    setName(def.name ?? "");
+    setMode(promptForm.mode);
+    setMaxSteps(String(def.runtime?.maxSteps ?? 20));
+    setSystemEnabled(promptForm.systemEnabled);
+    setSystemContent(promptForm.systemContent);
+    setPersistEnabled(promptForm.persistEnabled);
+    setDynamicEnabled(promptForm.dynamicEnabled);
+    setWorkplaceEnabled(promptForm.workplaceEnabled);
+    setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+    // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
+    setCustomAttachEnabled(promptForm.customAttachEnabled);
+    setCustomAttachText(promptForm.customAttachText);
+    setSkillsEnabled(promptForm.skillsEnabled ?? true);
+    const prefix = promptForm.skillsPrefixText;
+    setSkillsPrefix(prefix ?? DEFAULT_SKILLS_INDEX_PREFIX);
+    setDescription(promptForm.description ?? "");
+    setPersist([...promptForm.persist]);
+    setDynamic([...promptForm.dynamic]);
 
-      const toolsWire = toolsSelectionFromDefinition(def);
-      setToolsMode(toolsWire.mode);
-      setToolsSelected([...toolsWire.selected]);
+    const toolsWire = toolsSelectionFromDefinition(def);
+    setToolsMode(toolsWire.mode);
+    setToolsSelected([...toolsWire.selected]);
 
-      // 无 model pin（含 general 出厂态）：下拉停在「默认(跟随)」，不预填具体模型。
-      // unresolved（def.model 有值但列表里找不到）：保持「专属模型已开启」，
-      // 下拉停在置顶的不可用项，保存时按未被动过则原样保留 def.model。
-      const unresolvedRawId =
-        pinned != null && "unresolved" in pinned ? pinned.rawId : null;
-      const modelOn = pinned != null;
-      setUnresolvedModelId(unresolvedRawId);
-      setModelTouchedByUser(false);
-      setModelEnabled(modelOn);
-      setProviderId(
-        pinned != null && "providerId" in pinned ? pinned.providerId : "",
-      );
-      setSavedModelId(
-        pinned != null && "modelId" in pinned ? pinned.modelId : "",
-      );
+    // 无 model pin（含 general 出厂态）：下拉停在「默认(跟随)」，不预填具体模型。
+    // unresolved（def.model 有值但列表里找不到）：保持「专属模型已开启」，
+    // 下拉停在置顶的不可用项，保存时按未被动过则原样保留 def.model。
+    let unresolvedRawId: string | null = null;
+    if (pinned != null && "unresolved" in pinned) {
+      unresolvedRawId = pinned.rawId;
+    }
+    const modelOn = pinned != null;
+    setUnresolvedId(unresolvedRawId);
+    setModelTouchedByUser(false);
+    setModelEnabled(modelOn);
+    let modelProviderId = "";
+    if (pinned != null && "providerId" in pinned) {
+      modelProviderId = pinned.providerId;
+    }
+    setProviderId(modelProviderId);
+    let modelId = "";
+    if (pinned != null && "modelId" in pinned) {
+      modelId = pinned.modelId;
+    }
+    setSavedModelId(modelId);
 
-      setSavedBaseline(
-        formSnapshotJson({
-          name: def.name ?? "",
-          maxSteps: String(def.runtime?.maxSteps ?? 20),
-          modelEnabled: modelOn,
-          providerId:
-            pinned != null && "providerId" in pinned ? pinned.providerId : "",
-          savedModelId:
-            pinned != null && "modelId" in pinned ? pinned.modelId : "",
-          toolsMode: toolsWire.mode,
-          toolsSelected: [...toolsWire.selected],
-          ...promptForm,
-          persist: [...promptForm.persist],
-          // 基线侧必须显式带 mode（core2 §9 B 的三处联动之一）：
-          // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
-          // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开任意智能体即显示「未保存」。
-          // 放在 ...promptForm 之后：promptForm.mode 的口径与本行一致，
-          // 显式写出是为了让这条联动在本文件里看得见、不会被后续重构悄悄删掉。
-          mode: def.mode ?? "all",
-        })
-      );
-    },
-    [],
-  );
+    const baseline = {
+      name: def.name ?? "",
+      maxSteps: String(def.runtime?.maxSteps ?? 20),
+      modelEnabled: modelOn,
+      providerId: modelProviderId,
+      savedModelId: modelId,
+      toolsMode: toolsWire.mode,
+      toolsSelected: [...toolsWire.selected],
+      ...promptForm,
+      persist: [...promptForm.persist],
+      // 基线侧必须显式带 mode（core2 §9 B 的三处联动之一）：
+      // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
+      // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开任意智能体即显示「未保存」。
+      // 放在 ...promptForm 之后：promptForm.mode 的口径与本行一致，
+      // 显式写出是为了让这条联动在本文件里看得见、不会被后续重构悄悄删掉。
+      mode: def.mode ?? "all",
+    };
+    setSavedBaseline(formSnapshotJson(baseline));
+  };
+  const applyDefinition = useCallback(applyDef, []);
 
-  const loadAgent = useCallback(async () => {
+  // nm-style: keep-local — 回调承载整份 Agent 配置装载的状态机，内联回 useCallback 会让调用参数跨行
+  const loadAgentImpl = async () => {
     if (!agentId) return;
     setLoading(true);
     setLoadError(null);
@@ -389,10 +348,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         applyDefinition(DEFAULT_SUBAGENT_DEFINITION, null);
         return;
       }
-      const [agentRes, providerRes] = await Promise.all([
+      const reqs = [
         ipcAgentRegistryGet({ agentId }),
         ipcProvidersList(),
-      ]);
+      ] as const;
+      const [agentRes, providerRes] = await Promise.all(reqs);
       if (!agentRes.ok) {
         setLoadError(agentRes.error.message);
         return;
@@ -404,38 +364,37 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       }
       const def = agentRes.data.value as AgentDefinition;
 
-      const providerRows = providerRes.ok
-        ? providerRes.data.map((p) => ({
-            id: p.id,
-            label: p.displayName,
-          }))
-        : [];
+      const providerRows = (providerRes.ok ? providerRes.data : []).map(
+        (p) => ({
+          id: p.id,
+          label: p.displayName,
+        })
+      );
       setProviders(providerRows);
 
       // 扁平化：全量加载 savedModels，下拉直接选模型。
       const { models: allModels } = await loadAllSavedModels(providerRows);
       // 三分支：无绑定 / 解析到 / 解析不到但 def.model 有值（保留原绑定，不当无绑定）。
-      const pin: ModelPin =
-        def.model == null
-          ? null
-          : (() => {
-              const found = allModels.find((m) => m.id === def.model);
-              return found != null
-                ? { providerId: found.providerId, modelId: found.id }
-                : { unresolved: true as const, rawId: def.model };
-            })();
+      let pin: ModelPin = null;
+      if (def.model != null) {
+        const found = allModels.find((m) => m.id === def.model);
+        if (found != null)
+          pin = { providerId: found.providerId, modelId: found.id };
+        else pin = { unresolved: true, rawId: def.model };
+      }
       applyDefinition(def, pin);
     } finally {
       setLoading(false);
     }
-  }, [agentId, loadAllSavedModels, applyDefinition]);
+  };
+  const loadAgentDeps = [agentId, loadAllSavedModels, applyDefinition];
+  const loadAgent = useCallback(loadAgentImpl, loadAgentDeps);
 
-  useEffect(() => {
-    void loadAgent();
-  }, [loadAgent]);
+  useEffect(() => void loadAgent(), [loadAgent]);
 
   const displayName = name.trim() || "未命名 Agent";
 
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     if (
       !agentId ||
@@ -450,6 +409,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, [agentId, invalidHealth, loadError, displayName, nav]);
 
   // 内置 general：标题固定为 sentinel 名（不进 dirty / 保存链路）。
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     if (agentId === GENERAL_AGENT_ID) {
       nav.navState.editingAgentDisplayName = DEFAULT_SUBAGENT_DEFINITION.name;
@@ -464,6 +424,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // ⚠️ 落点必须在下面三个早返回（!agentId / invalidHealth / loadError）之前，
   // 否则违反 hooks 规则。三种早返回态本就不该上报 dirty：那时页面上没有可编辑
   // 表单，标脏只会让「无内容可丢」的页面弹无谓的确认框。
+  // nm-style: keep-local — effect 回调带 deps 且函数体多语句；prettier 强制展开，单行化会改语义
   useEffect(() => {
     if (!agentId || invalidHealth != null || loadError != null) {
       return;
@@ -493,21 +454,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
+  // nm-style: keep-local — 覆盖保存含 busy 状态与重载，内联进按钮会净增 >12 行
   const handleOverwriteWithDefault = async () => {
     const wire = storedWire;
     if (wire == null) {
       return;
     }
-    const preservedName = readAgentNameFromWire(wire, agentId);
-    const def = buildDefaultAgentDefinitionPreservingName(
-      preservedName || agentId
-    );
+    const record = wire as { name?: unknown };
+    const wiredName = typeof record.name === "string" ? record.name.trim() : "";
+    const preservedName = wiredName || agentId;
+    const def = buildDefaultAgentDefinitionPreservingName(preservedName);
     setSaving(true);
     try {
-      const saveRes = await ipcAgentRegistryUpdate({
-        agentId,
-        patch: toAgentDefinitionPatch(def),
-      });
+      const args = { agentId, patch: toAgentDefinitionPatch(def) };
+      const saveRes = await ipcAgentRegistryUpdate(args);
       if (saveRes.ok) {
         toastSettingsSuccess("已用默认模板覆盖并保存");
         await loadAgent();
@@ -577,7 +537,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     );
   }
 
-
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
@@ -597,7 +556,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       customAttachEnabled,
       customAttachText,
       skillsEnabled,
-      skillsPrefixText,
+      skillsPrefixText: skillsPrefix,
       description,
       persist,
       dynamic,
@@ -607,10 +566,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       return;
     }
     const definition: AgentDefinition = { ...built.definition };
-    if (unresolvedModelId != null && !modelTouchedByUser) {
+    if (unresolvedId != null && !modelTouchedByUser) {
       // 原绑定在当前列表里不可用（服务商被删 / 列表加载失败），且用户没动过下拉
       // ⇒ 保留原值，不得因为「下拉显示默认(跟随)」就把绑定从库里删掉。
-      definition.model = unresolvedModelId;
+      definition.model = unresolvedId;
     } else if (modelEnabled && savedModelId) {
       definition.model = savedModelId;
     } else {
@@ -618,10 +577,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
     setSaving(true);
     try {
-      const saveRes = await ipcAgentRegistryUpdate({
-        agentId,
-        patch: toAgentDefinitionPatch(definition),
-      });
+      const args = { agentId, patch: toAgentDefinitionPatch(definition) };
+      const saveRes = await ipcAgentRegistryUpdate(args);
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
         toastSettingsSuccess("已保存智能体配置");
@@ -631,22 +588,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     } finally {
       setSaving(false);
     }
-  };
-
-  const movePersist = (textIndex: number, dir: -1 | 1) => {
-    setPersist((prev) => movePersistTextBlock(prev, textIndex, dir));
-  };
-
-  const moveDynamic = (index: number, dir: -1 | 1) => {
-    setDynamic((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      const tmp = next[target]!;
-      next[target] = next[index]!;
-      next[index] = tmp;
-      return next;
-    });
   };
 
   const promptRegionForm = () => ({
@@ -660,22 +601,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     dynamic,
   });
 
-  /** 删除 Prompt 块前校验：三区全关则放行，否则删除后须至少保留一个有效来源。 */
-  const guardPromptBlockDeletion = (
-    nextForm: ReturnType<typeof promptRegionForm>,
-    proceed: () => void
-  ) => {
-    if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
-      proceed();
-      return;
-    }
-    if (countEffectiveFormPromptSources(nextForm) < 1) {
-      showToast("至少保留一个 Prompt 块");
-      return;
-    }
-    proceed();
-  };
-
+  // nm-style: keep-local — 删除须先校验 Prompt 来源，内联进 JSX 会净增 >12 行
   const deletePersist = (textIndex: number) => {
     const nextPersist = deletePersistTextBlock(persist, textIndex);
     const nextForm = { ...promptRegionForm(), persist: nextPersist };
@@ -690,35 +616,32 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     setPersist(nextPersist);
   };
 
+  // nm-style: keep-local — 删除须先校验 Prompt 来源，内联进 JSX 会净增 >12 行
   const deleteDynamic = (index: number) => {
     const nextDynamic = dynamic.filter((_, i) => i !== index);
-    guardPromptBlockDeletion(
-      { ...promptRegionForm(), dynamic: nextDynamic },
-      () => setDynamic(nextDynamic)
-    );
-  };
-
-  const addPersistTextBlock = () => {
-    setPersist((prev) => [
-      ...prev,
-      createDefaultPersistTextBlock(prev.length),
-    ]);
-  };
-
-  const addDynamicBlock = () => {
-    setDynamic((prev) => [...prev, createDefaultDynamicTextBlock(prev.length)]);
+    const nextForm = { ...promptRegionForm(), dynamic: nextDynamic };
+    if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
+      setDynamic(nextDynamic);
+      return;
+    }
+    if (countEffectiveFormPromptSources(nextForm) < 1) {
+      showToast("至少保留一个 Prompt 块");
+      return;
+    }
+    setDynamic(nextDynamic);
   };
 
   // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
   // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
   // 只看 modelEnabled + savedModelId，core 零改动）。
+  // nm-style: keep-local — 下拉三分支状态机（默认/不可用/具体模型），内联会拆散模型绑定状态
   const handleModelSelect = (id: string) => {
     setModelTouchedByUser(true);
     if (id === "") {
       setModelEnabled(false);
       setSavedModelId("");
       // 用户显式选回「默认(跟随)」= 显式解除绑定，unresolved 提示随之消失。
-      setUnresolvedModelId(null);
+      setUnresolvedId(null);
       return;
     }
     if (id === UNRESOLVED_MODEL_OPTION_VALUE) {
@@ -732,25 +655,28 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     // 「选回默认(跟随)」一样是「我主动改绑了」，留着会让三段式 value 的第一段
     // 把下拉重新拉回哨兵项、提示继续宣称「保存将保留原绑定」——而实际落库的是新模型，
     // 用户在 UI 上看不见自己改绑了（CR-F08 / OQ5 默认案：清掉，不拆双 state）。
-    setUnresolvedModelId(null);
+    setUnresolvedId(null);
     const selected = savedModels.find((m) => m.id === id);
     setProviderId(selected?.providerId ?? "");
   };
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
 
-  const handlePromptTextareaKeyDown = (
-    e: ReactKeyboardEvent<HTMLTextAreaElement>
-  ) => {
+  const handlePromptTextareaKeyDown = (e: TextareaKeyEvent) => {
     handleMultilineSubmitKeyDown(e, () => void save(), { disabled: saving });
   };
 
-  const renderBlockActions = (
-    index: number,
-    total: number,
-    onMove: (i: number, d: -1 | 1) => void,
-    onDelete: (i: number) => void
-  ) => (
+  const renderBlockActions = ({
+    index,
+    total,
+    onMove,
+    onDelete,
+  }: {
+    index: number;
+    total: number;
+    onMove: (i: number, d: -1 | 1) => void;
+    onDelete: (i: number) => void;
+  }) => (
     <div className="config-block-card__actions">
       {index > 0 ? (
         <button
@@ -785,6 +711,25 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       </button>
     </div>
   );
+
+  // nm-style: keep-local — 宏插入含光标快照与 rAF 回填，内联进芯片 JSX 会拆散焦点状态
+  const insertMacro = (index: number, content: string, token: string) => {
+    setInsertIndex(index);
+    const ta = insertIndex === index ? dynamicTextareaRef.current : null;
+    const start = ta?.selectionStart ?? content.length;
+    const end = ta?.selectionEnd ?? content.length;
+    const selection = { start, end };
+    const result = insertTextAtSelection(content, selection, token);
+    const { next, selection: nextSel } = result;
+    setDynamic((prev) =>
+      prev.map((b, i) => (i === index ? { ...b, content: next } : b))
+    );
+    requestAnimationFrame(() => {
+      const el = dynamicTextareaRef.current;
+      el?.focus();
+      el?.setSelectionRange(nextSel.start, nextSel.end);
+    });
+  };
 
   return (
     <SettingsPanel>
@@ -873,25 +818,24 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           >
             <select
               value={
-                unresolvedModelId != null
+                unresolvedId != null
                   ? UNRESOLVED_MODEL_OPTION_VALUE
                   : modelEnabled
-                    ? savedModelId
-                    : ""
+                  ? savedModelId
+                  : ""
               }
               disabled={isBuiltin}
               onChange={(e) => handleModelSelect(e.target.value)}
             >
               <option value="">默认(跟随)</option>
-              {unresolvedModelId != null ? (
+              {unresolvedId != null ? (
                 <option value={UNRESOLVED_MODEL_OPTION_VALUE}>
-                  ⚠ 原绑定模型当前不可用（{unresolvedModelId}）
+                  ⚠ 原绑定模型当前不可用（{unresolvedId}）
                 </option>
               ) : null}
               {savedModels.map((m) => {
-                const providerLabel =
-                  providers.find((p) => p.id === m.providerId)?.label ??
-                  "未知服务商";
+                const found = providers.find((p) => p.id === m.providerId);
+                const providerLabel = found?.label ?? "未知服务商";
                 return (
                   <option key={m.id} value={m.id}>
                     {providerLabel} / {m.displayName}
@@ -900,7 +844,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               })}
             </select>
           </SettingsField>
-          {unresolvedModelId != null ? (
+          {unresolvedId != null ? (
             <p className="settings-hint settings-hint--compact">
               原绑定模型当前不可用（服务商可能已删除或模型列表加载失败），保存将保留原绑定；选择「默认(跟随)」可解除。
             </p>
@@ -1019,16 +963,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 </p>
                 <SettingsField label="索引前缀语">
                   <PromptCollapsibleField
-                    value={skillsPrefixText}
-                    onChange={setSkillsPrefixText}
+                    value={skillsPrefix}
+                    onChange={setSkillsPrefix}
                     disabled={isBuiltin}
                     ariaLabel="索引前缀语"
                   >
                     <textarea
                       rows={2}
-                      value={skillsPrefixText}
+                      value={skillsPrefix}
                       disabled={isBuiltin}
-                      onChange={(e) => setSkillsPrefixText(e.target.value)}
+                      onChange={(e) => setSkillsPrefix(e.target.value)}
                       placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
                     />
                   </PromptCollapsibleField>
@@ -1077,7 +1021,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       type="button"
                       className="settings-link-btn"
                       disabled={isBuiltin}
-                      onClick={() => addPersistTextBlock()}
+                      onClick={() =>
+                        setPersist((prev) => [
+                          ...prev,
+                          createDefaultPersistTextBlock(prev.length),
+                        ])
+                      }
                     >
                       添加
                     </button>
@@ -1101,100 +1050,103 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         (b): b is PersistTextPromptBlock => b.type === "text"
                       )
                       .map((block, index, textBlocks) => (
-                      <div
-                        key={`persist-${index}`}
-                        className="config-block-card config-block-card--prompt"
-                      >
-                        <div className="config-block-card__header">
-                          <span className="config-block-card__badge">
-                            {blockTypeLabel(block.type)}
-                          </span>
-                          <span className="config-block-card__meta">
-                            {block.name}
-                          </span>
-                          {renderBlockActions(
-                            index,
-                            textBlocks.length,
-                            movePersist,
-                            deletePersist
-                          )}
-                        </div>
-                        <div className="config-block-card__body">
-                          <SettingsField label="名称">
-                            <input
-                              value={block.name}
-                              disabled={isBuiltin}
-                              onChange={(e) =>
+                        <div
+                          key={`persist-${index}`}
+                          className="config-block-card config-block-card--prompt"
+                        >
+                          <div className="config-block-card__header">
+                            <span className="config-block-card__badge">
+                              {blockTypeLabel(block.type)}
+                            </span>
+                            <span className="config-block-card__meta">
+                              {block.name}
+                            </span>
+                            {renderBlockActions({
+                              index,
+                              total: textBlocks.length,
+                              onMove: (i, d) =>
                                 setPersist((prev) =>
-                                  mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index
-                                      ? { ...b, name: e.target.value }
-                                      : b
-                                  )
-                                )
-                              }
-                            />
-                          </SettingsField>
-                          <SettingsField label="角色">
-                            <select
-                              value={block.role}
-                              disabled={isBuiltin}
-                              onChange={(e) =>
-                                setPersist((prev) =>
-                                  mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index
-                                      ? {
-                                          ...b,
-                                          role: e.target
-                                            .value as PersistTextPromptBlock["role"],
-                                        }
-                                      : b
-                                  )
-                                )
-                              }
-                            >
-                              {ROLE_OPTIONS.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </SettingsField>
-                          <p className="config-block-card__hint">
-                            {PROMPT_REGION_LABELS.persistRegionHint}
-                          </p>
-                          <SettingsField label="内容">
-                            <PromptCollapsibleField
-                              value={block.content}
-                              onChange={(content) =>
-                                setPersist((prev) =>
-                                  mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index ? { ...b, content } : b
-                                  )
-                                )
-                              }
-                              disabled={isBuiltin}
-                              ariaLabel={`常驻块 ${block.name} 内容`}
-                            >
-                              <textarea
-                                rows={4}
-                                value={block.content}
+                                  movePersistTextBlock(prev, i, d)
+                                ),
+                              onDelete: deletePersist,
+                            })}
+                          </div>
+                          <div className="config-block-card__body">
+                            <SettingsField label="名称">
+                              <input
+                                value={block.name}
                                 disabled={isBuiltin}
                                 onChange={(e) =>
                                   setPersist((prev) =>
                                     mapPersistTextBlocks(prev, (b, i) =>
                                       i === index
-                                        ? { ...b, content: e.target.value }
+                                        ? { ...b, name: e.target.value }
                                         : b
                                     )
                                   )
                                 }
                               />
-                            </PromptCollapsibleField>
-                          </SettingsField>
+                            </SettingsField>
+                            <SettingsField label="角色">
+                              <select
+                                value={block.role}
+                                disabled={isBuiltin}
+                                onChange={(e) =>
+                                  setPersist((prev) =>
+                                    mapPersistTextBlocks(prev, (b, i) =>
+                                      i === index
+                                        ? {
+                                            ...b,
+                                            role: e.target
+                                              .value as PersistTextPromptBlock["role"],
+                                          }
+                                        : b
+                                    )
+                                  )
+                                }
+                              >
+                                {ROLE_OPTIONS.map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </SettingsField>
+                            <p className="config-block-card__hint">
+                              {PROMPT_REGION_LABELS.persistRegionHint}
+                            </p>
+                            <SettingsField label="内容">
+                              <PromptCollapsibleField
+                                value={block.content}
+                                onChange={(content) =>
+                                  setPersist((prev) =>
+                                    mapPersistTextBlocks(prev, (b, i) =>
+                                      i === index ? { ...b, content } : b
+                                    )
+                                  )
+                                }
+                                disabled={isBuiltin}
+                                ariaLabel={`常驻块 ${block.name} 内容`}
+                              >
+                                <textarea
+                                  rows={4}
+                                  value={block.content}
+                                  disabled={isBuiltin}
+                                  onChange={(e) =>
+                                    setPersist((prev) =>
+                                      mapPersistTextBlocks(prev, (b, i) =>
+                                        i === index
+                                          ? { ...b, content: e.target.value }
+                                          : b
+                                      )
+                                    )
+                                  }
+                                />
+                              </PromptCollapsibleField>
+                            </SettingsField>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </>
               ) : (
@@ -1276,7 +1228,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       type="button"
                       className="settings-link-btn"
                       disabled={isBuiltin}
-                      onClick={() => addDynamicBlock()}
+                      onClick={() =>
+                        setDynamic((prev) => [
+                          ...prev,
+                          createDefaultDynamicTextBlock(prev.length),
+                        ])
+                      }
                     >
                       添加
                     </button>
@@ -1305,12 +1262,22 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           <span className="config-block-card__meta">
                             {block.name}
                           </span>
-                          {renderBlockActions(
+                          {renderBlockActions({
                             index,
-                            dynamic.length,
-                            moveDynamic,
-                            deleteDynamic
-                          )}
+                            total: dynamic.length,
+                            onMove: (i, d) =>
+                              setDynamic((prev) => {
+                                const next = [...prev];
+                                const target = i + d;
+                                if (target < 0 || target >= next.length)
+                                  return prev;
+                                const tmp = next[target]!;
+                                next[target] = next[i]!;
+                                next[i] = tmp;
+                                return next;
+                              }),
+                            onDelete: deleteDynamic,
+                          })}
                         </div>
                         <div className="config-block-card__body">
                           <SettingsField label="名称">
@@ -1368,14 +1335,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             >
                               <PromptMacroTextarea
                                 textareaRef={
-                                  dynamicInsertIndex === index
+                                  insertIndex === index
                                     ? dynamicTextareaRef
                                     : inactiveDynamicTextareaRef
                                 }
                                 rows={4}
                                 value={block.content}
                                 disabled={isBuiltin}
-                                onFocus={() => setDynamicInsertIndex(index)}
+                                onFocus={() => setInsertIndex(index)}
                                 onKeyDown={handlePromptTextareaKeyDown}
                                 onChange={(content) =>
                                   setDynamic((prev) =>
@@ -1397,48 +1364,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 type="button"
                                 className="config-dep-chip"
                                 disabled={isBuiltin}
-                                onClick={() => {
-                                  setDynamicInsertIndex(index);
-                                  const ta =
-                                    dynamicInsertIndex === index
-                                      ? dynamicTextareaRef.current
-                                      : null;
-                                  const selection =
-                                    ta != null
-                                      ? {
-                                          start:
-                                            ta.selectionStart ??
-                                            block.content.length,
-                                          end:
-                                            ta.selectionEnd ??
-                                            block.content.length,
-                                        }
-                                      : {
-                                          start: block.content.length,
-                                          end: block.content.length,
-                                        };
-                                  const { next, selection: nextSel } =
-                                    insertTextAtSelection(
-                                      block.content,
-                                      selection,
-                                      macro.token
-                                    );
-                                  setDynamic((prev) =>
-                                    prev.map((b, i) =>
-                                      i === index ? { ...b, content: next } : b
-                                    )
-                                  );
-                                  requestAnimationFrame(() => {
-                                    const el = dynamicTextareaRef.current;
-                                    if (el != null) {
-                                      el.focus();
-                                      el.setSelectionRange(
-                                        nextSel.start,
-                                        nextSel.end
-                                      );
-                                    }
-                                  });
-                                }}
+                                onClick={() =>
+                                  insertMacro(index, block.content, macro.token)
+                                }
                               >
                                 {macro.label}
                               </button>

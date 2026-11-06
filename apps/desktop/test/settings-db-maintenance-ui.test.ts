@@ -30,18 +30,18 @@ describe("SettingsViews 数据清理 UI（T-UID1）", () => {
     assert.match(source, /title="数据清理"/);
     assert.match(
       source,
-      /当前库体积 \$\{dbStats \? formatStorageBytes\(dbStats\.fileBytes\) : "—"\}/,
+      /当前库体积 \$\{\s*dbStats \? formatStorageBytes\(dbStats\.fileBytes\) : "—"\s*\}/,
     );
     assert.match(
       source,
-      /可回收约 \$\{dbStats \? formatStorageBytes\(dbStats\.reclaimableBytes\) : "—"\}/,
+      /可回收约 \$\{\s*dbStats \? formatStorageBytes\(dbStats\.reclaimableBytes\) : "—"\s*\}/,
     );
   });
 
   it("清理按钮挂 ConfirmModal 二次确认", () => {
     assert.match(
       source,
-      /onClick=\{\(\) => setConfirmMaintenance\(true\)\}>\s*\n\s*清理/,
+      /onClick=\{\(\) => setConfirmMaintenance\(true\)\}\s*\n\s*>\s*\n\s*清理/,
     );
     assert.match(source, /open=\{confirmMaintenance\}/);
     assert.match(source, /title="确认清理"/);
@@ -53,7 +53,11 @@ describe("SettingsViews 数据清理 UI（T-UID1）", () => {
   });
 
   it("controlsDisabled 纳入 maintenanceBusy", () => {
-    assert.match(source, /status\?\.maintenanceBusy === true/);
+    assert.match(
+      source,
+      /const busyFlags = \[\s*status\?\.syncBusy,\s*status\?\.agentActive,\s*status\?\.maintenanceBusy,\s*\];/,
+    );
+    assert.match(source, /const controlsDisabled = busy \|\| busyFlags\.some/);
   });
 
   it("执行前置 busy：setBusy(true) 先于 invoke ipcDbMaintenance", () => {

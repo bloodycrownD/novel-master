@@ -4,9 +4,7 @@
 import type { StoredConfigHealth } from "@novel-master/core/stored-config-validity";
 import type { StoredConfigHealthDto } from "../../../../shared/ipc-types.js";
 
-export function toStoredConfigHealthDto<TValue extends object>(
-  health: StoredConfigHealth<TValue>,
-): StoredConfigHealthDto<TValue> {
+export function toStoredConfigHealthDto<TValue extends object>(health: StoredConfigHealth<TValue>): StoredConfigHealthDto<TValue> {
   if (health.status === "valid") {
     return { status: "valid", value: health.value };
   }
