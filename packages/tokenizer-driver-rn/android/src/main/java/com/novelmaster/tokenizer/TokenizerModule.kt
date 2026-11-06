@@ -53,7 +53,7 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
   override fun getName(): String = "NovelMasterTokenizer"
 
   /**
-   * [vendorModelId] 双语义（token-count-perf-r2）：WEB/SP 家族下沿用原状
+   * [vendorModelId] 双语义（token-count-perf-r2）：WEB 家族下沿用原状
    * （仅诊断信息，不参与路由）；`family == "tiktoken"` 时承载 JS 侧已解析的
    * **编码名**（`cl100k_base` / `o200k_base`），Engine 据此选词表。复用既有
    * 第三参是刻意的——RN 桥两条路径都做 arity 硬校验，加参/新方法都有兼容矩阵

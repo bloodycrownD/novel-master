@@ -3,8 +3,8 @@ package com.novelmaster.tokenizer
 /**
  * Asset paths under `assets/tokenizers/`。
  *
- * 与 core `tokenizerAssetPaths` 的**已知分叉**（sp-to-hf，2026-11-06）：llama /
- * mistral / gemma 在本端指向转换后的 `tokenizer.json`，core 侧仍指 `.model`——
+ * 与 node 驱动 `src/logic/tokenizer-asset-paths.ts` 的**已知分叉**（sp-to-hf，2026-11-06）：llama /
+ * mistral / gemma 在本端指向转换后的 `tokenizer.json`，node 侧仍指 `.model`——
  * Node 驱动有 `@agnai/sentencepiece-js`（WASM）能真跑 SP，Android 没有
  * SentencePiece native，只能借已有的 HF native 路径（能力位见
  * `TokenizerCapabilities.kt`）。tiktoken 两表（cl100k/o200k）为本目录独有。

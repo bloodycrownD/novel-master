@@ -46,7 +46,7 @@ internal class TokenizerEngine(private val context: Context) {
     var jniMs: Long = -1
   }
 
-  // 缓存容量 6（token-count-perf-r2 由 4→6）：常驻条目现为 11 个——WEB 家族 8 个
+  // 缓存容量 6（token-count-perf-r2 由 4→6）：常驻条目现为 13 个——WEB 家族 8 个
   // + tiktoken 两表（cl100k/o200k）+ SP 转 HF 的 gemma/llama/mistral（2026-11-06
   // 起后者也走 webCache）。6 槽只兜最常用的 6 个家族，跨家族频繁切换仍会 LRU 互踢、
   // 每踢一次重付秒级词表加载（gemma.json 13.7MB / 58 万 merges，解析比 WEB 家族更重）。
@@ -121,7 +121,7 @@ internal class TokenizerEngine(private val context: Context) {
       loadWebTokenizer(spec, timings)
         ?: throw IllegalStateException("家族 $family 的裸编码词表缺失或加载失败: ${spec.primary}")
     timings.vocabLoadMs = elapsedMs(loadStartNs)
-    // 检查点：词表已就绪、encode 还没开始（与 WEB/SP 家族同构）。
+    // 检查点：词表已就绪、encode 还没开始（与 WEB 家族同构）。
     if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
     val encodeStartNs = System.nanoTime()
     return try {
