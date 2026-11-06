@@ -266,9 +266,7 @@ export function createIncrementalTokenCounter(
         // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
         // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
         // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
-        console.warn(
-          '[novel-master/incremental-token-counter] 尾窗不可编码，保持上一次读值',
-        );
+        console.warn('[nm/incremental] 尾窗不可编码，保持上一次读值');
       }
     }
     return tailTokens;
@@ -292,9 +290,7 @@ export function createIncrementalTokenCounter(
       unencodableCharsValue += piece.length;
       if (!warnedCommitFailure) {
         warnedCommitFailure = true;
-        console.warn(
-          `[novel-master/incremental-token-counter] 不可编码 ${piece.length} 字符，按 1:1 兜底计入`,
-        );
+        console.warn(`[nm/incremental] 不可编码 ${piece.length} 字符，按 1:1 兜底计入`);
       }
     }
     // 尾窗照常推进（切点在失败时同样有效）：固化路径的意义就是给内存封顶，

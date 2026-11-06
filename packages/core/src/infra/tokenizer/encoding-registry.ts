@@ -109,10 +109,7 @@ export function getEncoding<T extends EncodingHandle>(
   try {
     encoding = (encodingFactory ? encodingFactory(encodingName) : build()) as T;
   } catch (err) {
-    console.warn(
-      `[novel-master/core/tokenizer-registry] tiktoken encoding init failed (${key})`,
-      err,
-    );
+    console.warn(`[nm/registry] tiktoken encoding init failed (${key})`, err);
     encoding = null;
     failedAt = clock();
   }

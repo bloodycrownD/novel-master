@@ -184,10 +184,7 @@ export async function readSessionApiPromptTokenEntry(
     );
   } catch (error) {
     // 展示/判定派生值：库异常按 miss 处理，让读口回退本地估算，不打断 run。
-    console.warn(
-      `[novel-master/prompt-token-store] prompt token KKV 读取失败（session=${sessionId}），按 miss 处理`,
-      error
-    );
+    console.warn(`[nm/token-store] KKV 读取失败（session=${sessionId}）`, error);
     return null;
   }
 
@@ -232,10 +229,7 @@ export function writeSessionApiPromptTokenEntry(
       serializeSessionApiPromptTokenEntry(entry)
     )
     .catch((error) => {
-      console.warn(
-        `[novel-master/prompt-token-store] prompt token KKV 写入失败（session=${sessionId}）`,
-        error
-      );
+      console.warn(`[nm/token-store] KKV 写入失败（session=${sessionId}）`, error);
     });
 }
 
@@ -269,9 +263,6 @@ export async function invalidateSessionApiPromptTokenEntry(
       PROMPT_TOKENS_LAST_USAGE_KEY
     );
   } catch (error) {
-    console.warn(
-      `[novel-master/prompt-token-store] prompt token KKV 删除失败（session=${sessionId}）`,
-      error
-    );
+    console.warn(`[nm/token-store] KKV 删除失败（session=${sessionId}）`, error);
   }
 }

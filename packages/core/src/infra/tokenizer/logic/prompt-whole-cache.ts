@@ -284,10 +284,7 @@ export const promptWholeCache = {
         PROMPT_WHOLE_CACHE_KEY
       );
     } catch (error) {
-      console.warn(
-        "[novel-master/prompt-whole-cache] promptWhole KKV 读取失败，按无种子处理",
-        error
-      );
+      console.warn("[nm/whole-cache] promptWhole KKV 读取失败，按无种子处理", error);
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
       seededSessions.delete(sessionId);
       return 0;
@@ -356,10 +353,7 @@ export const promptWholeCache = {
     void sessionKkv
       .set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload)
       .catch((error) => {
-        console.warn(
-          "[novel-master/prompt-whole-cache] promptWhole KKV 写入失败",
-          error
-        );
+        console.warn("[nm/whole-cache] promptWhole KKV 写入失败", error);
       });
   },
 

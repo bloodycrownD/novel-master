@@ -366,10 +366,7 @@ export const tokenChunkCache = {
       void sessionKkv
         .set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload)
         .catch((error) => {
-          console.warn(
-            `[novel-master/token-chunk-cache] token_chunks KKV 写入失败（session=${sessionId}）`,
-            error
-          );
+          console.warn(`[nm/chunk] KKV 写入失败（session=${sessionId}）`, error);
         });
     }
   },
@@ -413,10 +410,7 @@ export const tokenChunkCache = {
         TOKEN_CHUNKS_CACHE_KEY
       );
     } catch (error) {
-      console.warn(
-        `[novel-master/token-chunk-cache] token_chunks KKV 读取失败（session=${sessionId}），按无种子处理`,
-        error
-      );
+      console.warn(`[nm/chunk] KKV 读取失败（session=${sessionId}），按无种子处理`, error);
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。
       seededSessions.delete(sessionId);
       return 0;
