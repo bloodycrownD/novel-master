@@ -42,6 +42,7 @@ export const ErrorCodes = {
   AGENT_NOT_FOUND: {code: 101007, desc: "agent not found"},
   AGENT_IN_USE: {code: 101008, desc: "agent in use"},
   AGENT_DUPLICATE_NAME: {code: 101009, desc: "duplicate agent name"},
+  AGENT_BUILTIN_PROTECTED: {code: 101010, desc: "builtin agent protected"},
 
   // 102 VFS 001-999：vfs 路径、zip、content-store 与端口失败。
   VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found"},
@@ -64,6 +65,7 @@ export const ErrorCodes = {
   VFS_CONTENT_BLOB_MISSING: {code: 102018, desc: "vfs content blob missing"},
   VFS_INVARIANT_VIOLATION: {code: 102020, desc: "vfs invariant violation"},
   VFS_RESTORE_FAILED: {code: 102021, desc: "vfs mutating path restore failed"},
+  VFS_OPERATION_UNSUPPORTED: {code: 102022, desc: "vfs operation unsupported by this service"},
 
   // 104 TOOL 001-999：工具入参（phase 2 logic）与搜索配置/引擎失败。
   TOOL_INVALID_ARGUMENT: {code: 104001, desc: "invalid tool argument"},
@@ -104,6 +106,14 @@ export const ErrorCodes = {
   // 109 CONFIG 001-499 + PREFERENCES 500-999。
   PREFERENCES_INVALID_VALUE: {code: 109500, desc: "invalid preference value"},
 
+  // 110 INFRA 001-999：组合根启动前置条件与平台能力检查。
+  INFRA_BASELINE_TOO_OLD: {code: 110001, desc: "database baseline too old"},
+  INFRA_UNSUPPORTED_PLATFORM: {code: 110002, desc: "unsupported platform for sksp driver"},
+  INFRA_INVARIANT_VIOLATION: {code: 110003, desc: "internal invariant violated (assembly/programming error)"},
+
+  // 114 FORMAT 001-999：外部 wire 版本串格式校验。
+  FORMAT_INVALID_VERSION: {code: 114001, desc: "invalid version string"},
+
   // 115 KKV 001-999。
   KKV_NOT_FOUND: {code: 115001, desc: "kkv key not found"},
   KKV_CONFLICT: {code: 115002, desc: "kkv conflict"},
@@ -113,6 +123,7 @@ export const ErrorCodes = {
 
   // 116 SESSION_FS 001-999。
   SESSION_FS_RESTORE_REVISION_MISSING: {code: 116001, desc: "restore revision missing"},
+  SESSION_FS_INVALID_ROLLBACK_OPTIONS: {code: 116002, desc: "invalid rollback option combination"},
 
   // 117 PROMPT 001-999：布局校验与动态宏校验。
   PROMPT_INVALID_LAYOUT: {code: 117001, desc: "invalid prompt layout"},
@@ -124,6 +135,7 @@ export const ErrorCodes = {
   WORKPLACE_INVALID_FILE_CACHE: {code: 121002, desc: "invalid workplace file cache payload"},
   WORKPLACE_MATERIALIZE_FAILED: {code: 121003, desc: "workplace materialize failed"},
   WORKPLACE_INVALID_RULE_ROW: {code: 121004, desc: "invalid workplace rule row"},
+  WORKPLACE_ROOT_RULE_LOCKED: {code: 121005, desc: "root directory rules cannot be disabled"},
 } as const satisfies Record<string, {readonly code: number; readonly desc: string}>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

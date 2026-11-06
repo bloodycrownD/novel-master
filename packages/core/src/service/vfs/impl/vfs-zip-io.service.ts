@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { throwLegacyVfs, throwLegacyVfsZip } from "./legacy-vfs-error.js";
+import { AppError } from "@/errors/app-error.js";
 import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
@@ -56,7 +57,7 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   }
   const withSlash = `${base}/`;
   if (!fullPath.startsWith(withSlash)) {
-    throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
+    throw new AppError("VFS_INVARIANT_VIOLATION", `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
   }
   return fullPath.slice(withSlash.length);
 }
@@ -234,6 +235,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           const revisionTx = new SqliteVfsRevisionRepository(tx);
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
+              // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);

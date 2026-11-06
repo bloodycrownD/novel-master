@@ -6,17 +6,18 @@
  * @module common/release
  */
 
+import {AppError} from "@/errors/app-error.js";
 import {truncateText} from "./text.js";
 
 function parseParts(version: string): [number, number, number] {
     const parts = version.split(".");
     if (parts.length !== 3) {
-        throw new Error(`无效的版本号: ${version}`);
+        throw new AppError("FORMAT_INVALID_VERSION", `无效的版本号: ${version}`);
     }
     const nums = parts.map((p) => {
         const n = Number.parseInt(p, 10);
         if (!Number.isFinite(n) || n < 0) {
-            throw new Error(`无效的版本号: ${version}`);
+            throw new AppError("FORMAT_INVALID_VERSION", `无效的版本号: ${version}`);
         }
         return n;
     });

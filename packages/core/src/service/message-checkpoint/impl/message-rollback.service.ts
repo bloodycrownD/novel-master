@@ -24,6 +24,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { AppError } from "@/errors/app-error.js";
 import { sessionFsRollbackMessageNotFound, sessionFsRollbackMessageSessionMismatch, sessionFsRollbackRevisionBackfillRequired, sessionFsRollbackVfsRestoreFailed, sessionFsRollbackUndoSendEmptyTarget, sessionFsRollbackConflict, sessionFsRollbackTailDrift, isSessionFsError } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -107,7 +108,7 @@ function formatDegradableMessage(cause: unknown): string {
 
 function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
   if (options?.skipVfsReconcile && options?.revisionHeadBackfill) {
-    throw new Error("skipVfsReconcile 与 revisionHeadBackfill 不能同时指定");
+    throw new AppError("SESSION_FS_INVALID_ROLLBACK_OPTIONS", "skipVfsReconcile 与 revisionHeadBackfill 不能同时指定");
   }
 }
 

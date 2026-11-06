@@ -15,6 +15,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
@@ -404,7 +405,7 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   const applied = await listAppliedSchemaMigrationIds(tx);
 
   if (await hasVfsEntryWithoutContentHash(tx)) {
-    throw new Error(BASELINE_TOO_OLD_MESSAGE);
+    throw new AppError("INFRA_BASELINE_TOO_OLD", BASELINE_TOO_OLD_MESSAGE);
   }
 
   const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
@@ -413,7 +414,7 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   }
 
   if (await detectLegacyShape(tx)) {
-    throw new Error(BASELINE_TOO_OLD_MESSAGE);
+    throw new AppError("INFRA_BASELINE_TOO_OLD", BASELINE_TOO_OLD_MESSAGE);
   }
 }
 

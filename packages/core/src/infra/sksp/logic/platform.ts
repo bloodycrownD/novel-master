@@ -9,6 +9,8 @@
  * @module infra/sksp/logic/platform
  */
 
+import {AppError} from "@/errors/app-error.js";
+
 /** 平台对应的 SKSP driver 名称。 */
 export type PlatformSkspName = "windows" | "macos" | "linux";
 
@@ -33,8 +35,6 @@ export function resolveSkspNameFromPlatform(
     case "linux":
       return "linux";
     default:
-      throw new Error(
-        `Unsupported SKSP platform: ${platform}（暂无对应的 driver）`
-      );
+      throw new AppError("INFRA_UNSUPPORTED_PLATFORM", `Unsupported SKSP platform: ${platform}（暂无对应的 driver）`);
   }
 }

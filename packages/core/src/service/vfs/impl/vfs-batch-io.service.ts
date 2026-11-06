@@ -5,6 +5,7 @@
  */
 
 import { throwLegacyVfs } from "./legacy-vfs-error.js";
+import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { joinTargetLogicalPath, normalizeBatchRelativePath, relativePathUnderAnchor } from "@/domain/vfs/logic/vfs-batch-path.js";
@@ -56,7 +57,7 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
     return;
   }
   if (existing.entryKind === "file") {
-    throw new Error(`path is a file, not a directory: ${logical}`);
+    throw new AppError("VFS_NOT_A_DIRECTORY", `path is a file, not a directory: ${logical}`, { path: logical });
   }
 }
 
@@ -300,6 +301,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
               if (!logicalResult.ok) throwLegacyVfs(logicalResult.error);
               const logical = logicalResult.value;
               if (this.testHook?.throwOnWriteLogical === logical) {
+                // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
                 throw new Error("test batch ingest failure");
               }
               await writeOrUpdateFile(repoTx, revisionTx, scope, logical, write.content);

@@ -201,6 +201,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           const revisionTx = new SqliteVfsRevisionRepository(tx);
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
+              // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);

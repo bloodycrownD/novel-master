@@ -115,11 +115,11 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     if (raw === undefined) {
       return defaultValue;
     }
-    try {
-      return parseBoolean(raw);
-    } catch {
+    const parsed = parseBoolean(raw);
+    if (!parsed.ok) {
       throw preferencesInvalidValue(key, "boolean", raw);
     }
+    return parsed.value;
   }
 
   private async getRaw(key: string): Promise<string | undefined> {

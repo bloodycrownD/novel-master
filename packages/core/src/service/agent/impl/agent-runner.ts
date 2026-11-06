@@ -27,7 +27,7 @@ import {
 } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ProviderError } from "@/errors/provider-errors.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
@@ -539,9 +539,8 @@ export class DefaultAgentRunner implements AgentRunner {
             const messages = this.deps.messages;
             const messageTranscriptEffects = this.deps.messageTranscriptEffects;
             if (messages == null || messageTranscriptEffects == null) {
-              throw new Error(
-                "messages and messageTranscriptEffects are required when compactionConditions are configured"
-              );
+              const missingDeps = "compaction requires messages + transcript effects";
+              throw new AppError("INFRA_INVARIANT_VIOLATION", missingDeps);
             }
             const hideStartDepth =
               await this.deps.compactionConditions!.getHideStartDepth();

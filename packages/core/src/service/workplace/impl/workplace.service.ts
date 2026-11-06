@@ -4,6 +4,7 @@
  * @module service/workplace/impl/workplace.service
  */
 
+import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
   assertLogicalPathAllowed,
@@ -119,7 +120,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
       input.ruleEnabled === false &&
       isWorkplaceRootPath(this.scope, logicalPath)
     ) {
-      throw new Error("cannot disable rules on root directory");
+      throw new AppError("WORKPLACE_ROOT_RULE_LOCKED", "cannot disable rules on root directory");
     }
     const existing = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),

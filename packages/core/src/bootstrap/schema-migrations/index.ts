@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 import {
@@ -64,7 +65,7 @@ export async function runPendingSchemaMigrations(
   const seen = new Set<string>();
   for (const migration of SCHEMA_MIGRATIONS) {
     if (seen.has(migration.id)) {
-      throw new Error(`重复的 schema migration id: ${migration.id}`);
+      throw new AppError("INFRA_INVARIANT_VIOLATION", `重复的 schema migration id: ${migration.id}`);
     }
     seen.add(migration.id);
 

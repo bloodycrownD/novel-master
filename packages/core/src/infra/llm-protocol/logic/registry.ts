@@ -7,6 +7,7 @@
  * @module infra/llm-protocol/logic/registry
  */
 
+import { AppError } from "@/errors/app-error.js";
 import type {
   FetchFn,
   LlmProtocolAdapter,
@@ -47,7 +48,7 @@ export function getProtocolAdapter(
   ensureDefaults(fetchFn);
   const adapter = adapters.get(kind);
   if (!adapter) {
-    throw new Error(`No LLM protocol adapter for: ${kind}`);
+    throw new AppError("INFRA_INVARIANT_VIOLATION", `No LLM protocol adapter for: ${kind}`);
   }
   return adapter;
 }

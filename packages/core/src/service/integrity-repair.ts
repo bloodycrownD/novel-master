@@ -29,6 +29,8 @@
  * @module service/integrity-repair
  */
 
+import { AppError } from "@/errors/app-error.js";
+
 /** 兜底种类：修复 / 重命名引用迁移 / 补缺。 */
 export type IntegrityRepairKind = "repair" | "rename" | "backfill";
 
@@ -105,11 +107,10 @@ export class IntegrityRepairRegistry {
         } 缺少 detect/repair`
       );
     }
-    if (this.operations.has(op.name)) {
-      throw new Error(
-        `IntegrityRepairRegistry.register: 操作 ${op.name} 已登记，不允许覆盖`
-      );
-    }
+      if (this.operations.has(op.name)) {
+        const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
+        throw new AppError("INFRA_INVARIANT_VIOLATION", duplicated);
+      }
     this.operations.set(op.name, op);
     return this;
   }
