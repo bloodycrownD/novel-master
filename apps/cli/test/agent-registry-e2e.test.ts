@@ -161,8 +161,9 @@ describe("agent registry e2e", () => {
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
       assert.equal(lines.length, 1, `stdout 应恰 1 行 project UUID: ${proj.stdout}`);
-      // 迁移日志改走 stderr 后仍应可见（内容一字未改）
-      assert.match(proj.stderr, /\[nm-boot\] migration run:/);
+      // SCHEMA_MIGRATIONS 第五轮退役后为空，新库不再产生迁移日志；留一条反向守卫：
+      // 旧 `[nm-boot]` 前缀不该以任何形态回到 stderr。
+      assert.doesNotMatch(proj.stderr, /\[nm-boot\]/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

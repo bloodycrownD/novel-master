@@ -38,6 +38,8 @@ import { runExportZip } from "./vfs/commands/export-zip.js";
 import { runImportCharacterCard } from "./vfs/commands/import-character-card.js";
 import { runImportZip } from "./vfs/commands/import-zip.js";
 import { extractDbPath, parseCliArgs } from "./vfs/parse-args.js";
+import { installCliLogSink } from "./log/cli-log-sink.js";
+import { extractLogFilePath } from "./log/parse-log-file-arg.js";
 
 const GLOBAL_VFS_COMMANDS: Record<
   string,
@@ -95,8 +97,12 @@ async function runVfs(argv: string[]): Promise<number> {
   }
 }
 
+// nm-style: keep-public — CLI 进程入口（`src/index.ts` 唯一调用）；命令分发不是可内联的局部 helper。
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
-  const top = argv[0];
+  // `--log-file` 是全局参数：先摘掉再分发，子命令的参数解析不该看到它。
+  const { logFile, rest: args } = extractLogFilePath(argv);
+  installCliLogSink({ logFile });
+  const top = args[0];
 
   if (top === "config" || top === "kkv") {
     console.error(
@@ -107,7 +113,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
 
   if (top === "vfs") {
     try {
-      return await runVfs(argv.slice(1));
+      return await runVfs(args.slice(1));
     } catch (error) {
       console.error(formatCliError(error));
       return exitCodeForError(error);
@@ -126,10 +132,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "compaction-conditions" ||
     top === "sort-rule"
   ) {
-    const rt = await createNovelMasterRuntime(argv);
+    const rt = await createNovelMasterRuntime(args);
     try {
-      const sub = argv[1];
-      const rest = argv.slice(2);
+      const sub = args[1];
+      const rest = args.slice(2);
       if (sub == null) {
         console.error(`Usage: novel-master ${top} <subcommand> ...`);
         return EXIT_USAGE;
@@ -186,7 +192,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     }
   }
 
-  const name = argv[0] ?? "world";
+  const name = args[0] ?? "world";
   console.log(`Hello, ${name} from ${PACKAGE_NAME}`);
   return 0;
 }
