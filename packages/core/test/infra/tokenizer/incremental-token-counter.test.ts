@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createIncrementalTokenCounter } from "../../../src/infra/tokenizer/logic/incremental-token-counter.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 
 /** 注入依赖类型（模块不再导出，从工厂签名推导）。 */
 type IncrementalTokenCounterDeps = Parameters<typeof createIncrementalTokenCounter>[0];
@@ -35,7 +36,7 @@ function makeCounter(
 }
 
 /**
- * 捕获 `console.warn`（失败降级路径的可观测落点，见 B-1 改法 #2/#3）。
+ * 捕获 warn 日志（失败降级路径的可观测落点，见 B-1 改法 #2/#3）。
  *
  * 返回 `[读到的文案数组, 还原函数]`——用 try/finally 保证还原，避免污染同进程
  * 的其它用例。
@@ -45,15 +46,16 @@ function captureWarnings(): {
   restore(): void;
 } {
   const warnings: string[] = [];
-  const original = console.warn;
-  console.warn = (...args: unknown[]): void => {
-    warnings.push(args.map(arg => String(arg)).join(' '));
-  };
+  setDefaultLogSink({
+    write(record) {
+      if (record.level === "warn") {
+        warnings.push(record.message);
+      }
+    },
+  });
   return {
     warnings,
-    restore(): void {
-      console.warn = original;
-    },
+    restore: restoreDefaultLogSink,
   };
 }
 

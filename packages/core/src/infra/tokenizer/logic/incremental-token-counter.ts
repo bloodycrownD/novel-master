@@ -54,6 +54,10 @@
  * @module infra/tokenizer/logic/incremental-token-counter
  */
 
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("tokenizer.incremental");
+
 /** 注入依赖：`encode` 由宿主绑定（真 tiktoken 或测试假实现）。 */
 interface IncrementalTokenCounterDeps {
   /** 把一段文本编码为 token 数；抛错表示这段文本不可编码（调用方吞掉）。 */
@@ -247,7 +251,7 @@ export function createIncrementalTokenCounter(deps: IncrementalTokenCounterDeps)
       unencodableCharsValue += piece.length;
       if (!warnedCommitFailure) {
         warnedCommitFailure = true;
-        console.warn(`[nm/incremental] 不可编码 ${piece.length} 字符，按 1:1 兜底计入`);
+        log.warn(`不可编码 ${piece.length} 字符，按 1:1 兜底计入`);
       }
     }
     // 尾窗照常推进（切点在失败时同样有效）：固化路径的意义就是给内存封顶，
@@ -291,7 +295,7 @@ export function createIncrementalTokenCounter(deps: IncrementalTokenCounterDeps)
           // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
           // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
           // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
-          console.warn('[nm/incremental] 尾窗不可编码，保持上一次读值');
+          log.warn('尾窗不可编码，保持上一次读值');
         }
       }
       const current = tailTokens;

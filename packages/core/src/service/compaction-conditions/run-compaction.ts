@@ -35,6 +35,9 @@ import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/se
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("compaction.run");
 
 /** 压缩触发来源：手动（用户点「压缩上下文」）vs 自动（agent 回合中段条件压缩）。 */
 type CompactionTrigger = "manual" | "auto";
@@ -115,7 +118,7 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
       try {
         await deps.sessionKkv.clearDomain(params.sessionId, domain);
       } catch (error) {
-        console.warn(`runCompaction: 手动压缩后 best-effort 清空 ${domain} 失败（session=${params.sessionId}）`, error);
+        log.warn(`手动压缩后 best-effort 清空 ${domain} 失败（session=${params.sessionId}）`, { error });
       }
     }
   }

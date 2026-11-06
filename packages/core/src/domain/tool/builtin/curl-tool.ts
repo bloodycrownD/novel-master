@@ -36,6 +36,9 @@ import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { sinkOversizedOutput, type OversizedSinkResult } from "./overflow-sink.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("tool.curl");
 
 /** 支持的 HTTP 方法（对齐 curl 常用子集，method 入参枚举来源）。 */
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
@@ -379,7 +382,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           const sinkOptions = { tool: "curl", content: text, contentType };
           sink = await sinkOversizedOutput(ctx, sinkOptions);
         } catch (error) {
-          console.debug("[curl] 超预算落盘失败，降级字节截断:", error);
+          log.debug("超预算落盘失败，降级字节截断", { error });
         }
         if (sink != null) {
           return {

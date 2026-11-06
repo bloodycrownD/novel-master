@@ -24,6 +24,8 @@ import {
 import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
 import { LlmStreamTimeoutError } from "../../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
 
@@ -523,7 +525,8 @@ describe("llm-stream-timeout 观测打点", () => {
 
     const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean };
     g.__NM_DEBUG_LLM_FETCH__ = true;
-    const logMock = mock.method(console, "log", () => {});
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
 
     try {
       const promise = postSse(
@@ -547,11 +550,11 @@ describe("llm-stream-timeout 观测打点", () => {
         (err: unknown) => err instanceof LlmStreamTimeoutError,
       );
 
-      const timeoutCall = logMock.mock.calls.find(
-        (call) => call.arguments[1] === "stream timeout",
+      const timeoutCall = records.find(
+        (record) => record.message === "stream timeout",
       );
       assert.ok(timeoutCall != null, "应有 stream timeout 打点日志");
-      const detail = timeoutCall.arguments[2] as {
+      const detail = timeoutCall.detail as unknown as {
         phase: string;
         lastActivityAt: number;
         processedLength: number;
@@ -575,7 +578,7 @@ describe("llm-stream-timeout 观测打点", () => {
         "bufferedBytes 取 SSE emitter 待发缓冲长度",
       );
     } finally {
-      logMock.mock.restore();
+      restoreDefaultLogSink();
     }
   });
 
@@ -585,7 +588,8 @@ describe("llm-stream-timeout 观测打点", () => {
 
     const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean };
     g.__NM_DEBUG_LLM_FETCH__ = true;
-    const logMock = mock.method(console, "log", () => {});
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
 
     try {
       const fetchFn = mock.fn(async () => {
@@ -618,11 +622,11 @@ describe("llm-stream-timeout 观测打点", () => {
         (err: unknown) => err instanceof LlmStreamTimeoutError,
       );
 
-      const timeoutCall = logMock.mock.calls.find(
-        (call) => call.arguments[1] === "stream timeout",
+      const timeoutCall = records.find(
+        (record) => record.message === "stream timeout",
       );
       assert.ok(timeoutCall != null, "应有 stream timeout 打点日志");
-      const detail = timeoutCall.arguments[2] as {
+      const detail = timeoutCall.detail as unknown as {
         phase: string;
         lastActivityAt: number;
         processedLength: number;
@@ -640,7 +644,7 @@ describe("llm-stream-timeout 观测打点", () => {
         "fetch 路径即时转发无节流缓冲，bufferedBytes 记 0",
       );
     } finally {
-      logMock.mock.restore();
+      restoreDefaultLogSink();
     }
   });
 });

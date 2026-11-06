@@ -31,6 +31,9 @@ import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("vfs.character-card-import");
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
 /** @internal 导入事务回滚单测钩子 */
@@ -216,7 +219,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
             await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
           });
         } catch (compensateError) {
-          console.warn("[character-card] import compensation failed", compensateError);
+          log.warn("import compensation failed", { error: compensateError });
         }
         throw wrapCardImportError(error, committedShards, shardIndex + 1);
       }
@@ -238,7 +241,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         });
       });
     } catch (error) {
-      console.warn("[character-card] import dir rules failed", error);
+      log.warn("import dir rules failed", { error });
     }
 
     // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
@@ -250,7 +253,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
-        console.warn("[character-card] baseline checkpoint backfill failed", error);
+        log.warn("baseline checkpoint backfill failed", { error });
       }
     }
 

@@ -15,6 +15,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type {
   SessionUsageDetail,
   SessionUsageLastRequest,
@@ -28,6 +29,8 @@ import type {
   UsageStatsService,
   UsageStatsSummary,
 } from "../usage-stats.port.js";
+
+const log = createLogger("chat.usage-stats");
 
 /**
  * 命中率分母（计费口径全部输入）的 SUM 表达式：
@@ -532,7 +535,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     for (const row of assistantRows) {
       const parsed = parseMessageContent(String(row.content_json));
       if (!parsed.ok) {
-        console.warn(`[usage-stats] 工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
+        log.warn(`工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
         continue;
       }
       for (const block of parsed.value.blocks) {
@@ -561,11 +564,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
         );
       }
     } catch (error) {
-      console.warn(
-        `[usage-stats] 工具调用缓存回填失败（不影响本次读数）：${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      log.warn(`工具调用缓存回填失败（不影响本次读数）：${error instanceof Error ? error.message : String(error)}`);
     }
     return { last, visibleMessageCount, toolUseCount };
   }

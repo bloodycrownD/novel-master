@@ -31,6 +31,8 @@ import {
   probeTransactions,
   type TransactionProbe,
 } from "../helpers/transaction-probe.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 function filesMap(count: number, prefix = "f"): Map<string, string> {
   const map = new Map<string, string>();
@@ -164,11 +166,8 @@ describe("CS-05b backfill 事务边界", () => {
     expected.set("sub2/y.md", "body-sub2-y");
 
     let upsertCalls = 0;
-    const warns: unknown[][] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       const zipSvc = createVfsZipIoService(conn, {
         testHook: {
@@ -198,7 +197,7 @@ describe("CS-05b backfill 事务边界", () => {
         zipSvc.import(scope, buildVfsZip(expected), { confirmed: true })
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
     // 牙齿判据①：注入必须真的被触发，否则本条全部断言恒真。
@@ -209,8 +208,8 @@ describe("CS-05b backfill 事务边界", () => {
     );
     // 牙齿判据②：best-effort 失败必须留痕（spec B2 验收项「日志含 warn」）。
     assert.ok(
-      warns.some((w) => String(w[0]).includes("ensureImportDirRules")),
-      "补规则行失败必须被吞掉并记 warn（含 ensureImportDirRules 前缀）"
+      records.some((record) => record.level === "warn" && record.scope === "vfs.import-dir-rules" && record.message.includes("补目录规则行失败")),
+      "补规则行失败必须被吞掉并记 warn（scope=vfs.import-dir-rules）"
     );
 
     const vfs = createScopedVfsService(conn, scope);
@@ -264,11 +263,8 @@ describe("CS-05b backfill 事务边界", () => {
        BEFORE INSERT ON message_checkpoint
        BEGIN SELECT RAISE(ABORT, 'backfill blocked'); END`
     );
-    const warns: unknown[][] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(() =>
         createVfsZipIoService(conn).import(
@@ -278,12 +274,12 @@ describe("CS-05b backfill 事务边界", () => {
         )
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_backfill_insert`);
     }
 
     assert.ok(
-      warns.some((w) => String(w[0]).includes("baseline checkpoint backfill failed")),
+      records.some((record) => record.level === "warn" && record.scope === "vfs.zip-io" && record.message.includes("baseline checkpoint backfill failed")),
       "backfill 失败必须被吞掉并记 warn（不得冒泡成 IMPORT_FAILED）"
     );
     // 新内容逐字节完整（导入是全量覆盖语义，但补写失败不影响任何一条导入语句）。

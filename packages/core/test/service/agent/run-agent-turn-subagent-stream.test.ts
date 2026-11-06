@@ -34,6 +34,8 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../../helpers/novel-master-fixture.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
 
@@ -311,13 +313,10 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("nm-preferences", "chat.subagentStream", "not-a-bool");
-    // 照 MF-3（test/agent/agent-runner.test.ts）先例：临时替换 console.error
-    // 收集调用，finally 恢复原函数，防止污染其它用例的输出。
-    const consoleErrors: Array<{ tag: unknown; payload: unknown }> = [];
-    const originalError = console.error;
-    console.error = ((tag: unknown, payload: unknown) => {
-      consoleErrors.push({ tag, payload });
-    }) as typeof console.error;
+    // 照 MF-3（test/agent/agent-runner.test.ts）先例：捕获 sink 收集日志，
+    // finally 恢复默认 console sink，防止污染其它用例的输出。
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       // runTaskTurn 内部已断言 stopReason === completed（run 不抛）
       const streams = await runTaskTurn(ctx.preferences);
@@ -326,22 +325,24 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         true,
         "偏好脏值时子 run 应回退默认流式 true",
       );
-      // 回退路径必须留痕：恰好一条带该 tag 的标签日志（payload 为脏值
-      // PreferencesError）。
-      const tagged = consoleErrors.filter(
-        (e) => e.tag === "[agent-run] subagentStream pref read failed",
+      // 回退路径必须留痕：恰好一条该 scope + message 的 error 日志（detail.error
+      // 为脱敏展开后的 PreferencesError 形状）。
+      const tagged = records.filter(
+        (record) => record.scope === "agent.turn" && record.message === "subagentStream pref read failed",
       );
       assert.equal(
         tagged.length,
         1,
-        `应恰好记录一次回退日志，实际=${tagged.length}（全部=${JSON.stringify(consoleErrors.map((e) => e.tag))}）`,
+        `应恰好记录一次回退日志，实际=${tagged.length}（全部=${JSON.stringify(records.map((record) => `${record.scope}:${record.message}`))}）`,
       );
-      assert.ok(
-        tagged[0]!.payload instanceof Error,
-        "回退日志 payload 应为 PreferencesError（Error 子类）",
+      const detail = tagged[0]!.detail as { error?: { name?: string } };
+      assert.equal(
+        detail.error?.name,
+        "PREFERENCES_INVALID_VALUE",
+        "回退日志 detail.error 应为 PreferencesError 的脱敏展开（name 保留错误码）",
       );
     } finally {
-      console.error = originalError;
+      restoreDefaultLogSink();
       await ctx.preferences.resetSubagentStreamEnabled();
     }
   });

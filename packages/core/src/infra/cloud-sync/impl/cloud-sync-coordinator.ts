@@ -4,6 +4,7 @@
  * @module infra/cloud-sync/impl/cloud-sync-coordinator
  */
 
+import { createLogger } from "@/infra/log/logger.js";
 import { CloudSyncError } from "../errors/cloud-sync-errors.js";
 import {
   buildLease,
@@ -25,6 +26,8 @@ import {
 } from "../model/cloud-sync-status.js";
 import type { DbSyncPort } from "../ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../ports/object-storage.port.js";
+
+const log = createLogger("cloud-sync.coordinator");
 
 /** 协调器依赖：哈希与文件读取由调用方注入（Core 不使用 node:crypto） */
 export type CloudSyncCoordinatorDeps = {
@@ -349,9 +352,7 @@ export class CloudSyncCoordinator {
           // 这里只留痕不抛错——重读分支已经能正确收尾，抛错会把「续租失败但收尾
           // 安全」误判成整次 push 失败（快照已上传、计数已上去）。
           // 目的是让下一个维护者不把「续租一定成功」当成不变量。
-          console.warn(
-            "[cloud-sync] 续租失败，final status 将走重读判定分支"
-          );
+          log.warn("续租失败，final status 将走重读判定分支");
         }
       }
 

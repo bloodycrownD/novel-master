@@ -16,6 +16,8 @@ import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from 
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -920,20 +922,19 @@ describe("VfsZipIoService", () => {
           } as unknown as WorkplaceRepository),
       },
     });
-    const originalWarn = console.warn;
-    const warnCalls: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnCalls.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(zipSvc.import(scope, buildVfsZip(new Map([["世界书/章节/深层/设定.md", "深层设定"]])), { confirmed: true, directoryPath: "/角色" }));
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
     // 仅失败目录触发一次 warn，导入整体成功
-    assert.equal(warnCalls.length, 1);
-    assert.match(String(warnCalls[0]![0]), /directory=\/角色\/世界书/);
+    const warns = records.filter((record) => record.level === "warn");
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0]!.scope, "vfs.import-dir-rules");
+    assert.match(warns[0]!.message, /directory=\/角色\/世界书/);
     assert.equal((await vfs.read("/角色/世界书/章节/深层/设定.md")).content, "深层设定");
 
     // 失败之前的 /角色 与之后的章节链都有默认启用行，失败目录自身无行

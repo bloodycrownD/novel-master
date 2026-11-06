@@ -19,6 +19,8 @@ import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/sess
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "../../src/service/vfs/logic/clear-session-prompt-caches.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 afterEach(() => {
   sessionApiPromptTokenCache.clearAll();
@@ -82,7 +84,7 @@ describe("clearSessionPromptCaches", () => {
     assert.ok(Number.isNaN(Number.parseInt(value ?? "", 10)));
   });
 
-  it("clearDomain 抛错时吞错 + console.warn，且短路后续步骤不抛出", async () => {
+  it("clearDomain 抛错时吞错 + warn 日志，且短路后续步骤不抛出", async () => {
     const boom: SessionKkvService = Object.assign(createMemorySessionKkv(), {
       clearDomain: async (): Promise<void> => {
         throw new Error("kkv-boom");
@@ -95,18 +97,18 @@ describe("clearSessionPromptCaches", () => {
       updatedAt: Date.now(),
     });
 
-    const originalWarn = console.warn;
-    const warnCalls: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnCalls.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(clearSessionPromptCaches(sessionId, boom));
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
-    assert.equal(warnCalls.length, 1);
+    const warns = records.filter((record) => record.level === "warn");
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0]!.scope, "vfs.clear-session-prompt-caches");
+    assert.match(warns[0]!.message, /清空提示词缓存失败/);
     // 首步抛错后整体短路：file_cache 未被清、token cache 未被 invalidate
     assert.deepEqual(
       await boom.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),

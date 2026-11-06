@@ -31,8 +31,11 @@ import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/se
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { MessageRollbackService, RollbackOptions, RollbackProbe } from "../message-rollback.port.js";
+
+const log = createLogger("message-checkpoint.rollback");
 
 /** Dependencies for {@link DefaultMessageRollbackService}. */
 export interface MessageRollbackServiceDeps {
@@ -269,7 +272,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     try {
       await createSessionKkvService(this.deps.conn).set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
     } catch (error) {
-      console.warn(`[message-rollback] 工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
+      log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
     // 全局孤儿 revision 清扫（rollback-large-jank Step 4）：事务提交后
     // fire-and-forget 调度——全表 DELETE 与本会话无关，不 await、不阻塞

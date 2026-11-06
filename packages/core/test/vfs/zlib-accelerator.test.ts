@@ -24,6 +24,7 @@ import { clearZlibCodecAccelerator, registerZlibCodecAccelerator, tryZlibDeflate
 import { compressZlib, decompressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import { decodeFossilChainSpans, decodeZlibConcatSpans, encodeFossilChainPack, encodeZlibConcatPack } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
 import type { Result } from "../../src/errors/either.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 
 /** 纯 logic 的 Result 解包：成功取 value，失败直接让用例红。 */
 function unwrapResult<T, E>(result: Result<T, E>): T {
@@ -72,17 +73,20 @@ const EMPTY_PLAIN = new Uint8Array(0);
 /** 确定性二进制样本（含 0x00/0xFF、非 UTF-8 合法序列）。 */
 const BINARY_PLAIN = Uint8Array.from({ length: 4096 }, (_, index) => (index * 37 + 129) % 256);
 
-/** 捕获 console.warn（回落告警断言用，finally 恢复）。 */
+/** 捕获 warn 日志（回落告警断言用，finally 恢复）。 */
 function captureWarnings<T>(fn: () => T): { result: T; warnings: string[] } {
   const warnings: string[] = [];
-  const originalWarn = console.warn;
-  console.warn = (...args: unknown[]) => {
-    warnings.push(args.map((a) => String(a)).join(" "));
-  };
+  setDefaultLogSink({
+    write(record) {
+      if (record.level === "warn") {
+        warnings.push(record.message);
+      }
+    },
+  });
   try {
     return { result: fn(), warnings };
   } finally {
-    console.warn = originalWarn;
+    restoreDefaultLogSink();
   }
 }
 

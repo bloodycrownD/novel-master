@@ -4,6 +4,10 @@
  * @module infra/events/simple-event-bus
  */
 
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("events.bus");
+
 export type EventHandler<T = unknown> = (payload: T) => void;
 
 export interface EventSubscription {
@@ -12,7 +16,7 @@ export interface EventSubscription {
 
 /** 同步 handler 抛错时的回调（可选）。 */
 export interface SimpleEventBusOptions {
-  /** handler 同步抛错时调用；默认 console.error */
+  /** handler 同步抛错时调用；默认走 core logger（scope `events.bus`） */
   readonly onHandlerError?: (eventType: string, error: unknown) => void;
 }
 
@@ -25,7 +29,7 @@ export class SimpleEventBus {
     this.onHandlerError =
       options?.onHandlerError ??
       ((eventType, err) => {
-        console.error("[SimpleEventBus]", eventType, err);
+        log.error("handler failed", { eventType, error: err });
       });
   }
 

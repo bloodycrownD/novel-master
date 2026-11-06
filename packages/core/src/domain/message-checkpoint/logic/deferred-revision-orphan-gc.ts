@@ -23,6 +23,9 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("message-checkpoint.revision-gc");
 
 /** 模块级 in-flight 守卫：清扫进行中不重入。 */
 let orphanGcInFlight = false;
@@ -51,12 +54,12 @@ export function scheduleDeferredRevisionOrphanGc(conn: TdbcConnection): void {
         orphanGcInFlight = false;
         if (deleted > 0) {
           // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
-          console.log(`[nm-revision-gc] deferred orphan sweep deleted ${deleted} revision row(s)`);
+          log.info(`deferred orphan sweep deleted ${deleted} revision row(s)`);
         }
       })
       .catch((error: unknown) => {
         orphanGcInFlight = false;
-        console.warn("[nm-revision-gc] deferred orphan sweep failed:", error instanceof Error ? error.message : error);
+        log.warn("deferred orphan sweep failed", { error });
       });
   });
 }

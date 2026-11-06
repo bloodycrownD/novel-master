@@ -17,6 +17,9 @@ import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kk
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("tool.vfs");
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = ["read", "write", "edit", "fs", "glob", "grep"] as const;
@@ -427,7 +430,7 @@ async function probeFileAbsentForWrite(ctx: BuiltinToolContext, logicalPath: str
     if (isVfsError(error, "NOT_FOUND")) {
       return true;
     }
-    console.debug(`[vfs-tools] write 前探测 ${logicalPath} 失败，保守跳过补规则:`, error);
+    log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error });
     return false;
   }
 }
@@ -467,7 +470,7 @@ export async function ensureDirRulesForNewPath(ctx: BuiltinToolContext, dirLogic
     await backfillMissingDirRules(chain, existing, (logicalPath) => workplace.setDirRule({ logicalPath }));
   } catch (error) {
     // 吞错但不无声：文件/目录已落盘，补规则失败不阻断主流程。
-    console.debug(`[vfs-tools] 补目录规则失败（${dirLogicalPath}）:`, error);
+    log.debug(`补目录规则失败（${dirLogicalPath}）`, { error });
   }
 }
 

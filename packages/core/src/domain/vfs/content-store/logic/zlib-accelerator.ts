@@ -13,7 +13,10 @@
  * @module domain/vfs/content-store/logic/zlib-accelerator
  */
 
+import { createLogger } from "@/infra/log/logger.js";
 import { errorText } from "../../../../common/error.js";
+
+const log = createLogger("vfs.zlib-accelerator");
 
 /**
  * 加速器契约：两个同步方法，入出均为 `Uint8Array`（实现可返回 Buffer——
@@ -84,7 +87,7 @@ export function tryZlibDeflate(data: Uint8Array, level?: number): Uint8Array | n
   } catch (error) {
     if (!warned.deflate) {
       warned.deflate = true;
-      console.warn(`[zlib-accelerator] deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
+      log.warn(`deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
     }
     return null;
   }
@@ -104,7 +107,7 @@ export function tryZlibInflate(data: Uint8Array): Uint8Array | null {
   } catch (error) {
     if (!warned.inflate) {
       warned.inflate = true;
-      console.warn(`[zlib-accelerator] inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
+      log.warn(`inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
     }
     return null;
   }

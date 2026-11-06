@@ -36,6 +36,9 @@ import type { BuiltinToolContext } from "../builtin-tool-context.js";
 import { sinkOversizedOutput } from "../overflow-sink.js";
 import { DEFAULT_MAX_RESULTS, ENGINE_IDS, MAX_RESULTS_LIMIT, normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
 import { dispatchSearch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("tool.search");
 
 /** 工具名（注册表 / catalog / policy 共用）。 */
 export const SEARCH_TOOL_NAME = "search";
@@ -201,7 +204,7 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
           message: sink.message,
         };
       } catch (error) {
-        console.debug("[search] 超预算落盘失败，回落完整输出:", error);
+        log.debug("超预算落盘失败，回落完整输出", { error });
       }
     }
     return success;

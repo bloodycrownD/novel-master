@@ -9,6 +9,8 @@ import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
 
@@ -40,7 +42,7 @@ describe("bootstrapNovelMaster", () => {
     assert.equal(Number(afterSecond[0]?.user_version), SCHEMA_BOOT_VERSION);
   });
 
-  it("T-V5：发号器修复报告含 error 时 bootstrap 输出 console.warn", async () => {
+  it("T-V5：发号器修复报告含 error 时 bootstrap 输出 warn 日志", async () => {
     const ctx = getNovelMasterTestContext();
     // 只拦住对 sqlite_sequence 的读取（bootstrap 链路里仅 entry-sequence
     // repair 会查它），模拟 op-sqlite 等驱动读发号器失败，其余查询原样放行
@@ -65,26 +67,23 @@ describe("bootstrapNovelMaster", () => {
       },
     });
 
-    const warns: unknown[][] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await bootstrapNovelMaster(brokenConn);
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
-    const matched = warns.some((args) =>
-      args.some(
-        (a) =>
-          typeof a === "string" && a.includes("vfs-entry-sequence-repair"),
-      ),
+    const matched = records.some(
+      (record) =>
+        record.level === "warn" &&
+        record.scope === "bootstrap" &&
+        record.message.includes("vfs-entry-sequence-repair"),
     );
     assert.ok(
       matched,
-      "发号器修复报告含 error 时应有 console.warn（携带操作名）",
+      "发号器修复报告含 error 时应有 warn 日志（携带操作名）",
     );
   });
 });

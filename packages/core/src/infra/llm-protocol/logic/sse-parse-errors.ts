@@ -4,9 +4,11 @@
  * @module infra/llm-protocol/logic/sse-parse-errors
  */
 
-import { truncateText } from "@/common/text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
+
+const log = createLogger("llm.sse-parse");
 
 /** 各 SSE parser 共享的诊断字段。 */
 export interface SseParseDiagnostics {
@@ -34,8 +36,8 @@ export function recordMalformedSseLine(
 ): void {
   diag.malformedLineCount += 1;
   if (isSseParseDebugEnabled()) {
-    const prefix = truncateText(payload, 120);
-    console.warn("[llm-sse] malformed JSON line:", prefix);
+    // 畸形行是响应正文：用正文键交给脱敏层压成 {chars, hash}，不落原文。
+    log.warn("malformed JSON line", { body: payload });
   }
 }
 

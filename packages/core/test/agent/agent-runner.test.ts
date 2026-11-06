@@ -19,6 +19,8 @@ import { SqliteMessageCheckpointRepository } from "../../src/domain/message-chec
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import type { SkillService } from "../../src/service/skills/skills.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 function minimalDefinition(): AgentDefinition {
   return {
@@ -1683,11 +1685,8 @@ describe("AgentRunner", () => {
 
   // MF-3：KKV 坏值（PreferencesError）不应炸掉整个 run。
   it("thinking 偏好抛 PreferencesError 时回退 false（默认关），run 正常完成并记标签日志", async () => {
-    const consoleErrors: Array<{ tag: unknown; payload: unknown }> = [];
-    const originalError = console.error;
-    console.error = ((tag: unknown, payload: unknown) => {
-      consoleErrors.push({ tag, payload });
-    }) as typeof console.error;
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       const session = new InMemoryAgentSession();
       await session.append("user", textBlocks("go"));
@@ -1742,15 +1741,17 @@ describe("AgentRunner", () => {
       // 回退 false（关态）：无 tool_use 的 assistant thinking 不进请求历史
       const historyText = JSON.stringify(histories[0]);
       assert.doesNotMatch(historyText, /latest-turn-thinking/);
-      // 标签式日志：含偏好 key 与错误码
-      assert.equal(consoleErrors.length, 1);
-      assert.equal(consoleErrors[0]!.tag, "[agent-runner] thinking_context_pref_read_failed");
-      const payload = consoleErrors[0]!.payload as Record<string, unknown>;
+      // 标签式日志：scope + message 定位，payload 已脱敏但 key/code/fallback 原值保留
+      const errors = records.filter((record) => record.level === "error");
+      assert.equal(errors.length, 1);
+      assert.equal(errors[0]!.scope, "agent.runner");
+      assert.equal(errors[0]!.message, "thinking_context_pref_read_failed");
+      const payload = errors[0]!.detail as Record<string, unknown>;
       assert.equal(payload.key, "chat.thinkingContext");
       assert.equal(payload.code, "PREFERENCES_INVALID_VALUE");
       assert.equal(payload.fallback, false);
     } finally {
-      console.error = originalError;
+      restoreDefaultLogSink();
     }
   });
 });

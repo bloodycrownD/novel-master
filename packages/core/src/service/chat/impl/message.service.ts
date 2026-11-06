@@ -42,8 +42,11 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteUsageRecordRepository } from "@/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
+import { createLogger } from "@/infra/log/logger.js";
 import { buildUsageRecordFromMessage } from "@/domain/usage/logic/build-usage-record.js";
 import type { MessageService } from "../message.port.js";
+
+const log = createLogger("chat.message");
 
 function reposFor(conn: TdbcConnection) {
   return {
@@ -114,11 +117,7 @@ export class DefaultMessageService implements MessageService {
         ""
       );
     } catch (error) {
-      console.warn(
-        `[message-service] 工具调用数缓存失效失败（下次读数将现算）：${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      log.warn(`工具调用数缓存失效失败（下次读数将现算）：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

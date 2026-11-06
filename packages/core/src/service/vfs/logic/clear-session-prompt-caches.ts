@@ -15,7 +15,10 @@ import {
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+
+const log = createLogger("vfs.clear-session-prompt-caches");
 
 /**
  * 清空该 session 的 `rule_snapshot` + `file_cache` 两域，并失效 prompt token cache。
@@ -47,9 +50,6 @@ export async function clearSessionPromptCaches(
       ""
     );
   } catch (error) {
-    console.warn(
-      `clearSessionPromptCaches: best-effort 清空提示词缓存失败（session=${sessionId}）`,
-      error
-    );
+    log.warn(`best-effort 清空提示词缓存失败（session=${sessionId}）`, { error });
   }
 }

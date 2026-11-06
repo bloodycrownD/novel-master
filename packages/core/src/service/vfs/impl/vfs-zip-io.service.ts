@@ -30,6 +30,9 @@ import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("vfs.zip-io");
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -191,7 +194,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
         });
       } catch (error) {
-        console.warn("[vfs-zip-io] import compensation failed", error);
+        log.warn("import compensation failed", { error });
       }
     };
 
@@ -266,7 +269,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     } catch (error) {
       // helper 自吞错、不阻断导入的既有语义保持不变；这里只是兜住
       // 「事务本身开不起来」这一层。
-      console.warn("[vfs-zip-io] import dir rules failed", error);
+      log.warn("import dir rules failed", { error });
     }
 
     // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
@@ -283,7 +286,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         // 「自己刚插入、尚未提交的 head」，与现在的「导入已提交的 live
         // head」内容相同（insertFileSeedingRevision 已把 head 与 revision
         // 同步落库）。
-        console.warn("[vfs-zip-io] baseline checkpoint backfill failed", error);
+        log.warn("baseline checkpoint backfill failed", { error });
       }
     }
 

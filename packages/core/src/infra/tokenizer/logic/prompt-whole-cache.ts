@@ -33,8 +33,11 @@
  */
 
 import { PROMPT_WHOLE_CACHE_KEY, SESSION_KKV_DOMAIN_TOKEN_CHUNKS } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenCounterKind } from "../ports/token-counter.port.js";
+
+const log = createLogger("tokenizer.prompt-whole-cache");
 
 /** L1 缓存条目：一次整 prompt 本地计数的完整结果（口径三件套）。 */
 export interface PromptWholeCacheEntry {
@@ -234,7 +237,7 @@ export const promptWholeCache = {
     try {
       raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY);
     } catch (error) {
-      console.warn("[nm/whole-cache] promptWhole KKV 读取失败，按无种子处理", error);
+      log.warn("promptWhole KKV 读取失败，按无种子处理", { error });
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
       seededSessions.delete(sessionId);
       return 0;
@@ -300,7 +303,7 @@ export const promptWholeCache = {
     const payload = JSON.stringify({ v: PERSIST_PAYLOAD_VERSION, items: merged });
     const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, PROMPT_WHOLE_CACHE_KEY, payload);
     void write.catch((error) => {
-      console.warn("[nm/whole-cache] promptWhole KKV 写入失败", error);
+      log.warn("promptWhole KKV 写入失败", { error });
     });
   },
 

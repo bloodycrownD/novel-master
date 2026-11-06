@@ -4,6 +4,8 @@ import {
   createLoggingFetch,
   redactUrl,
 } from "../../../src/infra/llm-protocol/logic/debug-fetch.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 describe("debug-fetch redactUrl", () => {
   it("redacts key query param on valid URL", () => {
@@ -59,22 +61,22 @@ function stubResponse(options?: {
 
 describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）", () => {
   const originalDebugEnv = process.env.NM_DEBUG_LLM_FETCH;
-  const originalLog = console.log;
-  const originalWarn = console.warn;
-  let logs: string[] = [];
-  let warnings: string[] = [];
+  let records: LogRecord[] = [];
+
+  /** 告警文案（只看 warn 级，避免与请求/响应 debug 行混在一起）。 */
+  function warnings(): string[] {
+    return records.filter((record) => record.level === "warn").map((record) => record.message);
+  }
+
+  /** 全部日志的可读投影：message + 已脱敏 detail。 */
+  function rendered(): string {
+    return records.map((record) => `${record.message} ${JSON.stringify(record.detail ?? {})}`).join("\n");
+  }
 
   beforeEach(() => {
     process.env.NM_DEBUG_LLM_FETCH = "1";
-    logs = [];
-    warnings = [];
-    // 只关心告警；日志与告警一起捕获，避免测试输出噪音。
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map(String).join(" "));
-    };
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map(String).join(" "));
-    };
+    records = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
   });
 
   afterEach(() => {
@@ -83,8 +85,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
     } else {
       process.env.NM_DEBUG_LLM_FETCH = originalDebugEnv;
     }
-    console.log = originalLog;
-    console.warn = originalWarn;
+    restoreDefaultLogSink();
   });
 
   it("非流式请求响应 body 为 null：不告警（listModels / chatNonStream 形态）", async () => {
@@ -97,7 +98,7 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
       method: "POST",
       body: JSON.stringify({ model: "claude", stream: false }),
     });
-    assert.deepEqual(warnings, []);
+    assert.deepEqual(warnings(), []);
   });
 
   it("OpenAI 风格 body stream:true + 响应 body 为 null：仍告警", async () => {
@@ -106,8 +107,8 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
       method: "POST",
       body: JSON.stringify({ model: "gpt", stream: true }),
     });
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /streaming may fail on RN/);
+    assert.equal(warnings().length, 1);
+    assert.match(warnings()[0]!, /streaming may fail on RN/);
   });
 
   it("Gemini 风格 URL alt=sse + 响应 body 为 null：仍告警", async () => {
@@ -116,11 +117,24 @@ describe("createLoggingFetch 空 body 告警判据收窄（native-sse/shim-2）"
       "https://generativelanguage.googleapis.com/v1beta/models/gemini:streamGenerateContent?alt=sse&key=SECRET",
       { method: "POST", body: JSON.stringify({ contents: [] }) }
     );
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /streaming may fail on RN/);
+    assert.equal(warnings().length, 1);
+    assert.match(warnings()[0]!, /streaming may fail on RN/);
     // 告警文本不含 URL；请求日志走 redactUrl，key 必须打码。
-    assert.ok(!warnings[0]!.includes("SECRET"));
-    assert.ok(logs.some((line) => line.includes("key=***")));
-    assert.ok(!logs.some((line) => line.includes("SECRET")));
+    assert.ok(!warnings()[0]!.includes("SECRET"));
+    assert.ok(rendered().includes("key=***"));
+    assert.ok(!rendered().includes("SECRET"));
+  });
+
+  it("B6: 非 JSON 请求体不落原文，只记 chars（脱敏硬要求）", async () => {
+    const secret = "RAW-BODY-SECRET-0123456789";
+    const fetchFn = createLoggingFetch(async () => stubResponse());
+    await fetchFn("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      body: `not-json-payload ${secret}`,
+    });
+    const text = rendered();
+    assert.ok(!text.includes(secret), "日志不得出现请求体原文");
+    assert.ok(!text.includes("not-json-payload"), "非 JSON 兜底不得把正文当前缀摘要");
+    assert.match(text, /chars=\d+/);
   });
 });

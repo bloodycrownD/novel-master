@@ -78,6 +78,10 @@
       "types": "./dist/infra/nmtp/index.d.ts",
       "import": "./dist/infra/nmtp/index.js"
     },
+    "./log": {
+      "types": "./dist/infra/log/index.d.ts",
+      "import": "./dist/infra/log/index.js"
+    },
     "./kkv": {
       "types": "./dist/public/kkv.d.ts",
       "import": "./dist/public/kkv.js"

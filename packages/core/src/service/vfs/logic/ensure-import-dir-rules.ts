@@ -22,6 +22,9 @@ import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("vfs.import-dir-rules");
 
 /**
  * 构造「默认启用」目录规则行。
@@ -117,18 +120,12 @@ export async function ensureImportDirRules(
         } catch (error) {
           // 逐目录容错（PRD 需求 4）：单个目录补行失败只 warn 并跳过，
           // 不阻断剩余目录补行；外层整体 try/catch 仍是兜底。
-          console.warn(
-            `ensureImportDirRules: 补目录规则行失败（directory=${logicalPath}）`,
-            error
-          );
+          log.warn(`补目录规则行失败（directory=${logicalPath}）`, { error });
         }
       }
     );
   } catch (error) {
     // 吞错但不无声：目录/文件已落库（同事务），补规则失败不阻断导入主流程。
-    console.warn(
-      `ensureImportDirRules: best-effort 补目录规则行失败（directory=${directoryPath}）`,
-      error
-    );
+    log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error });
   }
 }

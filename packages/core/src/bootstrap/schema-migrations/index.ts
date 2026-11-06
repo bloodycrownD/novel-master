@@ -5,12 +5,15 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 import {
   ensureSchemaMigrationsTable,
   listAppliedSchemaMigrationIds,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
+
+const log = createLogger("bootstrap.migrations");
 
 /**
  * 本版本最低支持 v1.5.23。以下 18 条 migration 的逻辑已并入 canonical DDL、
@@ -69,11 +72,11 @@ export async function runPendingSchemaMigrations(
       continue;
     }
 
-    console.error(`[nm-boot] migration run: ${migration.id}`);
+    log.error(`migration run: ${migration.id}`);
     await migration.up(tx);
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
     applied.add(migration.id);
-    console.error(`[nm-boot] migration applied: ${migration.id}`);
+    log.error(`migration applied: ${migration.id}`);
   }
 }
 

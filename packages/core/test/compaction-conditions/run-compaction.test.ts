@@ -28,6 +28,8 @@ import {
 import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -338,11 +340,8 @@ describe("runCompaction", () => {
       },
     }) as SessionKkvService;
 
-    const warns: unknown[][] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     let result;
     try {
       result = await runCompaction(
@@ -355,18 +354,17 @@ describe("runCompaction", () => {
         { sessionId, projectId: project.id, trigger: "manual" },
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
     // 压缩本身是成功的：清域失败不得把它翻成失败（file_cache 只是加速层）。
     assert.equal(result.ok, true);
-    // 吞错但留痕：至少一条 warn 指向 runCompaction 的清域路径。
-    assert.ok(warns.length >= 1, "expected a console.warn for the failed clear");
+    // 吞错但留痕：至少一条 warn 指向 compaction.run 的清域路径。
+    const warns = records.filter((record) => record.level === "warn");
+    assert.ok(warns.length >= 1, "expected a warn record for the failed clear");
     assert.ok(
-      warns.some((args) =>
-        String(args[0]).includes("runCompaction"),
-      ),
-      `expected warn tagged runCompaction, got ${JSON.stringify(warns[0])}`,
+      warns.some((record) => record.scope === "compaction.run" && record.message.includes("清空")),
+      `expected warn from compaction.run, got ${JSON.stringify(warns)}`,
     );
     // hide 与 token 失效都不受清域异常影响。
     const list = await ctx.messages.listBySession(sessionId);

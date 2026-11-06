@@ -8,10 +8,11 @@
  */
 
 import { isRecord } from "@/common/guards.js";
-import { truncateText } from "@/common/text.js";
+import { describeText } from "@/infra/log/index.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
-const LOG_TAG = "[novel-master/llm]";
+const log = createLogger("llm.fetch");
 
 /** Whether LLM fetch logging is active. */
 export function isLlmFetchDebugEnabled(): boolean {
@@ -108,7 +109,8 @@ function summarizeBody(body: RequestInit["body"]): string | undefined {
       }
       return JSON.stringify(summary);
     } catch {
-      return truncateText(body, 400);
+      // 非 JSON 请求体：绝不能把原文当前 400 字摘要吐进日志（G6 硬要求）。
+      return `[unparsed ${typeof body}: chars=${describeText(body).chars}]`;
     }
   }
   return `[${typeof body}]`;
@@ -153,11 +155,11 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
         : input.url;
     const method = init?.method ?? "GET";
 
-    console.log(LOG_TAG, "→", method, redactUrl(url));
-    console.log(LOG_TAG, "  headers", redactHeaders(init?.headers));
+    log.debug(`→ ${method} ${redactUrl(url)}`);
+    log.debug("request headers", { headers: redactHeaders(init?.headers) });
     const bodySummary = summarizeBody(init?.body ?? undefined);
     if (bodySummary !== undefined) {
-      console.log(LOG_TAG, "  body", bodySummary);
+      log.debug("request body", { bodySummary });
     }
 
     const started = Date.now();
@@ -166,24 +168,20 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
     const contentType = response.headers.get("content-type");
     const hasBody = response.body != null;
 
-    console.log(LOG_TAG, "←", response.status, response.statusText, `${ms}ms`, {
+    log.debug(`← ${response.status} ${response.statusText} ${ms}ms`, {
       contentType,
       hasBody,
     });
 
     if (!response.ok) {
       try {
-        const text = await response.clone().text();
-        const snippet = truncateText(text, 600);
-        console.log(LOG_TAG, "  error body", snippet);
+        // 错误响应体同样是正文：交给脱敏层压成 {chars, hash}，不落原文。
+        log.debug("error response body", { body: await response.clone().text() });
       } catch {
         /* ignore */
       }
     } else if (hasBody === false && isStreamingRequest(url, init?.body)) {
-      console.warn(
-        LOG_TAG,
-        "  response.body is null (streaming may fail on RN)"
-      );
+      log.warn("response.body is null (streaming may fail on RN)");
     }
 
     return response;

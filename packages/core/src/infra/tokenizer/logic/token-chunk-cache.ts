@@ -40,10 +40,14 @@
  * @module infra/tokenizer/logic/token-chunk-cache
  */
 
+import { fnv1aHex16 } from "@/common/hash.js";
 import { SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
+
+const log = createLogger("tokenizer.chunk-cache");
 
 /** 块 hash 键段长度（16 hex = 64 bit；形态契约，见 {@link chunkHash16}）。 */
 const CHUNK_HASH_HEX_LENGTH = 16;
@@ -83,47 +87,16 @@ export function buildCounterScope(input: CounterScopeInput): string {
 }
 
 /**
- * 轻量块哈希（token-count-perf-r2）：双 32 位 FNV-1a 拼接 16 hex 小写。
- *
- * 为什么弃用 hashContent（noble sha256）：块级缓存每块一次哈希，真机 Hermes
- * 无 JIT 下 6,798 块的**全命中**轮实测 4,034ms——计数工作量为零，时间全是
- * sha256 的每块固定开销（TextEncoder 转字节 + 64 轮压缩 + hex）。FNV-1a 是
- * 纯 Uint32 乘加（Math.imul 原生路径），零转码零堆分配零 BigInt。碰撞质量：
- * 前向 + 反向两遍独立 FNV-1a（不同 offset）拼 64 bit，对短中文句的分布与
- * 碰撞抽样由 T-H1/T-H2 护栏锁定；碰撞后果与旧 sha256 截断同款——读错一个
- * 块的计数（误差个位数 token），属既有可接受风险。
- *
- * ⚠ 输出形态是 public 契约：恒 16 位小写 hex——L1/L2 键拼接、KKV payload
- * 两处解析校验、splitEntryKey 定长切片都硬依赖。换哈希实现必须保持该形态；
- * 键值域变化须 bump TOKEN_CHUNKS_PAYLOAD_VERSION / PERSIST_PAYLOAD_VERSION。
- */
-const FNV_OFFSET_A = 0x811c9dc5;
-const FNV_OFFSET_B = 0x9dc5811c;
-const FNV_PRIME = 0x01000193;
-
-function fastHash16(text: string): string {
-  let h1 = FNV_OFFSET_A;
-  for (let i = 0; i < text.length; i++) {
-    h1 = Math.imul(h1 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
-  }
-  let h2 = FNV_OFFSET_B;
-  for (let i = text.length - 1; i >= 0; i--) {
-    h2 = Math.imul(h2 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
-  }
-  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
-}
-
-/**
- * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link fastHash16}）。
+ * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link fnv1aHex16}）。
  *
  * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
  * 且即便碰撞也只是读错一个块的计数（误差个位数 token），属可接受的缓存
  * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
  * 与块级（数千次小哈希）同源。
  */
-// nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口，fastHash16 是内部实现细节，直接暴露会让调用方耦合哈希实现。
+// nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
 export function chunkHash16(chunk: string): string {
-  return fastHash16(chunk);
+  return fnv1aHex16(chunk);
 }
 
 /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
@@ -333,7 +306,7 @@ export const tokenChunkCache = {
       currentGenDirty = false;
       const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload);
       void write.catch((error) => {
-        console.warn(`[nm/chunk] KKV 写入失败（session=${sessionId}）`, error);
+        log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
       });
     }
   },
@@ -370,7 +343,7 @@ export const tokenChunkCache = {
     try {
       raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY);
     } catch (error) {
-      console.warn(`[nm/chunk] KKV 读取失败（session=${sessionId}），按无种子处理`, error);
+      log.warn(`KKV 读取失败（session=${sessionId}），按无种子处理`, { error });
       // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。
       seededSessions.delete(sessionId);
       return 0;

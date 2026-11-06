@@ -14,11 +14,14 @@
 import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type {
   DatabaseMaintenanceResult,
   DbMaintenanceService,
   StorageStats,
 } from "../db-maintenance.port.js";
+
+const log = createLogger("db-maintenance");
 
 /**
  * 采样当前存储统计。
@@ -146,11 +149,7 @@ export function callMaintenanceHook(
   try {
     hook();
   } catch (error) {
-    console.warn(
-      `[${logTag}] ${label} 回调抛错，已忽略：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
+    log.warn(`${label} 回调抛错，已忽略：${error instanceof Error ? error.message : String(error)}`, { logTag });
   }
 }
 
@@ -199,23 +198,13 @@ export async function runPendingStartupMaintenance(
       try {
         await kkv.delete(args.kkvModule, args.pendingKey);
       } catch (error) {
-        console.warn(
-          `[${args.logTag}] 清除 ${args.pendingKey} 标记失败（下次启动会多补跑一次维护，无害）：${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+        log.warn(`清除 ${args.pendingKey} 标记失败（下次启动会多补跑一次维护，无害）：${error instanceof Error ? error.message : String(error)}`, { logTag: args.logTag });
       }
     } else {
-      console.warn(
-        `[${args.logTag}] ${args.pendingKey} 补跑被进程级去重短路（本进程已跑过维护链路），保留标记待下次冷启动补跑——正常场景`
-      );
+      log.warn(`${args.pendingKey} 补跑被进程级去重短路（本进程已跑过维护链路），保留标记待下次冷启动补跑——正常场景`, { logTag: args.logTag });
     }
   } catch (error) {
-    console.warn(
-      `[${args.logTag}] ${args.pendingKey} 补跑维护链路失败，保留标记待下次启动重试：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
+    log.warn(`${args.pendingKey} 补跑维护链路失败，保留标记待下次启动重试：${error instanceof Error ? error.message : String(error)}`, { logTag: args.logTag });
   } finally {
     callMaintenanceHook(args.afterMaintenance, "afterMaintenance", args.logTag);
   }

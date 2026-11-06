@@ -84,6 +84,9 @@ import {
   type AgentRunRuntimePort,
 } from "./agent-run-shared.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("agent.turn");
 
 export interface AgentTurnScope {
   readonly projectId: string;
@@ -406,9 +409,9 @@ function safePublish(
   try {
     runtime.eventBus?.publish(type, payload);
   } catch (err) {
-    console.error("[run-agent-turn] prelude_terminal_publish_failed", {
+    log.error("prelude_terminal_publish_failed", {
       type,
-      err: err instanceof Error ? err.message : String(err),
+      error: err,
     });
   }
 }
@@ -1399,7 +1402,7 @@ async function runChildAgent(args: {
         (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
     } catch (cause) {
       if (!isAppError(cause, "PREFERENCES_INVALID_VALUE")) throw cause;
-      console.error("[agent-run] subagentStream pref read failed", cause);
+      log.error("subagentStream pref read failed", { error: cause });
     }
 
     const maxSteps =

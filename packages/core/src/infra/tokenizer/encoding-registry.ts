@@ -37,6 +37,10 @@
  * @module infra/tokenizer/encoding-registry
  */
 
+import { createLogger } from "@/infra/log/logger.js";
+
+const log = createLogger("tokenizer.encoding-registry");
+
 /**
  * registry 句柄的最小结构契约：只要能把文本 encode 成带 `length` 的序列。
  * WASM tiktoken 的 `Tiktoken` 与 js-tiktoken 的 `Tiktoken` 都结构兼容，
@@ -103,7 +107,7 @@ export function getEncoding<T extends EncodingHandle>(encodingName: string, buil
   try {
     encoding = (encodingFactory ? encodingFactory(encodingName) : build()) as T;
   } catch (err) {
-    console.warn(`[nm/registry] tiktoken encoding init failed (${key})`, err);
+    log.warn(`tiktoken encoding init failed (${key})`, { error: err });
     encoding = null;
     failedAt = clock();
   }

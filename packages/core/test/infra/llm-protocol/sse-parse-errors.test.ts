@@ -6,6 +6,15 @@ import {
   isSseParseDebugEnabled,
   recordMalformedSseLine,
 } from "../../../src/infra/llm-protocol/logic/sse-parse-errors.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
+
+/** 捕获 sink：返回 records 与还原函数（finally 恢复，防污染同文件后续用例）。 */
+function captureLogs(): { readonly records: LogRecord[]; restore(): void } {
+  const records: LogRecord[] = [];
+  setDefaultLogSink({ write: (record) => records.push(record) });
+  return { records, restore: restoreDefaultLogSink };
+}
 
 describe("sse-parse-errors", () => {
   const envBackup = { ...process.env };
@@ -17,36 +26,32 @@ describe("sse-parse-errors", () => {
   it("SSE-MAL-03: debug env 关闭时不 warn", () => {
     delete process.env.NM_DEBUG_LLM_SSE;
     delete process.env.NM_DEBUG_LLM_FETCH;
-    const warns: string[] = [];
-    const original = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(String(args[0]));
-    };
+    const logs = captureLogs();
     try {
       assert.equal(isSseParseDebugEnabled(), false);
       const diag = { malformedLineCount: 0 };
       recordMalformedSseLine(diag, "{bad");
       assert.equal(diag.malformedLineCount, 1);
-      assert.equal(warns.length, 0);
+      assert.equal(logs.records.length, 0);
     } finally {
-      console.warn = original;
+      logs.restore();
     }
   });
 
   it("SSE-MAL-03: NM_DEBUG_LLM_SSE=1 时输出 warn", () => {
     process.env.NM_DEBUG_LLM_SSE = "1";
-    const warns: string[] = [];
-    const original = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(String(args[0]));
-    };
+    const logs = captureLogs();
     try {
       assert.equal(isSseParseDebugEnabled(), true);
       recordMalformedSseLine({ malformedLineCount: 0 }, "{bad-json");
-      assert.equal(warns.length, 1);
-      assert.match(warns[0]!, /malformed JSON line/);
+      assert.equal(logs.records.length, 1);
+      assert.equal(logs.records[0]!.level, "warn");
+      assert.equal(logs.records[0]!.scope, "llm.sse-parse");
+      assert.match(logs.records[0]!.message, /malformed JSON line/);
+      // 畸形行是正文：detail 已压成 {chars, hash}，不落原文。
+      assert.ok(!JSON.stringify(logs.records[0]!.detail).includes("bad-json"));
     } finally {
-      console.warn = original;
+      logs.restore();
     }
   });
 

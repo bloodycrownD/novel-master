@@ -43,6 +43,7 @@
 
 import { truncateText } from "@/common/text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 import { createSseChunkEmitter } from "./sse-chunk-emitter.js";
 import {
@@ -51,6 +52,8 @@ import {
 } from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
 import { LlmStreamTimeoutError } from "./llm-stream-timeout-error.js";
+
+const log = createLogger("llm.sse-transport");
 
 export type SseByteHandler = (chunk: string) => void;
 
@@ -227,19 +230,11 @@ function applyXhrHeaders(
   }
 }
 
-function logSse(
-  logTag: string,
-  message: string,
-  detail?: Record<string, unknown>
-): void {
+function logSse(logTag: string, message: string, detail?: Record<string, unknown>): void {
   if (!isSseDebugEnabled()) {
     return;
   }
-  if (detail != null) {
-    console.log(logTag, message, detail);
-  } else {
-    console.log(logTag, message);
-  }
+  log.debug(message, detail == null ? { logTag } : { logTag, ...detail });
 }
 
 /**

@@ -29,6 +29,8 @@ import {
   probeTransactions,
   type TransactionProbe,
 } from "../helpers/transaction-probe.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 /** 分片大小上界（与实现共用常量，防止测试悄悄跟实现漂移）。 */
 const CHUNK = ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK;
@@ -239,11 +241,8 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
        BEGIN SELECT RAISE(ABORT, 'blocked'); END`
     );
 
-    const warns: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warns.push(args.map((a) => String(a)).join(" "));
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await assert.rejects(
         () =>
@@ -254,12 +253,12 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
           e instanceof Error && e.message === "test import failure"
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
       await ctx.conn.execute(`DROP TRIGGER IF EXISTS t_block_compensate_delete`);
     }
 
     assert.ok(
-      warns.some((w) => w.includes("import compensation failed")),
+      records.some((record) => record.level === "warn" && record.message.includes("import compensation failed")),
       "补偿失败必须被吞掉并记 warn"
     );
   });

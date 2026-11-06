@@ -31,8 +31,11 @@
  */
 
 import { PROMPT_TOKENS_LAST_USAGE_KEY, SESSION_KKV_DOMAIN_PROMPT_TOKENS } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { sessionApiPromptTokenCache } from "./session-api-prompt-token-cache.js";
+
+const log = createLogger("tokenizer.session-api-store");
 
 /**
  * 落库/回读一条 prompt 占用值所需的全部字段。
@@ -165,7 +168,7 @@ export async function readSessionApiPromptTokenEntry(sessionKkv: SessionKkvServi
     raw = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
   } catch (error) {
     // 展示/判定派生值：库异常按 miss 处理，让读口回退本地估算，不打断 run。
-    console.warn(`[nm/token-store] KKV 读取失败（session=${sessionId}）`, error);
+    log.warn(`KKV 读取失败（session=${sessionId}）`, { error });
     return null;
   }
 
@@ -201,7 +204,7 @@ export function writeSessionApiPromptTokenEntry(sessionKkv: SessionKkvService | 
   const payload = serializeSessionApiPromptTokenEntry(entry);
   const write = sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY, payload);
   void write.catch((error) => {
-    console.warn(`[nm/token-store] KKV 写入失败（session=${sessionId}）`, error);
+    log.warn(`KKV 写入失败（session=${sessionId}）`, { error });
   });
 }
 
@@ -228,6 +231,6 @@ export async function invalidateSessionApiPromptTokenEntry(sessionKkv: SessionKk
   try {
     await sessionKkv.delete(sessionId, SESSION_KKV_DOMAIN_PROMPT_TOKENS, PROMPT_TOKENS_LAST_USAGE_KEY);
   } catch (error) {
-    console.warn(`[nm/token-store] KKV 删除失败（session=${sessionId}）`, error);
+    log.warn(`KKV 删除失败（session=${sessionId}）`, { error });
   }
 }

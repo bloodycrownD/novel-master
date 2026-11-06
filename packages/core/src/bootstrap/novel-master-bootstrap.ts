@@ -15,6 +15,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { createLogger } from "@/infra/log/logger.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
 import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
@@ -45,6 +46,8 @@ import {
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
+
+const log = createLogger("bootstrap");
 
 /**
  * 稳态 DDL + 列对齐合同版本。
@@ -483,10 +486,7 @@ export async function bootstrapNovelMaster(
   try {
     await seedBuiltinSkills(conn);
   } catch (error) {
-    console.warn(
-      "[bootstrap] 内置技能种入失败（不阻断启动，下次启动重试）:",
-      error
-    );
+    log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
   }
 
   // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
@@ -500,18 +500,12 @@ export async function bootstrapNovelMaster(
       .runAll();
     for (const report of reports) {
       if (report.error != null) {
-        console.warn(
-          `[bootstrap] 发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）:`,
-          report.error
-        );
+        log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });
       }
     }
   } catch (error) {
     // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
     // 同样只记日志不阻断启动（可重试）。
-    console.warn(
-      "[bootstrap] 发号器完整性修复运行异常（不阻断启动，下次启动重试）:",
-      error
-    );
+    log.warn("发号器完整性修复运行异常（不阻断启动，下次启动重试）", { error });
   }
 }

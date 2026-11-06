@@ -32,6 +32,8 @@ import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplac
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
 import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/character-card-import.service.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
+import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
+import type { LogRecord } from "@novel-master/core/log";
 
 novelMasterTestFixture();
 
@@ -476,22 +478,21 @@ describe("CharacterCardImportService", () => {
       ["角色描述.md", "描述"],
       ["世界书/章节/深层/设定.md", "深层设定"],
     ]);
-    const originalWarn = console.warn;
-    const warnCalls: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnCalls.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       await assert.doesNotReject(
         svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }),
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
     // 仅失败目录触发一次 warn，导入整体成功
-    assert.equal(warnCalls.length, 1);
-    assert.match(String(warnCalls[0]![0]), /directory=\/角色\/世界书/);
+    const warns = records.filter((record) => record.level === "warn");
+    assert.equal(warns.length, 1);
+    assert.equal(warns[0]!.scope, "vfs.import-dir-rules");
+    assert.match(warns[0]!.message, /directory=\/角色\/世界书/);
     assert.equal((await vfs.read("/角色/角色描述.md")).content, "描述");
     assert.equal(
       (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
@@ -772,11 +773,8 @@ describe("CharacterCardImportService", () => {
       { sessionKkv: throwingKkv },
     );
 
-    const originalWarn = console.warn;
-    const warnCalls: unknown[][] = [];
-    console.warn = (...args: unknown[]) => {
-      warnCalls.push(args);
-    };
+    const records: LogRecord[] = [];
+    setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       const tree = parseTree(JSON.stringify(SAMPLE_V2));
       await assert.doesNotReject(() =>
@@ -786,12 +784,12 @@ describe("CharacterCardImportService", () => {
         }),
       );
     } finally {
-      console.warn = originalWarn;
+      restoreDefaultLogSink();
     }
 
     // 导入本体已落库，缓存对齐失败仅 warn 留痕
     assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
-    assert.ok(warnCalls.length >= 1);
+    assert.ok(records.some((record) => record.level === "warn"));
   });
 
   it("体积闸门：importFromBytes 输入超上限抛 TOO_LARGE 且零写库", async () => {

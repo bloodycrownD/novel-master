@@ -48,6 +48,7 @@ import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
+import { createLogger } from "@/infra/log/logger.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -76,6 +77,8 @@ import {
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { randomUUID } from "@/infra/random-uuid.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
+
+const log = createLogger("agent.runner");
 
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
@@ -301,7 +304,7 @@ export class DefaultAgentRunner implements AgentRunner {
       if (!isAppError(error, "PREFERENCES_INVALID_VALUE")) {
         throw error;
       }
-      console.error("[agent-runner] thinking_context_pref_read_failed", {
+      log.error("thinking_context_pref_read_failed", {
         stage: "thinking_context_pref",
         key: "chat.thinkingContext",
         code: error.key,
@@ -782,15 +785,12 @@ export class DefaultAgentRunner implements AgentRunner {
             assistantAppendedInRun = true;
           } catch (appendError) {
             // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
-            console.error(
-              "[agent-runner] empty_reply_placeholder_append_failed",
-              {
-                stage: "empty_reply_placeholder_append",
-                sessionId,
-                projectId,
-                error: appendError,
-              }
-            );
+            log.error("empty_reply_placeholder_append_failed", {
+              stage: "empty_reply_placeholder_append",
+              sessionId,
+              projectId,
+              error: appendError,
+            });
           }
         }
 
@@ -900,7 +900,7 @@ export class DefaultAgentRunner implements AgentRunner {
               assistantMessage.id
             );
           } catch (error) {
-            console.error("[agent-runner] checkpoint_capture_failed", {
+            log.error("checkpoint_capture_failed", {
               stage: "checkpoint_capture",
               sessionId,
               projectId,
@@ -958,7 +958,7 @@ export class DefaultAgentRunner implements AgentRunner {
             });
           } catch (appendError) {
             // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
-            console.error("[agent-runner] failure_message_append_failed", {
+            log.error("failure_message_append_failed", {
               stage: "failure_message_append",
               sessionId,
               projectId,
