@@ -5,10 +5,7 @@
 import React from 'react';
 import {Pressable, Text, View} from 'react-native';
 
-import {
-  MODE_OPTIONS,
-  type AgentMode,
-} from '@/config-forms/agent';
+import {MODE_OPTIONS, type AgentMode} from '@/config-forms/agent';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';

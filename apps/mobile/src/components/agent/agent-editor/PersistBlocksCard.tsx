@@ -5,15 +5,11 @@
 import React from 'react';
 import {Text, View} from 'react-native';
 
-import type {
-  PersistPromptBlock,
-  PersistTextPromptBlock,
-} from '@novel-master/core/prompt';
-import {
-  PROMPT_REGION_LABELS,
-  ROLE_OPTIONS,
-  mapPersistTextBlocks,
-} from '@/config-forms/agent';
+import type {PersistPromptBlock} from '@novel-master/core/prompt';
+import type {PersistTextPromptBlock} from '@novel-master/core/prompt';
+import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
+import {ROLE_OPTIONS} from '@/config-forms/agent';
+import {mapPersistTextBlocks} from '@/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';
@@ -156,42 +152,38 @@ export function PersistBlocksCard({
                   >
                     {PROMPT_REGION_LABELS.persistRegionHint}
                   </Text>
-                  {(() => {
-                    // persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。
-                    const updatePersistContent = (v: string) =>
-                      setPersist(prev =>
-                        mapPersistTextBlocks(prev, (b, i) =>
-                          i === index ? {...b, content: v} : b,
+                  {/* persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。 */}
+                  <ExpandablePromptInput
+                    label="内容"
+                    disabled={readOnly}
+                    openEditor={() =>
+                      openPromptEditor(block.name, block.content, v =>
+                        setPersist(prev =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === index ? {...b, content: v} : b,
+                          ),
                         ),
-                      );
-                    return (
-                      <ExpandablePromptInput
-                        label="内容"
-                        disabled={readOnly}
-                        openEditor={() =>
-                          openPromptEditor(block.name, block.content, v =>
-                            setPersist(prev =>
-                              mapPersistTextBlocks(prev, (b, i) =>
-                                i === index ? {...b, content: v} : b,
-                              ),
+                      )
+                    }
+                    renderInline={ctx => (
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.content}
+                        onChangeText={v =>
+                          setPersist(prev =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === index ? {...b, content: v} : b,
                             ),
                           )
                         }
-                        renderInline={ctx => (
-                          <FormTextInput
-                            tokens={tokens}
-                            value={block.content}
-                            onChangeText={updatePersistContent}
-                            multiline
-                            disabled={readOnly}
-                            style={ctx.style}
-                            selection={ctx.selection}
-                            onSelectionChange={ctx.onSelectionChange}
-                          />
-                        )}
+                        multiline
+                        disabled={readOnly}
+                        style={ctx.style}
+                        selection={ctx.selection}
+                        onSelectionChange={ctx.onSelectionChange}
                       />
-                    );
-                  })()}
+                    )}
+                  />
                 </View>
               ))}
           </View>

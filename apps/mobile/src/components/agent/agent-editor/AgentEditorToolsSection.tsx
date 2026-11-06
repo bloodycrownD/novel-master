@@ -7,10 +7,7 @@
 import React from 'react';
 import {Text} from 'react-native';
 
-import {
-  TOOL_MODE_OPTIONS,
-  type ToolsMode,
-} from '@/config-forms/agent';
+import {TOOL_MODE_OPTIONS, type ToolsMode} from '@/config-forms/agent';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';

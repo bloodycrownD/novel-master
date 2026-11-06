@@ -136,41 +136,37 @@ export function DynamicBlocksCard({
                     disabled={readOnly}
                   />
                 </FormField>
-                {(() => {
-                  const updateDynamicContent = (v: string) =>
-                    setDynamic(prev =>
-                      prev.map((b, i) =>
-                        i === index ? {...b, content: v} : b,
+                <ExpandablePromptInput
+                  label="内容"
+                  disabled={readOnly}
+                  openEditor={() =>
+                    openPromptEditor(block.name, block.content, v =>
+                      setDynamic(prev =>
+                        prev.map((b, i) =>
+                          i === index ? {...b, content: v} : b,
+                        ),
                       ),
-                    );
-                  return (
-                    <ExpandablePromptInput
-                      label="内容"
-                      disabled={readOnly}
-                      openEditor={() =>
-                        openPromptEditor(block.name, block.content, v =>
-                          setDynamic(prev =>
-                            prev.map((b, i) =>
-                              i === index ? {...b, content: v} : b,
-                            ),
+                    )
+                  }
+                  renderInline={ctx => (
+                    <PromptMacroTextInput
+                      tokens={tokens}
+                      value={block.content}
+                      onChangeText={v =>
+                        setDynamic(prev =>
+                          prev.map((b, i) =>
+                            i === index ? {...b, content: v} : b,
                           ),
                         )
                       }
-                      renderInline={ctx => (
-                        <PromptMacroTextInput
-                          tokens={tokens}
-                          value={block.content}
-                          onChangeText={updateDynamicContent}
-                          placeholder="支持 $time、$week_cn、$filetree…"
-                          disabled={readOnly}
-                          style={ctx.style}
-                          selection={ctx.selection}
-                          onSelectionChange={ctx.onSelectionChange}
-                        />
-                      )}
+                      placeholder="支持 $time、$week_cn、$filetree…"
+                      disabled={readOnly}
+                      style={ctx.style}
+                      selection={ctx.selection}
+                      onSelectionChange={ctx.onSelectionChange}
                     />
-                  );
-                })()}
+                  )}
+                />
               </View>
             ))}
           </View>

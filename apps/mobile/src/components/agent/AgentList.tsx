@@ -16,19 +16,10 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {
-  DEFAULT_SUBAGENT_DEFINITION,
-  type AgentDefinition,
-} from '@novel-master/core/agent';
-import {
-  agentModeMatchesTab,
-  type AgentSettingsTab,
-} from '@/config-forms/agent';
-import {
-  AGENT_LIST_LABELS,
-  assessAgentDefinitionWire,
-  storedConfigInvalidReason,
-} from '@novel-master/core/stored-config-validity';
+import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
+import type {AgentDefinition} from '@novel-master/core/agent';
+import {agentModeMatchesTab, type AgentSettingsTab} from '@/config-forms/agent';
+import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
@@ -45,6 +36,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {pickEntityIcon} from '../../utils/entity-icon';
+import {agentDisplayNameFromWire} from './agent-editor/useAgentEditorFormState';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -56,21 +48,6 @@ interface AgentRow {
   /** 内置 general 合成行：只读展示，不参与批量勾选与增删改。 */
   builtin?: boolean;
   meta: string;
-}
-
-function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
-  if (
-    raw != null &&
-    typeof raw === 'object' &&
-    'name' in raw &&
-    typeof (raw as {name: unknown}).name === 'string'
-  ) {
-    const trimmed = (raw as {name: string}).name.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
-  }
-  return agentId;
 }
 
 const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
@@ -90,7 +67,8 @@ const GENERAL_ROW: AgentRow = {
 };
 
 const TAB_HINTS: Record<AgentSettingsTab, string> = {
-  primary: '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
+  primary:
+    '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
   subagent:
     '子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。',
 };
@@ -100,23 +78,10 @@ const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
   subagent: '暂无子智能体，点击「新建」创建。',
 };
 
-/**
- * mode 归一后为 all（显式 all 或缺省）时挂「全部」徽标。
- * invalid 行读不到 def（作用域未知）同样按「全部」呈现，
- * 与 desktop `row.mode == null || row.mode === "all"` 语义对齐。
- */
-function isAllModeRow(row: AgentRow): boolean {
-  return (row.def?.mode ?? 'all') === 'all';
-}
-
-function agentMeta(
-  def: AgentDefinition,
-  modelLabel: string,
-  workspace: boolean,
-): string {
-  const steps = def.runtime?.maxSteps ?? 20;
-  const modelPart = workspace ? `${modelLabel} · 工作区` : modelLabel;
-  return `${modelPart} · ${AGENT_LIST_LABELS.maxSteps(steps)}`;
+function agentMeta(d: AgentDefinition, label: string, ws: boolean): string {
+  const steps = d.runtime?.maxSteps ?? 20;
+  const modelPart = ws ? `${label} · 工作区` : label;
+  return `${modelPart} · ${storedConfig.AGENT_LIST_LABELS.maxSteps(steps)}`;
 }
 
 type Props = {
@@ -138,6 +103,7 @@ export function AgentList({onCreate}: Props) {
   >();
   const batch = useBatchSelection();
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const dismissAllOverlays = useCallback(() => {
     setMenuAgentId(undefined);
     setRenamePrompt(undefined);
@@ -145,20 +111,18 @@ export function AgentList({onCreate}: Props) {
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  const reload = useCallback(async () => {
+  // nm-style: keep-local — 列表装载与工作区模型解析的状态链，内联回 useCallback 会让调用参数跨行
+  const reloadAgentList = async () => {
     setLoading(true);
     try {
       const ids = await runtime.agentRegistry.listAgentIds();
       const workspaceModelId = await runtime.state.getCurrentModelId();
-      let workspaceLabel = '—';
+      let wsLabel = '—';
       if (workspaceModelId) {
         try {
-          workspaceLabel = await resolveModelDisplayLabel(
-            runtime,
-            workspaceModelId,
-          );
+          wsLabel = await resolveModelDisplayLabel(runtime, workspaceModelId);
         } catch {
-          workspaceLabel = workspaceModelId;
+          wsLabel = workspaceModelId;
         }
       }
       const enriched: AgentRow[] = [];
@@ -170,7 +134,7 @@ export function AgentList({onCreate}: Props) {
         if (raw == null) {
           continue;
         }
-        const health = assessAgentDefinitionWire(raw);
+        const health = storedConfig.assessAgentDefinitionWire(raw);
         if (health.status === 'valid') {
           const def = health.value;
           let meta: string;
@@ -183,7 +147,7 @@ export function AgentList({onCreate}: Props) {
             }
             meta = agentMeta(def, label, false);
           } else {
-            meta = agentMeta(def, workspaceLabel, true);
+            meta = agentMeta(def, wsLabel, true);
           }
           enriched.push({
             id,
@@ -196,7 +160,7 @@ export function AgentList({onCreate}: Props) {
             id,
             name: agentDisplayNameFromWire(raw, id),
             configInvalid: true,
-            meta: storedConfigInvalidReason(health.code),
+            meta: storedConfig.storedConfigInvalidReason(health.code),
           });
         }
       }
@@ -204,23 +168,20 @@ export function AgentList({onCreate}: Props) {
     } finally {
       setLoading(false);
     }
-  }, [runtime]);
+  };
+  const reload = useCallback(reloadAgentList, [runtime]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   useFocusEffect(
     useCallback(() => {
       reload().catch(err => showToast(toastMessage('加载智能体列表失败', err)));
     }, [reload, showToast]),
   );
 
-  /** 切 tab 退出批量模式（照技能管理页先例，两侧勾选集不互通）。 */
-  const switchTab = (next: AgentSettingsTab) => {
-    setTab(next);
-    batch.exit();
-  };
-
   // 全量加载后前端过滤（不重载）；invalid 行读不到 mode，按 all 双边显示。
   // 子 tab 头部合成内置 general 行（GENERAL_ROW def.mode 为 subagent，
   // 天然只落在子侧）。
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const visibleRows = useMemo(() => {
     const filtered = rows.filter(row =>
       agentModeMatchesTab(row.def?.mode, tab),
@@ -228,44 +189,8 @@ export function AgentList({onCreate}: Props) {
     return tab === 'subagent' ? [GENERAL_ROW, ...filtered] : filtered;
   }, [rows, tab]);
 
-  const handleRename = async (agentId: string, name: string) => {
-    const trimmed = name.trim();
-    if (trimmed === '') {
-      return;
-    }
-    const def = await runtime.agentRegistry.get(agentId);
-    await runtime.agentRegistry.upsert(agentId, {...def, name: trimmed});
-    await reload();
-  };
-
-  const handleDuplicate = async (agentId: string) => {
-    const def = await runtime.agentRegistry.get(agentId);
-    const copyId = `agent-${Date.now()}`;
-    await runtime.agentRegistry.upsert(copyId, {
-      ...def,
-      name: `${def.name}-copy`,
-    });
-    await reload();
-    navigation.navigate('AgentEditor', {agentId: copyId});
-  };
-
-  const handleDelete = async (agentId: string) => {
-    const displayName = rows.find(r => r.id === agentId)?.name ?? agentId;
-    Alert.alert('删除 Agent', `删除 Agent「${displayName}」？`, [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: () => {
-          (async () => {
-            await runtime.agentRegistry.delete(agentId);
-            await reload();
-          })().catch(err => showToast(toastMessage('删除失败', err)));
-        },
-      },
-    ]);
-  };
-
+  // nm-style: keep-local — 批量删除确认收口「勾选集快照 → 逐个删 → 退批选 → 刷新」，
+  // 22 行生命周期内联进 ManageHeader 的 prop 会把共享的批选状态拆散。
   const confirmBatchDelete = () => {
     const ids = Array.from(batch.selectedIds);
     if (ids.length === 0) {
@@ -289,19 +214,6 @@ export function AgentList({onCreate}: Props) {
     ]);
   };
 
-  /** 失效配置行仅允许删除，避免 strict get() 在重命名/复制时失败。 */
-  const menuItemsFor = (agentId: string) => {
-    const row = rows.find(r => r.id === agentId);
-    if (row?.configInvalid) {
-      return [{label: '删除', action: 'delete', danger: true}];
-    }
-    return [
-      {label: '重命名', action: 'rename'},
-      {label: '复制', action: 'duplicate'},
-      {label: '删除', action: 'delete', danger: true},
-    ];
-  };
-
   return (
     <View style={styles.root}>
       <ManageHeader
@@ -322,6 +234,7 @@ export function AgentList({onCreate}: Props) {
           ) : null
         }
       />
+      {/* 切 tab 退出批量模式（照技能管理页先例，两侧勾选集不互通） */}
       <SegmentedControl
         options={[
           {
@@ -336,7 +249,10 @@ export function AgentList({onCreate}: Props) {
           },
         ]}
         value={tab}
-        onChange={switchTab}
+        onChange={next => {
+          setTab(next);
+          batch.exit();
+        }}
         tokens={tokens}
       />
       <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>
@@ -398,6 +314,7 @@ export function AgentList({onCreate}: Props) {
                   >
                     {item.name}
                   </Text>
+                  {/* mode 归一后为 all（显式/缺省）挂「全部」徽标；invalid 行读不到 def 也按 all */}
                   {item.builtin ? (
                     <View
                       style={[
@@ -411,7 +328,7 @@ export function AgentList({onCreate}: Props) {
                         内置
                       </Text>
                     </View>
-                  ) : isAllModeRow(item) ? (
+                  ) : (item.def?.mode ?? 'all') === 'all' ? (
                     <View
                       style={[
                         styles.tagBadge,
@@ -443,7 +360,7 @@ export function AgentList({onCreate}: Props) {
                           {color: tokens.warning},
                         ]}
                       >
-                        {AGENT_LIST_LABELS.configInvalid}
+                        {storedConfig.AGENT_LIST_LABELS.configInvalid}
                       </Text>
                     </View>
                     <Text
@@ -489,9 +406,20 @@ export function AgentList({onCreate}: Props) {
           )}
         />
       )}
+      {/* 失效配置行仅允许删除，避免 strict get() 在重命名/复制时失败 */}
       <BottomSheetMenu
         visible={menuAgentId != null}
-        items={menuAgentId ? menuItemsFor(menuAgentId) : []}
+        items={
+          !menuAgentId
+            ? []
+            : rows.find(r => r.id === menuAgentId)?.configInvalid
+            ? [{label: '删除', action: 'delete', danger: true}]
+            : [
+                {label: '重命名', action: 'rename'},
+                {label: '复制', action: 'duplicate'},
+                {label: '删除', action: 'delete', danger: true},
+              ]
+        }
         onClose={() => setMenuAgentId(undefined)}
         onSelect={action => {
           const id = menuAgentId;
@@ -505,9 +433,31 @@ export function AgentList({onCreate}: Props) {
               setRenamePrompt({agentId: id, initialName: row.name});
             }
           } else if (action === 'duplicate') {
-            handleDuplicate(id).catch(() => undefined);
+            void (async () => {
+              const def = await runtime.agentRegistry.get(id);
+              const copyId = `agent-${Date.now()}`;
+              await runtime.agentRegistry.upsert(copyId, {
+                ...def,
+                name: `${def.name}-copy`,
+              });
+              await reload();
+              navigation.navigate('AgentEditor', {agentId: copyId});
+            })().catch(() => undefined);
           } else if (action === 'delete') {
-            handleDelete(id).catch(() => undefined);
+            const displayName = rows.find(r => r.id === id)?.name ?? id;
+            Alert.alert('删除 Agent', `删除 Agent「${displayName}」？`, [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '删除',
+                style: 'destructive',
+                onPress: () => {
+                  void (async () => {
+                    await runtime.agentRegistry.delete(id);
+                    await reload();
+                  })().catch(err => showToast(toastMessage('删除失败', err)));
+                },
+              },
+            ]);
           }
         }}
       />
@@ -523,7 +473,15 @@ export function AgentList({onCreate}: Props) {
           const prompt = renamePrompt;
           setRenamePrompt(undefined);
           if (prompt) {
-            await handleRename(prompt.agentId, values[0]);
+            const trimmed = values[0].trim();
+            if (trimmed !== '') {
+              const def = await runtime.agentRegistry.get(prompt.agentId);
+              await runtime.agentRegistry.upsert(prompt.agentId, {
+                ...def,
+                name: trimmed,
+              });
+              await reload();
+            }
           }
         }}
       />

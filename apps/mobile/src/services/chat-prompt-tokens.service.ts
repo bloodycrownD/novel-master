@@ -26,6 +26,8 @@ import {
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
 // 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
+// nm-style: keep-local — 三条具名导入（tokenizer 驱动子路径 / core 符号名较长）
+// 单行化后均超 80 列，prettier 必拆回；按可读性保留拆行。
 import {
   cancelSessionNativeCounts,
   PromptCountCancelledError,
@@ -34,15 +36,14 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
 // 对拍 core 真实现而非 mock 行为）。
-import {
-  formatContextUsageLabel,
-  formatTokenSourceBadge,
-} from '@novel-master/core/common';
-import {
-  buildSessionPromptInput,
-  ChatPromptBuildBailedError,
-  type SessionPromptScope,
-} from './session-prompt-input.service';
+import {formatContextUsageLabel} from '@novel-master/core/common';
+import {formatTokenSourceBadge} from '@novel-master/core/common';
+import {buildSessionPromptInput} from './session-prompt-input.service';
+import {ChatPromptBuildBailedError} from './session-prompt-input.service';
+import type {SessionPromptScope} from './session-prompt-input.service';
+
+/** 会话身份（可空）：延迟计时/在途取消的统一入参形态。 */
+type SessionId = string | null | undefined;
 
 /**
  * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
@@ -52,15 +53,12 @@ import {
  * 有可用的真分词器（且会话切换时已被 `primeStreamTokenModelHint` 空闲预热过
  * cl100k 兜底表），用它没有额外成本。
  */
-function countFallbackTokens(
-  runtime: MobileNovelMasterRuntime,
-  serialized: string,
-): number {
-  const real = countTextWithDefaultEncoding(serialized);
+function countFallback(rt: MobileNovelMasterRuntime, text: string): number {
+  const real = countTextWithDefaultEncoding(text);
   if (real != null) {
     return real;
   }
-  return runtime.tokenCounters.heuristic.countText(serialized);
+  return rt.tokenCounters.heuristic.countText(text);
 }
 
 /**
@@ -68,27 +66,24 @@ function countFallbackTokens(
  * `formatTokenSourceBadge` + `formatContextUsageLabel` 统一给出，
  * 本文件不再自备一份映射（与 desktop main 的 buildTokenStats 同源同形）。
  */
-function formatChatTokenLabel(
-  result: {
-    tokenCount: number;
-    estimated: boolean;
-    counterKind: string;
-    source?: 'api' | 'local';
-  },
-  contextWindow: number | undefined,
-): string {
-  const badge = formatTokenSourceBadge(
-    result.source,
-    result.counterKind,
-    result.estimated,
-  );
-  return formatContextUsageLabel(result.tokenCount, contextWindow, badge);
+type TokenLabelResult = {
+  tokenCount: number;
+  estimated: boolean;
+  counterKind: string;
+  source?: 'api' | 'local';
+  contextWindow?: number;
+};
+
+function formatLabel(r: TokenLabelResult): string {
+  const badge = formatTokenSourceBadge(r.source, r.counterKind, r.estimated);
+  return formatContextUsageLabel(r.tokenCount, r.contextWindow, badge);
 }
 
 /**
  * 单发标签（完整口径：api 优先、miss 走家族计数器）。两阶段 UI 刷新用
  * {@link loadChatPromptTokenLabelResilient}；本函数留给单测与一次性取数场景。
  */
+// nm-style: keep-local — 导出签名（runtime 长类型 + scope 类型）单行化超 80 列
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -113,6 +108,7 @@ function isChipBailError(error: unknown): boolean {
  * 估算首帧是否值得后台升级：只有「resolve 走了本地估算档」才升级（api 命中
  * 已精确、无模型/构建失败路径没有更好的档位可升）。
  */
+// nm-style: keep-local — 四参签名（runtime 长类型 + 可选 bail 回调）单行化超 80 列
 async function loadChatTokenLabelWithFlag(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -121,15 +117,11 @@ async function loadChatTokenLabelWithFlag(
 ): Promise<{label: string; upgradeWorthy: boolean; savedModelId?: string}> {
   // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
   // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
-  const diagT0 = Date.now();
+  const t0 = Date.now();
+  const opt = shouldBail != null ? {shouldBail} : undefined;
   let bundle;
   try {
-    bundle = await buildSessionPromptInput(
-      runtime,
-      scope,
-      undefined,
-      shouldBail != null ? {shouldBail} : undefined,
-    );
+    bundle = await buildSessionPromptInput(runtime, scope, undefined, opt);
   } catch (error) {
     if (isChipBailError(error)) {
       // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
@@ -143,11 +135,8 @@ async function loadChatTokenLabelWithFlag(
   }
   const {definition, layout, ctx, rawMessages} = bundle;
   if (__DEV__) {
-    console.log(
-      `[nm-chip] build done +${
-        Date.now() - diagT0
-      }ms (preferEstimate=${preferEstimate})`,
-    );
+    const msg = `[nm-chip] build ${Date.now() - t0}ms est=${preferEstimate}`;
+    console.log(msg);
   }
   // 弃权检查点（build/resolve 关键边界，r3-chip-1）：build 的分段 bail 只管得到
   // build 段内部，最后一段 bail 到 resolve 派发之间还夹着 getSessionAgentConfig、
@@ -159,41 +148,35 @@ async function loadChatTokenLabelWithFlag(
     }
     return {label: '', upgradeWorthy: false};
   }
-  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-    scope.sessionId,
-  );
-  const savedModelId = definition.model ?? sessionConfig.modelId;
+  const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+  const savedModelId = definition.model ?? conf.modelId;
   if (!savedModelId) {
     // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
-    // countFallbackTokens 整串级重活没有弃权点。理由——① 这一分支只统计可见
+    // countFallback 整串级重活没有弃权点。理由——① 这一分支只统计可见
     // 消息正文、不做整串装配，量级比 resolve 段小一个数量级；② 无模型即无
     // 会话升级价值，丢掉这轮读数没有损失（下一轮刷新自然补上）。真要补也不难，
     // 但会让「无 bail 分支」这个例外从注释升格成需要长期维护的分支。
     const serialized = await serializePromptLlmInput(layout, ctx);
-    const count = countFallbackTokens(runtime, serialized);
+    const count = countFallback(runtime, serialized);
     return {
-      label: formatChatTokenLabel(
-        {
-          tokenCount: count,
-          estimated: true,
-          counterKind: 'heuristic',
-          source: 'local',
-        },
-        undefined,
-      ),
+      label: formatLabel({
+        tokenCount: count,
+        estimated: true,
+        counterKind: 'heuristic',
+        source: 'local',
+      }),
       upgradeWorthy: false,
     };
   }
-  const tokenizerOverride = await resolveTokenCounterModeForModel(
-    runtime.providerModels,
-    savedModelId,
-  );
+  const models = runtime.providerModels;
+  const mode = await resolveTokenCounterModeForModel(models, savedModelId);
   // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权：core 在驱动调用前
   // 抛 PromptTokenResolveBailedError，这里收成空串哨兵——不包这段，弃权错误
   // 会逃到外层 catch 回落 fallback（重算一遍，恰是要避免的竞争）。
   let result;
   try {
-    result = await resolvePromptTokensWithBackfill(
+    // nm-style: keep-local — 三实参（会话 / 大对象 / 选项对象）无法单行，且拆对象会改动调用顺序形态
+    const resultPromise = resolvePromptTokensWithBackfill(
       scope.sessionId,
       rawMessages,
       {
@@ -201,7 +184,7 @@ async function loadChatTokenLabelWithFlag(
         ctx,
         savedModelId,
         registry: runtime.tokenCounters,
-        tokenizerOverride,
+        tokenizerOverride: mode,
         savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
       },
       {
@@ -214,6 +197,7 @@ async function loadChatTokenLabelWithFlag(
         ...(shouldBail != null ? {shouldBail} : {}),
       },
     );
+    result = await resultPromise;
   } catch (error) {
     if (error instanceof PromptCountCancelledError) {
       // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
@@ -232,18 +216,13 @@ async function loadChatTokenLabelWithFlag(
     }
     throw error;
   }
-  const contextWindow = await runtime.providerModels.getContextWindow(
-    savedModelId,
-  );
+  const cw = await runtime.providerModels.getContextWindow(savedModelId);
   if (__DEV__) {
-    console.log(
-      `[nm-chip] resolve done +${
-        Date.now() - diagT0
-      }ms (preferEstimate=${preferEstimate})`,
-    );
+    const msg = `[nm-chip] resolve ${Date.now() - t0}ms est=${preferEstimate}`;
+    console.log(msg);
   }
   return {
-    label: formatChatTokenLabel(result, contextWindow ?? undefined),
+    label: formatLabel({...result, contextWindow: cw ?? undefined}),
     upgradeWorthy: result.source === 'local' && result.estimated,
     // 模型身份随首帧带出：升级轮用它区分「切模型」（旧轮读数必被丢弃，可取消）
     // 与「同模型的内容变化」（旧轮仍值得跑完，靠补跑槽收敛）。
@@ -313,9 +292,7 @@ const preciseUpgradeDelayTimers = new Map<
  * 守卫挡掉、根本不跑。
  * 会话 id 传 null/undefined 同理无事可做（该会话没有挂起计时）。
  */
-export function cancelPreciseUpgradeDelay(
-  sessionId: string | null | undefined,
-): void {
+export function cancelPreciseUpgradeDelay(sessionId: SessionId) {
   if (sessionId == null) {
     return;
   }
@@ -346,9 +323,7 @@ export function cancelPreciseUpgradeDelay(
  *
  * 无在途轮 / 无会话 id / 原生未提供 cancelCount 时均为 no-op（桥内处理）。
  */
-export function cancelPreciseUpgrade(
-  sessionId: string | null | undefined,
-): void {
+export function cancelPreciseUpgrade(sessionId: SessionId) {
   if (sessionId == null) {
     return;
   }
@@ -361,7 +336,7 @@ export function cancelPreciseUpgrade(
 }
 
 /** 一次后台精确升级请求：轮次起步时所需的全部上下文。 */
-type PreciseUpgradeRequest = {
+type UpgradeRequest = {
   readonly runtime: MobileNovelMasterRuntime;
   readonly scope: SessionPromptScope;
   /** 发起它的首帧标签：精确标签与之一致时不必回调（读数没变）。 */
@@ -379,7 +354,7 @@ type PreciseUpgradeRequest = {
  * 升级补跑槽（按 sessionId，只留最新一次）：升级在途期间又来了「同样是估算
  * 档」的更新首帧时，把这一次的升级请求记下，等在途轮落定后立刻补跑。
  */
-const preciseUpgradeQueued = new Map<string, PreciseUpgradeRequest>();
+const preciseUpgradeQueued = new Map<string, UpgradeRequest>();
 
 /**
  * 会话首帧刷新代数（升级回调新鲜度闸，cr-fix-spec-r2 s2/B-1）：每次
@@ -401,10 +376,7 @@ const sessionRefreshGen = new Map<string, number>();
  * 计数），只是把它从「丢弃即终」改成「丢弃即重来」；一旦某一轮跑完，L1 里就
  * 有了该内容的精确条目，后续首帧直接命中精确档、不再排队，链条自然收敛。
  */
-function startPreciseUpgrade(
-  sessionId: string,
-  request: PreciseUpgradeRequest,
-): void {
+function startPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
   // 在途标记在延迟窗口起就算数：延迟期间再来的升级请求必须走补跑槽，
   // 否则去重失效、同会话两轮整串计数并发。
   //
@@ -427,6 +399,7 @@ function startPreciseUpgrade(
     void runPreciseUpgrade(sessionId, request);
     return;
   }
+  // nm-style: keep-local — setTimeout 的「回调 + 延迟」两参无法单行（prettier@80 必折行）
   const timer = setTimeout(() => {
     // 已被新轮顶替（切模型/换会话）的旧计时器，即便回调已入队也不得起飞：
     // clearTimeout 只能撤回**未到期**的，回调入队后照样执行。旧 request 起步时
@@ -446,10 +419,7 @@ function startPreciseUpgrade(
  * 升级轮本体（延迟到期后跑）：起步先查弃权（延迟窗口里视图已切走/run 已
  * 起步的话，这轮重活一行都不跑），其余语义与原实现一致（新鲜度闸 + 补跑槽）。
  */
-async function runPreciseUpgrade(
-  sessionId: string,
-  request: PreciseUpgradeRequest,
-): Promise<void> {
+async function runPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
   // 只有仍是自己的轮次才继续：被顶替/被取消的旧轮（含「计时器回调已入队才被
   // clearTimeout」那条路径）在这里就退出，与 finally 的 stillOwner 同判据。
   if (preciseUpgradeInflight.get(sessionId)?.round !== request.round) {
@@ -471,12 +441,14 @@ async function runPreciseUpgrade(
       }
       return;
     }
-    const precise = await loadChatTokenLabelWithFlag(
+    // nm-style: keep-local — 四实参（request 深字段）无法单行；单实参调用 + 多行拆分
+    const precisePromise = loadChatTokenLabelWithFlag(
       request.runtime,
       request.scope,
       false,
       shouldBail,
     );
+    const precise = await precisePromise;
     if (
       // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
       precise.label !== '' &&
@@ -520,6 +492,7 @@ async function runPreciseUpgrade(
  * 在途期间的新首帧排进补跑槽（见 {@link startPreciseUpgrade}）——精确标签
  * 不会因为「恰好撞上另一次刷新」而永远不到。
  */
+// nm-style: keep-local — 导出签名（4 参 + 内联 options 类型）单行化超 80 列
 export async function loadChatPromptTokenLabelResilient(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -536,13 +509,9 @@ export async function loadChatPromptTokenLabelResilient(
   },
 ): Promise<string> {
   let first: {label: string; upgradeWorthy: boolean; savedModelId?: string};
+  const bail = options?.shouldBail;
   try {
-    first = await loadChatTokenLabelWithFlag(
-      runtime,
-      scope,
-      true,
-      options?.shouldBail,
-    );
+    first = await loadChatTokenLabelWithFlag(runtime, scope, true, bail);
   } catch (error) {
     if (__DEV__) {
       console.warn('[nm/chat] prompt count failed, message fallback', error);
@@ -564,7 +533,7 @@ export async function loadChatPromptTokenLabelResilient(
   // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
   const runInFlight = runtime.abortRegistry.has(sessionId);
   if (first.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
-    const request: PreciseUpgradeRequest = {
+    const request: UpgradeRequest = {
       runtime,
       scope,
       baselineLabel: first.label,
@@ -604,25 +573,25 @@ export async function loadChatPromptTokenLabelResilient(
 }
 
 /** Message-only heuristic when full prompt build fails (still useful in meta bar). */
+// nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
+// catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
 async function loadChatPromptTokenLabelFallback(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
   const all = await runtime.messages.listBySession(scope.sessionId);
   const visible = all.filter(m => !m.hidden);
-  const serialized = visible
-    .map(m => `${m.role}: ${messageBodyTextFromBlocks(m.content.blocks)}`)
-    .join('\n\n');
-  const count = countFallbackTokens(runtime, serialized);
+  const bodyText = messageBodyTextFromBlocks;
+  const lines = visible.map(m => `${m.role}: ${bodyText(m.content.blocks)}`);
+  const serialized = lines.join('\n\n');
+  const count = countFallback(runtime, serialized);
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
   let savedModelId: string | undefined;
   try {
     const {definition} = await buildSessionPromptInput(runtime, scope);
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-      scope.sessionId,
-    );
-    savedModelId = definition.model ?? sessionConfig.modelId;
+    const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+    savedModelId = definition.model ?? conf.modelId;
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;
@@ -638,13 +607,11 @@ async function loadChatPromptTokenLabelFallback(
     }
   }
 
-  return formatChatTokenLabel(
-    {
-      tokenCount: count,
-      estimated: true,
-      counterKind: 'heuristic',
-      source: 'local',
-    },
+  return formatLabel({
+    tokenCount: count,
+    estimated: true,
+    counterKind: 'heuristic',
+    source: 'local',
     contextWindow,
-  );
+  });
 }

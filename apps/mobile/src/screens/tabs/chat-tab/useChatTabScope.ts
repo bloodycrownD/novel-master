@@ -12,23 +12,16 @@ import {
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
 import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {
-  type ChatProject,
-  type ChatSession,
-  type SkillToolRef,
-} from '@novel-master/core/chat';
+import type {ChatProject} from '@novel-master/core/chat';
+import type {ChatSession} from '@novel-master/core/chat';
+import type {SkillToolRef} from '@novel-master/core/chat';
 import {toastMessage} from '@/errors/toast-message';
-import {
-  loadChatAgentMeta,
-  type ChatAgentMeta,
-} from '@/services/chat-agent-meta';
-import {
-  cancelPreciseUpgrade,
-  cancelPreciseUpgradeDelay,
-  loadChatPromptTokenLabelResilient,
-} from '@/services/chat-prompt-tokens.service';
+import {loadChatAgentMeta} from '@/services/chat-agent-meta';
+import type {ChatAgentMeta} from '@/services/chat-agent-meta';
+import * as promptTokens from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
+// nm-style: keep-local — 三具名 + service 路径单行化超 80 列
 import {
   clearSessionViewCache,
   clearSessionViewCachesByProject,
@@ -39,14 +32,35 @@ import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcrip
 import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
 import {setPromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
-import {
-  resolveChatLinkIntent,
-} from './chat-link-nav';
+import {resolveChatLinkIntent} from './chat-link-nav';
 import {chatLinkResolver} from '@novel-master/core/chat';
 
+// nm-style: keep-local — 本文件的 React hooks（useEffect/useLayoutEffect/useCallback/
+// useMemo）、setTimeout 与两处带泛型的 useState 解构，在 prettier@80 下都会折行；
+// 外提回调会改变闭包/deps 语义，故按「规则无法两全选可读性」保留拆行。
 export type SessionListPanel = 'sessions' | 'projects';
 export type ChatSubview = 'sessions' | 'conversation';
 export type ConversationPanel = 'chat' | 'workspace';
+
+/** token 标签刷新防抖槽（单槽服务当前会话）。 */
+type ChatTokenSlot = {
+  key: string;
+  hasLabel: boolean;
+  sessionId: string | null;
+  timer: ReturnType<typeof setTimeout> | null;
+  deferred: {
+    promise: Promise<void>;
+    resolve: (value: Promise<void>) => void;
+  } | null;
+  running: Promise<void> | null;
+};
+
+/** refreshChatMeta 的在途复用槽。 */
+type ChatMetaInflight = {
+  key: string;
+  round: number;
+  promise: Promise<void>;
+};
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -76,9 +90,8 @@ export function useChatTabScope({
   const [currentProject, setCurrentProjectMeta] = useState<
     ChatProject | undefined
   >();
-  const [sessionListPanel, setSessionListPanel] =
-    useState<SessionListPanel>('sessions');
-  const [chatSubview, setChatSubview] = useState<ChatSubview>('sessions');
+  const [panel, setPanel] = useState<SessionListPanel>('sessions');
+  const [chatSubview, setSubview] = useState<ChatSubview>('sessions');
   // chatSubview 的同步镜像：chip 精确升级轮的弃权判据要在异步链里同步读
   // 「视图是否还在对话」——state 本身闭包老化，ref 永远最新。
   // 赋值放 useLayoutEffect 而非 render body（cr2-B-1）：并发根下被丢弃的
@@ -89,11 +102,10 @@ export function useChatTabScope({
   useLayoutEffect(() => {
     chatSubviewRef.current = chatSubview;
   }, [chatSubview]);
-  const [conversationPanel, setConversationPanel] =
-    useState<ConversationPanel>('chat');
+  const [convPanel, setConvPanel] = useState<ConversationPanel>('chat');
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
-  const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
+  const [vfsRefreshKey, setVfsKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
     {sessionId: string; initialTitle: string} | undefined
@@ -101,9 +113,7 @@ export function useChatTabScope({
   // agentMeta 未加载窗口用 undefined 表达（au/B-1）：undefined = 锁定/占位，
   // 绝不用 source:'none' 占位冒充「已删待重选」——none 仅在 loadChatAgentMeta
   // 归一（AgentRunResolveError）成功落位后才出现。
-  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta | undefined>(
-    undefined,
-  );
+  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>();
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
   // token 标签刷新防抖窗口（message-token-cache Step 4 / T-TC6）：300ms
@@ -139,9 +149,7 @@ export function useChatTabScope({
   useLayoutEffect(() => {
     tokenLabelSessionRef.current = sessionId ?? null;
     setAgentMeta(prev =>
-      prev == null || sessionId == null
-        ? prev
-        : {...prev, tokenLabel: '…'},
+      prev == null || sessionId == null ? prev : {...prev, tokenLabel: '…'},
     );
   }, [sessionId]);
 
@@ -153,26 +161,18 @@ export function useChatTabScope({
   // - sessionId：挂起计时器**那一轮**的会话身份（scheduleTrailing 里与 timer
   //   同处写入）——换会话/卸载时按它收口精确升级的延迟计时，cancel 打的是
   //   发起轮而非当前轮。其余消费点不读它。
-  const chatTokenLabelDebounceRef = useRef<{
-    key: string;
-    hasLabel: boolean;
-    sessionId: string | null;
-    timer: ReturnType<typeof setTimeout> | null;
-    deferred: {
-      promise: Promise<void>;
-      resolve: (value: Promise<void>) => void;
-    } | null;
-    running: Promise<void> | null;
-  }>({
+  const initialSlot: ChatTokenSlot = {
     key: '',
     hasLabel: false,
     sessionId: null,
     timer: null,
     deferred: null,
     running: null,
-  });
+  };
+  const chatTokenLabelDebounceRef = useRef<ChatTokenSlot>(initialSlot);
 
-  const runChatTokenLabelRefresh = useCallback(async () => {
+  // nm-style: keep-local — 回调承载 token 标签防抖槽/在途/弃权状态机，内联回 useCallback 会让调用参数跨行
+  const runRefreshImpl = async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
     // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
     if (projectId == null || sessionId == null) {
@@ -187,10 +187,10 @@ export function useChatTabScope({
     // （onSettled / 末条转录事件）触发的刷新 300ms 后才执行，彼时 core 的
     // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
     // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
-    const debounceSlot = chatTokenLabelDebounceRef.current;
+    const slot = chatTokenLabelDebounceRef.current;
     if (
-      debounceSlot.key === `${projectId}#${sessionId}` &&
-      debounceSlot.hasLabel &&
+      slot.key === `${projectId}#${sessionId}` &&
+      slot.hasLabel &&
       runtime.abortRegistry.has(sessionId)
     ) {
       return;
@@ -202,7 +202,8 @@ export function useChatTabScope({
       prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'},
     );
     try {
-      const tokenLabel = await loadChatPromptTokenLabelResilient(
+      // nm-style: keep-local — 四实参（runtime / scope / 升级回调 / 弃权选项）无法单行
+      const tokenLabelPromise = promptTokens.loadChatPromptTokenLabelResilient(
         runtime,
         {projectId, sessionId},
         // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
@@ -243,6 +244,7 @@ export function useChatTabScope({
             tokenLabelSessionRef.current !== sessionId,
         },
       );
+      const tokenLabel = await tokenLabelPromise;
       // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
       // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
       // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
@@ -253,26 +255,19 @@ export function useChatTabScope({
       // 新增的一条消息，run 结束后的刷新（onSettled → transcript 变化）会算出
       // 新的精确值；首刷（hasLabel=false）不冻，否则切进运行中会话时 chip 会
       // 空白到 run 结束。
-      const runInFlightWithLabel =
-        chatTokenLabelDebounceRef.current.hasLabel &&
-        runtime.abortRegistry.has(sessionId);
-      if (
-        tokenLabel &&
-        tokenLabelSessionRef.current === sessionId &&
-        !runInFlightWithLabel
-      ) {
+      const frozen = slot.hasLabel && runtime.abortRegistry.has(sessionId);
+      if (tokenLabel && tokenLabelSessionRef.current === sessionId && !frozen) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
         // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
         if (
-          chatTokenLabelDebounceRef.current.key ===
-          `${projectId}#${sessionId}`
+          chatTokenLabelDebounceRef.current.key === `${projectId}#${sessionId}`
         ) {
           chatTokenLabelDebounceRef.current.hasLabel = true;
         }
       }
     } catch {
       // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
-      // 这里**刻意不过 runInFlightWithLabel**：真失败（DB 读取抛错、家族解析
+      // 这里**刻意不过 frozen**：真失败（DB 读取抛错、家族解析
       // 异常）时宁可清空，也不留一个可能过时的精确值。代价是 run 在途且本次
       // 刷新恰好 reject 的窗口里 chip 仍会被清空——已知边界，见 cr-fix-spec
       // K 节 P3；触发概率极低（该路径只在底层读取整体失败时走到）。
@@ -280,9 +275,12 @@ export function useChatTabScope({
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       }
     }
-  }, [runtime, projectId, sessionId]);
+  };
+  const runRefreshDeps = [runtime, projectId, sessionId];
+  const runRefresh = useCallback(runRefreshImpl, runRefreshDeps);
 
-  const refreshChatTokenLabel = useCallback((): Promise<void> => {
+  // nm-style: keep-local — 回调承载防抖槽与会话身份闸状态机，内联回 useCallback 会让调用参数跨行
+  const refreshLabelImpl = (): Promise<void> => {
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
     const slot = chatTokenLabelDebounceRef.current;
     if (slot.key !== key) {
@@ -293,11 +291,11 @@ export function useChatTabScope({
       // 「发起那一轮」的会话身份，所以在 slot.key 赋值之前读 slot.sessionId
       // ——写在赋值之后读到的是新会话，cancel 会打偏。
       const stale = slot.sessionId;
-      cancelPreciseUpgradeDelay(stale);
+      promptTokens.cancelPreciseUpgradeDelay(stale);
       // 在途原生计数一并撤掉（tokenizer-native-cancel）：延迟收口只管得到
       // 「还没过桥」的那些，已起跑的那轮是秒级重活，正是堵返回键的元凶。
       // 同用 stale——身份必须取自 slot.key 赋值之前。
-      cancelPreciseUpgrade(stale);
+      promptTokens.cancelPreciseUpgrade(stale);
       if (slot.timer != null) {
         clearTimeout(slot.timer);
         slot.timer = null;
@@ -320,7 +318,8 @@ export function useChatTabScope({
       const win = CHAT_TOKEN_LABEL_DEBOUNCE_MS;
       // 与本轮 timer 同生命周期记下会话身份：换会话/卸载时按它收口升级延迟。
       slot.sessionId = sessionId ?? null;
-      slot.timer = setTimeout(() => {
+      // nm-style: keep-local — 回调承载防抖计时收口与在途复用状态机，内联回 setTimeout 会让调用参数跨行
+      const onDebounceElapsed = () => {
         slot.timer = null;
         // 计时期间又切了会话（无新触发清理）：本轮按旧 key 作废。
         if (slot.key !== timerKey) {
@@ -331,7 +330,7 @@ export function useChatTabScope({
         const previousRun = slot.running;
         const run = (
           previousRun ? previousRun.catch(() => undefined) : Promise.resolve()
-        ).then(() => runChatTokenLabelRefresh());
+        ).then(() => runRefresh());
         slot.running = run;
         const settle = () => {
           if (slot.running === run) {
@@ -345,7 +344,8 @@ export function useChatTabScope({
         if (deferred != null) {
           deferred.resolve(run);
         }
-      }, win);
+      };
+      slot.timer = setTimeout(onDebounceElapsed, win);
     };
     if (slot.running != null) {
       // 在途复用：并发触发直接挂正在跑的一轮；追赶轮保证新触发最终被计算。
@@ -361,7 +361,9 @@ export function useChatTabScope({
     }
     scheduleTrailing();
     return slot.deferred.promise;
-  }, [projectId, sessionId, runChatTokenLabelRefresh]);
+  };
+  const refreshDeps = [projectId, sessionId, runRefresh];
+  const refreshChatTokenLabel = useCallback(refreshLabelImpl, refreshDeps);
 
   // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState；同时收口它那一轮
   // 已挂起的精确升级延迟计时（组件已死，没人消费升级标签，秒级重活纯浪费）。
@@ -373,10 +375,10 @@ export function useChatTabScope({
         clearTimeout(slot.timer);
         slot.timer = null;
       }
-      cancelPreciseUpgradeDelay(slot.sessionId);
+      promptTokens.cancelPreciseUpgradeDelay(slot.sessionId);
       // 在途原生计数一并撤掉（tokenizer-native-cancel）：组件已死，没人消费
       // 升级标签，已过桥的那轮秒级重活纯浪费。
-      cancelPreciseUpgrade(slot.sessionId);
+      promptTokens.cancelPreciseUpgrade(slot.sessionId);
     },
     [],
   );
@@ -388,22 +390,17 @@ export function useChatTabScope({
   // 轮次比对——只有仍是槽内最新一轮的读数才许落地。切会话后旧会话在途的
   // loadChatAgentMeta 落定（含失败）一律丢弃，否则旧会话的 agentName /
   // modelLabel 会写进新会话（tokenLabel 因显式保留恰好幸免，其余字段不是）。
-  const refreshChatMetaInflightRef = useRef<{
-    key: string;
-    round: number;
-    promise: Promise<void>;
-  } | null>(null);
+  const refreshChatMetaInflightRef = useRef<ChatMetaInflight | null>(null);
   const refreshChatMetaRoundRef = useRef(0);
 
   // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
   // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
   // 重跑。ref 保住依赖稳定，调用时取最新引用。
   const showToastRef = useRef(showToast);
-  useEffect(() => {
-    showToastRef.current = showToast;
-  }, [showToast]);
+  useEffect(() => void (showToastRef.current = showToast), [showToast]);
 
-  const refreshChatMeta = useCallback(() => {
+  // nm-style: keep-local — 回调承载 meta 在途槽与轮次闸状态机，内联回 useCallback 会让调用参数跨行
+  const metaRefreshImpl = () => {
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
     const inflight = refreshChatMetaInflightRef.current;
     if (inflight != null && inflight.key === key) {
@@ -417,10 +414,10 @@ export function useChatTabScope({
       // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
       // projectId/sessionId），并行发起；两路赋值顺序保持
       // （先 hasWorkspaceModel 后 agentMeta），失败语义不变。
-      const metaPromise =
-        projectId != null && sessionId != null
-          ? loadChatAgentMeta(runtime, projectId, sessionId)
-          : undefined;
+      let metaPromise;
+      if (projectId != null && sessionId != null) {
+        metaPromise = loadChatAgentMeta(runtime, projectId, sessionId);
+      }
       // 兜底挂接：getCurrentModelId 先失败提前退出时，在途 meta 查询的
       // 拒绝不会变成 unhandled rejection（其结果本就不会再被消费）。
       metaPromise?.catch(() => undefined);
@@ -471,9 +468,17 @@ export function useChatTabScope({
     };
     promise.then(settleInflight, settleInflight);
     return promise;
-  }, [runtime, projectId, sessionId, refreshChatTokenLabel]);
+  };
+  const metaRefreshDeps = [
+    runtime,
+    projectId,
+    sessionId,
+    refreshChatTokenLabel,
+  ];
+  const refreshChatMeta = useCallback(metaRefreshImpl, metaRefreshDeps);
 
-  const reloadLists = useCallback(async () => {
+  // nm-style: keep-local — 回调承载项目/会话列表装载状态链，内联回 useCallback 会让调用参数跨行
+  const reloadListsImpl = async () => {
     const plist = await runtime.projects.list();
     setProjects(plist);
     const pid = projectId ?? plist[0]?.id;
@@ -496,7 +501,8 @@ export function useChatTabScope({
       setCurrentProjectMeta(undefined);
       setSessions([]);
     }
-  }, [runtime, projectId]);
+  };
+  const reloadLists = useCallback(reloadListsImpl, [runtime, projectId]);
 
   useEffect(() => {
     reloadLists().catch(() => undefined);
@@ -517,9 +523,7 @@ export function useChatTabScope({
 
   const currentSession = sessions.find(s => s.id === sessionId);
 
-  const backFromConversation = useCallback(() => {
-    setChatSubview('sessions');
-  }, []);
+  const backFromConversation = useCallback(() => setSubview('sessions'), []);
 
   const handleCreateProject = useCallback(
     async (name: string) => {
@@ -598,6 +602,7 @@ export function useChatTabScope({
     [runtime, reloadLists, showToast],
   );
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleDeleteSession = useCallback(
     async (targetSessionId: string) => {
       try {
@@ -606,12 +611,11 @@ export function useChatTabScope({
         // （纯内存同步方法、不抛错，放 try 内 delete 成功之后不影响 catch 语义）。
         runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
         if (projectId != null) {
-          clearSessionViewCache(
-            sessionViewCacheKey(projectId, targetSessionId),
-          );
+          const cacheKey = sessionViewCacheKey(projectId, targetSessionId);
+          clearSessionViewCache(cacheKey);
         }
         if (sessionId === targetSessionId) {
-          setChatSubview('sessions');
+          setSubview('sessions');
         }
         await refreshScope();
         await reloadLists();
@@ -627,19 +631,16 @@ export function useChatTabScope({
     (targetSessionId: string) => {
       const session = sessions.find(s => s.id === targetSessionId);
       const label = session?.title?.trim() || '该会话';
-      Alert.alert(
-        '确认删除',
-        `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`,
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '删除',
-            style: 'destructive',
-            onPress: () =>
-              handleDeleteSession(targetSessionId).catch(() => undefined),
-          },
-        ],
-      );
+      const msg = `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`;
+      Alert.alert('确认删除', msg, [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () =>
+            handleDeleteSession(targetSessionId).catch(() => undefined),
+        },
+      ]);
     },
     [sessions, handleDeleteSession],
   );
@@ -665,7 +666,7 @@ export function useChatTabScope({
         const deletedCurrent = sessionId != null && ids.includes(sessionId);
         exitSessionBatch();
         if (deletedCurrent) {
-          setChatSubview('sessions');
+          setSubview('sessions');
         }
         await refreshScope();
         await reloadLists();
@@ -674,47 +675,45 @@ export function useChatTabScope({
     [runtime, sessionId, projectId, refreshScope, reloadLists, showToast],
   );
 
-  const handleDeleteProjects = useCallback(
-    async (ids: string[]) => {
-      // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
-      try {
-        for (const id of ids) {
-          // 必须在 delete 之前取会话清单：项目删除是级联的，删完就再也读不到归属关系。
-          // TODO(AM-1 已知缺口)：`listByProject` 的 SQL 硬编码 `parent_session_id IS NULL`
-          //   ⇒ 只返回顶层会话，子 agent 会话不在结果里，而 manager 恰恰为子会话写过
-          //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
-          //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
-          //   残留条目最多存活到被淘汰，不会永久泄漏。
-          //   补法（**不必等 core 大改，这个缺口今天就能收**）：`listByParentSession`
-          //   在 core 里已经存在——仓储 port（domain/chat/repositories/session.port.ts）
-          //   与实现（impl/sqlite-session.repository.ts）都有，BFS 队列展开的成例也现成
-          //   （service/chat/impl/project.service.ts 的 delete、service/vfs/impl/
-          //   physical-vfs.service.ts 两处）。真正缺的只是**服务层没导出**：
-          //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
-          //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
-          const doomedSessions = await runtime.sessions.listByProject(id);
-          await runtime.projects.delete(id);
-          for (const s of doomedSessions) {
-            runtime.sessionStreamUnitManager.forgetSession(s.id);
-          }
-          // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
-          clearSessionViewCachesByProject(id);
-          clearScrollSnapshotsByProject(id);
-          clearTranscriptScrollSnapshotsByProject(id);
+  // nm-style: keep-local — 回调承载级联删项目与会话缓存清理状态链，内联回 useCallback 会让调用参数跨行
+  const deleteProjectsImpl = async (ids: string[]) => {
+    // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
+    try {
+      for (const id of ids) {
+        // 必须在 delete 之前取会话清单：项目删除是级联的，删完就再也读不到归属关系。
+        // TODO(AM-1 已知缺口)：`listByProject` 的 SQL 硬编码 `parent_session_id IS NULL`
+        //   ⇒ 只返回顶层会话，子 agent 会话不在结果里，而 manager 恰恰为子会话写过
+        //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
+        //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
+        //   残留条目最多存活到被淘汰，不会永久泄漏。
+        //   补法（**不必等 core 大改，这个缺口今天就能收**）：`listByParentSession`
+        //   在 core 里已经存在——仓储 port（domain/chat/repositories/session.port.ts）
+        //   与实现（impl/sqlite-session.repository.ts）都有，BFS 队列展开的成例也现成
+        //   （service/chat/impl/project.service.ts 的 delete、service/vfs/impl/
+        //   physical-vfs.service.ts 两处）。真正缺的只是**服务层没导出**：
+        //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
+        //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
+        const doomedSessions = await runtime.sessions.listByProject(id);
+        await runtime.projects.delete(id);
+        for (const s of doomedSessions) {
+          runtime.sessionStreamUnitManager.forgetSession(s.id);
         }
-      } catch (error) {
-        showToast(toastMessage('删除失败', error));
-      } finally {
-        await refreshScope();
-        await reloadLists();
+        // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
+        clearSessionViewCachesByProject(id);
+        clearScrollSnapshotsByProject(id);
+        clearTranscriptScrollSnapshotsByProject(id);
       }
-    },
-    [runtime, refreshScope, reloadLists, showToast],
-  );
+    } catch (error) {
+      showToast(toastMessage('删除失败', error));
+    } finally {
+      await refreshScope();
+      await reloadLists();
+    }
+  };
+  const projectsDeps = [runtime, refreshScope, reloadLists, showToast];
+  const handleDeleteProjects = useCallback(deleteProjectsImpl, projectsDeps);
 
-  const bumpWorktreeUiToken = useCallback(() => {
-    setVfsRefreshKey(key => key + 1);
-  }, []);
+  const bumpWorktreeUiToken = useCallback(() => setVfsKey(k => k + 1), []);
 
   const openFileEditor = useCallback(
     (path: string, scopeKind: 'project' | 'session') => {
@@ -747,7 +746,7 @@ export function useChatTabScope({
 
   const openSessionFilePreview = useCallback(
     (path: string) => {
-      setConversationPanel('workspace');
+      setConvPanel('workspace');
       openFileEditor(path, 'session');
     },
     [openFileEditor],
@@ -775,15 +774,15 @@ export function useChatTabScope({
   // projectId（webview / 卡片无会话上下文），这里按当前会话项目补齐。
   const openSkillDetail = useCallback(
     (ref: SkillToolRef) => {
-      const targetProjectId =
-        ref.domain === 'project' ? ref.projectId ?? projectId : undefined;
-      if (ref.domain === 'project' && targetProjectId == null) {
+      const isProject = ref.domain === 'project';
+      const pid = isProject ? ref.projectId ?? projectId : undefined;
+      if (isProject && pid == null) {
         return;
       }
       navigation.navigate('SkillDetail', {
         domain: ref.domain,
         name: ref.name,
-        ...(targetProjectId != null ? {projectId: targetProjectId} : {}),
+        ...(pid != null ? {projectId: pid} : {}),
       });
     },
     [navigation, projectId],
@@ -798,19 +797,14 @@ export function useChatTabScope({
   // body/headers 这类入参只存在于原始入参里，摘要一行给不出，光看输出没法
   // 判断「为什么发了这个请求」。正文用原文 pretty JSON，不做二次格式化。
   const openToolResult = useCallback(
-    (payload: {
-      title: string;
-      content: string;
-      inputJson?: string;
-    }) => {
-      const body =
-        payload.inputJson != null && payload.inputJson !== ''
-          ? `【输入】\n${payload.inputJson}\n\n【输出】\n${payload.content}`
-          : payload.content;
-      setPromptTurnDetail({title: payload.title, body});
+    (payload: {title: string; content: string; inputJson?: string}) => {
+      const {title, content, inputJson} = payload;
+      const withInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
+      const body = inputJson != null && inputJson !== '' ? withInput : content;
+      setPromptTurnDetail({title, body});
       navigation.navigate('PromptTurnDetail', {
-        title: payload.title,
-        turnId: `tool-result-${payload.title}`,
+        title,
+        turnId: `tool-result-${title}`,
       });
     },
     [navigation],
@@ -882,12 +876,12 @@ export function useChatTabScope({
     sessions,
     currentProject,
     currentSession,
-    sessionListPanel,
-    setSessionListPanel,
+    sessionListPanel: panel,
+    setSessionListPanel: setPanel,
     chatSubview,
-    setChatSubview,
-    conversationPanel,
-    setConversationPanel,
+    setChatSubview: setSubview,
+    conversationPanel: convPanel,
+    setConversationPanel: setConvPanel,
     projectDrawerOpen,
     setProjectDrawerOpen,
     sessionDrawerOpen,

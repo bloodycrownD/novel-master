@@ -9,7 +9,18 @@ import {
 } from '@/config-forms/agent';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
-async function listAgentDisplayNameSlots(runtime: MobileNovelMasterRuntime) {
+/**
+ * Creates blank agent in registry; returns new agentId.
+ *
+ * `mode` 传入时作为新定义的默认作用域直接落库（主 tab → "primary"、
+ * 子 tab → "subagent"）；不传则维持既有行为（缺省 all，双侧可见）。
+ */
+// nm-style: keep-local — 导出签名（3 参 + runtime 长类型 + 模板默认值）单行化超 80 列
+export async function createBlankAgent(
+  runtime: MobileNovelMasterRuntime,
+  id = `agent-${Date.now()}`,
+  mode?: AgentMode,
+): Promise<string> {
   const ids = await runtime.agentRegistry.listAgentIds();
   const slots = [];
   for (const id of ids) {
@@ -20,23 +31,7 @@ async function listAgentDisplayNameSlots(runtime: MobileNovelMasterRuntime) {
       slots.push({id, name: id});
     }
   }
-  return slots;
-}
-
-/**
- * Creates blank agent in registry; returns new agentId.
- *
- * `mode` 传入时作为新定义的默认作用域直接落库（主 tab → "primary"、
- * 子 tab → "subagent"）；不传则维持既有行为（缺省 all，双侧可见）。
- */
-export async function createBlankAgent(
-  runtime: MobileNovelMasterRuntime,
-  id = `agent-${Date.now()}`,
-  mode?: AgentMode,
-): Promise<string> {
-  const name = allocateAgentDisplayName(
-    await listAgentDisplayNameSlots(runtime),
-  );
+  const name = allocateAgentDisplayName(slots);
   await runtime.agentRegistry.upsert(id, {
     name,
     ...(mode != null ? {mode} : {}),

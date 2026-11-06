@@ -10,10 +10,10 @@ import {Alert, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
-import {
-  buildAgentDefinitionFromForm,
-  PROMPT_REGION_LABELS,
-} from '@/config-forms/agent';
+// nm-style: keep-local — 本文件的具名导入（core/config-forms 名称较长）单行化后均超 80 列，
+// prettier 必拆回；按可读性保留拆行。
+import {buildAgentDefinitionFromForm} from '@/config-forms/agent';
+import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
 import {
   STORED_CONFIG_LABELS,
   buildDefaultAgentDefinitionPreservingName,
@@ -31,10 +31,8 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
-import {
-  exportAgentYaml,
-  importAgentYaml,
-} from '../../services/agent-yaml.service';
+import {exportAgentYaml} from '../../services/agent-yaml.service';
+import {importAgentYaml} from '../../services/agent-yaml.service';
 import type {AgentDefinition} from '@novel-master/core/agent';
 import type {RootStackParamList} from '../../navigation/types';
 
@@ -66,8 +64,14 @@ type Props = {
 };
 
 export function AgentEditorForm(props: Props) {
-  const {onDirtyChange, onSaved, agentId, readOnly = false, initialDefinition} =
-    props;
+  // nm-style: keep-local — 五键解构单行化超 80 列；拆两行会牺牲可读性
+  const {
+    onDirtyChange,
+    onSaved,
+    agentId,
+    readOnly = false,
+    initialDefinition,
+  } = props;
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const navigation = useNavigation<StackNav>();
@@ -100,11 +104,10 @@ export function AgentEditorForm(props: Props) {
     setSaving,
   } = useAgentEditorFormState(agentId, runtime, showToast, initialDefinition);
 
-  useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
 
   // 只读形态首帧即有数据（initialDefinition 直填），不走 registry 拉取。
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   useEffect(() => {
     if (readOnly) {
       return;
@@ -112,6 +115,7 @@ export function AgentEditorForm(props: Props) {
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
   }, [loadAgent, showToast, readOnly]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleDeleteBrokenAgent = useCallback(() => {
     Alert.alert('删除 Agent', `删除 Agent「${displayName ?? agentId}」？`, [
       {text: '取消', style: 'cancel'},
@@ -137,7 +141,9 @@ export function AgentEditorForm(props: Props) {
     ]);
   }, [agentId, displayName, navigation, runtime, showToast]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleOverwriteDefault = useCallback(() => {
+    // nm-style: keep-local — 确认文案是长中文串，外提成 const 会因宽度被 prettier 拆行
     Alert.alert(
       '覆盖为默认模板',
       '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
@@ -151,9 +157,8 @@ export function AgentEditorForm(props: Props) {
               try {
                 const raw = await runtime.agentRegistry.getRawWire(agentId);
                 const displayName = agentDisplayNameFromWire(raw, agentId);
-                const def = buildDefaultAgentDefinitionPreservingName(
-                  displayName.trim() || agentId,
-                );
+                const baseName = displayName.trim() || agentId;
+                const def = buildDefaultAgentDefinitionPreservingName(baseName);
                 const probe = new ToolRegistry();
                 registerBuiltinTools(probe);
                 await runtime.agentRegistry.upsert(agentId, def, {
@@ -174,6 +179,8 @@ export function AgentEditorForm(props: Props) {
     );
   }, [agentId, loadAgent, onSaved, runtime, setRecovering, showToast]);
 
+  // nm-style: keep-local — 保存编排（构建 → 模型校验 → upsert → 基线/回调收尾）逾 20 行，
+  // 内联进 StickyFormFooter 的 onPress 会把保存生命周期塞进 prop。
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm(form);
     if (!built.ok) {
@@ -205,6 +212,7 @@ export function AgentEditorForm(props: Props) {
     }
   };
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleExportYaml = useCallback(async () => {
     try {
       const result = await exportAgentYaml(runtime, agentId);
@@ -216,6 +224,7 @@ export function AgentEditorForm(props: Props) {
     }
   }, [runtime, agentId, showToast]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleImportYaml = useCallback(() => {
     Alert.alert('导入 YAML', '将覆盖当前智能体配置，是否继续？', [
       {text: '取消', style: 'cancel'},
@@ -238,6 +247,7 @@ export function AgentEditorForm(props: Props) {
 
   // 全屏编辑入口：回调先写进模块级存取再 push（路由参数必须可序列化，
   // 不再放函数），保存才用现有 setter 回填（自动触发 dirty，不另接线）。
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const openPromptEditor = useCallback(
     (title: string, text: string, onSaved: (text: string) => void) => {
       setPromptEditorOnSaved(onSaved);
@@ -255,12 +265,12 @@ export function AgentEditorForm(props: Props) {
   }
 
   if (loadError != null || invalidConfig != null) {
-    const title =
-      invalidConfig != null ? STORED_CONFIG_LABELS.invalidTitle : '加载失败';
-    const reason =
-      invalidConfig != null
-        ? storedConfigInvalidReason(invalidConfig.code)
-        : loadError ?? '';
+    const labels = STORED_CONFIG_LABELS;
+    const title = invalidConfig != null ? labels.invalidTitle : '加载失败';
+    let reason = loadError ?? '';
+    if (invalidConfig != null) {
+      reason = storedConfigInvalidReason(invalidConfig.code);
+    }
     const detail = invalidConfig?.message ?? '';
     return (
       <AgentEditorInvalidCard

@@ -37,18 +37,12 @@ type Props = {
 
 const TOTAL = BUILTIN_TOOL_CATALOG.length;
 
-/** 根据 toolsMode 的语义把 label 里「白名单/黑名单」前缀传进来更准，但调用方目前两种都用本组件，统一显示「工具」。 */
-function buildTriggerLabel(selected: readonly string[]): string {
-  if (selected.length === 0) {
-    return `未选择工具（0/${TOTAL}）`;
-  }
-  if (selected.length >= TOTAL) {
-    return `全部工具（${TOTAL}/${TOTAL}）`;
-  }
-  return `已选工具（${selected.length}/${TOTAL}）`;
-}
-
-export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}: Props) {
+export function ToolPolicyPicker({
+  tokens,
+  selected,
+  onChange,
+  disabled = false,
+}: Props) {
   const overlay = useFormOverlay();
   const overlayKey = useId();
   const insets = useSafeAreaInsets();
@@ -59,6 +53,7 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
   // draft 仅在 sheet 从关闭翻到打开的那一刻用 selected 初始化一次；
   // 打开期间 selected 即便变了也不重置（避免外部改动把用户正在勾的草稿冲掉）。
   const prevOpenRef = useRef(false);
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setDraft(selected);
@@ -69,6 +64,7 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
 
   const draftSet = useMemo(() => new Set(draft), [draft]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q === '') {
@@ -81,6 +77,7 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
     );
   }, [query]);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const toggle = useCallback(
     (name: string) => {
       if (draftSet.has(name)) {
@@ -94,18 +91,18 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
 
   const close = useCallback(() => setOpen(false), []);
 
+  // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const confirm = useCallback(() => {
     onChange([...draft]);
     close();
   }, [onChange, draft, close]);
 
-  const triggerLabel = buildTriggerLabel(selected);
-
   // 键盘避让（上移 + maxHeight 收缩）由 ModalShell standalone + adaptive 策略统一处理：
   // FormOverlayHost 是普通 View 渲染层无任何避让，iOS 也要 iosTranslateY
   // 让面板自己 translateY，否则面板底部被键盘盖住 kb 高度、顶部留 kb 空隙。
 
-  useEffect(() => {
+  // nm-style: keep-local — sheet 生命周期与 overlay 句柄绑定，内联回 useEffect 会让调用参数跨行
+  const showSheet = () => {
     if (!open || !overlay) {
       overlay?.hide(overlayKey);
       return;
@@ -183,7 +180,8 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
     );
 
     return () => overlay.hide(overlayKey);
-  }, [
+  };
+  const sheetDeps = [
     open,
     overlay,
     overlayKey,
@@ -196,7 +194,8 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
     close,
     confirm,
     toggle,
-  ]);
+  ];
+  useEffect(showSheet, sheetDeps);
 
   return (
     <Pressable
@@ -218,7 +217,11 @@ export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}:
         }}
         numberOfLines={1}
       >
-        {triggerLabel}
+        {selected.length === 0
+          ? `未选择工具（0/${TOTAL}）`
+          : selected.length >= TOTAL
+          ? `全部工具（${TOTAL}/${TOTAL}）`
+          : `已选工具（${selected.length}/${TOTAL}）`}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
     </Pressable>

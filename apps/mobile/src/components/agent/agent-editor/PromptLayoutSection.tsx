@@ -25,10 +25,8 @@ import {DynamicBlocksCard} from './DynamicBlocksCard';
 import {PromptSectionHead} from './PromptSectionHead';
 import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
-import {
-  type AgentEditorFormState,
-  type AgentEditorFormPatch,
-} from './useAgentEditorFormState';
+import type {AgentEditorFormState} from './useAgentEditorFormState';
+import type {AgentEditorFormPatch} from './useAgentEditorFormState';
 
 // 自定义附加信息输入框文案（core 未导出，UI 层自管）。
 const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
@@ -111,6 +109,7 @@ export function PromptLayoutSection({
             label={PROMPT_REGION_LABELS.systemContent}
             disabled={readOnly}
             openEditor={() =>
+              // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
               openPromptEditor(
                 PROMPT_REGION_LABELS.systemContent,
                 form.systemContent,
@@ -188,13 +187,11 @@ export function PromptLayoutSection({
         switchValue={form.workplaceEnabled}
         disabled={readOnly}
         onSwitchChange={next => {
-          const patched = withWorkplaceToggle(
-            next,
-            form.workplaceAssistantText,
-          );
+          // nm-style: keep-local — 调用在事件回调里，单行化超 80 列
+          const wp = withWorkplaceToggle(next, form.workplaceAssistantText);
           patch({
-            workplaceEnabled: patched.workplaceEnabled,
-            workplaceAssistantText: patched.workplaceAssistantText,
+            workplaceEnabled: wp.workplaceEnabled,
+            workplaceAssistantText: wp.workplaceAssistantText,
           });
         }}
       />
@@ -209,6 +206,7 @@ export function PromptLayoutSection({
               label={WORKPLACE_ASSISTANT_TEXT_LABEL}
               disabled={readOnly}
               openEditor={() =>
+                // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
                 openPromptEditor(
                   WORKPLACE_ASSISTANT_TEXT_LABEL,
                   form.workplaceAssistantText,
@@ -267,6 +265,7 @@ export function PromptLayoutSection({
             label={CUSTOM_ATTACH_TEXT_LABEL}
             disabled={readOnly}
             openEditor={() =>
+              // nm-style: keep-local — 三参（文案/正文/回填）在 JSX 箭头里单行化超 80 列
               openPromptEditor(
                 CUSTOM_ATTACH_TEXT_LABEL,
                 form.customAttachText,
