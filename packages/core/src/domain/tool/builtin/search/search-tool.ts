@@ -81,22 +81,6 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
   return parts.join("\n");
 }
 
-/** 单引擎错误完整摘要（脱敏 + 截断）：聚合错误每引擎一行用。 */
-function engineErrorSummary(e: unknown, entry: ResolvedEngineConfig): string {
-  const message = e instanceof Error ? e.message : String(e);
-  return redactSecret(message, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
-}
-
-/** 单引擎错误短摘要：attempts 轨迹括号内用（状态码 / 超时时长 / 消息头）。 */
-function engineErrorBrief(e: unknown): string {
-  const message = e instanceof Error ? e.message : String(e);
-  const status = message.match(/error (\d{3})/i);
-  if (status != null) return status[1];
-  const timeout = message.match(/timed out after (\d+)ms/);
-  if (timeout != null) return `超时 ${timeout[1]}ms`;
-  return message.slice(0, 40) || "未知错误";
-}
-
 /**
  * 静态 `search` 工具实例。
  *
@@ -185,8 +169,13 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
         success = attempts == null ? response : { ...response, attempts };
         break;
       } catch (e) {
-        failureLines.push(`${entry.engine}: ${engineErrorSummary(e, entry)}`);
-        attemptParts.push(`${entry.engine} 失败(${engineErrorBrief(e)})`);
+        const msg = e instanceof Error ? e.message : String(e);
+        const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
+        const code = msg.match(/error (\d{3})/i)?.[1];
+        const timeout = msg.match(/timed out after (\d+)ms/);
+        const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
+        failureLines.push(`${entry.engine}: ${safe}`);
+        attemptParts.push(`${entry.engine} 失败(${brief})`);
         // 循环继续：尝试链中下一个 configured 引擎（钉死时仅一员，自然止）。
       }
     }

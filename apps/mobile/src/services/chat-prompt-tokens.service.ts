@@ -110,23 +110,6 @@ function isChipBailError(error: unknown): boolean {
 }
 
 /**
- * 取消判定（tokenizer-native-cancel）：原生计数被 {@link cancelPreciseUpgrade}
- * 撤掉时，桥层把 cancel reject 翻译成 `PromptCountCancelledError` 上抛。
- *
- * 收口口径与 bail **同款**（返回空串哨兵、无 warn），但语义不同：bail 是「用户
- * 已切走，这轮没人要」，取消是「这轮被主动作废」。两者都必须由 resolve 段的
- * catch 收口——漏出去的话 `runPreciseUpgrade` 的 catch 会打
- * `[chat] prompt token precise upgrade failed` 留痕（取消不是失败），空串哨兵
- * 同样让 hook 侧不写 meta。
- *
- * 只认 resolve 段：取消异常只可能从 resolve 链抛出（build 段不经过原生计数），
- * 故 build 段的 catch 一行不动。
- */
-function isChipCancelError(error: unknown): boolean {
-  return error instanceof PromptCountCancelledError;
-}
-
-/**
  * 估算首帧是否值得后台升级：只有「resolve 走了本地估算档」才升级（api 命中
  * 已精确、无模型/构建失败路径没有更好的档位可升）。
  */
@@ -232,7 +215,7 @@ async function loadChatTokenLabelWithFlag(
       },
     );
   } catch (error) {
-    if (isChipCancelError(error)) {
+    if (error instanceof PromptCountCancelledError) {
       // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
       // 撤掉。与 bail 同款收成空串哨兵——不重试、不回落 fallback（重算一遍等于
       // 取消白做），也不打 warn（取消不是失败）。
@@ -562,10 +545,7 @@ export async function loadChatPromptTokenLabelResilient(
     );
   } catch (error) {
     if (__DEV__) {
-      console.warn(
-        '[chat] prompt token count failed, using message fallback',
-        error,
-      );
+      console.warn('[nm/chat] prompt count failed, message fallback', error);
     }
     return loadChatPromptTokenLabelFallback(runtime, scope);
   }

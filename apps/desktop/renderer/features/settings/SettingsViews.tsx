@@ -2160,21 +2160,6 @@ function applySmartSortPatternInput(
   return { ...draft, patternInput: text, ...parsePatternInput(text) };
 }
 
-/** 本地即时正则校验（用解析后的 pattern/flags；捕获组等严格校验仍走 service）。 */
-function localSmartSortRegexError(
-  draft: SmartSortRuleDraft,
-): string | null {
-  if (!draft.pattern) {
-    return null;
-  }
-  try {
-    new RegExp(draft.pattern, draft.flags);
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
-}
-
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   // ruleId 经本地 state 镜像 navState：规则缺失回退新建时 setRuleId(undefined)
   // 才能让本组件感知（直接改 navState 不触发渲染，desktop/B-2）。
@@ -2225,7 +2210,14 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     });
   }, [ruleId, nav]);
 
-  const regexError = localSmartSortRegexError(draft);
+  let regexError: string | null = null;
+  if (draft.pattern) {
+    try {
+      new RegExp(draft.pattern, draft.flags);
+    } catch (e) {
+      regexError = e instanceof Error ? e.message : String(e);
+    }
+  }
 
   /** 结果只属于点击「测试」时的输入快照：任一输入（测试文本/正则/捕获档）
    *  变化即清空旧结果与错误，避免旧 matches 偏移对已编辑文本高亮错位、

@@ -201,15 +201,6 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
   return undefined;
 }
 
-function summarizeToolError(content: string): string | undefined {
-  const trimmed = content.trimStart();
-  if (!trimmed.startsWith("Error:")) {
-    return undefined;
-  }
-  const msg = trimmed.slice("Error:".length).trimStart();
-  return msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
-}
-
 /**
  * Maps one parallel tool outcome to a block ready for session persistence.
  */
@@ -237,7 +228,8 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
     // meta 额外带 failureReason（UI 卡片用）。
     if (isStoppedTaskOutput(outcome.output)) {
-      const failureReason = readFailureReason(outcome.output);
+      const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
+      const failureReason = typeof rawReason === "string" ? rawReason : undefined;
       return {
         type: "tool_result",
         toolUseId,
@@ -277,7 +269,12 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
   const content = formatToolErrorForLlm(outcome.error, {
     vfsScope: meta?.vfsScope,
   });
-  const summary = summarizeToolError(content);
+  const trimmed = content.trimStart();
+  let summary: string | undefined;
+  if (trimmed.startsWith("Error:")) {
+    const msg = trimmed.slice("Error:".length).trimStart();
+    summary = msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
+  }
   return {
     type: "tool_result",
     toolUseId,
@@ -296,15 +293,6 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
  */
 function isStoppedTaskOutput(output: unknown): boolean {
   return output != null && typeof output === "object" && !Array.isArray(output) && (output as { stopped?: unknown }).stopped === true;
-}
-
-/** 从 task 工具输出读取 failureReason（仅 string 时生效，否则返回 undefined）。 */
-function readFailureReason(output: unknown): string | undefined {
-  if (output == null || typeof output !== "object" || Array.isArray(output)) {
-    return undefined;
-  }
-  const reason = (output as { failureReason?: unknown }).failureReason;
-  return typeof reason === "string" ? reason : undefined;
 }
 
 /**

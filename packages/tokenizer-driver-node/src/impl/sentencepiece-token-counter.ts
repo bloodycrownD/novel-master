@@ -47,6 +47,7 @@ export class SentencePieceTokenCounter implements TokenCounter {
     this.kind = family;
   }
 
+  /** nm-style: keep-local — 懒加载状态机（processor 缓存 + loadError 锁存），内联会把错误缓存塞进计数路径。 */
   private async getProcessor(): Promise<SentencePieceProcessor | null> {
     if (this.processor != null) {
       return this.processor;
