@@ -90,3 +90,6 @@ __pycache__/
 
 # 门控日志（workflow 运行时产物，属临时）
 .nm-gate/
+
+# ZCode 工具目录（workflow 草稿/运行记录/plans）
+.zcode/
