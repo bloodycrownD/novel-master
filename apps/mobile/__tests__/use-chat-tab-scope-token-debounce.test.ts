@@ -664,6 +664,50 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
     expect(loadLabelMock).toHaveBeenCalledTimes(1);
   });
 
+  it('刷新已在途时 run 起步：读数回来后被写回闸冻掉，chip 不被估算档顶替', async () => {
+    // 病灶路径（2026-11-06）：首刷入口闸管不到「已经起跑、build 又很快」的那一轮
+    // ——估算读数先返回，`gpt ≈` 就把上一轮精确的 `deepseek =` 写掉。写回闸补的
+    // 就是这一刀，入口闸的用例（上两条）覆盖不到它。
+    loadChatAgentMetaMock.mockResolvedValue({
+      tokenLabel: '',
+      modelName: 'deepseek-chat',
+      agentName: 'a',
+      projectName: 'p',
+    });
+    const abortState = {inFlight: false};
+    harness = await mountScopeHarness({
+      abortHas: () => abortState.inFlight,
+      modelId: 'deepseek-chat',
+    });
+
+    // 第一轮精确标签落地（hasLabel 置位）。
+    loadLabelMock.mockResolvedValueOnce('10K tokens · deepseek');
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(1200);
+      await flushMicrotasks();
+    });
+    expect(harness.api().agentMeta?.tokenLabel).toBe('10K tokens · deepseek');
+
+    // 第二轮读数挂起——模拟 build + 计数还在路上。
+    const pending = createDeferred<string>();
+    loadLabelMock.mockImplementationOnce(() => pending.promise);
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(1200);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(2);
+
+    // run 在此之后才注册，读数随后以估算档返回：写回闸必须拦住。
+    abortState.inFlight = true;
+    await act(async () => {
+      pending.resolve('30K tokens · gpt ≈');
+      await flushMicrotasks();
+    });
+    expect(harness.api().agentMeta?.tokenLabel).toBe('10K tokens · deepseek');
+  });
+
   it('中途弃权（服务返回空串哨兵）：chip 保留旧标签，不清空', async () => {
     // meta 真实落地（tokenLabel 写入面可断言）——同 B-1 用例的退出挂起约定。
     loadChatAgentMetaMock.mockResolvedValue({

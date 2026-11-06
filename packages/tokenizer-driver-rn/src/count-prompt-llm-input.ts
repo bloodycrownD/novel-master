@@ -527,10 +527,11 @@ async function countSerializedImpl(
       }
       // 家族词表不可用（2026-11-06 真机实证）：Android 包内只有 DJL 的
       // `libdjl_tokenizer.so`（HuggingFace 用），SentencePiece 没有 Android
-      // native —— `SpTokenizer` 构造必失败，整个 SP 家族（gemma/gemini/
-      // llama/mistral/yi/jamba）一直静默落在这里。先试**原生 cl100k 近似**：
-      // 口径与下面的 fallbackCount 完全一致（同样是 cl100k、同样报 heuristic/
-      // estimated，压缩阈值照乘 0.85），但算力在原生 executor 上、毫秒级。
+      // native —— `SpTokenizer` 构造必失败。gemma/llama/mistral 已在同轮转成
+      // HF tokenizer.json 走原生 HF 路径，走到这里的只剩 yi/jamba（转换后
+      // 偏差 ±1 token，暂留 model 档）。先试**原生 cl100k 近似**：口径与下面的
+      // fallbackCount 完全一致（同样是 cl100k、同样报 heuristic/estimated，
+      // 压缩阈值照乘 0.85），但算力在原生 executor 上、毫秒级。
       // 真机实测 gemini 107K 字符落 JS 分块要 7.9s 且全程占住 Hermes 主线程
       // （切模型点不动、侧滑无响应）——这条兜底只是把同样的近似换到原生算。
       const nativeHeuristic = await countHeuristicViaNative(

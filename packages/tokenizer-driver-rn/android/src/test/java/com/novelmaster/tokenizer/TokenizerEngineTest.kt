@@ -1,7 +1,6 @@
 package com.novelmaster.tokenizer
 
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
-import ai.djl.sentencepiece.SpTokenizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -50,25 +49,54 @@ class TokenizerEngineTest {
 
   @Test
   fun gemmaFamilyCountsFixedStringAboveZero() {
-    val asset = resolveAsset("tokenizers/gemma.model")
-    assumeTrue("gemma.model asset missing", asset != null)
+    val asset = resolveAsset("tokenizers/gemma.json")
+    assumeTrue("gemma.json asset missing", asset != null)
 
-    SpTokenizer(Paths.get(asset!!.absolutePath)).use { tokenizer ->
-      val ids = tokenizer.processor.encode(fixedSerialized)
-      assertTrue("expected positive token count for gemma SP path", ids.size > 0)
-    }
+    // sp-to-hf（2026-11-06）：Android 无 SentencePiece native，gemma 走转换后的
+    // HF tokenizer.json + 裸编码（AssetPathSpec.bare），不再经 SpTokenizer。
+    val tokenizer = HuggingFaceTokenizer.newInstance(Paths.get(asset!!.absolutePath))
+    val ids = tokenizer.encode(fixedSerialized, false, false).ids
+    assertTrue("expected positive token count for gemma HF path", ids.size > 0)
   }
 
   @Test
   fun gemmaFamilySuccessPathIsNotEstimated() {
-    val asset = resolveAsset("tokenizers/gemma.model")
-    assumeTrue("gemma.model asset missing", asset != null)
+    val asset = resolveAsset("tokenizers/gemma.json")
+    assumeTrue("gemma.json asset missing", asset != null)
 
-    SpTokenizer(Paths.get(asset!!.absolutePath)).use { tokenizer ->
-      val ids = tokenizer.processor.encode(fixedSerialized)
-      val result = TokenizerEngine.CountResult(ids.size, "gemma", estimated = false)
-      assertFalse("gemma SP encode must not be estimated", result.estimated)
-      assertTrue(result.tokenCount > 0)
+    val tokenizer = HuggingFaceTokenizer.newInstance(Paths.get(asset!!.absolutePath))
+    val ids = tokenizer.encode(fixedSerialized, false, false).ids
+    val result = TokenizerEngine.CountResult(ids.size, "gemma", estimated = false)
+    assertFalse("gemma HF encode must not be estimated", result.estimated)
+    assertTrue(result.tokenCount > 0)
+  }
+
+  @Test
+  fun everyKnownFamilyPrimaryAssetExists() {
+    // 映射与磁盘资产的一致性守卫：forFamily 返回的 primary 必须真实存在。
+    // gemma/llama/mistral 从 .model 切到 .json 时，两个用例曾靠 assumption
+    // 静默 skip、覆盖凭空消失；这条守卫让同类遗漏直接红而不是悄悄跳过。
+    for (family in
+      listOf(
+        "claude",
+        "llama3",
+        "llama",
+        "mistral",
+        "yi",
+        "gemma",
+        "jamba",
+        "qwen2",
+        "command-r",
+        "command-a",
+        "nemo",
+        "deepseek",
+        "glm",
+      )) {
+      val spec = TokenizerEngine.resolveAssetSpecFor(family)
+      assertTrue(
+        "家族 $family 的 primary 资产不存在: ${spec.primary}",
+        resolveAsset("tokenizers/${spec.primary}") != null,
+      )
     }
   }
 

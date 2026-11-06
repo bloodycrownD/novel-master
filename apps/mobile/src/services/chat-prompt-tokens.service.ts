@@ -369,7 +369,7 @@ type PreciseUpgradeRequest = {
   readonly shouldBail?: () => boolean;
   /** 本轮轮次号：在途登记与 finally 清理都按它比对，切模型取消后旧轮不会误删新轮标记。 */
   readonly round: number;
-  /** 本轮计数针对的模型身份（空串=无模型早退分支）：切模型判据。 */
+  /** 本轮计数针对的模型身份（解析失败时为空串）：切模型判据。 */
   readonly savedModelId: string;
 };
 
@@ -475,10 +475,15 @@ async function runPreciseUpgrade(
   } finally {
     // 只摘自己这一轮：切模型取消后新轮已用新轮次号登记，无条件 delete 会把
     // 新轮的标记一起抹掉，后续升级请求就再无在途去重可用。
-    if (preciseUpgradeInflight.get(sessionId)?.round === request.round) {
+    const stillOwner = preciseUpgradeInflight.get(sessionId)?.round === request.round;
+    if (stillOwner) {
       preciseUpgradeInflight.delete(sessionId);
     }
-    const queued = preciseUpgradeQueued.get(sessionId);
+    // 补跑槽同样只在 owner 时排空：被切模型取消的旧轮若抢着排空，会把新轮
+    // 刚排进槽的补跑请求提前放出来，同会话出现两轮并发整串计数（两轮 JS
+    // 装配 + 两轮原生排队），正是这轮要消灭的队列堆积。非 owner 直接退出，
+    // 排队请求交给当前 owner 的 finally 接手。
+    const queued = stillOwner ? preciseUpgradeQueued.get(sessionId) : undefined;
     if (queued != null) {
       preciseUpgradeQueued.delete(sessionId);
       startPreciseUpgrade(sessionId, queued);
@@ -561,7 +566,10 @@ export async function loadChatPromptTokenLabelResilient(
       // 切模型（tokenizer-switch-stall）：旧轮的读数必被新鲜度闸丢弃，而它正
       // 占着单线程原生 executor——gemini 走 SentencePiece，整串 encode 实测
       // 8.4s，期间任何计数只能排队，这正是「切模型频繁时卡住线程」的本体。
-      // 先撤在途轮再起新轮：取消指令配合原生分段检查点，一段之内就能收场。
+      // 先撤在途轮再起新轮。取消的生效边界要说清：原生侧只有「任务出队时」和
+      // 「词表加载后、encode 之前」两个检查点（分段计数已于 2026-11-06 移除，
+      // 那条路径走不到）——已经进 encode 的那一轮仍会把新轮挡在单线程
+      // executor 后面，属本轮已知残留，别误以为 cancel 能抢占 encode。
       cancelPreciseUpgrade(sessionId);
       preciseUpgradeQueued.delete(sessionId);
       preciseUpgradeInflight.delete(sessionId);

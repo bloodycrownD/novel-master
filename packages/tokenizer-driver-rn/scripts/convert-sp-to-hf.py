@@ -16,7 +16,12 @@ import json
 import sys
 from pathlib import Path
 
-ASSETS = Path(__file__).resolve().parents[1] / "android/src/main/assets/tokenizers"
+# `.model` 源在 Node 驱动（desktop 走 SP WASM，那边五个 model 都还在）；
+# 产物写进 Android assets。同一个 PR 里 Android 侧的 .model 已经被删，脚本
+# 不能从那里读——否则转换过程不可复现。
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+MODEL_DIR = PACKAGE_ROOT.parent / "tokenizer-driver-node/assets/tokenizers"
+ASSETS = PACKAGE_ROOT / "android/src/main/assets/tokenizers"
 
 # 家族 → (SP 模型文件, transformers 慢分词器类, 额外 kwargs)
 FAMILIES = {
@@ -49,10 +54,10 @@ def load_slow(family: str, model_path: Path):
 
 
 def convert(family: str, model_name: str, write: bool) -> bool:
-    model_path = ASSETS / model_name
+    model_path = MODEL_DIR / model_name
     out_path = ASSETS / f"{family}.json"
     if not model_path.exists():
-        print(f"[skip] {family}: {model_path.name} missing")
+        print(f"[skip] {family}: {model_path.name} missing in {MODEL_DIR}")
         return True
 
     try:
@@ -75,7 +80,10 @@ def convert(family: str, model_name: str, write: bool) -> bool:
         )
 
     sp = spm.SentencePieceProcessor(model_file=str(model_path))
-    hf = PreTrainedTokenizerFast(tokenizer_file=str(out_path if write else model_path))
+    # 对拍口径：两边都取「裸 encode 的 token 数」。不比 id 值——HF 慢分词器
+    # 转换时会重排 vocab，id 空间整体偏移，长度才是计数口径。
+    # 用 tokenizer_object 而不是 tokenizer_file：--check 不落盘时没有 json 可读。
+    hf = PreTrainedTokenizerFast(tokenizer_object=fast)
 
     ok = True
     print(f"\n=== {family} ({model_name} → {out_path.name}) ===")

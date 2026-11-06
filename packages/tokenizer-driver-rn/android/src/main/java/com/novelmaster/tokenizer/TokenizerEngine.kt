@@ -45,6 +45,8 @@ internal class TokenizerEngine(private val context: Context) {
     var copyMs: Long = -1
     /** 词表加载拆细：DJL newInstance（含 .so 首载/解析/建表）段。无加载为 -1。 */
     var jniMs: Long = -1
+    /** 该家族被 `spUnavailable` 短路（未尝试加载）——与「LRU 命中」的 -1 区分开。 */
+    var spUnavailable: Boolean = false
   }
 
   // 缓存容量 6（token-count-perf-r2 由 4→6）：WEB 家族 8 个 + tiktoken 两表
@@ -54,8 +56,8 @@ internal class TokenizerEngine(private val context: Context) {
   // 词 + 31.8 万合并），LRU 淘汰后下次使用再懒加载一次即可。
   private val webCache = LruCache<String, HuggingFaceTokenizer>(6)
 
-  // SP 家族本轮零新增（仍 5 个），维持容量 4——cr2-B-06：无需求无收益的扩容
-  // 只是白付内存账；若将来 SP 家族新增再同批上调。
+  // SP 家族只剩 yi/jamba 两个（gemma/llama/mistral 于 2026-11-06 转 HF json，
+  // 改走 webCache），容量 4 富余——cr2-B-06 的「无需求无收益的扩容」口径不变。
   private val spCache = LruCache<String, SpTokenizer>(4)
 
   /**
@@ -89,7 +91,10 @@ internal class TokenizerEngine(private val context: Context) {
       }
     return try {
       when {
-        family == "tiktoken" -> countGptFamily(serialized, family, spec, shouldCancel, timings)
+        // 裸编码档：gpt 家族（tiktoken 两表）+ SP 转 HF 家族（bare=true）——
+        // 与 Node 侧「裸 encode」口径对齐，不做 WEB 的 system 包装。
+        family == "tiktoken" || spec.bare ->
+          countBareJsonFamily(serialized, family, spec, shouldCancel, timings)
         spec.kind == "json" -> countWebFamily(serialized, family, spec, shouldCancel, timings)
         spec.kind == "model" -> countSpFamily(serialized, family, spec, shouldCancel, timings)
         // resolveAssetSpecFor 已校验 kind，此分支仅为防御性兜底。
@@ -104,13 +109,18 @@ internal class TokenizerEngine(private val context: Context) {
   }
 
   /**
-   * gpt 家族计数（token-count-perf-r2）：**直编码整串、不包装**——与 WEB 家族
-   * 的 system 包装（+ "\n\nAssistant:" 后缀）不同，tiktoken 裸 encode 口径与
-   * js-tiktoken 的 `encoding.encode(text)` 对齐；per-message overhead（~7 token
-   * 常数）由 JS 侧用 core 公式补加，公式单源保持在 TS。词表走 webCache（键=
-   * 资产路径，cl100k/o200k 各占一槽不互踢）。
+   * 裸编码档（`AssetPathSpec.bare`，或 gpt 家族的 tiktoken 两表）：**直编码整串、
+   * 不包装**。
+   *
+   * - gpt 家族：与 js-tiktoken 的 `encoding.encode(text)` 对齐（token-count-perf-r2），
+   *   per-message overhead（~7 token 常数）由 JS 侧用 core 公式补加，公式单源在 TS。
+   * - SP 转 HF 家族（gemma/llama/mistral）：Node 侧的 `SentencePieceTokenCounter`
+   *   就是裸编码，Android 若走 `countWebFamily` 的 system 包装（+`\n\nAssistant:`）
+   *   会稳定多 3~5 token，与桌面/CLI 的读法对不上。
+   *
+   * 词表走 webCache（键 = 资产路径，cl100k/o200k 等各占一槽不互踢）。
    */
-  private fun countGptFamily(
+  private fun countBareJsonFamily(
     serialized: String,
     family: String,
     spec: AssetPathSpec,
@@ -120,7 +130,7 @@ internal class TokenizerEngine(private val context: Context) {
     val loadStartNs = System.nanoTime()
     val tokenizer =
       loadWebTokenizer(spec, timings)
-        ?: throw IllegalStateException("gpt 编码词表资产缺失或加载失败: ${spec.primary}")
+        ?: throw IllegalStateException("家族 $family 的裸编码词表缺失或加载失败: ${spec.primary}")
     timings.vocabLoadMs = elapsedMs(loadStartNs)
     // 检查点：词表已就绪、encode 还没开始（与 WEB/SP 家族同构）。
     if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
@@ -131,7 +141,7 @@ internal class TokenizerEngine(private val context: Context) {
     } catch (e: TokenizerCountCancelledException) {
       throw e
     } catch (e: Throwable) {
-      throw IllegalStateException("家族 $family 的 gpt 编码失败: ${e.message}", e)
+      throw IllegalStateException("家族 $family 的裸编码失败: ${e.message}", e)
     } finally {
       timings.encodeMs = elapsedMs(encodeStartNs)
     }
@@ -250,6 +260,7 @@ internal class TokenizerEngine(private val context: Context) {
     // 若把 .so 补进 jniLibs，重启即恢复重试。只在模块的单线程 executor 上
     // 读写，无需加锁。
     if (family in spUnavailable) {
+      timings?.spUnavailable = true
       return null
     }
     spCache.get(family)?.let { return it }
@@ -309,7 +320,8 @@ internal class TokenizerEngine(private val context: Context) {
         LOG_TAG,
         "family=${timings.family} chars=${timings.chars} " +
           "vocabLoadMs=${timings.vocabLoadMs} copyMs=${timings.copyMs} jniMs=${timings.jniMs} " +
-          "encodeMs=${timings.encodeMs} totalMs=${timings.totalMs}",
+          "encodeMs=${timings.encodeMs} totalMs=${timings.totalMs}" +
+          if (timings.spUnavailable) " spUnavailable=true" else "",
       )
     } catch (_: Throwable) {
       // 忽略：探针失败不影响计数结果。

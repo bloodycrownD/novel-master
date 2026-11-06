@@ -13,6 +13,12 @@ internal data class AssetPathSpec(
   val primary: String,
   val fallback: String? = null,
   val kind: String,
+  /**
+   * true = 对整串裸编码、不做 WEB 家族的 system 包装（`WebPromptConverter` 会在
+   * 尾部追加 `\n\nAssistant:` 等）。SP 家族转 HF 后必须裸编码才能与 Node 侧
+   * `SentencePieceTokenCounter` 的口径对齐——同一份文本两者差 3~5 token。
+   */
+  val bare: Boolean = false,
 )
 
 internal object TokenizerAssetPaths {
@@ -23,13 +29,15 @@ internal object TokenizerAssetPaths {
       // SP 家族转 HF（sp-to-hf，2026-11-06）：Android 没有 SentencePiece native
       // （DJL 无 ai.djl.android:sentencepiece-native），这些家族此前恒落 JS cl100k
       // 兜底。`.model` 用 transformers 的 convert_slow_tokenizer 转成 tokenizer.json
-      // 后直接复用已有的 libdjl_tokenizer.so，全部对拍逐 token 等值（脚本见
-      // packages/tokenizer-driver-rn/scripts/convert-sp-to-hf.py）。
+      // 后直接复用已有的 libdjl_tokenizer.so，脚本见
+      // packages/tokenizer-driver-rn/scripts/convert-sp-to-hf.py。
+      // `bare = true`：Node 侧 SP counter 是裸编码，这里走 HF 也必须裸编码，
+      // 否则 WEB 包装（+`\n\nAssistant:`）会稳定多出 3~5 token。
       // yi / jamba 转换后偏差 ±1 token（normalizer 细节差异），暂留 model 档。
-      "llama" -> AssetPathSpec("llama.json", kind = "json")
-      "mistral" -> AssetPathSpec("mistral.json", kind = "json")
+      "llama" -> AssetPathSpec("llama.json", kind = "json", bare = true)
+      "mistral" -> AssetPathSpec("mistral.json", kind = "json", bare = true)
       "yi" -> AssetPathSpec("yi.model", kind = "model")
-      "gemma" -> AssetPathSpec("gemma.json", kind = "json")
+      "gemma" -> AssetPathSpec("gemma.json", kind = "json", bare = true)
       "jamba" -> AssetPathSpec("jamba.model", kind = "model")
       "qwen2" -> AssetPathSpec("web/qwen2.json", "llama3.json", "json")
       "command-r" -> AssetPathSpec("web/command-r.json", "llama3.json", "json")
