@@ -116,7 +116,6 @@ export {
   type EncodingHandle,
   type EncodingFactory,
 } from "./encoding-registry.js";
-export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   parseTokenCounterModePref,
   isValidTokenCounterModePref,

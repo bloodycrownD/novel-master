@@ -1,10 +1,16 @@
 /**
- * Tokenizer asset path table — platform-agnostic relative paths per family.
+ * node 侧的 tokenizer 资产路径表（相对 `assets/tokenizers/`）。
  *
- * @module infra/tokenizer/logic/tokenizer-asset-paths
+ * 本表只描述 node/desktop/CLI 平台的资产布局；Android 侧有自己的
+ * `TokenizerAssetPaths.kt`，两者有意不同——Node 有 SentencePiece WASM 能跑
+ * `.model`，Android 无 SP native 只能走转换后的 `.json`。
+ *
+ * Tokenizer asset path table — node-platform relative paths per family.
+ *
+ * @module tokenizer-driver-node/logic/tokenizer-asset-paths
  */
 
-import type { TokenizerFamily } from "../ports/token-counter.port.js";
+import type { TokenizerFamily } from "@novel-master/core/provider";
 
 /** Relative asset paths per tokenizer family (ST parity). */
 export function tokenizerAssetPaths(family: TokenizerFamily): {

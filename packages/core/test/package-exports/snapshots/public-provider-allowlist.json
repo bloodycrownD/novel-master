@@ -90,7 +90,6 @@
   "thinkingProtocol",
   "toSavedModelView",
   "tokenChunkCache",
-  "tokenizerAssetPaths",
   "toolsFromRegistry",
   "wrapSerializedPromptAsSystemMessage",
   "zodToJsonSchema"

@@ -10,12 +10,13 @@ import { type ChatMessage } from "@novel-master/core/chat";
 import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/provider";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
-import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter, tokenizerAssetPaths } from "@novel-master/core/provider";
+import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
 import {
   countWebTokenizerMessages,
   wrapSerializedPromptAsSystemMessage,
   type OpenAiStyleMessage,
 } from "../logic/count-openai-style-message.js";
+import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
 

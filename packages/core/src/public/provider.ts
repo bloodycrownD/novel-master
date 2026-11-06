@@ -162,7 +162,6 @@ export {
   isGpt0301TiktokenModel,
   countTokens,
   countTextWithIncrementalTokenizer,
-  tokenizerAssetPaths,
   resolveContextWindowTokens,
   seedContextWindowTokens,
   getTokenizerDriver,
