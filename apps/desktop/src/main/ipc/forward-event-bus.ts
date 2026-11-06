@@ -14,8 +14,10 @@ import {
   EVENT_AGENT_STREAM_USAGE,
   type SimpleEventBus,
 } from "@novel-master/core/events";
+import { createLogger } from "@novel-master/core/log";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
-import { desktopLogError } from "../log/desktop-log.js";
+
+const log = createLogger("desktop.ipc.event-bus");
 
 let getTargetWebContents: (() => WebContents | undefined) | undefined;
 const subscriptions: Array<{ unsubscribe: () => void }> = [];
@@ -41,7 +43,7 @@ export function setEventBusForwardTarget(
 function forwardEvent(type: string, payload: unknown): void {
   if (type === EVENT_AGENT_RUN_FAILED) {
     const failed = payload as { sessionId?: string; projectId?: string; error?: string };
-    desktopLogError("agent run failed (forwarding to renderer)", {
+    log.error("agent run failed (forwarding to renderer)", {
       sessionId: failed.sessionId,
       projectId: failed.projectId,
       error: failed.error,

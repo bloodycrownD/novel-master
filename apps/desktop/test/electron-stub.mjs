@@ -4,6 +4,15 @@ export const dialog = {
   showSaveDialog: async () => ({ canceled: true, filePath: undefined }),
 };
 
+export const shell = {
+  openPath: async () => "",
+};
+
+export const Menu = {
+  buildFromTemplate: (_template) => ({ getMenuItemById: () => null, popup: () => {} }),
+  setApplicationMenu: () => {},
+};
+
 export class BrowserWindow {
   static getFocusedWindow() {
     return null;

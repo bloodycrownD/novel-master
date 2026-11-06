@@ -27,6 +27,9 @@ import {
   isSessionVfsScope,
 } from "./user-vfs-turn-execute.service.js";
 import type { VfsService } from "@novel-master/core/vfs";
+import { createLogger } from "@novel-master/core/log";
+
+const log = createLogger("desktop.vfs-batch");
 
 /**
  * Windows 上 `nativeImage.createEmpty()` + `startDrag` 会硬崩主进程（try/catch 拦不住）。
@@ -444,10 +447,7 @@ export async function stageVfsBatchExport(
     // UI 如何呈现列为债务池；此处至少留日志与计数。
     const skipped = plan.skipped ?? [];
     if (skipped.length > 0) {
-      console.warn(
-        `[vfs-batch] 导出跳过 ${skipped.length} 项（相对路径碰撞）：`,
-        skipped.map((s) => s.logicalPath),
-      );
+      log.warn(`导出跳过 ${skipped.length} 项（相对路径碰撞）`, { skipped: skipped.map((s) => s.logicalPath) });
     }
     return {
       stagingRoot,

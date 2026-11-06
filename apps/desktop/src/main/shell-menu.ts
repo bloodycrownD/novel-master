@@ -2,7 +2,11 @@
  * Application menu (accelerators + popup submenus for in-window menubar on Windows/Linux).
  */
 import { app, BrowserWindow, Menu, dialog, type MenuItemConstructorOptions } from "electron";
+import { createLogger } from "@novel-master/core/log";
 import type { ShellMenuId } from "../../shared/ipc-types.js";
+import { createDesktopDiagnosticsSeams, exportDiagnostics, openLogsDirectory } from "./log/desktop-diagnostics.js";
+
+const log = createLogger("desktop.shell-menu");
 
 const isDev = !app.isPackaged;
 
@@ -25,8 +29,18 @@ export function titleBarOverlayOptions(theme: "light" | "dark" = "light") {
   };
 }
 
-export function buildApplicationMenu(): Menu {
-  const template: MenuItemConstructorOptions[] = [
+/** 菜单模板的外部动作；抽成纯函数是为了不碰 electron 就能断言结构与点击接线。 */
+// nm-style: keep-public — spec 4.6 要求的 deps 契约：buildApplicationMenu 与模板测试共用同一份形状。
+export interface ShellMenuDeps {
+  readonly isDev: boolean;
+  readonly onAbout: () => void;
+  readonly onOpenLogsDir: () => void;
+  readonly onExportDiagnostics: () => void;
+}
+
+// nm-style: keep-public — spec F3 明确要求可导出的纯模板函数，供测试不碰 Menu 直接断言。
+export function buildMenuTemplate(deps: ShellMenuDeps): MenuItemConstructorOptions[] {
+  return [
     {
       label: "文件",
       id: "file",
@@ -50,9 +64,7 @@ export function buildApplicationMenu(): Menu {
       id: "view",
       submenu: [
         { role: "reload", label: "重新加载" },
-        ...(isDev
-          ? [{ role: "toggleDevTools" as const, label: "开发者工具" }]
-          : []),
+        ...(deps.isDev ? [{ role: "toggleDevTools" as const, label: "开发者工具" }] : []),
         { type: "separator" },
         { role: "togglefullscreen", label: "全屏" },
       ],
@@ -69,24 +81,35 @@ export function buildApplicationMenu(): Menu {
       label: "帮助",
       id: "help",
       submenu: [
-        {
-          label: "关于 Novel Master",
-          click: () => {
-            const win = BrowserWindow.getFocusedWindow();
-            if (!win) return;
-            void dialog.showMessageBox(win, {
-              type: "info",
-              title: "关于",
-              message: "Novel Master",
-              detail: `版本 ${app.getVersion()}`,
-            });
-          },
-        },
+        { label: "打开日志目录", click: () => deps.onOpenLogsDir() },
+        { label: "导出诊断包", click: () => deps.onExportDiagnostics() },
+        { type: "separator" },
+        { label: "关于 Novel Master", click: () => deps.onAbout() },
       ],
     },
   ];
+}
 
-  appMenu = Menu.buildFromTemplate(template);
+export function buildApplicationMenu(): Menu {
+  appMenu = Menu.buildFromTemplate(buildMenuTemplate({
+    isDev,
+    onAbout: () => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (!win) return;
+      void dialog.showMessageBox(win, {
+        type: "info",
+        title: "关于",
+        message: "Novel Master",
+        detail: `版本 ${app.getVersion()}`,
+      });
+    },
+    onOpenLogsDir: () => {
+      void openLogsDirectory(createDesktopDiagnosticsSeams()).catch((error: unknown) => log.error("open logs directory failed", { error }));
+    },
+    onExportDiagnostics: () => {
+      void exportDiagnostics(createDesktopDiagnosticsSeams()).catch((error: unknown) => log.error("export diagnostics failed", { error }));
+    },
+  }));
   return appMenu;
 }
 
@@ -121,6 +144,6 @@ export function syncTitleBarOverlay(
   try {
     window.setTitleBarOverlay(titleBarOverlayOptions(theme));
   } catch (error) {
-    console.warn("[desktop] titleBarOverlay update skipped:", error);
+    log.warn("titleBarOverlay update skipped", { error });
   }
 }

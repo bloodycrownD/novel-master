@@ -5,8 +5,10 @@
  * default adapters unless `NM_DEBUG_LLM_FETCH=1`.
  */
 import { configureLlmFetch, createLoggingFetch } from "@novel-master/core/provider";
-import { desktopLog, isDesktopLlmDebug } from "../log/desktop-log.js";
+import { createLogger } from "@novel-master/core/log";
+import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";
 
+const log = createLogger("desktop.llm-fetch");
 let configured = false;
 
 /** Registers logging fetch for protocol adapters once per main process. */
@@ -20,7 +22,7 @@ export function ensureLlmFetchConfigured(): void {
     (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ =
       true;
     configureLlmFetch(createLoggingFetch(globalThis.fetch));
-    desktopLog("LLM fetch debug enabled", {
+    log.info("LLM fetch debug enabled", {
       nmDebugLlmFetch: process.env.NM_DEBUG_LLM_FETCH === "1",
       nmDebugDesktop: process.env.NM_DEBUG_DESKTOP === "1",
     });

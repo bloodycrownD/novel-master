@@ -41,6 +41,7 @@ import {
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
+import { createLogger } from "@novel-master/core/log";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import { notifyPromptChatTokenUpdatedToRenderer } from "../ipc/forward-prompt-chat-token-updated.js";
 import {
@@ -54,6 +55,8 @@ import {
   ChatPromptBuildBailedError,
   type SessionPromptScope,
 } from "./session-prompt-input.service.js";
+
+const log = createLogger("desktop.chat-prompt-tokens");
 
 /**
  * chip 读口中途弃权的两类哨兵错误统一判定：build 段（ChatPromptBuildBailedError，
@@ -496,7 +499,7 @@ async function loadChatPromptTokenStatsNow(
             // chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——开发期
             // 留痕与首帧失败同款。
             if (!app.isPackaged) {
-              console.warn("[chat] prompt token precise warm-up failed", error);
+              log.warn("prompt token precise warm-up failed", { error });
             }
           })
           .finally(() => readWarmInflight.delete(scope.sessionId));
@@ -739,7 +742,7 @@ setRunFinishedTokenStatsRefresh((payload) => {
       return;
     }
     if (!app.isPackaged) {
-      console.warn("[chat] prompt token post-run refresh failed", error);
+      log.warn("prompt token post-run refresh failed", { error });
     }
   });
 });

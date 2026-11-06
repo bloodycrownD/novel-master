@@ -41,9 +41,11 @@ import {
   incrementDesktopAgentActive,
   isDesktopAgentActive,
 } from "../../runtime/agent-activity.js";
-import { desktopLogError } from "../../log/desktop-log.js";
+import { createLogger } from "@novel-master/core/log";
 import { formatIpcError } from "../format-ipc-error.js";
 import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-appended.js";
+
+const log = createLogger("desktop.ipc.agent");
 
 async function resolveModelLabel(
   rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
@@ -332,13 +334,7 @@ function refreshChatTokenStatsAfterRun(payload: {
     runFinishedTokenStatsRefresh(payload);
   } catch (err) {
     // 补拍失败绝不能影响终态收口（refcount / activeRuns 已在上游处理完）。
-    desktopLogError("agent/run token stats refresh failed", {
-      sessionId: payload.sessionId,
-      err:
-        err instanceof Error
-          ? { name: err.name, message: err.message, stack: err.stack }
-          : String(err),
-    });
+    log.error("agent/run token stats refresh failed", { sessionId: payload.sessionId, error: err });
   }
 }
 
@@ -441,14 +437,7 @@ export async function handleAgentRun(
       },
     )
       .catch((err) => {
-        desktopLogError("agent/run IPC background task failed", {
-          sessionId,
-          projectId: req.projectId,
-          err:
-            err instanceof Error
-              ? { name: err.name, message: err.message, stack: err.stack }
-              : String(err),
-        });
+        log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: err });
       })
       .finally(() => {
         // Phase 3 Step 24(d)：refcount 单一归属——只由 finishTrackedRun 递减。

@@ -33,6 +33,9 @@ import {
   releaseDesktopDbMaintenanceBusy,
 } from "./db-maintenance-busy.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+import { createLogger } from "@novel-master/core/log";
+
+const log = createLogger("desktop.db-backup");
 
 /** Close live DB only after dropping the runtime handle (avoids stale conn use). */
 async function closeLiveDbForBackupImport(): Promise<void> {
@@ -267,10 +270,7 @@ async function replaceLiveDatabase(
   } finally {
     if (bakCreated && !rollbackFailed && !keepBackupForManualRecovery) {
       await fsOps.unlink(bakPath).catch((unlinkError: unknown) => {
-        console.error(
-          `[db-backup] 清理回滚副本失败（不影响数据正确性）: ${bakPath}`,
-          unlinkError,
-        );
+        log.error("清理回滚副本失败（不影响数据正确性）", { path: bakPath, error: unlinkError });
       });
     }
   }

@@ -6,13 +6,11 @@
 import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
 import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
-import {
-  desktopLog,
-  desktopLogError,
-  desktopLogWarn,
-  isDesktopLlmDebug,
-} from "../log/desktop-log.js";
+import { createLogger } from "@novel-master/core/log";
+import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+
+const log = createLogger("desktop.agent-run");
 
 export type AgentRunScope = AgentTurnScope;
 
@@ -73,7 +71,7 @@ export async function runAgentTurn(
       const vendorModelId = saved?.vendorModelId ?? ctx.savedModelId;
       try {
         const provider = await runtime.providers.get(providerId);
-        desktopLog("agent-run start", {
+        log.info("agent-run start", {
           sessionId: ctx.scope.sessionId,
           projectId: ctx.scope.projectId,
           providerId,
@@ -84,32 +82,17 @@ export async function runAgentTurn(
           stream: ctx.stream,
         });
       } catch (lookupError) {
-        desktopLogWarn("agent-run provider lookup failed", {
-          providerId,
-          savedModelId: ctx.savedModelId,
-          err:
-            lookupError instanceof Error
-              ? lookupError.message
-              : String(lookupError),
-        });
+        log.warn("agent-run provider lookup failed", { providerId, savedModelId: ctx.savedModelId, error: lookupError });
       }
     },
     onRunFailed: (ctx) => {
-      const err =
-        ctx.error instanceof Error
-          ? {
-              name: ctx.error.name,
-              message: ctx.error.message,
-              stack: ctx.error.stack,
-            }
-          : { name: typeof ctx.error, message: String(ctx.error) };
-      desktopLogError("agent-run failed", {
+      log.error("agent-run failed", {
         stage: ctx.stage,
         sessionId: ctx.scope.sessionId,
         projectId: ctx.scope.projectId,
         savedModelId: ctx.savedModelId,
         stream: ctx.stream,
-        err,
+        error: ctx.error,
       });
     },
   });

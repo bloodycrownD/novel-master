@@ -18,6 +18,9 @@ import {
   releaseDesktopDbMaintenanceBusy,
 } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
+import { createLogger } from "@novel-master/core/log";
+
+const log = createLogger("desktop.ipc.cloud-sync");
 
 export async function handleCloudSyncGetConfig(): Promise<
   IpcResult<CloudSyncConfigDto>
@@ -110,10 +113,7 @@ export async function handleCloudSyncPull(): Promise<
       // `providerTablesRestored` 这类 TypeScript 字段名拼进去——它对用户零信息量，
       // 只会让人对着一个内部布尔名发懵。要判断成没成，看这里的中文措辞即可；
       // 字段值本身只进日志。
-      console.warn(
-        "[cloud-sync] 库已换代但服务商配置表未完全恢复",
-        { providerTablesRestored: err.providerTablesRestored },
-      );
+      log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.providerTablesRestored });
       return {
         ok: false,
         error: formatIpcError(

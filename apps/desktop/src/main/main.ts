@@ -5,6 +5,8 @@ import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chatLinkResolver } from "@novel-master/core/chat";
+import { createLogger } from "@novel-master/core/log";
+import { installDesktopLogSink } from "./log/desktop-log-sink.js";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
 import {
@@ -33,6 +35,10 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
+const log = createLogger("desktop.main");
+
+// 文件 sink 必须在 app.whenReady() 之前装好：启动早期的失败也要留痕。
+installDesktopLogSink();
 
 let detachEventBusForwarder: (() => void) | undefined;
 let detachAgentActivityForwarder: (() => void) | undefined;
@@ -78,11 +84,11 @@ function createMainWindow(): BrowserWindow {
   configureWindowChrome(window);
 
   window.webContents.on("preload-error", (_event, preloadPath, err) => {
-    console.error("[desktop] preload failed:", preloadPath, err);
+    log.error("preload failed", { preloadPath, error: err });
   });
 
   window.webContents.on("did-fail-load", (_event, code, desc, url) => {
-    console.error("[desktop] renderer load failed:", code, desc, url);
+    log.error("renderer load failed", { code, description: desc, url });
     if (!window.isDestroyed() && !window.isVisible()) {
       window.show();
     }
@@ -90,7 +96,7 @@ function createMainWindow(): BrowserWindow {
 
   const showFallback = setTimeout(() => {
     if (!window.isDestroyed() && !window.isVisible()) {
-      console.warn("[desktop] ready-to-show timeout — showing window anyway");
+      log.warn("ready-to-show timeout — showing window anyway");
       window.show();
     }
   }, 8000);
@@ -178,7 +184,7 @@ app.whenReady().then(async () => {
   try {
     await bootstrapMainServices();
   } catch (error) {
-    console.error("[desktop] bootstrap failed:", error);
+    log.error("bootstrap failed", { error });
   }
 
   app.on("activate", () => {
@@ -187,7 +193,7 @@ app.whenReady().then(async () => {
     }
   });
 }).catch((error) => {
-  console.error("[desktop] startup failed:", error);
+  log.error("startup failed", { error });
 });
 
 app.on("window-all-closed", () => {

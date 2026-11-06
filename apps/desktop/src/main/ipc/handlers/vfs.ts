@@ -76,6 +76,9 @@ import {
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { createLogger } from "@novel-master/core/log";
+
+const log = createLogger("desktop.ipc.vfs");
 
 function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
@@ -148,9 +151,7 @@ export async function handleVfsWrite(
         baseline != null &&
         req.lastKnownContent !== baseline
       ) {
-        console.info("[user-vfs-turn] external_drift_detected", {
-          path: req.path,
-        });
+        log.info("user-vfs-turn external_drift_detected", { path: req.path });
       }
       const op = buildUserVfsSaveOp(
         baseline,
@@ -460,7 +461,7 @@ export function handleVfsStartDrag(
   try {
     startDragExport(event.sender, req.filePaths ?? []);
   } catch (err) {
-    console.error("[vfs-batch] startDrag failed", err);
+    log.error("vfs-batch startDrag failed", { error: err });
     const payload: VfsStartDragFailedPayload = {
       message: formatIpcError(err).message || "拖出失败",
     };
