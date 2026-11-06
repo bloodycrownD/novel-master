@@ -16,9 +16,11 @@ import {
   TOKEN_CHUNKS_CACHE_KEY,
 } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {
-  PROMPT_WHOLE_CACHE_LRU_PER_SESSION,
   promptWholeCache,
 } from "../../../src/infra/tokenizer/logic/prompt-whole-cache.js";
+
+/** 规格常量（缓存不再导出，测试按规格值本地锁定）。 */
+const PROMPT_WHOLE_CACHE_LRU_PER_SESSION = 32;
 
 const SESSION_ID = "sess-l1";
 const SCOPE = "vendor/m:tk:auto:node";

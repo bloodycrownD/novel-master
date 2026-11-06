@@ -28,15 +28,15 @@
  */
 
 /** 单块字符数上限（规则②③适用）；规则①的贪吃段可超出，见文件头。 */
-export const MAX_CHUNK_CHARS = 64;
+const MAX_CHUNK_CHARS = 64;
 
 /** 句末符号：出现即收尾成块（贪吃连续出现，含入块尾）。 */
-export const SENTENCE_END_CHARS: ReadonlySet<string> = new Set([
+const SENTENCE_END_CHARS: ReadonlySet<string> = new Set([
   "。", "！", "？", "!", "?", "；", ";", "…", "\n", "\r", ">", "」", "』",
 ]);
 
 /** 软边界：超限回退时的次选切点（CJK/ASCII 标点与空白，含入块尾）。 */
-export const SOFT_BOUNDARY_CHARS: ReadonlySet<string> = new Set([
+const SOFT_BOUNDARY_CHARS: ReadonlySet<string> = new Set([
   "，", "、", ",", ".", ":", "：", "）", ")", "】", "]", "}", "》",
   "\"", "'", "“", "”", "‘", "’", " ", "\t", "—", "·", "%", "/", "\\", "|",
 ]);

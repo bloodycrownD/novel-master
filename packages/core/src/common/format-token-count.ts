@@ -8,8 +8,8 @@
  *
  * `formatTokenSourceBadge`（占用来源 → 记号 + 连接符）是这套标签的唯一事实
  * 来源：实现放在本文件（common）是为了让 mobile 在整体 mock `core/provider`
- * 的 jest 套件里也能经 `core/common` 直取真实现，`infra/tokenizer/logic/
- * format-token-source-badge.ts` 与 `public/provider` 只是它的具名再导出。
+ * 的 jest 套件里也能经 `core/common` 直取真实现，`public/provider` 只是它的
+ * 具名再导出。
  *
  * desktop renderer 因 X1 门禁不能 import core，那边在
  * `apps/desktop/shared/logic/format-token-count.ts` 维护等价镜像，

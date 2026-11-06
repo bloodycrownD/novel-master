@@ -55,7 +55,7 @@ import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.j
 import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** 占用结果来源。 */
-export type PromptTokenSource = "api" | "local";
+type PromptTokenSource = "api" | "local";
 
 /**
  * resolve 段中途弃权（cr-fix-spec-r3 r3-chip-1，2026-09-30 治本点）。

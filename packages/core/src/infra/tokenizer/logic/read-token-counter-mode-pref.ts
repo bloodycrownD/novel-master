@@ -10,8 +10,6 @@
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 
-export const TOKEN_COUNTER_MODE_PREF_KEY = "tokenCounter.mode";
-
 const VALID_FAMILIES: ReadonlySet<string> = new Set([
   "auto",
   "heuristic",
@@ -36,7 +34,11 @@ export function isValidTokenCounterModePref(raw: string): boolean {
   return VALID_FAMILIES.has(raw);
 }
 
-/** Parses stored preference value into registry override. */
+/**
+ * Parses stored preference value into registry override.
+ *
+ * nm-style: keep-local — 家族白名单与旧 heuristic 归一化是 saved-model 模式的领域口径，schema 只做转接
+ */
 export function parseTokenCounterModePref(
   raw: string | undefined
 ): TokenizerOverride {

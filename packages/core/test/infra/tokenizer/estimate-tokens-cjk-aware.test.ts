@@ -4,10 +4,10 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  CJK_TOKENS_PER_CHAR,
-  estimateTokensCjkAware,
-} from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
+import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
+
+/** 规格系数（估算器不再导出，测试按规格值本地锁定）。 */
+const CJK_TOKENS_PER_CHAR = 1.64;
 
 describe("estimateTokensCjkAware", () => {
   it("空串 → 0", () => {

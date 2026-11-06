@@ -11,13 +11,15 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 
 import {
-  ENCODING_RETRY_TTL_MS,
   getEncoding,
   clearForTests,
   setFactoryForTests,
   setClockForTests,
   type EncodingHandle,
 } from "../../../src/infra/tokenizer/encoding-registry.js";
+
+/** 规格常量（registry 不再导出，测试按规格值本地锁定）。 */
+const ENCODING_RETRY_TTL_MS = 5 * 60 * 1000;
 
 /** 最小可用的假句柄：encode 出 { length }。 */
 function makeHandle(tag: string): EncodingHandle {

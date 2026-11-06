@@ -47,7 +47,7 @@ export interface PromptWholeCacheEntry {
 }
 
 /** 单会话 LRU 条数上限（同会话最近 32 个「内容×身份」组合）。 */
-export const PROMPT_WHOLE_CACHE_LRU_PER_SESSION = 32;
+const PROMPT_WHOLE_CACHE_LRU_PER_SESSION = 32;
 
 /** 每会话持久化条数上限（回滚/编辑的少数内容版本窗口）。 */
 const PERSIST_MAX_ITEMS = 16;

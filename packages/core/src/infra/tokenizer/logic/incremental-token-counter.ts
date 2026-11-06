@@ -55,7 +55,7 @@
  */
 
 /** 注入依赖：`encode` 由宿主绑定（真 tiktoken 或测试假实现）。 */
-export interface IncrementalTokenCounterDeps {
+interface IncrementalTokenCounterDeps {
   /** 把一段文本编码为 token 数；抛错表示这段文本不可编码（调用方吞掉）。 */
   readonly encode: (text: string) => number;
   /** 尾窗字符数（尾窗每次读值重算），默认可由常量 {@link DEFAULT_TAIL_CHARS} 取。 */
@@ -89,9 +89,9 @@ export interface IncrementalTokenCounter {
 }
 
 /** 尾窗字符数默认值（双端装配口径）。 */
-export const DEFAULT_TAIL_CHARS = 24;
+const DEFAULT_TAIL_CHARS = 24;
 /** 边界回看字符数默认值。 */
-export const DEFAULT_LOOKBACK_CHARS = 8;
+const DEFAULT_LOOKBACK_CHARS = 8;
 /**
  * 固化步长默认值（尾窗超过 `tailChars + 该值` 触发一次固化）。
  *
@@ -99,7 +99,7 @@ export const DEFAULT_LOOKBACK_CHARS = 8;
  * 重算——实测 256 时中文长文单次 push 峰值 5.24ms（超过 2ms 验收线），64 时
  * 0.92ms（误差仅 +0.06pp）。数值表见模块文档。
  */
-export const DEFAULT_COMMIT_STEP_CHARS = 64;
+const DEFAULT_COMMIT_STEP_CHARS = 64;
 
 /**
  * 单次 `encode` 的字符数硬上限（内部自保，不对外暴露为旋钮）。

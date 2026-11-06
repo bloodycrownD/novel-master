@@ -47,12 +47,12 @@ export interface EncodingHandle {
 }
 
 /** 编码表构造器：入参为编码名，返回可共享的句柄；抛错视为构造失败。 */
-export type EncodingFactory<T extends EncodingHandle = EncodingHandle> = (
+type EncodingFactory<T extends EncodingHandle = EncodingHandle> = (
   encodingName: string,
 ) => T;
 
 /** 失败缓存的重试 TTL（毫秒）：5 分钟内的重复取用不触发重建。 */
-export const ENCODING_RETRY_TTL_MS = 5 * 60 * 1000;
+const ENCODING_RETRY_TTL_MS = 5 * 60 * 1000;
 
 interface RegistryEntry {
   /** 单例句柄；`null` = 上次构造失败（看 `failedAt` 判断是否允许重试）。 */

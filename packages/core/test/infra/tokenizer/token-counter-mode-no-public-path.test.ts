@@ -57,10 +57,11 @@ describe("T9 tokenCounter.mode no public read path", () => {
     assert.equal(mainEntry.TOKEN_COUNTER_MODE_PREF_KEY, undefined);
   });
 
-  it("saved-model validation helpers remain exported from @novel-master/core/provider", () => {
-    assert.equal(typeof provider.parseTokenCounterModePref, "function");
-    assert.equal(typeof provider.isValidTokenCounterModePref, "function");
-    assert.equal(provider.TOKEN_COUNTER_MODE_PREF_KEY, "tokenCounter.mode");
+  it("saved-model 校验只剩 isValid 走 public，解析器与 pref 键已收窄", () => {
+    const pub = provider as Record<string, unknown>;
+    assert.equal(typeof pub.isValidTokenCounterModePref, "function");
+    assert.equal(pub.parseTokenCounterModePref, undefined);
+    assert.equal(pub.TOKEN_COUNTER_MODE_PREF_KEY, undefined);
   });
 });
 

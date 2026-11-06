@@ -42,7 +42,7 @@ import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layou
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 
 /** 记忆条目：与 `ResolvedPromptTokens` 的 local 分支同构（source 恒 local）。 */
-export interface ChatTokenEstimateMemoEntry {
+interface ChatTokenEstimateMemoEntry {
   readonly tokenCount: number;
   readonly estimated: boolean;
   readonly counterKind: string;
@@ -71,6 +71,7 @@ const LAYOUT_DIGEST_HEX_LENGTH = 16;
 const workplaceEstimateByFp = new Map<string, number>();
 
 /** 指纹估读命中；miss 返回 null（调用方现算并回填）。 */
+// nm-style: keep-local — workplaceEstimateByFp 的读口，与回填成对维护该表的不变量
 export function lookupWorkplaceEstimateByFingerprint(
   fingerprint: string
 ): number | null {
@@ -79,6 +80,7 @@ export function lookupWorkplaceEstimateByFingerprint(
 
 /** 回填指纹估读（覆盖式）。容量上界：指纹随文件 mtime 演进，旧条目不再被
  * 查询——按 64 条 LRU 式截断（超限删最旧插入序），防长会话漂移累积。 */
+// nm-style: keep-local — workplaceEstimateByFp 的写口，负责 64 条容量上界不变量
 export function rememberWorkplaceEstimateByFingerprint(
   fingerprint: string,
   estimate: number
@@ -155,6 +157,8 @@ export function clearChatTokenEstimateMemo(sessionId?: string): void {
  * 长度和用 `JSON.stringify(blocks).length`（一次小序列化，消息体远小于
  * workplace 前缀）；「同长度异内容」的编辑是病理边界——估读标签短暂陈旧，
  * 下一次消息事件自愈，可接受（与旧指纹 memo 同款取舍，见模块头）。
+ *
+ * nm-style: keep-local — 尾戳三段（数量/末 seq/长度和）是「同键 ⇒ 产物同值」的判定契约
  */
 export function stampMessagesForEstimateMemo(
   messages: readonly ChatMessageData[]
@@ -168,20 +172,6 @@ export function stampMessagesForEstimateMemo(
     }
   }
   return `${messages.length}:${lastSeq}:${lenSum}`;
-}
-
-/** tools 折算长度（tools 集随 agent 定义变，长度异即 miss；消息体同款取舍）。 */
-export function stampToolsForEstimateMemo(
-  tools: unknown
-): string {
-  if (tools == null) {
-    return "0";
-  }
-  try {
-    return String(JSON.stringify(tools).length);
-  } catch {
-    return "unserializable";
-  }
 }
 
 /**
@@ -223,6 +213,8 @@ function digestLayoutForEstimateMemo(layout: AgentPromptLayout): string {
  * 模块头「键按回合有效」。**调用点位置是语义的一部分**——内部会对
  * `messages` 做一次 JSON.stringify，调用方必须在弃权检查点之后调用
  * （见 resolve-current-prompt-tokens 的检查点注释）。
+ *
+ * nm-style: keep-local — 记忆键五段契约的单一组装点，与 memo 查找/回填同模块
  */
 export function buildChatTokenEstimateMemoKey(params: {
   readonly savedModelId: string | undefined;
@@ -239,11 +231,18 @@ export function buildChatTokenEstimateMemoKey(params: {
     params.messages == null
       ? "0::0"
       : stampMessagesForEstimateMemo(params.messages);
+  // tools 折算长度（tools 集随 agent 定义变，长度异即 miss；消息体同款取舍）。
+  let toolsStamp: string;
+  try {
+    toolsStamp = params.tools == null ? "0" : String(JSON.stringify(params.tools).length);
+  } catch {
+    toolsStamp = "unserializable";
+  }
   return [
     params.savedModelId ?? "none",
     fp,
     msgStamp,
-    stampToolsForEstimateMemo(params.tools),
+    toolsStamp,
     digestLayoutForEstimateMemo(params.layout),
   ].join("|");
 }

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createIncrementalTokenCounter,
-  type IncrementalTokenCounterDeps,
-} from "../../../src/infra/tokenizer/logic/incremental-token-counter.js";
+import { createIncrementalTokenCounter } from "../../../src/infra/tokenizer/logic/incremental-token-counter.js";
+
+/** 注入依赖类型（模块不再导出，从工厂签名推导）。 */
+type IncrementalTokenCounterDeps = Parameters<typeof createIncrementalTokenCounter>[0];
 
 /**
  * 假 encode：按空白切词计数。对「断词切分」敏感——被切成两半的词会被算成

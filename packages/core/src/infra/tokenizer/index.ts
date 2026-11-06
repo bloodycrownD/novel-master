@@ -20,7 +20,6 @@ export {
 } from "./impl/heuristic-token-counter.js";
 export {
   createDefaultTokenCounterRegistry,
-  type CreateDefaultTokenCounterRegistryDeps,
 } from "./logic/create-default-registry.js";
 export {
   resolveTokenizerFamily,
@@ -49,7 +48,6 @@ export {
 } from "./logic/count-prompt-llm-input.js";
 export {
   sessionApiPromptTokenCache,
-  type SessionApiPromptTokenCacheEntry,
 } from "./logic/session-api-prompt-token-cache.js";
 export {
   serializeSessionApiPromptTokenEntry,
@@ -57,12 +55,10 @@ export {
   readSessionApiPromptTokenEntry,
   writeSessionApiPromptTokenEntry,
   invalidateSessionApiPromptTokenEntry,
-  type SessionApiPromptTokenEntry,
 } from "./logic/session-api-prompt-token-store.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
 export {
   promptWholeCache,
-  PROMPT_WHOLE_CACHE_LRU_PER_SESSION,
   type PromptWholeCacheEntry,
 } from "./logic/prompt-whole-cache.js";
 export {
@@ -70,21 +66,13 @@ export {
   buildCounterScope,
   chunkHash16,
   parseTokenChunkCachePayload,
-  CHUNK_CACHE_MAX_TOTAL_ENTRIES,
-  type CounterScopeInput,
-  type TokenChunkCacheItem,
-  type AdvanceGenerationOptions,
 } from "./logic/token-chunk-cache.js";
 // message-token-cache Step 3：双驱动块流程需要与 core 同源的确定性切分
 // （golden 锁定行为），切分器本体不动、只接出导出面。
-export {
-  splitTextIntoChunks,
-  MAX_CHUNK_CHARS,
-} from "./logic/chunk-splitter.js";
+export { splitTextIntoChunks } from "./logic/chunk-splitter.js";
 export {
   resolveCurrentPromptTokens,
   PromptTokenResolveBailedError,
-  type PromptTokenSource,
   type ResolvedPromptTokens,
   type ResolveCurrentPromptTokensOptions,
 } from "./logic/resolve-current-prompt-tokens.js";
@@ -104,22 +92,17 @@ export {
   convertMessagesForWebTokenizer,
   countWebTokenizerMessages,
   type OpenAiStyleMessage,
-  type CountOpenAiStyleMessageOptions,
-  type TokenEncoder,
 } from "./logic/count-openai-style-message.js";
 export {
   getEncoding,
   clearForTests,
   setFactoryForTests,
   setClockForTests,
-  ENCODING_RETRY_TTL_MS,
   type EncodingHandle,
-  type EncodingFactory,
 } from "./encoding-registry.js";
 export {
   parseTokenCounterModePref,
   isValidTokenCounterModePref,
-  TOKEN_COUNTER_MODE_PREF_KEY,
 } from "./logic/read-token-counter-mode-pref.js";
 export {
   registerTokenizerDriver,

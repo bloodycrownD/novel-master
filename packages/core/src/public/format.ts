@@ -30,12 +30,8 @@ export {
  * barrel 就近转出，避免新增子路径依赖。
  */
 export {
-  DEFAULT_COMMIT_STEP_CHARS,
-  DEFAULT_LOOKBACK_CHARS,
-  DEFAULT_TAIL_CHARS,
   createIncrementalTokenCounter,
   type IncrementalTokenCounter,
-  type IncrementalTokenCounterDeps,
 } from "../infra/tokenizer/logic/incremental-token-counter.js";
 /**
  * 指标条 token 来源的中立类型（声明在 session-run-state 行模型，与

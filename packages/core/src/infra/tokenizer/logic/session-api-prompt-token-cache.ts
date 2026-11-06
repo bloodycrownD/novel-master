@@ -5,7 +5,7 @@
  */
 
 /** 单会话缓存条目。 */
-export interface SessionApiPromptTokenCacheEntry {
+interface SessionApiPromptTokenCacheEntry {
   readonly promptTokens: number;
   readonly updatedAt: number;
   /**

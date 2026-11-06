@@ -20,7 +20,7 @@ import { countTokens } from "./count-tokens.js";
  * 在 core 解析不了。这里只依赖「能把文本 encode 成带长度的序列」这一结构——
  * WASM tiktoken 与 js-tiktoken 的 `Tiktoken` 都满足。
  */
-export interface TokenEncoder {
+interface TokenEncoder {
   encode(text: string): { readonly length: number };
 }
 
@@ -28,11 +28,6 @@ export interface OpenAiStyleMessage {
   readonly role: string;
   readonly content: string;
   readonly name?: string;
-}
-
-export interface CountOpenAiStyleMessageOptions {
-  /** Claude web path uses full prompt conversion without `-2` name adjustment. */
-  readonly full?: boolean;
 }
 
 /**
@@ -73,7 +68,11 @@ export function wrapSerializedPromptAsSystemMessage(
   return { role: "system", content: serialized };
 }
 
-/** Converts messages to a Claude-style prompt string for web tokenizers. */
+/**
+ * Converts messages to a Claude-style prompt string for web tokenizers.
+ *
+ * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
+ */
 export function convertMessagesForWebTokenizer(
   messages: readonly OpenAiStyleMessage[],
 ): string {
@@ -99,6 +98,8 @@ export function convertMessagesForWebTokenizer(
 
 /**
  * Web tokenizer count aligned with ST `countWebTokenizerTokens`.
+ *
+ * nm-style: keep-public — node 驱动跨包消费（web tokenizer 计数入口）
  */
 export function countWebTokenizerMessages(
   encode: (text: string) => { length: number },

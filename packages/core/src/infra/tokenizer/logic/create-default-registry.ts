@@ -14,7 +14,7 @@ import type {
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
 /** Registry construction options. */
-export interface CreateDefaultTokenCounterRegistryDeps {
+interface CreateDefaultTokenCounterRegistryDeps {
   /** Optional override hook for tokenizer drivers/tests; product runtimes do not inject. */
   readonly getTokenizerOverride?: () => Promise<TokenizerOverride>;
   /** When set, resolves vendor model id from saved model UUID. */

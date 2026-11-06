@@ -51,7 +51,7 @@ import { sessionApiPromptTokenCache } from "./session-api-prompt-token-cache.js"
  * 死字段，这个有真实消费方（读口 delta 估算）。老行没有该键 → 读口 delta
  * 按 0 处理，值原样使用。
  */
-export interface SessionApiPromptTokenEntry {
+interface SessionApiPromptTokenEntry {
   readonly promptTokens: number;
   readonly atMs: number;
   readonly savedModelId?: string;
@@ -76,7 +76,11 @@ function optionalAnchorSeq(
     : {};
 }
 
-/** 序列化为 session KKV 值（紧凑 JSON）。 */
+/**
+ * 序列化为 session KKV 值（紧凑 JSON）。
+ *
+ * nm-style: keep-local — 可选指纹/锚点的省略规则是落库格式契约，写口与测试共用
+ */
 export function serializeSessionApiPromptTokenEntry(
   entry: SessionApiPromptTokenEntry
 ): string {
@@ -101,6 +105,8 @@ export function serializeSessionApiPromptTokenEntry(
  * ⚠️ **只解构已知键，未知键一律忽略**：旧行里可能还带着已移除的那两个可选加固
  * 字段，这些键既不参与判定，也不会导致报错或 miss——老行照常解析出
  * `{promptTokens, atMs, savedModelId?}`，所以字段移除**不需要数据迁移/清库**。
+ *
+ * nm-style: keep-local — 「缺 atMs/promptTokens 即整体 miss」是读口径契约，读口与测试共用
  */
 export function parseSessionApiPromptTokenEntry(
   raw: string | null | undefined
@@ -149,6 +155,8 @@ export function parseSessionApiPromptTokenEntry(
  *
  * `sessionKkv` 缺省（未装配 / 测试未注入）时退化为纯进程内读——调用方
  * 行为与落库前一致，不因缺装配而报错。
+ *
+ * nm-style: keep-local — 与 write/invalidate 成对的 store 读口，KKV 读失败按 miss 的降级口径单点
  */
 export async function readSessionApiPromptTokenEntry(
   sessionKkv: SessionKkvService | null | undefined,

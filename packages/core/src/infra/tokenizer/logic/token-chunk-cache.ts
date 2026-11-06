@@ -52,7 +52,7 @@ import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 const CHUNK_HASH_HEX_LENGTH = 16;
 
 /** 三代总量条数上限（≈10MB 上限：100K × (16 hex 键 + number)）。 */
-export const CHUNK_CACHE_MAX_TOTAL_ENTRIES = 100_000;
+const CHUNK_CACHE_MAX_TOTAL_ENTRIES = 100_000;
 
 /**
  * 持久化 JSON 版本号（`v` 不符的旧行整体按 miss 丢弃，无迁移）。
@@ -66,7 +66,7 @@ const TOKEN_CHUNKS_PAYLOAD_VERSION = 2;
  *
  * 任一字段变化都会产生新 scope（旧条目自动失活），因此无需主动失效。
  */
-export interface CounterScopeInput {
+interface CounterScopeInput {
   readonly vendorModelId: string;
   readonly tokenizerOverride?: TokenizerOverride | null;
   readonly tokenizerFamily?: TokenizerFamily | null;
@@ -143,7 +143,7 @@ function splitEntryKey(key: string): [string, string] {
 }
 
 /** advanceGeneration 的持久化选项。 */
-export interface AdvanceGenerationOptions {
+interface AdvanceGenerationOptions {
   /**
    * 持久化通道：`sessionKkv` 缺省（未装配 / 测试未注入）时只推进代际、
    * 不落库，行为与无持久化前完全一致。
@@ -159,7 +159,7 @@ export interface AdvanceGenerationOptions {
 }
 
 /** 持久化条目三元组：`[hash16, scope, count]`。 */
-export type TokenChunkCacheItem = readonly [
+type TokenChunkCacheItem = readonly [
   hash16: string,
   scope: string,
   count: number
@@ -240,6 +240,8 @@ function serializeCurrentGeneration(): string | null {
 /**
  * 解析持久化整表；缺失 / 损坏 / `v` 不符 / 任一条目字段非法 → 整体 null
  * （静默按 miss，不抛错、不造数）。未知键一律忽略（兼容未来加字段）。
+ *
+ * nm-style: keep-local — KKV 载荷 v2 版本守卫与 16-hex 键形态是持久化契约，seed 与解析共用同一份
  */
 export function parseTokenChunkCachePayload(
   raw: string | null | undefined

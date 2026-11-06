@@ -16,10 +16,16 @@ import { isGpt0301TiktokenModel } from "./resolve-tokenizer-family.js";
  * Node 传 tiktoken 的 `encoding.encode(text).length`，
  * RN 传 js-tiktoken 的 `enc.encode(text).length`，
  * 测试可传 mock。签名统一，三端互换。
+ *
+ * nm-style: keep-public — countTokens 公开签名
  */
 export type ChatTokenEncoder = (text: string) => number;
 
-/** OpenAI chat 风格消息（role / content 必填，name 可选）。 */
+/**
+ * OpenAI chat 风格消息（role / content 必填，name 可选）。
+ *
+ * nm-style: keep-public — countTokens 公开签名
+ */
 export interface ChatTokenMessage {
   readonly role: string;
   readonly content: string;
@@ -34,9 +40,14 @@ export interface ChatTokenMessage {
  * - `heuristic`：简化 +3+3——只 encode content，固定按非 0301 处理。
  *   RN js-tiktoken 路径用这档；因为包装粗糙、又不区分模型，
  *   counterKind 应诚实标 `heuristic`，不能冒充精确。
+ *
+ * nm-style: keep-public — countTokens 公开签名
  */
 export type ChatTokenCountKind = "precise" | "heuristic";
 
+/**
+ * nm-style: keep-public — countTokens 公开签名
+ */
 export interface CountTokensOptions {
   /**
    * tiktoken 模型名，仅在 `kind === "precise"` 时用于判断 0301 额外开销。
@@ -50,6 +61,8 @@ export interface CountTokensOptions {
  *
  * 三端共用入口：调用方注入 {@link ChatTokenEncoder} 与 {@link ChatTokenCountKind}，
  * 函数本身是纯函数、无副作用、不持有 encoding 资源。
+ *
+ * nm-style: keep-public — 三端共用入口（文档契约），签名类型随同 keep-public
  */
 export function countTokens(
   encode: ChatTokenEncoder,

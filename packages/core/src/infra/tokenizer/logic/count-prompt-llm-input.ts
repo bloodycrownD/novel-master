@@ -78,7 +78,11 @@ export async function resolveVendorModelIdFromSaved(
   return saved?.vendorModelId ?? savedModelId;
 }
 
-/** Minimal fallback without a registered driver (tests / documentation). */
+/**
+ * Minimal fallback without a registered driver (tests / documentation).
+ *
+ * nm-style: keep-public — desktop 跨包消费，依赖 core 序列化 + 家族解析 + registry
+ */
 export async function countPromptLlmInputHeuristicOnly(
   params: CountPromptLlmInputParams
 ): Promise<PromptTokenCountResult> {

@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  MAX_CHUNK_CHARS,
-  SOFT_BOUNDARY_CHARS,
-  SENTENCE_END_CHARS,
-  splitTextIntoChunks,
-} from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
+import { splitTextIntoChunks } from "../../../src/infra/tokenizer/logic/chunk-splitter.js";
+
+/** 规格常量（切分器不再导出，测试按规格值本地锁定）。 */
+const MAX_CHUNK_CHARS = 64;
 
 /**
  * T-TC1：切分器 golden 快照 + 核心不变量。
@@ -157,10 +155,10 @@ describe("chunk-splitter 不变量（T-TC1 续）", () => {
     assertInvariants(mixed);
   });
 
-  it("边界集常量可寻址（供缓存层与测试引用）", () => {
-    assert.ok(SENTENCE_END_CHARS.has("。"));
-    assert.ok(!SENTENCE_END_CHARS.has("."));
-    assert.ok(SOFT_BOUNDARY_CHARS.has("."));
-    assert.ok(SOFT_BOUNDARY_CHARS.has("，"));
+  it("边界口径：句号成块、半角句点不切、顿号作软边界回退", () => {
+    assert.deepEqual(splitTextIntoChunks("甲。乙"), ["甲。", "乙"]);
+    assert.deepEqual(splitTextIntoChunks("甲.乙"), ["甲.乙"]);
+    const head = "甲".repeat(63);
+    assert.deepEqual(splitTextIntoChunks(`${head}、乙`), [`${head}、`, "乙"]);
   });
 });

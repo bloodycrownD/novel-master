@@ -15,7 +15,7 @@
  */
 
 /** CJK 字符的 token 折算系数：cl100k 对中文实测 ≈1.64 token/字符。 */
-export const CJK_TOKENS_PER_CHAR = 1.64;
+const CJK_TOKENS_PER_CHAR = 1.64;
 
 /** 非 CJK 字符沿用既有英文口径的倒数（1 / 3.35）。 */
 const NON_CJK_CHARS_PER_TOKEN = 3.35;
