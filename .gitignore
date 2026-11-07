@@ -91,5 +91,8 @@ __pycache__/
 # 门控日志（workflow 运行时产物，属临时）
 .nm-gate/
 
+# VitePress（官网构建缓存；产物 dist 已由上方全局规则覆盖）
+website/.vitepress/cache/
+
 # ZCode 工具目录（workflow 草稿/运行记录/plans）
 .zcode/

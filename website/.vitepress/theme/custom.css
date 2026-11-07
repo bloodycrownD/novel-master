@@ -1,0 +1,87 @@
+/* 暗夜书房：暖暗底色 + 琥珀金 / 陶土红品牌色，只覆盖变量与少量选择器 */
+:root,
+html.dark {
+  --vp-c-bg: #171310;
+  --vp-c-bg-alt: #1e1915;
+  --vp-c-bg-elv: #1e1915;
+  --vp-c-bg-soft: #1e1915;
+
+  --vp-c-text-1: #f0e6d8;
+  --vp-c-text-2: #a89a86;
+  --vp-c-text-3: #6f6455;
+
+  --vp-c-divider: #3a3129;
+  --vp-c-border: #3a3129;
+  --vp-c-gutter: #3a3129;
+
+  --vp-c-brand-1: #e6913f;
+  --vp-c-brand-2: #c9703f;
+  --vp-c-brand-3: #a24e44;
+  --vp-c-brand-soft: rgba(230, 145, 63, 0.14);
+
+  --vp-code-block-bg: #1a1512;
+  --vp-code-line-highlight-color: rgba(230, 145, 63, 0.08);
+  --vp-code-copy-code-bg: #241d18;
+  --vp-code-copy-code-hover-bg: #2e251e;
+  --vp-code-copy-code-active-text: #f0e6d8;
+
+  --vp-nav-bg-color: #171310;
+  --vp-sidebar-bg-color: #1e1915;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #e6913f 20%, #a24e44 80%);
+  --vp-home-hero-image-background-image: radial-gradient(
+    circle,
+    rgba(230, 145, 63, 0.28) 0%,
+    rgba(162, 78, 68, 0.18) 55%,
+    transparent 75%
+  );
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-button-brand-bg: #e6913f;
+  --vp-button-brand-hover-bg: #f0a355;
+  --vp-button-brand-active-bg: #c9703f;
+  --vp-button-brand-text: #171310;
+  --vp-button-brand-hover-text: #171310;
+  --vp-button-brand-active-text: #171310;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+}
+
+::selection {
+  background: rgba(230, 145, 63, 0.28);
+  color: #fbf3e6;
+}
+
+.vp-doc a {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc a:hover {
+  color: #f0a355;
+}
+
+html {
+  scrollbar-color: #3a3129 #171310;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #171310;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3129;
+  border: 2px solid #171310;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5a4a3b;
+}
