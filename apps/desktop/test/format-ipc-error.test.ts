@@ -3,11 +3,15 @@ import { describe, it } from "node:test";
 import { ToolError } from "@novel-master/core";
 import { AppError, VfsError } from "@novel-master/core/vfs";
 import { AgentTurnError } from "@novel-master/core/agent";
+// 走公开子入口而非 core src：src 的 `@/` 别名只有 core-dist hook 覆盖，
+// 测试直接加载 src 会在 `@/i18n/*` 上解析失败（迁移后新增的运行时 import）。
 import {
   sessionFsRollbackNoCheckpoint,
   sessionFsRollbackRevisionBackfillRequired,
   sessionFsRollbackVfsRestoreFailed,
-} from "../../../packages/core/src/errors/session-fs-errors.js";
+} from "@novel-master/core/session-fs";
+import { userMessageOf } from "@novel-master/core/i18n";
+import { coreT } from "../shared/logic/core-i18n.js";
 import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
 
 describe("formatIpcError", () => {
@@ -38,7 +42,17 @@ describe("formatIpcError", () => {
     );
     const payload = formatIpcError(err);
     assert.equal(payload.code, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
-    assert.match(payload.message, /revision 缺失/);
+    // descriptor 迁移后 Error.message 是 key 原文；中文经 coreT 渲染。
+    assert.equal(
+      payload.message,
+      "error.session_fs.rollback_revision_backfill_required",
+    );
+    const descriptor = userMessageOf(err);
+    assert.ok(descriptor != null);
+    assert.equal(
+      coreT(descriptor),
+      "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md",
+    );
     assert.deepEqual(payload.missingLogicalPaths, [
       "/chapter-1.md",
       "/notes/b.md",

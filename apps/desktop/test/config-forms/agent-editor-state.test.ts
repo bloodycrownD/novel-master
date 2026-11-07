@@ -841,7 +841,8 @@ test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.message, /助手/);
+    // 边界经 userMessageOf + coreT 解析回中文（agent-editor-state 的 toast 边界）。
+    assert.equal(result.message, "启用持久区时最后一个块须为助手角色");
   }
 });
 
@@ -891,7 +892,7 @@ test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", 
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.message, /两个块/);
+    assert.equal(result.message, "启用动态区时至少需要两个块");
   }
 });
 

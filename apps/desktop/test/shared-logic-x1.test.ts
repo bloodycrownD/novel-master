@@ -172,9 +172,24 @@ describe("X1 结构快照：renderer 侧零直连 core（wave-e X1.5）", () => 
       bindings.length > 0,
       "shared/logic 里一个 core 再导出都没有了 —— X1 的转发层被掏空，对账失去意义。",
     );
+    // i18n 迁移（spec G4.1/G4.2）后 shared/logic 不再只是再导出层：它同时是
+    // renderer 侧唯一的 core-descriptor→string 翻译边界——下面这些文件必须
+    // import core 的 descriptor 工厂/选项表，再包一层返回 string。其余文件仍
+    // 只允许 `export … from`。
+    const TRANSLATION_BOUNDARY = new Set([
+      "shared/logic/core-i18n.ts",
+      "shared/logic/format.ts",
+      "shared/logic/provider.ts",
+      "shared/logic/skills.ts",
+      "shared/logic/stored-config-validity.ts",
+      "shared/logic/vfs.ts",
+      "shared/logic/workplace.ts",
+    ]);
     assert.ok(
-      bindings.every((b) => b.kind === "export"),
-      "shared/logic 里出现了指向 core 的 import（应当只做再导出，不该反向依赖）。",
+      bindings.every(
+        (b) => b.kind === "export" || TRANSLATION_BOUNDARY.has(b.file),
+      ),
+      "shared/logic 里出现了指向 core 的 import（仅 descriptor→string 翻译边界文件允许）。",
     );
   });
 

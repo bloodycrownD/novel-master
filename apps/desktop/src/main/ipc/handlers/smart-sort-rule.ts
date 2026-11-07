@@ -23,6 +23,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { BrowserWindow } from "electron";
 import { matchSmartSortPattern } from "@novel-master/core/smart-sort-rule";
+import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   exportSmartSortRuleYamlWithDialog,
@@ -175,7 +176,16 @@ export async function handleSmartSortRuleMatch(
       req.text,
       req.captureKind ?? "smart"
     );
-    return { ok: true, data: result as SmartSortRuleMatchResultDto };
+    // tuple 在 core 侧是 MessageLike（fixed 档为 label descriptor）；DTO 契约是
+    // string，翻译发生在 IPC 边界（main 侧 coreT），renderer 直接渲染。非法正则
+    // 是合法测试结局：data 内联 ok:false + error，不升格为 IPC 错误。
+    if (!result.ok) {
+      return { ok: true, data: { ok: false as const, error: result.error } };
+    }
+    const matches = result.matches.map(
+      (m) => ({ ...m, tuple: m.tuple == null ? null : coreT(m.tuple) }),
+    );
+    return { ok: true, data: { ok: true as const, matches } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

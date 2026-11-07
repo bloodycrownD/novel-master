@@ -7,12 +7,24 @@ import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isCloudSyncError } from "@novel-master/core";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { ToolError } from "@novel-master/core";
+import { userMessageOf } from "@novel-master/core/i18n";
 import {
   AppError,
   VfsError,
   isVfsError,
 } from "@novel-master/core/vfs";
+import { coreT } from "../../../shared/logic/core-i18n.js";
 import { ZodError } from "zod";
+
+/**
+ * 错误 → 用户可见中文文案：i18n 后 AppError/VfsError 在 descriptor 模式下
+ * `message` 是英文 desc，中文在 messageKey/catalog 里；IPC 边界统一解析，
+ * renderer 拿到的 message 直接可显示。未覆盖的错误回退原 message。
+ */
+function visibleMessage(err: unknown, fallback: string): string {
+  const descriptor = userMessageOf(err);
+  return descriptor != null ? coreT(descriptor) : fallback;
+}
 
 const FIELD_LABELS: Record<string, string> = {
   endDepth: "结束深度",
@@ -83,27 +95,27 @@ function sessionFsMissingPaths(
  */
 export function formatIpcError(err: unknown): IpcErrorPayload {
   if (isCloudSyncError(err)) {
-    return { code: err.code, message: err.message };
+    return { code: err.code, message: visibleMessage(err, err.message) };
   }
   if (err instanceof ZodError) {
     return { code: "VALIDATION", message: formatZodIssues(err) };
   }
   if (err instanceof VfsError) {
-    return { code: err.code, message: err.message };
+    return { code: err.code, message: visibleMessage(err, err.message) };
   }
   // 统一错误透出可读 key（AppError.key），不落成 Error.name；VFS 域在 phase 1
   // 仍对渲染层承诺旧 short code（NOT_FOUND / ALREADY_EXISTS 等）。
   if (err instanceof AppError) {
-    return { code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key, message: err.message };
+    return { code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key, message: visibleMessage(err, err.message) };
   }
   if (err instanceof ToolError) {
     const cause = err.cause;
     if (cause instanceof VfsError || isVfsError(cause)) {
       const vfsCause = cause as VfsError;
-      return { code: vfsCause.code, message: vfsCause.message };
+      return { code: vfsCause.code, message: visibleMessage(vfsCause, vfsCause.message) };
     }
-    const message = cause instanceof Error ? cause.message : err.message;
-    return { code: err.code, message };
+    const fallback = cause instanceof Error ? cause.message : err.message;
+    return { code: err.code, message: visibleMessage(err, fallback) };
   }
   if (err instanceof AgentTurnError) {
     return { code: "AGENT_RUN_ERROR", message: err.message };

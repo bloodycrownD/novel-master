@@ -1,7 +1,9 @@
 import type { AgentDefinition } from "@novel-master/core/agent";
 import type { AgentPromptLayout, DynamicPromptBlock, PersistPromptBlock as EditorPersistPromptBlock, PersistTextPromptBlock } from "@novel-master/core/prompt";
 import { DEFAULT_SKILLS_INDEX_PREFIX, DEFAULT_WORKPLACE_ASSISTANT_TEXT, layoutHasCustomAttach, layoutHasWorkplace, validateAgentPromptLayout } from "@novel-master/core/prompt";
+import { userMessageOf } from "@novel-master/core/i18n";
 import { isSavedModelUuidFormat } from "@novel-master/core/provider";
+import { coreT } from "../logic/core-i18n.js";
 import { buildToolsPolicyFromSelection } from "./agent-tool-catalog.js";
 
 export type ToolsMode = "default" | "allow" | "deny";
@@ -343,7 +345,9 @@ export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok:
   const layout = layoutFromFormInput(input);
   const validated = validateAgentPromptLayout(layout);
   if (!validated.ok) {
-    return { ok: false, message: validated.error.message };
+    // AppError 在 descriptor 模式下 message 是英文 desc；toast 给用户前在边界解析回中文。
+    const layoutError = userMessageOf(validated.error);
+    return { ok: false, message: layoutError != null ? coreT(layoutError) : validated.error.message };
   }
   const validatedLayout = validated.value;
   const steps = Number(input.maxSteps);

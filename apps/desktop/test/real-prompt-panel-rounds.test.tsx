@@ -1298,9 +1298,10 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     // 轮 DTO 返回类型
     assert.match(src, /IpcResult<PromptPreviewTurnDto\[\]>/);
     assert.match(src, /buildRealPromptPreviewTurns/);
-    // 正向：三类轮统一形态——摘要与计数分列，cards 是唯一正文载体
-    assert.match(src, /summaryText: turn\.summaryText/);
-    assert.match(src, /metaText: turn\.metaText/);
+    // 正向：三类轮统一形态——摘要与计数分列，cards 是唯一正文载体。
+    // 迁移后 core 产出 MessageLike，main 在 IPC 边界用 coreT 翻译成 string DTO。
+    assert.match(src, /summaryText: coreT\(turn\.summaryText\)/);
+    assert.match(src, /metaText: turn\.metaText\.map\(coreT\)/);
     assert.match(src, /cards: turn\.cards\.map\(/);
     // 反向：不再有 assistant / 非 assistant 三元分叉
     assert.doesNotMatch(src, /turn\.kind === "assistant"/);

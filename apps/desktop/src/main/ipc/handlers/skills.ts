@@ -20,6 +20,7 @@ import type {
   SkillListScope,
   SkillLocation,
 } from "@novel-master/core/skills";
+import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
 
@@ -49,7 +50,7 @@ export async function handleSkillsList(
         domain: item.domain,
         valid: item.valid,
         ...(item.invalidReason != null
-          ? { invalidReason: item.invalidReason }
+          ? { invalidReason: coreT(item.invalidReason) }
           : {}),
         files: [...item.files],
       })),
@@ -75,7 +76,7 @@ export async function handleSkillsEffective(
         disabled: row.disabled,
         valid: row.valid,
         ...(row.invalidReason != null
-          ? { invalidReason: row.invalidReason }
+          ? { invalidReason: coreT(row.invalidReason) }
           : {}),
         effective: row.effective,
       })),

@@ -306,7 +306,8 @@ describe("skills IPC handlers", () => {
     assert.equal(dup.ok, false);
     if (!dup.ok) {
       assert.equal(dup.error.code, "SKILL_ALREADY_EXISTS");
-      assert.match(dup.error.message, /已存在同名技能/);
+      // IPC 边界 formatIpcError 经 userMessageOf + coreT 解析回中文。
+      assert.equal(dup.error.message, "已存在同名技能：foo");
     }
 
     // global 域内置技能改名拒：BUILTIN_SKILL_RENAME（内置源门先于
@@ -319,7 +320,7 @@ describe("skills IPC handlers", () => {
     assert.equal(builtinRes.ok, false);
     if (!builtinRes.ok) {
       assert.equal(builtinRes.error.code, "SKILL_BUILTIN_RENAME");
-      assert.match(builtinRes.error.message, /内置技能不支持重命名：agent-config/);
+      assert.equal(builtinRes.error.message, "内置技能不支持重命名：agent-config");
     }
   });
 });

@@ -19,9 +19,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  buildStreamMetricsLine,
   composeStreamTokens,
   createTokenRateSampler,
+  formatStreamMetricsLineText,
   reanchorStreamTokenBase,
   type IncrementalTokenCounter,
   type StreamTokenSource,
@@ -124,7 +124,7 @@ function heuristicTokens(totalChars: number): number {
 export function buildAgentStreamMetricsLabel(
   metrics: AgentStreamMetricsView,
 ): string {
-  return buildStreamMetricsLine({
+  return formatStreamMetricsLineText({
     running: metrics.running,
     elapsedMs: metrics.elapsedMs,
     completionTokens: metrics.completionTokens,

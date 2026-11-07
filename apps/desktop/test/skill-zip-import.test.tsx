@@ -212,7 +212,7 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("handler：project 域保留名（目录不存在）拒绝且中文文案，非名单名放行", async () => {
+  it("handler：project 域保留名（目录不存在）拒绝并透传英文 desc，非名单名放行", async () => {
     const denied = await handleSkillsAssertCreateName({
       domain: "project",
       projectId,
@@ -221,7 +221,8 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
     assert.equal(denied.ok, false);
     if (!denied.ok) {
       assert.equal(denied.error.code, "SKILL_BUILTIN_NAME_RESERVED");
-      assert.match(denied.error.message, /「agent-config」为内置技能保留名/);
+      // IPC 边界 formatIpcError 经 userMessageOf + coreT 解析回中文。
+      assert.equal(denied.error.message, "「agent-config」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑");
     }
 
     const allowed = await handleSkillsAssertCreateName({

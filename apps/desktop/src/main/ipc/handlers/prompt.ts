@@ -20,6 +20,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
 import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
+import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handlePromptRealPreview(
@@ -33,8 +34,9 @@ export async function handlePromptRealPreview(
       data: turns.map((turn) => ({
         id: turn.id,
         kind: turn.kind,
-        summaryText: turn.summaryText,
-        metaText: turn.metaText,
+        // core 产出 MessageLike（G3.5）：main 翻译后写 string DTO（spec G4.3）
+        summaryText: coreT(turn.summaryText),
+        metaText: turn.metaText.map(coreT).join(" · "),
         // cards 是唯一正文载体：三类轮统一下发，body / items 已从 DTO 退役
         // （它们是同一份正文的两种粒度，各下发一次才需要按 kind 分叉压体积；
         // 详见 shared/ipc-types.ts 的体积策略注释）。

@@ -77,6 +77,7 @@ import {
 } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { createLogger } from "@novel-master/core/log";
+import { coreT } from "../../../../shared/logic/core-i18n.js";
 
 const log = createLogger("desktop.ipc.vfs");
 
@@ -420,7 +421,9 @@ export async function handleVfsBatchIngestFromPaths(
     if (outcome.status === "applied") {
       pushWorkspaceMutated(req);
     }
-    return { ok: true, data: outcome };
+    // failed[].message 可能是 descriptor（error.vfs.batch_ingest_partial）：main 翻译后写 string DTO
+    const data: VfsBatchIngestFromPathsResult = outcome.status === "applied" ? { ...outcome, report: { ...outcome.report, failed: outcome.report.failed.map((f) => ({ ...f, message: coreT(f.message) })) } } : outcome;
+    return { ok: true, data };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
