@@ -60,7 +60,7 @@ export async function resolveAgentForProject(
     // 保留原始错误消息便于诊断。
     const detail = error instanceof Error ? error.message : String(error);
     throw new AgentRunResolveError(
-      `会话引用的 Agent 不存在：${agentId}（${detail}）`
+      {key: "error.agent.referenced_not_found", params: {agent_id: agentId, detail}}
     );
   }
 }

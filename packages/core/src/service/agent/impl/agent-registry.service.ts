@@ -97,7 +97,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     }
     // 内置 general 是虚拟 agent，禁止用户创建同名
     if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", `"${DEFAULT_SUBAGENT_DEFINITION.name}" 是内置智能体名称，不可使用`);
+      throw new AppError("AGENT_INVALID_SCHEMA", {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}});
     }
     const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
@@ -112,7 +112,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         otherName = otherId.trim();
       }
       if (otherName.length > 0 && otherName === trimmedName) {
-        throw new AppError("AGENT_DUPLICATE_NAME", "Agent 名称已存在");
+        throw new AppError("AGENT_DUPLICATE_NAME", {key: "error.agent.duplicate_name"});
       }
     }
 
@@ -137,7 +137,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     const wire = await this.deps.repository.getRawWire(agentId);
     const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
     if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`);
+      throw new AppError("AGENT_INVALID_SCHEMA", {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}});
     }
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {

@@ -19,6 +19,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -421,7 +422,7 @@ describe("SkillService（T-SK5）", () => {
       () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
       (error: unknown) =>
         isAppError(error, "SKILL_BUILTIN") &&
-        /内置技能不支持删除：agent-config/.test(error.message),
+        renderError(error).includes("内置技能不支持删除：agent-config"),
     );
 
     // 拦截后技能目录仍在，清单还能查到
@@ -496,7 +497,7 @@ describe("SkillService（T-SK5）", () => {
         ),
       (error: unknown) =>
         isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
-        /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
+        renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
     );
 
     // global 域模拟 seed 缺失：物理清掉内置目录后，新建同样拒绝
@@ -547,7 +548,7 @@ describe("SkillService（T-SK5）", () => {
         ),
       (error: unknown) =>
         isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
-        /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
+        renderError(error).includes("「agent-config」为内置技能保留名，不能用于新建"),
     );
 
     // project 域缺 projectId：与 writeSkillFile 的 vfsForDomain 校验同源拒绝
@@ -696,7 +697,7 @@ describe("SkillService（T-SK5）", () => {
           ),
         (error: unknown) =>
           isAppError(error, "SKILL_ALREADY_EXISTS") &&
-          /已存在同名技能/.test(error.message),
+          renderError(error).includes("已存在同名技能"),
       );
       // 拒绝后源技能原样（未半迁移）
       const list = await skills.listSkills("global");
@@ -716,7 +717,7 @@ describe("SkillService（T-SK5）", () => {
           ),
         (error: unknown) =>
           isAppError(error, "SKILL_BUILTIN_RENAME") &&
-          /内置技能不支持重命名：agent-config/.test(error.message),
+          renderError(error).includes("内置技能不支持重命名：agent-config"),
       );
 
       // 拒绝后内置技能目录原样
@@ -910,3 +911,17 @@ describe("SkillService（T-SK5）", () => {
     });
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

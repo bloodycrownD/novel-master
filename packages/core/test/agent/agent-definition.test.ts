@@ -293,7 +293,7 @@ describe("agentDefinitionSchema", () => {
     const def = defWithDuplicatePersist();
     assert.throws(
       () => agentDefinitionSchema.toWire(def),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && /重复的块名/.test(e.message)
+      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
     );
   });
 
@@ -321,7 +321,7 @@ describe("agentDefinitionSchema", () => {
     };
     assert.throws(
       () => agentDefinitionSchema.toWire(dup),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && /重复的块名/.test(e.message)
+      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
     );
   });
 

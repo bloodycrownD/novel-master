@@ -12,7 +12,8 @@ import {
   isVfsError,
 } from "@novel-master/core/vfs";
 import { VfsError } from "../../src/errors/vfs-errors.js";
-import { formatVfsErrorForUser } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
+import { vfsUserMessage } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
+import { tCore } from "../helpers/core-i18n.js";
 import { insertFileSeedingRevision } from "../../src/domain/vfs/logic/seed-live-head-revisions.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -41,7 +42,7 @@ describe("VFS entry name validation (service)", () => {
       () => vfs.write(SCOPE, scoped("/坏\n名.txt"), "x"),
       (e: unknown) => {
         assert.ok(isVfsError(e, "INVALID_NAME"));
-        assert.equal((e as { message: string }).message, "文件名不能包含换行或控制字符");
+        assert.equal(tCore(vfsUserMessage(e)), "文件名不能包含换行或控制字符");
         return true;
       },
     );
@@ -59,7 +60,7 @@ describe("VFS entry name validation (service)", () => {
       (e: unknown) => {
         assert.ok(isVfsError(e, "INVALID_NAME"));
         assert.equal(
-          (e as { message: string }).message,
+          tCore(vfsUserMessage(e)),
           "文件名不能以空格开头或结尾",
         );
         return true;
@@ -134,12 +135,13 @@ describe("VFS entry name validation (service)", () => {
     assert.ok(entries.some((e) => e.path === dir));
   });
 
-  it("formatVfsErrorForUser 对 INVALID_NAME 直接透出中文 reason", () => {
-    const message = formatVfsErrorForUser(
+  it("vfsUserMessage 对 INVALID_NAME 直接透出中文 reason", () => {
+    const message = tCore(vfsUserMessage(
       new VfsError("INVALID_NAME", "文件名不能包含换行或控制字符", {
         path: "坏\n名",
       }),
-    );
+    ));
+    // 未迁移的裸中文 message：translator 对未知 key 原样回显（与旧透传语义一致）
     assert.equal(message, "文件名不能包含换行或控制字符");
   });
 });

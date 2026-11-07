@@ -22,9 +22,9 @@ const textBlockStrictSchema = z.object({ type: z.literal("text"), role: z.enum([
 
 const textBlockValueSchema = z.preprocess(stripLifecycleFromTextBlock, textBlockStrictSchema);
 
-const promptsWorkplaceSchema = z.union([z.boolean(), z.string().refine((s) => s.trim().length > 0, { message: "prompts.workplace 如开启则须为非空字符串" })]).optional();
-const promptsCustomAttachSchema = z.string().refine((s) => s.trim().length > 0, { message: "prompts.customAttach 如填写则须为非空字符串" }).optional();
-const promptsSkillsPrefixSchema = z.string().refine((s) => s.trim().length > 0, { message: "prompts.skillsPrefix 如填写则须为非空字符串" }).optional();
+const promptsWorkplaceSchema = z.union([z.boolean(), z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.workplace_nonempty_string" })]).optional();
+const promptsCustomAttachSchema = z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.custom_attach_nonempty_string" }).optional();
+const promptsSkillsPrefixSchema = z.string().refine((s) => s.trim().length > 0, { message: "error.agent.invalid_schema.skills_prefix_nonempty_string" }).optional();
 
 const promptsObjectShape = {
   system: z.string().optional(),

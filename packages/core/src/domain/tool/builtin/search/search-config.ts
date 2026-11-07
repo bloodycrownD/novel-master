@@ -226,7 +226,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
     async saveEngineKey(engineId, apiKey) {
       const trimmed = apiKey.trim();
       if (trimmed.length === 0) {
-        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", "API key 不能为空");
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {key: "error.tool.search_api_key_required"});
       }
       await secretStore.set(searchApiKeyRef(engineId), trimmed);
     },
@@ -241,7 +241,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       }
       const normalized = normalizeSearxngBaseUrl(trimmed);
       if (normalized == null) {
-        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", "searxng baseUrl 无效：仅支持 http/https，且不允许携带用户名密码");
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {key: "error.tool.search_searxng_base_url_invalid"});
       }
       await kkv.set(SEARCH_KKV_MODULE, KEY_SEARXNG_BASE_URL, normalized);
     },
@@ -249,12 +249,12 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       const seen = new Set<string>();
       for (const item of order) {
         if (!(ENGINE_IDS as readonly string[]).includes(item) || seen.has(item)) {
-          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`);
+          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {key: "error.tool.search_engine_order_invalid", params: {order: JSON.stringify(order)}});
         }
         seen.add(item);
       }
       if (seen.size !== ENGINE_IDS.length) {
-        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`);
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {key: "error.tool.search_engine_order_invalid", params: {order: JSON.stringify(order)}});
       }
       await kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, JSON.stringify(order));
     },

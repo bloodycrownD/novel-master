@@ -65,7 +65,7 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
     if (typeof val.skillName !== "string" || val.skillName === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "skillAttach 附件必须携带非空 skillName",
+        message: "error.chat.attachment_skill_name_required",
         path: ["skillName"],
       });
     }
@@ -75,7 +75,7 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
   if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "name 禁止为 action:path 展示 tag（须 name=path）",
+      message: "error.chat.attachment_name_display_tag_forbidden",
       path: ["name"],
     });
   }
@@ -85,7 +85,9 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
     if (val.name !== expected) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `有 action 时 name 须等于 attachmentStorageName(path)（期望 ${expected}）`,
+        // zod message 通道无法携带 {expected} 参数（静态 string）；本分支消费链
+        // 为 parseAttachmentsJson 静默降级与写侧防御，无 UI 直达路径。
+        message: "error.chat.attachment_name_storage_mismatch",
         path: ["name"],
       });
     }

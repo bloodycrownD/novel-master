@@ -12,6 +12,7 @@ import {
   isValidSkillName,
   validateSkillName,
 } from "@/domain/skills/model/skill-name.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("SKILL_NAME_PATTERN 校验", () => {
   it("合法名通过：字母 / 数字 / 连字符 / 下划线 / 中文 / 中间点", () => {
@@ -47,7 +48,7 @@ describe("SKILL_NAME_PATTERN 校验", () => {
     for (const name of ["SKILL.md", "skill.md", "Skill.MD", "skill.Md"]) {
       const reason = validateSkillName(name);
       assert.ok(reason != null, `${name} 应非法`);
-      assert.match(reason!, /保留名/);
+      assert.match(tCore(reason!), /保留名/);
     }
   });
 
@@ -65,3 +66,17 @@ describe("SKILL_NAME_PATTERN 校验", () => {
     assert.ok(!tokenRe.test("$a b"));
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

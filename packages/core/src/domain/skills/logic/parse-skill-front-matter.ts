@@ -8,13 +8,15 @@
  */
 
 import { splitMarkdownFrontMatter } from "@/domain/workplace/logic/front-matter.js";
+import type { MessageLike } from "@/common/i18n.js";
+import { messageParamOf } from "@/i18n/localized-message.js";
 import { parseText } from "@/infra/serialization/parse-text.js";
 import { skillFrontMatterSchema } from "../model/skill.schema.js";
 
-/** front matter 解析结果（含有效性标记与无效原因）。 */
+/** front matter 解析结果（含有效性标记与无效原因；invalidReason 供 UI 翻译）。 */
 export interface ParsedSkillFrontMatter {
   readonly valid: boolean;
-  readonly invalidReason?: string;
+  readonly invalidReason?: MessageLike;
   readonly name: string | null;
   readonly description: string | null;
 }
@@ -39,8 +41,7 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
   if (split.frontMatterLines === null) {
     return {
       valid: false,
-      invalidReason:
-        "缺少 front matter（需以 --- 包裹并含 name 与 description）",
+      invalidReason: { key: "error.skill.front_matter_missing" },
       name: null,
       description: null,
     };
@@ -53,7 +54,7 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
     const message = error instanceof Error ? error.message : "invalid YAML";
     return {
       valid: false,
-      invalidReason: `front matter 不可解析：${message}`,
+      invalidReason: { key: "error.skill.front_matter_unparsable", params: { message } },
       name: null,
       description: null,
     };
@@ -64,7 +65,7 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
     const issue = parsed.error.issues[0];
     return {
       valid: false,
-      invalidReason: `front matter 字段不合法：${issue?.message ?? "未知错误"}`,
+      invalidReason: { key: "error.skill.front_matter_field_invalid", params: { message: messageParamOf(issue?.message ?? "unknown") } },
       name: pickStringField(raw, "name"),
       description: pickStringField(raw, "description"),
     };

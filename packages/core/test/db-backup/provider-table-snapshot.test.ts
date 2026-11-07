@@ -19,7 +19,7 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { BASELINE_TOO_OLD_MESSAGE } from "../../src/bootstrap/novel-master-bootstrap.js";
+import { userMessageOf } from "../../src/i18n/error-message.js";
 import {
   execLegacySavedModelTable,
   seedLegacySavedModelRows,
@@ -255,7 +255,10 @@ describe("provider-table-snapshot", () => {
       await restoreProviderTableSnapshot(target, snapshot);
       await assert.rejects(
         bootstrapNovelMaster(target),
-        (err: unknown) => err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+        (err: unknown) => {
+          const descriptor = userMessageOf(err);
+          return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
+        },
         "legacy saved_model 表无 id 列 → 应被 baseline 检查拦下",
       );
     } finally {

@@ -27,14 +27,18 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import {
-  BASELINE_MIGRATION_IDS,
-  BASELINE_TOO_OLD_MESSAGE,
-} from "../../src/bootstrap/novel-master-bootstrap.js";
+import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
+import { userMessageOf } from "../../src/i18n/error-message.js";
 import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import { execLegacyVfsEntryTable } from "./helpers/legacy-db-fixtures.js";
 
 const INDEX_NAME = "idx_vfs_entry_content_hash";
+
+/** 迁移后断言形态：错误经 userMessageOf 解析出 `error.infra.baseline_too_old`（文案在 core catalog）。 */
+function resolvesBaselineTooOld(error: unknown): boolean {
+  const descriptor = userMessageOf(error);
+  return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
+}
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
@@ -166,8 +170,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
 
       await assert.rejects(
         () => bootstrapNovelMaster(conn),
-        (error: unknown) =>
-          error instanceof Error && error.message === BASELINE_TOO_OLD_MESSAGE,
+        (error: unknown) => resolvesBaselineTooOld(error),
         "legacy vfs_entry 应由基线检查拦下并给出升级提示"
       );
     } finally {
@@ -193,8 +196,7 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
 
       await assert.rejects(
         () => bootstrapNovelMaster(conn),
-        (error: unknown) =>
-          error instanceof Error && error.message === BASELINE_TOO_OLD_MESSAGE,
+        (error: unknown) => resolvesBaselineTooOld(error),
         "已登记 baseline id 的 legacy vfs_entry 库也应给出升级提示（而非 no such column）"
       );
     } finally {

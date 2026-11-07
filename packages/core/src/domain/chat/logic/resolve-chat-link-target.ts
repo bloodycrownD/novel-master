@@ -18,6 +18,7 @@
  */
 
 import {resolveLogicalPath} from "../../vfs/logic/vfs-path-mapper.js";
+import type {CoreMessageDescriptor} from "@/i18n/keys.js";
 
 /** scheme 起始形态：字母开头 + 字母/数字/`+`/`.`/`-` + `:`（大小写不敏感）。 */
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
@@ -105,9 +106,9 @@ class ChatLinkResolver {
         return `/${parts[0]!}.../${parts[parts.length - 1]!}`;
     }
 
-    /** 聊天路径链接未命中的提示文案。 */
-    notFoundMessage(path: string): string {
-        return `${this.elidePath(path)} 不存在`;
+    /** 聊天路径链接未命中的提示文案（descriptor，宿主 translator 渲染）。 */
+    notFoundMessage(path: string): CoreMessageDescriptor {
+        return { key: "label.chat.link_not_found", params: { path: this.elidePath(path) } };
     }
 }
 

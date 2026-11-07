@@ -21,6 +21,7 @@
 
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
+import type { MessageLike } from "@/common/i18n.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -153,10 +154,10 @@ export interface PromptPreviewTurn {
    * 与 `items` / `.body` 的 wire parity 口径刻意不同（见模块头「行号口径」段）。
    */
   readonly cards: ReadonlyArray<PromptTurnCardData>;
-  /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
-  readonly summaryText: string;
-  /** 计数行（字数 / 工具调用次数 / 失败丢失计数 / 附件计数）。 */
-  readonly metaText: string;
+  /** 真摘要：单行语义（>70 字截断，三类轮统一；原文 string 或 descriptor）。 */
+  readonly summaryText: MessageLike;
+  /** 计数行各段（字数 / 工具调用次数 / 失败丢失计数 / 附件计数），消费方翻译后以 ` · ` join。 */
+  readonly metaText: readonly MessageLike[];
 }
 
 /** 轮摘要文本位上限：首行**超** 70 字才截断（恰好 70 字原样保留）。 */
@@ -203,8 +204,8 @@ function buildAssistantTurnSummary(items: readonly PromptPreviewSegment[]): stri
   return textPart === "" ? `${items.length} 段 · ${counts}` : `${textPart} · ${counts}`;
 }
 
-/** 空摘要兜底文案（user 轮内层解析为空串时用）。 */
-const EMPTY_SUMMARY_TEXT = "（无文本）";
+/** 空摘要兜底文案（user 轮内层解析为空串时用；descriptor，UI 翻译）。 */
+const EMPTY_SUMMARY_TEXT = { key: "label.prompt_preview.empty_text" } as const;
 
 /** `<user-input>` / `</user-input>` 标签（wrap 形态由 `wrapUserMessageForLlm` 产出）。 */
 const USER_INPUT_OPEN = "<user-input>";
@@ -497,50 +498,29 @@ function cardCharsOf(cards: readonly PromptTurnCardData[]): number {
   return cards.reduce((sum, card) => sum + cardCharCount(card), 0);
 }
 
-/** assistant 轮真摘要：首条 **assistant** 文本卡的首行；纯工具/纯思考轮用卡片数占位。 */
-function buildAssistantSummaryText(cards: readonly PromptTurnCardData[]): string {
-  const firstText = cards.find(
-    (card): card is PromptTextCardData =>
-      card.type === "text" && card.role === "assistant"
-  );
-  const textPart = firstText == null ? "" : summarizeFirstLine(firstText.body);
-  return textPart === "" ? `${cards.length} 段` : textPart;
-}
-
-/** user 轮真摘要：`<user-input>` 内层首行（无标签时取正文首行）；空串兜底 `（无文本）`。 */
-function buildUserSummaryText(card: PromptTextCardData): string {
-  const inner = extractUserInputInner(card.body);
-  const source = (inner === null ? card.body : inner).trim();
-  if (source === "") {
-    return EMPTY_SUMMARY_TEXT;
-  }
-  const firstLine = summarizeFirstLine(source);
-  return firstLine === "" ? EMPTY_SUMMARY_TEXT : firstLine;
-}
-
 /** 计数行：字数 + 工具调用次数 + 失败/丢失计数（**分别计算**，不切旧 summary 拼串）。 */
 function buildAssistantMetaText(
   seq: number | undefined,
   cards: readonly PromptTurnCardData[]
-): string {
+): readonly MessageLike[] {
   const charCount = cardCharsOf(cards);
   const toolGroups = cards.filter(
     (card): card is PromptToolGroupCardData => card.type === "toolGroup"
   );
-  const parts = [
+  const parts: MessageLike[] = [
     ...(seq === undefined ? [] : [`#${seq}`]),
-    `工具调用 ${toolGroups.length} 次`,
-    `${charCount} 字`,
+    { key: "label.prompt_preview.tool_calls", params: { count: toolGroups.length } },
+    { key: "label.prompt_preview.chars", params: { count: charCount } },
   ];
   const failed = toolGroups.filter((card) => card.status === "error").length;
   const lost = toolGroups.filter((card) => card.status === "lost").length;
   if (failed > 0) {
-    parts.push(`${failed} 失败`);
+    parts.push({ key: "label.prompt_preview.failed", params: { count: failed } });
   }
   if (lost > 0) {
-    parts.push(`${lost} 丢失`);
+    parts.push({ key: "label.prompt_preview.lost", params: { count: lost } });
   }
-  return parts.join(" · ");
+  return parts;
 }
 
 /** user 轮计数行：`#N · M 字`（有附件追加 ` · 附件 K`）。 */
@@ -548,15 +528,15 @@ function buildUserMetaText(
   seq: number | undefined,
   charCount: number,
   attachmentCount: number
-): string {
-  const parts = [
+): readonly MessageLike[] {
+  const parts: MessageLike[] = [
     ...(seq === undefined ? [] : [`#${seq}`]),
-    `${charCount} 字`,
+    { key: "label.prompt_preview.chars", params: { count: charCount } },
   ];
   if (attachmentCount > 0) {
-    parts.push(`附件 ${attachmentCount}`);
+    parts.push({ key: "label.prompt_preview.attachments", params: { count: attachmentCount } });
   }
-  return parts.join(" · ");
+  return parts;
 }
 
 /** 分组中间形态：先按切轮规则归组，最后一步才补 summary / body / cards / 新摘要字段。 */
@@ -724,24 +704,37 @@ export async function buildPromptPreviewTurnsFromLayout(
       return {
         ...base,
         summaryText: group.items[0]!.title,
-        metaText: `${charCount} 字`,
+        metaText: [{ key: "label.prompt_preview.chars", params: { count: charCount } }],
       };
     }
     if (group.kind === "assistant") {
+      // assistant 轮真摘要：首条 assistant 文本卡首行；纯工具/纯思考轮用卡片数占位。
+      const firstText = group.cards.find(
+        (card): card is PromptTextCardData =>
+          card.type === "text" && card.role === "assistant"
+      );
+      const textPart = firstText == null ? "" : summarizeFirstLine(firstText.body);
       return {
         ...base,
-        summaryText: buildAssistantSummaryText(group.cards),
+        summaryText: textPart === "" ? { key: "label.prompt_preview.segments", params: { count: group.cards.length } } : textPart,
         metaText: buildAssistantMetaText(group.seq, group.cards),
       };
     }
     const firstCard = group.cards[0];
     const charCount = cardCharsOf(group.cards);
+    // user 轮真摘要：<user-input> 内层首行（无标签时取正文首行）；空串兜底 `（无文本）`。
+    let userSummary: MessageLike = EMPTY_SUMMARY_TEXT;
+    if (firstCard != null && firstCard.type === "text") {
+      const inner = extractUserInputInner(firstCard.body);
+      const source = (inner === null ? firstCard.body : inner).trim();
+      const firstLine = source === "" ? "" : summarizeFirstLine(source);
+      if (firstLine !== "") {
+        userSummary = firstLine;
+      }
+    }
     return {
       ...base,
-      summaryText:
-        firstCard != null && firstCard.type === "text"
-          ? buildUserSummaryText(firstCard)
-          : EMPTY_SUMMARY_TEXT,
+      summaryText: userSummary,
       metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
     };
   });

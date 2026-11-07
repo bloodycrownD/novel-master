@@ -1,8 +1,16 @@
 /**
  * Session FS errors: message rollback failures.
  *
+ * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
+ * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
+ * `userMessageOf` + translator 翻译。
+ *
  * @module errors/session-fs-errors
  */
+
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /** Discriminant codes for {@link SessionFsError}. */
 export type SessionFsErrorCode =
@@ -39,10 +47,12 @@ export class SessionFsError extends Error {
    */
   readonly expectedMessageCount?: number;
   readonly actualMessageCount?: number;
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
 
   constructor(
     code: SessionFsErrorCode,
-    message: string,
+    message: string | CoreMessageDescriptor,
     options?: {
       sessionId?: string;
       messageId?: string;
@@ -53,7 +63,8 @@ export class SessionFsError extends Error {
       actualMessageCount?: number;
     }
   ) {
-    super(message);
+    const localized = resolveLocalizedMessage(message);
+    super(localized.text);
     this.name = "SessionFsError";
     this.code = code;
     this.sessionId = options?.sessionId;
@@ -63,6 +74,8 @@ export class SessionFsError extends Error {
     this.missingLogicalPaths = options?.missingLogicalPaths;
     this.expectedMessageCount = options?.expectedMessageCount;
     this.actualMessageCount = options?.actualMessageCount;
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 
@@ -98,7 +111,7 @@ export function sessionFsRollbackMessageNotFound(
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_MESSAGE_NOT_FOUND",
-    `消息不存在：${messageId}`,
+    {key: "error.session_fs.rollback_message_not_found", params: {message_id: messageId}},
     { messageId }
   );
 }
@@ -109,7 +122,7 @@ export function sessionFsRollbackMessageSessionMismatch(
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_MESSAGE_SESSION_MISMATCH",
-    `消息不属于当前会话：${messageId}`,
+    {key: "error.session_fs.rollback_message_session_mismatch", params: {message_id: messageId}},
     { messageId, sessionId }
   );
 }
@@ -120,7 +133,7 @@ export function sessionFsRestoreRevisionMissing(
 ): SessionFsError {
   return new SessionFsError(
     "RESTORE_REVISION_MISSING",
-    `恢复所需 revision 缺失：${logicalPath} v${revisionVersion}`,
+    {key: "error.session_fs.restore_revision_missing", params: {logical_path: logicalPath, revision_version: revisionVersion}},
     { logicalPath, revisionVersion }
   );
 }
@@ -157,15 +170,15 @@ export function sessionFsRollbackUndoSendEmptyTarget(
   return new SessionFsError(
     "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
     mode === "rewind"
-      ? "rewind 缺少可用的 baseline 快照，拒绝清空会话工作区"
-      : "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
+      ? {key: "error.session_fs.rollback_undo_send_empty_target.rewind"}
+      : {key: "error.session_fs.rollback_undo_send_empty_target.undo_send"},
     { sessionId, messageId }
   );
 }
 
 /** VFS reconcile 失败，UI 可提供仅截断消息的降级回滚。 */
 export function sessionFsRollbackVfsRestoreFailed(
-  message: string,
+  message: string | CoreMessageDescriptor,
   options?: {
     sessionId?: string;
     messageId?: string;
@@ -185,10 +198,9 @@ export function sessionFsRollbackRevisionBackfillRequired(
     messageId?: string;
   }
 ): SessionFsError {
-  const paths = missingLogicalPaths.join(", ");
   return new SessionFsError(
     "ROLLBACK_REVISION_BACKFILL_REQUIRED",
-    `回滚所需 revision 缺失，需确认使用最新内容修复：${paths}`,
+    {key: "error.session_fs.rollback_revision_backfill_required", params: {paths: missingLogicalPaths.join(", ")}},
     { ...options, missingLogicalPaths }
   );
 }
@@ -247,7 +259,7 @@ export function sessionFsRollbackConflict(
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_CONFLICT",
-    `回滚期间会话消息发生了变化（预期 ${expectedMessageCount} 条，实际 ${actualMessageCount} 条），请重试`,
+    {key: "error.session_fs.rollback_conflict", params: {expected_count: expectedMessageCount, actual_count: actualMessageCount}},
     { sessionId, messageId, expectedMessageCount, actualMessageCount }
   );
 }
@@ -274,7 +286,7 @@ export function sessionFsRollbackTailDrift(
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_TAIL_DRIFT",
-    `回滚期间待截断的消息集合发生变化（预期 ${expectedTailCount} 条，实际 ${actualTailCount} 条），已拒绝截断以免误删新消息，请重试`,
+    {key: "error.session_fs.rollback_tail_drift", params: {expected_count: expectedTailCount, actual_count: actualTailCount}},
     { sessionId, messageId, expectedMessageCount: expectedTailCount, actualMessageCount: actualTailCount }
   );
 }

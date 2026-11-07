@@ -31,6 +31,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 const isChatInvalidArgument = (error: unknown): boolean => isAppError(error, "CHAT_INVALID_ARGUMENT");
 
@@ -1262,7 +1263,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     // 非法 limit 拒收
     await assert.rejects(
       () => svc.listRequestUsage({}, { offset: 0, limit: 0 }),
-      /limit/
+      (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_limit"
     );
   });
 
@@ -1276,7 +1277,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     ]) {
       await assert.rejects(
         () => svc.listRequestUsage({}, { offset, limit: 10 }),
-        /offset/
+        (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_offset"
       );
     }
   });
@@ -1884,3 +1885,17 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(Number(count[0]?.n ?? 0), 1, "仅 token 真值 assistant 行入账本");
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

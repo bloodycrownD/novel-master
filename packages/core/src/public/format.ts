@@ -3,6 +3,7 @@ export {
   buildStreamMetricsLine,
   formatStreamElapsed,
   type StreamMetricsLineInput,
+  type StreamMetricsLineParts,
 } from "../domain/format/format-stream-metrics-line.js";
 export {
   SLIDING_TOKEN_RATE_WINDOW_MS,

@@ -16,6 +16,7 @@ import { AppError } from "../../src/errors/app-error.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 /** 最小合法 AgentDefinition 形状（照 agent-tool-policy.test.ts 的 BASE_DEF）。 */
 function def(name: string, extra?: Partial<AgentDefinition>): AgentDefinition {
@@ -597,3 +598,17 @@ describe("assembleAgentsToolContext 装配（run-agent-turn 两态）", () => {
     );
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

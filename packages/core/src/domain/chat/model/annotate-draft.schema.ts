@@ -62,13 +62,13 @@ export const annotateDraftSchema = z.object({
   if ((renderStart == null) !== (renderEnd == null)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "renderStart 与 renderEnd 须成对出现",
+      message: "error.chat.annotate_render_range_pair_required",
       path: renderStart != null ? ["renderEnd"] : ["renderStart"],
     });
   } else if (renderStart != null && renderEnd != null && renderStart >= renderEnd) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "须满足 renderStart < renderEnd（半开区间 [start, end)）",
+      message: "error.chat.annotate_render_range_order",
       path: ["renderEnd"],
     });
   }
@@ -76,13 +76,13 @@ export const annotateDraftSchema = z.object({
   if ((startOffset == null) !== (endOffset == null)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "startOffset 与 endOffset 须成对出现",
+      message: "error.chat.annotate_offset_pair_required",
       path: startOffset != null ? ["endOffset"] : ["startOffset"],
     });
   } else if (startOffset != null && endOffset != null && startOffset >= endOffset) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "须满足 startOffset < endOffset（半开区间 [start, end)）",
+      message: "error.chat.annotate_offset_order",
       path: ["endOffset"],
     });
   }

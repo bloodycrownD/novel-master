@@ -31,6 +31,7 @@ import {
 } from "../helpers/transaction-probe.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
+import { tCore } from "../helpers/core-i18n.js";
 
 /** 分片大小上界（与实现共用常量，防止测试悄悄跟实现漂移）。 */
 const CHUNK = ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK;
@@ -214,8 +215,9 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
       (e: unknown) =>
         e instanceof VfsZipError &&
         e.code === "IMPORT_FAILED" &&
-        e.message.includes("已提交 1 片") &&
-        e.message.includes("失败在第 2 片")
+        (e as {messageKey?: string}).messageKey === "error.vfs.zip_import_failed.with_progress" &&
+        (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
+        (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
     );
 
     // 补偿照跑：目标前缀回到「空的可重试态」。
@@ -302,3 +304,16 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     assert.equal(Number(revisions[0]!.n), 5000);
   });
 });
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

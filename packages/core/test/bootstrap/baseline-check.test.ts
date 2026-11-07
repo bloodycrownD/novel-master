@@ -7,10 +7,11 @@ import {
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   BASELINE_MIGRATION_IDS,
-  BASELINE_TOO_OLD_MESSAGE,
   bootstrapNovelMaster,
   assertMinimumBaseline,
 } from "../../src/bootstrap/novel-master-bootstrap.js";
+import { userMessageOf } from "../../src/i18n/error-message.js";
+import { tCore } from "../helpers/core-i18n.js";
 import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import {
   execLegacyChatProjectWithAgentConfig,
@@ -29,6 +30,12 @@ async function openMemoryConn(): Promise<TdbcConnection> {
   });
 }
 
+/** 迁移后断言形态：错误经 userMessageOf 解析出 `error.infra.baseline_too_old`（文案在 core catalog）。 */
+function isBaselineTooOld(err: unknown): boolean {
+  const descriptor = userMessageOf(err);
+  return descriptor != null && descriptor.key === "error.infra.baseline_too_old";
+}
+
 describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
   it("T-BL1：缺旧 migration id + legacy 形态 → fail-fast", async () => {
     // 先建出 legacy 形态：llm_saved_model 无 id 列。
@@ -39,8 +46,17 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await ensureSchemaMigrationsTable(conn);
     await assert.rejects(
       assertMinimumBaseline(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => {
+        const descriptor = userMessageOf(err);
+        assert.ok(descriptor != null && descriptor.key === "error.infra.baseline_too_old", "应解析出 baseline_too_old key");
+        // 牙齿：key 经 catalog 渲染出带最低版本参数的中文提示（不写死版本号，抬基线不用改这里）。
+        assert.match(
+          tCore(descriptor),
+          /^检测到当前数据库低于本版本最低支持版本（v[\d.]+）/,
+          "catalog 渲染应含最低支持版本参数",
+        );
+        return true;
+      },
       "legacy 形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
@@ -53,8 +69,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await ensureSchemaMigrationsTable(conn);
     await assert.rejects(
       assertMinimumBaseline(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => isBaselineTooOld(err),
       "worktree_* 残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
@@ -67,8 +82,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await ensureSchemaMigrationsTable(conn);
     await assert.rejects(
       assertMinimumBaseline(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => isBaselineTooOld(err),
       "vfs_entry 旧主键形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
@@ -81,8 +95,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await ensureSchemaMigrationsTable(conn);
     await assert.rejects(
       assertMinimumBaseline(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => isBaselineTooOld(err),
       "chat_session 缺 agent_config_json + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
@@ -95,8 +108,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     await ensureSchemaMigrationsTable(conn);
     await assert.rejects(
       assertMinimumBaseline(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => isBaselineTooOld(err),
       "chat_project 配置残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
@@ -132,8 +144,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
 
     await assert.rejects(
       bootstrapNovelMaster(conn),
-      (err: unknown) =>
-        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      (err: unknown) => isBaselineTooOld(err),
       "bootstrapNovelMaster 应在 migration runner 之前 fail-fast"
     );
   });

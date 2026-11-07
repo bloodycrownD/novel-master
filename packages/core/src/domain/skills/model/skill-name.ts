@@ -9,6 +9,8 @@
  * @module domain/skills/model/skill-name
  */
 
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
+
 /**
  * 技能名 token 源（无锚定）：首字符不得为 `.`，全体不得含空白与 `/`。
  *
@@ -23,26 +25,26 @@ export const SKILL_NAME_PATTERN = new RegExp(`^(?:${SKILL_NAME_PATTERN_SOURCE})$
 export const SKILL_RESERVED_NAME = "skill.md";
 
 /**
- * 校验技能名，合法返回 `null`，非法返回中文原因（供 UI 提示）。
+ * 校验技能名，合法返回 `null`，非法返回错误 descriptor（供 UI 翻译提示）。
  */
-export function validateSkillName(name: string): string | null {
+export function validateSkillName(name: string): CoreMessageDescriptor | null {
   if (name.length === 0) {
-    return "技能名不能为空";
+    return { key: "error.skill.invalid_name.empty" };
   }
   if (name.toLowerCase() === SKILL_RESERVED_NAME) {
-    return "SKILL.md 是保留名，不能用作技能名";
+    return { key: "error.skill.invalid_name.skill_md_reserved" };
   }
   if (!SKILL_NAME_PATTERN.test(name)) {
     if (name.startsWith(".")) {
-      return "技能名不能以 . 开头";
+      return { key: "error.skill.invalid_name.leading_dot" };
     }
     if (/\s/.test(name)) {
-      return "技能名不能包含空白字符";
+      return { key: "error.skill.invalid_name.whitespace" };
     }
     if (name.includes("/")) {
-      return "技能名不能包含 /";
+      return { key: "error.skill.invalid_name.slash" };
     }
-    return "技能名包含不支持的字符";
+    return { key: "error.skill.invalid_name.unsupported_chars" };
   }
   return null;
 }

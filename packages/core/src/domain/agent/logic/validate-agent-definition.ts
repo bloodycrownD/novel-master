@@ -6,6 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import { messageParamOf } from "@/i18n/localized-message.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { validateAgentToolPolicy } from "./validate-agent-tool-policy.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
@@ -46,18 +47,18 @@ export async function validateAgentDefinition(def: AgentDefinition, options: Val
   // 入参按不可信处理：agent 工具会把 LLM 原始 JSON 直接塞进来，类型断言不保证运行时形状。
   const name: unknown = def.name;
   if (typeof name !== "string" || name.trim().length === 0) {
-    return Result.err(new AppError("AGENT_INVALID_SCHEMA", "definition.name 必填且为非空字符串（写在 definition 顶层；工具参数 name 仅用于定位，不能替代）"));
+    return Result.err(new AppError("AGENT_INVALID_SCHEMA", { key: "error.agent.invalid_schema.name_required" }));
   }
   // description：可省略，但给出时必须是字符串（序列化 toWire 会 trim）。
   const description: unknown = def.description;
   if (description != null && typeof description !== "string") {
-    return Result.err(new AppError("AGENT_INVALID_SCHEMA", "definition.description 如填写必须为字符串"));
+    return Result.err(new AppError("AGENT_INVALID_SCHEMA", { key: "error.agent.invalid_schema.description_type" }));
   }
   // prompts：必填对象，persist / dynamic 为块数组（域格式，对齐 get 的输出），
   // 不是 wire 格式的「块名 → 块」对象映射。
   const prompts = def.prompts as { persist?: unknown; dynamic?: unknown } | null | undefined;
   if (prompts == null || !Array.isArray(prompts.persist) || !Array.isArray(prompts.dynamic)) {
-    return Result.err(new AppError("AGENT_INVALID_SCHEMA", "definition.prompts 必填且含 persist / dynamic 块数组（结构对齐 get 的输出，不是以块名为键的对象映射）"));
+    return Result.err(new AppError("AGENT_INVALID_SCHEMA", { key: "error.agent.invalid_schema.prompts_shape" }));
   }
   // 终极防线：wire 往返（toWire → 与读侧同一 schema decode）。mode / model
   // uuid / runtime / 块形状 / 未知键等其余字段错误在此以 zod 消息拒绝，
@@ -68,7 +69,7 @@ export async function validateAgentDefinition(def: AgentDefinition, options: Val
     // schema 层的失败协议是 throw（preprocess 抛 AGENT_INVALID_SCHEMA，prompt 校验抛 PROMPT_*），
     // 在这里统一转译成定义级失败，保留原始 message。
     const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("AGENT_INVALID_SCHEMA", `definition 字段不合法：${detail}`));
+    return Result.err(new AppError("AGENT_INVALID_SCHEMA", { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } }));
   }
   const pin = def.model;
   if (pin == null || options.assertSavedModel == null) {

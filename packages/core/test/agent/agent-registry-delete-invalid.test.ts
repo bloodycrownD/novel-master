@@ -7,6 +7,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -65,3 +66,17 @@ describe("AgentRegistryService.delete 不解码", () => {
     );
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

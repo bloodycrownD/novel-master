@@ -30,7 +30,7 @@ const composerDraftTokenRangeShape = z.object({
   end: z.number().int().nonnegative(),
 });
 
-const composerDraftTokenRangeSchema = composerDraftTokenRangeShape.refine((range) => range.start < range.end, { message: "tokenRange 需满足 start < end（零长度区间拒收）" });
+const composerDraftTokenRangeSchema = composerDraftTokenRangeShape.refine((range) => range.start < range.end, { message: "error.chat.composer_token_range_order" });
 
 const composerDraftTokenRangesSchema = z.array(composerDraftTokenRangeSchema);
 

@@ -21,6 +21,8 @@ import { describe, it } from "node:test";
 import { parseText, TdbcError } from "@novel-master/core";
 import { decodeSmartSortRuleBundle } from "@novel-master/core/smart-sort-rule";
 import { normalizeSmartSortImportError } from "../../src/common/index.js";
+import { userMessageOf } from "../../src/i18n/error-message.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImportError）", () => {
   it("T-SRTX-D1 DB 故障不被贴「YAML 无效」标签", () => {
@@ -47,10 +49,11 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
       syntaxErr = e;
     }
     assert.ok(syntaxErr != null, "夹具必须真的抛（否则本条无牙齿）");
-    assert.match(
-      normalizeSmartSortImportError(syntaxErr).message,
-      /YAML 无效/,
-    );
+    // 迁移后标签走 descriptor：message 是 key 原文，中文经 userMessageOf +
+    // tCore 渲染（顺带钉住「带 messageKey 的错误能被边界翻译通道识别」）。
+    const syntaxDescriptor = userMessageOf(normalizeSmartSortImportError(syntaxErr));
+    assert.ok(syntaxDescriptor != null, "产品错误必须带 messageKey（否则边界翻译拿不到）");
+    assert.match(tCore(syntaxDescriptor), /YAML 无效/);
 
     // schema 违规（缺 rules 字段）。
     let schemaErr: unknown;
@@ -60,10 +63,9 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
       schemaErr = e;
     }
     assert.ok(schemaErr != null, "夹具必须真的抛");
-    assert.match(
-      normalizeSmartSortImportError(schemaErr).message,
-      /YAML 无效/,
-    );
+    const schemaDescriptor = userMessageOf(normalizeSmartSortImportError(schemaErr));
+    assert.ok(schemaDescriptor != null, "产品错误必须带 messageKey");
+    assert.match(tCore(schemaDescriptor), /YAML 无效/);
   });
 
   /**
@@ -74,8 +76,12 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
   it("T-SRTX-D3 非 Error 抛出值照套前缀（不因判据放宽而漏标签）", () => {
     const thrown: unknown = "裸字符串";
     const surfaced = normalizeSmartSortImportError(thrown);
-    assert.match(surfaced.message, /YAML 无效/);
-    // normalizeYamlError 对非 Error 只给 fallback 本身，不拼 ": undefined"
-    assert.equal(surfaced.message, "智能排序规则 YAML 无效");
+    const descriptor = userMessageOf(surfaced);
+    assert.ok(descriptor != null, "非 Error 抛出值的产品也必须带 messageKey");
+    // reason = String(裸字符串)，渲染成「标签：裸字符串」（不拼 ": undefined"）
+    assert.equal(
+      tCore(descriptor),
+      "智能排序规则 YAML 无效：裸字符串",
+    );
   });
 });

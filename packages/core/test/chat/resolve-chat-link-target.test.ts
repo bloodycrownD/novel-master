@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { chatLinkResolver } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("resolveChatLinkTarget (T-L1)", () => {
   it("真机形态①：相对路径 → 补前导 / 归一化", () => {
@@ -98,8 +99,8 @@ describe("isHttpUrl（MF-4 三端单源）", () => {
 
 describe('chatLinkNotFoundMessage / elideChatLinkPath', () => {
   it('浅路径（两段内）与未超长度门槛的短路径不省略', () => {
-    assert.equal(chatLinkResolver.notFoundMessage('/测试/不存在的文件.md'), '/测试/不存在的文件.md 不存在');
-    assert.equal(chatLinkResolver.notFoundMessage('/x.md'), '/x.md 不存在');
+    assert.equal(tCore(chatLinkResolver.notFoundMessage('/测试/不存在的文件.md')), '/测试/不存在的文件.md 不存在');
+    assert.equal(tCore(chatLinkResolver.notFoundMessage('/x.md')), '/x.md 不存在');
     // 短而深（3 段但整体 ≤20 字符）：完整显示，不丢中间段
     assert.equal(chatLinkResolver.elidePath('/a/b/c/x.md'), '/a/b/c/x.md');
   });
@@ -111,7 +112,7 @@ describe('chatLinkNotFoundMessage / elideChatLinkPath', () => {
     );
     // 长而浅（3 段但总长 >20）：省略中间段
     assert.equal(
-      chatLinkResolver.notFoundMessage('/notes/2026/report-final-draft.md'),
+      tCore(chatLinkResolver.notFoundMessage('/notes/2026/report-final-draft.md')),
       '/notes.../report-final-draft.md 不存在',
     );
   });

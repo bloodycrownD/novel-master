@@ -1,10 +1,17 @@
 /**
  * Tool error model: typed, machine-readable error codes for tool dispatch.
  *
+ * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
+ * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
+ * `userMessageOf` + translator 翻译。
+ *
  * @module errors/tool-errors
  */
 
 import type { ZodIssue } from "zod";
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /** Discriminant codes for {@link ToolError}. */
 export type ToolErrorCode =
@@ -35,25 +42,30 @@ export class ToolError extends Error {
   readonly code: ToolErrorCode;
   readonly toolName?: string;
   readonly details?: ToolErrorDetails;
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
 
   constructor(
     code: ToolErrorCode,
-    message: string,
+    message: string | CoreMessageDescriptor,
     options?: {
       toolName?: string;
       details?: ToolErrorDetails;
       cause?: unknown;
     }
   ) {
+    const localized = resolveLocalizedMessage(message);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     super(
-      message,
+      localized.text,
       options?.cause !== undefined ? { cause: options.cause } : {}
     );
     this.name = "ToolError";
     this.code = code;
     this.toolName = options?.toolName;
     this.details = options?.details;
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 

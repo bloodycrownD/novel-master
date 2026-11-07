@@ -173,7 +173,8 @@ async function saveWithTranslatedError<T>(action: () => Promise<T>): Promise<T> 
   try {
     return await action();
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    // descriptor 迁移后 message 退为英文 desc（日志口径）；给 LLM 的原因优先取 key（精确到字段级规则）
+    const reason = error instanceof Error && typeof (error as {messageKey?: unknown}).messageKey === "string" ? (error as Error & {messageKey: string}).messageKey : error instanceof Error ? error.message : String(error);
     const isArgumentError = isAppError(error);
     throw new ToolError(isArgumentError ? "INVALID_ARGUMENT" : "FAILED", `agent 定义保存未通过校验：${reason}`, { toolName: AGENT_TOOL_NAME, cause: error });
   }

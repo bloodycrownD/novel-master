@@ -17,7 +17,7 @@ const projectAgentConfigDocumentSchema = z.object({
   if (value.mode === "custom" && value.definition == null) {
     ctx.addIssue({
       code: "custom",
-      message: "mode 为 custom 时 definition 必填",
+      message: "error.chat.project_agent_definition_required",
       path: ["definition"],
     });
   }

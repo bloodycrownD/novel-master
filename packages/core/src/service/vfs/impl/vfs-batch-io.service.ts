@@ -336,7 +336,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         failed: [
           {
             path: failedPath,
-            message: `${failureMessage ?? "batch ingest failed"}（已提交 ${committedShards} 片，失败在第 ${shardIndex + 1} 片）`,
+            // 组合站点（spec G2）：失败原因与分片进度拆 batch_ingest_partial 单 key
+            message: {key: "error.vfs.batch_ingest_partial", params: {reason: failureMessage ?? "batch ingest failed", committed: committedShards, failed_shard: shardIndex + 1}},
           },
         ],
       };

@@ -106,7 +106,7 @@ export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, ent
     return first === base;
   });
   if (allMatchBase) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", `ZIP 似以目标目录名「${base}」作根前缀，请使用相对该目录的内容，系统不会自动剥离`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", {key: "error.vfs.zip_root_prefix_suspected", params: {base}}));
   }
   return Result.ok(undefined);
 }

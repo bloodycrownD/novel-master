@@ -16,6 +16,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { createLogger } from "@/infra/log/logger.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
@@ -244,9 +245,11 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
  */
 const BASELINE_MINIMUM_VERSION = "v1.5.23";
 
-/** 老库升级失败提示，指引用户先升到最低支持版本。 */
-export const BASELINE_TOO_OLD_MESSAGE =
-  `检测到当前数据库低于本版本最低支持版本（${BASELINE_MINIMUM_VERSION}）。请先升级到${BASELINE_MINIMUM_VERSION}，再升级到本版本。`;
+/** 老库升级失败提示（descriptor）：指引用户先升到最低支持版本，文案在 core catalog。 */
+const BASELINE_TOO_OLD_MESSAGE: CoreMessageDescriptor = {
+  key: "error.infra.baseline_too_old",
+  params: { minimum_version: BASELINE_MINIMUM_VERSION },
+};
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {

@@ -127,7 +127,7 @@ class AttachmentScanner {
     const materialized: MessageAttachment[] = [];
     for (const raw of paths) {
       if (typeof raw !== "string" || raw.trim() === "") {
-        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "附件路径不能为空串或纯空白", { path: raw }));
+        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { key: "error.chat.attachment_path_blank" }, { path: raw }));
       }
       let seenKey: string;
       try {

@@ -46,7 +46,7 @@ function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
   if (trimmed === "") {
     throw new ProviderError(
       "INVALID_ARGUMENT",
-      "displayName 不能为空",
+      {key: "error.provider.display_name_required"},
       providerId != null ? { providerId } : undefined
     );
   }
@@ -267,7 +267,7 @@ export class DefaultProviderService implements ProviderService {
         // 新造码只会让前端拿不到已处理的文案。
         throw new ProviderError(
           "SAVED_MODEL_IN_USE",
-          `无法删除服务商：其下模型「${m.modelName}」仍被引用（${blockingRefs.join("、")}）`,
+          {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}},
           { providerId: id }
         );
       }

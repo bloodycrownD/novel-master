@@ -41,6 +41,9 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { isAppError } from "@/errors/app-error.js";
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import {
@@ -188,9 +191,15 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
 }
 
 export class AgentTurnError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
+
+  constructor(message: string | CoreMessageDescriptor) {
+    const localized = resolveLocalizedMessage(message);
+    super(localized.text);
     this.name = "AgentTurnError";
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 
@@ -664,7 +673,7 @@ async function runAgentTurnWithController(
       trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
 
     if (!hasInput && !allowResumeWithoutInput) {
-      throw new AgentTurnError("消息不能为空");
+      throw new AgentTurnError({key: "error.agent.message_empty"});
     }
     if (!hasInput && allowResumeWithoutInput) {
       stage = "resume-check-last-message";
@@ -677,7 +686,7 @@ async function runAgentTurnWithController(
       });
       // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
       if (tail[tail.length - 1]?.role !== "user") {
-        throw new AgentTurnError("消息不能为空");
+        throw new AgentTurnError({key: "error.agent.message_empty"});
       }
     }
 
@@ -971,7 +980,7 @@ async function runAgentTurnWithController(
         const resolved = def.model ?? savedModelId;
         if (resolved == null || resolved === "") {
           throw new AgentRunResolveError(
-            "子代理未指定模型，且父 agent 也无可用 savedModelId。"
+            {key: "error.agent.subagent_model_missing"}
           );
         }
         return { savedModelId: resolved, workspaceModelId };
@@ -1203,7 +1212,7 @@ async function runChildAgent(args: {
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
       throw new ToolError(
         "FAILED",
-        `子会话 ${childSessionId} 已有另一个子代理在运行，不能并发续用同一个子会话；去掉 sessionId 新开一个子会话即可。`,
+        {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}},
         { toolName: "task" }
       );
     }
@@ -1349,7 +1358,7 @@ async function runChildAgent(args: {
           const resolved = grandchildDef.model ?? opts.savedModelId;
           if (resolved == null || resolved === "") {
             throw new AgentRunResolveError(
-              "孙代理未指定模型，且子 agent 也无可用 savedModelId。"
+              {key: "error.agent.grandchild_model_missing"}
             );
           }
           return {

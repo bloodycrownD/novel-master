@@ -17,6 +17,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
 import { isAppError, type AppError } from "@/errors/app-error.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import {
@@ -82,12 +83,7 @@ function resolveSkillRelPath(name: string, path: string | undefined): string {
   if (resolved.ok) {
     return resolved.rel;
   }
-  const reason =
-    resolved.reason === "empty"
-      ? "技能文件路径不能为空"
-      : resolved.reason === "dotdot"
-        ? "技能文件路径不得包含 .."
-        : "技能文件路径必须位于技能目录内";
+  const reason: CoreMessageDescriptor = { key: `error.skill.invalid_path.${resolved.reason}` };
   throw skillInvalidPath(String(path ?? SKILL_ENTRY_FILE), reason);
 }
 
@@ -124,7 +120,7 @@ function assertValidSkillName(name: string): void {
 /** 技能名不得含 `/`（防路径拼接逃逸；read 等只做该项弱校验）。 */
 function assertNoPathSeparatorInName(name: string): void {
   if (name.includes("/")) {
-    throw skillInvalidName(name, "技能名不能包含 /");
+    throw skillInvalidName(name, { key: "error.skill.invalid_name.slash" });
   }
 }
 
@@ -283,7 +279,7 @@ export class SkillsService implements SkillService {
         description: null,
         domain,
         valid: false,
-        invalidReason: "缺少 SKILL.md 入口文件",
+        invalidReason: { key: "error.skill.entry_file_missing" },
         files: [...files].sort(),
       };
     }

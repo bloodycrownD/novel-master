@@ -108,7 +108,7 @@ export class DefaultSessionService implements SessionService {
     });
     if (agentId == null || agentId === "") {
       throw chatInvalidArgument(
-        "新建会话失败：workspace 未配置 Agent，且 registry 为空"
+        {key: "error.chat.session_create_agent_missing"}
       );
     }
     const workspaceModelId = await this.deps.state.getCurrentModelId();

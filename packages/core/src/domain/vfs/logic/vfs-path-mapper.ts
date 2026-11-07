@@ -5,6 +5,7 @@
  */
 
 import { vfsInvalidPath } from "@/errors/vfs-errors.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
 /** VFS visibility scope (global, project, session, and meta domains). */
@@ -23,7 +24,7 @@ const GLOBAL_PHYSICAL_PREFIX = "/template";
 /** Legacy logical prefix — rejected on input; no dual-read. */
 const LEGACY_TEMPLATE_LOGICAL = "/template";
 
-const LEGACY_TEMPLATE_MESSAGE = "逻辑路径以 `/` 为根，请勿使用 `/template/` 前缀";
+const LEGACY_TEMPLATE_MESSAGE: CoreMessageDescriptor = {key: "error.vfs.template_prefix_forbidden"};
 
 function isLegacyTemplateLogicalPath(normalized: string): boolean {
   return normalized === LEGACY_TEMPLATE_LOGICAL || normalized.startsWith(`${LEGACY_TEMPLATE_LOGICAL}/`);

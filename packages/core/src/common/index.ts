@@ -33,4 +33,5 @@ export {
     type MessageCatalog,
     type MessageDescriptor,
     type MessageLike,
+    type MessageParams,
 } from "./i18n.js";

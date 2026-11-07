@@ -63,8 +63,10 @@ function wrapCardImportError(error: unknown, committedShards?: number, failedSha
     return error;
   }
   const base = error instanceof Error ? error.message : "import transaction failed";
-  const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
-  return new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", `${base}${progress}`);
+  // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
+  return committedShards != null && failedShard != null
+    ? new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {key: "error.vfs.character_card_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}, {base})
+    : new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", base);
 }
 
 export type DefaultCharacterCardImportServiceOptions = {
@@ -147,17 +149,17 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
 
       const sizeBytes = utf8ByteLength(content);
       if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：文件 "${logical}" 内容 ${sizeBytes} 字节，超过单文件上限 ${CHARACTER_CARD_MAX_SINGLE_FILE_BYTES} 字节，已拒绝导入`);
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}});
       }
       totalBytes += sizeBytes;
       // 超限即抛，避免对后续条目做无谓的编码累计
       if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：全部文件内容合计 ${totalBytes} 字节，超过总量上限 ${CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES} 字节，已拒绝导入`);
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}});
       }
       files.set(logical, content);
     }
     if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：共 ${files.size} 个文件，超过条目数上限 ${CHARACTER_CARD_MAX_FILE_COUNT}，已拒绝导入`);
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}});
     }
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -272,7 +274,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
     // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
     if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡文件过大：${bytes.length} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`);
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}});
     }
     const parsed = parseCharacterCardToMdTree(bytes);
     if (!parsed.ok) throw parsed.error;

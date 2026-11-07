@@ -103,6 +103,11 @@
       "import": "./dist/domain/agent/stored-config-validity/index.js"
     },
     "./locales/*": "./locales/*",
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js"
+    },
+    "./i18n/catalog/*": "./src/i18n/catalog/*",
     "./presentation/chat/*": {
       "types": "./dist/presentation/chat/*",
       "import": "./dist/presentation/chat/*"

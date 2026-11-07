@@ -12,6 +12,7 @@ import { AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
 import { VfsError, type VfsErrorCode } from "@/errors/vfs-errors.js";
 import { VfsZipError, type VfsZipErrorCode } from "@/errors/vfs-zip-errors.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 
 const APP_TO_VFS: Partial<Record<ErrorKey, VfsErrorCode>> = {
   VFS_NOT_FOUND: "NOT_FOUND",
@@ -33,21 +34,26 @@ const APP_TO_VFS_ZIP: Partial<Record<ErrorKey, VfsZipErrorCode>> = {
   VFS_ZIP_PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
 };
 
-/** 解包失败：VFS key 翻成 VfsError，其余 AppError 原样抛出。 */
+/** 解包失败：VFS key 翻成 VfsError，其余 AppError 原样抛出（descriptor 随 messageKey 透传）。 */
 export function throwLegacyVfs(error: AppError): never {
   const code = APP_TO_VFS[error.key];
   if (code == null) {
     throw error;
   }
   const path = typeof error.details?.path === "string" ? error.details.path : undefined;
-  throw new VfsError(code, error.message, { path, ...(error.details?.details !== undefined ? { details: error.details.details } : {}) });
+  throw new VfsError(code, legacyMessageOf(error), { path, ...(error.details?.details !== undefined ? { details: error.details.details } : {}) });
 }
 
-/** 解包失败：VFS_ZIP_* key 翻成 VfsZipError，其余 AppError 原样抛出。 */
+/** 解包失败：VFS_ZIP_* key 翻成 VfsZipError，其余 AppError 原样抛出（descriptor 随 messageKey 透传）。 */
 export function throwLegacyVfsZip(error: AppError): never {
   const code = APP_TO_VFS_ZIP[error.key];
   if (code == null) {
     throw error;
   }
-  throw new VfsZipError(code, error.message);
+  throw new VfsZipError(code, legacyMessageOf(error));
+}
+
+/** 原 message（string 路径）或 descriptor（迁移后的 messageKey 路径）二选一透传。 */
+function legacyMessageOf(error: AppError): string | CoreMessageDescriptor {
+  return error.messageKey == null ? error.message : {key: error.messageKey, ...(error.messageParams != null ? {params: error.messageParams} : {})};
 }

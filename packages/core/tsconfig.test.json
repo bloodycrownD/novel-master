@@ -29,7 +29,8 @@
       "@novel-master/core/session-kkv": ["./src/public/session-kkv.ts"],
       "@novel-master/core/session-run-state": ["./src/public/session-run-state.ts"],
       "@novel-master/core/skills": ["./src/public/skills.ts"],
-      "@novel-master/core/stored-config-validity": ["./src/domain/agent/stored-config-validity/index.ts"]
+      "@novel-master/core/stored-config-validity": ["./src/domain/agent/stored-config-validity/index.ts"],
+      "@novel-master/core/i18n": ["./src/i18n/index.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"]

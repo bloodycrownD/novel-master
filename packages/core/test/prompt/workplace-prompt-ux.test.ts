@@ -10,6 +10,7 @@ import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@nove
 import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import { createMemorySessionKkv, mockWorkplaceService } from "../helpers/prompt-layout-test-helpers.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 const emptyPrompts = { persist: {}, dynamic: {} };
@@ -78,7 +79,12 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
       workplace: "   ",
     });
     assert.ok(!blank.ok);
-    assert.match(blank.error.message, /workplace/);
+    assert.match(
+      blank.error.messageKey != null
+        ? tCore({ key: blank.error.messageKey, params: blank.error.messageParams })
+        : blank.error.message,
+      /workplace/
+    );
   });
 });
 

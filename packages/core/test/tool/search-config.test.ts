@@ -15,6 +15,7 @@ import {
 import { AppError } from "../../src/errors/app-error.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 /** 内存 fake SecretStore：记录 has/get 调用日志供断言。 */
 function fakeSecretStore(): SecretStore & {
@@ -172,8 +173,9 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
 
-    await assert.rejects(store.setSearxngBaseUrl("ftp://bad"), /baseUrl 无效/);
-    await assert.rejects(store.setSearxngBaseUrl("https://u:p@h.com"), /baseUrl 无效/);
+    // descriptor 迁移后 message 退为英文 desc，判 key（G1-G3 契约）
+    await assert.rejects(store.setSearxngBaseUrl("ftp://bad"), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_searxng_base_url_invalid");
+    await assert.rejects(store.setSearxngBaseUrl("https://u:p@h.com"), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_searxng_base_url_invalid");
 
     await store.setSearxngBaseUrl("http://localhost:8888");
     await store.setSearxngBaseUrl("");
@@ -196,11 +198,11 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
     ]);
     await assert.rejects(
       store.setEngineOrder(["bocha", "tavily", "brave"]),
-      /合法排列/
+      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
     );
     await assert.rejects(
       store.setEngineOrder(["bocha", "bocha", "tavily", "brave", "searxng"]),
-      /合法排列/
+      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
     );
     await assert.rejects(
       store.setEngineOrder([
@@ -209,13 +211,13 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
         "brave",
         "google" as never,
       ]),
-      /合法排列/
+      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
     );
   });
 
   it("saveEngineKey 空串拒绝", async () => {
     const store = createSearchConfigStore(makeDeps());
-    await assert.rejects(store.saveEngineKey("bocha", "  "), /API key 不能为空/);
+    await assert.rejects(store.saveEngineKey("bocha", "  "), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_api_key_required");
   });
 });
 
@@ -338,3 +340,17 @@ describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () 
     ]);
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

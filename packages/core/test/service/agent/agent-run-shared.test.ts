@@ -10,6 +10,7 @@ import {
   resolveCurrentAgentId,
   type AgentRunRuntimePort,
 } from "@/service/agent/logic/agent-run-shared.js";
+import { tCore } from "../../helpers/core-i18n.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -78,7 +79,8 @@ describe("agent-run-shared", () => {
       () => resolveCurrentAgentDefinition(runtime),
       (error: unknown) =>
         error instanceof AgentRunResolveError &&
-        (error as AgentRunResolveError).message.includes("missing"),
+        (error as AgentRunResolveError).messageKey === "error.agent.not_found" &&
+        (error as AgentRunResolveError).messageParams?.agent_id === "missing",
     );
   });
 
@@ -158,3 +160,17 @@ describe("agent-run-shared", () => {
     );
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

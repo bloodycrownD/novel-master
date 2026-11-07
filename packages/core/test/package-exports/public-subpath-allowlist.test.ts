@@ -8,6 +8,7 @@ const SUBPATHS = [
   "compaction",
   "events",
   "feature-flags",
+  "i18n",
   "kkv",
   "message-checkpoint",
   "prompt",

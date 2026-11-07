@@ -22,6 +22,7 @@ import {
   type MessageAttachment,
 } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
+import { tCore } from "../../helpers/core-i18n.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -310,7 +311,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           { stream: false },
         ),
       (err: unknown) =>
-        err instanceof AgentTurnError && err.message === "消息不能为空",
+        err instanceof AgentTurnError && err.messageKey === "error.agent.message_empty",
     );
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
@@ -539,3 +540,17 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

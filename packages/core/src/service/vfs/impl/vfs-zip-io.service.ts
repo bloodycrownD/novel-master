@@ -94,9 +94,11 @@ function wrapImportError(error: unknown, committedShards?: number, failedShard?:
     return error;
   }
   const base = error instanceof Error ? error.message : "import transaction failed";
-  const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
-  const wrapped = vfsZipError("IMPORT_FAILED", `${base}${progress}`);
-  return wrapped;
+  // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
+  if (committedShards != null && failedShard != null) {
+    return vfsZipError("IMPORT_FAILED", {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}});
+  }
+  return vfsZipError("IMPORT_FAILED", base);
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {

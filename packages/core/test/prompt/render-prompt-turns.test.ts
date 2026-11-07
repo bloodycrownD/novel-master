@@ -9,6 +9,11 @@ import {
   type ContentBlock,
 } from "@novel-master/core/chat";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { tCore } from "../helpers/core-i18n.js";
+
+/** DTO 断言 helper：summaryText 为 MessageLike、metaText 为 MessageLike[]（G3.5），渲染后比对。 */
+const summaryOf = (m: unknown) => tCore(m as Parameters<typeof tCore>[0]);
+const metaOf = (parts: readonly unknown[]) => parts.map((m) => summaryOf(m)).join(" · ");
 import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 
 import {
@@ -168,7 +173,7 @@ describe("T-R1 切轮正确性", () => {
     // metaText 字数 = 各文件**剥后**正文之和（口径=与用户所见字符一致）。
     const filesChars =
       "第一行\n第二行".length + "草稿.txt".length + "---\ntitle: x\n---".length;
-    assert.equal(workplace.metaText, `${filesChars} 字`);
+    assert.equal(metaOf(workplace.metaText), `${filesChars} 字`);
     // 纯函数、不改入参：ctx.workplaceFiles 的原 body 仍带行号（T-PL7 判据②）。
     assert.equal(ctx.workplaceFiles![0]!.body, "1|第一行\n2|第二行");
     // 无结构化数据（缺省 ctx）退普通 text 卡——旧调用方不空窗。
@@ -256,8 +261,8 @@ describe("T-R2 首轮与空轮守卫", () => {
     assert.equal(userTurn.kind, "user");
     // 旧 summary 字段保留段名形态（兼容面），新 summaryText 才是真摘要
     assert.equal(userTurn.summary, "#1 · user");
-    assert.equal(userTurn.summaryText, "第一句");
-    assert.equal(userTurn.metaText, "#1 · 3 字");
+    assert.equal(summaryOf(userTurn.summaryText), "第一句");
+    assert.equal(metaOf(userTurn.metaText), "#1 · 3 字");
     assert.equal(userTurn.body, "[#1 · user]\n第一句");
     // user 轮恒一张 text 卡：wrap 后整条文本（发给模型的形态）
     assert.equal(userTurn.cards.length, 1);
@@ -303,8 +308,8 @@ describe("T-R3 模板段各自独立", () => {
     assert.equal(turns[turns.length - 1]!.body, "[state]\ndyn");
     // 合成段轮：summaryText = 段标题、metaText = 字数；卡片由该轮唯一段直转（id=段 id）
     const dynamicTurn = turns[turns.length - 1]!;
-    assert.equal(dynamicTurn.summaryText, "state");
-    assert.equal(dynamicTurn.metaText, "3 字");
+    assert.equal(summaryOf(dynamicTurn.summaryText), "state");
+    assert.equal(metaOf(dynamicTurn.metaText), "3 字");
     assert.deepEqual(
       dynamicTurn.cards.map((card) => ({
         id: card.id,
@@ -336,10 +341,10 @@ describe("T-R4 assistant 轮摘要", () => {
       `${"长".repeat(69)}… · 工具调用 1 次 · ${expectedChars} 字`
     );
     // 新口径：summaryText 只放真摘要（单行截断），计数全在 metaText
-    assert.equal(turn.summaryText, `${"长".repeat(69)}…`);
+    assert.equal(summaryOf(turn.summaryText), `${"长".repeat(69)}…`);
     // 该轮 tool_use 无 result（悬挂）→ metaText 追加丢失计数位
     assert.equal(
-      turn.metaText,
+      metaOf(turn.metaText),
       `#2 · 工具调用 1 次 · ${cardChars(turn)} 字 · 1 丢失`
     );
     // 正文按序拼接且带角色前缀行
@@ -352,8 +357,8 @@ describe("T-R4 assistant 轮摘要", () => {
     const messages = [message("user", "hi", 1), message("assistant", exact, 2)];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     assert.match(turns[1]!.summary, /^字{70} · 工具调用 0 次 · 70 字$/);
-    assert.equal(turns[1]!.summaryText, exact);
-    assert.equal(turns[1]!.metaText, "#2 · 工具调用 0 次 · 70 字");
+    assert.equal(summaryOf(turns[1]!.summaryText), exact);
+    assert.equal(metaOf(turns[1]!.metaText), "#2 · 工具调用 0 次 · 70 字");
   });
 
   it("无文本卡（纯工具轮）时 summaryText 用卡片数占位", async () => {
@@ -371,7 +376,7 @@ describe("T-R4 assistant 轮摘要", () => {
     assert.equal(turn.summary, `2 段 · 工具调用 1 次 · ${expectedChars} 字`);
     // 新口径按卡片数占位（工具结果并进组卡，不单独成卡 → 一张）
     assert.equal(turn.cards.length, 1);
-    assert.equal(turn.summaryText, "1 段");
+    assert.equal(summaryOf(turn.summaryText), "1 段");
   });
 
   it("摘要只取 assistant 文本卡：tool_result 回传里的 user 文本不参与", async () => {
@@ -392,7 +397,7 @@ describe("T-R4 assistant 轮摘要", () => {
     assert.equal(turn.kind, "assistant");
     assert.deepEqual(cardTypes(turn), ["toolGroup", "text", "text"]);
     // 摘要取首条 **assistant** 文本卡（「收尾」），不是排在它前面的 user 文本卡（「继续」）
-    assert.equal(turn.summaryText, "收尾");
+    assert.equal(summaryOf(turn.summaryText), "收尾");
   });
 
   it("thinking 开 / 关两态：cards 与 metaText 随实际产出变化", async () => {
@@ -423,17 +428,17 @@ describe("T-R4 assistant 轮摘要", () => {
       ["thinking", "toolGroup", "text"]
     );
     assert.ok(onTurn.items.some((item) => item.role === "thinking"));
-    assert.equal(offTurn.summaryText, "回答");
-    assert.equal(onTurn.summaryText, "回答");
+    assert.equal(summaryOf(offTurn.summaryText), "回答");
+    assert.equal(summaryOf(onTurn.summaryText), "回答");
     assert.equal(
-      offTurn.metaText,
+      metaOf(offTurn.metaText),
       `#2 · 工具调用 1 次 · ${cardChars(offTurn)} 字 · 1 丢失`
     );
     assert.equal(
-      onTurn.metaText,
+      metaOf(onTurn.metaText),
       `#2 · 工具调用 1 次 · ${cardChars(onTurn)} 字 · 1 丢失`
     );
-    assert.notEqual(offTurn.metaText, onTurn.metaText);
+    assert.notEqual(metaOf(offTurn.metaText), metaOf(onTurn.metaText));
   });
 });
 
@@ -566,7 +571,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
     const [group] = groupCards(turns[1]!);
     assert.equal(group!.result, null);
     assert.equal(group!.status, "lost");
-    assert.match(turns[1]!.metaText, /1 丢失$/);
+    assert.match(metaOf(turns[1]!.metaText), /1 丢失$/);
   });
 });
 
@@ -682,7 +687,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("assistant", "好", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[0]!.summaryText, "帮我看看这段");
+    assert.equal(summaryOf(turns[0]!.summaryText), "帮我看看这段");
   });
 
   it("有附件 wrap 形态：摘要取 <user-input> 内层首行，不是 <attachment>", async () => {
@@ -703,7 +708,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     const turn = turns[0]!;
-    assert.equal(turn.summaryText, "帮我改这段");
+    assert.equal(summaryOf(turn.summaryText), "帮我改这段");
     // 卡片正文 = 完整 wrap 后文本（发给模型的形态）
     assert.equal(turn.cards.length, 1);
     assert.equal(turn.cards[0]!.type, "text");
@@ -712,7 +717,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       wrapped
     );
     // 附件计数含 workplace 源附件口径：直接取 attachments.length
-    assert.equal(turn.metaText, `#1 · ${wrapped.length} 字 · 附件 2`);
+    assert.equal(metaOf(turn.metaText), `#1 · ${wrapped.length} 字 · 附件 2`);
   });
 
   it("无附件时 metaText 不带附件位", async () => {
@@ -721,7 +726,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("assistant", "yo", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[0]!.metaText, "#1 · 2 字");
+    assert.equal(metaOf(turns[0]!.metaText), "#1 · 2 字");
   });
 
   it("首行超 70 字截断为 slice(0,69) + …", async () => {
@@ -730,7 +735,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("assistant", "好", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[0]!.summaryText, `${"问".repeat(69)}…`);
+    assert.equal(summaryOf(turns[0]!.summaryText), `${"问".repeat(69)}…`);
   });
 
   it("空正文兜底「（无文本）」", async () => {
@@ -743,7 +748,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       message("assistant", "好", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[0]!.summaryText, "（无文本）");
+    assert.equal(summaryOf(turns[0]!.summaryText), "（无文本）");
   });
 });
 
@@ -759,8 +764,8 @@ describe("T-PT6 合成段轮摘要", () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
     const system = turns[0]!;
     assert.equal(system.kind, "system");
-    assert.equal(system.summaryText, "system");
-    assert.equal(system.metaText, "7 字");
+    assert.equal(summaryOf(system.summaryText), "system");
+    assert.equal(metaOf(system.metaText), "7 字");
     // 卡片由该轮唯一段直转：id=段 id、role=段标题、body=段 body
     assert.deepEqual(
       system.cards.map((card) => ({
@@ -786,8 +791,8 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     const turn = turns[1]!;
-    assert.equal(turn.summaryText, "1 段");
-    assert.equal(turn.metaText, `#2 · 工具调用 1 次 · ${cardChars(turn)} 字`);
+    assert.equal(summaryOf(turn.summaryText), "1 段");
+    assert.equal(metaOf(turn.metaText), `#2 · 工具调用 1 次 · ${cardChars(turn)} 字`);
   });
 
   it("metaText 分别计算失败 / 丢失计数并追加", async () => {
@@ -806,16 +811,16 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     const turn = turns[1]!;
-    assert.equal(turn.summaryText, "收工");
+    assert.equal(summaryOf(turn.summaryText), "收工");
     // 字数硬编码 74 = 三个 inputJson 各 20（`{\n  "path": "…"\n}`）+ 结果 3 + 9 + 文本 2，
     // 不用自派生 helper 算期望值（同漂不发现）
     assert.equal(
-      turn.metaText,
+      metaOf(turn.metaText),
       `#2 · 工具调用 3 次 · 74 字 · 1 失败 · 1 丢失`
     );
     assert.equal(cardChars(turn), 74);
     // 字数单独算：不切旧 summary 拼串
-    assert.ok(!turn.metaText.includes("收工"));
+    assert.ok(!metaOf(turn.metaText).includes("收工"));
   });
 
   it("无失败 / 丢失时不追加计数位", async () => {
@@ -824,7 +829,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
       message("assistant", "答", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[1]!.metaText, "#2 · 工具调用 0 次 · 1 字");
+    assert.equal(metaOf(turns[1]!.metaText), "#2 · 工具调用 0 次 · 1 字");
   });
 });
 
@@ -960,8 +965,8 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
     assert.ok(turns.length > 0);
     for (const turn of turns) {
-      assert.equal(typeof turn.summaryText, "string");
-      assert.equal(typeof turn.metaText, "string");
+      assert.ok(turn.summaryText != null);
+      assert.ok(Array.isArray(turn.metaText));
       assert.ok(Array.isArray(turn.cards));
       assert.ok(turn.cards.length > 0);
     }
@@ -1358,7 +1363,7 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
       { path: "b.txt", display: "filename", body: "1|b.txt" },
     ]);
     // 手写期望值（不用自派生 helper，同漂不发现）："第一行\n第二行"=7 + "b.txt"=5
-    assert.equal(turn.metaText, "12 字");
+    assert.equal(metaOf(turn.metaText), "12 字");
   });
 
   it("assistant 轮 metaText 的工具结果字数按剥后正文", async () => {
@@ -1374,7 +1379,7 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     const turn = turns[1]!;
     // inputJson `{\n  "path": "a.md"\n}` = 20 字 + 剥后 result 正文 3 字 = 23
-    assert.equal(turn.metaText, "#2 · 工具调用 1 次 · 23 字");
+    assert.equal(metaOf(turn.metaText), "#2 · 工具调用 1 次 · 23 字");
   });
 });
 
@@ -1490,7 +1495,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       message("assistant", "好", 2),
     ];
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
-    assert.equal(turns[0]!.summaryText, "看看这个");
+    assert.equal(summaryOf(turns[0]!.summaryText), "看看这个");
     assert.match(turns[0]!.cards[0]!.type === "text" ? turns[0]!.cards[0]!.body : "", /<user-input>\n看看这个\n<\/user-input>/);
   });
 

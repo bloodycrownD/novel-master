@@ -1,8 +1,16 @@
 /**
  * Provider / model domain errors.
  *
+ * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
+ * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
+ * `userMessageOf` + translator 翻译。
+ *
  * @module errors/provider-errors
  */
+
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /** Discriminant codes for {@link ProviderError}. */
 export type ProviderErrorCode =
@@ -29,17 +37,22 @@ export class ProviderError extends Error {
   readonly code: ProviderErrorCode;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
 
   constructor(
     code: ProviderErrorCode,
-    message: string,
+    message: string | CoreMessageDescriptor,
     options?: { providerId?: string; modelId?: string }
   ) {
-    super(message);
+    const localized = resolveLocalizedMessage(message);
+    super(localized.text);
     this.name = "ProviderError";
     this.code = code;
     this.providerId = options?.providerId;
     this.modelId = options?.modelId;
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 

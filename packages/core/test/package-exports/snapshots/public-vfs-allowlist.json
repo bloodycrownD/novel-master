@@ -26,7 +26,6 @@
   "createVfsBatchIoService",
   "createVfsService",
   "createVfsZipIoService",
-  "formatVfsErrorForUser",
   "isAppError",
   "isVfsError",
   "joinTargetLogicalPath",
@@ -46,5 +45,6 @@
   "scopePhysicalPrefix",
   "toLogicalPath",
   "toPhysicalPath",
-  "validateVfsEntryName"
+  "validateVfsEntryName",
+  "vfsUserMessage"
 ]

@@ -1,0 +1,30 @@
+# en-US 骨架：允许部分覆盖，缺 key 按回退链落到 zh-CN（spec §2.3）。
+# 全量翻译归 G6；本文件只放已定稿的少量条目，且同 key 的 {param} 集合必须与 zh-CN 一致
+# （test/i18n/catalog.test.ts 有对齐断言，不得出现 zh-CN 没有的 key）。
+# 书写规范与 zh-CN.yaml 相同（缩进 2 空格、陷阱词禁裸值、含半角冒号的值加引号）。
+error:
+  vfs:
+    not_found: File does not exist or has been deleted.
+  session_fs:
+    rollback_message_not_found: "Message not found: {message_id}"
+  cloud_sync:
+    push_mutex_timeout:
+      push: Push is busy waiting for the sync mutex lock; please try again later.
+      pull: Pull is busy waiting for the sync mutex lock; please try again later.
+label:
+  agent:
+    max_steps: Max steps {n}
+  workplace:
+    rule_on: Rules · On
+    rule_off: Rules · Off
+  token_source:
+    api: Remote
+  stream_metrics:
+    running: Generating
+    last: Last generation
+    line: Output {tokens} tok
+    line_with_rate: Output {tokens} tok · {rate} tok/s
+  attachment:
+    action:
+      delete: Delete
+    chip: "{action}:{path}"

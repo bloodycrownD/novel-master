@@ -20,6 +20,7 @@
 
 import type { SortOrder } from "../model/workplace-types.js";
 import type { SmartSortCaptureKind } from "../../smart-sort-rule/model/smart-sort-rule.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 
 /** Chinese numeral char → numeric value (mirrors legado `ChnMap`). */
 const CHN_NUM_VALUE: Readonly<Record<string, number>> = {
@@ -247,16 +248,16 @@ export const FIXED_MAX_SORT_TUPLE: readonly number[] = [Infinity];
 
 /**
  * 元组显示格式化（D13）：数字元组 → "(12,)" / "(2,13,)" 风格（Python 元组
- * repr 尾逗号）；哨兵元组 → "(固定最小,)" / "(固定最大,)"（GUI 测试预览
- * 小字消费，不参与比较）。空数组/非哨兵不在此出现。仅识别 ±Infinity
+ * repr 尾逗号）；哨兵元组 → label.smart_sort.pinned_min/max descriptor（GUI
+ * 测试预览小字消费，不参与比较）。空数组/非哨兵不在此出现。仅识别 ±Infinity
  * 首元素判定哨兵：数字管道永不产出 ±Infinity（parseChineseNum 有限值）。
  */
-export function formatSortTupleForDisplay(nums: readonly number[]): string {
+export function formatSortTupleForDisplay(nums: readonly number[]): string | CoreMessageDescriptor {
   if (nums[0] === -Infinity) {
-    return "(固定最小,)";
+    return { key: "label.smart_sort.pinned_min" };
   }
   if (nums[0] === Infinity) {
-    return "(固定最大,)";
+    return { key: "label.smart_sort.pinned_max" };
   }
   return `(${nums.join(",")},)`;
 }

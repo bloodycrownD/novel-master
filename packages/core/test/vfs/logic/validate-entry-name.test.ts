@@ -11,7 +11,7 @@ describe("validateVfsEntryName", () => {
     it("换行符（\\n / \\r / \\r\\n）", () => {
       assert.deepEqual(validateVfsEntryName("第\n2章"), {
         ok: false,
-        reason: "文件名不能包含换行或控制字符",
+        reason: {key: "error.vfs.invalid_name.control_chars"},
       });
       assert.equal(validateVfsEntryName("第\r2章").ok, false);
       assert.equal(validateVfsEntryName("a\r\nb").ok, false);
@@ -33,7 +33,7 @@ describe("validateVfsEntryName", () => {
     it("纯空白名（空串 / 空格 / 全角空格 / 混合）", () => {
       assert.deepEqual(validateVfsEntryName(""), {
         ok: false,
-        reason: "文件名不能为空或纯空白",
+        reason: {key: "error.vfs.invalid_name.blank"},
       });
       assert.equal(validateVfsEntryName("   ").ok, false);
       assert.equal(validateVfsEntryName("\u3000").ok, false);
@@ -43,7 +43,7 @@ describe("validateVfsEntryName", () => {
     it("首尾空格（半角与全角）", () => {
       assert.deepEqual(validateVfsEntryName(" 第2章"), {
         ok: false,
-        reason: "文件名不能以空格开头或结尾",
+        reason: {key: "error.vfs.invalid_name.edge_spaces"},
       });
       assert.equal(validateVfsEntryName("第2章 ").ok, false);
       assert.equal(validateVfsEntryName("　第2章").ok, false);
@@ -53,7 +53,7 @@ describe("validateVfsEntryName", () => {
     it(". 与 ..", () => {
       assert.deepEqual(validateVfsEntryName("."), {
         ok: false,
-        reason: "文件名不能为 . 或 ..",
+        reason: {key: "error.vfs.invalid_name.dotdot"},
       });
       assert.equal(validateVfsEntryName("..").ok, false);
     });

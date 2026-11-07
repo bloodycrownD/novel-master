@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import type { MessageLike } from "@/common/i18n.js";
 
 /** 技能归属域。 */
 export type SkillDomain = "global" | "project";
@@ -32,12 +33,12 @@ export interface SkillRef {
  * 技能清单条目（listSkills / effectiveSkills 的输入形态）。
  *
  * `valid=false` 表示 front matter 缺失 / 不可解析 / 字段不合法，
- * `invalidReason` 给出可展示的原因。
+ * `invalidReason` 给出可展示的原因（descriptor，UI 翻译后展示）。
  */
 export interface SkillSummary {
   readonly name: string;
   readonly description: string | null;
   readonly domain: SkillDomain;
   readonly valid: boolean;
-  readonly invalidReason?: string;
+  readonly invalidReason?: MessageLike;
 }

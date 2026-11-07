@@ -14,6 +14,7 @@ import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("assessAgentDefinitionWire", () => {
   it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
@@ -94,17 +95,17 @@ describe("buildDefaultAgentDefinitionPreservingName", () => {
 });
 
 describe("STORED_CONFIG_LABELS", () => {
-  it("提供失效面板主文案", () => {
-    assert.equal(STORED_CONFIG_LABELS.invalidTitle, "配置已失效");
-    assert.equal(STORED_CONFIG_LABELS.eventsRestoreAndSave, "恢复默认并保存");
-    assert.equal(STORED_CONFIG_LABELS.agentOverwriteDefault, "用默认模板覆盖并保存");
+  it("提供失效面板主文案（经 core translator 渲染）", () => {
+    assert.equal(tCore(STORED_CONFIG_LABELS.invalidTitle), "配置已失效");
+    assert.equal(tCore(STORED_CONFIG_LABELS.eventsRestoreAndSave), "恢复默认并保存");
+    assert.equal(tCore(STORED_CONFIG_LABELS.agentOverwriteDefault), "用默认模板覆盖并保存");
   });
 });
 
 describe("AGENT_LIST_LABELS", () => {
-  it("提供需修复与最大步数文案", () => {
-    assert.equal(AGENT_LIST_LABELS.needsRepair, "需修复");
-    assert.equal(AGENT_LIST_LABELS.maxSteps(12), "最大步数 12");
+  it("提供需修复与最大步数文案（经 core translator 渲染）", () => {
+    assert.equal(tCore(AGENT_LIST_LABELS.needsRepair), "需修复");
+    assert.equal(tCore(AGENT_LIST_LABELS.maxSteps(12)), "最大步数 12");
   });
 });
 

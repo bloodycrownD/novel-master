@@ -11,6 +11,7 @@ import {
   type CompiledSmartSortRule,
   type SmartSortKeyCache,
 } from "../../src/domain/workplace/logic/smart-sort.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 function compile(
   ruleId: string,
@@ -353,11 +354,14 @@ describe("compareSmartBasenames total order (T-SS4)", () => {
     assert.deepEqual(desc, [...asc].reverse());
   });
 
-  it("D13 formatSortTupleForDisplay：数字元组/哨兵文案", () => {
+  it("D13 formatSortTupleForDisplay：数字元组 string / 哨兵 descriptor", () => {
     assert.equal(formatSortTupleForDisplay([12]), "(12,)");
     assert.equal(formatSortTupleForDisplay([2, 13]), "(2,13,)");
-    assert.equal(formatSortTupleForDisplay([-Infinity]), "(固定最小,)");
-    assert.equal(formatSortTupleForDisplay([Infinity]), "(固定最大,)");
+    assert.deepEqual(formatSortTupleForDisplay([-Infinity]), {key: "label.smart_sort.pinned_min"});
+    assert.deepEqual(formatSortTupleForDisplay([Infinity]), {key: "label.smart_sort.pinned_max"});
+    // descriptor 经 translator 渲染回旧文案（zh-CN catalog 值）
+    assert.equal(tCore(formatSortTupleForDisplay([-Infinity])), "(固定最小,)");
+    assert.equal(tCore(formatSortTupleForDisplay([Infinity])), "(固定最大,)");
   });
 });
 
@@ -440,3 +444,17 @@ describe("builtin rule set, appendix A verbatim (T-SS5)", () => {
     assert.deepEqual(extractSortKey("第一千零一章", [zhChapter]), [1001]);
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

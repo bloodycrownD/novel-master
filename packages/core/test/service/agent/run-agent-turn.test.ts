@@ -11,6 +11,7 @@ import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-sca
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+import { tCore } from "../../helpers/core-i18n.js";
 
 /** 发送侧（mobile）区间扫描口径：逐区间 slice 单独扫（D9）。 */
 function scanComposerRanges(
@@ -180,7 +181,7 @@ describe("runAgentTurn", () => {
         ),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
-        assert.equal(err.message, "消息不能为空");
+        assert.equal(renderError(err), "消息不能为空");
         return true;
       },
     );
@@ -520,7 +521,7 @@ describe("runAgentTurn", () => {
         runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
-        assert.equal(err.message, "消息不能为空");
+        assert.equal(renderError(err), "消息不能为空");
         return true;
       },
     );
@@ -558,7 +559,7 @@ describe("runAgentTurn", () => {
       () => runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
-        assert.equal(err.message, "消息不能为空");
+        assert.equal(renderError(err), "消息不能为空");
         return true;
       },
     );
@@ -592,7 +593,7 @@ describe("runAgentTurn", () => {
         runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
-        assert.equal(err.message, "消息不能为空");
+        assert.equal(renderError(err), "消息不能为空");
         return true;
       },
     );
@@ -756,3 +757,17 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

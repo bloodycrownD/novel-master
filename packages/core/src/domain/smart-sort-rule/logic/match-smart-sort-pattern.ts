@@ -29,6 +29,7 @@
 
 import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
 import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, formatSortTupleForDisplay, parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
+import type { MessageLike } from "@/common/i18n.js";
 
 /**
  * Single match: full match text + start offset in the tested text
@@ -41,13 +42,13 @@ export interface SmartSortPatternMatch {
   readonly index: number;
   readonly groups: readonly (string | null)[];
   /**
-   * 提取元组的显示字符串（D13）：fixed 档恒为 "(固定最小,)"/"(固定最大,)"
-   * （忽略捕获组）；smart 档为捕获组→数字转换后的 "(12,)" 风格，无捕获组
+   * 提取元组的显示文案（D13）：fixed 档恒为 label.smart_sort.pinned_* descriptor
+   * （忽略捕获组）；smart 档为捕获组→数字转换后的 "(12,)" 风格 string，无捕获组
    * 或任一组转换失败时为 null（GUI 渲染「无序号」）。文案单源
    * formatSortTupleForDisplay（C-3）。仅显示用途，排序比较走
    * extractSortKey 的数值元组。
    */
-  readonly tuple: string | null;
+  readonly tuple: MessageLike | null;
 }
 
 /** Success shape: all matches in first-occurrence order. */
@@ -94,7 +95,7 @@ export function matchSmartSortPattern(pattern: string, flags: string, text: stri
     // tuple（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
     // formatSortTupleForDisplay 格式化（C-3 单源）；smart 档无捕获组或任一
     // 组转换失败 → null（GUI 渲染「无序号」）。
-    let tuple: string | null;
+    let tuple: MessageLike | null;
     if (captureKind === "fixed_min") {
       tuple = formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
     } else if (captureKind === "fixed_max") {

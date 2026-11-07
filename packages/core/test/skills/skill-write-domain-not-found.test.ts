@@ -21,6 +21,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -74,12 +75,12 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     const error = asSkillError(raw, "edit 落 project 域");
 
     assert.ok(
-      !/Path not found/.test(error.message),
+      !/Path not found/.test(renderError(error)),
       `不应泄漏 VFS 裸路径文案，实际：${error.message}`
     );
-    assert.match(error.message, /project/, "文案应说明命中的是 project 域");
+    assert.match(renderError(error), /project/, "文案应说明命中的是 project 域");
     assert.match(
-      error.message,
+      renderError(error),
       /domain:"global"/,
       "文案应明确给出可操作参数 domain:\"global\""
     );
@@ -112,7 +113,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     );
     const error = asSkillError(raw, "edit 落 global 域");
 
-    assert.match(error.message, /domain:"project"/);
+    assert.match(renderError(error), /domain:"project"/);
   });
 
   it("edit 落 global 域但无 projectId：明说无法确认 project 域，不谎报「没有」", async () => {
@@ -130,9 +131,9 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     );
     const error = asSkillError(raw, "global 域无 projectId");
 
-    assert.match(error.message, /未能确认 project 域/);
+    assert.match(renderError(error), /未能确认 project 域/);
     assert.ok(
-      !/domain:"project"/.test(error.message),
+      !/domain:"project"/.test(renderError(error)),
       `查不了就不该指示切域，实际：${error.message}`
     );
   });
@@ -156,10 +157,10 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     const error = asSkillError(raw, "两域皆无");
 
     assert.ok(
-      !/domain:"global"/.test(error.message),
+      !/domain:"global"/.test(renderError(error)),
       `另一域没有该技能时不应提示切域，实际：${error.message}`
     );
-    assert.match(error.message, /新建/);
+    assert.match(renderError(error), /新建/);
   });
 
   it("write 落 project 域、技能只在 global 域：在 project 域新建副本，不动 global", async () => {
@@ -228,3 +229,17 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     );
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

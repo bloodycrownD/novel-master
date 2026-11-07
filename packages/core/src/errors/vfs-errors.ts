@@ -1,8 +1,16 @@
 /**
  * VFS domain errors: typed codes for path and replace failures.
  *
+ * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
+ * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
+ * `userMessageOf` + translator 翻译。
+ *
  * @module errors/vfs-errors
  */
+
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /**
  * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
@@ -41,20 +49,25 @@ export class VfsError extends Error {
   readonly code: VfsErrorCode;
   readonly path?: string;
   readonly details?: unknown;
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
 
   constructor(
     code: VfsErrorCode,
-    message: string,
+    message: string | CoreMessageDescriptor,
     options?: {
       path?: string;
       details?: unknown;
     }
   ) {
-    super(message);
+    const localized = resolveLocalizedMessage(message);
+    super(localized.text);
     this.name = "VfsError";
     this.code = code;
     this.path = options?.path;
     this.details = options?.details;
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 
@@ -110,9 +123,9 @@ export function vfsDirectoryNotEmpty(path: string): VfsError {
   });
 }
 
-/** Invalid or non-normalizable path. */
-export function vfsInvalidPath(path: string, reason: string): VfsError {
-  return new VfsError("INVALID_PATH", `Invalid path ${path}: ${reason}`, {
+/** Invalid or non-normalizable path（reason 可为 descriptor，如 legacy /template 拒绝）。 */
+export function vfsInvalidPath(path: string, reason: string | CoreMessageDescriptor): VfsError {
+  return new VfsError("INVALID_PATH", typeof reason === "string" ? `Invalid path ${path}: ${reason}` : reason, {
     path,
   });
 }
@@ -120,10 +133,10 @@ export function vfsInvalidPath(path: string, reason: string): VfsError {
 /**
  * Entry name rejected by {@link validateVfsEntryName}（创建/重命名入口拦截）。
  *
- * message 直接用中文 reason（面向用户的文案即最终展示文案）；LLM 面由
+ * message 传中文 reason 或 descriptor（invalid_name.* 子段）；LLM 面由
  * format-vfs-error-for-llm 包装 `[INVALID_NAME]` 前缀与路径。
  */
-export function vfsInvalidName(name: string, reason: string): VfsError {
+export function vfsInvalidName(name: string, reason: string | CoreMessageDescriptor): VfsError {
   return new VfsError("INVALID_NAME", reason, { path: name });
 }
 

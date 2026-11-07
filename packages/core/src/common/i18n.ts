@@ -19,8 +19,8 @@ export type MessageLike<K extends string = string> = string | MessageDescriptor<
 /** 参数值支持嵌套 descriptor；数组按行拼接。 */
 type MessageParamValue = string | number | boolean | null | undefined | MessageLike | readonly MessageLike[];
 
-/** 模板参数；复杂列表可用 descriptor 数组。 */
-type MessageParams = Readonly<Record<string, MessageParamValue>>;
+/** 模板参数；复杂列表可用 descriptor 数组。错误类与 IPC payload 携带参数时需要此类型。 */
+export type MessageParams = Readonly<Record<string, MessageParamValue>>;
 
 /** 字符串模板或接收参数的函数模板。 */
 type MessageTemplate = string | ((params: MessageParams) => string);

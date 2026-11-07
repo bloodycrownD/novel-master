@@ -58,7 +58,7 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
   const meta = await revisionRepo.findMetaByEntryAndVersion(checkpointEntryId, version);
   if (meta == null) {
     // revision 真缺（非 entry 缺）：维持降级语义。
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
   if (meta.status === "deleted") {
     // 防御：checkpoint 只 capture live head，正常不指向 deleted 态；
@@ -77,7 +77,7 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
   const rev = await revisionRepo.findByEntryAndVersion(checkpointEntryId, version);
   if (rev == null || rev.content == null) {
     // 与 restorePathToRevision 正常分支同口径：active 行无正文无法恢复。
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
 
   // 路径被新 entry 占用（删除后同路径重建）：先墓碑删掉新 entry。
@@ -98,7 +98,7 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
   // content_hash 有 blob 可解，并回取权威 hash（对齐 resetHeadToVersion）。
   const contentHash = contentStore ? await contentStore.put(rev.content) : meta.contentHash;
   if (contentHash == null || contentHash.length === 0) {
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
 
   const ensured = await ensureDirectoryChain(vfs, logicalPath);

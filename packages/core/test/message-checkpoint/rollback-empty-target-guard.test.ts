@@ -7,6 +7,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 // T-DS2（S-13 护栏）：undo_send 解析出的 targetTree 经过 prior + anchor
 // 两轮兜底后仍为空时，reconcileVfsPaths 会把 live 树里所有路径都判定为
@@ -42,7 +43,10 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
           true,
           "应抛 ROLLBACK_UNDO_SEND_EMPTY_TARGET",
         );
-        assert.match((error as Error).message, /拒绝清空会话工作区/);
+        assert.equal(
+          (error as {messageKey?: string}).messageKey,
+          "error.session_fs.rollback_undo_send_empty_target.undo_send",
+        );
         return true;
       },
     );
@@ -105,3 +109,17 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     await assert.rejects(() => svfs.read("/later.md"));
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

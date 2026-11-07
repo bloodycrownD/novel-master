@@ -7,6 +7,7 @@
  */
 
 import type { SkillDomain, SkillSummary } from "../model/skill.schema.js";
+import type { MessageLike } from "@/common/i18n.js";
 
 /** 合并输入：两域清单 + 当前项目的禁用名单。 */
 export interface EffectiveSkillsInput {
@@ -31,7 +32,7 @@ export interface EffectiveSkill {
   /** 命中当前项目负清单时为 true。 */
   readonly disabled: boolean;
   readonly valid: boolean;
-  readonly invalidReason?: string;
+  readonly invalidReason?: MessageLike;
   /**
    * `valid && !disabled`——是否计入生效（提示词索引 / `$` 候选 / 启用统计）。
    * 无效技能保留在清单（管理界面展示原因），但不计入生效。

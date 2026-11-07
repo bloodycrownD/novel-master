@@ -1,0 +1,12 @@
+[
+  "CORE_CATALOGS",
+  "CORE_MESSAGE_KEYS",
+  "CORE_MESSAGE_KEY_PATTERN",
+  "ERROR_KEY_DOMAINS",
+  "LABEL_KEY_DOMAINS",
+  "createTranslator",
+  "messageParamOf",
+  "parseCoreCatalog",
+  "resolveLocalizedMessage",
+  "userMessageOf"
+]

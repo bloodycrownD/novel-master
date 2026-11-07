@@ -4,8 +4,15 @@ import { isAppError } from "../../src/errors/app-error.js";
 import type { Result } from "../../src/errors/either.js";
 import { agentDefinitionSchema } from "../../src/domain/agent/model/agent-definition.schema.js";
 import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { tCore } from "../helpers/core-i18n.js";
+import type { AppError } from "../../src/errors/app-error.js";
 
 type LayoutErrorKey = "PROMPT_INVALID_LAYOUT" | "PROMPT_INVALID_MACRO";
+
+/** 错误的用户可见文案：带 messageKey 时经 tCore 渲染，否则回退 message。 */
+function renderError(error: AppError<LayoutErrorKey>): string {
+  return error.messageKey != null ? tCore({ key: error.messageKey, params: error.messageParams }) : error.message;
+}
 
 function expectOk<T>(result: Result<T, unknown>): T {
   if (!result.ok) {
@@ -19,7 +26,7 @@ function expectError(result: Result<unknown, unknown>, key: LayoutErrorKey, patt
     assert.fail("预期校验失败，实际成功");
   }
   assert.ok(isAppError(result.error, key), `期望 ${key}，实际 ${String(result.error)}`);
-  assert.match(result.error.message, pattern);
+  assert.match(renderError(result.error), pattern);
 }
 
 describe("validateAgentPromptLayoutFromMaps", () => {

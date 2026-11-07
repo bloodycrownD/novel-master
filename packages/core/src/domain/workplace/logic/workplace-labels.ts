@@ -1,40 +1,41 @@
 /**
- * Chinese display labels for workplace list output.
+ * Workplace list UI labels（descriptor 形态，宿主 translator 渲染）。
  *
  * @module domain/workplace/logic/workplace-labels
  */
 
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import type { DisplayState, InclusionMode, RuleState } from "../model/workplace-types.js";
 
-export function ruleStateLabel(state: RuleState): string {
-  return state === "rule_on" ? "规则·开" : "规则·关";
+export function ruleStateLabel(state: RuleState): CoreMessageDescriptor {
+  return state === "rule_on" ? { key: "label.workplace.rule_on" } : { key: "label.workplace.rule_off" };
 }
 
-export function inclusionModeLabel(mode: InclusionMode): string {
+export function inclusionModeLabel(mode: InclusionMode): CoreMessageDescriptor {
   switch (mode) {
     case "auto":
-      return "跟随";
+      return { key: "label.workplace.inclusion.auto" };
     case "show":
-      return "展示";
+      return { key: "label.workplace.inclusion.show" };
     case "hide":
-      return "隐藏";
+      return { key: "label.workplace.inclusion.hide" };
   }
 }
 
-export function displayStateLabel(state: DisplayState): string {
+export function displayStateLabel(state: DisplayState): CoreMessageDescriptor {
   switch (state) {
     case "hidden":
-      return "不展示";
+      return { key: "label.workplace.display.hidden" };
     case "full":
-      return "全内容";
+      return { key: "label.workplace.display.full" };
     case "header":
-      return "文件头";
+      return { key: "label.workplace.display.header" };
     case "filename":
-      return "文件名";
+      return { key: "label.workplace.display.filename" };
   }
 }
 
-/** `{{$filetree}}` 宏文件行尾加载状态文案（与 UI 四态标签分离）。 */
+/** `{{$filetree}}` 宏文件行尾加载状态文案（进提示词，保持 string 不迁，spec G3.2）。 */
 export function filetreeMacroLoadStateLabel(state: DisplayState): string {
   switch (state) {
     case "full":

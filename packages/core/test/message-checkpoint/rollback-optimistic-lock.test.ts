@@ -9,6 +9,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 // T-SC11（A-22 乐观锁）：resolveRollbackPlan 多次 await 读与 conn.transaction 写之间
 // 存在 TOCTOU 间隙——agent 可在此期间 append 消息，导致 plan 基于过期读。
@@ -89,11 +90,12 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
           "重试上限耗尽后应抛 ROLLBACK_CONFLICT",
         );
         // better-sqlite3 驱动会把事务里抛出的非 TdbcError 用 TdbcError 包起来（cause 链指向原错误），
-        // isSessionFsError 会追 cause 链识别；但 expectedMessageCount / actualMessageCount 在原
-        // SessionFsError 上，所以这里从 message 文本里验证计数与预期一致。
-        const message = (error as Error).message;
-        assert.match(message, /预期 \d+ 条/);
-        assert.match(message, /实际 \d+ 条/);
+        // isSessionFsError 会追 cause 链识别；descriptor 形态下 key/计数挂在 cause 的
+        // messageKey/messageParams 上（包装层不带）。
+        const original = (error as {cause?: {messageKey?: string; messageParams?: {expected_count?: number; actual_count?: number}}}).cause;
+        assert.equal(original?.messageKey, "error.session_fs.rollback_conflict");
+        assert.equal(typeof original?.messageParams?.expected_count, "number");
+        assert.equal(typeof original?.messageParams?.actual_count, "number");
         return true;
       },
     );
@@ -166,3 +168,17 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     assert.equal((await svfs.read("/a.md")).content, "v2");
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

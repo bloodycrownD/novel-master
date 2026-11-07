@@ -1,0 +1,288 @@
+# core 用户可见文案唯一真源（error.* 用户可见错误 + label.* 展示标签）。
+# 书写规范见 docs/Iterations/i18n-normalization/spec.md §2.6：
+# - 值含半角冒号、ASCII 引号或形似数字/布尔 → 必须加引号；全角冒号不受影响
+# - on/off/yes/no/true/false 等陷阱词永不可作裸值；缩进 2 空格；一 key 一行
+# - 多行文案用双引号 + \n，不用 YAML 折行；参数占位 {snake_case}
+# - 值内字面 {{...}} 是提示词宏语法本体（如 {{.worktree}}），插值器只吃 {word}，不会误替换
+error:
+  # —— agent：定义校验 / 注册表 / 运行前置（validate-agent-definition、agent-definition.schema、agent-registry、agent-run-shared、run-agent-turn）——
+  agent:
+    invalid_schema:
+      name_required: definition.name 必填且为非空字符串（写在 definition 顶层；工具参数 name 仅用于定位，不能替代）
+      description_type: definition.description 如填写必须为字符串
+      prompts_shape: definition.prompts 必填且含 persist / dynamic 块数组（结构对齐 get 的输出，不是以块名为键的对象映射）
+      field_invalid: definition 字段不合法：{detail}
+      workplace_nonempty_string: prompts.workplace 如开启则须为非空字符串
+      custom_attach_nonempty_string: prompts.customAttach 如填写则须为非空字符串
+      skills_prefix_nonempty_string: prompts.skillsPrefix 如填写则须为非空字符串
+      builtin_name_reserved: '"{name}" 是内置智能体名称，不可使用'
+      builtin_not_deletable: '内置 agent "{name}" 不可删除'
+    duplicate_name: Agent 名称已存在
+    not_configured: 未配置 Agent。请先在「agent管理」中导入或创建 Agent。
+    not_found: Agent 不存在：{agent_id}
+    model_not_set: 未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。
+    referenced_not_found: 会话引用的 Agent 不存在：{agent_id}（{detail}）
+    message_empty: 消息不能为空
+    subagent_model_missing: 子代理未指定模型，且父 agent 也无可用 savedModelId。
+    grandchild_model_missing: 孙代理未指定模型，且子 agent 也无可用 savedModelId。
+    child_session_busy: 子会话 {child_session_id} 已有另一个子代理在运行，不能并发续用同一个子会话；去掉 sessionId 新开一个子会话即可。
+  # —— chat：zod schema 与会话创建 ——
+  chat:
+    attachment_path_blank: 附件路径不能为空串或纯空白
+    annotate_render_range_pair_required: renderStart 与 renderEnd 须成对出现
+    annotate_render_range_order: 须满足 renderStart < renderEnd（半开区间 [start, end)）
+    annotate_offset_pair_required: startOffset 与 endOffset 须成对出现
+    annotate_offset_order: 须满足 startOffset < endOffset（半开区间 [start, end)）
+    composer_token_range_order: tokenRange 需满足 start < end（零长度区间拒收）
+    attachment_skill_name_required: skillAttach 附件必须携带非空 skillName
+    attachment_name_display_tag_forbidden: "name 禁止为 action:path 展示 tag（须 name=path）"
+    attachment_name_storage_mismatch: 有 action 时 name 须等于 attachmentStorageName(path)（期望 {expected}）
+    project_agent_definition_required: mode 为 custom 时 definition 必填
+    session_create_agent_missing: 新建会话失败：workspace 未配置 Agent，且 registry 为空
+  # —— cloud_sync：方向入子段（agent_active / push_mutex_timeout），NEED_PULL_FIRST 两个原因分立 ——
+  cloud_sync:
+    already_up_to_date: 本地已是最新，无需拉取
+    snapshot_missing: 云端快照缺失
+    download_checksum_mismatch: 下载快照校验失败
+    agent_active:
+      pull: Agent 运行中，请稍后再拉取
+      push: Agent 运行中，请稍后再推送
+    push_mutex_timeout:
+      pull: 拉取繁忙，等待互斥锁超时，请稍后再试
+      push: 推送繁忙，等待互斥锁超时，请稍后再试
+    need_pull_first:
+      remote_ahead: 云端有更新，请先拉取
+      advanced_by_other: 云端已被其他设备推进，请先拉取
+    lock_held_by_other: 另一台设备正在同步，请稍后再推送
+    lock_contention: 同步冲突，请重试
+    not_configured: 请先配置云存储
+    invalid_status:
+      unparseable: 云端状态文件无法解析
+      schema_invalid: 云端状态文件格式无效
+  # —— db_backup：provider 三表快照校验 14 条原因（抛错点带 key；{row_index} 定位脏数据行）——
+  db_backup:
+    provider_row_id_missing: llm_provider 第 {row_index} 行缺少非空 id
+    provider_row_protocol_invalid: llm_provider 第 {row_index} 行 protocol 非法：{protocol}
+    provider_row_base_url_empty: llm_provider 第 {row_index} 行 base_url 为空（id={id}）
+    provider_row_display_name_empty: llm_provider 第 {row_index} 行 display_name 为空（id={id}）
+    provider_row_is_builtin_not_number: llm_provider 第 {row_index} 行 is_builtin 不是数字（id={id}）
+    provider_row_timestamp_invalid: llm_provider 第 {row_index} 行时间戳缺失或非数字（id={id}）
+    saved_model_row_provider_id_empty: llm_saved_model 第 {row_index} 行 provider_id 为空
+    saved_model_row_vendor_model_id_empty: llm_saved_model 第 {row_index} 行 vendor_model_id 为空（provider_id={provider_id}）
+    saved_model_row_settings_json_missing: llm_saved_model 第 {row_index} 行 settings_json 缺失（provider_id={provider_id}）
+    dangling_saved_model: llm_saved_model 第 {row_index} 行 provider_id={provider_id} 在快照内找不到对应 llm_provider
+    secret_row_ref_missing: sksp_secrets 第 {row_index} 行缺少非空 ref
+    secret_row_ciphertext_missing: sksp_secrets 第 {row_index} 行 ciphertext 缺失（ref={ref}）
+    secret_row_algo_empty: sksp_secrets 第 {row_index} 行 algo 为空（ref={ref}）
+    secret_row_version_not_number: sksp_secrets 第 {row_index} 行 version 不是数字（ref={ref}）
+  # —— infra：启动基线（INFRA_BASELINE_TOO_OLD，bootstrap 域不在词表，按 code 归 infra）——
+  infra:
+    baseline_too_old: 检测到当前数据库低于本版本最低支持版本（{minimum_version}）。请先升级到{minimum_version}，再升级到本版本。
+  # —— prompt：布局校验（PROMPT_INVALID_LAYOUT）与动态宏校验（PROMPT_INVALID_MACRO）；{block} 是块名「N」片段，{hint} 是嵌套 descriptor ——
+  prompt:
+    invalid_layout:
+      workplace_nonempty_string: prompts.workplace 如开启则须为非空字符串
+      workplace_type: prompts.workplace 须为 boolean 或非空字符串
+      region_map_not_array: prompts.{region} 须为对象映射，不能是数组
+      region_map_required: prompts.{region} 须为对象映射
+      system_nonempty_string: prompts.system 如填写则须为非空字符串
+      block_name_required: 块名称须为非空字符串
+      block_not_object: "{block}须为对象"
+      persist_worktree_removed: "{block}：请改用常驻工作区（prompts.workplace）开关"
+      persist_block_text_only: "{block}：持久区须为 text 类型"
+      when_removed: "{block}：不再支持 when 字段，请删除"
+      persist_system_role: "{block}：持久区文本块不得使用 system 角色，请改用 prompts.system"
+      persist_role: "{block}：持久区文本块的 role 须为 user 或 assistant"
+      text_content_required: "{block}：文本块须为字符串 content"
+      dynamic_block_text_only: "{block}：动态区块须为 text 类型"
+      dynamic_system_role: "{block}：动态区文本块不得使用 system 角色"
+      dynamic_role: "{block}：动态区文本块的 role 须为 user 或 assistant"
+      persist_needs_blocks: 启用持久区时至少需要一个文本块
+      persist_last_role: 启用持久区时最后一个块须为助手角色
+      dynamic_needs_two_blocks: 启用动态区时至少需要两个块
+      dynamic_first_role: 启用动态区时第一个块须为助手角色
+      dynamic_last_role: 启用动态区时最后一个块须为用户角色
+      duplicate_block_name: "prompts.{region}：重复的块名「{name}」"
+    invalid_macro:
+      scan_failed: "{block}：{detail}"
+      worktree_removed: 请改用 prompts.workplace 常驻工作区开关，不要使用 {{.worktree}}
+      filetree_alias: 请使用 {{$filetree}} 替代 {{.filetree}}
+      dot_removed: "{block}：动态区不允许 {{.{macro}}}；{hint}"
+      dot_unsupported: "{block}：动态区不支持点号宏（{{.{path}}}）"
+      unknown: "{block}：未知的动态宏 {{${key}}}；允许：$time、$week_cn、$filetree"
+      persist_forbidden: "{block}：持久区文本块不得包含宏（{{...}}）"
+    macro_expand_failed: dynamic 宏展开失败：{detail}
+  # —— provider ——
+  provider:
+    display_name_required: displayName 不能为空
+    saved_model_in_use: 无法删除服务商：其下模型「{model_name}」仍被引用（{blocking_refs}）
+  # —— session_fs：回滚/恢复（restore_revision_missing 由 restore-path 与 revive-deleted-entry 复用）——
+  session_fs:
+    rollback_message_not_found: 消息不存在：{message_id}
+    rollback_message_session_mismatch: 消息不属于当前会话：{message_id}
+    restore_revision_missing: 恢复所需 revision 缺失：{logical_path} v{revision_version}
+    rollback_undo_send_empty_target:
+      rewind: rewind 缺少可用的 baseline 快照，拒绝清空会话工作区
+      undo_send: undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区
+    rollback_revision_backfill_required: 回滚所需 revision 缺失，需确认使用最新内容修复：{paths}
+    rollback_conflict: 回滚期间会话消息发生了变化（预期 {expected_count} 条，实际 {actual_count} 条），请重试
+    rollback_tail_drift: 回滚期间待截断的消息集合发生变化（预期 {expected_count} 条，实际 {actual_count} 条），已拒绝截断以免误删新消息，请重试
+    vfs_restore_failed: 工作区无法恢复：{detail}
+    invalid_rollback_options: skipVfsReconcile 与 revisionHeadBackfill 不能同时指定
+  # —— skill：名称/路径/域/front matter（reason 入子段；hint_* 作 {hint} 嵌套 descriptor）——
+  skill:
+    missing_domain: 写入技能 {name} 须显式指定 domain（global / project）
+    missing_project_id: project 域操作须提供 projectId（技能 {name}）
+    not_found_in_domain: 技能 {name} 在 {domain} 域不存在（文件 {path}）；{hint}
+    not_found_in_domain_hint:
+      create: '如需在该域新建，请显式传 domain:"{domain}"。'
+      other_domain: '该技能存在于 {other_domain} 域；如需修改它，请显式传 domain:"{other_domain}"。'
+      neither_domain: '{other_domain} 域也没有该技能；如需在 {domain} 域新建，请显式传 domain:"{domain}"。'
+      probe_failed: 未能确认 {other_domain} 域是否存在该技能（缺 projectId 无法探测该域）。
+    builtin_not_deletable: 内置技能不支持删除：{name}
+    builtin_name_reserved: 「{name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑
+    builtin_rename_forbidden: 内置技能不支持重命名：{name}
+    already_exists: 已存在同名技能：{name}
+    invalid_name:
+      empty: 技能名不能为空
+      skill_md_reserved: SKILL.md 是保留名，不能用作技能名
+      leading_dot: 技能名不能以 . 开头
+      whitespace: 技能名不能包含空白字符
+      slash: 技能名不能包含 /
+      unsupported_chars: 技能名包含不支持的字符
+    invalid_path:
+      empty: 技能文件路径不能为空
+      dotdot: 技能文件路径不得包含 ..
+      escape: 技能文件路径必须位于技能目录内
+    entry_file_missing: 缺少 SKILL.md 入口文件
+    front_matter_missing: "缺少 front matter（需以 --- 包裹并含 name 与 description）"
+    front_matter_unparsable: front matter 不可解析：{message}
+    front_matter_field_invalid: front matter 字段不合法：{message}
+  # —— smart_sort_rule：YAML 导入错误（common/error.ts，{reason} 为嵌套错误文本）——
+  smart_sort_rule:
+    import_yaml_invalid: 智能排序规则 YAML 无效：{reason}
+  # —— tool：搜索配置 ——
+  tool:
+    search_not_configured: 未配置任何搜索引擎。请先完成配置后重试：桌面端「设置 → AI → 搜索配置」、移动端「我的 → 配置 → 搜索配置」；可为 bocha / tavily / brave 填写 API key，或为自托管的 searxng 填写 baseUrl。
+    search_api_key_required: API key 不能为空
+    search_searxng_base_url_invalid: searxng baseUrl 无效：仅支持 http/https，且不允许携带用户名密码
+    search_engine_order_invalid: "engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: {order}"
+  # —— usage：统计入参校验（{field} 是入参标签原文，如 dayLocalDate / range.fromDay）——
+  usage:
+    invalid_day_format: "{field} 须为 YYYY-MM-DD 格式，收到：{value}"
+    invalid_day: "{field} 不是有效日期：{value}"
+    daily_buckets_range_required: getDailyBuckets 必须提供 range（日桶序列需要界）
+    invalid_page_limit: 流水分页 limit 须为 1–200，收到：{value}
+    invalid_page_offset: 流水分页 offset 须为有限数值，收到：{value}
+    session_id_required: getSessionUsageDetail 须提供 sessionId，收到：{value}
+    from_after_to: "fromDay 不能晚于 toDay：{from_day} > {to_day}"
+  # —— vfs：用户文案表 / 名称校验 / 角色卡 / zip / 批量导入（VFS_ZIP_*、VFS_CHARACTER_CARD_* 归并 vfs 域）——
+  vfs:
+    not_found: 文件不存在或已被删除。
+    replace_not_found: 文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。
+    already_exists: 名称不能重复
+    operation_failed: 操作失败：{detail}
+    invalid_name:
+      dotdot: 文件名不能为 . 或 ..
+      blank: 文件名不能为空或纯空白
+      control_chars: 文件名不能包含换行或控制字符
+      edge_spaces: 文件名不能以空格开头或结尾
+    template_prefix_forbidden: 逻辑路径以 `/` 为根，请勿使用 `/template/` 前缀
+    zip_root_prefix_suspected: ZIP 似以目标目录名「{base}」作根前缀，请使用相对该目录的内容，系统不会自动剥离
+    character_card_unrecognized: 无法识别为角色卡
+    character_card_unsupported_spec: "不支持的角色卡规格: {spec}"
+    character_card_too_large:
+      single_file: '角色卡过大：文件 "{logical}" 内容 {size_bytes} 字节，超过单文件上限 {limit_bytes} 字节，已拒绝导入'
+      total_content: 角色卡过大：全部文件内容合计 {total_bytes} 字节，超过总量上限 {limit_bytes} 字节，已拒绝导入
+      file_count: 角色卡过大：共 {count} 个文件，超过条目数上限 {limit}，已拒绝导入
+      input: 角色卡文件过大：{size_bytes} 字节，超过输入上限 {limit_bytes} 字节（约 48MB），已拒绝导入
+    character_card_import_failed:
+      with_progress: （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
+    zip_import_failed:
+      with_progress: （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
+    batch_ingest_partial: "{reason}（已提交 {committed} 片，失败在第 {failed_shard} 片）"
+label:
+  # —— agent：存储配置失效面板与列表（invalid_title 与 config_invalid 同文不同语境，分立 key）；custom_attach 是 customAttach 块标签 ——
+  agent:
+    invalid_title: 配置已失效
+    reason_outdated_version: 配置版本过旧，当前应用无法读取
+    reason_removed_feature: 配置含已移除的字段或动作
+    reason_broken_wire: 配置格式损坏，无法解析
+    action_restore_and_save: 恢复默认并保存
+    action_clear_and_save: 清空旧配置并保存默认
+    action_delete: 删除该智能体
+    action_overwrite_default: 用默认模板覆盖并保存
+    action_back: 返回
+    needs_repair: 需修复
+    max_steps: 最大步数 {n}
+    config_invalid: 配置已失效
+    custom_attach: 附加信息
+  # —— attachment：状态 chip 动作二字（write 与 mkdir 同为「创建」，动作不同分立 key）+ chip 模板 ——
+  attachment:
+    action:
+      delete: 删除
+      write: 创建
+      edit: 编辑
+      mkdir: 创建
+      rename: 改名
+      move: 移动
+      workplace_change: 规则
+      annotate: 批注
+    chip: "{action}:{path}"
+  # —— chat ——
+  chat:
+    link_not_found: "{path} 不存在"
+  # —— prompt_preview：summaryText / metaText 与预览截断（desktop 由 main 翻译后写 string DTO）——
+  prompt_preview:
+    tool_calls_chars: 工具调用 {calls} 次 · {chars} 字
+    segment_fallback: "{count} 段 · {counts}"
+    empty_text: （无文本）
+    segments: "{count} 段"
+    tool_calls: 工具调用 {count} 次
+    chars: "{count} 字"
+    failed: "{count} 失败"
+    lost: "{count} 丢失"
+    attachments: 附件 {count}
+    truncated_text: "{head}…（截断，全文 {count} 字）"
+    more_items: "…另有 {count} 项"
+    more_fields: "…另有 {count} 个字段"
+  # —— provider：模型设置选项表（THINKING_LEVEL / TOKEN_COUNTER_MODE）——
+  provider:
+    thinking_level:
+      off: 关
+      low: 低
+      medium: 中
+      high: 高
+    token_counter:
+      auto: 自动（按模型名匹配）
+      tiktoken: Tiktoken（OpenAI 等）
+      claude: Claude 分词器
+      gemma: Gemma 分词器
+      llama3: Llama 3 分词器
+      mistral: Mistral 分词器
+  # —— smart_sort：排序元组哨兵显示 ——
+  smart_sort:
+    pinned_min: "(固定最小,)"
+    pinned_max: "(固定最大,)"
+  # —— stream_metrics：指标条（line 与 line_with_rate 分立，速率段不用空串拼）——
+  stream_metrics:
+    running: 生成中
+    last: 上次生成
+    line: 输出 {tokens} tok
+    line_with_rate: 输出 {tokens} tok · {rate} tok/s
+  # —— token_source ——
+  token_source:
+    api: 远程
+  # —— workplace：UI 四态标签（filetree 宏标签进提示词，保持 string 不迁）——
+  workplace:
+    rule_on: 规则·开
+    rule_off: 规则·关
+    inclusion:
+      auto: 跟随
+      show: 展示
+      hide: 隐藏
+    display:
+      hidden: 不展示
+      full: 全内容
+      header: 文件头
+      filename: 文件名

@@ -49,11 +49,11 @@ export function resolveWorkplaceFromWire(workplace: boolean | string | undefined
   }
   if (typeof workplace === "string") {
     if (workplace.trim().length < 1) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "prompts.workplace 如开启则须为非空字符串"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.workplace_nonempty_string" }));
     }
     return Result.ok(workplace);
   }
-  return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "prompts.workplace 须为 boolean 或非空字符串"));
+  return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.workplace_type" }));
 }
 
 function blockLabel(name: string): string {
@@ -62,10 +62,10 @@ function blockLabel(name: string): string {
 
 function validateBlockMap(raw: unknown, region: "persist" | "dynamic"): Result<Record<string, unknown>, PromptLayoutError> {
   if (Array.isArray(raw)) {
-    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `prompts.${region} 须为对象映射，不能是数组`));
+    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.region_map_not_array", params: { region } }));
   }
   if (raw == null || typeof raw !== "object") {
-    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `prompts.${region} 须为对象映射`));
+    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.region_map_required", params: { region } }));
   }
   return Result.ok(raw as Record<string, unknown>);
 }
@@ -75,7 +75,7 @@ function validateBlockMap(raw: unknown, region: "persist" | "dynamic"): Result<R
  */
 export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRaw: unknown, system?: string, options?: AgentPromptLayoutWireOptions): Result<AgentPromptLayout, PromptLayoutError> {
   if (system != null && system.trim() === "") {
-    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "prompts.system 如填写则须为非空字符串"));
+    return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.system_nonempty_string" }));
   }
 
   const persistMapRaw = validateBlockMap(persistRaw, "persist");
@@ -92,32 +92,32 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
   const persist: PersistTextPromptBlock[] = [];
   for (const [name, item] of Object.entries(persistMap)) {
     if (!isNonEmptyString(name)) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "块名称须为非空字符串"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.block_name_required" }));
     }
     if (item == null || typeof item !== "object" || Array.isArray(item)) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${blockLabel(name)}须为对象`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.block_not_object", params: { block: blockLabel(name) } }));
     }
     const record = item as Record<string, unknown>;
     const type = record.type;
     if (type !== "text") {
       if (type === "worktree") {
-        return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${blockLabel(name)}：请改用常驻工作区（prompts.workplace）开关`));
+        return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_worktree_removed", params: { block: blockLabel(name) } }));
       }
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${blockLabel(name)}：持久区须为 text 类型`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_block_text_only", params: { block: blockLabel(name) } }));
     }
     const label = blockLabel(name);
     if ("when" in record) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：不再支持 when 字段，请删除`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.when_removed", params: { block: label } }));
     }
     const role = record.role;
     if (role === "system") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：持久区文本块不得使用 system 角色，请改用 prompts.system`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_system_role", params: { block: label } }));
     }
     if (role !== "user" && role !== "assistant") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：持久区文本块的 role 须为 user 或 assistant`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_role", params: { block: label } }));
     }
     if (typeof record.content !== "string") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：文本块须为字符串 content`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.text_content_required", params: { block: label } }));
     }
     const macros = rejectPersistMacros(record.content, label);
     if (!macros.ok) {
@@ -129,29 +129,29 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
   const dynamic: DynamicPromptBlock[] = [];
   for (const [name, item] of Object.entries(dynamicMap)) {
     if (!isNonEmptyString(name)) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "块名称须为非空字符串"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.block_name_required" }));
     }
     if (item == null || typeof item !== "object" || Array.isArray(item)) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${blockLabel(name)}须为对象`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.block_not_object", params: { block: blockLabel(name) } }));
     }
     const record = item as Record<string, unknown>;
     const type = record.type;
     if (type !== "text") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${blockLabel(name)}：动态区块须为 text 类型`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_block_text_only", params: { block: blockLabel(name) } }));
     }
     const label = blockLabel(name);
     if ("when" in record) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：不再支持 when 字段，请删除`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.when_removed", params: { block: label } }));
     }
     const role = record.role;
     if (role === "system") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：动态区文本块不得使用 system 角色`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_system_role", params: { block: label } }));
     }
     if (role !== "user" && role !== "assistant") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：动态区文本块的 role 须为 user 或 assistant`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_role", params: { block: label } }));
     }
     if (typeof record.content !== "string") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `${label}：文本块须为字符串 content`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.text_content_required", params: { block: label } }));
     }
     const macros = validateDynamicMacros(record.content, label);
     if (!macros.ok) {
@@ -170,7 +170,7 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
   const customAttach = typeof customAttachRaw === "string" && customAttachRaw.trim().length > 0 ? customAttachRaw : undefined;
   if (customAttach != null) {
     // customAttach 宏白名单与动态区一致（time/week_cn/filetree）。
-    const macros = validateDynamicMacros(customAttach, "附加信息");
+    const macros = validateDynamicMacros(customAttach, { key: "label.agent.custom_attach" });
     if (!macros.ok) {
       return Result.err(macros.error);
     }
@@ -178,25 +178,25 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
 
   if (persistEnabled) {
     if (persist.length < 1) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "启用持久区时至少需要一个文本块"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_needs_blocks" }));
     }
     const last = persist[persist.length - 1]!;
     if (last.role !== "assistant") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "启用持久区时最后一个块须为助手角色"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.persist_last_role" }));
     }
   }
 
   if (dynamicEnabled) {
     if (dynamic.length < 2) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "启用动态区时至少需要两个块"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_needs_two_blocks" }));
     }
     const first = dynamic[0]!;
     const last = dynamic[dynamic.length - 1]!;
     if (first.role !== "assistant") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "启用动态区时第一个块须为助手角色"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_first_role" }));
     }
     if (last.role !== "user") {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", "启用动态区时最后一个块须为用户角色"));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.dynamic_last_role" }));
     }
   }
 
@@ -220,7 +220,7 @@ function validateUniqueBlockNames(blocks: readonly { readonly name: string }[], 
   const seen = new Set<string>();
   for (const block of blocks) {
     if (seen.has(block.name)) {
-      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", `prompts.${region}：重复的块名「${block.name}」`));
+      return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { key: "error.prompt.invalid_layout.duplicate_block_name", params: { region, name: block.name } }));
     }
     seen.add(block.name);
   }

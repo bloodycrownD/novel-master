@@ -27,6 +27,7 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { AppError } from "@/errors/app-error.js";
 import { sessionFsRollbackMessageNotFound, sessionFsRollbackMessageSessionMismatch, sessionFsRollbackRevisionBackfillRequired, sessionFsRollbackVfsRestoreFailed, sessionFsRollbackUndoSendEmptyTarget, sessionFsRollbackConflict, sessionFsRollbackTailDrift, isSessionFsError } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
+import { userMessageOf } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
@@ -94,21 +95,9 @@ type RollbackPlan = {
   fileTreeFingerprint: ReadonlyArray<readonly [string, number]>;
 };
 
-function formatDegradableMessage(cause: unknown): string {
-  let detail: string;
-  if (isSessionFsError(cause) || isVfsError(cause)) {
-    detail = cause.message;
-  } else if (cause instanceof Error) {
-    detail = cause.message;
-  } else {
-    detail = String(cause);
-  }
-  return `工作区无法恢复：${detail}`;
-}
-
 function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
   if (options?.skipVfsReconcile && options?.revisionHeadBackfill) {
-    throw new AppError("SESSION_FS_INVALID_ROLLBACK_OPTIONS", "skipVfsReconcile 与 revisionHeadBackfill 不能同时指定");
+    throw new AppError("SESSION_FS_INVALID_ROLLBACK_OPTIONS", {key: "error.session_fs.invalid_rollback_options"});
   }
 }
 
@@ -224,7 +213,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 skipped: reconcileStats.skippedSameVersion + reconcileStats.skippedSameContentHash,
               });
             } catch (cause) {
-              throw sessionFsRollbackVfsRestoreFailed(formatDegradableMessage(cause), { sessionId, messageId: anchorMessageId });
+              // {detail} 取嵌套 descriptor（userMessageOf 命中时），否则退回 message 文本（spec G2 组合站点）
+              const detail = userMessageOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
+              throw sessionFsRollbackVfsRestoreFailed({key: "error.session_fs.vfs_restore_failed", params: {detail}}, { sessionId, messageId: anchorMessageId });
             }
           }
           // CD-01 第 4 步 · tailIds 断言：truncateTailInTransaction 只吃 afterSeq、

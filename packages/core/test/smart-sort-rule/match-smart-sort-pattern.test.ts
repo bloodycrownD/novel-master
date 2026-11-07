@@ -16,6 +16,7 @@ import {
   FIXED_MIN_SORT_TUPLE,
   formatSortTupleForDisplay,
 } from "../../src/domain/workplace/logic/smart-sort.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 function ok(
   result: ReturnType<typeof matchSmartSortPattern>
@@ -183,7 +184,7 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
       "fixed_min"
     );
     ok(minNoGroup);
-    assert.equal(minNoGroup.matches[0]!.tuple, "(固定最小,)");
+    assert.deepEqual(minNoGroup.matches[0]!.tuple, {key: "label.smart_sort.pinned_min"});
     // 捕获组可解析 + fixed_max：捕获组被忽略，仍显哨兵文案。
     const maxWithGroup = matchSmartSortPattern(
       "^(番外|外传)([0-9]*)",
@@ -193,7 +194,7 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
     );
     ok(maxWithGroup);
     assert.equal(maxWithGroup.matches[0]!.groups.length, 2);
-    assert.equal(maxWithGroup.matches[0]!.tuple, "(固定最大,)");
+    assert.deepEqual(maxWithGroup.matches[0]!.tuple, {key: "label.smart_sort.pinned_max"});
     // 捕获组不可解析 + fixed：不影响 tuple（哨兵优先，不参与转换）。
     const minUnparsable = matchSmartSortPattern(
       "^(终章|尾声)(\\S*)",
@@ -202,20 +203,20 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
       "fixed_max"
     );
     ok(minUnparsable);
-    assert.equal(minUnparsable.matches[0]!.tuple, "(固定最大,)");
+    assert.deepEqual(minUnparsable.matches[0]!.tuple, {key: "label.smart_sort.pinned_max"});
   });
 
   it("tuple 文案与 formatSortTupleForDisplay 同源（C-3 单源锁定）", () => {
     // match 通道不再内联哨兵文案：三档 tuple 必须与权威实现输出逐字一致。
     const min = matchSmartSortPattern("^(序章?|楔子)", "", "序章", "fixed_min");
     ok(min);
-    assert.equal(
+    assert.deepEqual(
       min.matches[0]!.tuple,
       formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE)
     );
     const max = matchSmartSortPattern("^(番外)", "", "番外", "fixed_max");
     ok(max);
-    assert.equal(
+    assert.deepEqual(
       max.matches[0]!.tuple,
       formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE)
     );
@@ -225,6 +226,20 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
       "第2卷第13章"
     );
     ok(smart);
-    assert.equal(smart.matches[0]!.tuple, formatSortTupleForDisplay([2, 13]));
+    assert.equal(tCore(smart.matches[0]!.tuple!), tCore(formatSortTupleForDisplay([2, 13])));
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

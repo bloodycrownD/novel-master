@@ -39,7 +39,7 @@ function decodeLatin1(bytes: Uint8Array): string {
 
 function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardError> {
   if (!isRecord(card)) {
-    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
   }
   const spec = card["spec"];
   const dataRaw = card["data"];
@@ -47,9 +47,9 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardE
   const recognizable = spec === SPEC_V2 || data != null || typeof card["description"] === "string" || typeof card["first_mes"] === "string" || isRecord(card["character_book"]);
   if (!recognizable) {
     if (typeof spec === "string" && spec.length > 0) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_UNSUPPORTED_SPEC", `不支持的角色卡规格: ${spec}`));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_UNSUPPORTED_SPEC", { key: "error.vfs.character_card_unsupported_spec", params: { spec } }));
     }
-    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
   }
 
   const descriptionRaw = data?.["description"];
@@ -106,7 +106,7 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
   if (typeof input === "string") {
     const parsed = parseJsonText(input);
     if (!parsed.ok) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
     }
     return characterCardJsonToMdTree(parsed.value);
   }
@@ -121,7 +121,7 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
       const dataEnd = dataStart + length;
       const crcEnd = dataEnd + 4;
       if (crcEnd > input.length) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
       }
 
       const type = decodeLatin1(input.subarray(typeStart, typeStart + 4));
@@ -138,17 +138,17 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
       offset = crcEnd;
     }
     if (charaText == null || charaText.length === 0) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
     }
     let jsonText: string;
     try {
       jsonText = new TextDecoder("utf-8").decode(base64ToBytes(charaText));
     } catch {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
     }
     const parsed = parseJsonText(jsonText);
     if (!parsed.ok) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
     }
     return characterCardJsonToMdTree(parsed.value);
   }
@@ -157,11 +157,11 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
   try {
     text = new TextDecoder("utf-8").decode(payload);
   } catch {
-    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
   }
   const parsed = parseJsonText(text);
   if (!parsed.ok) {
-    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
+    return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { key: "error.vfs.character_card_unrecognized" }));
   }
   return characterCardJsonToMdTree(parsed.value);
 }

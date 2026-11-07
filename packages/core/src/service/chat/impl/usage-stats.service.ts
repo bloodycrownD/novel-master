@@ -138,7 +138,7 @@ function parseDayLocalDate(
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
     throw chatInvalidArgument(
-      `${label} 须为 YYYY-MM-DD 格式，收到：${dayLocalDate}`
+      {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}}
     );
   }
   const year = Number(match[1]);
@@ -150,7 +150,7 @@ function parseDayLocalDate(
     probe.getMonth() !== month ||
     probe.getDate() !== day
   ) {
-    throw chatInvalidArgument(`${label} 不是有效日期：${dayLocalDate}`);
+    throw chatInvalidArgument({key: "error.usage.invalid_day", params: {field: label, value: dayLocalDate}});
   }
   return { year, month, day };
 }
@@ -208,7 +208,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]> {
     // 日桶序列需要界（桶数随天数线性膨胀），护栏挂在这条查询上而非区间类型。
     if (filter.range == null) {
-      throw chatInvalidArgument("getDailyBuckets 必须提供 range（日桶序列需要界）");
+      throw chatInvalidArgument({key: "error.usage.daily_buckets_range_required"});
     }
     const { fromMs, toMs } = this.resolveDayRangeMs(filter.range);
     // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
@@ -363,14 +363,14 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
       throw chatInvalidArgument(
-        `流水分页 limit 须为 1–200，收到：${page.limit}`
+        {key: "error.usage.invalid_page_limit", params: {value: page.limit}}
       );
     }
     // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
     // 直接抛错），与 limit 同构提前拒收。
     if (!Number.isFinite(page.offset)) {
       throw chatInvalidArgument(
-        `流水分页 offset 须为有限数值，收到：${page.offset}`
+        {key: "error.usage.invalid_page_offset", params: {value: page.offset}}
       );
     }
     const offset = Math.max(0, Math.floor(page.offset));
@@ -448,7 +448,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
     if (typeof sessionId !== "string" || sessionId.length === 0) {
       throw chatInvalidArgument(
-        `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
+        {key: "error.usage.session_id_required", params: {value: String(sessionId)}}
       );
     }
     // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
@@ -585,7 +585,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const toStart = new Date(to.year, to.month, to.day);
     if (fromStart.getTime() > toStart.getTime()) {
       throw chatInvalidArgument(
-        `fromDay 不能晚于 toDay：${range.fromDay} > ${range.toDay}`
+        {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}}
       );
     }
     return {

@@ -87,7 +87,7 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
   if (entryRepo != null && entryId != null) {
     const meta = prefetch?.revisionMetaByKey != null ? prefetch.revisionMetaByKey.get(revisionPairKey(entryId, version)) ?? null : await revisionRepo.findMetaByEntryAndVersion(entryId, version);
     if (meta == null) {
-      return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+      return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
     }
     if (meta.status === "deleted") {
       try {
@@ -114,12 +114,12 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
     if (entryRepo != null && cpEntryId != null) {
       return reviveDeletedEntryForRestore({ vfs, entryRepo, revisionRepo, contentStore }, scope, logicalPath, cpEntryId, version);
     }
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
 
   const rev = await revisionRepo.findByEntryAndVersion(entryId, version);
   if (rev == null) {
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
 
   if (rev.status === "deleted") {
@@ -139,7 +139,7 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
   }
   // find* 已按 ContentStore 解出明文；禁止再用 ?? "" 把未解 NULL 当空串。
   if (rev.content == null) {
-    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, { logicalPath, revisionVersion: version }));
   }
   await vfs.resetHeadToVersion(logicalPath, version);
   return Result.ok("restored");

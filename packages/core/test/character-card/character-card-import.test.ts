@@ -34,6 +34,7 @@ import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/ch
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -816,7 +817,7 @@ describe("CharacterCardImportService", () => {
       (e: unknown) => {
         assert.ok(e instanceof AppError);
         assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(e.message.includes("48"));
+        assert.ok(renderError(e).includes("48"));
         return true;
       },
     );
@@ -853,7 +854,7 @@ describe("CharacterCardImportService", () => {
       (e: unknown) => {
         assert.ok(e instanceof AppError);
         assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(e.message.includes("单文件上限"));
+        assert.ok(renderError(e).includes("单文件上限"));
         return true;
       },
     );
@@ -887,7 +888,7 @@ describe("CharacterCardImportService", () => {
       (e: unknown) => {
         assert.ok(e instanceof AppError);
         assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(e.message.includes("条目数上限"));
+        assert.ok(renderError(e).includes("条目数上限"));
         return true;
       },
     );
@@ -922,10 +923,24 @@ describe("CharacterCardImportService", () => {
       (e: unknown) => {
         assert.ok(e instanceof AppError);
         assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(e.message.includes("总量上限"));
+        assert.ok(renderError(e).includes("总量上限"));
         return true;
       },
     );
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

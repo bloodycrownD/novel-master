@@ -45,6 +45,6 @@ export async function expandDynamicMacros(content: string, ctx: DynamicMacroCont
     return Result.ok(renderMacro(content, { dot: {}, root }));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", `dynamic 宏展开失败：${detail}`, { cause: error }));
+    return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.macro_expand_failed", params: { detail } }, { cause: error }));
   }
 }

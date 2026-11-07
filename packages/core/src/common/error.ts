@@ -8,9 +8,9 @@
  */
 
 import {TdbcError} from "../infra/tdbc/errors.js";
-
-/** 智能排序规则 YAML 导入失败时给用户看的标签（两端 app 共用这一份字面量）。 */
-const SMART_SORT_IMPORT_YAML_INVALID_LABEL = "智能排序规则 YAML 无效";
+import type {MessageParams} from "./i18n.js";
+import type {CoreMessageDescriptor, CoreMessageKey} from "../i18n/keys.js";
+import {resolveLocalizedMessage} from "../i18n/localized-message.js";
 
 /**
  * 取错误文案：`Error` 取其 `message`，其余（含 `null`、字符串、对象）一律
@@ -29,12 +29,35 @@ export function errorText(error: unknown): string {
 }
 
 /**
+ * normalizeYamlError 的 descriptor 通道产品：`message` 取 key 原文，
+ * `messageKey`/`messageParams` 供边界 `userMessageOf` + translator 翻译。
+ */
+class LocalizedYamlError extends Error {
+    readonly messageKey: CoreMessageKey;
+    readonly messageParams: MessageParams;
+
+    constructor(descriptor: CoreMessageDescriptor) {
+        super(resolveLocalizedMessage(descriptor).text);
+        this.name = "LocalizedYamlError";
+        this.messageKey = descriptor.key;
+        this.messageParams = descriptor.params ?? {};
+    }
+}
+
+/**
  * 把任意错误归一成 `Error`，并在前面拼上业务 fallback 文案。
  *
  * 跨端 YAML 导入导出都会用这个函数把 decode / 落库阶段的异常统一包装，
  * 这样调用方拿到的永远是带上下文提示的 Error，不用各自再判一次类型。
+ *
+ * fallback 传 descriptor 时走 i18n 通道（spec §5 G1.9）：原错误文本经
+ * {@link errorText} 进 `{reason}` 参数，不做字符串拼接；传 string 时保持
+ * 旧的 `fallback：message` 拼接（apps 侧自有 fallback 文案仍走这条通道）。
  */
-export function normalizeYamlError(error: unknown, fallback: string): Error {
+export function normalizeYamlError(error: unknown, fallback: string | CoreMessageDescriptor): Error {
+    if (typeof fallback !== "string") {
+        return new LocalizedYamlError({key: fallback.key, params: {...fallback.params, reason: errorText(error)}});
+    }
     if (error instanceof Error) {
         return new Error(`${fallback}：${error.message}`);
     }
@@ -46,7 +69,8 @@ export function normalizeYamlError(error: unknown, fallback: string): Error {
  *
  * - 存储/事务类故障（{@link TdbcError}）**原样返回**：`importRules` 整体包
  *   一条事务，中途失败即回滚；套上「YAML 无效」前缀会把 DB 故障误报成用户格式错误。
- * - 其余（YAML 语法错 / schema 违规）照旧套 {@link SMART_SORT_IMPORT_YAML_INVALID_LABEL} 前缀。
+ * - 其余（YAML 语法错 / schema 违规）套 `error.smart_sort_rule.import_yaml_invalid`
+ *   （原错误文本进 `{reason}` 参数，不拼接）。
  *
  * @remarks 这段「存储/事务类故障原样上抛、其余套『YAML 无效』前缀」的判据，
  *   此前在 desktop（`src/main/services/smart-sort-rule-yaml.service.ts`）与
@@ -77,5 +101,5 @@ export function normalizeSmartSortImportError(error: unknown): Error {
     if (error instanceof TdbcError) {
         return error;
     }
-    return normalizeYamlError(error, SMART_SORT_IMPORT_YAML_INVALID_LABEL);
+    return normalizeYamlError(error, {key: "error.smart_sort_rule.import_yaml_invalid"});
 }

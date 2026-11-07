@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "./app-error.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 
 /** 会话 / 项目 / 消息不存在。 */
 export function chatNotFound(kind: string, id: string, options?: { projectId?: string; sessionId?: string }): AppError<"CHAT_NOT_FOUND"> {
@@ -17,7 +18,7 @@ export function chatNotFound(kind: string, id: string, options?: { projectId?: s
   });
 }
 
-/** Chat 操作入参非法。 */
-export function chatInvalidArgument(message: string): AppError<"CHAT_INVALID_ARGUMENT"> {
+/** Chat 操作入参非法（message 可为 descriptor，如 usage.* 校验文案）。 */
+export function chatInvalidArgument(message: string | CoreMessageDescriptor): AppError<"CHAT_INVALID_ARGUMENT"> {
   return new AppError("CHAT_INVALID_ARGUMENT", message);
 }

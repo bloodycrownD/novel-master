@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("parseSkillFrontMatter（T-SK4）", () => {
   it("合法 front matter：name 与 description 齐全时有效", () => {
@@ -62,13 +63,13 @@ description: 一个写作辅助技能
       ["---", "name: [unclosed", "---", "", "正文"].join("\n"),
     );
     assert.equal(parsed.valid, false);
-    assert.match(parsed.invalidReason ?? "", /不可解析/);
+    assert.match(tCore(parsed.invalidReason!), /不可解析/);
   });
 
   it("缺少 front matter 时无效", () => {
     const parsed = parseSkillFrontMatter("# 只有正文\n没有 front matter");
     assert.equal(parsed.valid, false);
-    assert.match(parsed.invalidReason ?? "", /缺少 front matter/);
+    assert.match(tCore(parsed.invalidReason!), /缺少 front matter/);
   });
 
   it("未知键被 strict schema 拒绝（照 agent-definition 模式）", () => {
@@ -79,3 +80,17 @@ description: 一个写作辅助技能
     assert.ok(parsed.invalidReason != null);
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

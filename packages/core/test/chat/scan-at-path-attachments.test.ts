@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import { attachmentStorageName, messageAttachmentsSchema, type MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
@@ -120,7 +121,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
       assert.equal(r.ok, false);
       if (r.ok) continue;
       assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
-      assert.match(r.error.message, /附件路径/);
+      assert.match(renderError(r.error), /附件路径/);
       assert.equal(r.error.details?.path, paths[paths.length - 1]);
     }
   });
@@ -130,7 +131,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
     assert.equal(r.ok, false);
     if (r.ok) return;
     assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
-    assert.match(r.error.message, /Invalid path/);
+    assert.match(renderError(r.error), /Invalid path/);
     assert.equal(r.error.details?.path, "/../evil");
   });
 
@@ -151,3 +152,17 @@ describe("F-A4: mobile 双终止符明文 `@path@` 在 core 扫描下照常可�
     assert.equal(dir[0]!.path, "/notes/");
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

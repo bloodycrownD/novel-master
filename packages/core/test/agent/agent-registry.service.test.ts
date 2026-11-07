@@ -5,6 +5,7 @@ import { decode } from "@novel-master/core";
 import { AppError, createAgentRegistryService, agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -71,7 +72,7 @@ describe("AgentRegistryService", () => {
     } as unknown as AgentDefinition;
     await assert.rejects(
       () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.name 必填/.test(e.message)
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required"
     );
     // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
     const defs = await registry.list();
@@ -114,7 +115,7 @@ describe("AgentRegistryService", () => {
           name: "坏形状-字符串",
           prompts: "你是翻译",
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
     );
     await assert.rejects(
       () => registry.get(id),
@@ -132,7 +133,7 @@ describe("AgentRegistryService", () => {
           name: "坏形状-数组",
           prompts: [{ persist: [], dynamic: [] }],
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
     );
     await assert.rejects(
       () => registry.get(id),
@@ -150,7 +151,7 @@ describe("AgentRegistryService", () => {
           name: "坏形状-数字",
           prompts: 42,
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
     );
     await assert.rejects(
       () => registry.get(id),
@@ -194,7 +195,7 @@ describe("AgentRegistryService", () => {
     await registry.upsert("writer-a", def);
     await assert.rejects(
       () => registry.upsert("writer-b", def),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.message === "Agent 名称已存在"
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name"
     );
   });
 
@@ -301,3 +302,17 @@ describe("AgentRegistryService", () => {
     assert.equal(await ctx.state.getCurrentAgentId(), "agent-a");
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

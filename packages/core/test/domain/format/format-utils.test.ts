@@ -4,7 +4,15 @@ import { formatCharCount } from "../../../src/domain/format/format-char-count.js
 import {
   buildStreamMetricsLine,
   formatStreamElapsed,
+  type StreamMetricsLineInput,
 } from "../../../src/domain/format/format-stream-metrics-line.js";
+import { tCore } from "../../helpers/core-i18n.js";
+
+/** parts → 整行（消费方形态：`{prefix} · {elapsed} · {body}`，descriptor 经 tCore 渲染）。 */
+function renderMetricsLine(metrics: StreamMetricsLineInput): string {
+  const parts = buildStreamMetricsLine(metrics);
+  return `${tCore(parts.prefix)} · ${parts.elapsed} · ${tCore(parts.body)}`;
+}
 
 describe("formatCharCount", () => {
   it("uses zh-CN grouping", () => {
@@ -27,9 +35,9 @@ describe("formatStreamElapsed（core-metrics/C-2：core 单点实现，双端复
   });
 });
 
-describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
+describe("buildStreamMetricsLine（T-M8 文案快照，经 tCore 渲染拼装）", () => {
   it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + tok/s 惯例）", () => {
-    const line = buildStreamMetricsLine({
+    const line = renderMetricsLine({
       running: true,
       elapsedMs: 12_300,
       completionTokens: 1_234,
@@ -39,7 +47,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
   });
 
   it("无速率样本时省略速率段（仅输出 token）", () => {
-    const line = buildStreamMetricsLine({
+    const line = renderMetricsLine({
       running: false,
       elapsedMs: 61_000,
       completionTokens: 2_500,
@@ -50,7 +58,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
 
   it("速率数字格式：≥100 取整数、否则一位小数", () => {
     assert.equal(
-      buildStreamMetricsLine({
+      renderMetricsLine({
         running: true,
         elapsedMs: 5_000,
         completionTokens: 600,
@@ -59,7 +67,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
       "生成中 · 5.0s · 输出 600 tok · 123 tok/s"
     );
     assert.equal(
-      buildStreamMetricsLine({
+      renderMetricsLine({
         running: true,
         elapsedMs: 5_000,
         completionTokens: 28,
@@ -70,7 +78,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
   });
 
   it("正文/思考不再分列（token 化改版后的形态锁定）", () => {
-    const line = buildStreamMetricsLine({
+    const line = renderMetricsLine({
       running: true,
       elapsedMs: 3_000,
       completionTokens: 90,

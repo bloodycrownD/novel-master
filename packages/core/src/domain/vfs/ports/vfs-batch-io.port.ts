@@ -4,6 +4,7 @@
  * @module domain/vfs/ports/vfs-batch-io.port
  */
 
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import type { VfsScope } from "../logic/vfs-path-mapper.js";
 
 /** 宿主传入的原始 ingest 条目（文件字节或显式空目录）。 */
@@ -40,10 +41,10 @@ export interface BatchApplyReport {
   readonly written: string[];
   /** 预检或策略性未写：非法 UTF-8、用户跳过冲突等；非异常 */
   readonly skipped: string[];
-  /** 执行期异常未写成功的项 */
+  /** 执行期异常未写成功的项（message 为失败原因文本或 descriptor，如 batch_ingest_partial） */
   readonly failed: ReadonlyArray<{
     readonly path: string;
-    readonly message: string;
+    readonly message: string | CoreMessageDescriptor;
   }>;
 }
 

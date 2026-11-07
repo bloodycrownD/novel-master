@@ -11,12 +11,13 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 
 /** assertValidVfsEntryName 的失败载荷。 */
 type VfsInvalidNameError = AppError<"VFS_INVALID_NAME">;
 
-/** {@link validateVfsEntryName} 的返回形态。 */
-export type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: string };
+/** {@link validateVfsEntryName} 的返回形态（reason 为 invalid_name.* descriptor）。 */
+export type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: CoreMessageDescriptor };
 
 /** C0（U+0000–U+001F，含 \n \r \t）、DEL（U+007F）与 C1（U+0080–U+009F）控制字符。 */
 // 校验目的就是拒绝控制字符，正则必须字面包含它们
@@ -34,16 +35,16 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
  */
 export function validateVfsEntryName(name: string): VfsEntryNameValidation {
   if (name === "." || name === "..") {
-    return { ok: false, reason: "文件名不能为 . 或 .." };
+    return { ok: false, reason: {key: "error.vfs.invalid_name.dotdot"} };
   }
   if (name.trim() === "") {
-    return { ok: false, reason: "文件名不能为空或纯空白" };
+    return { ok: false, reason: {key: "error.vfs.invalid_name.blank"} };
   }
   if (CONTROL_CHARS.test(name)) {
-    return { ok: false, reason: "文件名不能包含换行或控制字符" };
+    return { ok: false, reason: {key: "error.vfs.invalid_name.control_chars"} };
   }
   if (name !== name.trim()) {
-    return { ok: false, reason: "文件名不能以空格开头或结尾" };
+    return { ok: false, reason: {key: "error.vfs.invalid_name.edge_spaces"} };
   }
   return { ok: true };
 }

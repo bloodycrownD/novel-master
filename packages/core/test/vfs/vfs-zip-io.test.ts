@@ -18,6 +18,7 @@ import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix 
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
+import { tCore } from "../helpers/core-i18n.js";
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -992,3 +993,17 @@ describe("VfsZipIoService", () => {
     assert.deepEqual(await repo.listDirRules(`session:${session.id}`), []);
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

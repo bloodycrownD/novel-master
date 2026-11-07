@@ -20,6 +20,7 @@ import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
+import { tCore } from "../helpers/core-i18n.js";
 
 novelMasterTestFixture();
 
@@ -67,7 +68,7 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
       (e: unknown) =>
         e instanceof ToolError &&
         e.code === "INVALID_ARGUMENT" &&
-        e.message.includes("definition.name 必填"),
+        e.message.includes("error.agent.invalid_schema.name_required"),
     );
 
     // 拒绝后无落盘：持久化 id 集合与调用前一致（无 agent- 前缀新行）。
@@ -137,10 +138,24 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
       (e: unknown) =>
         e instanceof ToolError &&
         e.code === "INVALID_ARGUMENT" &&
-        e.message.includes("已存在"),
+        e.message.includes("error.agent.duplicate_name"),
     );
 
     await registry.delete(a);
     await registry.delete(b);
   });
 });
+
+/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
+function renderError(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
+  return textOf(error);
+}
+
+/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
+function textOf(error: unknown): string {
+  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
+  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
+  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
+  return e.message;
+}

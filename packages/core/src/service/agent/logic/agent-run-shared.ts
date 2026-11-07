@@ -7,6 +7,9 @@
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import { isAppError } from "@/errors/app-error.js";
+import type { MessageParams } from "@/common/i18n.js";
+import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
+import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /**
  * Agent run 共享的最小 runtime 表面。
@@ -29,9 +32,15 @@ export interface AgentRunRuntimePort {
 }
 
 export class AgentRunResolveError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly messageKey?: CoreMessageKey;
+  readonly messageParams?: MessageParams;
+
+  constructor(message: string | CoreMessageDescriptor) {
+    const localized = resolveLocalizedMessage(message);
+    super(localized.text);
     this.name = "AgentRunResolveError";
+    this.messageKey = localized.messageKey;
+    this.messageParams = localized.messageParams;
   }
 }
 
@@ -76,7 +85,7 @@ export async function resolveCurrentAgentDefinition(
   const agentId = await resolveCurrentAgentId(runtime);
   if (agentId == null || agentId === "") {
     throw new AgentRunResolveError(
-      "未配置 Agent。请先在「agent管理」中导入或创建 Agent。"
+      {key: "error.agent.not_configured"}
     );
   }
   try {
@@ -84,7 +93,7 @@ export async function resolveCurrentAgentDefinition(
     return { agentId, definition };
   } catch (error) {
     if (isAppError(error, "AGENT_NOT_FOUND")) {
-      throw new AgentRunResolveError(`Agent 不存在：${agentId}`);
+      throw new AgentRunResolveError({key: "error.agent.not_found", params: {agent_id: agentId}});
     }
     throw error;
   }
@@ -114,7 +123,7 @@ export async function resolveApplicationModelIdForRun(
   const resolved = definition.model ?? sessionModelId;
   if (resolved == null || resolved === "") {
     throw new AgentRunResolveError(
-      "未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。"
+      {key: "error.agent.model_not_set"}
     );
   }
   return { savedModelId: resolved, workspaceModelId };

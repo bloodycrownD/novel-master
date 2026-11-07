@@ -49,7 +49,7 @@ function validateProviderRow(row: Row, rowIndex: number): void {
   if (id == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行缺少非空 id`,
+      {key: "error.db_backup.provider_row_id_missing", params: {row_index: rowIndex}},
       { table, rowIndex }
     );
   }
@@ -57,28 +57,28 @@ function validateProviderRow(row: Row, rowIndex: number): void {
   if (protocol == null || !KNOWN_PROTOCOLS.has(protocol as LlmProtocolKind)) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行 protocol 非法：${String(row.protocol)}`,
+      {key: "error.db_backup.provider_row_protocol_invalid", params: {row_index: rowIndex, protocol: String(row.protocol)}},
       { table, rowIndex }
     );
   }
   if (nonEmptyString(row.base_url) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行 base_url 为空（id=${id}）`,
+      {key: "error.db_backup.provider_row_base_url_empty", params: {row_index: rowIndex, id}},
       { table, rowIndex }
     );
   }
   if (nonEmptyString(row.display_name) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行 display_name 为空（id=${id}）`,
+      {key: "error.db_backup.provider_row_display_name_empty", params: {row_index: rowIndex, id}},
       { table, rowIndex }
     );
   }
   if (asNumber(row.is_builtin) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行 is_builtin 不是数字（id=${id}）`,
+      {key: "error.db_backup.provider_row_is_builtin_not_number", params: {row_index: rowIndex, id}},
       { table, rowIndex }
     );
   }
@@ -88,7 +88,7 @@ function validateProviderRow(row: Row, rowIndex: number): void {
   ) {
     throw new ProviderTableSnapshotError(
       "INVALID_PROVIDER_ROW",
-      `llm_provider 第 ${rowIndex} 行时间戳缺失或非数字（id=${id}）`,
+      {key: "error.db_backup.provider_row_timestamp_invalid", params: {row_index: rowIndex, id}},
       { table, rowIndex }
     );
   }
@@ -113,28 +113,28 @@ function validateSavedModelRow(
   if (providerId == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SAVED_MODEL_ROW",
-      `llm_saved_model 第 ${rowIndex} 行 provider_id 为空`,
+      {key: "error.db_backup.saved_model_row_provider_id_empty", params: {row_index: rowIndex}},
       { table, rowIndex }
     );
   }
   if (!knownProviderIds.has(providerId)) {
     throw new ProviderTableSnapshotError(
       "DANGLING_SAVED_MODEL",
-      `llm_saved_model 第 ${rowIndex} 行 provider_id=${providerId} 在快照内找不到对应 llm_provider`,
+      {key: "error.db_backup.dangling_saved_model", params: {row_index: rowIndex, provider_id: providerId}},
       { table, rowIndex }
     );
   }
   if (nonEmptyString(row.vendor_model_id) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SAVED_MODEL_ROW",
-      `llm_saved_model 第 ${rowIndex} 行 vendor_model_id 为空（provider_id=${providerId}）`,
+      {key: "error.db_backup.saved_model_row_vendor_model_id_empty", params: {row_index: rowIndex, provider_id: providerId}},
       { table, rowIndex }
     );
   }
   if (asString(row.settings_json) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SAVED_MODEL_ROW",
-      `llm_saved_model 第 ${rowIndex} 行 settings_json 缺失（provider_id=${providerId}）`,
+      {key: "error.db_backup.saved_model_row_settings_json_missing", params: {row_index: rowIndex, provider_id: providerId}},
       { table, rowIndex }
     );
   }
@@ -147,28 +147,28 @@ function validateSecretRow(row: Row, rowIndex: number): void {
   if (ref == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SECRET_ROW",
-      `sksp_secrets 第 ${rowIndex} 行缺少非空 ref`,
+      {key: "error.db_backup.secret_row_ref_missing", params: {row_index: rowIndex}},
       { table, rowIndex }
     );
   }
   if (row.ciphertext == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SECRET_ROW",
-      `sksp_secrets 第 ${rowIndex} 行 ciphertext 缺失（ref=${ref}）`,
+      {key: "error.db_backup.secret_row_ciphertext_missing", params: {row_index: rowIndex, ref}},
       { table, rowIndex }
     );
   }
   if (nonEmptyString(row.algo) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SECRET_ROW",
-      `sksp_secrets 第 ${rowIndex} 行 algo 为空（ref=${ref}）`,
+      {key: "error.db_backup.secret_row_algo_empty", params: {row_index: rowIndex, ref}},
       { table, rowIndex }
     );
   }
   if (asNumber(row.version) == null) {
     throw new ProviderTableSnapshotError(
       "INVALID_SECRET_ROW",
-      `sksp_secrets 第 ${rowIndex} 行 version 不是数字（ref=${ref}）`,
+      {key: "error.db_backup.secret_row_version_not_number", params: {row_index: rowIndex, ref}},
       { table, rowIndex }
     );
   }
