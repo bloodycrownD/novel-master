@@ -20,6 +20,7 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 export { layoutHasWorkplace };
 
 /** {@link assembleWorkplaceDisplay} 依赖。 */
+// nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
 export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
   readonly workplace: WorkplaceService;
@@ -29,6 +30,7 @@ export interface AssembleWorkplaceDisplayDeps {
 }
 
 /** {@link assembleWorkplaceDisplay} 返回值。 */
+// nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
 export interface AssembleWorkplaceDisplayResult {
   /** 常驻前缀展示文本（给模型看的 workplace 块）。 */
   readonly workplaceDisplay: string;
@@ -73,7 +75,7 @@ export interface AssembleWorkplaceDisplayResult {
 }
 
 /** 组装产出的单文件结构（预览侧 workplace 二级卡数据源）。 */
-export interface WorkplaceAssembledFile {
+interface WorkplaceAssembledFile {
   /** VFS 逻辑路径（规则快照条目原值）。 */
   readonly path: string;
   /** 展示档（`full` / `header` / `filename`，快照条目原值）。 */
@@ -106,6 +108,7 @@ export class WorkplaceAssemblyAbortedError extends Error {
 }
 
 /** {@link assembleWorkplaceDisplay} 可选参数。 */
+// nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
 export interface AssembleWorkplaceDisplayOptions {
   /**
    * rule_snapshot / file_cache 的 KKV 归属 session id；缺省用 `scope.sessionId`。
@@ -192,7 +195,9 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
     if (options?.shouldStop?.() === true) {
       throw new WorkplaceAssemblyAbortedError();
     }
-    const normalized = resolveLogicalPath(entry.path);
+    const resolved = resolveLogicalPath(entry.path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     // 全量可见集（workplace 省略判定用，= 旧 prefixPaths 语义）。
     visiblePaths.push(normalized);
     // S0 入集（attach 去重用）：只有 full 档真正把全文注入了提示词，

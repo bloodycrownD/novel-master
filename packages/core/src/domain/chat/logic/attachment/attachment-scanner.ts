@@ -129,14 +129,9 @@ class AttachmentScanner {
       if (typeof raw !== "string" || raw.trim() === "") {
         return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { key: "error.chat.attachment_path_blank" }, { path: raw }));
       }
-      let seenKey: string;
-      try {
-        seenKey = resolveLogicalPath(raw);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", message, { path: raw }));
-      }
-      const base = attachFromPath(raw, seenKey);
+      const resolved = resolveLogicalPath(raw);
+      if (!resolved.ok) return Result.err(new AppError("CHAT_INVALID_ARGUMENT", resolved.error.message, { path: raw }));
+      const base = attachFromPath(raw, resolved.value);
       materialized.push({
         ...base,
         name: attachmentStorageName(base.path),

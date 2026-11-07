@@ -17,10 +17,10 @@ export const SKILLS_ROOT = "/meta/skills";
 export const SKILL_ENTRY_FILE = "SKILL.md";
 
 /** 相对路径解析失败原因（service 层据此映射报错文案）。 */
-export type SkillRelPathInvalidReason = "empty" | "dotdot" | "escape";
+type SkillRelPathInvalidReason = "empty" | "dotdot" | "escape";
 
 /** {@link resolveSkillRelPathCore} 结果：ok 时带相对技能目录的归一化路径。 */
-export type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { readonly ok: false; readonly reason: SkillRelPathInvalidReason };
+type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { readonly ok: false; readonly reason: SkillRelPathInvalidReason };
 
 /**
  * 把技能内相对路径解析为受控形态：缺省 SKILL.md，禁 `..` 段，
@@ -43,10 +43,12 @@ export function resolveSkillRelPathCore(name: string, path: string | undefined):
   }
   const dirPrefix = `${SKILLS_ROOT}/${name}/`;
   // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，normalizePath
-  // 没有“越过根”的 throw 路径，剩余失败只有“归一化后跑到技能目录外”。
+  // 的 Err（越过根）在正常技能名下不可达；仍按迁移前的抛错口径透传，时机不变。
+  // 剩余失败只有“归一化后跑到技能目录外”。
   const logical = resolveLogicalPath(`${dirPrefix}${raw}`);
-  if (!logical.startsWith(dirPrefix)) {
+  if (!logical.ok) throw logical.error;
+  if (!logical.value.startsWith(dirPrefix)) {
     return { ok: false, reason: "escape" };
   }
-  return { ok: true, rel: logical.slice(dirPrefix.length) };
+  return { ok: true, rel: logical.value.slice(dirPrefix.length) };
 }

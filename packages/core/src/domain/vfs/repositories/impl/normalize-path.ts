@@ -4,21 +4,23 @@
  * @module domain/vfs/repositories/impl/normalize-path
  */
 
-import { vfsInvalidPath } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * Normalizes a path to absolute POSIX form: leading `/`, no trailing slash (except `/`).
  *
- * @throws {import("../../../../errors/vfs-errors.js").VfsError} `INVALID_PATH`
+ * @returns 规范化路径；空串 / 非绝对路径 / 越过根时返回 `VFS_INVALID_PATH`
  */
-export function normalizePath(path: string): string {
+export function normalizePath(path: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   if (typeof path !== "string" || path.length === 0) {
-    throw vfsInvalidPath(String(path), "path must be a non-empty string");
+    const raw = String(path);
+    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${raw}: path must be a non-empty string`, { path: raw }));
   }
 
   const normalized = path.replace(/\\/g, "/");
   if (!normalized.startsWith("/")) {
-    throw vfsInvalidPath(path, "path must start with /");
+    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${path}: path must start with /`, { path }));
   }
 
   const segments = normalized.split("/");
@@ -30,7 +32,7 @@ export function normalizePath(path: string): string {
     }
     if (segment === "..") {
       if (stack.length === 0) {
-        throw vfsInvalidPath(path, "path escapes above root");
+        return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${path}: path escapes above root`, { path }));
       }
       stack.pop();
       continue;
@@ -39,8 +41,8 @@ export function normalizePath(path: string): string {
   }
 
   if (stack.length === 0) {
-    return "/";
+    return Result.ok("/");
   }
 
-  return `/${stack.join("/")}`;
+  return Result.ok(`/${stack.join("/")}`);
 }

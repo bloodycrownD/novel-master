@@ -4,10 +4,15 @@ import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysical
 import { scopeKey, scopePhysicalPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
+/** 解包 Result 成功分支；失败直接让测试失败。 */
+function unwrapPath(result: ReturnType<typeof resolveLogicalPath>): string {
+  return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
+}
+
 describe("vfs-path-mapper", () => {
   it("resolveLogicalPath normalizes relative input", () => {
-    assert.equal(resolveLogicalPath("notes/a.md"), "/notes/a.md");
-    assert.equal(resolveLogicalPath("/notes/a.md"), "/notes/a.md");
+    assert.equal(unwrapPath(resolveLogicalPath("notes/a.md")), "/notes/a.md");
+    assert.equal(unwrapPath(resolveLogicalPath("/notes/a.md")), "/notes/a.md");
   });
 
   it("global toPhysicalPath maps logical root to /template", () => {

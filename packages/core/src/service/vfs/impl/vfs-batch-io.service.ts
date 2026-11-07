@@ -119,7 +119,9 @@ function detectIngestTypeConflict(rel: string, kind: "file" | "directory", pathK
 }
 
 function basenameOf(logical: string): string {
-  const path = resolveLogicalPath(logical);
+  const resolved = resolveLogicalPath(logical);
+  if (!resolved.ok) throwLegacyVfs(resolved.error);
+  const path = resolved.value;
   if (path === "/") {
     return "";
   }
@@ -135,7 +137,9 @@ function basenameOf(logical: string): string {
  * 调用方会 `continue` 掉，单选一个文件会被整个丢掉。
  */
 function parentLogicalOf(logical: string): string {
-  const path = resolveLogicalPath(logical);
+  const resolved = resolveLogicalPath(logical);
+  if (!resolved.ok) throwLegacyVfs(resolved.error);
+  const path = resolved.value;
   const i = path.lastIndexOf("/");
   return i <= 0 ? "/" : path.slice(0, i);
 }
@@ -157,7 +161,7 @@ function exportRelativePath(childLogical: string, anchorLogical: string, selecti
   return under.length === 0 ? rootName : `${rootName}/${under}`;
 }
 
-export type DefaultVfsBatchIoServiceOptions = {
+type DefaultVfsBatchIoServiceOptions = {
   /** @internal 回滚单测专用 */
   readonly testHook?: VfsBatchImportTestHook;
   /**
@@ -177,7 +181,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
   }
 
   async planBatchIngest(scope: VfsScope, targetDir: string, entries: readonly BatchIngestRawEntry[]): Promise<BatchIngestPlan> {
-    const target = resolveLogicalPath(targetDir);
+    const resolvedTarget = resolveLogicalPath(targetDir);
+    if (!resolvedTarget.ok) throwLegacyVfs(resolvedTarget.error);
+    const target = resolvedTarget.value;
     assertLogicalPathAllowed(scope, target);
 
     const writes: BatchIngestPlanEntry[] = [];
@@ -260,7 +266,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       return emptyReport([...skippedBase, ...plan.conflicts.map((c) => c.logicalPath)]);
     }
 
-    const target = resolveLogicalPath(_targetDir);
+    const resolvedTarget = resolveLogicalPath(_targetDir);
+    if (!resolvedTarget.ok) throwLegacyVfs(resolvedTarget.error);
+    const target = resolvedTarget.value;
     const writtenLogical: string[] = [];
 
     // 分片提交（CS-05）：段 B0 = mkdir 行独立短事务；段 B1..Bk = 每片 ≤200 个
@@ -373,7 +381,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       return { written: [], skipped, failed: [] };
     }
 
-    const target = resolveLogicalPath(targetDir);
+    const resolvedTarget = resolveLogicalPath(targetDir);
+    if (!resolvedTarget.ok) throwLegacyVfs(resolvedTarget.error);
+    const target = resolvedTarget.value;
     const written: string[] = [];
     const failed: Array<{ path: string; message: string }> = [];
 
@@ -439,7 +449,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     const sk = scopeKey(scope);
 
     for (const raw of logicalPaths) {
-      const logical = resolveLogicalPath(raw);
+      const resolved = resolveLogicalPath(raw);
+      if (!resolved.ok) throwLegacyVfs(resolved.error);
+      const logical = resolved.value;
       assertLogicalPathAllowed(scope, logical);
       const existing = await this.repo.findByPath(sk, logical);
 

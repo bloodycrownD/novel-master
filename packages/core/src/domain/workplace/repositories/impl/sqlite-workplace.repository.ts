@@ -47,7 +47,9 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async upsertDirRule(rule: WorkplaceDirRule): Promise<void> {
-    const logicalPath = normalizePath(rule.logicalPath);
+    const resolved = normalizePath(rule.logicalPath);
+    if (!resolved.ok) throw resolved.error;
+    const logicalPath = resolved.value;
         const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
         head_count, tail_count, fill_policy
@@ -75,7 +77,9 @@ await executeTemplate(this.conn, this.parser, sql28, {
   }
 
   async upsertFileRule(rule: WorkplaceFileRule): Promise<void> {
-    const logicalPath = normalizePath(rule.logicalPath);
+    const resolved = normalizePath(rule.logicalPath);
+    if (!resolved.ok) throw resolved.error;
+    const logicalPath = resolved.value;
         const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
        ON CONFLICT(scope_key, logical_path) DO UPDATE SET
@@ -107,7 +111,12 @@ await executeTemplate(this.conn, this.parser, sql29, {
         head_count = excluded.head_count,
         tail_count = excluded.tail_count,
         fill_policy = excluded.fill_policy`;
-    const paramsList = rules.map((rule) => [rule.scopeKey, normalizePath(rule.logicalPath), rule.ruleEnabled ? 1 : 0, rule.sortField, rule.sortOrder, rule.headCount, rule.tailCount, rule.fillPolicy]);
+    const paramsList: unknown[][] = [];
+    for (const rule of rules) {
+      const resolved = normalizePath(rule.logicalPath);
+      if (!resolved.ok) throw resolved.error;
+      paramsList.push([rule.scopeKey, resolved.value, rule.ruleEnabled ? 1 : 0, rule.sortField, rule.sortOrder, rule.headCount, rule.tailCount, rule.fillPolicy]);
+    }
     await this.conn.batch(sql, paramsList);
   }
 
@@ -120,7 +129,12 @@ await executeTemplate(this.conn, this.parser, sql29, {
       VALUES (?, ?, ?)
       ON CONFLICT(scope_key, logical_path) DO UPDATE SET
         inclusion_mode = excluded.inclusion_mode`;
-    const paramsList = rules.map((rule) => [rule.scopeKey, normalizePath(rule.logicalPath), rule.inclusionMode]);
+    const paramsList: unknown[][] = [];
+    for (const rule of rules) {
+      const resolved = normalizePath(rule.logicalPath);
+      if (!resolved.ok) throw resolved.error;
+      paramsList.push([rule.scopeKey, resolved.value, rule.inclusionMode]);
+    }
     await this.conn.batch(sql, paramsList);
   }
 
@@ -149,7 +163,9 @@ const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
-const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: normalizePath(logicalPath) });
+    const resolved = normalizePath(logicalPath);
+    if (!resolved.ok) throw resolved.error;
+const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return null;
     }
@@ -160,7 +176,9 @@ const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logi
         const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
-const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: normalizePath(logicalPath) });
+    const resolved = normalizePath(logicalPath);
+    if (!resolved.ok) throw resolved.error;
+const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return null;
     }
@@ -188,7 +206,9 @@ const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logi
   }
 
   async deleteRulesUnderLogicalPrefix(scopeKey: string, logicalPrefix: string): Promise<void> {
-    const base = normalizePath(logicalPrefix);
+    const resolved = normalizePath(logicalPrefix);
+    if (!resolved.ok) throw resolved.error;
+    const base = resolved.value;
     const escaped = escapeLike(base);
     const childPattern = `${escaped}/%`;
         const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
@@ -202,8 +222,12 @@ await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, chi
   }
 
   async renameRulesUnderLogicalPrefix(scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
-    const oldBase = normalizePath(oldPrefix);
-    const newBase = normalizePath(newPrefix);
+    const oldResolved = normalizePath(oldPrefix);
+    if (!oldResolved.ok) throw oldResolved.error;
+    const newResolved = normalizePath(newPrefix);
+    if (!newResolved.ok) throw newResolved.error;
+    const oldBase = oldResolved.value;
+    const newBase = newResolved.value;
     const escaped = escapeLike(oldBase);
     const childPattern = `${escaped}/%`;
     const matchClause = "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";

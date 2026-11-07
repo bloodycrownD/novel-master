@@ -11,7 +11,12 @@ import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 
-/** 父目录链重建失败：路径被同名文件占用。 */
+/**
+ * 父目录链重建失败：路径被同名文件占用。
+ *
+ * 非法路径（`VFS_INVALID_PATH`）在入口按旧实现抛错，不进这个错误联合：抛错
+ * 时机与迁移前一致，也不扩宽 `RestorePathError`（其消费方不在本文件内）。
+ */
 type EnsureDirectoryChainError = AppError<"VFS_NOT_A_DIRECTORY">;
 
 /**
@@ -23,8 +28,9 @@ type EnsureDirectoryChainError = AppError<"VFS_NOT_A_DIRECTORY">;
  */
 export async function ensureDirectoryChain(vfs: VfsRestorePort, logicalPath: string): Promise<Result<void, EnsureDirectoryChainError>> {
   const normalized = normalizePath(logicalPath);
+  if (!normalized.ok) throw normalized.error;
   const dirs: string[] = [];
-  let current = parentDir(normalized);
+  let current = parentDir(normalized.value);
   while (current !== "/") {
     dirs.unshift(current);
     current = parentDir(current);

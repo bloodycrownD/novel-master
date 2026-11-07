@@ -4,6 +4,8 @@
  * @module domain/vfs/vfs-path-mapper
  */
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
@@ -46,13 +48,13 @@ function assertNormalizedPathAllowed(normalized: string): void {
  * Resolves caller path input to a normalized absolute logical path.
  *
  * @param input - Absolute (`/notes/a.md`) or relative (`notes/a.md`) path
- * @returns Normalized logical path under `/`
- * @throws {import("@/errors/vfs-errors.js").VfsError} `INVALID_PATH` when empty or invalid
+ * @returns Normalized logical path under `/`；空输入或 {@link normalizePath} 拒绝时返回
+ * `VFS_INVALID_PATH` 而非抛出
  */
-export function resolveLogicalPath(input: string): string {
+export function resolveLogicalPath(input: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
-    throw vfsInvalidPath(String(input), "path must be a non-empty string");
+    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${String(input)}: path must be a non-empty string`, { path: String(input) }));
   }
   if (trimmed.startsWith("/")) {
     return normalizePath(trimmed);
@@ -63,18 +65,23 @@ export function resolveLogicalPath(input: string): string {
 /**
  * Validates that a logical path is allowed for the given scope.
  *
- * @throws {import("@/errors/vfs-errors.js").VfsError} `INVALID_PATH`
+ * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀仍抛旧 `VfsError`
  */
 export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
-  const normalized = resolveLogicalPath(logical);
-  assertNormalizedPathAllowed(normalized);
+  const resolved = resolveLogicalPath(logical);
+  if (!resolved.ok) throw resolved.error;
+  assertNormalizedPathAllowed(resolved.value);
 }
 
 /**
  * Converts a caller logical path to the physical `vfs_entry.path`.
+ *
+ * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀仍抛旧 `VfsError`
  */
 export function toPhysicalPath(scope: VfsScope, logical: string): string {
-  const normalized = resolveLogicalPath(logical);
+  const resolved = resolveLogicalPath(logical);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   assertNormalizedPathAllowed(normalized);
   switch (scope.kind) {
     case "global":
@@ -113,10 +120,12 @@ export function toPhysicalPath(scope: VfsScope, logical: string): string {
 /**
  * Converts a physical path back to the logical path for the scope.
  *
- * @throws {import("@/errors/vfs-errors.js").VfsError} `INVALID_PATH` when out of scope
+ * @throws AppError<"VFS_INVALID_PATH"> 物理路径非法；越出 scope 时仍抛旧 `VfsError`
  */
 export function toLogicalPath(scope: VfsScope, physical: string): string {
-  const normalized = normalizePath(physical);
+  const resolved = normalizePath(physical);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   switch (scope.kind) {
     case "global": {
       if (normalized !== GLOBAL_PHYSICAL_PREFIX && !normalized.startsWith(`${GLOBAL_PHYSICAL_PREFIX}/`)) {

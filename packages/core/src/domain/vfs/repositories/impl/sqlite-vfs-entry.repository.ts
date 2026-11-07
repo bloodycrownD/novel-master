@@ -43,7 +43,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<VfsListEntry[]> {
-    const normalizedDir = normalizePath(dir);
+    const resolved = normalizePath(dir);
+    if (!resolved.ok) throw resolved.error;
+    const normalizedDir = resolved.value;
     const pattern = childLikePattern(normalizedDir);
     const sql27 = "SELECT path, entry_kind, head_version FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND path LIKE #{pattern} ESCAPE '\\'";
     const rows = await queryTemplate<{ path: string; entry_kind: string; head_version: number }>(this.conn, this.parser, sql27, { scopeKey, pattern });
@@ -85,7 +87,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async findByPath(scopeKey: string, path: string): Promise<VfsEntry | null> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const sql28 = "SELECT entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind\n       FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate(this.conn, this.parser, sql28, { scopeKey, path: normalized });
     if (rows.length === 0) {
@@ -95,7 +99,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async findContentHash(scopeKey: string, path: string): Promise<string | null> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const sql29 = "SELECT content_hash, entry_kind FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate<{ content_hash: string | null; entry_kind: string }>(this.conn, this.parser, sql29, { scopeKey, path: normalized });
     if (rows.length === 0) {
@@ -113,7 +119,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (paths.length === 0) {
       return result;
     }
-    const normalized = [...new Set(paths.map((path) => normalizePath(path)))];
+    const normalizedValues: string[] = [];
+    for (const path of paths) {
+      const resolved = normalizePath(path);
+      if (!resolved.ok) throw resolved.error;
+      normalizedValues.push(resolved.value);
+    }
+    const normalized = [...new Set(normalizedValues)];
     const chunkSize = 200;
     for (let offset = 0; offset < normalized.length; offset += chunkSize) {
       const chunk = normalized.slice(offset, offset + chunkSize);
@@ -145,7 +157,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async findContentSizeByPath(scopeKey: string, path: string): Promise<VfsContentSize | null> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）；
     // mtime 随行带回供占位块渲染真实时间（CR-1：避免 1970 假时间戳入提示词）
     const sql31 = "SELECT length(content) AS inline_chars, content_hash, entry_kind, mtime_ms\n       FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -200,7 +214,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<{ version: number }> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const mtimeMs = Date.now();
     const version = 1;
     const sql32 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')";
@@ -209,7 +225,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insertAtVersion(scopeKey: string, path: string, content: string, version: number): Promise<{ version: number }> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const mtimeMs = Date.now();
     const contentHash = await this.contentStore.put(content);
     const sql33 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')";
@@ -218,14 +236,18 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insertDirectory(scopeKey: string, path: string): Promise<void> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const mtimeMs = Date.now();
     const sql34 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, NULL, 1, #{mtimeMs}, 'directory')";
     await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: normalized, mtimeMs });
   }
 
   async reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<void> {
-    const normalized = normalizePath(input.path);
+    const resolved = normalizePath(input.path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const sql35 = "INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')";
     await executeTemplate(this.conn, this.parser, sql35, {
       entryId: input.entryId,
@@ -247,7 +269,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   private async applyContentHashUpdate(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<{ version: number }> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const mtimeMs = Date.now();
 
     const sql36 = "UPDATE vfs_entry\n       SET content = NULL,\n           content_hash = #{contentHash},\n           head_version = #{nextVersion},\n           mtime_ms = #{mtimeMs}\n       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'";
@@ -266,7 +290,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       contentHash: string;
       mtimeMs: number;
     }): Promise<void> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const sql37 = "SELECT entry_id FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const existing = await queryTemplate<{ entry_id: number }>(this.conn, this.parser, sql37, { scopeKey, path: normalized });
 
@@ -293,7 +319,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<number> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     const pattern = childLikePattern(normalized);
 
     if (!options.recursive) {
@@ -423,7 +451,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       return this.resolveScanRows(rows);
     }
 
-    const base = normalizePath(pathPrefix);
+    const resolved = normalizePath(pathPrefix);
+    if (!resolved.ok) throw resolved.error;
+    const base = resolved.value;
     const pattern = childLikePattern(base);
     const sql46 = "SELECT entry_id, path, content_hash FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const rows = await queryTemplate<{ entry_id: number; path: string; content_hash: string | null }>(this.conn, this.parser, sql46, { scopeKey, path: base, pattern });
@@ -451,7 +481,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       }));
     }
 
-    const base = normalizePath(pathPrefix);
+    const resolved = normalizePath(pathPrefix);
+    if (!resolved.ok) throw resolved.error;
+    const base = resolved.value;
     const pattern = childLikePattern(base);
     const sql48 = "SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const rows = await queryTemplate<{ entry_id: number; path: string; content_hash: string | null; head_version: number; mtime_ms: number }>(this.conn, this.parser, sql48, { scopeKey, path: base, pattern });
@@ -469,7 +501,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (paths.length === 0) {
       return result;
     }
-    const normalized = [...new Set(paths.map((p) => normalizePath(p)))];
+    const normalizedValues: string[] = [];
+    for (const p of paths) {
+      const resolved = normalizePath(p);
+      if (!resolved.ok) throw resolved.error;
+      normalizedValues.push(resolved.value);
+    }
+    const normalized = [...new Set(normalizedValues)];
     const chunkSize = 200;
     for (let offset = 0; offset < normalized.length; offset += chunkSize) {
       const chunk = normalized.slice(offset, offset + chunkSize);
@@ -496,7 +534,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }>): Promise<void> {
     if (entries.length === 0) return;
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
-    const paramsList = entries.map((e) => [scopeKey, normalizePath(e.path), e.contentHash, e.mtimeMs]);
+    const paramsList: unknown[][] = [];
+    for (const e of entries) {
+      const resolved = normalizePath(e.path);
+      if (!resolved.ok) throw resolved.error;
+      paramsList.push([scopeKey, resolved.value, e.contentHash, e.mtimeMs]);
+    }
     await this.conn.batch(sql, paramsList);
   }
 
@@ -504,7 +547,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (paths.length === 0) return;
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
     const now = Date.now();
-    const paramsList = paths.map((p) => [scopeKey, normalizePath(p), now]);
+    const paramsList: unknown[][] = [];
+    for (const p of paths) {
+      const resolved = normalizePath(p);
+      if (!resolved.ok) throw resolved.error;
+      paramsList.push([scopeKey, resolved.value, now]);
+    }
     await this.conn.batch(sql, paramsList);
   }
 
@@ -548,8 +596,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<void> {
-    const oldNorm = normalizePath(oldPath);
-    const newNorm = normalizePath(newPath);
+    const oldResolved = normalizePath(oldPath);
+    if (!oldResolved.ok) throw oldResolved.error;
+    const newResolved = normalizePath(newPath);
+    if (!newResolved.ok) throw newResolved.error;
+    const oldNorm = oldResolved.value;
+    const newNorm = newResolved.value;
     const parser = this.parser;
     const sql49 = "UPDATE vfs_entry SET path = #{newPath}\n       WHERE scope_key = #{scopeKey} AND path = #{oldPath}";
     const result = await executeTemplate(tx, parser, sql49, { scopeKey, oldPath: oldNorm, newPath: newNorm });

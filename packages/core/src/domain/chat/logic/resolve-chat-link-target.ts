@@ -80,12 +80,12 @@ class ChatLinkResolver {
             return null;
         }
 
-        try {
-            return resolveLogicalPath(pathPart);
-        } catch {
+        const resolved = resolveLogicalPath(pathPart);
+        if (!resolved.ok) {
             // INVALID_PATH：空段越权、`..` 越根等形态
             return null;
         }
+        return resolved.value;
     }
 
 

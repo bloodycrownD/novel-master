@@ -23,7 +23,7 @@ import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
 
 /** writeWithRevision 的失败载荷。 */
-type WriteWithRevisionError = AppError<"VFS_IS_DIRECTORY" | "VFS_INVALID_NAME" | "VFS_NOT_A_DIRECTORY">;
+type WriteWithRevisionError = AppError<"VFS_IS_DIRECTORY" | "VFS_INVALID_NAME" | "VFS_INVALID_PATH" | "VFS_NOT_A_DIRECTORY">;
 
 interface WriteWithRevisionOptions {
   /**
@@ -47,7 +47,9 @@ interface WriteWithRevisionOptions {
  * 零 service 层依赖（只吃两个 repo），故下沉不违反分层。
  */
 export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, content: string, options: WriteWithRevisionOptions = {}): Promise<Result<{ version: number }, WriteWithRevisionError>> {
-  const normalized = normalizePath(path);
+  const resolved = normalizePath(path);
+  if (!resolved.ok) return Result.err(resolved.error);
+  const normalized = resolved.value;
   const existing = await entryRepo.findByPath(scopeKey, normalized);
   if (existing?.entryKind === "directory") {
     return Result.err(new AppError("VFS_IS_DIRECTORY", `Path is a directory: ${normalized}`, { path: normalized }));

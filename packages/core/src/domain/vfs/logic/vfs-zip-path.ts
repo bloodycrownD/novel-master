@@ -9,26 +9,21 @@ import { Result } from "@/errors/either.js";
 import { resolveLogicalPath } from "./vfs-path-mapper.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
-/** ZIP entry 路径映射的失败载荷。 */
-type VfsZipPathError = AppError<"VFS_ZIP_INVALID_PATH">;
+/** ZIP entry 路径映射的失败载荷（含目标目录 → 逻辑路径透传的 `VFS_INVALID_PATH`）。 */
+type VfsZipPathError = AppError<"VFS_ZIP_INVALID_PATH" | "VFS_INVALID_PATH">;
 
 /**
  * 规范化 ZIP 目标目录；缺省或空串 → `/`。
+ *
+ * @throws AppError<"VFS_INVALID_PATH"> 目标目录非法（保持原抛错时机）
  */
 export function resolveZipDirectoryPath(directoryPath?: string): string {
   if (directoryPath == null || directoryPath.trim() === "") {
     return "/";
   }
-  return resolveLogicalPath(directoryPath);
-}
-
-/** ZIP entry name from a domain logical path (strips leading `/`). */
-export function zipEntryNameFromLogical(logical: string): Result<string, VfsZipPathError> {
-  const normalized = normalizePath(logical);
-  if (normalized === "/") {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", "cannot export root as a ZIP entry"));
-  }
-  return Result.ok(normalized.startsWith("/") ? normalized.slice(1) : normalized);
+  const resolved = resolveLogicalPath(directoryPath);
+  if (!resolved.ok) throw resolved.error;
+  return resolved.value;
 }
 
 /**
@@ -37,9 +32,12 @@ export function zipEntryNameFromLogical(logical: string): Result<string, VfsZipP
  */
 export function zipEntryNameRelativeToDirectory(logical: string, directoryPath: string): Result<string, VfsZipPathError> {
   const dir = resolveZipDirectoryPath(directoryPath);
-  const path = resolveLogicalPath(logical);
+  const resolved = resolveLogicalPath(logical);
+  if (!resolved.ok) return Result.err(resolved.error);
+  const path = resolved.value;
   if (dir === "/") {
-    return path === "/" ? Result.ok("") : zipEntryNameFromLogical(path);
+    // path 已由 resolveLogicalPath 规范化（非根、无尾斜杠），去掉 leading `/` 即 entry 名。
+    return path === "/" ? Result.ok("") : Result.ok(path.slice(1));
   }
   if (path === dir) {
     return Result.ok("");
@@ -53,6 +51,9 @@ export function zipEntryNameRelativeToDirectory(logical: string, directoryPath: 
 
 /**
  * 相对目标目录的目录 marker entry 名。
+ *
+ * nm-style: keep-local — 与 zipEntryNameRelativeToDirectory 成对的目录变体（尾斜杠 + 拒绝目标目录自身），
+ * 共同定义 ZIP entry 命名规则；service 单点消费，内联会把命名规则拆进 vfs-zip-io.service。
  */
 export function zipDirectoryEntryNameRelativeToDirectory(logical: string, directoryPath: string): Result<string, VfsZipPathError> {
   const relative = zipEntryNameRelativeToDirectory(logical, directoryPath);
@@ -72,11 +73,14 @@ export function logicalFromZipEntryRelativeToDirectory(entryName: string, direct
     return Result.err(new AppError("VFS_ZIP_INVALID_PATH", "empty ZIP entry name"));
   }
   const dir = resolveZipDirectoryPath(directoryPath);
-  return Result.ok(normalizePath(dir === "/" ? `/${trimmed}` : `${dir}/${trimmed}`));
+  return normalizePath(dir === "/" ? `/${trimmed}` : `${dir}/${trimmed}`);
 }
 
 /**
  * 目录 marker entry → 相对 `directoryPath` 的逻辑目录路径。
+ *
+ * nm-style: keep-local — 与 logicalFromZipEntryRelativeToDirectory 成对的目录入口解析（去尾斜杠 + 空名守卫），
+ * validator 单点消费；内联会把 ZIP entry 命名规则从 path 模块拆出去。
  */
 export function logicalFromZipDirectoryEntryRelativeToDirectory(entryName: string, directoryPath: string): Result<string, VfsZipPathError> {
   const withoutSlash = entryName.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -89,6 +93,9 @@ export function logicalFromZipDirectoryEntryRelativeToDirectory(entryName: strin
 /**
  * 「带域根/目标目录名错误前缀」硬失败：不剥前缀。
  * `directoryPath === "/"` 时跳过。
+ *
+ * nm-style: keep-local — 独立的前缀判定阶段（含 base 提取与 error.vfs.zip_root_prefix_suspected 文案），
+ * validator 单点调用；内联会把判定与错误口径塞回 validateVfsZipEntries 主循环。
  */
 export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, entryNames: readonly string[]): Result<void, VfsZipPathError> {
   const dir = resolveZipDirectoryPath(directoryPath);
@@ -96,7 +103,8 @@ export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, ent
     return Result.ok(undefined);
   }
   const normalizedDir = resolveLogicalPath(dir);
-  const base = normalizedDir === "/" ? "" : normalizedDir.slice(normalizedDir.lastIndexOf("/") + 1);
+  if (!normalizedDir.ok) return Result.err(normalizedDir.error);
+  const base = normalizedDir.value === "/" ? "" : normalizedDir.value.slice(normalizedDir.value.lastIndexOf("/") + 1);
   const nonEmpty = entryNames.filter((name) => name.length > 0);
   if (nonEmpty.length === 0) {
     return Result.ok(undefined);

@@ -10,8 +10,9 @@ import { sortDirPaths, sortFilesForDir, type WorkplaceFileSortMeta } from "./wor
 import type { CompiledSmartSortRule } from "./smart-sort.js";
 import { filetreeMacroLoadStateLabel } from "./workplace-labels.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
-import { directChildDirs, directChildFiles } from "./workplace-tree.js";
+import { directChildDirs } from "./workplace-tree.js";
 
+/** nm-style: keep-public — 导出函数签名类型；declaration 构建要求导出，脚本不统计签名内类型引用。 */
 export interface RenderWorkplaceFileTreeParams {
   readonly scope: WorkplaceScope;
   readonly allDirs: ReadonlySet<string>;
@@ -24,7 +25,11 @@ export interface RenderWorkplaceFileTreeParams {
   readonly dirMtimeByPath?: ReadonlyMap<string, number>;
 }
 
-/** 宏树渲染参数：在基础树参数上附带各文件 display 状态。 */
+/**
+ * 宏树渲染参数：在基础树参数上附带各文件 display 状态。
+ *
+ * nm-style: keep-public — 导出函数签名类型；declaration 构建要求导出，脚本不统计签名内类型引用。
+ */
 export interface RenderWorkplaceFileTreeForMacroParams extends RenderWorkplaceFileTreeParams {
   readonly displayByPath: ReadonlyMap<string, DisplayState>;
 }
@@ -32,7 +37,9 @@ export interface RenderWorkplaceFileTreeForMacroParams extends RenderWorkplaceFi
 type TreeEntry = { readonly kind: "dir" | "file"; readonly path: string };
 
 function entryName(entry: TreeEntry): string {
-  const normalized = normalizePath(entry.path);
+  const resolved = normalizePath(entry.path);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   if (entry.kind === "dir") {
     if (normalized === "/") {
       return "/";
@@ -60,7 +67,17 @@ function sortedChildren(dirPath: string, params: RenderWorkplaceFileTreeParams):
   const dirRule = params.dirRuleMap.get(dirPath) ?? null;
   const subdirs = sortDirPaths(directChildDirs(dirPath, params.allDirs), dirRule, { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }).map((path) => ({ kind: "dir" as const, path }));
 
-  const fileMetas = directChildFiles(dirPath, params.fileSet).map((logicalPath): WorkplaceFileSortMeta => ({ logicalPath, mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0 }));
+  const resolvedDir = normalizePath(dirPath);
+  if (!resolvedDir.ok) throw resolvedDir.error;
+  const dirPrefix = resolvedDir.value === "/" ? "/" : `${resolvedDir.value}/`;
+  const childFiles: string[] = [];
+  for (const logicalPath of params.fileSet) {
+    if (!logicalPath.startsWith(dirPrefix)) continue;
+    const rel = resolvedDir.value === "/" ? logicalPath.slice(1) : logicalPath.slice(dirPrefix.length);
+    if (rel.length === 0 || rel.includes("/")) continue;
+    childFiles.push(logicalPath);
+  }
+  const fileMetas = childFiles.map((logicalPath): WorkplaceFileSortMeta => ({ logicalPath, mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0 }));
   const files = sortFilesForDir(fileMetas, dirRule, { smartRules: params.smartRules }).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
 
   return [...subdirs, ...files];
@@ -86,6 +103,9 @@ function appendDirLines(lines: string[], dirPath: string, prefix: string, params
 
 /**
  * Renders a UTF-8 directory tree (dirs before files, same sort as workplace list).
+ *
+ * nm-style: keep-public — 仍在 public/workplace.ts 的包公开面；生产零调用（仅测试经 public 入口使用），
+ * 撤销须同步 barrel/allowlist 快照/测试，跨文件死链清理不在本文件范围内。
  */
 export function renderWorkplaceFileTree(params: RenderWorkplaceFileTreeParams): string {
   const rootPath = workplaceRootLogicalPath(params.scope);
@@ -98,6 +118,9 @@ export function renderWorkplaceFileTree(params: RenderWorkplaceFileTreeParams): 
 
 /**
  * 渲染带加载状态后缀的 workplace ASCII 树（`{{$filetree}}` 与工作区宏树）。
+ *
+ * nm-style: keep-local — 宏树 ASCII 渲染的 domain 入口；workplace.service 装配单点 + 3 处宏树测试直调，
+ * 内联会把 header/appendDirLines/join 的树格式化摊进 service。
  */
 export function renderWorkplaceFileTreeForMacro(params: RenderWorkplaceFileTreeForMacroParams): string {
   const rootPath = workplaceRootLogicalPath(params.scope);

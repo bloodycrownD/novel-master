@@ -31,14 +31,19 @@ const log = createLogger("vfs.import-dir-rules");
  *
  * 必须与 `WorkplaceService.setDirRule({ logicalPath })` 在无既有行时的产物
  * 逐字段等价（含路径规范化与 scopeKey），等价性由单测锁定。
+ *
+ * nm-style: keep-local — 默认规则行构造契约（等价性注记）由单测 3 处直接构造期望行，
+ * 内联会丢注记且须改测试。
  */
 export function buildDefaultDirRule(
   scopeKey: string,
   logicalPath: string
 ): WorkplaceDirRule {
+  const normalized = normalizePath(logicalPath);
+  if (!normalized.ok) throw normalized.error;
   return {
     scopeKey,
-    logicalPath: normalizePath(logicalPath),
+    logicalPath: normalized.value,
     ruleEnabled: true,
     sortField: DEFAULT_WORKPLACE_DIR_RULE.sortField,
     sortOrder: DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
@@ -64,7 +69,9 @@ export async function backfillMissingDirRules(
   writeDefaultRule: (logicalPath: string) => Promise<void>
 ): Promise<void> {
   for (const candidate of candidates) {
-    const logicalPath = normalizePath(candidate);
+    const normalized = normalizePath(candidate);
+    if (!normalized.ok) throw normalized.error;
+    const logicalPath = normalized.value;
     if (logicalPath === "/" || existingLogicalPaths.has(logicalPath)) {
       continue;
     }
@@ -73,7 +80,7 @@ export async function backfillMissingDirRules(
 }
 
 /** {@link ensureImportDirRules} 依赖。 */
-export interface EnsureImportDirRulesDeps {
+interface EnsureImportDirRulesDeps {
   /** 事务级 VFS repo（用于查导入前缀下的目录全集）。 */
   readonly vfsRepo: VfsEntryRepository;
   /** 事务级 workplace repo（用于读已有行 / 补默认行）。 */
@@ -98,16 +105,20 @@ export async function ensureImportDirRules(
 ): Promise<void> {
   const { vfsRepo, workplaceRepo, scope, directoryPath } = deps;
   try {
-    const prefix = normalizePath(directoryPath);
+    const normalizedPrefix = normalizePath(directoryPath);
+    if (!normalizedPrefix.ok) throw normalizedPrefix.error;
+    const prefix = normalizedPrefix.value;
     const targetScopeKey = workplaceScopeKey(scope);
     const directories = await vfsRepo.listDirectoryPathsUnderPrefix(
       scopeKey(scope),
       prefix
     );
     const existing = new Set(
-      (await workplaceRepo.listDirRules(targetScopeKey)).map((rule) =>
-        normalizePath(rule.logicalPath)
-      )
+      (await workplaceRepo.listDirRules(targetScopeKey)).map((rule) => {
+        const normalized = normalizePath(rule.logicalPath);
+        if (!normalized.ok) throw normalized.error;
+        return normalized.value;
+      })
     );
     await backfillMissingDirRules(
       directories,

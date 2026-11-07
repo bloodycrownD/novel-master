@@ -8,7 +8,9 @@ import { normalizePath } from "../repositories/impl/normalize-path.js";
 
 /** Returns the parent directory path; root's parent is `/`. */
 export function parentDir(path: string): string {
-  const normalized = normalizePath(path);
+  const resolved = normalizePath(path);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   if (normalized === "/") {
     return "/";
   }
@@ -25,7 +27,9 @@ export function parentDir(path: string): string {
  * @remarks Physical roots only: global `/template`, project `…/template`, session mount.
  */
 export function isStorageRootParent(parentPath: string): boolean {
-  const normalized = normalizePath(parentPath);
+  const resolved = normalizePath(parentPath);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   if (normalized === "/template") {
     return true;
   }

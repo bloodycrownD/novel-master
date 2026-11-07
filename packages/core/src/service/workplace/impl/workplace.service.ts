@@ -52,7 +52,7 @@ import {
 } from "./workplace-view-cache.js";
 
 /** Dependencies for {@link DefaultWorkplaceService}. */
-export interface WorkplaceServiceDeps {
+interface WorkplaceServiceDeps {
   readonly scope: WorkplaceScope;
   /** conn 级 L1 memo 的 WeakMap key（见 workplace-view-cache.ts）。 */
   readonly conn: TdbcConnection;
@@ -85,7 +85,9 @@ function filterGhostConfiguredPaths(input: {
   const kept: string[] = [];
   const files = [...input.fileSet];
   for (const raw of input.configuredPaths) {
-    const n = normalizePath(raw);
+    const resolved = normalizePath(raw);
+    if (!resolved.ok) throw resolved.error;
+    const n = resolved.value;
     if (n === "/") {
       kept.push(raw);
       continue;
@@ -114,7 +116,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async setDirRule(input: SetDirRuleInput): Promise<void> {
-    const logicalPath = normalizePath(input.logicalPath);
+    const resolved = normalizePath(input.logicalPath);
+    if (!resolved.ok) throw resolved.error;
+    const logicalPath = resolved.value;
     assertLogicalPathAllowed(this.scope, logicalPath);
     if (
       input.ruleEnabled === false &&
@@ -156,7 +160,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async getDirRule(logicalPath: string): Promise<WorkplaceDirRule | undefined> {
-    const normalized = normalizePath(logicalPath);
+    const resolved = normalizePath(logicalPath);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     assertLogicalPathAllowed(this.scope, normalized);
     const rule = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
@@ -170,7 +176,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async setFileRule(input: SetFileRuleInput): Promise<void> {
-    const logicalPath = normalizePath(input.logicalPath);
+    const resolved = normalizePath(input.logicalPath);
+    if (!resolved.ok) throw resolved.error;
+    const logicalPath = resolved.value;
     assertLogicalPathAllowed(this.scope, logicalPath);
     await this.deps.workplace.upsertFileRule({
       scopeKey: workplaceScopeKey(this.scope),
@@ -180,7 +188,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void> {
-    const normalized = normalizePath(logicalPrefix);
+    const resolved = normalizePath(logicalPrefix);
+    if (!resolved.ok) throw resolved.error;
+    const normalized = resolved.value;
     assertLogicalPathAllowed(this.scope, normalized);
     await this.deps.workplace.deleteRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
@@ -192,8 +202,12 @@ export class DefaultWorkplaceService implements WorkplaceService {
     oldPrefix: string,
     newPrefix: string
   ): Promise<void> {
-    const oldNormalized = normalizePath(oldPrefix);
-    const newNormalized = normalizePath(newPrefix);
+    const oldResolved = normalizePath(oldPrefix);
+    if (!oldResolved.ok) throw oldResolved.error;
+    const newResolved = normalizePath(newPrefix);
+    if (!newResolved.ok) throw newResolved.error;
+    const oldNormalized = oldResolved.value;
+    const newNormalized = newResolved.value;
     assertLogicalPathAllowed(this.scope, oldNormalized);
     assertLogicalPathAllowed(this.scope, newNormalized);
     await this.deps.workplace.renameRulesUnderLogicalPrefix(
@@ -352,9 +366,19 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const fileRules = await this.deps.workplace.listFileRules(scopeKey);
     const dirRuleMap = new Map(dirRules.map((r) => [r.logicalPath, r]));
     const fileRuleMap = new Map(fileRules.map((r) => [r.logicalPath, r]));
-    const fileSet = new Set(fileMeta.map((row) => normalizePath(row.path)));
+    const fileSet = new Set<string>();
+    for (const row of fileMeta) {
+      const resolved = normalizePath(row.path);
+      if (!resolved.ok) throw resolved.error;
+      fileSet.add(resolved.value);
+    }
     // VFS 中真实存在的目录行（normalize 后作判据；喂 allDirs 用同一份数据）
-    const dirPathSet = new Set(dirPaths.map((logical) => normalizePath(logical)));
+    const dirPathSet = new Set<string>();
+    for (const logical of dirPaths) {
+      const resolved = normalizePath(logical);
+      if (!resolved.ok) throw resolved.error;
+      dirPathSet.add(resolved.value);
+    }
     const configuredPaths = filterGhostConfiguredPaths({
       dirRulePaths: new Set(dirRuleMap.keys()),
       fileRulePaths: new Set(fileRuleMap.keys()),

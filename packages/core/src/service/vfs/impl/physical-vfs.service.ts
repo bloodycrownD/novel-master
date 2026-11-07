@@ -29,6 +29,7 @@ import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
+import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
 
 /** 解析结果：物理路径落到的 scope 与域内逻辑路径。 */
@@ -122,7 +123,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   }
 
   async list(physicalPath: string): Promise<VfsListEntry[]> {
-    const normalized = resolveLogicalPath(physicalPath);
+    const resolved = resolveLogicalPath(physicalPath);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
 
     // 物理根：三个域挂载点合成目录行（域内根级文件在各自挂载点下列出）
     if (normalized === "/") {
@@ -164,7 +167,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    * 详见 port 注释；每个 scope 一次前缀查询后应用层递归切层）。
    */
   async listTree(physicalPath: string): Promise<VfsListEntry[]> {
-    const normalized = resolveLogicalPath(physicalPath);
+    const resolved = resolveLogicalPath(physicalPath);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
 
     if (normalized === "/") {
       const rows = [
@@ -214,7 +219,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   }
 
   async read(physicalPath: string): Promise<VfsReadResult> {
-    const normalized = resolveLogicalPath(physicalPath);
+    const logicalResult = resolveLogicalPath(physicalPath);
+    if (!logicalResult.ok) throwLegacyVfs(logicalResult.error);
+    const normalized = logicalResult.value;
     const resolved = resolvePhysicalPath(normalized);
     if (resolved == null) {
       throw vfsNotFound(normalized);

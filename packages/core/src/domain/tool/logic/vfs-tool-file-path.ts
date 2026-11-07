@@ -4,10 +4,8 @@
  * @module domain/tool/logic/vfs-tool-file-path
  */
 
+import { FILE_OPEN_TOOL_NAMES, type FileToolName } from "../builtin/vfs-tools.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-
-/** 可在工作区预览中打开文件的工具名（不含 vfs. 前缀）。 */
-const FILE_OPEN_TOOL_NAMES = new Set(["read", "write", "edit"]);
 
 /**
  * 解析工具调用输入中的 VFS 文件路径，供工具卡片「打开文件」门控使用。
@@ -20,14 +18,12 @@ const FILE_OPEN_TOOL_NAMES = new Set(["read", "write", "edit"]);
  */
 export function resolveVfsToolFilePath(toolName: string, input: Record<string, unknown> | null | undefined): string | undefined {
   const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
-  if (!FILE_OPEN_TOOL_NAMES.has(name)) return undefined;
+  if (!FILE_OPEN_TOOL_NAMES.has(name as FileToolName)) return undefined;
   // Bug1 加固：某些 LLM 会用 file_path 作为字段名而非标准的 path。
   // v1 只兜 input.path ?? input.file_path，不强加 filename（等真机日志确认后再扩展）。
   const raw = input?.path ?? input?.file_path;
   if (typeof raw !== "string") return undefined;
-  try {
-    return resolveLogicalPath(raw);
-  } catch {
-    return undefined;
-  }
+  const resolved = resolveLogicalPath(raw);
+  if (!resolved.ok) return undefined;
+  return resolved.value;
 }

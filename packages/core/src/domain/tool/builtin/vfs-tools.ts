@@ -24,6 +24,7 @@ const log = createLogger("tool.vfs");
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = ["read", "write", "edit", "fs", "glob", "grep"] as const;
 
+/** nm-style: keep-public — 主入口 index.ts 再导出的工具名联合类型（FILE_TOOL_NAMES 元素），脚本不统计同文件泛型实参引用。 */
 export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
 
 /** V1 文件工具名 → V2 替代写法提示（错误消息 / UI toast 共用，勿在调用点另抄一份）。 */
@@ -36,13 +37,21 @@ export const LEGACY_FILE_TOOL_HINTS: Readonly<Record<string, string>> = {
   list: "fs (ls / ls -r)",
 };
 
-/** Tools that mutate session file content (checkpoint-eligible). */
+/**
+ * Tools that mutate session file content (checkpoint-eligible).
+ *
+ * nm-style: keep-public — 工具名契约集合：同文件 isMutatingFileToolName 直接持有它，脚本不统计同文件 Set.has 引用；测试也直接锁集合内容。
+ */
 export const MUTATING_FILE_TOOL_NAMES = new Set<FileToolName>(["write", "edit", "fs"]);
 
 /** @deprecated Use {@link MUTATING_FILE_TOOL_NAMES}. */
 export const MUTATING_VFS_TOOL_NAMES = MUTATING_FILE_TOOL_NAMES;
 
-/** Returns whether a tool name performs file mutations for checkpoint purposes. */
+/**
+ * Returns whether a tool name performs file mutations for checkpoint purposes.
+ *
+ * nm-style: keep-public — 工具名 mutating 契约（集合 + 谓词同属一处）；消费方 tool-use-mutates-workspace 只做 agent 策略组合，内联会把工具名定义下沉进策略逻辑，且 4 处测试断言直接锁该谓词。
+ */
 export function isMutatingFileToolName(name: string): boolean {
   return MUTATING_FILE_TOOL_NAMES.has(name as FileToolName);
 }
@@ -58,7 +67,7 @@ export function normalizeAgentToolPolicyName(name: string): string {
   return name.startsWith("vfs.") ? name.slice(4) : name;
 }
 
-export type ReadToolOutput = {
+type ReadToolOutput = {
   readonly path: string;
   readonly content: string;
   readonly version: number;
@@ -73,13 +82,13 @@ export type ReadToolOutput = {
   readonly nextOffset?: number;
 };
 
-export type GrepToolOutput = {
+type GrepToolOutput = {
   readonly matches: readonly VfsGrepMatch[];
   readonly total: number;
   readonly truncated: boolean;
 };
 
-export type GlobToolOutput = {
+type GlobToolOutput = {
   readonly paths: readonly string[];
   readonly total: number;
   readonly truncated: boolean;
@@ -87,6 +96,8 @@ export type GlobToolOutput = {
 
 /**
  * Creates the builtin workspace file tools (V2: 6 tools).
+ *
+ * nm-style: keep-public — 内置工具工厂是本模块唯一产物，registerBuiltinTools 只做注册编排；4 个测试文件直接构造工具，内联等于把整段工具定义并进注册器。
  *
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
@@ -204,7 +215,9 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       // 编辑器保存链路同样不做版本比对，保存即覆盖。
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
-      const logicalPath = resolveLogicalPath(input.path);
+      const resolved = resolveLogicalPath(input.path);
+      if (!resolved.ok) throw resolved.error;
+      const logicalPath = resolved.value;
       // B-1：仅新建文件时补父链规则——编辑已有文件不得静默把存量无行目录翻成 rule_on。
       // 未注入 workplace 时无补规则可谈，连探测也一并跳过（旧 ctx 的 vfs 可能没有 read）。
       const isNewFile = ctx.workplace != null && (await probeFileAbsentForWrite(ctx, logicalPath));
@@ -303,7 +316,9 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const result = await executeFsCommand(ctx.vfs, parsed);
       // mkdir 成功后为新目录及其祖先补默认目录规则；其余子命令不碰
       if (parsed.kind === "mkdir") {
-        await ensureDirRulesForNewPath(ctx, resolveLogicalPath(parsed.path));
+        const resolved = resolveLogicalPath(parsed.path);
+        if (!resolved.ok) throw resolved.error;
+        await ensureDirRulesForNewPath(ctx, resolved.value);
       }
       return result;
     },

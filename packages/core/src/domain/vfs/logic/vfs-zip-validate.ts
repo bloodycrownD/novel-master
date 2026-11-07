@@ -23,8 +23,8 @@ interface VfsZipValidatedPayload {
   readonly directories: readonly string[];
 }
 
-/** validateVfsZipEntries 的失败载荷。 */
-type VfsZipValidateError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID_PATH" | "VFS_ZIP_INVALID_UTF8" | "VFS_ZIP_DUPLICATE_PATH" | "VFS_ZIP_PAYLOAD_TOO_LARGE">;
+/** validateVfsZipEntries 的失败载荷（含路径映射透传的 `VFS_INVALID_PATH`）。 */
+type VfsZipValidateError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID_PATH" | "VFS_ZIP_INVALID_UTF8" | "VFS_ZIP_DUPLICATE_PATH" | "VFS_ZIP_PAYLOAD_TOO_LARGE" | "VFS_INVALID_PATH">;
 
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 

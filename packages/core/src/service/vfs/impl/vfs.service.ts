@@ -30,7 +30,9 @@ export class DefaultVfsService implements InternalVfsService {
   constructor(private readonly repo: VfsEntryRepository) {}
 
   async list(scopeKey: string, dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<VfsListEntry[]> {
-    const normalized = normalizePath(dir);
+    const resolved = normalizePath(dir);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
     const entries = await this.repo.list(scopeKey, normalized, options);
     if (normalized !== "/" && !isStorageRootParent(normalized)) {
       const entry = await this.repo.findByPath(scopeKey, normalized);
@@ -43,7 +45,9 @@ export class DefaultVfsService implements InternalVfsService {
   }
 
   async mkdir(scopeKey: string, path: string): Promise<void> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot mkdir root");
     }
@@ -90,7 +94,9 @@ export class DefaultVfsService implements InternalVfsService {
   }
 
   async write(scopeKey: string, path: string, content: string): Promise<{ version: number }> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing?.entryKind === "directory") {
       throw vfsIsDirectory(normalized);
@@ -140,7 +146,9 @@ export class DefaultVfsService implements InternalVfsService {
   }
 
   async delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void> {
-    const normalized = normalizePath(path);
+    const resolved = normalizePath(path);
+    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    const normalized = resolved.value;
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot delete root");
     }

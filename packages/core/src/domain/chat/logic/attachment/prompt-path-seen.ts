@@ -19,10 +19,11 @@ export const promptPathSeen = {
         const keepSlash = options?.keepDirTrailingSlash === true;
         const isDir = this.isDirToken(path);
         const seen = resolveLogicalPath(path);
-        if (keepSlash && isDir && seen !== "/") {
-            return `${seen}/`;
+        if (!seen.ok) throw seen.error;
+        if (keepSlash && isDir && seen.value !== "/") {
+            return `${seen.value}/`;
         }
-        return seen;
+        return seen.value;
     },
 
     /** 尝试规范化；非法 path 返回 `null`（不抛）。 */
@@ -30,11 +31,8 @@ export const promptPathSeen = {
         if (path.trim() === "") {
             return null;
         }
-        try {
-            return resolveLogicalPath(path);
-        } catch {
-            return null;
-        }
+        const seen = resolveLogicalPath(path);
+        return seen.ok ? seen.value : null;
     },
 
     /** 由初始前缀 path 列表构造可变 seen 集合。 */

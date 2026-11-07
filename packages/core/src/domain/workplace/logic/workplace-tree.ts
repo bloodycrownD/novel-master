@@ -10,7 +10,9 @@ import { workplaceRootLogicalPath } from "./workplace-scope.js";
 
 /** 逻辑路径的父目录；根目录文件返回 `/`。 */
 export function parentDirOf(logicalPath: string): string | null {
-  const n = normalizePath(logicalPath);
+  const resolved = normalizePath(logicalPath);
+  if (!resolved.ok) throw resolved.error;
+  const n = resolved.value;
   if (n === "/") {
     return null;
   }
@@ -32,15 +34,22 @@ function addParentChain(dirs: Set<string>, logicalPath: string, root: string): v
 
 /**
  * Builds the set of directory logical paths for list/display traversal.
+ *
+ * nm-style: keep-public — workplace 树构造的唯一 domain 入口，由 workplace.service
+ * 跨层单点调用；内联需把 addParentChain/parentDirOf 的目录链逻辑一并搬进 service。
  */
 export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Set<string> {
   const root = workplaceRootLogicalPath(params.scope);
   const dirs = new Set<string>([root]);
   for (const p of params.filePaths) {
-    addParentChain(dirs, normalizePath(p), root);
+    const resolved = normalizePath(p);
+    if (!resolved.ok) throw resolved.error;
+    addParentChain(dirs, resolved.value, root);
   }
   for (const p of params.configuredPaths) {
-    const n = normalizePath(p);
+    const resolved = normalizePath(p);
+    if (!resolved.ok) throw resolved.error;
+    const n = resolved.value;
     if (n === root) {
       dirs.add(root);
       continue;
@@ -56,7 +65,9 @@ export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; r
 
 /** Direct child directories of `dir` within `allDirs`. */
 export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): string[] {
-  const normalized = normalizePath(dir);
+  const resolved = normalizePath(dir);
+  if (!resolved.ok) throw resolved.error;
+  const normalized = resolved.value;
   const children: string[] = [];
   for (const d of allDirs) {
     if (d === normalized) {
@@ -65,24 +76,6 @@ export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): stri
     if (parentDirOf(d) === normalized) {
       children.push(d);
     }
-  }
-  return children;
-}
-
-/** Direct child files of `dir` from the file path list. */
-export function directChildFiles(dir: string, filePaths: ReadonlySet<string>): string[] {
-  const normalized = normalizePath(dir);
-  const prefix = normalized === "/" ? "/" : `${normalized}/`;
-  const children: string[] = [];
-  for (const f of filePaths) {
-    if (!f.startsWith(prefix) && !(normalized === "/" && f.startsWith("/"))) {
-      continue;
-    }
-    const rel = normalized === "/" ? f.slice(1) : f.slice(prefix.length);
-    if (rel.length === 0 || rel.includes("/")) {
-      continue;
-    }
-    children.push(f);
   }
   return children;
 }

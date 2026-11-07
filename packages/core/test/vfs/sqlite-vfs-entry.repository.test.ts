@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isAppError } from "@/errors/app-error.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
@@ -15,18 +16,25 @@ function isolatedRoot(): string {
   return `/${testIsolationSuffix()}`;
 }
 
+/** 解包 Result 成功分支；失败直接让测试失败。 */
+function normalized(path: string): string {
+  const result = normalizePath(path);
+  return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
+}
+
 describe("normalizePath", () => {
   it("normalizes POSIX paths", () => {
-    assert.equal(normalizePath("/a/b"), "/a/b");
-    assert.equal(normalizePath("/a//b"), "/a/b");
-    assert.equal(normalizePath("/"), "/");
+    assert.equal(normalized("/a/b"), "/a/b");
+    assert.equal(normalized("/a//b"), "/a/b");
+    assert.equal(normalized("/"), "/");
   });
 
   it("rejects invalid paths", () => {
-    assert.throws(() => normalizePath("relative"), (e: unknown) => {
-      assert.ok(isVfsError(e, "INVALID_PATH"));
-      return true;
-    });
+    const result = normalizePath("relative");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.ok(isAppError(result.error, "VFS_INVALID_PATH"));
+    }
   });
 });
 

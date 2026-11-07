@@ -44,20 +44,27 @@ export function normalizeBatchRelativePath(relativePath: string): string | null 
 /** 将相对路径拼到目标目录下，得到逻辑绝对路径。 */
 export function joinTargetLogicalPath(targetDir: string, relativePath: string): Result<string, VfsBatchPathError> {
   const dir = resolveLogicalPath(targetDir);
+  if (!dir.ok) return dir;
   const rel = normalizeBatchRelativePath(relativePath);
   if (rel == null) {
     return Result.err(new AppError("VFS_INVALID_PATH", `invalid batch relative path: ${relativePath}`, { path: relativePath }));
   }
-  return Result.ok(dir === "/" ? `/${rel}` : `${dir}/${rel}`);
+  return Result.ok(dir.value === "/" ? `/${rel}` : `${dir.value}/${rel}`);
 }
 
 /**
  * 逻辑路径相对导出锚点的相对路径（无 leading `/`）。
  * 锚点自身返回空串。
+ *
+ * nm-style: keep-public — 纯路径原语，与 normalizeBatchRelativePath / joinTargetLogicalPath 同组导出；唯一消费方 vfs-batch-io 是 IO 编排服务，内联会把路径规范化与 Result 语义搬进 service 层（撤销导出还需同步 public/vfs.ts 与 allowlist）。
  */
 export function relativePathUnderAnchor(logical: string, anchor: string): Result<string, VfsBatchPathError> {
-  const path = resolveLogicalPath(logical);
-  const root = resolveLogicalPath(anchor);
+  const resolvedPath = resolveLogicalPath(logical);
+  if (!resolvedPath.ok) return resolvedPath;
+  const resolvedRoot = resolveLogicalPath(anchor);
+  if (!resolvedRoot.ok) return resolvedRoot;
+  const path = resolvedPath.value;
+  const root = resolvedRoot.value;
   if (root === "/") {
     return Result.ok(path === "/" ? "" : path.slice(1));
   }

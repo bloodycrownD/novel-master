@@ -101,7 +101,11 @@ class ForkCopySeeder {
 
     const sourceScope = workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId });
     const targetScope = workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId });
-    await workplace.copyScope(sourceScope, targetScope, (p) => normalizePath(p));
+    await workplace.copyScope(sourceScope, targetScope, (p) => {
+      const normalized = normalizePath(p);
+      if (!normalized.ok) throw normalized.error;
+      return normalized.value;
+    });
 
     if (heads.length === 0 || newMessages.length === 0) {
       return Result.ok(undefined);
