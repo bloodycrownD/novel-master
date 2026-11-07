@@ -292,6 +292,7 @@ describe("vfs character-card CLI e2e", () => {
         "--yes",
       ]);
       assert.notEqual(imp.status, 0);
+      // CLI 错误边界（cli-errors）经 userMessageOf + coreT 解析回中文。
       assert.match(imp.stderr, /无法识别为角色卡/);
     } finally {
       await rm(dir, { recursive: true, force: true });

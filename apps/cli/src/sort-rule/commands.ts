@@ -1,3 +1,4 @@
+import {coreT} from '../i18n.js';
 /**
  * `nm sort-rule` subcommands (spec Step 9；agent 自测定位，从简).
  *
@@ -195,7 +196,7 @@ export async function runSortRule(
         // 格式化（C-3）：固定档哨兵 "(固定最小,)"/"(固定最大,)"，smart "(1,)"
         // 风格（Python 元组 repr 尾逗号）。
         const nums =
-          line.nums == null ? "-" : formatSortTupleForDisplay(line.nums);
+          line.nums == null ? "-" : coreT(formatSortTupleForDisplay(line.nums));
         console.log(`${line.name}\t${line.matchedRuleId ?? "-"}\t${nums}`);
       }
       console.log("");
