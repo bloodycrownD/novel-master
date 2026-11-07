@@ -78,6 +78,10 @@ function flattenStyle(style: unknown): Record<string, unknown> {
   return (style ?? {}) as Record<string, unknown>;
 }
 
+// core 迁移后 `metaText` 是 `MessageLike[]`（descriptor 数组），UI 逐段翻译后
+// 以 ` · ` 拼接；fixture 用单段字符串保持展示文案与旧断言一致。
+const META_TEXT = '#12 · 工具调用 0 次 · 6 字';
+
 const TURN = {
   id: 'turn-12',
   kind: 'assistant' as const,
@@ -88,7 +92,7 @@ const TURN = {
   // main/A-2 后 UI 不再读 body，字段仅为满足 core 类型（`body` 是必填）。
   body: '',
   summaryText: '好的，我来看看。',
-  metaText: '#12 · 工具调用 0 次 · 6 字',
+  metaText: [META_TEXT],
   cards: [
     {type: 'text' as const, id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
   ],
@@ -145,7 +149,7 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     expect(meta.props.numberOfLines).toBe(1);
     // 读的是新字段 summaryText/metaText，不是旧 summary 拼接串。
     expect(textsOf(summary.props.children)).toEqual([TURN.summaryText]);
-    expect(textsOf(meta.props.children)).toEqual([TURN.metaText]);
+    expect(textsOf(meta.props.children)).toEqual([META_TEXT]);
     expect(textsOf(summary.props.children)).not.toContain(TURN.summary);
   });
 

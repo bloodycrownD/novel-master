@@ -11,6 +11,7 @@ import {
   buildStreamMetricsLine,
   type StreamTokenSource,
 } from '@novel-master/core/format';
+import {coreT} from '@/i18n/core';
 
 /**
  * token 计数来源：usage=基线来自事件真值（run 级累计），读值=基线+增量；
@@ -47,5 +48,6 @@ export function toAgentStreamMetricsView(
 export function buildChatStreamMetricsLine(
   metrics: AgentStreamMetricsView,
 ): string {
-  return buildStreamMetricsLine(metrics);
+  const parts = buildStreamMetricsLine(metrics);
+  return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
 }

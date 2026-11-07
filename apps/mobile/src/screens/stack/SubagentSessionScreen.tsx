@@ -20,7 +20,8 @@
  * abortRegistry 的 abort 语义）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
+import {
+  Linking, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -49,6 +50,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
+import {coreT} from '@/i18n/core';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
 
@@ -220,7 +222,7 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'not-found') {
             // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            showAppToast(chatLinkResolver.notFoundMessage(intent.path));
+            showAppToast(coreT(chatLinkResolver.notFoundMessage(intent.path)));
             return;
           }
           if (intent.kind === 'file') {

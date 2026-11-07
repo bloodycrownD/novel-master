@@ -51,7 +51,8 @@ import {
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 
-import {formatVfsErrorForUser, isAppError, isVfsError} from '@novel-master/core/vfs';
+import {isAppError, isVfsError} from '@novel-master/core/vfs';
+import {formatVfsErrorForUser} from '../../errors/format-error';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,

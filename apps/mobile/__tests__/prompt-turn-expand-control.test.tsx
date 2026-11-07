@@ -130,7 +130,8 @@ const TURN: PromptPreviewTurn = {
   // main/A-2 后 UI 不再读 body，字段仅为满足 core 类型（`body` 是必填）。
   body: '',
   summaryText: '好的，我来看看。',
-  metaText: '#12 · 工具调用 1 次 · 12 字',
+  // core 迁移后 `metaText` 是 descriptor 数组，UI 逐段翻译后以 ` · ` 拼接。
+  metaText: ['#12 · 工具调用 1 次 · 12 字'],
   // type 分派顺序锚：text / toolGroup / thinking 三卡依次渲染。
   cards: [
     {type: 'text', id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
@@ -152,7 +153,7 @@ const TURN_B: PromptPreviewTurn = {
   ...TURN,
   id: 'turn-13',
   summaryText: '找到了，接着改。',
-  metaText: '#13 · 工具调用 0 次 · 7 字',
+  metaText: ['#13 · 工具调用 0 次 · 7 字'],
   cards: [{type: 'text', id: 'card-13-0', role: 'assistant', body: '找到了，接着改。'}],
 };
 

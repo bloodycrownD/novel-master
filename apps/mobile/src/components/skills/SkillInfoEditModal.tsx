@@ -26,6 +26,7 @@ import {
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 /** 待编辑技能定位（跳详情同构）。 */
 export type SkillInfoTarget = {
@@ -79,8 +80,9 @@ export function SkillInfoEditModal({
   const trimmedDesc = description.trim();
   const nameChanged = !builtin && trimmedName !== target.name;
   const descChanged = trimmedDesc !== (currentDescription ?? '');
-  const nameIssue =
-    nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+  // validateSkillName 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
+  const nameReason = nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+  const nameIssue = nameReason == null ? null : coreT(nameReason);
   const canSubmit =
     (nameChanged || descChanged) &&
     nameIssue == null &&

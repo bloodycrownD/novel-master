@@ -7,6 +7,7 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {validateVfsEntryName} from '@novel-master/core/vfs';
+import {coreT} from '@/i18n/core';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -36,7 +37,7 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
   const handleSubmit = () => {
     const check = validateVfsEntryName(value);
     if (!check.ok) {
-      showToast(check.reason);
+      showToast(coreT(check.reason));
       return;
     }
     onSubmit(value);

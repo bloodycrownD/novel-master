@@ -2,7 +2,8 @@
  * 单模型设置：内部预算（上下文、计数）与生成参数（采样、思考）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
+import {
+  ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {
@@ -30,6 +31,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type SamplingRoute = RouteProp<RootStackParamList, 'ModelSampling'>;
 
@@ -261,7 +263,7 @@ export function ModelSamplingScreen() {
             tokens={tokens}
             value={tokenCounterMode}
             onChange={v => setTokenCounterMode(v as TokenizerOverride)}
-            options={TOKEN_COUNTER_MODE_SELECT_OPTIONS}
+            options={TOKEN_COUNTER_MODE_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))}
             sheetTitle="Token 计数器"
             placeholder="auto"
           />
@@ -294,7 +296,7 @@ export function ModelSamplingScreen() {
           <SegmentedControl
             tokens={tokens}
             value={thinkingLevel}
-            options={THINKING_LEVEL_SELECT_OPTIONS}
+            options={THINKING_LEVEL_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))}
             onChange={setThinkingLevel}
           />
         </FormField>

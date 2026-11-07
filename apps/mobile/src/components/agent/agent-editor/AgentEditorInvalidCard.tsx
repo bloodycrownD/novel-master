@@ -6,6 +6,7 @@ import React from 'react';
 import {Pressable, Text, View} from 'react-native';
 
 import {STORED_CONFIG_LABELS} from '@novel-master/core/stored-config-validity';
+import {coreT} from '@/i18n/core';
 
 import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
@@ -58,7 +59,7 @@ export function AgentEditorInvalidCard({
                 fontWeight: '600',
               }}
             >
-              {STORED_CONFIG_LABELS.agentBack}
+              {coreT(STORED_CONFIG_LABELS.agentBack)}
             </Text>
           </Pressable>
           {onOverwriteDefault != null ? (
@@ -70,7 +71,7 @@ export function AgentEditorInvalidCard({
                   fontWeight: '600',
                 }}
               >
-                {STORED_CONFIG_LABELS.agentOverwriteDefault}
+                {coreT(STORED_CONFIG_LABELS.agentOverwriteDefault)}
               </Text>
             </Pressable>
           ) : null}
@@ -82,7 +83,7 @@ export function AgentEditorInvalidCard({
                 fontWeight: '600',
               }}
             >
-              {STORED_CONFIG_LABELS.agentDelete}
+              {coreT(STORED_CONFIG_LABELS.agentDelete)}
             </Text>
           </Pressable>
         </View>

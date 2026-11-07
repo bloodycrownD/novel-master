@@ -31,6 +31,7 @@ import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import type {RootStackParamList} from '@/navigation/types';
 import {setPromptTurnDetail} from './prompt-turn-callback';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -105,7 +106,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const roleBadge = roleBadgeStyle(tokens, turn.kind);
   const roleLabel = TURN_ROLE_LABEL[turn.kind];
   // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
-  const summaryTail = turn.summaryText.slice(0, 20);
+  const summaryTail = coreT(turn.summaryText).slice(0, 20);
   const headLabel = `${expanded ? '收起' : '展开'}${roleLabel}轮，${summaryTail}`;
 
   const handleToggle = useCallback(() => {
@@ -141,13 +142,13 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
           testID="prompt-turn-summary"
           style={[styles.summary, {color: tokens.text}]}
           numberOfLines={1}>
-          {turn.summaryText}
+          {coreT(turn.summaryText)}
         </Text>
         <Text
           testID="prompt-turn-meta"
           style={[styles.meta, {color: tokens.textTertiary}]}
           numberOfLines={1}>
-          {turn.metaText}
+          {turn.metaText.map(coreT).join(' · ')}
         </Text>
         <Text
           testID="prompt-turn-chevron"

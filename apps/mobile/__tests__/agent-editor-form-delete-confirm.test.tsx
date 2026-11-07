@@ -3,6 +3,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Alert} from 'react-native';
 import {STORED_CONFIG_LABELS} from '@novel-master/core/stored-config-validity';
+import {coreT} from '@/i18n/core';
 
 const mockGetRawWire = jest.fn();
 const mockListAgentIds = jest.fn();
@@ -178,7 +179,8 @@ async function renderInvalidEditor(wire: unknown) {
 }
 
 function pressDeleteButton(root: TestRenderer.ReactTestInstance) {
-  const deleteLabel = STORED_CONFIG_LABELS.agentDelete;
+  // 迁移后 labels 是 descriptor，渲染层用 coreT 转成中文；断言也要比解析后的文案。
+  const deleteLabel = coreT(STORED_CONFIG_LABELS.agentDelete);
   const deletePressable = root
     .findAll(node => node.type === 'Pressable')
     .find(node =>

@@ -20,7 +20,9 @@ describe('formatError (T4)', () => {
       'VFS_CHARACTER_CARD_UNRECOGNIZED',
       '无法识别为角色卡',
     );
-    expect(formatError(cardErr)).toBe('无法识别为角色卡');
+    // 迁移后非 VFS key 的 AppError 统一走 `error.vfs.operation_failed`
+    // 兜底（`操作失败：{detail}`），不再是裸 message 透传。
+    expect(formatError(cardErr)).toBe('操作失败：无法识别为角色卡');
   });
 
   it('T-M-TOAST-01: REPLACE_NOT_FOUND uses Chinese refresh hint', () => {
@@ -50,7 +52,7 @@ describe('formatError (T4)', () => {
     const err = new AppError('CHAT_NOT_FOUND', 'session not found: s1', {
       sessionId: 's1',
     });
-    expect(formatError(err)).toBe('session not found: s1');
+    expect(formatError(err)).toBe('操作失败：session not found: s1');
   });
 
   it('formats ToolError with cause', () => {
@@ -63,7 +65,7 @@ describe('formatError (T4)', () => {
 
   it('formats AppError message', () => {
     const err = new AppError('AGENT_DOOM_LOOP', 'Doom loop detected');
-    expect(formatError(err)).toBe('Doom loop detected');
+    expect(formatError(err)).toBe('操作失败：Doom loop detected');
   });
 
   it('formats TdbcError with cause', () => {

@@ -2,6 +2,7 @@
  * User-visible error messages for Core domain errors (VFS, chat, provider, tools, agent).
  */
 import {CloudSyncError, TdbcError, ToolError} from '@novel-master/core';
+import {coreT} from '@/i18n/core';
 
 import {AppError} from '@novel-master/core/agent';
 
@@ -12,9 +13,14 @@ import {SessionFsError} from '@novel-master/core/session-fs';
 import {
   VfsError,
   VfsZipError,
-  formatVfsErrorForUser,
   isVfsError,
+  vfsUserMessage,
 } from '@novel-master/core/vfs';
+
+/** core vfsUserMessage（descriptor）→ 中文 string。 */
+export function formatVfsErrorForUser(error: unknown, scope?: Parameters<typeof vfsUserMessage>[1]): string {
+  return coreT(vfsUserMessage(error, scope));
+}
 
 function formatCause(cause: unknown): string | undefined {
   if (cause instanceof Error && cause.message) {

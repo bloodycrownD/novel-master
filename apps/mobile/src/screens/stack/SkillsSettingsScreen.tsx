@@ -49,6 +49,7 @@ import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -326,7 +327,7 @@ export function SkillsSettingsScreen() {
                 style={[styles.invalidTag, {color: tokens.danger}]}
                 numberOfLines={1}
               >
-                无效 · {row.item.invalidReason ?? 'front matter 不合法'}
+                无效 · {row.item.invalidReason != null ? coreT(row.item.invalidReason) : 'front matter 不合法'}
               </Text>
             ) : null}
           </View>

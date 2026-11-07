@@ -1,5 +1,7 @@
 import {describe, expect, it, jest} from '@jest/globals';
+import {userMessageOf} from '@novel-master/core/i18n';
 
+import {coreT} from '@/i18n/core';
 import {runAgentTurn} from '@/services/agent-run.service';
 
 function baseRuntime(overrides: Partial<any> = {}) {
@@ -95,10 +97,16 @@ describe('runAgentTurn integration', () => {
         append: jest.fn(async () => undefined),
       },
     });
-    await expect(
-      runAgentTurn(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
-        allowResumeWithoutInput: true,
-      }),
-    ).rejects.toThrow('消息不能为空');
+    // 迁移后抛的是带 messageKey 的 descriptor（Error.message 为 key 原文），
+    // 经 core translator 解析后再断言用户可见中文。
+    const error = await runAgentTurn(
+      runtime as any,
+      {projectId: 'p', sessionId: 's'},
+      '',
+      {allowResumeWithoutInput: true},
+    ).catch((e: unknown) => e);
+    const descriptor = userMessageOf(error);
+    expect(descriptor).not.toBeNull();
+    expect(coreT(descriptor!)).toBe('消息不能为空');
   });
 });

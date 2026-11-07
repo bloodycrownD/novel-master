@@ -46,6 +46,7 @@ import {
   agentDisplayNameFromWire,
   useAgentEditorFormState,
 } from './agent-editor/useAgentEditorFormState';
+import {coreT} from '@/i18n/core';
 
 type StackNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -265,11 +266,10 @@ export function AgentEditorForm(props: Props) {
   }
 
   if (loadError != null || invalidConfig != null) {
-    const labels = STORED_CONFIG_LABELS;
-    const title = invalidConfig != null ? labels.invalidTitle : '加载失败';
+    const title = invalidConfig != null ? coreT(STORED_CONFIG_LABELS.invalidTitle) : '加载失败';
     let reason = loadError ?? '';
     if (invalidConfig != null) {
-      reason = storedConfigInvalidReason(invalidConfig.code);
+      reason = coreT(storedConfigInvalidReason(invalidConfig.code));
     }
     const detail = invalidConfig?.message ?? '';
     return (

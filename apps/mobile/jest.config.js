@@ -227,5 +227,19 @@ module.exports = {
       repoRoot,
       'packages/cloud-sync-driver-s3/dist/index.js',
     ),
+    // core i18n 子入口（key 契约 / parseCoreCatalog / translator 工厂）：
+    // 直连 dist 真实文件，同其它 core 子路径口径；catalog YAML 不进 jest
+    // （mobile 运行时经 android assets 读取，见 spec G4.4）。
+    '^@novel-master/core/i18n$': path.join(
+      repoRoot,
+      'packages/core/dist/i18n/index.js',
+    ),
+    // chat 转录 presentation 文案（attachment chip / tool 摘要）：webview runtime
+    // 直接按子路径 import；exports 只声明 import 条件，Jest 的 require 解析不到，
+    // 与其它 core 子路径同样直连 dist 真实文件。
+    '^@novel-master/core/presentation/chat/(.*)$': path.join(
+      repoRoot,
+      'packages/core/dist/presentation/chat/$1',
+    ),
   },
 };

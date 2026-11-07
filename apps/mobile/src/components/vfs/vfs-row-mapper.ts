@@ -9,6 +9,7 @@ import {
   type RuleState,
   type WorkplaceListRow,
 } from '@novel-master/core/workplace';
+import {coreT} from '../../i18n/core';
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
@@ -144,9 +145,9 @@ export function mapWorktreeRow(
     };
   }
 
-  const subtitle = `${inclusionModeLabel(
-    row.inclusionMode,
-  )}·${displayStateLabel(row.displayState)}`;
+  const inclusionText = coreT(inclusionModeLabel(row.inclusionMode));
+  const displayText = coreT(displayStateLabel(row.displayState));
+  const subtitle = `${inclusionText}·${displayText}`;
 
   return {
     path: row.path,

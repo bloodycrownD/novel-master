@@ -37,6 +37,7 @@ import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {pickEntityIcon} from '../../utils/entity-icon';
 import {agentDisplayNameFromWire} from './agent-editor/useAgentEditorFormState';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -81,7 +82,7 @@ const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
 function agentMeta(d: AgentDefinition, label: string, ws: boolean): string {
   const steps = d.runtime?.maxSteps ?? 20;
   const modelPart = ws ? `${label} · 工作区` : label;
-  return `${modelPart} · ${storedConfig.AGENT_LIST_LABELS.maxSteps(steps)}`;
+  return `${modelPart} · ${coreT(storedConfig.AGENT_LIST_LABELS.maxSteps(steps))}`;
 }
 
 type Props = {
@@ -160,7 +161,7 @@ export function AgentList({onCreate}: Props) {
             id,
             name: agentDisplayNameFromWire(raw, id),
             configInvalid: true,
-            meta: storedConfig.storedConfigInvalidReason(health.code),
+            meta: coreT(storedConfig.storedConfigInvalidReason(health.code)),
           });
         }
       }
@@ -360,7 +361,7 @@ export function AgentList({onCreate}: Props) {
                           {color: tokens.warning},
                         ]}
                       >
-                        {storedConfig.AGENT_LIST_LABELS.configInvalid}
+                        {coreT(storedConfig.AGENT_LIST_LABELS.configInvalid)}
                       </Text>
                     </View>
                     <Text

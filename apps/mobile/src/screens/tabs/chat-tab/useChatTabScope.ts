@@ -34,6 +34,7 @@ import {setPromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 import {resolveChatLinkIntent} from './chat-link-nav';
 import {chatLinkResolver} from '@novel-master/core/chat';
+import {coreT} from '@/i18n/core';
 
 // nm-style: keep-local — 本文件的 React hooks（useEffect/useLayoutEffect/useCallback/
 // useMemo）、setTimeout 与两处带泛型的 useState 解构，在 prettier@80 下都会折行；
@@ -853,7 +854,7 @@ export function useChatTabScope({
         }
         if (intent.kind === 'not-found') {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showAppToast(chatLinkResolver.notFoundMessage(intent.path));
+          showAppToast(coreT(chatLinkResolver.notFoundMessage(intent.path)));
         }
       });
     },

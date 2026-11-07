@@ -38,6 +38,7 @@ import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type PanelRoute = RouteProp<RootStackParamList, 'SkillPanel'>;
@@ -185,7 +186,7 @@ export function SkillPanelScreen() {
                       style={[styles.invalidTag, {color: tokens.danger}]}
                       numberOfLines={1}
                     >
-                      无效 · {item.invalidReason ?? 'front matter 不合法'}
+                      无效 · {item.invalidReason != null ? coreT(item.invalidReason) : 'front matter 不合法'}
                     </Text>
                   ) : null}
                 </View>

@@ -35,6 +35,7 @@ import {
 import {pickZipFileBytes} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
+import {coreT} from '@/i18n/core';
 
 export type NewSkillTarget = {
   domain: SkillDomain;
@@ -127,7 +128,8 @@ export function NewSkillModal({
     [projects, projectId],
   );
 
-  const nameIssue = name.length > 0 ? validateSkillName(name) : null;
+  const nameReason = name.length > 0 ? validateSkillName(name) : null;
+  const nameIssue = nameReason == null ? null : coreT(nameReason);
   const descriptionIssue =
     description.length === 0
       ? '描述不能为空（进入索引，供模型判断是否使用）'
