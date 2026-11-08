@@ -22,3 +22,9 @@ user:
 
 assistant:
 启动动态工作流（subagent_model=opencode-go-chat/deepseek-v4.1-flash$max，遵守记忆 #217）：八张合同截图（home/chat/workspace/annotate/context/agents/skills/stats.png）落 assets/screenshots/ 并复制 website/public/screenshots/；演示项目《星轨旅人》虚构内容；七份指南文档由七个写手并行从 references/ 改写；落地页 + README 重写参考 intro-copywriting 记忆；构建门控 npm --prefix website run docs:build 循环修到绿；独立复审员换人读稿。纪律：任何设备禁 uninstall/pm clear（含模拟器），装包只 adb install -r -d；Metro 必须从真实路径起；debug 包不内嵌 bundle。先本地提交，push 与开启 Pages（gh api 设 build_type=workflow）前征求用户确认。
+
+user:
+（工作流跑完 + 主代理收尾）
+
+assistant:
+结果：三笔本地提交 8a284e3e2（website 25 文件）/ 80b380c3e（README + 8 截图 + MANIFEST）/ 91c8b7ba6（changelog + 记忆）。站点 docs:build 一轮过绿；独立复审 17 条全部修复并经主代理抽查核实（含 3 条高危：先建项目再建会话写反、同屏改稿不存在实为分段条切换、项目批量入口是「管理」不是长按）。截图 4 张 done、4 张 partial：workspace.png 已由主代理亲手补拍（工作区根层 卷纲/设定/章节 三目录 + 同步开启）；chat/stats 卡在模拟器内置 OpenCode Zen 只有 public key（401 Missing API key）、免费模型撞 FreeUsageLimitError；home 因项目抽屉会露出 5 个历史真实项目而改取项目主页。check-style：website 触达文件 0 问题（--all 全仓扫到的 400+ 条 core 存量不属本轮）。模拟器截图 runbook 沉淀：默认 5037 adb server 会卡死，用 ANDROID_ADB_SERVER_PORT=5038；中文输入用 ADBKeyboard（com.android.adbkeyboard/.AdbIME，ADB_INPUT_B64 广播）；input text 不支持非 ASCII；演示文件走「聊天工作区 → ⋯ → 导入 → ZIP 包」；Metro 起不来先 npm run build -w @novel-master/core；真实生成失败会留 [生成失败] 气泡，用回滚清。遗留：仓库根 scripts/symbols-inventory.mjs（01:24 子代理建的 AST 函数盘点工具，未入库未删）与 assets/screenshots/_progress/（过程截图）留在工作区；cmd 下 node -e 的正则含 | 会被拆坏产生垃圾文件（已清理三个），以后复杂 one-liner 落盘成脚本再跑。
