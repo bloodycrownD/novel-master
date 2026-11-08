@@ -134,7 +134,7 @@ Agent 运行中，同步控件是禁用的，页面会提示「Agent 运行中�
 
 **入口：我的 → 数据统计**
 
-![用量统计](/screenshots/stats.png)
+<ShotStrip :items="[['/screenshots/stats.png', '数据统计：图表 / 汇总 / 流水']]" />
 
 数据统计页按时间、服务商和模型汇总本机的 token 用量与缓存命中率，并保留每次请求的明细。
 

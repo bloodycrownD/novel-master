@@ -1,6 +1,6 @@
 # 工作区与文件
 
-![聊天工作区](/screenshots/workspace.png)
+<ShotStrip :items="[['/screenshots/workspace.png', '会话工作区文件树：卷纲 / 设定 / 章节']]" />
 
 Novel Master 把世界观、人设、卷纲、正文都放进一棵虚拟文件树里，Agent 和你在同一个空间里读写这些文件。所有文件在逻辑上都以 `/` 为根，比如 `/设定/世界观.md`、`/正文/01.md`；路径在三层工作区里形状一致，方便备份和迁移。
 
@@ -132,7 +132,7 @@ Novel Master 把世界观、人设、卷纲、正文都放进一棵虚拟文件�
 
 批注是定点改稿的核心功能：在文件预览上划一段词写意见，跟着消息发给 Agent，它照着批注改对应的地方。
 
-![划词批注](/screenshots/annotate.png)
+<ShotStrip :items="[['/screenshots/annotate.png', '文件预览与划词批注']]" />
 
 **入口：对话 tab → 进会话 → 顶部分段条「聊天工作区」→ 点开文件 → 右上切到「预览」→ Markdown 档**
 

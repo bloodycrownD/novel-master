@@ -1,5 +1,53 @@
-/* 暗夜书房：暖暗底色 + 琥珀金 / 陶土红品牌色，只覆盖变量与少量选择器 */
-:root,
+/* 暗夜书房（暗）/ 米白稿纸（亮）双主题：只覆盖变量与少量选择器，切换按钮由 VitePress 原生提供 */
+:root {
+  --vp-c-bg: #faf6ee;
+  --vp-c-bg-alt: #f3edde;
+  --vp-c-bg-elv: #fffdf7;
+  --vp-c-bg-soft: #f1ead9;
+
+  --vp-c-text-1: #3f3627;
+  --vp-c-text-2: #7d6f5a;
+  --vp-c-text-3: #a89880;
+
+  --vp-c-divider: #e2d7c2;
+  --vp-c-border: #d9ccb4;
+  --vp-c-gutter: #e2d7c2;
+
+  --vp-c-brand-1: #a85f1e;
+  --vp-c-brand-2: #c9703f;
+  --vp-c-brand-3: #a24e44;
+  --vp-c-brand-soft: rgba(200, 112, 63, 0.14);
+
+  --vp-code-block-bg: #f2ecdd;
+  --vp-code-line-highlight-color: rgba(200, 112, 63, 0.1);
+  --vp-code-copy-code-bg: #efe7d5;
+  --vp-code-copy-code-hover-bg: #e6dcc6;
+  --vp-code-copy-code-active-text: #3f3627;
+
+  --vp-nav-bg-color: #faf6ee;
+  --vp-sidebar-bg-color: #f3edde;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #c9703f 20%, #a24e44 80%);
+  --vp-home-hero-image-background-image: radial-gradient(
+    circle,
+    rgba(230, 145, 63, 0.22) 0%,
+    rgba(162, 78, 68, 0.14) 55%,
+    transparent 75%
+  );
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-button-brand-bg: #c9703f;
+  --vp-button-brand-hover-bg: #a85f1e;
+  --vp-button-brand-active-bg: #a24e44;
+  --vp-button-brand-text: #fffdf7;
+  --vp-button-brand-hover-text: #fffdf7;
+  --vp-button-brand-active-text: #fffdf7;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+}
+
 html.dark {
   --vp-c-bg: #171310;
   --vp-c-bg-alt: #1e1915;
@@ -50,6 +98,11 @@ html.dark {
 }
 
 ::selection {
+  background: rgba(230, 145, 63, 0.25);
+  color: #3f3627;
+}
+
+html.dark ::selection {
   background: rgba(230, 145, 63, 0.28);
   color: #fbf3e6;
 }
@@ -59,12 +112,20 @@ html.dark {
 }
 
 .vp-doc a:hover {
+  color: #b4622e;
+}
+
+html.dark .vp-doc a:hover {
   color: #f0a355;
 }
 
 html {
-  scrollbar-color: #3a3129 #171310;
+  scrollbar-color: #d9ccb4 #faf6ee;
   scrollbar-width: thin;
+}
+
+html.dark {
+  scrollbar-color: #3a3129 #171310;
 }
 
 ::-webkit-scrollbar {
@@ -73,15 +134,60 @@ html {
 }
 
 ::-webkit-scrollbar-track {
+  background: #faf6ee;
+}
+
+html.dark ::-webkit-scrollbar-track {
   background: #171310;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3129;
-  border: 2px solid #171310;
+  background: #d9ccb4;
+  border: 2px solid #faf6ee;
   border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #b3a288;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3a3129;
+  border-color: #171310;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
   background: #5a4a3b;
+}
+
+/* 首页 hero：手机竖图限高，避免撑爆首屏 */
+.VPHomeHero .image-container img {
+  max-height: 256px;
+  width: auto;
+}
+
+/* 手机截图横条：并排小图 + 图注，替代全宽竖图 */
+.shot-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 12px;
+  margin: 16px 0;
+}
+
+.shot-strip-item {
+  margin: 0;
+}
+
+.shot-strip-item img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+}
+
+.shot-strip-item figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+  text-align: center;
 }

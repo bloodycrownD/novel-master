@@ -1,6 +1,6 @@
 # 快速上手
 
-![聊天工作区](/screenshots/workspace.png)
+<ShotStrip :items="[['/screenshots/workspace.png', '会话工作区：卷纲 / 设定 / 章节 三层文件树']]" />
 
 Novel Master 是专注长篇小说创作的 AI Agent 工作台。安卓端把世界观、人设、卷纲、章节统统放进一棵虚拟文件树，Agent 直接读写这些文件，你和它在同一个空间里对话改稿。底部只有两个 tab——「对话」和「我的」，绝大多数设置页都从「我的」进。
 
@@ -132,7 +132,7 @@ Novel Master 是专注长篇小说创作的 AI Agent 工作台。安卓端把世
 
 ## 第 4 步：写第一稿
 
-![对话](/screenshots/chat.png)
+<ShotStrip :items="[['/screenshots/chat.png', '对话：聊天面板与输入框']]" />
 
 **入口：进会话 → 底部输入框**
 
@@ -172,7 +172,7 @@ Agent 干活时会在对话里留下工具卡片，这是理解它行为的关�
 
 ### 路 A：划词批注定点改
 
-![划词批注](/screenshots/annotate.png)
+<ShotStrip :items="[['/screenshots/annotate.png', '划词批注：选中正文写意见']]" />
 
 这是最精准的改稿方式——指着文件里的某一段说明要怎么改。
 
@@ -204,7 +204,7 @@ Agent 干活时会在对话里留下工具卡片，这是理解它行为的关�
 
 ## 第 7 步：长对话收敛
 
-![上下文管理](/screenshots/context.png)
+<ShotStrip :items="[['/screenshots/context.png', '消息操作菜单：编辑 / 复制 / 置位 / 分叉 / 回滚']]" />
 
 写长篇很容易聊着聊着上下文就撑爆了。常用的做法有三种。
 

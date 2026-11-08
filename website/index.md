@@ -48,45 +48,4 @@ features:
 
 ## 界面一览
 
-<div style="overflow-x: auto;">
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="/screenshots/home.png" width="270" alt="首页"><br>
-      <sub>首页 — 项目与会话总览</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/chat.png" width="270" alt="对话"><br>
-      <sub>对话 — 聊天面板与输入框</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/workspace.png" width="270" alt="工作区"><br>
-      <sub>工作区 — 会话文件树</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/annotate.png" width="270" alt="批注"><br>
-      <sub>批注 — 划词写意见，随消息定点改稿</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="/screenshots/context.png" width="270" alt="消息菜单"><br>
-      <sub>消息菜单 — 编辑、复制、置位、分叉、回滚</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/agents.png" width="270" alt="智能体"><br>
-      <sub>智能体 — 子智能体列表</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/skills.png" width="270" alt="技能"><br>
-      <sub>技能 — 技能管理列表</sub>
-    </td>
-    <td align="center">
-      <img src="/screenshots/stats.png" width="270" alt="统计"><br>
-      <sub>统计 — 数据统计页（图表 / 汇总 / 流水）</sub>
-    </td>
-  </tr>
-</table>
-
-</div>
+<ShotStrip :items="[['/screenshots/home.png', '首页 — 项目与会话总览'], ['/screenshots/chat.png', '对话 — 聊天面板与输入框'], ['/screenshots/workspace.png', '工作区 — 会话文件树'], ['/screenshots/annotate.png', '批注 — 划词写意见，随消息定点改稿'], ['/screenshots/context.png', '消息菜单 — 编辑、复制、置位、分叉、回滚'], ['/screenshots/agents.png', '智能体 — 子智能体列表'], ['/screenshots/skills.png', '技能 — 技能管理列表'], ['/screenshots/stats.png', '统计 — 数据统计页（图表 / 汇总 / 流水）']]" :size="200" />
