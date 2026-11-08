@@ -10,4 +10,4 @@ Novel Master 是专注长篇小说创作的 AI Agent 工作台，**Android 移�
 
 技术交流与 AI 小说创作交流，欢迎加入：
 
-![交流群](../../assets/group.jpg)
+<img src="/group.jpg" width="280" alt="技术交流群 &amp; AI 小说交流群">
