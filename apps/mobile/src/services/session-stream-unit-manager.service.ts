@@ -163,6 +163,15 @@ import {createQuantumYield} from '@/services/yield-quantum';
 import {createLogger} from '@novel-master/core/log';
 import {AppState} from 'react-native';
 
+/**
+ * reset-stream 的下一拍 force-snapshot 目标（P0-4）：只在该会话仍是同一
+ * 单元且未销毁时补发，避免捕获的旧单元把过期快照推给已替换的宿主。
+ */
+type ForceSnapshotTarget = {
+  readonly sessionId: string;
+  readonly unit: SessionStreamUnit;
+};
+
 /** 编排器日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
 const log = createLogger('chat.stream-manager');
 
@@ -448,6 +457,28 @@ export class SessionStreamUnitManager {
   private disposed = false;
   private hydratedValue = false;
 
+  /**
+   * tool-use 事件路由（arrow 属性：eventBus 直接持引用，需要稳定 this；
+   * 订阅调用因此保持单行）。
+   */
+  private readonly onToolUse = (payload: AgentStreamToolUsePayload): void => {
+    const tool = {id: payload.id, name: payload.name, input: payload.input};
+    this.units.get(payload.sessionId)?.ingestToolUse(payload.runId, tool);
+  };
+
+  /**
+   * reset-stream 的下一拍 force-snapshot（P0-4）：force-snapshot 经适配器
+   * 同步调宿主 sendSessionSnapshotNow，它起手读 Provider 的 streamingRows
+   * 闭包——必须等 setUnitView 提交后的下一拍再发，否则「清空后的快照」
+   * 仍带旧 partial。
+   */
+  private readonly forceSnapshotSoon = (target: ForceSnapshotTarget): void => {
+    const sameUnit = this.units.get(target.sessionId) === target.unit;
+    if (sameUnit && !target.unit.isDestroyed()) {
+      target.unit.requestForceSnapshot();
+    }
+  };
+
   constructor(params: SessionStreamUnitManagerParams) {
     this.runtime = params.runtime;
     // 默认实现的完整 options 类型比 SessionStreamStartOptions 宽，调用点只传子集，安全断言。
@@ -483,6 +514,8 @@ export class SessionStreamUnitManager {
     // Step 5：delta 生效（ingest 返回 true）即把最新快照 append 进该会话
     // 的写通 coalescer（250ms 合并；settled/interrupted 单元的陈旧 delta
     // 被 ingest 守卫拦截，不产生持久层写）。
+    // bus 短别名只为让 tool-use 的订阅调用保持一行（check-signatures）。
+    const bus = this.runtime.eventBus;
     this.subscriptions.push(
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STREAM_TEXT_DELTA,
@@ -511,16 +544,7 @@ export class SessionStreamUnitManager {
       // tool-use（chat-streaming-projection Step 2）：进当前 step 记录的
       // tools 并立即推 tools-only 的 stream-batch。tool 状态不是持久字段，
       // 不写通（只由单元内的 onProjectionChanged 通知）。
-      this.runtime.eventBus.subscribe(
-        EVENT_AGENT_STREAM_TOOL_USE,
-        (payload: AgentStreamToolUsePayload) => {
-          this.units.get(payload.sessionId)?.ingestToolUse(payload.runId, {
-            id: payload.id,
-            name: payload.name,
-            input: payload.input,
-          });
-        },
-      ),
+      bus.subscribe(EVENT_AGENT_STREAM_TOOL_USE, this.onToolUse),
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STEP_COMMITTED,
         (payload: AgentStepCommittedPayload) => this.onStepCommitted(payload),
@@ -601,7 +625,11 @@ export class SessionStreamUnitManager {
     this.scopeBridge = bridge;
   }
 
-  /** 水合是否完成（完成前 snapshot 一律 null——会话呈现为无 run）。 */
+  /**
+   * 水合是否完成（完成前 snapshot 一律 null——会话呈现为无 run）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（水合时序观测面）。
+   */
   isHydrated(): boolean {
     return this.hydratedValue;
   }
@@ -821,7 +849,11 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
   }
 
-  /** 某 session 当前是否有进行中的 run（starting|running 单元）。 */
+  /**
+   * 某 session 当前是否有进行中的 run（starting|running 单元）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（活跃 run 观测面）。
+   */
   hasActiveRun(sessionId: string): boolean {
     const unit = this.units.get(sessionId);
     return unit != null && this.isActiveUnit(unit);
@@ -884,17 +916,10 @@ export class SessionStreamUnitManager {
     const removed = unit.clearStreamProjection();
     unit.broadcastControlMessage({type: 'reset-stream', streamIds: removed});
     this.notifyChanged();
-    setTimeout(() => {
-      if (this.units.get(sessionId) === unit && !unit.isDestroyed()) {
-        unit.requestForceSnapshot();
-      }
-    }, 0);
+    setTimeout(() => this.forceSnapshotSoon({sessionId, unit}), 0);
     if (unit.getStatus() === 'interrupted') {
-      this.upsertSettledRunStateQuietly(
-        sessionId,
-        unit.projectId,
-        unit.snapshot(),
-      );
+      const snap = unit.snapshot();
+      this.upsertSettledRunStateQuietly(sessionId, unit.projectId, snap);
     }
   }
 
@@ -923,7 +948,11 @@ export class SessionStreamUnitManager {
     };
   }
 
-  /** 当前注册表中的单元总数（含活跃与 settled；诊断/测试用）。 */
+  /**
+   * 当前注册表中的单元总数（含活跃与 settled；诊断/测试用）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（LRU 淘汰观测面）。
+   */
   unitCount(): number {
     return this.units.size;
   }
@@ -2183,11 +2212,18 @@ export class SessionStreamUnitManager {
    * test-only 尺寸探针（形态对齐 `chat-session-view-cache` 的 `*CacheSize()` 先例）：
    * 两张表是 private 且无注入口，LRU 封顶只能靠外部灌数 + 读 size 观测。
    * 生产代码零调用；随这两张表的实现一起回滚。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一。
    */
   idleMessageViewsSize(): number {
     return this.idleMessageViews.size;
   }
 
+  /**
+   * test-only 尺寸探针（语义同 {@link idleMessageViewsSize}）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一。
+   */
   settledProjectionsSize(): number {
     return this.settledProjections.size;
   }

@@ -193,13 +193,13 @@ CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-
 
 Chat Transcript `webview/ui/**` 对 `runtime/state` 的纪律（对齐 post-1.3.14-large-debt-remediation）：
 
-| 规则                                 | 定案                                                                                                                         |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| **初始 allowlist（值导入 `state`）** | `{StreamingMessageRow, RowList, MessageRow}`                                                                                 |
+| 规则                                 | 定案                                                                                                                                           |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **初始 allowlist（值导入 `state`）** | `{StreamingMessageRow, RowList, MessageRow}`                                                                                                   |
 | 路径                                 | `ui/stream/StreamingMessageRow.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamingMessageRow 内 `StreamBodyHost`，同文件） |
-| type-only                            | `import type { … } from '…/state'` **允许**（不占白名单）                                                                    |
-| **新** `ui/**` 组件                  | **禁止**值导入 `state`；经 props / runtime 门面拿数据                                                                        |
-| 门禁                                 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关                            |
+| type-only                            | `import type { … } from '…/state'` **允许**（不占白名单）                                                                                      |
+| **新** `ui/**` 组件                  | **禁止**值导入 `state`；经 props / runtime 门面拿数据                                                                                          |
+| 门禁                                 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关                                              |
 
 既有三文件可渐进 props 化并缩小白名单（不挡本门禁开启）。勿把新直读加进白名单外文件。
 

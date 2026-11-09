@@ -6,15 +6,14 @@
  * 协议升级后逐文件漂移。这里单一来源：宿主判定（v===2、version t2、能力含
  * streamProjection）与 web dist 的 ready 常量同源。
  */
+import type {ComponentType} from 'react';
 import type TestRenderer from 'react-test-renderer';
 import {act} from 'react-test-renderer';
 import {CONVERSATION_BRIDGE_V} from '@/components/chat/ChatConversationBridge';
-import {
-  TRANSCRIPT_CAPABILITIES,
-  TRANSCRIPT_READY_VERSION,
-} from '@/web/chat-transcript/transcript-capabilities';
+import {TRANSCRIPT_CAPABILITIES} from '@/web/chat-transcript/transcript-capabilities';
+import {TRANSCRIPT_READY_VERSION} from '@/web/chat-transcript/transcript-capabilities';
 
-export type TranscriptReadyEnvelope = {
+type TranscriptReadyEnvelope = {
   v: number;
   type: 'ready';
   payload: {
@@ -24,7 +23,20 @@ export type TranscriptReadyEnvelope = {
   };
 };
 
-/** 现代 ready 载荷（v2 + t2 + streamBlockCommit/streamProjection）。 */
+type TestInstance = TestRenderer.ReactTestInstance;
+
+type WebViewLike = ComponentType<{
+  onMessage?: (event: {nativeEvent: {data: string}}) => void;
+}>;
+
+const WebViewComponent = require('react-native-webview').default as WebViewLike;
+
+/**
+ * 现代 ready 载荷（v2 + t2 + streamBlockCommit/streamProjection）。
+ *
+ * nm-style: keep-public — 共享 ready fixture（spec §9.1 / P1-9）；被多个
+ * __tests__ 直接 import，撤 public 会让 ready 载荷协议在各用例重新漂移。
+ */
 export function makeTranscriptReadyPayload(): TranscriptReadyEnvelope {
   return {
     v: CONVERSATION_BRIDGE_V,
@@ -37,15 +49,14 @@ export function makeTranscriptReadyPayload(): TranscriptReadyEnvelope {
   };
 }
 
-/** 向测试树里的 WebView 注入一条 ready（与旧用例手写形态逐字等价）。 */
-export function simulateTranscriptReady(
-  root: TestRenderer.ReactTestInstance,
-): void {
-  const webView = root.findByType(
-    require('react-native-webview').default as React.ComponentType<{
-      onMessage?: (event: {nativeEvent: {data: string}}) => void;
-    }>,
-  );
+/**
+ * 向测试树里的 WebView 注入一条 ready（与旧用例手写形态逐字等价）。
+ *
+ * nm-style: keep-public — 共享 ready fixture（spec §9.1 / P1-9）；被多个
+ * __tests__ 直接 import，撤 public 会让 ready 载荷协议在各用例重新漂移。
+ */
+export function simulateTranscriptReady(root: TestInstance): void {
+  const webView = root.findByType(WebViewComponent);
   act(() => {
     webView.props.onMessage?.({
       nativeEvent: {data: JSON.stringify(makeTranscriptReadyPayload())},

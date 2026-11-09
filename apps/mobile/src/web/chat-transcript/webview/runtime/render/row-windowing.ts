@@ -60,13 +60,7 @@ export function getRowWindowRange(total: number): RowWindowRange {
  * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
  * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
  */
-export function getRowWindowSpacerHeights(
-  total: number,
-  pinnedTail = false,
-): {
-  top: number;
-  bottom: number;
-} {
+export function getRowWindowSpacerHeights(total: number, pinnedTail = false) {
   const range = getRowWindowRange(total);
   const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
   return {
@@ -154,11 +148,8 @@ function estimateViewportFirstRow(totalHint: number): number | null {
 }
 
 /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
-export function retargetRowWindow(
-  total: number,
-  viewportFirstRow: number,
-): void {
-  win = desiredRowWindow(total, viewportFirstRow);
+export function retargetRowWindow(total: number, firstRow: number): void {
+  win = desiredRowWindow(total, firstRow);
   // 窗口内容大换血：下次 render 后必须重测平均槽高。
   lastMeasuredWin = null;
 }
@@ -338,9 +329,7 @@ export function measureRowWindow(): void {
   const measuredPx = bottomPx - topPx;
   if (!(measuredPx > 0)) return;
   const measuredSlot = measuredPx / effectiveCount;
-  avgSlotPx =
-    avgSlotPx * (1 - ROW_WINDOW_AVG_ALPHA) +
-    measuredSlot * ROW_WINDOW_AVG_ALPHA;
+  avgSlotPx += (measuredSlot - avgSlotPx) * ROW_WINDOW_AVG_ALPHA;
   lastMeasuredWin = {start: win.start, end: win.end};
 }
 

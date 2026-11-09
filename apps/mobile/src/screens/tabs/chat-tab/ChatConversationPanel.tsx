@@ -84,6 +84,10 @@ export type ChatConversationPanelProps = {
  * `projectId` / `sessionId` 由调用方在已判非空的分支里传入——controller 的 scope
  * 两者皆必填，**不**在本组件里做二次判空（判空就得放 hook 之前 early return，
  * 那会让「本次渲染 hook 数」随入参变化，React 直接报 hook 顺序错）。
+ *
+ * nm-style: keep-local — 把 useChatTabController / useChatComposerController 与其
+ * 派生收敛在稳定子树；hook 归属决定不能内联进面板本体（内联会让 hook 在可见性
+ * 分支上条件执行）。
  */
 function ChatConversationWebSurface(props: {
   readonly projectId: string;

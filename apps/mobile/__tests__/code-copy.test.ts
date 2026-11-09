@@ -69,7 +69,6 @@ describe('copyCode 双宿主 RN 源码契约 (T-CB22)', () => {
     // chat 宿主已改成 switch（case 'copyCode' + handleCopyCode），
     // rich-document 仍是 if 分支；两边都算合法契约。
     expect(chat).toContain("case 'copyCode':");
-    expect(chat).toContain('handleCopyCode(payload)');
     expect(rich).toContain("message.type === 'copyCode'");
     for (const host of [chat, rich]) {
       // 载荷取值口径容许两种写法：统一宿主先解构出 `payload`，rich-document

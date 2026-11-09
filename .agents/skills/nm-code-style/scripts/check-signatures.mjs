@@ -40,7 +40,8 @@ function checkParameters(node, sourceFile, file) {
 function checkArguments(node, sourceFile, file) {
   const args = node.arguments;
   if (args == null || args.length === 0) return;
-  if (args.length === 1 && (ts.isArrowFunction(args[0]) || ts.isFunctionExpression(args[0]))) return;
+  // 回调实参（setTimeout(fn, delayMs) 等）的函数体天然跨行；只校验普通实参列表。
+  if (args.some((arg) => ts.isArrowFunction(arg) || ts.isFunctionExpression(arg))) return;
   const startLine = lineOf(sourceFile, node.getStart(sourceFile));
   const split = lineOf(sourceFile, args[0]) !== startLine || args.some((arg, index) => index > 0 && lineOf(sourceFile, arg) !== lineOf(sourceFile, args[index - 1]));
   if (split) report(file, sourceFile, node, "ARGS", node.expression.getText(sourceFile).slice(0, 80));
@@ -51,6 +52,9 @@ function checkImport(node, sourceFile, file) {
   if (bindings == null || !ts.isNamedImports(bindings)) return;
   const elements = bindings.elements;
   if (elements.length === 0 || elements.length > 3) return;
+  // 长 import 的一行形式必然超过 prettier printWidth；这种拆行不是风格问题。
+  const oneLine = node.getText(sourceFile).replace(/\s+/g, " ");
+  if (oneLine.length > 80) return;
   const startLine = lineOf(sourceFile, node.getStart(sourceFile));
   const split = lineOf(sourceFile, elements[0]) !== startLine || elements.some((element, index) => index > 0 && lineOf(sourceFile, element) !== lineOf(sourceFile, elements[index - 1]));
   if (split) report(file, sourceFile, node, "IMPORT", `${elements.length} 个具名导入`);

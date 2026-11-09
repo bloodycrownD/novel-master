@@ -80,7 +80,7 @@ function bodySeed(html: string | null | undefined, text: unknown): BodySeed {
   return {seedHtml: null, seedText: value.length > 0 ? value : null, rich};
 }
 
-export type StreamingMessageRowProps = {
+type StreamingMessageRowProps = {
   row: MessageRow;
 };
 
@@ -137,8 +137,10 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const hasTools = !!(tools && tools.length > 0);
   // 折叠键（P1-6）：streaming 用 stream:* 常量键；finished 用 msg:<id> 并读
   // state.thinkingExpanded / toolGroupExpanded（窗口卸载重建后展开态保持）。
+  // streaming 必须展开：runtime getStreamThinkingBody 依赖 .thinking-body 存在，
+  // 思考增量才有落笔点；折叠/展开只在 finished 行交给用户控制。
   const thinkingKey = streaming ? 'stream:thinking' : 'msg:' + row.id;
-  const thinkingExpanded = !streaming && !!state.thinkingExpanded[thinkingKey];
+  const thinkingExpanded = streaming || !!state.thinkingExpanded[thinkingKey];
   const toolGroupKey = streaming ? 'stream:tools:' + row.id : 'msg:' + row.id;
   const stored = state.toolGroupExpanded[toolGroupKey];
   const groupExpanded = streaming ? stored !== false : !!stored;

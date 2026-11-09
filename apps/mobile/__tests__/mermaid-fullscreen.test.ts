@@ -161,9 +161,8 @@ describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
     // case + handleMermaidVisibility(true/false)，上浮回调不变。
     expect(chatWeb).toContain("case 'mermaidViewerOpened':");
     expect(chatWeb).toContain("case 'mermaidViewerClosed':");
-    expect(chatWeb).toContain('handleMermaidVisibility(true)');
-    expect(chatWeb).toContain('handleMermaidVisibility(false)');
-    expect(chatWeb).toContain('onWebMermaidViewerOpenChange');
+    expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(true)');
+    expect(chatWeb).toContain('onWebMermaidViewerOpenChange?.(false)');
     // 返回键关闭下发通道（照 menuCloseSignal 先例）
     expect(chatWeb).toContain("type: 'closeMermaidViewer'");
 

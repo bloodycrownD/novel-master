@@ -8,8 +8,10 @@ import type {StreamCheckpoint} from '../state/state';
 
 export type {StreamCheckpoint};
 
+type Cp = StreamCheckpoint | null;
+
 /** delta 判定：应用 / 丢弃 / 请求普通快照。 */
-export type StreamDeltaDecision = 'apply' | 'ignore' | 'resync';
+type Decision = 'apply' | 'ignore' | 'resync';
 
 /**
  * delta 判定表：
@@ -19,14 +21,14 @@ export type StreamDeltaDecision = 'apply' | 'ignore' | 'resync';
  * - `seq <= applied` → ignore（重复/过期，幂等丢弃）；
  * - `seq === applied + 1` → apply；
  * - 其余（gap）→ resync（不应用半截内容，等快照）。
+ *
+ * nm-style: keep-public — spec C20 的纯函数对账面，stream-checkpoint.test.ts
+ * 表驱动直测（判定表/merge 四象限）；生产各 1 个调用点（stream.ts /
+ * snapshot.ts），撤导出会让一致性与测试双面失守。
  */
-export function decideStreamDelta(
-  cp: StreamCheckpoint | null,
-  streamId: string,
-  seq: number,
-): StreamDeltaDecision {
+export function decideStreamDelta(cp: Cp, id: string, seq: number): Decision {
   if (cp == null) return 'resync';
-  if (cp.id !== streamId) return 'resync';
+  if (cp.id !== id) return 'resync';
   if (cp.status === 'finished') return 'ignore';
   if (seq <= cp.seq) return 'ignore';
   if (seq === cp.seq + 1) return 'apply';
@@ -39,11 +41,12 @@ export function decideStreamDelta(
  * - local 为空 → incoming；
  * - 异 id → incoming（新流换主）；
  * - 同 id → seq 取 max、status 收尾不可逆（finished 优先）。
+ *
+ * nm-style: keep-public — spec C20 的纯函数对账面，stream-checkpoint.test.ts
+ * 表驱动直测（判定表/merge 四象限）；生产各 1 个调用点（stream.ts /
+ * snapshot.ts），撤导出会让一致性与测试双面失守。
  */
-export function mergeCheckpoint(
-  local: StreamCheckpoint | null,
-  incoming: StreamCheckpoint | null,
-): StreamCheckpoint | null {
+export function mergeCheckpoint(local: Cp, incoming: Cp): Cp {
   if (incoming == null) return null;
   if (local == null) return incoming;
   if (local.id !== incoming.id) return incoming;

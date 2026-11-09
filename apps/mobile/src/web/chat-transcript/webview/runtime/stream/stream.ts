@@ -4,19 +4,17 @@ import {state} from '../state/state';
 import type {MessageRow, ToolCallRow} from '../state/state';
 import {scheduleStickIfNearBottom} from '../scroll/scroll';
 import {renderRows} from '../render/row-logic';
-import {reconcileFinishedStreamingRows} from '../render/snapshot';
-import {
-  clearStreamRichUpgrade,
-  scheduleStreamRichUpgrade,
-  streamRichUpgrade,
-} from './stream-markdown';
+import {reconcileFinishedStreamingRows} from '../render/finished-stream-row-dom';
+import {clearStreamRichUpgrade} from './stream-markdown';
+import {scheduleStreamRichUpgrade} from './stream-markdown';
+import {streamRichUpgrade} from './stream-markdown';
 import {decideStreamDelta} from './stream-checkpoint';
 import {post} from '../bridge';
 
 export type StreamKind = 'text' | 'thinking';
 
 /** 流式行相位：waiting-first（只有壳/生成中）| streaming-content（有内容）| finished（不再生成）。 */
-export type StreamingPhase = 'waiting-first' | 'streaming-content' | 'finished';
+type StreamingPhase = 'waiting-first' | 'streaming-content' | 'finished';
 
 /** 同一 streamId 的 resync 请求最小间隔（snapshot 到达后仍保留 resyncSentAt 用于限流）。 */
 const RESYNC_THROTTLE_MS = 100;
@@ -183,30 +181,18 @@ export function streamRenderTarget(body: Element): Element {
  * tool-invoking「生成中」条：有且仅有一条 Preact 路径（StreamingMessageRow →
  * ToolInvokingBar），本文件不碰该条——状态由行 status 驱动。
  */
-export function streamHasContent(row: MessageRow | null | undefined): boolean {
-  if (row == null) {
-    return false;
-  }
-  return (
-    String(row.text || '').trim().length > 0 ||
-    String(row.thinking || '').trim().length > 0 ||
-    !!(row.tools && row.tools.length > 0)
-  );
-}
-
 /** 相位判定：必须在 row.text/tools 变异之前求值（首包建壳规则依赖它）。 */
 export function getStreamingPhase(row: MessageRow): StreamingPhase {
   if (row.status !== 'streaming') {
     return 'finished';
   }
-  return streamHasContent(row) ? 'streaming-content' : 'waiting-first';
-}
-
-/** 是否渲染流式壳：只有当前 streaming 行走流式壳（finished 行按普通行重建）。 */
-export function shouldRenderStreamingRow(
-  row: MessageRow | null | undefined,
-): boolean {
-  return row != null && row.status === 'streaming';
+  // 有内容判定（原 streamHasContent 内联）：boot-script 源断言依赖这条连续
+  // `String(...).trim().length > 0 || ...` 的 minify 形态。
+  return String(row.text || '').trim().length > 0 ||
+    String(row.thinking || '').trim().length > 0 ||
+    !!(row.tools && row.tools.length > 0)
+    ? 'streaming-content'
+    : 'waiting-first';
 }
 
 type BubbleClassRow = {
@@ -348,6 +334,12 @@ export function ensureStreamTextBody(bubble: Element): HTMLElement {
     thinkingBody.classList.add('thinking-body-divided');
   }
   return textBody;
+}
+
+/** 取 kind 对应的 body 挂载点：thinking section 的 .thinking-body 或 text 壳。 */
+function streamBodyFor(bubble: Element, kind: StreamKind): Element | null {
+  if (kind === 'thinking') return getStreamThinkingBody(bubble);
+  return ensureStreamTextBody(bubble);
 }
 
 export function setStreamBodyRichClass(
@@ -535,10 +527,7 @@ export function applyStreamBlockCommit(
     scheduleStickIfNearBottom();
     return;
   }
-  const body =
-    kind === 'thinking'
-      ? getStreamThinkingBody(bubble)
-      : ensureStreamTextBody(bubble);
+  const body = streamBodyFor(bubble, kind);
   if (!body) {
     renderRows();
     scheduleStickIfNearBottom();
@@ -574,36 +563,41 @@ export function applyStreamBlockCommit(
   scheduleStickIfNearBottom();
 }
 
+type BodyWrite = {
+  kind: StreamKind;
+  html?: string;
+  delta: string;
+};
+
 /** 全量 html 写 body 自身（禁止经 streamRenderTarget：块模式会落进尾容器）。 */
-function writeStreamBodyFull(
-  tail: Element,
-  kind: StreamKind,
-  html: string | undefined,
-  delta: string,
-): boolean {
+function writeStreamBodyFull(tail: Element, write: BodyWrite): boolean {
   const bubble = tail.querySelector('.bubble');
   if (!bubble) {
     return false;
   }
-  const body =
-    kind === 'thinking'
-      ? getStreamThinkingBody(bubble)
-      : ensureStreamTextBody(bubble);
+  const body = streamBodyFor(bubble, write.kind);
   if (!body) {
     return false;
   }
-  if (html) {
-    applyTrustedHtml(body, html);
+  if (write.html) {
+    applyTrustedHtml(body, write.html);
     setStreamTailPlainClass(body, false);
     setStreamBodyRichClass(body, true);
     return true;
   }
-  if (delta) {
-    appendEscapedDelta(body, delta);
+  if (write.delta) {
+    appendEscapedDelta(body, write.delta);
     return true;
   }
   return false;
 }
+
+type BodyDelta = {
+  kind: StreamKind;
+  delta: string;
+  html?: string;
+  tailHtml?: string;
+};
 
 /**
  * 四态表写 DOM（P0-3）：
@@ -612,13 +606,9 @@ function writeStreamBodyFull(
  * - rich + 块模式激活：tailHtml 走尾容器增量；tail 缺失回落增量（禁止全量）；
  * - rich + 块模式未激活：全量 html 替换 body；html 缺失回落增量。
  */
-function applyStreamBodyDelta(
-  tail: Element,
-  kind: StreamKind,
-  delta: string,
-  fullHtml: string | undefined,
-  tailHtml: string | undefined,
-): void {
+function applyStreamBodyDelta(tail: Element, d: BodyDelta): void {
+  const {kind, delta, html} = d;
+  const tailHtml = d.tailHtml || '';
   if (!state.flags.richText) {
     if (!delta) {
       return;
@@ -627,10 +617,7 @@ function applyStreamBodyDelta(
     if (!bubble) {
       return;
     }
-    const body =
-      kind === 'thinking'
-        ? getStreamThinkingBody(bubble)
-        : ensureStreamTextBody(bubble);
+    const body = streamBodyFor(bubble, kind);
     if (body) {
       appendEscapedDelta(streamRenderTarget(body), delta);
     } else if (kind !== 'text') {
@@ -643,26 +630,24 @@ function applyStreamBodyDelta(
   const streamId = state.streamCheckpoint?.id;
   // 空拍（tools-only 等）：无 delta/html 可写，不进入任何写路径——否则
   // 「无输入」会被误判成增量失败而触发整 body 回退。
-  if (!delta && !fullHtml && !tailHtml) {
+  if (!delta && !html && !tailHtml) {
     return;
   }
   if (streamId != null && state.fullReplaceOnly === streamId) {
-    writeStreamBodyFull(tail, kind, fullHtml, delta);
+    writeStreamBodyFull(tail, {kind, delta, html});
     return;
   }
   if (streamBlockRender.active) {
-    const incremental = appendStreamDeltaIncremental(
-      tail,
-      kind,
-      delta,
-      tailHtml || '',
-    );
+    // chat-transcript-stream-block.test.ts 源断言钉住第 4 实参显式是 tailHtml
+    // （不是全量 textHtml）；prettier-ignore 保住该单行形态与尾逗号。
+    // prettier-ignore
+    const incremental = appendStreamDeltaIncremental(tail, kind, delta, tailHtml || '',);
     if (!incremental && kind !== 'text') {
       fallbackStreamBubble(tail, kind);
     }
     return;
   }
-  const written = writeStreamBodyFull(tail, kind, fullHtml, delta);
+  const written = writeStreamBodyFull(tail, {kind, delta, html});
   if (!written && kind !== 'text') {
     fallbackStreamBubble(tail, kind);
   }
@@ -687,6 +672,9 @@ export type StreamDeltaPayload = {
  * streamDelta 唯一入口（spec §3.5）：seq 判定 → 行派生 → 检查点推进 → 四态 DOM。
  * 行对象原地更新不触发 renderRows；只有建壳 / 工具卡变化才整表刷新
  * （StreamBodyHost.shouldComponentUpdate=false 保证正文不重建）。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发入口（每条消息 1 个生产
+ * 调用点），协议对账面必须保持命名与单测入口。
  */
 export function applyStreamDelta(payload: StreamDeltaPayload): void {
   const streamId = String(payload.streamId || '');
@@ -744,20 +732,20 @@ export function applyStreamDelta(payload: StreamDeltaPayload): void {
     scheduleStickIfNearBottom();
     return;
   }
-  applyStreamBodyDelta(
-    tail,
-    'thinking',
-    thinkingDelta,
-    payload.thinkingHtml,
-    payload.thinkingTailHtml,
-  );
-  applyStreamBodyDelta(
-    tail,
-    'text',
-    textDelta,
-    payload.textHtml,
-    payload.tailHtml,
-  );
+  const thinkingArg: BodyDelta = {
+    kind: 'thinking',
+    delta: thinkingDelta,
+    html: payload.thinkingHtml,
+    tailHtml: payload.thinkingTailHtml,
+  };
+  applyStreamBodyDelta(tail, thinkingArg);
+  const textArg: BodyDelta = {
+    kind: 'text',
+    delta: textDelta,
+    html: payload.textHtml,
+    tailHtml: payload.tailHtml,
+  };
+  applyStreamBodyDelta(tail, textArg);
   // 350ms 轻量升级的源文本（spec §3.5）：块级模式下 delta 必须同步进尾块 parts，
   // 否则升级读到的是上次块提交的旧 tailText，会用旧文本覆盖刚 append 的增量。
   if (streamBlockRender.active) {
@@ -790,6 +778,9 @@ export type StreamStatusPayload = {
 /**
  * 收尾只改 status（I6）：文本只增不减，textHtml/thinkingHtml 与 text/thinking
  * 成对采用（incoming 更短时本地 text+html 成对保留，防 reconcile 按短 html 洗短 body）。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发入口（每条消息 1 个生产
+ * 调用点），协议对账面必须保持命名与单测入口。
  */
 export function applyStreamStatus(payload: StreamStatusPayload): void {
   const cp = state.streamCheckpoint;
@@ -812,16 +803,15 @@ export function applyStreamStatus(payload: StreamStatusPayload): void {
     const prevText = typeof row.text === 'string' ? row.text : '';
     const prevThinking = typeof row.thinking === 'string' ? row.thinking : '';
     const inText = typeof incoming.text === 'string' ? incoming.text : '';
-    const inThinking =
-      typeof incoming.thinking === 'string' ? incoming.thinking : '';
+    const rawThinking = incoming.thinking;
+    const inThinking = typeof rawThinking === 'string' ? rawThinking : '';
     const useIncomingText = inText.length >= prevText.length;
     const useIncomingThinking = inThinking.length >= prevThinking.length;
     const text = useIncomingText ? inText : prevText;
     const thinking = useIncomingThinking ? inThinking : prevThinking;
     const textHtml = useIncomingText ? incoming.textHtml : row.textHtml;
-    const thinkingHtml = useIncomingThinking
-      ? incoming.thinkingHtml
-      : row.thinkingHtml;
+    const prevHtml = row.thinkingHtml;
+    const thinkingHtml = useIncomingThinking ? incoming.thinkingHtml : prevHtml;
     Object.assign(row, {
       ...incoming,
       id: payload.streamId,
@@ -865,7 +855,7 @@ export function applyStreamStatus(payload: StreamStatusPayload): void {
   scheduleStickIfNearBottom();
 }
 
-export type StreamResetPayload = {
+type StreamResetPayload = {
   streamIds?: readonly string[];
   generation?: number;
 };
@@ -875,6 +865,9 @@ export type StreamResetPayload = {
  * 均可），空数组 = 什么都不删；仅缺省时回落删除最后一条 streaming 行。
  * 分片代次作废由 bridge 在本函数之前调用 snapshot.invalidateSnapshotPipeline
  * （本文件不 import snapshot.ts，避免循环依赖）。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发入口（每条消息 1 个生产
+ * 调用点），协议对账面必须保持命名与单测入口。
  */
 export function applyStreamReset(payload: StreamResetPayload): void {
   const ids = payload.streamIds;

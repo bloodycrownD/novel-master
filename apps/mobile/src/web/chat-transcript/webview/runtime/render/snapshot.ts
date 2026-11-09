@@ -1,6 +1,5 @@
-import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {state} from '../state/state';
-import type {MessageRow, StreamCheckpoint, TranscriptRow} from '../state/state';
+import type {StreamCheckpoint, TranscriptRow} from '../state/state';
 import {
   offsetFromBottom,
   isNearBottom,
@@ -23,7 +22,11 @@ import {
 import {requestResync, resetStreamBlockRenderState} from '../stream/stream';
 import {clearStreamRichUpgrade} from '../stream/stream-markdown';
 import {mergeCheckpoint} from '../stream/stream-checkpoint';
+import {reconcileFinishedStreamingRows} from './finished-stream-row-dom';
+import {reseedStreamingRow} from './finished-stream-row-dom';
 import {scheduleMermaidScan} from '../mermaid';
+
+export {reconcileFinishedStreamingRows} from './finished-stream-row-dom';
 
 export type RestoreScroll = {
   nearBottom?: boolean;
@@ -81,13 +84,16 @@ let pendingChunkActions: PendingChunkAction[] = [];
 
 /** 连续异常快照退避参数（spec §3.4.1）：1s / 5s，连续 3 次停止自动 resync。 */
 const SNAPSHOT_RESYNC_ANOMALY_LIMIT = 3;
-const SNAPSHOT_RESYNC_BACKOFF_MS = 1000;
-const SNAPSHOT_RESYNC_BACKOFF_LONG_MS = 5000;
+const BACKOFF_MS = 1000;
+const BACKOFF_LONG_MS = 5000;
 
 /**
  * 作废在途快照分片管线（streamReset 专用，C18）：宿主 bump generation 后，
  * 旧代次余片（含末片）不得再整体替换 rows。由 bridge 的 streamReset 分支
  * 在 applyStreamReset 之前调用——stream.ts 不 import 本文件（避免循环依赖）。
+ *
+ * nm-style: keep-public — bridge.ts 的 streamReset 分支先作废在途分片再
+ * applyStreamReset（spec C18/P2-8）；跨模块唯一入口。
  */
 export function invalidateSnapshotPipeline(generation: number): void {
   pendingChunkAcc = null;
@@ -218,10 +224,9 @@ function replayPendingChunkActions(): void {
   }
 }
 
-function findRowByIdIn(
-  rows: readonly TranscriptRow[],
-  id: string,
-): TranscriptRow | null {
+type Rows = readonly TranscriptRow[];
+
+function findRowByIdIn(rows: Rows, id: string): TranscriptRow | null {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i].id === id) {
       return rows[i];
@@ -229,6 +234,18 @@ function findRowByIdIn(
   }
   return null;
 }
+
+type MergeInput = {
+  rows0: Rows;
+  cp0: StreamCheckpoint | null;
+  rows1: Rows;
+  cp1: StreamCheckpoint | null;
+};
+
+type MergeResult = {
+  rows: TranscriptRow[];
+  checkpoint: StreamCheckpoint | null;
+};
 
 /**
  * 快照行组装（纯函数）：rows 永远是完整基线；同 id 且本地 seq 更大时走
@@ -238,40 +255,33 @@ function findRowByIdIn(
  * rewind 分支独立成段）；内联会把「原子提交」与「旧代次保护」搅在一起，
  * 且该函数是 rewind 不变量（I3/I4）的唯一收口点。
  */
-function mergeSnapshotRows(
-  localRows: readonly TranscriptRow[],
-  localCp: StreamCheckpoint | null,
-  incomingRows: readonly TranscriptRow[],
-  incomingCp: StreamCheckpoint | null,
-): {rows: TranscriptRow[]; checkpoint: StreamCheckpoint | null} {
+function mergeRows(input: MergeInput): MergeResult {
+  const {rows0: localRows, cp0: localCp} = input;
+  const {rows1: incomingRows, cp1: incomingCp} = input;
   if (incomingCp == null) {
     return {rows: incomingRows.slice(), checkpoint: null};
   }
   // rewind 必须拿 incoming 的原始 seq 比较，不能先 merge（merge 同 id 取 max
   // 会让 rewind 永假）。
-  const rewind =
+  if (
     localCp != null &&
     localCp.id === incomingCp.id &&
-    localCp.seq > incomingCp.seq;
-  if (rewind) {
-    const localRow =
-      findRowByIdIn(localRows, localCp.id) ??
-      findRowByIdIn(incomingRows, localCp.id);
+    localCp.seq > incomingCp.seq
+  ) {
+    const hitLocal = findRowByIdIn(localRows, localCp.id);
+    const localRow = hitLocal ?? findRowByIdIn(incomingRows, localCp.id);
     if (localRow == null) {
       return {rows: incomingRows.slice(), checkpoint: incomingCp};
     }
     const rows = incomingRows.filter(r => r.id !== localCp.id);
     rows.push(localRow);
-    const status =
-      localCp.status === 'finished' || incomingCp.status === 'finished'
-        ? 'finished'
-        : 'streaming';
+    const localDone = localCp.status === 'finished';
+    const incomingDone = incomingCp.status === 'finished';
+    const status = localDone || incomingDone ? 'finished' : 'streaming';
     return {rows, checkpoint: {...localCp, status}};
   }
-  const hasLocalRow = findRowByIdIn(localRows, incomingCp.id) != null;
-  const nextCp = hasLocalRow
-    ? mergeCheckpoint(localCp, incomingCp)
-    : incomingCp;
+  const hit = findRowByIdIn(localRows, incomingCp.id) != null;
+  const nextCp = hit ? mergeCheckpoint(localCp, incomingCp) : incomingCp;
   return {rows: incomingRows.slice(), checkpoint: nextCp};
 }
 
@@ -290,17 +300,14 @@ export function applySnapshot(payload: SnapshotPayload): void {
   const localCheckpoint = state.streamCheckpoint;
 
   // 1) 组装 nextRows + nextCheckpoint（纯函数，便于单测）
-  const merged = mergeSnapshotRows(
-    state.rows,
-    localCheckpoint,
-    payload.rows || [],
-    payload.stream ?? null,
-  );
+  const rows0 = state.rows;
+  const rows1 = payload.rows || [];
+  const cp0 = localCheckpoint;
+  const cp1 = payload.stream ?? null;
+  const merged = mergeRows({rows0, cp0, rows1, cp1});
   let nextCheckpoint = merged.checkpoint;
-  const localAppliedSeq =
-    localCheckpoint?.id === nextCheckpoint?.id
-      ? localCheckpoint?.seq ?? -1
-      : -1;
+  const sameCpId = localCheckpoint?.id === nextCheckpoint?.id;
+  const localAppliedSeq = sameCpId ? localCheckpoint?.seq ?? -1 : -1;
 
   // 不变量：checkpoint 指向的行必须存在；否则视为协议异常（清 checkpoint +
   // 异步请求普通快照；不能在同步块里 requestResync，否则会形成快照循环）。
@@ -327,26 +334,23 @@ export function applySnapshot(payload: SnapshotPayload): void {
   // 3) 流式块状态换主：id 变化 → 复位；同 id 但快照带来了更新内容 →
   //    进入 fullReplaceOnly（后续 delta 用全量 textHtml，忽略 tailHtml/块提交）
   const idChanged = prevCheckpointId !== nextCheckpoint?.id;
-  const streamingRow =
-    nextCheckpoint != null
-      ? findRowByIdIn(merged.rows, nextCheckpoint.id)
-      : null;
-  const richJustEnabled =
-    nextCheckpoint?.status === 'streaming' &&
-    streamingRow != null &&
-    state.flags.richText &&
-    !!streamingRow.textHtml &&
-    state.lastStreamHtmlStreamId !== nextCheckpoint.id;
-  const needsReseed =
-    nextCheckpoint?.status === 'streaming' &&
-    streamingRow != null &&
-    (richJustEnabled ||
-      (idChanged
-        ? nextCheckpoint.seq > 0 ||
-          !!streamingRow.text ||
-          !!streamingRow.thinking ||
-          (streamingRow.tools?.length ?? 0) > 0
-        : nextCheckpoint.seq > localAppliedSeq));
+  const cpId = nextCheckpoint?.id;
+  let streamingRow: TranscriptRow | null = null;
+  if (cpId != null) streamingRow = findRowByIdIn(merged.rows, cpId);
+  const streamingNow = nextCheckpoint?.status === 'streaming';
+  const richOn = state.flags.richText;
+  const hasRichHtml = !!streamingRow?.textHtml;
+  const notSeededYet = state.lastStreamHtmlStreamId !== cpId;
+  const richJustEnabled = streamingNow && richOn && hasRichHtml && notSeededYet;
+  const cpSeq = nextCheckpoint?.seq ?? -1;
+  const seqAdvanced = idChanged ? cpSeq > 0 : cpSeq > localAppliedSeq;
+  const hasTextSeed = !!streamingRow?.text;
+  const hasThinkingSeed = !!streamingRow?.thinking;
+  const hasToolsSeed = (streamingRow?.tools?.length ?? 0) > 0;
+  const hasSeedContent = hasTextSeed || hasThinkingSeed || hasToolsSeed;
+  const contentSeed = idChanged && hasSeedContent;
+  const seedNeeded = richJustEnabled || contentSeed || seqAdvanced;
+  const needsReseed = streamingNow && streamingRow != null && seedNeeded;
   if (idChanged) {
     clearStreamRichUpgrade();
     resetStreamBlockRenderState();
@@ -466,13 +470,10 @@ function scheduleSnapshotAnomalyResync(streamId: string): void {
   const count = state.snapshotResyncAnomalyCount;
   if (count >= SNAPSHOT_RESYNC_ANOMALY_LIMIT) {
     if (count === SNAPSHOT_RESYNC_ANOMALY_LIMIT) {
-      console.error(
-        '[chat-transcript] snapshot anomaly resync stopped after ' +
-          count +
-          ' consecutive anomalies (' +
-          streamId +
-          ')',
-      );
+      // console 保留：web runtime 无 logger 依赖；与 main.ts / ToolGroup.tsx 同类
+      // （spec §7.3 保留清单）。
+      const stopMessage = '[chat-transcript] snapshot anomaly resync stopped';
+      console.error(stopMessage + ' after ' + count + ' (' + streamId + ')');
     }
     return;
   }
@@ -482,10 +483,7 @@ function scheduleSnapshotAnomalyResync(streamId: string): void {
     // 退避窗口内已有待重试：异常快照连发时不重复排队。
     return;
   }
-  const delayMs =
-    count >= 2
-      ? SNAPSHOT_RESYNC_BACKOFF_LONG_MS
-      : SNAPSHOT_RESYNC_BACKOFF_MS;
+  const delayMs = count >= 2 ? BACKOFF_LONG_MS : BACKOFF_MS;
   const deadline = now + delayMs;
   state.snapshotResyncBackoffUntil = deadline;
   // microtask 调度：目标 WebView 是 minSdk 26 / Chromium 58，原生 queueMicrotask
@@ -501,121 +499,6 @@ function scheduleSnapshotAnomalyResync(streamId: string): void {
       requestResync(streamId, 0);
     }, delayMs);
   });
-}
-
-/** 按行 id 找窗口内的行元素（窗口外未渲染 → null）。 */
-function findRowElement(id: string): Element | null {
-  if (typeof document.querySelector !== 'function') {
-    return null;
-  }
-  return document.querySelector('[data-id="' + id + '"]');
-}
-
-/** 全量写 body 自身（不是 .stream-active-tail）：rich 用 html，plain 用纯文本。 */
-function writeBodyFull(
-  body: Element,
-  html: string | undefined,
-  text: string | undefined,
-  richText: boolean,
-): void {
-  if (richText && html) {
-    applyTrustedHtml(body, html);
-    body.classList.remove('stream-tail-plain');
-    body.classList.add('rich');
-    return;
-  }
-  body.textContent = String(text || '');
-}
-
-/**
- * gap 恢复/快照 seed 的唯一 DOM 写入口（P0-2）：按 data-id 找行，把
- * `.bubble-body/.thinking-body` 自身一次性重写为行内完整 text/thinking/html。
- * 无壳直接 return（壳已由本次 renderRows 建好，这里不再 renderRows）。
- */
-export function reseedStreamingRow(row: MessageRow): void {
-  const el = findRowElement(row.id);
-  if (!el) {
-    return;
-  }
-  const bubble = el.querySelector('.bubble');
-  if (!bubble) {
-    return;
-  }
-  const textBody = bubble.querySelector('.bubble-body');
-  if (textBody) {
-    writeBodyFull(textBody, row.textHtml, row.text, state.flags.richText);
-  }
-  const thinkingBody = bubble.querySelector('.thinking-body');
-  if (thinkingBody) {
-    writeBodyFull(
-      thinkingBody,
-      row.thinkingHtml,
-      row.thinking,
-      state.flags.richText,
-    );
-  }
-}
-
-type StreamRenderSignature = {
-  text: string;
-  thinking: string;
-  textHtml: string;
-  thinkingHtml: string;
-};
-
-const lastStreamRenderSignature = new Map<string, StreamRenderSignature>();
-
-/**
- * finished 流式行的正文校正：只处理窗口内命中的 `[data-id]`，签名（四个
- * 字符串全等）未变直接跳过；无壳跳过；**不调用 renderRows**；只写
- * `.bubble-body/.thinking-body` 自身（不经 streamRenderTarget，块模式会把
- * 全量 html 写进尾容器复制已提交块）。
- */
-export function reconcileFinishedStreamingRows(): void {
-  for (let i = 0; i < state.rows.length; i++) {
-    const row = state.rows[i];
-    if (row.kind !== 'message' || row.status !== 'finished') {
-      continue;
-    }
-    const el = findRowElement(row.id);
-    if (!el) {
-      continue;
-    }
-    const next: StreamRenderSignature = {
-      text: String(row.text || ''),
-      thinking: String(row.thinking || ''),
-      textHtml: String(row.textHtml || ''),
-      thinkingHtml: String(row.thinkingHtml || ''),
-    };
-    const prev = lastStreamRenderSignature.get(row.id);
-    if (
-      prev != null &&
-      prev.text === next.text &&
-      prev.thinking === next.thinking &&
-      prev.textHtml === next.textHtml &&
-      prev.thinkingHtml === next.thinkingHtml
-    ) {
-      continue;
-    }
-    const bubble = el.querySelector('.bubble');
-    if (!bubble) {
-      continue;
-    }
-    const textBody = bubble.querySelector('.bubble-body');
-    if (textBody) {
-      writeBodyFull(textBody, row.textHtml, row.text, state.flags.richText);
-    }
-    const thinkingBody = bubble.querySelector('.thinking-body');
-    if (thinkingBody) {
-      writeBodyFull(
-        thinkingBody,
-        row.thinkingHtml,
-        row.thinking,
-        state.flags.richText,
-      );
-    }
-    lastStreamRenderSignature.set(row.id, next);
-  }
 }
 
 /**

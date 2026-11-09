@@ -157,3 +157,56 @@ fix-10-2 另跑：`node .../check-signatures.mjs apps/mobile/src/components/chat
   下 `prevFirstId` 已非空），改为单行 `findIndex`；`check-signatures` 整文件 0。
 
 未做：e2e（同 §3，需真机/用户确认）；未提交 git（按要求）。
+
+## 7. Step 10 清理轮（2026-11-09 晚，分支基线）
+
+本轮在开发分支 `feat/chat-streaming-projection`（HEAD `fa9e3952b`）上把 Step 10 的 3 条红测试、2 条新签名与报告缺口收掉；清理改动尚未提交。
+
+### 7.1 实跑门禁
+
+| 命令 | 结果 |
+|---|---|
+| 全量 mobile jest（`--maxWorkers=2`，日志 `tmp/full-jest.stderr.log`） | **265 suites / 2291 tests 全绿**（41.1 s） |
+| `npm run typecheck -w @novel-master/mobile` | exit 0（`tsconfig.build.json` + `src/web/tsconfig.json` + `e2e:tsc`） |
+| `npm run build:webview -w @novel-master/mobile` | exit 0，rich-document / code-editor / composer-input / chat-transcript 四包 gate C GREEN |
+| `npm run check:encoding` | exit 0，**4064** 个跟踪文件 0 命中 |
+| `node .agents/skills/nm-code-style/scripts/test-check-signatures.mjs` | **1/1 pass**（新增回调/长 import 用例） |
+| `check-signatures --changed`（清理后） | 0 处（本轮工作区改动） |
+| 全量文件清单的 nm style | 新增 mustFix **0**；main 既有基线：check-signatures **363**、check-inline **11**、check-methods **58**、prettier **19 文件**（不阻断，逐条见 §1.2/§1.3/§4） |
+
+### 7.2 `check-signatures` 误报修复
+
+- `checkArguments`：原规则只豁免「恰好一个参数且是函数」；改为**任一实参**是箭头函数/函数表达式就跳过。`setTimeout(function () { ... }, delayMs)` 不再报 `ARGS`。
+- `checkImport`：新增「一行形式超过 prettier printWidth(80) 就跳过」；`SubagentSessionScreen.tsx:52` 的长 import（prettier 必然拆行）不再报 `IMPORT`。
+- `test-check-signatures.mjs` 新增两条 fixture 断言：回调实参、长 import 均不误报；实跑 1/1 pass。
+- 因此 `snapshot.ts:493` 与 `SubagentSessionScreen.tsx:52` 两条不再需要书面豁免，报告不再登记 waiver。
+
+### 7.3 3 条红测试（测试断言跟随最终代码形态，非产品逻辑红）
+
+| 测试 | 改动 | 证据 |
+|---|---|---|
+| `__tests__/code-copy.test.ts:72` | 删 `handleCopyCode(payload)` 断言；源码已内联 `case 'copyCode'` + `Clipboard.setString` | `code-copy` 通过 |
+| `__tests__/mermaid-fullscreen.test.ts:164-165` | 改断言 `onWebMermaidViewerOpenChange?.(true/false)`；源码已内联 | `mermaid-fullscreen` 通过 |
+| `__tests__/chat-transcript-stream-block.test.ts:206-208` | 改对象参数 `postStreamBlockSplits({splits, streamId, seq})`；另把旧的 `streamCommittedTextPartsRef.current.join` 断言改为 `const textParts = committedTextPartsRef.current;` + `accumulated(textParts, streamTextAccumRef.current)` | `chat-transcript-stream-block` 通过；三套件 **41/41 pass** |
+
+### 7.4 `snapshot-chunk-bounds` 两条新签名
+
+- 新增 `type Bounds = Array<readonly [number, number]>`、`type BytesAt = (index: number) => number`。
+- `planRowChunkBounds(rows: readonly TranscriptRow[]): Bounds` 与 `planChunkBounds(count: number, bytesAt: BytesAt): Bounds` 收成一行；`const bounds: Bounds = []`。
+- 剩余 `planSnapshotChunkBounds(1)`（行 41）为 **main 既有**基线（单行会超 printWidth），不属本轮新增。
+
+### 7.5 未处理项（按 nm-code-style「未处理项报告」）
+
+| 位置 | verdict | 理由 |
+|---|---|---|
+| `ChatConversationWebView.tsx:581/634/672/731/775/820/877/1228/1283/1324/1575` | KEEP_LOCAL | 流式 ref/状态机原子复位，逐条带 `nm-style: keep-local` 注记 |
+| `snapshot.ts:258 mergeRows`、`:468 scheduleSnapshotAnomalyResync` | KEEP_LOCAL | 快照合并/异常退避共享状态机 |
+| `session-stream-unit.ts:1364 adoptPendingStreams`、`:1583 buildStreamRowsProjection` | KEEP_LOCAL | pendingAdoptions/streamRowIds、finishedStreams/currentStream 投影状态 |
+| `session-stream-unit.ts:909 handleStepCommitted`、`:941 ingestToolUse`、`:982 clearStreamProjection` | KEEP_PUBLIC | manager 路由唯一入口 |
+| `StreamingMessageRow.tsx:46 StreamBodyHost.shouldComponentUpdate` | 误报 | Preact class 生命周期方法，框架调用，不是自由函数 |
+| `snapshot-chunk-bounds.ts:41 planSnapshotChunkBounds(1)` | 基线 | main 既有；单行超 printWidth |
+| `SubagentSessionScreen.tsx` prettier | 基线 | main 既有 19 个 prettier 红之一；本轮未新增红 |
+
+### 7.6 未覆盖
+
+e2e 未跑（同 §3，需真机/用户确认）；独立 code-review-loop 未跑；本轮清理改动未提交；main 既有 363 条 style 基线未清零；`--include-tests` 另有 403 条测试侧既有签名。

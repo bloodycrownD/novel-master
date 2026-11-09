@@ -204,10 +204,11 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     expect(rn).toContain('const carriesTail = i === lastCommitIndex;');
     // 块级化只切分不 post 的顺序约束（delta 先行，块提交随后）
     expect(rn).toMatch(
-      /const blockSplits = takeStreamBlockSplits\(\);[\s\S]*?postStreamBlockSplits\(blockSplits, streamId, seq\);/,
+      /const blockSplits = takeStreamBlockSplits\(\);[\s\S]*?postStreamBlockSplits\(\{splits: blockSplits, streamId, seq\}\);/,
     );
     // abort overlay 全量物化口径：已提交块 parts + 活跃尾块
-    expect(rn).toContain('streamCommittedTextPartsRef.current.join');
+    expect(rn).toContain('const textParts = committedTextPartsRef.current;');
+    expect(rn).toContain('accumulated(textParts, streamTextAccumRef.current)');
   });
 
   it('块提交守卫顺序与幂等：streamId → streaming → seq → blockKey → fullReplaceOnly', () => {

@@ -91,7 +91,13 @@ type SessionStreamUnitActiveStatus = 'idle' | 'starting' | 'running';
 /** 单元的终态子类型：interrupted 仅来自水合，finished/failed 来自事件收尾。 */
 type SessionStreamUnitSettledStatus = 'interrupted' | 'finished' | 'failed';
 
-/** 单元全量状态（状态机节点）。 */
+/**
+ * 单元全量状态（状态机节点）。
+ *
+ * nm-style: keep-public — spec C4 明确要求保留的声明面：它是
+ * SessionStreamUnitView.status 的公共类型的一部分，撤导出会让外部消费方
+ * 只能拿到字面量联合、丢掉语义名。
+ */
 export type SessionStreamUnitStatus =
   | SessionStreamUnitActiveStatus
   | SessionStreamUnitSettledStatus;
@@ -112,7 +118,7 @@ export type SessionStreamRunSettledStatus = 'finished' | 'failed';
  * 流式工具卡投影（与桥层 `TranscriptToolView` 结构同形、分属两层：
  * service 不 import component，宿主侧 buildStreamingRows 做结构化映射）。
  */
-export type SessionStreamToolView = {
+type SessionStreamToolView = {
   readonly toolUseId: string;
   readonly name: string;
   readonly input: Record<string, unknown>;
@@ -120,7 +126,7 @@ export type SessionStreamToolView = {
 };
 
 /** 流式行状态：一条 assistant 行从出现到 DB 接管只翻转一次（I5/I6）。 */
-export type SessionStreamMessageStatus = 'streaming' | 'finished';
+type SessionStreamMessageStatus = 'streaming' | 'finished';
 
 /**
  * 流式行投影（`snapshot().streamRows` 的元素，宿主 `buildStreamingRows`
@@ -225,7 +231,7 @@ export interface SessionStreamUnitMetrics {
  * heuristic=基线为 0 的纯估算。
  * 复用 core 的中立类型（别名）——联合字面量单一声明在 core 的
  * `StreamTokenSource`，消费端不再各写一份。 */
-export type SessionStreamUnitTokenSource = StreamTokenSource;
+type SessionStreamUnitTokenSource = StreamTokenSource;
 
 /**
  * 消息仓库窄口（单元消息管线回源 DB 用）。
@@ -436,7 +442,7 @@ export class SessionStreamUnit {
   /** streamRows 投影缓存（copy-on-write，内容变化才换新数组）。 */
   private streamRowsValue: readonly SessionStreamMessageProjection[] = [];
   /** DB message id → streamId 接管映射（copy-on-write，有界 200）。 */
-  private streamRowIdsValue: ReadonlyMap<string, string> = new Map();
+  private streamRowIdsValue: StreamRowIds = new Map();
   /**
    * 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。
    * copy-on-write：内容变化时整体换新 Map（snapshot 返回内部引用），引用
@@ -895,6 +901,10 @@ export class SessionStreamUnit {
    * 待接管队列，再 resetPartial 并开下一条空 streaming 记录；`tool_results`
    * phase：只 flush + 清 partial，不轮转 stream（否则 tool 执行期凭空多一条
    * assistant 行）。指标是 run 级累计，不在 step 边界清。返回是否生效。
+   *
+   * nm-style: keep-public — manager 的 STEP_COMMITTED 路由唯一生产入口，且
+   * session-stream-unit-accum-perf / -stream-projection / -persist 三个测试
+   * 套件直接驱动这套 step 边界状态机（内联会让跨层状态迁移无直测面）。
    */
   handleStepCommitted(runId: string, phase: AgentStepCommittedPhase): boolean {
     if (
@@ -941,7 +951,12 @@ export class SessionStreamUnit {
     }
     const tools: readonly SessionStreamToolView[] = [
       ...current.tools,
-      {toolUseId: tool.id, name: tool.name, input: tool.input, status: 'pending'},
+      {
+        toolUseId: tool.id,
+        name: tool.name,
+        input: tool.input,
+        status: 'pending',
+      },
     ];
     this.currentStream = {...current, tools};
     this.pushStreamPayload({
@@ -985,7 +1000,7 @@ export class SessionStreamUnit {
   }
 
   /** 已接管的 DB id → streamId 映射（只读内部引用；内容变化才换新 Map）。 */
-  getStreamRowIds(): ReadonlyMap<string, string> {
+  getStreamRowIds(): StreamRowIds {
     return this.streamRowIdsValue;
   }
 
@@ -994,7 +1009,7 @@ export class SessionStreamUnit {
    * takeWebviewHandles 同批调用）：旧单元的 DB 行在跟新单元里继续以原
    * streamId 呈现，避免 Web 行 remount/闪动（R5）。
    */
-  inheritStreamRowIds(map: ReadonlyMap<string, string>): void {
+  inheritStreamRowIds(map: StreamRowIds): void {
     if (map.size === 0) {
       return;
     }
@@ -1150,7 +1165,12 @@ export class SessionStreamUnit {
     }
   }
 
-  /** 当前句柄数（诊断/测试用）。 */
+  /**
+   * 当前句柄数（诊断/测试用）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（attach/detach
+   * 的观测基线），生产零调用但属公共观测面。
+   */
   getWebviewCount(): number {
     return this.webviewHandles.length;
   }
@@ -1349,21 +1369,16 @@ export class SessionStreamUnit {
     this.pendingAdoptions = [];
     const adoptedIds = new Set<string>();
     for (const entry of pending) {
-      const candidate = messages
-        .filter(
-          message =>
-            message.role === 'assistant' &&
-            !entry.baseMessageIds.has(message.id) &&
-            !adoptedIds.has(message.id),
-        )
-        .reduce<ChatMessageData | null>(
-          (oldest, message) =>
-            oldest == null || message.seq < oldest.seq ? message : oldest,
-          null,
-        );
-      if (candidate == null) {
-        continue;
+      let candidate: ChatMessageData | null = null;
+      for (const message of messages) {
+        if (message.role !== 'assistant') continue;
+        const known = entry.baseMessageIds.has(message.id);
+        if (known || adoptedIds.has(message.id)) continue;
+        if (candidate == null || message.seq < candidate.seq) {
+          candidate = message;
+        }
       }
+      if (candidate == null) continue;
       entry.record.messageId = candidate.id;
       adoptedIds.add(candidate.id);
       // 写入一条 DB 接管映射（copy-on-write + 有界 200，超出丢最旧）。
@@ -1539,7 +1554,12 @@ export class SessionStreamUnit {
     ) {
       return;
     }
-    const frozen: StreamStepRecord = {...record, status: 'finished', text, thinking};
+    const frozen: StreamStepRecord = {
+      ...record,
+      status: 'finished',
+      text,
+      thinking,
+    };
     this.finishedStreams = [...this.finishedStreams, frozen];
     this.pendingAdoptions = [
       ...this.pendingAdoptions,
@@ -1583,7 +1603,7 @@ export class SessionStreamUnit {
     if (current != null) {
       const text = this.materializePartialText();
       const thinking = this.materializePartialThinking();
-      rows.push(projectStreamRecord(current, text, thinking));
+      rows.push(projectStreamRecord({...current, text, thinking}));
     }
     return rows;
   }
@@ -1605,26 +1625,26 @@ function isStreamRecordEmpty(record: StreamStepRecord): boolean {
   );
 }
 
-/** 记录 → 投影（当前 streaming 记录用调用方传入的物化正文/思考）。 */
-function projectStreamRecord(
-  record: StreamStepRecord,
-  text = record.text,
-  thinking = record.thinking,
-): SessionStreamMessageProjection {
+/** 流式行投影的短别名（让 helper 签名保持一行）。 */
+type StreamRow = SessionStreamMessageProjection;
+
+/** 记录 → 投影（当前 streaming 记录由调用方传入物化后的 text/thinking）。 */
+function projectStreamRecord(record: StreamStepRecord): StreamRow {
   return {
     streamId: record.streamId,
     status: record.status,
-    text,
-    thinking,
+    text: record.text,
+    thinking: record.thinking,
     tools: record.tools,
     messageId: record.messageId,
   };
 }
 
+/** streamRowIds 的短别名（类型与签名保持一行）。 */
+type StreamRowIds = ReadonlyMap<string, string>;
+
 /** streamRowIds 有界化：超出上限丢最旧（Map 插入序）。 */
-function trimStreamRowIds(
-  map: ReadonlyMap<string, string>,
-): ReadonlyMap<string, string> {
+function trimStreamRowIds(map: StreamRowIds): StreamRowIds {
   if (map.size <= STREAM_ROW_IDS_LIMIT) {
     return map;
   }

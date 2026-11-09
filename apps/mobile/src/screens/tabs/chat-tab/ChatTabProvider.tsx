@@ -46,10 +46,8 @@ import type {ChatConversationWebViewHandle} from '@/components/chat/ChatConversa
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import type {TranscriptStreamingMessage} from '@/components/chat/ChatTranscriptBridge';
-import {
-  EMPTY_STREAM_ROW_IDS,
-  buildStreamingRows,
-} from '@/components/chat/transcript-stream-projection';
+import {EMPTY_STREAM_ROW_IDS} from '@/components/chat/transcript-stream-projection';
+import {buildStreamingRows} from '@/components/chat/transcript-stream-projection';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
@@ -270,17 +268,11 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
   // 流式投影（spec C12）：有单元走单元投影；单元出表后映射交接在 idle 视图，
   // 两条来源任一命中都保留 db→streamId，避免已接管行回退 DB id 触发 remount。
-  const streamingRows = useMemo(
-    () => buildStreamingRows(unitView),
-    [unitView],
-  );
-  const streamRowIds = useMemo(
-    () =>
-      unitView?.streamRowIds ??
-      messagesView?.streamRowIds ??
-      EMPTY_STREAM_ROW_IDS,
-    [unitView, messagesView],
-  );
+  // 引用稳定性由 `buildStreamingRows` 自己的输入缓存保证（spec P1-5），不再套 useMemo。
+  const streamingRows = buildStreamingRows(unitView);
+  const unitRowIds = unitView?.streamRowIds;
+  const viewRowIds = messagesView?.streamRowIds;
+  const streamRowIds = unitRowIds ?? viewRowIds ?? EMPTY_STREAM_ROW_IDS;
 
   // 消息面 tail 水合：会话切换或单元出现时取 tail（非 force——缓存命中即
   // 采纳的会话切换语义；运行中单元的后续刷新由 step/settle 边界自驱）。

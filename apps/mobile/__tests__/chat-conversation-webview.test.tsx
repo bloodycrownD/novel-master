@@ -28,6 +28,7 @@ import {
 } from '../test-utils/react-native-webview-mock';
 import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from '@/components/chat/chat-transcript-selection-menu';
 import {buildTranscriptLabels} from '@/components/chat/transcript-labels';
+import {CORE_CATALOGS} from '@novel-master/core/i18n';
 import {coreT} from '@/i18n/core';
 import {
   TRANSCRIPT_CAPABILITIES,
@@ -374,6 +375,14 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     expect(init?.payload.flags).toMatchObject({menuDisabled: false});
     // T-SP22：init.labels 与 core catalog 的 4 个 transcript key 逐字段 parity。
     expect(init?.payload.labels).toEqual(buildTranscriptLabels(coreT));
+    // 再直比 zh-CN catalog 字面值：避免宿主与断言共用同一个装配函数造成自证。
+    const zh = CORE_CATALOGS['zh-CN']!;
+    expect(init?.payload.labels).toEqual({
+      generating: zh['label.transcript.generating'],
+      thinking: zh['label.transcript.thinking_header'],
+      empty: zh['label.transcript.empty'],
+      loadOlder: zh['label.transcript.load_older'],
+    });
     // D4c 收口：init.composer 段删除（web 侧 dispatcher 对缺失段有兜底）
     expect(init?.payload).not.toHaveProperty('composer');
   });

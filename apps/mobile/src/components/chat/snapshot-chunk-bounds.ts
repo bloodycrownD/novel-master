@@ -29,6 +29,9 @@ const SNAPSHOT_CHUNK_SIZE = 50;
  */
 const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
 
+type Bounds = Array<readonly [number, number]>;
+type BytesAt = (index: number) => number;
+
 /**
  * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
  * ——逐条累计源 content JSON 的 UTF-8 真实字节，条数到上限或累计字节超预算
@@ -37,7 +40,7 @@ const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
  */
 export function planSnapshotChunkBounds(
   messages: readonly ChatMessageData[],
-): Array<readonly [number, number]> {
+): Bounds {
   return planChunkBounds(messages.length, index =>
     utf8ByteLength(JSON.stringify(messages[index]!.content)),
   );
@@ -48,9 +51,7 @@ export function planSnapshotChunkBounds(
  * 度量口径为**整行 wire JSON** 的 UTF-8 字节（含 text/thinking/textHtml/tools），
  * 因为流式片就是这些行原样上行。空列表返回空数组（无流式行时不发空片）。
  */
-export function planRowChunkBounds(
-  rows: readonly TranscriptRow[],
-): Array<readonly [number, number]> {
+export function planRowChunkBounds(rows: readonly TranscriptRow[]): Bounds {
   if (rows.length === 0) {
     return [];
   }
@@ -59,11 +60,8 @@ export function planRowChunkBounds(
   );
 }
 
-function planChunkBounds(
-  count: number,
-  bytesAt: (index: number) => number,
-): Array<readonly [number, number]> {
-  const bounds: Array<readonly [number, number]> = [];
+function planChunkBounds(count: number, bytesAt: BytesAt): Bounds {
+  const bounds: Bounds = [];
   let start = 0;
   let bytes = 0;
   for (let i = 0; i < count; i += 1) {

@@ -8,7 +8,7 @@ const repoRoot = process.cwd();
 const fixture = path.join(repoRoot, "tmp", "__signature_fixture__.ts");
 const script = path.join(repoRoot, ".agents/skills/nm-code-style/scripts/check-signatures.mjs");
 
-test("check-signatures：单参数/单实参/单 import 与 const/赋值拆行都能检测", () => {
+test("check-signatures：单参数/单实参/单 import 与 const/赋值拆行都能检测，回调/长 import 不误报", () => {
   fs.mkdirSync(path.dirname(fixture), { recursive: true });
   try {
     fs.writeFileSync(fixture, [
@@ -21,6 +21,13 @@ test("check-signatures：单参数/单实参/单 import 与 const/赋值拆行�
       "import {",
       "  one",
       '} from "./one.js";',
+      "setTimeout(function () {",
+      "  tick();",
+      "}, 10);",
+      "import {",
+      "  aVeryLongNamedImport,",
+      "  anotherVeryLongNamedImport,",
+      '} from "./a-very-long-module-path-that-makes-the-one-line-import-exceed-print-width.js";',
       "const moved =",
       "  compute();",
       "const binary = a +",

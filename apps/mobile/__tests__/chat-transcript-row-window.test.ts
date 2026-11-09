@@ -725,6 +725,16 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         all.some(n => n.props?.['data-thinking-key'] === 'stream:thinking'),
       ).toBe(true);
       expect(
+        all.find(n => n.props?.action === 'toggle-thinking')?.props?.expanded,
+      ).toBe(true);
+      expect(
+        all.some(n =>
+          String(n.props?.className ?? '')
+            .split(/\s+/)
+            .includes('thinking-body'),
+        ),
+      ).toBe(true);
+      expect(
         all.some(n =>
           String(n.props?.className ?? '')
             .split(/\s+/)

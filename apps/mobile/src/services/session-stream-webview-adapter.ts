@@ -13,10 +13,14 @@
  */
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
 import {isRecord} from '@novel-master/core/common';
+import type {StreamWireChunk} from './stream-wire-queue';
 import type {
   SessionStreamUnitStreamPayload,
   SessionStreamWebviewHandle,
 } from '@/services/session-stream-unit';
+
+/** 载荷里的工具卡元素类型（经 SessionStreamUnitStreamPayload 派生，避免再导出内部类型）。 */
+type ToolView = NonNullable<SessionStreamUnitStreamPayload['tools']>[number];
 
 export function createTranscriptStreamHandle(
   handleId: string,
@@ -32,19 +36,58 @@ export function createTranscriptStreamHandle(
       if (typeof streamId !== 'string' || !Array.isArray(segments)) {
         return;
       }
-      const payloadShape = {
-        streamId,
-        segments: segments as SessionStreamUnitStreamPayload['segments'],
-        tools: tools as SessionStreamUnitStreamPayload['tools'],
-      };
-      web.pushStream(payloadShape);
+      const chunks: StreamWireChunk[] = [];
+      for (const entry of segments) {
+        if (!isRecord(entry)) {
+          return;
+        }
+        const kind = entry.kind;
+        const delta = entry.delta;
+        if (kind !== 'text' && kind !== 'thinking') {
+          return;
+        }
+        if (typeof delta !== 'string') {
+          return;
+        }
+        chunks.push({kind, delta});
+      }
+      let toolViews: ToolView[] | undefined;
+      if (tools != null) {
+        if (!Array.isArray(tools)) {
+          return;
+        }
+        toolViews = [];
+        for (const entry of tools) {
+          if (!isRecord(entry)) {
+            return;
+          }
+          const {toolUseId, name, status, input} = entry;
+          if (typeof toolUseId !== 'string' || typeof name !== 'string') {
+            return;
+          }
+          if (typeof status !== 'string' || !isRecord(input)) {
+            return;
+          }
+          toolViews.push({toolUseId, name, status, input});
+        }
+      }
+      web.pushStream({streamId, segments: chunks, tools: toolViews});
     },
     onControlMessage: message => {
       if (!isRecord(message)) {
         return;
       }
-      if (message.type === 'reset-stream' && Array.isArray(message.streamIds)) {
-        const streamIds = message.streamIds as readonly string[];
+      if (message.type === 'reset-stream') {
+        if (!Array.isArray(message.streamIds)) {
+          return;
+        }
+        const streamIds: string[] = [];
+        for (const entry of message.streamIds) {
+          if (typeof entry !== 'string') {
+            return;
+          }
+          streamIds.push(entry);
+        }
         web.resetStream(streamIds);
         return;
       }
