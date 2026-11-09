@@ -1,5 +1,6 @@
+import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {state} from '../state/state';
-import type {MessageRow, TranscriptRow} from '../state/state';
+import type {MessageRow, StreamCheckpoint, TranscriptRow} from '../state/state';
 import {
   offsetFromBottom,
   isNearBottom,
@@ -19,7 +20,9 @@ import {
   retargetRowWindowFromBottom,
   type RowWindowPositioning,
 } from './row-windowing';
-import {setStreamToolInvokingDom} from '../stream/stream';
+import {requestResync, resetStreamBlockRenderState} from '../stream/stream';
+import {clearStreamRichUpgrade} from '../stream/stream-markdown';
+import {mergeCheckpoint} from '../stream/stream-checkpoint';
 import {scheduleMermaidScan} from '../mermaid';
 
 export type RestoreScroll = {
@@ -33,7 +36,8 @@ export type SnapshotPayload = {
   rows?: TranscriptRow[];
   hasMore?: boolean;
   restoreScroll?: RestoreScroll;
-  generating?: boolean;
+  /** 流式检查点：任一 occurrence 均可携带，最后到达者为准；末片必须与流式行同片。 */
+  stream?: StreamCheckpoint;
   /** 分片协议（init-busy-yield Step 6）：单片/旧载荷缺省视为 chunkTotal=1。 */
   generation?: number;
   chunkIndex?: number;
@@ -47,8 +51,8 @@ export type RowsPayload = {
 
 /**
  * 分片拼装状态（init-busy-yield Step 6，Step 7 前的最小适配）：
- * 同代次按 chunkIndex 顺序累计 rows，末片到齐才整体 applySnapshot——
- * 分片期间不产生中间渲染，也不触发任何滚动副作用（T-S4 前半）。
+ * 同代次按 chunkIndex 顺序累计 rows 与流式检查点（每片 last-wins），末片到齐
+ * 才整体 applySnapshot——分片期间不产生中间渲染，也不触发任何滚动副作用（T-S4 前半）。
  */
 type SnapshotChunkAccumulator = {
   generation: number;
@@ -57,7 +61,7 @@ type SnapshotChunkAccumulator = {
   rows: TranscriptRow[];
   sessionKey?: string;
   hasMore?: boolean;
-  generating?: boolean;
+  stream?: StreamCheckpoint;
 };
 
 /** 已完整应用的最新代次（RN 侧模块级计数器从 1 起单调递增）。 */
@@ -65,17 +69,31 @@ let appliedSnapshotGeneration = 0;
 let pendingChunkAcc: SnapshotChunkAccumulator | null = null;
 
 /**
- * 分片收集在途时挂起的三通道动作（C-orch-1 web 侧防御）：appendTailRows /
- * prependPage / streamCommit 若在末片之前到达（协议异常时序——RN 侧已用
- * deferred 队列保序，此处兜底），先按到达序挂起，末片 applySnapshot 后
- * 原序重放——末片整体替换基线会抹掉已 concat 的增量行，重放恢复之。
- * 收集器被顶替/作废时挂起队列一并丢弃（新代次基线为准）。
+ * 分片收集在途时挂起的两通道动作（C-orch-1 web 侧防御）：appendTailRows /
+ * prependPage 若在末片之前到达（协议异常时序），先按到达序挂起，末片
+ * applySnapshot 后原序重放——末片整体替换基线会抹掉已 concat 的增量行，
+ * 重放恢复之。收集器被顶替/作废时挂起队列一并丢弃（新代次基线为准）。
  */
 type PendingChunkAction =
   | {kind: 'appendTail'; rows: TranscriptRow[]}
-  | {kind: 'prependPage'; rows: TranscriptRow[]}
-  | {kind: 'streamCommit'; rows: TranscriptRow[]; scrollIntent?: string};
+  | {kind: 'prependPage'; rows: TranscriptRow[]};
 let pendingChunkActions: PendingChunkAction[] = [];
+
+/** 连续异常快照退避参数（spec §3.4.1）：1s / 5s，连续 3 次停止自动 resync。 */
+const SNAPSHOT_RESYNC_ANOMALY_LIMIT = 3;
+const SNAPSHOT_RESYNC_BACKOFF_MS = 1000;
+const SNAPSHOT_RESYNC_BACKOFF_LONG_MS = 5000;
+
+/**
+ * 作废在途快照分片管线（streamReset 专用，C18）：宿主 bump generation 后，
+ * 旧代次余片（含末片）不得再整体替换 rows。由 bridge 的 streamReset 分支
+ * 在 applyStreamReset 之前调用——stream.ts 不 import 本文件（避免循环依赖）。
+ */
+export function invalidateSnapshotPipeline(generation: number): void {
+  pendingChunkAcc = null;
+  pendingChunkActions = [];
+  appliedSnapshotGeneration = Math.max(appliedSnapshotGeneration, generation);
+}
 
 function numberOf(value: unknown): number {
   return typeof value === 'number' && value >= 0 ? value : -1;
@@ -85,11 +103,16 @@ function numberOf(value: unknown): number {
  * sessionSnapshot 统一入口：单片（chunkTotal 缺省或 =1）直发 applySnapshot
  * 等价旧协议；多片则按代次拼装——未知/迟到代次与乱序分片一律丢弃
  * （凑不齐的代次由 RN 侧 force 新代次重传兜底）。
+ * 每个片（含末片）先做代次判旧：旧代次末片不会整体替换 rows。
  */
 export function handleSnapshotPayload(payload: SnapshotPayload): void {
   const rawChunkTotal = numberOf(payload.chunkTotal);
   const chunkTotal = rawChunkTotal >= 1 ? rawChunkTotal : 1;
   const generation = numberOf(payload.generation);
+  if (generation > 0 && generation < appliedSnapshotGeneration) {
+    // 旧代次的任何片（含末片）：丢弃，不回退已应用基线。
+    return;
+  }
   if (chunkTotal <= 1) {
     if (generation > 0) {
       // 已应用代次的迟到单片（乱序/重复投递）与分片同口径判旧丢弃；
@@ -100,11 +123,8 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
       appliedSnapshotGeneration = generation;
       // web/B-1：单片应用新代次时同步作废在途旧代次收集器——否则其末片
       // 随后到达仍会拼装并 applySnapshot，造成已应用代次回退（当前 RN 实现
-      // 不可达，协议鲁棒性缺口）。挂起的三通道动作一并作废（新基线为准）。
-      if (
-        pendingChunkAcc != null &&
-        generation >= pendingChunkAcc.generation
-      ) {
+      // 不可达，协议鲁棒性缺口）。挂起的增量动作一并作废（新基线为准）。
+      if (pendingChunkAcc != null && generation >= pendingChunkAcc.generation) {
         pendingChunkAcc = null;
         pendingChunkActions = [];
       }
@@ -130,7 +150,7 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
     return;
   }
   // 新代次首片：重置收集（顶替在途旧代次，旧余片随后被上面的判旧丢弃）；
-  // 旧收集器挂起的三通道动作随之作废（新代次基线为准）。
+  // 旧收集器挂起的增量动作随之作废（新代次基线为准）。
   if (acc == null || generation > acc.generation) {
     if (chunkIndex !== 0) {
       return;
@@ -141,7 +161,7 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
       rows: [],
       sessionKey: payload.sessionKey,
       hasMore: payload.hasMore,
-      generating: payload.generating,
+      stream: payload.stream,
     };
     pendingChunkAcc = acc;
     pendingChunkActions = [];
@@ -154,10 +174,12 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
   for (let i = 0; i < rows.length; i++) {
     acc.rows.push(rows[i]);
   }
-  // 快照级标量每片重复携带，取最新到达为准。
+  // 快照级标量每片重复携带，取最新到达为准（stream 每片 last-wins）。
   acc.sessionKey = payload.sessionKey;
   acc.hasMore = payload.hasMore;
-  acc.generating = payload.generating;
+  if (payload.stream != null) {
+    acc.stream = payload.stream;
+  }
   acc.received = chunkIndex + 1;
   if (chunkIndex === chunkTotal - 1) {
     // 末片到齐：滚动字段仅在末片携带，拼齐后整体应用（一次 renderRows、
@@ -166,14 +188,14 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
       sessionKey: acc.sessionKey,
       rows: acc.rows,
       hasMore: !!acc.hasMore,
-      generating: acc.generating,
+      stream: acc.stream,
       scrollIntent: payload.scrollIntent || 'stick',
       restoreScroll: payload.restoreScroll,
     };
     appliedSnapshotGeneration = generation;
     pendingChunkAcc = null;
     applySnapshot(assembled);
-    // 末片应用后按原序重放分片期间挂起的三通道动作（C-orch-1 web 侧）：
+    // 末片应用后按原序重放分片期间挂起的增量动作（C-orch-1 web 侧）：
     // applySnapshot 用分片启动时的旧闭包整体替换 rows，挂起的增量行由此恢复。
     replayPendingChunkActions();
   }
@@ -190,16 +212,72 @@ function replayPendingChunkActions(): void {
     const action = actions[i];
     if (action.kind === 'appendTail') {
       applyAppendTailRowsNow(action.rows);
-    } else if (action.kind === 'prependPage') {
-      applyPrependPageNow(action.rows);
     } else {
-      applyStreamCommitNow(action.rows, action.scrollIntent);
+      applyPrependPageNow(action.rows);
     }
   }
 }
 
+function findRowByIdIn(
+  rows: readonly TranscriptRow[],
+  id: string,
+): TranscriptRow | null {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].id === id) {
+      return rows[i];
+    }
+  }
+  return null;
+}
+
 /**
- * 会话快照、prepend/append 与 streamCommit 编排。
+ * 快照行组装（纯函数）：rows 永远是完整基线；同 id 且本地 seq 更大时走
+ * rewind 保护（保留本地行与本地 seq，绝不把已显示正文回退）。
+ *
+ * nm-style: keep-local — spec §3.4.1 明示的纯函数（rows + checkpoint 组装 /
+ * rewind 分支独立成段）；内联会把「原子提交」与「旧代次保护」搅在一起，
+ * 且该函数是 rewind 不变量（I3/I4）的唯一收口点。
+ */
+function mergeSnapshotRows(
+  localRows: readonly TranscriptRow[],
+  localCp: StreamCheckpoint | null,
+  incomingRows: readonly TranscriptRow[],
+  incomingCp: StreamCheckpoint | null,
+): {rows: TranscriptRow[]; checkpoint: StreamCheckpoint | null} {
+  if (incomingCp == null) {
+    return {rows: incomingRows.slice(), checkpoint: null};
+  }
+  // rewind 必须拿 incoming 的原始 seq 比较，不能先 merge（merge 同 id 取 max
+  // 会让 rewind 永假）。
+  const rewind =
+    localCp != null &&
+    localCp.id === incomingCp.id &&
+    localCp.seq > incomingCp.seq;
+  if (rewind) {
+    const localRow =
+      findRowByIdIn(localRows, localCp.id) ??
+      findRowByIdIn(incomingRows, localCp.id);
+    if (localRow == null) {
+      return {rows: incomingRows.slice(), checkpoint: incomingCp};
+    }
+    const rows = incomingRows.filter(r => r.id !== localCp.id);
+    rows.push(localRow);
+    const status =
+      localCp.status === 'finished' || incomingCp.status === 'finished'
+        ? 'finished'
+        : 'streaming';
+    return {rows, checkpoint: {...localCp, status}};
+  }
+  const hasLocalRow = findRowByIdIn(localRows, incomingCp.id) != null;
+  const nextCp = hasLocalRow
+    ? mergeCheckpoint(localCp, incomingCp)
+    : incomingCp;
+  return {rows: incomingRows.slice(), checkpoint: nextCp};
+}
+
+/**
+ * 会话快照编排：rows 与 checkpoint 在同一同步块原子替换（中间无渲染），
+ * RAF 内一次 renderRows + 一次滚动副作用；流式行 seed/gap 恢复在此重播 body。
  */
 export function applySnapshot(payload: SnapshotPayload): void {
   const intent = payload.scrollIntent || 'stick';
@@ -208,11 +286,79 @@ export function applySnapshot(payload: SnapshotPayload): void {
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
   const sessionChanged =
     !!payload.sessionKey && payload.sessionKey !== state.sessionKey;
+  const prevCheckpointId = state.streamCheckpoint?.id;
+  const localCheckpoint = state.streamCheckpoint;
 
+  // 1) 组装 nextRows + nextCheckpoint（纯函数，便于单测）
+  const merged = mergeSnapshotRows(
+    state.rows,
+    localCheckpoint,
+    payload.rows || [],
+    payload.stream ?? null,
+  );
+  let nextCheckpoint = merged.checkpoint;
+  const localAppliedSeq =
+    localCheckpoint?.id === nextCheckpoint?.id
+      ? localCheckpoint?.seq ?? -1
+      : -1;
+
+  // 不变量：checkpoint 指向的行必须存在；否则视为协议异常（清 checkpoint +
+  // 异步请求普通快照；不能在同步块里 requestResync，否则会形成快照循环）。
+  let anomalyStreamId: string | null = null;
+  if (
+    nextCheckpoint != null &&
+    findRowByIdIn(merged.rows, nextCheckpoint.id) == null
+  ) {
+    anomalyStreamId = nextCheckpoint.id;
+    nextCheckpoint = null;
+  } else {
+    state.snapshotResyncAnomalyCount = 0;
+    state.snapshotResyncBackoffUntil = null;
+  }
+
+  // 2) 原子提交：同一同步块内完成，中间不渲染
   state.sessionKey = payload.sessionKey || state.sessionKey;
-  state.rows = (payload.rows || []).slice();
+  state.rows = merged.rows;
+  state.streamCheckpoint = nextCheckpoint;
+  state.resyncPending = null;
   state.hasMore = !!payload.hasMore;
   state.loadOlderArmed = true;
+
+  // 3) 流式块状态换主：id 变化 → 复位；同 id 但快照带来了更新内容 →
+  //    进入 fullReplaceOnly（后续 delta 用全量 textHtml，忽略 tailHtml/块提交）
+  const idChanged = prevCheckpointId !== nextCheckpoint?.id;
+  const streamingRow =
+    nextCheckpoint != null
+      ? findRowByIdIn(merged.rows, nextCheckpoint.id)
+      : null;
+  const richJustEnabled =
+    nextCheckpoint?.status === 'streaming' &&
+    streamingRow != null &&
+    state.flags.richText &&
+    !!streamingRow.textHtml &&
+    state.lastStreamHtmlStreamId !== nextCheckpoint.id;
+  const needsReseed =
+    nextCheckpoint?.status === 'streaming' &&
+    streamingRow != null &&
+    (richJustEnabled ||
+      (idChanged
+        ? nextCheckpoint.seq > 0 ||
+          !!streamingRow.text ||
+          !!streamingRow.thinking ||
+          (streamingRow.tools?.length ?? 0) > 0
+        : nextCheckpoint.seq > localAppliedSeq));
+  if (idChanged) {
+    clearStreamRichUpgrade();
+    resetStreamBlockRenderState();
+    state.fullReplaceOnly = null;
+    state.appliedBlockKeys = new Set();
+  }
+  if (needsReseed) {
+    state.fullReplaceOnly = nextCheckpoint!.id;
+    resetStreamBlockRenderState();
+    clearStreamRichUpgrade();
+  }
+
   // 窗口预定位（Step 7）：stick / restore / preserve 统一按距底偏移从底
   // 反推（stick 即 offset=0 的贴底口径，与读位设定后的重估口径一致，
   // 避免 stick 后无谓的二次扩窗渲染）。
@@ -237,15 +383,6 @@ export function applySnapshot(payload: SnapshotPayload): void {
     };
   }
   resetRowWindowForSnapshot(state.rows.length, positioning);
-  if (intent !== 'preserve' || sessionChanged) {
-    state.stream = {
-      text: '',
-      thinking: '',
-      textHtml: '',
-      thinkingHtml: '',
-      toolInvoking: false,
-    };
-  }
   if (sessionChanged) {
     closeContextMenu(false);
   }
@@ -285,11 +422,14 @@ export function applySnapshot(payload: SnapshotPayload): void {
   };
   requestAnimationFrame(function () {
     renderRows();
-    // 历史行渲染后触发 mermaid 扫描（防抖；流式尾不扫）
+    // 历史行渲染后触发 mermaid 扫描（防抖；流式行不扫）
     scheduleMermaidScan();
-    if (payload.generating) {
-      setStreamToolInvokingDom(true);
+    // 4) streaming 行 reseed（gap/remount/快照 seed）；finished 行仅签名变化时校正
+    if (needsReseed && streamingRow != null) {
+      reseedStreamingRow(streamingRow);
+      state.lastStreamHtmlStreamId = nextCheckpoint!.id;
     }
+    reconcileFinishedStreamingRows();
     if (intent === 'stick') {
       // 窗口化后不再先回顶（top 占位巨大时会闪一帧空白）：渲染后立即贴底，
       // 二层 RAF 的 scrollAfterRender 保持原时序幂等收尾（stick + emit）。
@@ -303,10 +443,184 @@ export function applySnapshot(payload: SnapshotPayload): void {
       scrollAfterRender();
     }
   });
+
+  // 异常快照退避（spec §3.4.1）：queueMicrotask 触发 + 1s/5s 退避，连续 3 次
+  // 停止自动 resync；计数与退避截止写在 state 上便于观测/测试。
+  if (anomalyStreamId != null) {
+    scheduleSnapshotAnomalyResync(anomalyStreamId);
+  }
+}
+
+/**
+ * 异常快照自动 resync（spec §3.4.1 / C18）：本同步块刚清 `resyncPending`，
+ * 直接 `requestResync` 会形成「快照→resync→快照」循环，改为队列微任务触发；
+ * 连续异常按 1s/5s 退避（`snapshotResyncBackoffUntil` 既是退避截止也是去重
+ * 窗口：窗口内已有待重试时不叠加 timer），连续 3 次停止自动 resync 并留日志。
+ * 正常快照不变量通过时由 `applySnapshot` 清零计数与退避截止（待重试自然作废）。
+ *
+ * nm-style: keep-local — 共享 state.snapshotResyncAnomalyCount/BackoffUntil 的
+ * 退避状态机；timer 闭包捕获 deadline 作废语义，内联会把三处状态读写拆散。
+ */
+function scheduleSnapshotAnomalyResync(streamId: string): void {
+  state.snapshotResyncAnomalyCount += 1;
+  const count = state.snapshotResyncAnomalyCount;
+  if (count >= SNAPSHOT_RESYNC_ANOMALY_LIMIT) {
+    if (count === SNAPSHOT_RESYNC_ANOMALY_LIMIT) {
+      console.error(
+        '[chat-transcript] snapshot anomaly resync stopped after ' +
+          count +
+          ' consecutive anomalies (' +
+          streamId +
+          ')',
+      );
+    }
+    return;
+  }
+  const now = performance.now();
+  const pendingUntil = state.snapshotResyncBackoffUntil;
+  if (pendingUntil != null && now < pendingUntil) {
+    // 退避窗口内已有待重试：异常快照连发时不重复排队。
+    return;
+  }
+  const delayMs =
+    count >= 2
+      ? SNAPSHOT_RESYNC_BACKOFF_LONG_MS
+      : SNAPSHOT_RESYNC_BACKOFF_MS;
+  const deadline = now + delayMs;
+  state.snapshotResyncBackoffUntil = deadline;
+  // microtask 调度：目标 WebView 是 minSdk 26 / Chromium 58，原生 queueMicrotask
+  // 是 Chrome 71 才有的 API（`novel-webview/no-es2020-builtin` 禁用它）；
+  // Promise.then 与原生同属微任务队列（ES2015 起可用），语义一致。
+  Promise.resolve().then(function () {
+    setTimeout(function () {
+      // 期间正常快照已清零（或退避被新窗口顶替）：本次待重试作废。
+      if (state.snapshotResyncBackoffUntil !== deadline) {
+        return;
+      }
+      state.snapshotResyncBackoffUntil = null;
+      requestResync(streamId, 0);
+    }, delayMs);
+  });
+}
+
+/** 按行 id 找窗口内的行元素（窗口外未渲染 → null）。 */
+function findRowElement(id: string): Element | null {
+  if (typeof document.querySelector !== 'function') {
+    return null;
+  }
+  return document.querySelector('[data-id="' + id + '"]');
+}
+
+/** 全量写 body 自身（不是 .stream-active-tail）：rich 用 html，plain 用纯文本。 */
+function writeBodyFull(
+  body: Element,
+  html: string | undefined,
+  text: string | undefined,
+  richText: boolean,
+): void {
+  if (richText && html) {
+    applyTrustedHtml(body, html);
+    body.classList.remove('stream-tail-plain');
+    body.classList.add('rich');
+    return;
+  }
+  body.textContent = String(text || '');
+}
+
+/**
+ * gap 恢复/快照 seed 的唯一 DOM 写入口（P0-2）：按 data-id 找行，把
+ * `.bubble-body/.thinking-body` 自身一次性重写为行内完整 text/thinking/html。
+ * 无壳直接 return（壳已由本次 renderRows 建好，这里不再 renderRows）。
+ */
+export function reseedStreamingRow(row: MessageRow): void {
+  const el = findRowElement(row.id);
+  if (!el) {
+    return;
+  }
+  const bubble = el.querySelector('.bubble');
+  if (!bubble) {
+    return;
+  }
+  const textBody = bubble.querySelector('.bubble-body');
+  if (textBody) {
+    writeBodyFull(textBody, row.textHtml, row.text, state.flags.richText);
+  }
+  const thinkingBody = bubble.querySelector('.thinking-body');
+  if (thinkingBody) {
+    writeBodyFull(
+      thinkingBody,
+      row.thinkingHtml,
+      row.thinking,
+      state.flags.richText,
+    );
+  }
+}
+
+type StreamRenderSignature = {
+  text: string;
+  thinking: string;
+  textHtml: string;
+  thinkingHtml: string;
+};
+
+const lastStreamRenderSignature = new Map<string, StreamRenderSignature>();
+
+/**
+ * finished 流式行的正文校正：只处理窗口内命中的 `[data-id]`，签名（四个
+ * 字符串全等）未变直接跳过；无壳跳过；**不调用 renderRows**；只写
+ * `.bubble-body/.thinking-body` 自身（不经 streamRenderTarget，块模式会把
+ * 全量 html 写进尾容器复制已提交块）。
+ */
+export function reconcileFinishedStreamingRows(): void {
+  for (let i = 0; i < state.rows.length; i++) {
+    const row = state.rows[i];
+    if (row.kind !== 'message' || row.status !== 'finished') {
+      continue;
+    }
+    const el = findRowElement(row.id);
+    if (!el) {
+      continue;
+    }
+    const next: StreamRenderSignature = {
+      text: String(row.text || ''),
+      thinking: String(row.thinking || ''),
+      textHtml: String(row.textHtml || ''),
+      thinkingHtml: String(row.thinkingHtml || ''),
+    };
+    const prev = lastStreamRenderSignature.get(row.id);
+    if (
+      prev != null &&
+      prev.text === next.text &&
+      prev.thinking === next.thinking &&
+      prev.textHtml === next.textHtml &&
+      prev.thinkingHtml === next.thinkingHtml
+    ) {
+      continue;
+    }
+    const bubble = el.querySelector('.bubble');
+    if (!bubble) {
+      continue;
+    }
+    const textBody = bubble.querySelector('.bubble-body');
+    if (textBody) {
+      writeBodyFull(textBody, row.textHtml, row.text, state.flags.richText);
+    }
+    const thinkingBody = bubble.querySelector('.thinking-body');
+    if (thinkingBody) {
+      writeBodyFull(
+        thinkingBody,
+        row.thinkingHtml,
+        row.thinking,
+        state.flags.richText,
+      );
+    }
+    lastStreamRenderSignature.set(row.id, next);
+  }
 }
 
 /**
  * appendTailRows: 追加落库行；全量路径走 Preact renderRows（保留滚动锚点）。
+ * 流式行必须保持最后一条（I1）：新行插到它之前。
  * 分片收集在途时挂起（C-orch-1），末片应用后重放。
  */
 export function applyAppendTailRows(payload: RowsPayload): void {
@@ -325,7 +639,12 @@ function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
   const scroller = document.getElementById('scroller');
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-  state.rows = state.rows.concat(newRows);
+  const last = state.rows[state.rows.length - 1];
+  if (last != null && last.status === 'streaming') {
+    state.rows = state.rows.slice(0, -1).concat(newRows, [last]);
+  } else {
+    state.rows = state.rows.concat(newRows);
+  }
   // 窗口跟随尾部追加（渲染前）：按追加前距底偏移重定位，新行进窗口。
   retargetRowWindowFromBottom(
     prevOffsetFromBottom,
@@ -337,101 +656,6 @@ function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
     if (wasNearBottom) {
       stickToBottom(scroller);
     } else {
-      scroller.scrollTop = scrollTopForOffsetFromBottom(
-        scroller.scrollHeight,
-        scroller.clientHeight,
-        prevOffsetFromBottom,
-      );
-    }
-    state.nearBottom = isNearBottom(scroller);
-    emitScrollSnapshot();
-  }
-}
-
-/**
- * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
- */
-export function promoteStreamTailToRow(row: TranscriptRow): boolean {
-  if (!row || row.kind !== 'message') {
-    return false;
-  }
-  const streamTail = document.getElementById('stream-tail');
-  if (!streamTail) {
-    return false;
-  }
-  // Preact 全量路径：调用方已清 stream 并写入 rows，交由 renderRows 刷新
-  renderRows();
-  return true;
-}
-
-/**
- * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
- * 分片收集在途时挂起（C-orch-1），末片应用后重放。
- */
-export function applyStreamCommit(payload: RowsPayload): void {
-  const newRows = (payload.rows || []).slice();
-  if (pendingChunkAcc != null) {
-    pendingChunkActions.push({
-      kind: 'streamCommit',
-      rows: newRows,
-      scrollIntent: payload.scrollIntent,
-    });
-    return;
-  }
-  applyStreamCommitNow(newRows, payload.scrollIntent);
-}
-
-function applyStreamCommitNow(
-  newRows: TranscriptRow[],
-  scrollIntent?: string,
-): void {
-  const toAppend: TranscriptRow[] = [];
-  for (let i = 0; i < newRows.length; i++) {
-    const row = newRows[i];
-    if (row.kind !== 'message') {
-      continue;
-    }
-    let dup = false;
-    for (let j = 0; j < state.rows.length; j++) {
-      const existing = state.rows[j];
-      if (existing.kind === 'message' && existing.id === row.id) {
-        dup = true;
-        break;
-      }
-    }
-    if (!dup) {
-      toAppend.push(row);
-    }
-  }
-  if (toAppend.length === 0) {
-    renderRows();
-    scheduleMermaidScan();
-    return;
-  }
-  const scroller = document.getElementById('scroller');
-  const wasNearBottom = state.nearBottom;
-  const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-  state.rows = state.rows.concat(toAppend);
-  // 窗口跟随尾部定稿行（渲染前）：nearBottom 场景新行进窗口，
-  // 流式尾 promote 为正式行后不出现「尾清了而行没渲染」的空档。
-  retargetRowWindowFromBottom(
-    prevOffsetFromBottom,
-    scroller ? scroller.clientHeight : 0,
-  );
-  const promoted =
-    toAppend.length === 1 &&
-    toAppend[0].kind === 'message' &&
-    promoteStreamTailToRow(toAppend[0] as MessageRow);
-  if (!promoted) {
-    renderRows();
-  }
-  // 定稿行落库后触发 mermaid 扫描（流式期保留的源码占位在此转图表）
-  scheduleMermaidScan();
-  const resolvedScrollIntent = scrollIntent || 'preserve';
-  if (scroller) {
-    if (resolvedScrollIntent === 'preserve' && wasNearBottom) {
-      stickToBottom(scroller);
-    } else if (resolvedScrollIntent === 'preserve') {
       scroller.scrollTop = scrollTopForOffsetFromBottom(
         scroller.scrollHeight,
         scroller.clientHeight,

@@ -66,7 +66,6 @@ import type {ThemeTokens} from '@/theme/tokens';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 import {useChatTabController} from './useChatTabController';
-import {useInterruptedPartialCommit} from './useInterruptedPartialCommit';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
@@ -99,6 +98,8 @@ function ChatConversationWebSurface(props: {
   const {
     agentMeta,
     unitView,
+    streamingRows,
+    streamRowIds,
     transcriptWebRef,
     chatScrollKey,
     chatMessages,
@@ -123,15 +124,6 @@ function ChatConversationWebSurface(props: {
   // 保护窗——starting 投影即时可见，乐观置位已随单元化退役）。
   const unitActive =
     unitView?.status === 'starting' || unitView?.status === 'running';
-
-  // 中断现场渲染（Step 6，语义说明见 hook 模块头）：与 SubagentSessionScreen
-  // 共用同一份 effect（ui/C-1 抽取）；ready 世代入依赖修 ui/B-1 的
-  // 「tail 先于 webview ready 到达」时序。
-  useInterruptedPartialCommit({
-    unitView,
-    webRef: transcriptWebRef,
-    readyEpoch: ctx.transcriptReadyEpoch,
-  });
 
   const transcriptFlags = useMemo(
     () => ({richText: chatRichTextEnabled}),
@@ -211,10 +203,11 @@ function ChatConversationWebSurface(props: {
         key={chatScrollKey ?? 'no-session-scroll'}
         sessionKey={chatScrollKey ?? 'no-session'}
         messages={chatMessages}
+        streamingRows={streamingRows}
+        streamRowIds={streamRowIds}
         hasMore={hasMoreMessages}
         agentRunning={unitActive}
         uiRunning={unitActive}
-        toolInvoking={unitActive}
         flags={transcriptFlags}
         menuCloseSignal={webMenuCloseSignal}
         mermaidViewerCloseSignal={mermaidViewerCloseSignal}

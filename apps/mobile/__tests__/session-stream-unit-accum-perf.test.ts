@@ -115,7 +115,7 @@ describe('SessionStreamUnit partial 数组化性能护栏（T-N5）', () => {
     }
 
     // step 边界清零回归：冲刷后 partial 归空，新 step 从零累积。
-    expect(unit.handleStepCommitted(RUN_ID)).toBe(true);
+    expect(unit.handleStepCommitted(RUN_ID, 'assistant')).toBe(true);
     const cleared = unit.snapshot();
     expect(cleared.partialText).toBe('');
     expect(cleared.partialThinking).toBe('');

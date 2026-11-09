@@ -83,6 +83,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_AGENT_STREAM_USAGE,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
@@ -93,6 +94,7 @@ import type {
   AgentStepCommittedPayload,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
+  AgentStreamToolUsePayload,
   AgentStreamUsagePayload,
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
@@ -158,7 +160,11 @@ import {
 import {createLruMap, type LruMap} from '@/services/scope-key-cache';
 import {prependOlderMessages} from '@/services/message-paging';
 import {createQuantumYield} from '@/services/yield-quantum';
+import {createLogger} from '@novel-master/core/log';
 import {AppState} from 'react-native';
+
+/** 编排器日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
+const log = createLogger('chat.stream-manager');
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
@@ -175,6 +181,9 @@ export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
  */
 export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
 
+/** 空接管映射共享实例（idle 视图缺省值；避免每次新建空 Map 打穿引用比较）。 */
+const EMPTY_STREAM_ROW_IDS: ReadonlyMap<string, string> = new Map();
+
 /**
  * 无单元会话消息面在 LRU 表内的**存储形态**：只存消息面本身。
  *
@@ -187,6 +196,11 @@ export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
 interface IdleMessageViewEntry {
   readonly messages: readonly ChatMessageData[];
   readonly hasMoreMessages: boolean;
+  /**
+   * DB message id → streamId 接管映射（单元出表时交接；idle 侧的 tail/分页
+   * 刷新必须保留它，否则已接管的 assistant 行回退 DB id → remount/闪动）。
+   */
+  readonly streamRowIds: ReadonlyMap<string, string>;
 }
 
 /** 读口形态 = 存储形态 + 从 `idleLoadingMore` 合成的 in-flight 标记。 */
@@ -494,6 +508,19 @@ export class SessionStreamUnitManager {
           }
         },
       ),
+      // tool-use（chat-streaming-projection Step 2）：进当前 step 记录的
+      // tools 并立即推 tools-only 的 stream-batch。tool 状态不是持久字段，
+      // 不写通（只由单元内的 onProjectionChanged 通知）。
+      this.runtime.eventBus.subscribe(
+        EVENT_AGENT_STREAM_TOOL_USE,
+        (payload: AgentStreamToolUsePayload) => {
+          this.units.get(payload.sessionId)?.ingestToolUse(payload.runId, {
+            id: payload.id,
+            name: payload.name,
+            input: payload.input,
+          });
+        },
+      ),
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STEP_COMMITTED,
         (payload: AgentStepCommittedPayload) => this.onStepCommitted(payload),
@@ -609,6 +636,9 @@ export class SessionStreamUnitManager {
    *
    * 失败策略：任一步失败则记日志并直接 markHydrated 放行（会话呈现为
    * 无 run，不阻塞 UI）。
+   *
+   * nm-style: keep-public — runtime 启动唯一水合入口，承载 dispose/幂等/
+   * 量子让步状态机，调用方无法 own 这段生命周期。
    */
   hydrate(): Promise<void> {
     if (this.hydratePromise != null) {
@@ -710,10 +740,7 @@ export class SessionStreamUnitManager {
       this.markHydrated();
     })();
     this.hydratePromise = run.catch(err => {
-      console.error(
-        '[novel-master/session-stream-unit-manager] hydrate failed',
-        err,
-      );
+      log.error('hydrate failed', {err});
       this.markHydrated();
     });
     return this.hydratePromise;
@@ -838,12 +865,37 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 请求该会话单元向全句柄广播 reset-stream 控制消息（Step 6 屏幕接线：
-   * 消息操作 rollback/fork 等场景清流式显示的单元等效，对应 webview 的
-   * resetStream；无单元 no-op）。
+   * 请求该会话单元清掉流式投影并向全句柄广播 reset-stream（Step 6 屏幕
+   * 接线：消息操作 rollback/fork 等场景，对应 webview 的 resetStream；
+   * 无单元 no-op）。
+   *
+   * 顺序（P0-4）：先 `unit.clearStreamProjection()` 拿被清掉的 streamId →
+   * 广播 `{streamIds}` → 通知 → 下一拍再 force-snapshot。force-snapshot 经
+   * 适配器同步调宿主 `sendSessionSnapshotNow`，它起手读 Provider 的
+   * streamingRows 闭包；必须等 `setUnitView` 提交后的下一拍发，否则
+   * 「清空后的快照」仍带旧 partial。interrupted 单元另 best-effort settle
+   * 持久层行，避免进程重启后水合回鬼影。
    */
   requestStreamReset(sessionId: string): void {
-    this.units.get(sessionId)?.broadcastControlMessage({type: 'reset-stream'});
+    const unit = this.units.get(sessionId);
+    if (unit == null) {
+      return;
+    }
+    const removed = unit.clearStreamProjection();
+    unit.broadcastControlMessage({type: 'reset-stream', streamIds: removed});
+    this.notifyChanged();
+    setTimeout(() => {
+      if (this.units.get(sessionId) === unit && !unit.isDestroyed()) {
+        unit.requestForceSnapshot();
+      }
+    }, 0);
+    if (unit.getStatus() === 'interrupted') {
+      this.upsertSettledRunStateQuietly(
+        sessionId,
+        unit.projectId,
+        unit.snapshot(),
+      );
+    }
   }
 
   /**
@@ -943,6 +995,7 @@ export class SessionStreamUnitManager {
           messages: snap.messages,
           hasMoreMessages: snap.hasMoreMessages,
           loadingMoreMessages: snap.loadingMoreMessages,
+          streamRowIds: snap.streamRowIds,
         };
       }
       const idle = this.idleMessageViews.get(sessionId);
@@ -956,6 +1009,7 @@ export class SessionStreamUnitManager {
         messages: snap.messages,
         hasMoreMessages: snap.hasMoreMessages,
         loadingMoreMessages: snap.loadingMoreMessages,
+        streamRowIds: snap.streamRowIds,
       };
     }
     const idle = this.idleMessageViews.get(sessionId);
@@ -968,6 +1022,9 @@ export class SessionStreamUnitManager {
    * 同步水合（会话切换防闪，原 useChatTabMessages.hydrateFromSessionCache
    * 的等价语义）：view cache 命中即采纳进 idle 视图、miss 清空；有单元
    * （投影接管消息面）no-op。写完通知一次。
+   *
+   * nm-style: keep-public — 会话切换防闪的唯一水合入口，读写 manager 私有
+   * idleMessageViews 与 view cache，调用侧无法 own 这段状态。
    */
   hydrateSessionMessages(projectId: string, sessionId: string): void {
     if (this.units.has(sessionId)) {
@@ -981,11 +1038,13 @@ export class SessionStreamUnitManager {
       this.idleMessageViews.set(sessionId, {
         messages: [...windowed.messages],
         hasMoreMessages: windowed.hasMoreMessages,
+        streamRowIds: this.idleStreamRowIds(sessionId),
       });
     } else {
       this.idleMessageViews.set(sessionId, {
         messages: [],
         hasMoreMessages: false,
+        streamRowIds: this.idleStreamRowIds(sessionId),
       });
     }
     this.notifyChanged();
@@ -1102,6 +1161,7 @@ export class SessionStreamUnitManager {
       this.idleMessageViews.set(sessionId, {
         messages: next,
         hasMoreMessages: hasMore,
+        streamRowIds: current.streamRowIds,
       });
       this.notifyChanged();
     } finally {
@@ -1121,8 +1181,20 @@ export class SessionStreamUnitManager {
     this.idleMessageViews.set(sessionId, {
       messages: [...messages],
       hasMoreMessages: hasMore,
+      streamRowIds: this.idleStreamRowIds(sessionId),
     });
     this.notifyChanged();
+  }
+
+  /**
+   * idle 视图当前的接管映射（缺省空 Map）。所有 idleMessageViews.set 写入点
+   * 都必须经它保留既有映射——单元出表后任意一次 tail/older 刷新丢了 map，
+   * 已接管的 assistant 行就会回退 DB id（remount/闪动，P1-3）。
+   */
+  private idleStreamRowIds(sessionId: string): ReadonlyMap<string, string> {
+    return (
+      this.idleMessageViews.get(sessionId)?.streamRowIds ?? EMPTY_STREAM_ROW_IDS
+    );
   }
 
   /**
@@ -1169,8 +1241,10 @@ export class SessionStreamUnitManager {
     // （不触发屏幕侧 attach effect 重挂）——不迁移的话新 run 的流式推送
     // 全程无句柄（HANDLE-NULL：会话内不渲染、退出重进注入才可见）。
     let inheritedHandles: SessionStreamWebviewHandle[] = [];
+    let inheritedIds: ReadonlyMap<string, string> = EMPTY_STREAM_ROW_IDS;
     if (existing != null) {
       inheritedHandles = existing.takeWebviewHandles();
+      inheritedIds = existing.getStreamRowIds();
       this.removeUnit(sessionId, existing);
     }
     const unit = new SessionStreamUnit({
@@ -1184,6 +1258,7 @@ export class SessionStreamUnitManager {
       onProjectionChanged: () => this.notifyChanged(),
     });
     unit.begin();
+    unit.inheritStreamRowIds(inheritedIds);
     for (const handle of inheritedHandles) {
       unit.attachWebview(handle);
     }
@@ -1245,7 +1320,7 @@ export class SessionStreamUnitManager {
         }
       })
       .catch(err => {
-        console.error('[novel-master/session-stream-unit-manager] run failed', {
+        log.error('run failed', {
           sessionId,
           projectId,
           err:
@@ -1329,6 +1404,9 @@ export class SessionStreamUnitManager {
    * interrupted 态单元入注册表（partial/指标/子会话链接由水合流程回填，
    * 本节点只立入口与替换/LRU 语义）。返回单元供回填；若该会话已有单元
    * （settled）则被替换销毁——活跃单元场景下水合流程不应调用。
+   *
+   * nm-style: keep-public — 水合流程的唯一建单元入口，承载 units 注册表/
+   * 替换销毁/LRU 淘汰与 notifyChanged 时序。
    */
   adoptInterruptedUnit(
     sessionId: string,
@@ -1382,8 +1460,10 @@ export class SessionStreamUnitManager {
       }
       // 句柄迁移 + 消费型标记重建都靠 adoptConsumptiveUnit（removeUnit 会 delete 标记）
       const inheritedHandles = unit.takeWebviewHandles();
+      const inheritedStreamRowIds = unit.getStreamRowIds();
       this.removeUnit(payload.sessionId, unit);
       unit = this.adoptConsumptiveUnit(payload.sessionId, payload.projectId);
+      unit.inheritStreamRowIds(inheritedStreamRowIds);
       for (const handle of inheritedHandles) {
         unit.attachWebview(handle);
       }
@@ -1393,10 +1473,10 @@ export class SessionStreamUnitManager {
       // 新单元 messages 为空，屏侧会先落到空数组；立即回源填历史，避免二轮 run 开场空白
       void this.loadSessionTailMessages(payload.sessionId, {force: true}).catch(
         error => {
-          console.error(
-            '[novel-master/session-stream-unit-manager] reuse tail reload failed',
+          log.error('reuse tail reload failed', {
+            sessionId: payload.sessionId,
             error,
-          );
+          });
         },
       );
     }
@@ -1447,7 +1527,10 @@ export class SessionStreamUnitManager {
    */
   private onStepCommitted(payload: AgentStepCommittedPayload): void {
     const unit = this.units.get(payload.sessionId);
-    if (unit == null || !unit.handleStepCommitted(payload.runId)) {
+    if (
+      unit == null ||
+      !unit.handleStepCommitted(payload.runId, payload.phase)
+    ) {
       return;
     }
     this.appendWritethroughSnapshot(unit);
@@ -1581,14 +1664,15 @@ export class SessionStreamUnitManager {
 
     if (status === 'failed') {
       // 失败反馈也收口在所有权校验之后：无主 FAILED 不弹 toast；
-      // 桥未注入时用 console.error 兜底，不留无任何痕迹的失败。
+      // 桥未注入时用 log.error 兜底，不留无任何痕迹的失败。
       if (this.uiBridge != null) {
         this.uiBridge.onError(errorMessage ?? '生成失败');
       } else {
-        console.error(
-          '[novel-master/session-stream-unit-manager] run failed (uiBridge not ready)',
-          {sessionId, runId, error: errorMessage},
-        );
+        log.error('run failed (uiBridge not ready)', {
+          sessionId,
+          runId,
+          error: errorMessage,
+        });
       }
     }
 
@@ -1679,19 +1763,13 @@ export class SessionStreamUnitManager {
   /** fire-and-forget 包装：吞错但留日志，防 unhandled rejection。 */
   private startKeepAliveQuietly(sessionId: string, projectId: string): void {
     void this.startKeepAliveFor(sessionId, projectId).catch(err => {
-      console.error(
-        '[novel-master/session-stream-unit-manager] startKeepAlive failed',
-        err,
-      );
+      log.error('startKeepAlive failed', {sessionId, err});
     });
   }
 
   private stopKeepAliveQuietly(sessionId: string): void {
     void this.stopKeepAliveFor(sessionId).catch(err => {
-      console.error(
-        '[novel-master/session-stream-unit-manager] stopKeepAlive failed',
-        err,
-      );
+      log.error('stopKeepAlive failed', {sessionId, err});
     });
   }
 
@@ -1740,12 +1818,31 @@ export class SessionStreamUnitManager {
   private removeUnit(sessionId: string, unit: SessionStreamUnit): void {
     // 消息面交接（Step 7 收口）：销毁前把投影消息面挪进 idle 视图——宽限
     // 销毁/LRU 淘汰/替换沿上，消息显示源从投影切 idle 无缝不断档。单元
-    // 消息面为空时保留既有 idle（防 run 前历史消息被闪掉）。
+    // 消息面为空时保留既有 idle（防 run 前历史消息被闪掉）。接管映射同批
+    // 交接（R5）：丢了它，已接管的 assistant 行会回退 DB id → remount。
     const handover = unit.snapshot();
     if (handover.messages.length > 0) {
+      const base = this.idleStreamRowIds(sessionId);
+      const incoming = handover.streamRowIds;
+      let changed = false;
+      for (const [messageId, streamId] of incoming) {
+        if (base.get(messageId) !== streamId) {
+          changed = true;
+          break;
+        }
+      }
+      let streamRowIds = base;
+      if (changed) {
+        const merged = new Map(base);
+        for (const [messageId, streamId] of incoming) {
+          merged.set(messageId, streamId);
+        }
+        streamRowIds = merged;
+      }
       this.idleMessageViews.set(sessionId, {
         messages: [...handover.messages],
         hasMoreMessages: handover.hasMoreMessages,
+        streamRowIds,
       });
     }
     this.units.delete(sessionId);
@@ -1810,10 +1907,7 @@ export class SessionStreamUnitManager {
       return;
     }
     this.runStateStore.upsert(state).catch(err => {
-      console.error(
-        '[novel-master/session-stream-unit-manager] run_state upsert failed',
-        err,
-      );
+      log.error('run_state upsert failed', {sessionId: state.sessionId, err});
     });
   }
 
@@ -1839,10 +1933,7 @@ export class SessionStreamUnitManager {
         updatedAtMs: Date.now(),
       })
       .catch(err => {
-        console.error(
-          '[novel-master/session-stream-unit-manager] run_state settle failed',
-          err,
-        );
+        log.error('run_state settle failed', {sessionId, err});
       });
   }
 
@@ -1943,10 +2034,7 @@ export class SessionStreamUnitManager {
         }),
       )
       .catch(err => {
-        console.warn(
-          '[novel-master/session-stream-unit-manager] final rate persist failed',
-          err,
-        );
+        log.warn('final rate persist failed', {sessionId, err});
       });
   }
 
@@ -1968,10 +2056,7 @@ export class SessionStreamUnitManager {
         STREAM_METRICS_FINAL_RATE_KEY,
       )
       .catch(err => {
-        console.warn(
-          '[novel-master/session-stream-unit-manager] final rate delete failed',
-          err,
-        );
+        log.warn('final rate delete failed', {sessionId, err});
       });
   }
 

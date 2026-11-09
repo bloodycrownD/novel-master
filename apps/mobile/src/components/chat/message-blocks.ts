@@ -16,10 +16,7 @@ import {
   resolveVfsToolFilePath,
 } from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
-import type {
-  TranscriptRow,
-  TranscriptStreamState,
-} from './ChatTranscriptBridge';
+import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
@@ -447,10 +444,6 @@ function buildChatListItemsWithContext(
   return items;
 }
 
-// TranscriptStreamState 声明收敛到 ChatTranscriptBridge（comp-chat/C-5），这里 re-export
-// 维持既有导入路径兼容。
-export type {TranscriptStreamState};
-
 /** 单个聊天气泡 → Web transcript 行（逐 item 独立转换，不依赖跨消息状态）。 */
 function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
   // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
@@ -517,34 +510,24 @@ export function selectTailTranscriptRows(
   );
 }
 
-/** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
+/**
+ * Maps session messages to Web transcript rows (seq ascending, forward DOM order).
+ *
+ * 流式正文不再是本函数的第二条数据面（spec C10）：流式行由宿主
+ * `buildStreamingTranscriptRow` 生成、快照末片携带，本函数只产出 DB 历史行。
+ */
 export function buildTranscriptRows(
   messages: readonly ChatMessageData[],
-  stream?: TranscriptStreamState,
   options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {
-  const items = buildChatListItems(messages, options);
-  const rows: TranscriptRow[] = items.map(transcriptRowFromItem);
-
-  if (
-    stream != null &&
-    (stream.text.length > 0 || stream.thinking.length > 0)
-  ) {
-    rows.push({
-      kind: 'stream',
-      text: stream.text,
-      thinking: stream.thinking,
-    });
-  }
-
-  return rows;
+  return buildChatListItems(messages, options).map(transcriptRowFromItem);
 }
 
 /**
  * 基于既有配对上下文构建消息片段的 transcript rows（init-busy-yield Step 6
  * 快照分片）：行转换逐消息独立、不依赖跨消息状态，故「按片调用本函数后
- * 顺序拼接」与单次全量 buildTranscriptRows（stream 省略时）输出全等——
- * 快照路径从不携带 stream 行，这里不设 stream 参数。
+ * 顺序拼接」与单次全量 buildTranscriptRows 输出全等——流式行由宿主另行
+ * 生成（spec C10），本函数只处理 DB 消息。
  */
 export function buildTranscriptRowsWithContext(
   messages: readonly ChatMessageData[],

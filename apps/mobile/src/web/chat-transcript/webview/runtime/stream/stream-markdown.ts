@@ -5,6 +5,7 @@ import {state} from '../state/state';
 import {scheduleStickIfNearBottom} from '../scroll/scroll';
 import {
   assistantBubbleExtraClasses,
+  currentStreamingRow,
   ensureStreamTextBody,
   getStreamActiveTailText,
   getStreamThinkingBody,
@@ -98,6 +99,8 @@ export function clearStreamRichUpgrade(): void {
 }
 
 export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
+  const row = currentStreamingRow();
+  if (row == null) return;
   const bubble = tail.querySelector('.bubble');
   if (!bubble) return;
   if (kind === 'thinking') {
@@ -114,7 +117,8 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
     // 轻量升级落富文本：清纯文本降级标记（B-1）
     setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(body, true);
-    state.stream.thinkingHtml = thinkingHtml;
+    // 不写回 row.thinkingHtml：行上是全量 html（delta 携带），尾块 html 写回
+    // 会把 full 截成 tail（C22）。
   } else {
     const textBody = ensureStreamTextBody(bubble);
     const textHtml = renderStreamingMarkdown(getStreamActiveTailText('text'));
@@ -123,16 +127,9 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
     applyTrustedHtml(target, textHtml);
     setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(textBody, true);
-    state.stream.textHtml = textHtml;
+    // 同上：不写回 row.textHtml（全量真源在 delta）。
   }
-  bubble.className =
-    'bubble assistant' +
-    assistantBubbleExtraClasses(
-      state.stream.textHtml,
-      [],
-      state.stream.text,
-      state.stream.thinking,
-    );
+  bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
 }
 
 export function flushStreamRichUpgrade(): void {

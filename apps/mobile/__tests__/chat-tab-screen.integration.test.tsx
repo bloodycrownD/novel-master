@@ -10,11 +10,8 @@ import {
 } from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {clearAllSessionViewCaches} from '../src/services/chat-session-view-cache';
-import {
-  CONVERSATION_BRIDGE_V,
-  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-  decodeConversationUpstream,
-} from '../src/components/chat/ChatConversationBridge';
+import {decodeConversationUpstream} from '../src/components/chat/ChatConversationBridge';
+import {makeTranscriptReadyPayload} from '../test-utils/transcript-ready';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -598,7 +595,7 @@ describe('ChatTabScreen integration', () => {
     expect(mockHarnessManager!.snapshot('s1')?.partialText).toBe('ABC');
   });
 
-  it('T-R3 顺序：重进注入的 streamDelta 晚于 sessionSnapshot（先 snapshot 后 inject）', async () => {
+  it('T-SP26 / T-R3 顺序：重进注入的 streamDelta 晚于 sessionSnapshot（先 snapshot 后 inject）', async () => {
     // 重进恢复现场：s1 的 run 进行中且单元已有 partial；统一宿主是这屏唯一
     // 转录面，sessionSnapshot 与注入 delta 都经桥的 postToWeb（webview mock
     // 落盘）按序记录。
@@ -633,11 +630,9 @@ describe('ChatTabScreen integration', () => {
       await Promise.resolve();
     });
 
-    // web 侧 ready：webReady=true 后子组件 messages effect 直发
-    // sessionSnapshot（needsOpenSnapshot 路径）；Provider 的 attach effect
-    // 随 onReady 触发，单元注入（stream-delta 载荷）经 RAF 到达。
-    // 统一宿主的 ready 必须带 v:2 与 composer-dock 能力位（纪律 C：v:1 的旧
-    // dist ready 被拒 → 走 8s 兜底，下行全丢）。
+    // web 侧 ready：webReady=true 后宿主直发 sessionSnapshot（needsOpenSnapshot
+    // 路径）。流式投影迭代起，重进恢复不再注入 delta——流式正文由快照末片的
+    // 流式行 + `stream` 检查点承载（spec C9 快照段 / T-SP26）。
     const WebViewMock = require('react-native-webview')
       .default as React.ComponentType<{
       onMessage?: (event: {nativeEvent: {data: string}}) => void;
@@ -650,22 +645,11 @@ describe('ChatTabScreen integration', () => {
     await act(async () => {
       webViews[0]!.props.onMessage?.({
         nativeEvent: {
-          data: JSON.stringify({
-            v: CONVERSATION_BRIDGE_V,
-            type: 'ready',
-            payload: {
-              version: 'u1',
-              readyState: 'complete',
-              capabilities: [
-                'streamBlockCommit',
-                CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-              ],
-            },
-          }),
+          data: JSON.stringify(makeTranscriptReadyPayload()),
         },
       });
     });
-    // 冲洗 RAF/deferred 定时器（注入 delta 经 requestAnimationFrame 发出）
+    // 冲洗 RAF/deferred 定时器（快照分片让步与增量判路共用）
     await act(async () => {
       jest.advanceTimersByTime(64);
     });
@@ -675,28 +659,43 @@ describe('ChatTabScreen integration', () => {
 
     // 统一宿主的下行信封是 v:2——用它的宽松 decoder 取 type/payload
     // （旧的 decodeHostToTranscript 对 v !== 1 直接 throw，会把断言变成误判）。
-    const sentMessages = mockWebViewPostMessages.map(raw =>
-      decodeConversationUpstream(raw),
+    const decoded = mockWebViewPostMessages
+      .map(raw => decodeConversationUpstream(raw))
+      .filter(r => r.ok)
+      .map(
+        r =>
+          (r as {
+            ok: true;
+            message: {type: string; payload: Record<string, unknown>};
+          }).message,
+      );
+    const types = decoded.map(message => message.type);
+    expect(types).toContain('sessionSnapshot');
+    // 重进注入链已删：不再有 singleton raw-delta 注入消息。
+    expect(types).not.toContain('streamDelta');
+
+    const snapshots = decoded.filter(m => m.type === 'sessionSnapshot');
+    const last = snapshots.at(-1)!;
+    const stream = last.payload.stream as
+      | {id: string; seq: number; status: string}
+      | undefined;
+    expect(stream).toMatchObject({status: 'streaming'});
+    expect(typeof stream!.id).toBe('string');
+
+    // 同一代次的所有分片拼起来：流式行 id 是 streamId、文本即单元 partial。
+    const sameGeneration = snapshots.filter(
+      snapshot => snapshot.payload.generation === last.payload.generation,
     );
-    const types = sentMessages
-      .filter(r => r.ok)
-      .map(r => (r as {ok: true; message: {type: string}}).message.type);
-    const snapshotIdx = types.indexOf('sessionSnapshot');
-    const deltaIdx = types.indexOf('streamDelta');
-    expect(snapshotIdx).toBeGreaterThanOrEqual(0);
-    expect(deltaIdx).toBeGreaterThanOrEqual(0);
-    // 先 snapshot 后 inject：第一条 sessionSnapshot 的调用序号必须小于任何
-    // 注入产生的 stream/delta 消息（snapshot 建立基线后 delta 才有意义）
-    expect(snapshotIdx).toBeLessThan(deltaIdx);
-    // 本用例的流式 delta 已在挂屏前进投影（attach 前已 apply），streamDelta
-    // 只可能来自重进注入，内容即单元 partial。
-    const delta = sentMessages
-      .filter(r => r.ok)
-      .map(r => (r as {ok: true; message: {type: string; payload: Record<string, unknown>}}).message)
-      .find(m => m.type === 'streamDelta');
-    if (delta?.type === 'streamDelta') {
-      expect(delta.payload.delta).toBe('重进恢复的 partial 正文');
-    }
+    const rows = sameGeneration.flatMap(
+      snapshot => snapshot.payload.rows as Array<Record<string, unknown>>,
+    );
+    const streamingRow = rows.find(row => row.id === stream!.id);
+    expect(streamingRow).toMatchObject({
+      kind: 'message',
+      role: 'assistant',
+      status: 'streaming',
+      text: '重进恢复的 partial 正文',
+    });
   });
 
   it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stopRun', async () => {

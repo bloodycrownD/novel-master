@@ -25,11 +25,12 @@ import {
   readReadyCapabilities,
   type ConversationHostMessage,
 } from '@/components/chat/ChatConversationBridge';
-// ready 的 t1 标识与转录域能力清单真源（web 独立入口 / RN 桥同源常量）
+// ready 的 t2 标识与转录域能力清单真源（web 独立入口 / RN 桥同源常量）
 import {
   TRANSCRIPT_READY_VERSION,
   TRANSCRIPT_CAPABILITIES,
   TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+  TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
 } from '@/web/chat-transcript/transcript-capabilities';
 // 主题键集的唯一真源（web 侧 shared/host-theme；RN 与 web 两侧清单都从它派生）
 import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
@@ -43,9 +44,12 @@ import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-
  * 逼着同步本清单——否则「RN 加了下行 type 而 web 侧不跟随」就又变成无声漂移。
  * 类型擦除拿不到联合成员，所以这里必须落一份运行时名单；关键是让它被类型锁住。
  *
- * D4c 收口后为纯转录域 14 键：composer 域 7 条下行
+ * D4c 收口后为纯转录域 12 键：composer 域 7 条下行
  * （setText/setSelection/setDisabled/blur/composerState/composerPaste/selectAll）
- * 已从联合删除。
+ * 已从联合删除；`streamStatus` 为流式投影协议（spec §2.2.5）新增。
+ * chat-streaming-projection Step 4（C7/C9 wire）再删 `streamBatch`/`streamCommit`/
+ * `streamToolInvoking` 三条旧流式通道——delta 合并为单条 `streamDelta`，
+ * 终态由 `streamStatus{row}` 表达。
  */
 const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
   init: true,
@@ -54,11 +58,9 @@ const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
   prependPage: true,
   appendTailRows: true,
   streamDelta: true,
-  streamBatch: true,
   streamBlockCommit: true,
+  streamStatus: true,
   streamReset: true,
-  streamCommit: true,
-  streamToolInvoking: true,
   flagsUpdate: true,
   closeMenu: true,
   closeMermaidViewer: true,
@@ -69,11 +71,11 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
     expect(CONVERSATION_BRIDGE_V).toBe(2);
   });
 
-  it('ready 的 t1 标识：RN 侧与转录域真源同源（独立入口 t1），宿主判定只认 v===2', () => {
+  it('ready 的 t2 标识：RN 侧与转录域真源同源（独立入口 t2），宿主判定只认 v===2', () => {
     // 宿主对 ready 的判定只认 v === 2（decodeConversationUpstream），version
     // 是辅助信息；同源断言保证「标识字符串」不出现第二份手抄。
     expect(CONVERSATION_READY_VERSION).toBe(TRANSCRIPT_READY_VERSION);
-    expect(CONVERSATION_READY_VERSION).toBe('t1');
+    expect(CONVERSATION_READY_VERSION).toBe('t2');
   });
 
   it('主题 9 键超集同源于 HOST_THEME_KEYS（web 侧同取此真源）', () => {
@@ -86,11 +88,19 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
     expect(CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
   });
 
-  it('下行 type 全集：RN 联合为纯转录 14 键', () => {
+  it('下行 type 全集：RN 联合为纯转录 12 键', () => {
     // 合成包退役后 web 侧无集中清单可对账（独立入口 runtime 用 switch 分发）；
     // RN 侧的增删由上面的 Record 类型编译期锁住，此处钉运行时形态。
     const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
-    expect(rnDownstreamTypes).toHaveLength(14);
+    expect(rnDownstreamTypes).toHaveLength(12);
+    // 流式旧通道已随投影协议删除（单条 streamDelta + streamStatus）
+    for (const retired of [
+      'streamBatch',
+      'streamCommit',
+      'streamToolInvoking',
+    ]) {
+      expect(rnDownstreamTypes).not.toContain(retired);
+    }
     // stickIfNearBottom 已在 RN 联合移除（BASE 起无生产方）
     expect(rnDownstreamTypes).not.toContain('stickIfNearBottom');
     // composer/dock 域 7 条下行已随 D4c 从 RN 联合退役
@@ -119,10 +129,13 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
 
   it('能力协商：转录域能力位可判定（真源 = 独立入口 TRANSCRIPT_CAPABILITIES）', () => {
     // 独立入口 ready 上报的 capabilities 是真源（RN 桥与 web main.ts 同源
-    // import）；RN 侧 ready 消费面只剩转录域 streamBlockCommit
-    // （D4b 剥离 composer-dock 判定）。
+    // import）；RN 侧 ready 消费面为转录域 streamBlockCommit + 流式投影
+    // streamProjection（spec §2.2.1 / C3）。
     expect(TRANSCRIPT_CAPABILITIES).toContain(
       TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+    );
+    expect(TRANSCRIPT_CAPABILITIES).toContain(
+      TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
     );
     expect(
       conversationCapabilitiesInclude(
@@ -130,11 +143,19 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
         'streamBlockCommit',
       ),
     ).toBe(true);
+    expect(
+      conversationCapabilitiesInclude(
+        TRANSCRIPT_CAPABILITIES,
+        'streamProjection',
+      ),
+    ).toBe(true);
     // 「未声明 = 不支持」：空清单一律 false
-    expect(conversationCapabilitiesInclude([], 'streamBlockCommit')).toBe(false);
-    expect(conversationCapabilitiesInclude(undefined, 'streamBlockCommit')).toBe(
+    expect(conversationCapabilitiesInclude([], 'streamBlockCommit')).toBe(
       false,
     );
+    expect(
+      conversationCapabilitiesInclude(undefined, 'streamBlockCommit'),
+    ).toBe(false);
   });
 });
 

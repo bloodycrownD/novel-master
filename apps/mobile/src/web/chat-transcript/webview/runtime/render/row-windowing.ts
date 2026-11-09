@@ -55,15 +55,23 @@ export function getRowWindowRange(total: number): RowWindowRange {
   return {start, end};
 }
 
-/** RowList 渲染取上下占位高度（未渲染行数 × 实测平均槽高）。 */
-export function getRowWindowSpacerHeights(total: number): {
+/**
+ * RowList 渲染取上下占位高度（未渲染行数 × 实测平均槽高）。
+ * `pinnedTail`（spec C19）：流式行被窗口滚出后钉在下占位之后单独渲染，下占位
+ * 必须少算这 1 行——它的真实高度由 DOM 自己贡献，不能被估算重复计算。
+ */
+export function getRowWindowSpacerHeights(
+  total: number,
+  pinnedTail = false,
+): {
   top: number;
   bottom: number;
 } {
   const range = getRowWindowRange(total);
+  const bottomRows = Math.max(0, total - range.end - (pinnedTail ? 1 : 0));
   return {
     top: Math.round(range.start * avgSlotPx),
-    bottom: Math.round(Math.max(0, total - range.end) * avgSlotPx),
+    bottom: Math.round(bottomRows * avgSlotPx),
   };
 }
 
@@ -146,7 +154,10 @@ function estimateViewportFirstRow(totalHint: number): number | null {
 }
 
 /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
-export function retargetRowWindow(total: number, viewportFirstRow: number): void {
+export function retargetRowWindow(
+  total: number,
+  viewportFirstRow: number,
+): void {
   win = desiredRowWindow(total, viewportFirstRow);
   // 窗口内容大换血：下次 render 后必须重测平均槽高。
   lastMeasuredWin = null;
@@ -276,6 +287,11 @@ export function handleRowWindowScroll(): boolean {
  * renderRows 后的实测钩子（main 装配点回调）：
  * 以上 / 下占位边界量出窗口行实际占高（含行间 gap），EWMA 更新平均槽高。
  * 窗口未变时跳过——流式期间高频 renderRows 不产生额外 reflow。
+ *
+ * 贴底且最后一行是 streaming（spec C19）：RowList 不渲染下占位，测量下缘会
+ * 落到不断长高的流式行。测量上界必须收到流式行之前：下缘取流式行 offsetTop、
+ * count 减 1（只减 count 不减 measuredPx 会把流式行高度留在分子、分母少 1，
+ * 估算反而偏大）。窗口外钉住的流式行在下占位之后，天然不进测量。
  */
 export function measureRowWindow(): void {
   const count = win.end - win.start;
@@ -291,23 +307,40 @@ export function measureRowWindow(): void {
   const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
   let topPx: number | null = null;
   let bottomPx: number | null = null;
+  let effectiveCount = count;
   if (topSpacer) {
     topPx = topSpacer.offsetTop + topSpacer.offsetHeight;
   } else {
-    const first = firstOrLastRowEl(true);
+    const first = firstOrLastRowEl(false);
     if (first) topPx = first.offsetTop;
   }
   if (bottomSpacer) {
     bottomPx = bottomSpacer.offsetTop;
   } else {
-    const lastRow = firstOrLastRowEl(true);
-    if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
+    let streamingTail: LayoutBox | null = null;
+    if (
+      typeof document !== 'undefined' &&
+      typeof document.getElementById === 'function'
+    ) {
+      const el = document.getElementById('stream-tail');
+      streamingTail = el == null ? null : (el as unknown as LayoutBox);
+    }
+    if (streamingTail != null && win.end >= state.rows.length) {
+      // 贴底流式行：测量区间收到它之前，槽高不含流式行高度。
+      bottomPx = streamingTail.offsetTop;
+      effectiveCount = count - 1;
+    } else {
+      const lastRow = firstOrLastRowEl(true);
+      if (lastRow) bottomPx = lastRow.offsetTop + lastRow.offsetHeight;
+    }
   }
-  if (topPx == null || bottomPx == null) return;
+  if (topPx == null || bottomPx == null || effectiveCount <= 0) return;
   const measuredPx = bottomPx - topPx;
   if (!(measuredPx > 0)) return;
-  const measuredSlot = measuredPx / count;
-  avgSlotPx = avgSlotPx * (1 - ROW_WINDOW_AVG_ALPHA) + measuredSlot * ROW_WINDOW_AVG_ALPHA;
+  const measuredSlot = measuredPx / effectiveCount;
+  avgSlotPx =
+    avgSlotPx * (1 - ROW_WINDOW_AVG_ALPHA) +
+    measuredSlot * ROW_WINDOW_AVG_ALPHA;
   lastMeasuredWin = {start: win.start, end: win.end};
 }
 

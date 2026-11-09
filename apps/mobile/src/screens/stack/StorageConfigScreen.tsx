@@ -85,16 +85,6 @@ export function StorageConfigScreen() {
     return `${Math.max(0, Math.round(bytes / 1024))} KB`;
   };
 
-  const maintenanceControlValue = (): string => {
-    if (dbBusy) {
-      return '处理中…';
-    }
-    if (agentActive) {
-      return 'Agent 运行中';
-    }
-    return '清理数据库空间';
-  };
-
   useEffect(() => {
     setAgentActive(isMobileAgentActive());
     return subscribeMobileAgentActivity(setAgentActive);
@@ -132,7 +122,7 @@ export function StorageConfigScreen() {
       <ProfileMenuItem
         icon="🧹"
         label="数据清理"
-        value={maintenanceControlValue()}
+        value={dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
@@ -186,7 +176,7 @@ export function StorageConfigScreen() {
       />
       <ProfileMenuItem
         icon="📝"
-        label="导出诊断日志"
+        label="导出日志"
         value={dbBusy ? '处理中…' : '分享日志文件'}
         tokens={tokens}
         onPress={() => {
@@ -197,7 +187,7 @@ export function StorageConfigScreen() {
           exportMobileLogs()
             .then(result => {
               if (result === 'saved') {
-                showToast('诊断日志已导出');
+                showToast('日志已导出');
               }
             })
             .catch(err => showToast(toastMessage('导出失败', err)))

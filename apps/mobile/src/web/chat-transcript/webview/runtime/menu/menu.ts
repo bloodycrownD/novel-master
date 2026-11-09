@@ -83,7 +83,10 @@ export function layoutContextMenu(
 export function findMessageRow(messageId: string): MessageRow | null {
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
-    if (row.kind === 'message' && row.id === messageId) {
+    if (
+      row.kind === 'message' &&
+      (row.id === messageId || row.messageId === messageId)
+    ) {
       return row;
     }
   }
@@ -240,6 +243,9 @@ export function openContextMenuFromAnchor(
   if (state.flags.menuDisabled) return;
   const row = findMessageRow(messageId);
   if (!row) return;
+  // 菜单动作与 data-message-id 一律用 DB id：流式行的行 id 是 streamId，
+  // DB 接管后 messageId 才是宿主动作（回滚/分叉/置位）的唯一落点（C28）。
+  const dbId = row.messageId ?? row.id;
   const anchor: MenuAnchor = {
     x: rect.x,
     y: rect.y,
@@ -248,10 +254,10 @@ export function openContextMenuFromAnchor(
   };
   const pageX = anchor.x + anchor.width / 2;
   const pageY = anchor.y + anchor.height / 2;
-  post('openMessageMenu', {messageId: messageId, pageX: pageX, pageY: pageY});
+  post('openMessageMenu', {messageId: dbId, pageX: pageX, pageY: pageY});
   post('menuOpened', {});
   state.menu = {
-    messageId: messageId,
+    messageId: dbId,
     pageX: pageX,
     pageY: pageY,
     anchor: anchor,

@@ -164,12 +164,13 @@ function publishStepCommitted(
   eventBus: SimpleEventBus,
   sessionId: string,
   runId: string,
+  phase: 'assistant' | 'tool_results' = 'assistant',
 ): void {
   eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
     sessionId,
     projectId: 'p',
     runId,
-    phase: 'assistant',
+    phase,
   });
 }
 
@@ -355,7 +356,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
   });
 });
 
-describe('单一注入实现（T-U3：重进注入恰好一次 + step 边界重注入）', () => {
+describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', () => {
   beforeEach(() => {
     setMobileAgentActive(false);
     jest.clearAllMocks();
@@ -370,123 +371,148 @@ describe('单一注入实现（T-U3：重进注入恰好一次 + step 边界重�
     resetKeepAliveStateForTests();
   });
 
-  it('T-U3/T-R3: attach 即注入本 step 已累积的 partial（text/thinking 各一条 stream-delta）', () => {
+  it('attach 不再注入 partial；快照 streamRows 携带完整当前流式行', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
     publishTextDelta(h.eventBus, 'a', 'r1', '正文 partial');
     publishThinkingDelta(h.eventBus, 'a', 'r1', '思考 partial');
     advanceStreamTimers();
 
+    const streamId = h.manager.snapshot('a')?.streamRows[0]?.streamId;
     const w1 = createRecordingHandle('w1');
     h.manager.attachWebview('a', w1.handle);
-    expect(w1.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: '正文 partial'},
-      {type: 'stream-delta', kind: 'thinking', delta: '思考 partial'},
+    expect(w1.payloads).toEqual([]);
+    expect(h.manager.snapshot('a')?.streamRows).toEqual([
+      {
+        streamId,
+        status: 'streaming',
+        text: '正文 partial',
+        thinking: '思考 partial',
+        tools: [],
+        messageId: null,
+      },
     ]);
-    expect(h.manager.snapshot('a')?.injected).toBe(true);
   });
 
-  it('T-U3: attach 两次（无 detach）只注一次；流式推送只给最后 attach 的句柄', () => {
+  it('attach 两次：均无注入；后续 delta 只推给最后 attach 的句柄且带同一 streamId', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
     publishTextDelta(h.eventBus, 'a', 'r1', 'body');
     advanceStreamTimers();
-
-    const w1 = createRecordingHandle('w1');
-    h.manager.attachWebview('a', w1.handle);
-    expect(w1.payloads).toHaveLength(1);
-
-    // 第二个句柄 attach（w1 未 detach）：本 step 已注入过，不再注入
-    const w2 = createRecordingHandle('w2');
-    h.manager.attachWebview('a', w2.handle);
-    expect(w2.payloads).toEqual([]);
-
-    // 注入后的新 delta 经合并以 stream-batch 推给「最后 attach」的 w2
-    publishTextDelta(h.eventBus, 'a', 'r1', ' more');
-    advanceStreamTimers();
-    expect(w1.payloads).toHaveLength(1); // w1 不再收流式
-    expect(w2.payloads).toEqual([
-      {type: 'stream-batch', segments: [{kind: 'text', delta: ' more'}]},
-    ]);
-  });
-
-  it('T-U3/T-R4: step 边界后 attach 重新注入，且只含新 step 的累积', () => {
-    const h = createHarness();
-    startRunningRun(h, 'a', 'r1');
-    publishTextDelta(h.eventBus, 'a', 'r1', 'step1-body');
-    advanceStreamTimers();
-
-    const w1 = createRecordingHandle('w1');
-    h.manager.attachWebview('a', w1.handle);
-    expect(w1.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'step1-body'},
-    ]);
-
-    // step 提交：注入标记复位（蓝本 resetInjection）
-    publishStepCommitted(h.eventBus, 'a', 'r1');
-    publishTextDelta(h.eventBus, 'a', 'r1', 'step2-body');
-    advanceStreamTimers();
-
-    const w2 = createRecordingHandle('w2');
-    h.manager.attachWebview('a', w2.handle);
-    expect(w2.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'step2-body'},
-    ]);
-    // 新注入不含上一 step 的内容（partial 已在 step 边界清零）
-    const injections = [w1.payloads, w2.payloads]
-      .flat()
-      .filter(
-        payload =>
-          typeof payload === 'object' &&
-          payload != null &&
-          (payload as {type?: string}).type === 'stream-delta',
-      );
-    expect(injections).toHaveLength(2);
-  });
-
-  it('T-R5 等价: 同一会话反复重进（detach → attach）每次都重新注入', () => {
-    const h = createHarness();
-    startRunningRun(h, 'a', 'r1');
-    publishTextDelta(h.eventBus, 'a', 'r1', 'abc');
-    advanceStreamTimers();
-
-    // 第一次进入
-    const first = createRecordingHandle('w-first');
-    h.manager.attachWebview('a', first.handle);
-    expect(first.payloads).toHaveLength(1);
-
-    // 切走（句柄摘除）→ 标记复位；切回重新挂 → 重新注入
-    h.manager.detachWebview('a', 'w-first');
-    const second = createRecordingHandle('w-second');
-    h.manager.attachWebview('a', second.handle);
-    expect(second.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'abc'},
-    ]);
-
-    // 第三次重进仍注入（标记不残留）
-    h.manager.detachWebview('a', 'w-second');
-    const third = createRecordingHandle('w-third');
-    h.manager.attachWebview('a', third.handle);
-    expect(third.payloads).toHaveLength(1);
-  });
-
-  it('partial 为空时 attach 不注入；后续 delta 直接以流式推送到达', () => {
-    const h = createHarness();
-    startRunningRun(h, 'a', 'r1');
+    const streamId = h.manager.snapshot('a')?.streamRows[0]?.streamId;
 
     const w1 = createRecordingHandle('w1');
     h.manager.attachWebview('a', w1.handle);
     expect(w1.payloads).toEqual([]);
-    expect(h.manager.snapshot('a')?.injected).toBe(false);
+
+    const w2 = createRecordingHandle('w2');
+    h.manager.attachWebview('a', w2.handle);
+    expect(w2.payloads).toEqual([]);
+
+    publishTextDelta(h.eventBus, 'a', 'r1', ' more');
+    advanceStreamTimers();
+    expect(w1.payloads).toEqual([]);
+    expect(w2.payloads).toEqual([
+      {
+        type: 'stream-batch',
+        streamId,
+        segments: [{kind: 'text', delta: ' more'}],
+      },
+    ]);
+  });
+
+  it('assistant STEP_COMMITTED：旧记录冻结（文本保留）+ 新空 streaming，不发 reset-stream', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    publishTextDelta(h.eventBus, 'a', 'r1', 'step1-body');
+    advanceStreamTimers();
+    const controls: unknown[] = [];
+    h.manager.attachWebview('a', {
+      handleId: 'web-step',
+      onStreamPayload: () => undefined,
+      onControlMessage: message => controls.push(message),
+    });
+    const step1Id = h.manager.snapshot('a')?.streamRows[0]?.streamId;
+
+    publishStepCommitted(h.eventBus, 'a', 'r1');
+    const rows = h.manager.snapshot('a')?.streamRows ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      streamId: step1Id,
+      status: 'finished',
+      text: 'step1-body',
+      messageId: null,
+    });
+    expect(rows[1]).toMatchObject({status: 'streaming', text: ''});
+    expect(rows[1]?.streamId).not.toBe(step1Id);
+    // 步边界不再广播清尾（reset-stream 只留给消息操作）
+    expect(controls).toEqual([]);
+
+    publishTextDelta(h.eventBus, 'a', 'r1', 'step2-body');
+    advanceStreamTimers();
+    const after = h.manager.snapshot('a')?.streamRows ?? [];
+    expect(after.map(row => row.text)).toEqual(['step1-body', 'step2-body']);
+  });
+
+  it('tool_results STEP_COMMITTED 不轮转 stream（不凭空多一条 assistant 行）', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    publishTextDelta(h.eventBus, 'a', 'r1', 'tool step');
+    advanceStreamTimers();
+    const streamId = h.manager.snapshot('a')?.streamRows[0]?.streamId;
+
+    publishStepCommitted(h.eventBus, 'a', 'r1', 'tool_results');
+    const rows = h.manager.snapshot('a')?.streamRows ?? [];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      streamId,
+      status: 'streaming',
+      text: '',
+    });
+    expect(h.manager.snapshot('a')?.partialText).toBe('');
+  });
+
+  it('同一会话反复重进（detach → attach）都零注入：快照 streamRows 始终完整', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    publishTextDelta(h.eventBus, 'a', 'r1', 'abc');
+    advanceStreamTimers();
+    const streamId = h.manager.snapshot('a')?.streamRows[0]?.streamId;
+
+    const first = createRecordingHandle('w-first');
+    h.manager.attachWebview('a', first.handle);
+    expect(first.payloads).toEqual([]);
+
+    h.manager.detachWebview('a', 'w-first');
+    const second = createRecordingHandle('w-second');
+    h.manager.attachWebview('a', second.handle);
+    expect(second.payloads).toEqual([]);
+
+    const row = h.manager.snapshot('a')?.streamRows.at(-1);
+    expect(row).toMatchObject({streamId, text: 'abc', status: 'streaming'});
+  });
+
+  it('partial 为空时 attach 无载荷；后续 delta 直接以带 streamId 的 batch 到达', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    const streamId = h.manager.snapshot('a')?.streamRows[0]?.streamId;
+
+    const w1 = createRecordingHandle('w1');
+    h.manager.attachWebview('a', w1.handle);
+    expect(w1.payloads).toEqual([]);
 
     publishTextDelta(h.eventBus, 'a', 'r1', 'live');
     advanceStreamTimers();
     expect(w1.payloads).toEqual([
-      {type: 'stream-batch', segments: [{kind: 'text', delta: 'live'}]},
+      {
+        type: 'stream-batch',
+        streamId,
+        segments: [{kind: 'text', delta: 'live'}],
+      },
     ]);
   });
 
-  it('run 结束（settled）后 attach 不注入——落库消息接管', () => {
+  it('run 结束（settled）后 attach 无载荷；快照仍带 finished 流式行', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
     publishTextDelta(h.eventBus, 'a', 'r1', 'done-body');
@@ -496,9 +522,16 @@ describe('单一注入实现（T-U3：重进注入恰好一次 + step 边界重�
     const w1 = createRecordingHandle('w1');
     h.manager.attachWebview('a', w1.handle);
     expect(w1.payloads).toEqual([]);
+    expect(h.manager.snapshot('a')?.streamRows).toEqual([
+      expect.objectContaining({
+        status: 'finished',
+        text: 'done-body',
+        messageId: null,
+      }),
+    ]);
   });
 
-  it('注入只经定向 stream-delta 载荷：不可见的中间句柄不受影响', () => {
+  it('不可见句柄 attach 无载荷；流式推送只找可见目标', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
     publishTextDelta(h.eventBus, 'a', 'r1', 'x');
@@ -510,15 +543,12 @@ describe('单一注入实现（T-U3：重进注入恰好一次 + step 边界重�
       isVisible: () => false,
       onStreamPayload: payload => hiddenPayloads.push(payload),
     });
-    // 不可见句柄 attach 也注入（注入是定向的，不受可见性约束），
-    // 但后续流式推送只找「最后 attach 的可见句柄」——这里没有 → 落空
-    expect(hiddenPayloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'x'},
-    ]);
+    expect(hiddenPayloads).toEqual([]);
     publishTextDelta(h.eventBus, 'a', 'r1', 'y');
     advanceStreamTimers();
-    expect(hiddenPayloads).toHaveLength(1);
+    expect(hiddenPayloads).toEqual([]);
     expect(h.manager.snapshot('a')?.partialText).toBe('xy');
+    expect(h.manager.snapshot('a')?.streamRows.at(-1)?.text).toBe('xy');
   });
 });
 
@@ -561,7 +591,9 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
     expect(starting?.elapsedMs).toBe(null);
     expect(starting?.partialText).toBe('');
     expect(starting?.partialThinking).toBe('');
-    expect(starting?.injected).toBe(false);
+    expect(starting?.streamRows).toEqual([
+      expect.objectContaining({status: 'streaming', text: '', thinking: ''}),
+    ]);
     expect(starting?.pendingChildren).toEqual([]);
   });
 
@@ -853,18 +885,16 @@ describe('T-U13: 跨项目并行等价', () => {
     expect(snapA?.pendingChildren).toEqual(['ca']);
     expect(snapB?.pendingChildren).toEqual(['cb']);
 
-    // webview 句柄各自 attach：注入互不串
+    // webview 句柄各自 attach：快照投影各是各的（零注入，不串）
     const wa = createRecordingHandle('wa');
     const wb = createRecordingHandle('wb');
     h.manager.attachWebview('sa', wa.handle);
     h.manager.attachWebview('sb', wb.handle);
-    expect(wa.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'alpha'},
-      {type: 'stream-delta', kind: 'thinking', delta: 'aa'},
-    ]);
-    expect(wb.payloads).toEqual([
-      {type: 'stream-delta', kind: 'text', delta: 'beta'},
-    ]);
+    expect(wa.payloads).toEqual([]);
+    expect(wb.payloads).toEqual([]);
+    expect(snapA?.streamRows.at(-1)?.text).toBe('alpha');
+    expect(snapA?.streamRows.at(-1)?.thinking).toBe('aa');
+    expect(snapB?.streamRows.at(-1)?.text).toBe('beta');
 
     // sa 的 step 边界只影响 sa
     publishStepCommitted(h.eventBus, 'sa', 'r1');
@@ -901,36 +931,8 @@ describe('T-U13: 跨项目并行等价', () => {
   });
 });
 
-describe('step 边界 reset-stream 广播（1.5.18 渲染错段回归修复）', () => {
-  it('STEP_COMMITTED 冲刷后向句柄广播 reset-stream，webview 尾巴随之整体重置', () => {
-    const h = createHarness();
-    startRunningRun(h, 's1', 'r1');
-    const controls: unknown[] = [];
-    h.manager.attachWebview(
-      's1',
-      (() => {
-        const handle: SessionStreamWebviewHandle = {
-          handleId: 'web-reset',
-          isVisible: () => true,
-          onStreamPayload: () => undefined,
-          onControlMessage: (m: unknown) => {
-            controls.push(m);
-          },
-        };
-        return handle;
-      })(),
-    );
-
-    publishTextDelta(h.eventBus, 's1', 'r1', 'step1 text');
-    advanceStreamTimers();
-    publishStepCommitted(h.eventBus, 's1', 'r1');
-
-    // 尾巴重置广播必须与 partial 清零同边界发出，否则下一 step 的
-    // thinking/text 追加进上一 step 残留尾巴（正文/思考交替错段）。
-    expect(controls).toContainEqual({type: 'reset-stream'});
-  });
-
-  it('runId 不匹配或非 running 态的陈旧 STEP_COMMITTED 不广播', () => {
+describe('step 边界不再广播 reset-stream（Step 2：清尾交给 streamReset/快照）', () => {
+  it('runId 不匹配或非 running 态的陈旧 STEP_COMMITTED 不广播任何控制消息', () => {
     const h = createHarness();
     startRunningRun(h, 's1', 'r1');
     const controls: unknown[] = [];

@@ -30,13 +30,19 @@
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
  * try/catch 静默吞掉 → `webReady` 永假 → 全部下行丢弃 → 落进 8s 兜底白屏。
  */
-import { isRecord } from '@novel-master/core/common';
+import {isRecord} from '@novel-master/core/common';
 import type {
   ChatTranscriptScrollSnapshot,
   TranscriptFlags,
+  TranscriptLabels,
   TranscriptRestoreScroll,
   TranscriptRow,
   TranscriptScrollIntent,
+  TranscriptStreamBlockCommitPayload,
+  TranscriptStreamCheckpoint,
+  TranscriptStreamDeltaPayload,
+  TranscriptStreamResetPayload,
+  TranscriptStreamStatusPayload,
 } from './ChatTranscriptBridge';
 // 主题键集的唯一真源在 web 侧 shared/host-theme——本文件与 web 侧 model 都从这里取，
 // 不再各抄一份（原先两份手抄零约束，宿主加 token 时都不红）。
@@ -59,8 +65,9 @@ export const CONVERSATION_BRIDGE_V = 2 as const;
 
 /**
  * 单 ready 的版本号标识（宿主只认 `v === 2` 的 ready，`version` 仅作辅助信息）。
- * 与 web 侧 `TRANSCRIPT_READY_VERSION` 同源：独立入口 ready 带 't1'、合成包壳
- * ready 仍带 'u1'（其 web 侧 model 未动），宿主对两者一视同仁（都判 v === 2）。
+ * 与 web 侧 `TRANSCRIPT_READY_VERSION` 同源：独立入口 ready 带 't2'（流式投影
+ * 协议），合成包壳 ready 仍带 'u1'（其 web 侧 model 未动），宿主按 v 号放行；
+ * 版本/能力严格判定见 spec §2.2.1（Step 9 落地）。
  */
 export const CONVERSATION_READY_VERSION = TRANSCRIPT_READY_VERSION;
 
@@ -113,6 +120,8 @@ export type ConversationDockAction =
 export type ConversationInitPayload = {
   readonly theme: ConversationTheme;
   readonly flags: TranscriptFlags;
+  /** 转录渲染层文案（spec §2.2.8）；缺省时 web 回退内置中文常量。 */
+  readonly labels?: TranscriptLabels;
   /**
    * 转录 only 变体（子会话屏，transcript-converge）：无输入 dock 的降级形态。
    * web 侧据此给 #app 挂 transcript-only 类（CSS 隐藏
@@ -126,10 +135,11 @@ export type ConversationSnapshotPayload = {
   readonly sessionKey: string;
   readonly rows: readonly TranscriptRow[];
   readonly hasMore: boolean;
+  /** 流式检查点（spec §2.2.2）：流式片/末片携带，最后到达者为准。 */
+  readonly stream?: TranscriptStreamCheckpoint;
   /** 仅末片携带。 */
   readonly scrollIntent?: TranscriptScrollIntent;
   readonly restoreScroll?: TranscriptRestoreScroll;
-  readonly generating?: boolean;
   readonly generation: number;
   readonly chunkIndex: number;
   readonly chunkTotal: number;
@@ -163,34 +173,13 @@ export type ConversationHostMessage =
       {rows: readonly TranscriptRow[]; prependedCount: number}
     >
   | ConversationEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
-  | ConversationEnvelope<
-      'streamCommit',
-      {rows: readonly TranscriptRow[]; scrollIntent?: 'preserve' | 'none'}
-    >
-  | ConversationEnvelope<
-      'streamDelta',
-      {kind: 'text' | 'thinking'; delta?: string; html?: string}
-    >
-  | ConversationEnvelope<
-      'streamBatch',
-      {
-        segments: readonly {kind: 'text' | 'thinking'; delta: string}[];
-        textHtml?: string;
-        thinkingHtml?: string;
-      }
-    >
+  | ConversationEnvelope<'streamDelta', TranscriptStreamDeltaPayload>
   | ConversationEnvelope<
       'streamBlockCommit',
-      {
-        kind: 'text' | 'thinking';
-        html?: string;
-        text: string;
-        tailHtml?: string;
-        tailText?: string;
-      }
+      TranscriptStreamBlockCommitPayload
     >
-  | ConversationEnvelope<'streamReset', Record<string, never>>
-  | ConversationEnvelope<'streamToolInvoking', {active: boolean}>
+  | ConversationEnvelope<'streamReset', TranscriptStreamResetPayload>
+  | ConversationEnvelope<'streamStatus', TranscriptStreamStatusPayload>
   | ConversationEnvelope<'closeMenu', Record<string, never>>
   | ConversationEnvelope<'closeMermaidViewer', Record<string, never>>;
 
@@ -298,8 +287,11 @@ export function parseConversationScrollSnapshot(
   if (message.type !== 'scrollSnapshot') {
     return null;
   }
-  const {schemaVersion: msgSchemaVersion, offsetY, nearBottom} =
-    message.payload;
+  const {
+    schemaVersion: msgSchemaVersion,
+    offsetY,
+    nearBottom,
+  } = message.payload;
   if (msgSchemaVersion !== schemaVersion) {
     return null;
   }
@@ -307,9 +299,9 @@ export function parseConversationScrollSnapshot(
     return null;
   }
   return {
-    schemaVersion: msgSchemaVersion as ChatTranscriptScrollSnapshot['schemaVersion'],
+    schemaVersion:
+      msgSchemaVersion as ChatTranscriptScrollSnapshot['schemaVersion'],
     offsetY,
     nearBottom,
   };
 }
-

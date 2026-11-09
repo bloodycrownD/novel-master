@@ -1,4 +1,6 @@
 import React, {useRef} from 'react';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
@@ -47,35 +49,25 @@ jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
 }));
 
 // 统一宿主 mock（chat-webview-unify Step 7：webview 分支改挂 ChatConversationWebView，
-// 单实例承载转录 + dock）。经 ref 暴露可记录的 commitSyntheticAssistantRow
-// （ui/B-1 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
-//
-// 这层 mock 另担两件事：①抓 props（面板→宿主的 props 面回归锁的观察面）；
-// ②记 mount/unmount 流水（切会话 key 重挂回归锁的观察面）。
-const mockCommitSyntheticAssistantRow = jest.fn(() => true);
+// 单实例承载转录 + dock）。组件本体渲染 null，props 与挂载流水是面板接线的
+// 观察面：①抓 props（面板→宿主的 props 面回归锁）；②记 mount/unmount 流水
+// （切会话 key 重挂回归锁）。Step 3 起面板不再走 commitSyntheticAssistantRow
+// 命令式通道（中断现场走流式行投影），mock 的 ref 方法面随之为空。
 const mockWebViewPropsList: Array<Record<string, unknown>> = [];
 const mockWebViewLifecycle: string[] = [];
 jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const mockReact = require('react');
   return {
-    ChatConversationWebView: mockReact.forwardRef(
-      (
-        props: unknown,
-        ref: React.Ref<{commitSyntheticAssistantRow: unknown}>,
-      ) => {
-        mockWebViewPropsList.push(props as Record<string, unknown>);
-        mockReact.useEffect(() => {
-          mockWebViewLifecycle.push('mount');
-          return () => {
-            mockWebViewLifecycle.push('unmount');
-          };
-        }, []);
-        mockReact.useImperativeHandle(ref, () => ({
-          commitSyntheticAssistantRow: mockCommitSyntheticAssistantRow,
-        }));
-        return null;
-      },
-    ),
+    ChatConversationWebView: mockReact.forwardRef((props: unknown) => {
+      mockWebViewPropsList.push(props as Record<string, unknown>);
+      mockReact.useEffect(() => {
+        mockWebViewLifecycle.push('mount');
+        return () => {
+          mockWebViewLifecycle.push('unmount');
+        };
+      }, []);
+      return null;
+    }),
   };
 });
 
@@ -159,7 +151,6 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
-import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
 import {
   applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
@@ -259,6 +250,9 @@ function makeMockContext(
     streamTailGenerating: false,
     streamingText: '',
     streamingThinking: '',
+    unitView: null,
+    streamingRows: [],
+    streamRowIds: new Map(),
     streamMetricsLastRun: null,
     streamMetricsAccRef: {current: null},
     onStreamReset: jest.fn(),
@@ -356,7 +350,6 @@ beforeEach(() => {
   mockSessionId = 's1';
   mockWebViewPropsList.length = 0;
   mockWebViewLifecycle.length = 0;
-  mockCommitSyntheticAssistantRow.mockClear();
   mockComposerPropsList.length = 0;
   mockComposerSetText.mockClear();
   mockContextOverrides = {};
@@ -441,6 +434,57 @@ describe('ChatConversationPanel workspace reload', () => {
 // v1.5.30 引入；10-02 的修复曾因未合入 main 丢失（v1.5.30~33 连续带病），
 // 此为重做后的回归锁——拔牙验证过：key 去掉 sessionId 即首条用例红。
 
+describe('ChatConversationPanel · 流式投影接线（T-SP28）', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('streamingRows/streamRowIds 原样透传给宿主，旧 toolInvoking prop 不再传', async () => {
+    const streamingRows = [
+      {
+        streamId: 'st:1',
+        status: 'streaming' as const,
+        text: '流式中',
+        thinking: '',
+        tools: [],
+        messageId: null,
+      },
+    ];
+    const streamRowIds = new Map([['db-1', 'st:1']]);
+    mockContextOverrides.streamingRows = streamingRows;
+    mockContextOverrides.streamRowIds = streamRowIds;
+
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    const props = lastWebViewProps();
+    expect(props.streamingRows).toBe(streamingRows);
+    expect(props.streamRowIds).toBe(streamRowIds);
+    expect(props).not.toHaveProperty('toolInvoking');
+  });
+
+  // T-SP28 的另一半：中断注入 hook 已在 Step 8 整文件删除（C15），这里用源码
+  // 扫描锁住两个屏幕不再 import/调用旧合成提交通道。
+  it('T-SP28: 面板与子会话屏不再引用 useInterruptedPartialCommit', () => {
+    for (const rel of [
+      '../src/screens/tabs/chat-tab/ChatConversationPanel.tsx',
+      '../src/screens/stack/SubagentSessionScreen.tsx',
+    ]) {
+      const source = readFileSync(join(__dirname, rel), 'utf8');
+      expect(source).not.toContain('useInterruptedPartialCommit');
+    }
+  });
+});
+
 describe('ChatConversationPanel 工作区面板跨会话重挂', () => {
   let tree: TestRenderer.ReactTestRenderer | undefined;
 
@@ -492,126 +536,6 @@ describe('ChatConversationPanel 工作区面板跨会话重挂', () => {
       await flushPromises();
     });
     expect(mockVfsLifecycle).toEqual(['mount']);
-  });
-});
-
-// ── 中断现场合成行提交（cr-fix-spec ui/B-1 / ui/C-1）─────────────────────
-//
-// 时序背景：重进 interrupted 会话的常态是 tail（单元投影水合）先于 webview
-// ready 到达——webReady=false 时 commitSyntheticAssistantRow 被组件守卫拒绝
-// 且不置去重键，若 effect 只依赖投影变化，此后永不重跑、partial 永不提交。
-// 修复把 ready 世代（ctx.transcriptReadyEpoch）纳入依赖，ready 后补交。
-
-/** interrupted 投影工厂：默认携带非空 partial（runId/settledAtMs 固定）。 */
-function interruptedUnitView(
-  overrides?: Partial<SessionStreamUnitView>,
-): SessionStreamUnitView {
-  return {
-    sessionId: 's1',
-    projectId: 'p1',
-    status: 'interrupted',
-    runId: 'run-1',
-    settledAtMs: 1234,
-    metrics: {textChars: 5, thinkingChars: 2},
-    startedAtMs: 100,
-    elapsedMs: 1134,
-    partialText: '中断前的正文',
-    partialThinking: '中断前的思考',
-    injected: false,
-    pendingChildren: [],
-    pendingChildrenByTitle: new Map(),
-    messages: [],
-    hasMoreMessages: false,
-    loadingMoreMessages: false,
-    ...overrides,
-  };
-}
-
-describe('ChatConversationPanel 中断现场合成行提交（ui/B-1）', () => {
-  // 时序驱动变量：模拟 Provider 侧的投影水合与 ready 世代推进。
-  let mockUnitView: SessionStreamUnitView | null;
-  let mockReadyEpoch: number;
-
-  function InterruptedTestHost() {
-    const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
-    const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
-      typeof useChatTabContext
-    > & {
-      unitView: SessionStreamUnitView | null;
-      transcriptReadyEpoch: number;
-    };
-    ctx.unitView = mockUnitView;
-    ctx.transcriptReadyEpoch = mockReadyEpoch;
-    ctx.useWebviewTranscript = true;
-    mockUseChatTabContext.mockReturnValue(ctx);
-    return <ChatConversationPanel tokens={tokens} visible />;
-  }
-
-  let tree: TestRenderer.ReactTestRenderer | undefined;
-
-  beforeEach(() => {
-    mockCommitSyntheticAssistantRow.mockClear().mockReturnValue(true);
-    mockUnitView = interruptedUnitView();
-    mockReadyEpoch = 0;
-  });
-
-  afterEach(() => {
-    if (tree != null) {
-      act(() => {
-        tree!.unmount();
-      });
-    }
-    tree = undefined;
-  });
-
-  it('ui/B-1: 进入 interrupted 会话、tail 先于 webview ready，ready 后合成行仍提交', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(<InterruptedTestHost />);
-      await flushPromises();
-    });
-
-    // tail（投影水合）已到、webview 未 ready：不提交（守卫拒绝且不置键）
-    expect(mockCommitSyntheticAssistantRow).not.toHaveBeenCalled();
-
-    // webview ready：ready 世代递增（Provider 的 onReady bump），effect 重跑补交
-    mockReadyEpoch = 1;
-    await act(async () => {
-      tree!.update(<InterruptedTestHost />);
-      await flushPromises();
-    });
-
-    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
-    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledWith(
-      '中断前的正文',
-      '中断前的思考',
-    );
-  });
-
-  it('ui/B-1: 同一中断现场不重复提交（runId+settledAtMs 去重），webview 重挂后重新提交', async () => {
-    mockReadyEpoch = 1;
-    await act(async () => {
-      tree = TestRenderer.create(<InterruptedTestHost />);
-      await flushPromises();
-    });
-    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
-
-    // 同一 run 的投影再次换新引用（字段微变，runId+settledAtMs 不变）：
-    // 不重复提交
-    mockUnitView = interruptedUnitView({metrics: {textChars: 99, thinkingChars: 2}});
-    await act(async () => {
-      tree!.update(<InterruptedTestHost />);
-      await flushPromises();
-    });
-    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
-
-    // webview 重挂：ready 世代递增 = 新空基线（落库行经快照链重推，合成行
-    // 不在落库消息里），同键须在新世代重新提交
-    mockReadyEpoch = 2;
-    await act(async () => {
-      tree!.update(<InterruptedTestHost />);
-      await flushPromises();
-    });
-    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -8,6 +8,7 @@
  */
 import {type ChatMessageData} from '@novel-master/core/chat';
 import {utf8ByteLength} from '@novel-master/core/common';
+import type {TranscriptRow} from './ChatTranscriptBridge';
 
 /**
  * 快照分片大小（init-busy-yield Step 6）：每片最多承载的消息数。行由消息
@@ -37,22 +38,47 @@ const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
 export function planSnapshotChunkBounds(
   messages: readonly ChatMessageData[],
 ): Array<readonly [number, number]> {
+  return planChunkBounds(messages.length, index =>
+    utf8ByteLength(JSON.stringify(messages[index]!.content)),
+  );
+}
+
+/**
+ * 流式行的分片边界（spec §2.2.2）：与 DB 行同一套 50 行 / 256KB 预算，
+ * 度量口径为**整行 wire JSON** 的 UTF-8 字节（含 text/thinking/textHtml/tools），
+ * 因为流式片就是这些行原样上行。空列表返回空数组（无流式行时不发空片）。
+ */
+export function planRowChunkBounds(
+  rows: readonly TranscriptRow[],
+): Array<readonly [number, number]> {
+  if (rows.length === 0) {
+    return [];
+  }
+  return planChunkBounds(rows.length, index =>
+    utf8ByteLength(JSON.stringify(rows[index])),
+  );
+}
+
+function planChunkBounds(
+  count: number,
+  bytesAt: (index: number) => number,
+): Array<readonly [number, number]> {
   const bounds: Array<readonly [number, number]> = [];
   let start = 0;
   let bytes = 0;
-  for (let i = 0; i < messages.length; i += 1) {
-    const messageBytes = utf8ByteLength(JSON.stringify(messages[i]!.content));
+  for (let i = 0; i < count; i += 1) {
+    const itemBytes = bytesAt(i);
     const countInBucket = i - start + 1;
     if (
       countInBucket > SNAPSHOT_CHUNK_SIZE ||
-      (bytes + messageBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
+      (bytes + itemBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
     ) {
       bounds.push([start, i]);
       start = i;
       bytes = 0;
     }
-    bytes += messageBytes;
+    bytes += itemBytes;
   }
-  bounds.push([start, messages.length]);
+  bounds.push([start, count]);
   return bounds;
 }

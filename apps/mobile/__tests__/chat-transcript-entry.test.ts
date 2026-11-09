@@ -72,12 +72,12 @@ function downtranslateSource(): string {
 }
 
 describe('chat-transcript 独立入口（T-TS1 · dist）', () => {
-  it('T-TS1a: ready v2 面——version t1 字面量 + DOMContentLoaded 兜底 + 装配闸', () => {
+  it('T-TS1a: ready v2 面——version t2 字面量 + DOMContentLoaded 兜底 + 装配闸', () => {
     const script = bootScript();
-    // minify 稳定面：ready payload 的 version 字面量（独立入口的 u 标识）。
-    // 宿主判定只认 v === 2（信封 v），标识仅辅助信息——t1 与合成包 'u1' 刻意不同，
-    // 报障日志里一眼区分 ready 来源。
-    expect(script).toMatch(/version:\s*['"]t1['"]/);
+    // minify 稳定面：ready payload 的 version 字面量（独立入口的标识，spec C3）。
+    // 宿主判定 v === 2（信封 v），版本标识只作辅助——t2 = 流式投影协议来源，
+    // t1 只可能来自陈旧 dist（宿主按版本/能力不符立即错误态）。
+    expect(script).toMatch(/version:\s*['"]t2['"]/);
     expect(script).toMatch(/readyState\s*===\s*['"]loading['"]/);
     // 装配闸：壳未命中不发 ready（诊断文案是 minify 保留的字符串面）。
     expect(script).toContain('[chat-transcript]');

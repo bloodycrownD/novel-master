@@ -7,8 +7,7 @@
  *
  * transcript-converge：宿主从已退役的 `ChatTranscriptWebView` 迁到统一宿主
  * `ChatConversationWebView`（快照分片/代次/信号的行为面一字未动，props 名同名）。
- * mock 基建照 `chat-conversation-webview.test.tsx`，唯一差别是 ready 握手走 v2
- * （`CONVERSATION_BRIDGE_V`）——旧宿主用 v1、统一宿主只认 v:2 的 ready。
+ * ready 握手走共享 fixture（v2 + t2 + streamProjection，spec §9.1 / T-SP20）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -16,7 +15,6 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessageData} from '@novel-master/core/chat';
 import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
-import {CONVERSATION_BRIDGE_V} from '@/components/chat/ChatConversationBridge';
 import {
   ChatConversationWebView,
   type ChatConversationWebViewHandle,
@@ -25,6 +23,10 @@ import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
+import {
+  makeTranscriptReadyPayload,
+  simulateTranscriptReady,
+} from '../test-utils/transcript-ready';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -95,12 +97,10 @@ function sampleMessage(id: string, seq: number): ChatMessageData {
   };
 }
 
-/** 统一宿主的最小 props 面（composer 域为默认空串，见组件内 transcriptOnly 兜底）。 */
+/** 统一宿主的最小 props 面（流式行投影由 Step 3 的 props 驱动，本套件用缺省）。 */
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     sessionKey: 'p1:s1',
-    streamingText: '',
-    streamingThinking: '',
     ...overrides,
   };
 }
@@ -126,30 +126,6 @@ describe('onSnapshotComplete 回调（T-R5 组件半）', () => {
         break;
       }
     }
-  }
-
-  function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
-    const webView = root.findByType(
-      require('react-native-webview').default as React.ComponentType<{
-        onMessage?: (event: {nativeEvent: {data: string}}) => void;
-      }>,
-    );
-    act(() => {
-      webView.props.onMessage?.({
-        nativeEvent: {
-          data: JSON.stringify({
-            // 统一宿主只认 v:2 的 ready（v:1 被拒 → 走 8s 超时兜底）
-            v: CONVERSATION_BRIDGE_V,
-            type: 'ready',
-            payload: {
-              version: 'test',
-              capabilities: ['streamBlockCommit'],
-              readyState: 'complete',
-            },
-          }),
-        },
-      });
-    });
   }
 
   /**
@@ -197,7 +173,7 @@ describe('onSnapshotComplete 回调（T-R5 组件半）', () => {
         />,
       );
     });
-    simulateWebReady(tree.root);
+    simulateTranscriptReady(tree.root);
     // 推进一轮让步：首代次在途（发部分片）时 force 开新代次。
     await act(async () => {
       await new Promise<void>(resolve => {
@@ -264,7 +240,7 @@ describe('onSnapshotComplete 回调（T-R5 组件半）', () => {
         />,
       );
     });
-    simulateWebReady(tree.root);
+    simulateTranscriptReady(tree.root);
     await flushSnapshotChunks();
 
     // ready 双路径（T-S1 先例）：两个代次都完整发出单包 → 各 notify 一次。
@@ -272,6 +248,108 @@ describe('onSnapshotComplete 回调（T-R5 组件半）', () => {
     const generations = new Set(snapshots.map(p => p.generation));
     expect(onSnapshotComplete).toHaveBeenCalledTimes(generations.size);
     expect(onSnapshotComplete).toHaveBeenCalled();
+    tree.unmount();
+  });
+});
+
+/**
+ * ready 版本门（spec §6.2 / §6.3 · T-SP20 宿主半）。
+ *
+ * v2 信封只锁「桥协议」，旧 t1 dist 仍会说 v2：宿主必须再校验 `version ===
+ * 't2'` 与 `streamProjection` 能力位，否则新协议消息会被一个不认得的页面
+ * 半认（只在 step 边界补文本）——比显式错误态更难查。判定失败**立即**错误态，
+ * 不等 8s 兜底；同时一个下行都不发（webReady 不置位）。
+ */
+describe('ready 版本门（T-SP20 宿主半）', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  afterEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  async function mountWithMessage(overrides: Record<string, unknown> = {}) {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatConversationWebView
+          {...baseProps({
+            messages: [sampleMessage('only', 1)],
+            ...overrides,
+          })}
+        />,
+      );
+    });
+    return tree;
+  }
+
+  /** 注入任意 ready 信封（版本门用例要自己改 payload）。 */
+  function sendEnvelope(
+    root: TestRenderer.ReactTestInstance,
+    envelope: ReturnType<typeof makeTranscriptReadyPayload>,
+  ): void {
+    const webView = root.findByType(
+      require('react-native-webview').default as React.ComponentType<{
+        onMessage?: (event: {nativeEvent: {data: string}}) => void;
+      }>,
+    );
+    act(() => {
+      webView.props.onMessage?.({
+        nativeEvent: {data: JSON.stringify(envelope)},
+      });
+    });
+  }
+
+  function sentTypes(): string[] {
+    return mockWebViewPostMessages.flatMap(raw => {
+      const decoded = decodeConversationUpstream(raw);
+      return decoded.ok ? [decoded.message.type] : [];
+    });
+  }
+
+  function errorViews(root: TestRenderer.ReactTestInstance) {
+    return root.findAllByProps({testID: 'chat-conversation-ready-error'});
+  }
+
+  it('v2 + t2 + streamProjection：接受并进入下行（init → 快照）', async () => {
+    const onReady = jest.fn();
+    const tree = await mountWithMessage({onReady});
+    simulateTranscriptReady(tree.root);
+    await act(async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(errorViews(tree.root)).toHaveLength(0);
+    expect(sentTypes()).toContain('init');
+    tree.unmount();
+  });
+
+  it('version 不是 t2（旧 t1 dist）：立即错误态、零下行', async () => {
+    const onReady = jest.fn();
+    const tree = await mountWithMessage({onReady});
+    const stale = makeTranscriptReadyPayload();
+    stale.payload.version = 't1';
+    sendEnvelope(tree.root, stale);
+
+    // 立即错误态：不等 8s 超时兜底。
+    expect(errorViews(tree.root).length).toBeGreaterThan(0);
+    expect(mockWebViewPostMessages).toHaveLength(0);
+    expect(onReady).not.toHaveBeenCalled();
+    tree.unmount();
+  });
+
+  it('t2 但缺 streamProjection：立即错误态、零下行', async () => {
+    const onReady = jest.fn();
+    const tree = await mountWithMessage({onReady});
+    const missing = makeTranscriptReadyPayload();
+    missing.payload.capabilities = ['streamBlockCommit'];
+    sendEnvelope(tree.root, missing);
+
+    expect(errorViews(tree.root).length).toBeGreaterThan(0);
+    expect(mockWebViewPostMessages).toHaveLength(0);
+    expect(onReady).not.toHaveBeenCalled();
     tree.unmount();
   });
 });

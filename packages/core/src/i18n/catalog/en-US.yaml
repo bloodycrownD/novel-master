@@ -28,3 +28,8 @@ label:
     action:
       delete: Delete
     chip: "{action}:{path}"
+  transcript:
+    generating: Generating
+    thinking_header: Thinking
+    empty: No messages yet
+    load_older: Load earlier messages

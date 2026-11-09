@@ -226,6 +226,10 @@ const ZH_CN: MessageCatalog<CoreMessageKey> = {
   "label.workplace.display.full": "全内容",
   "label.workplace.display.header": "文件头",
   "label.workplace.display.filename": "文件名",
+  "label.transcript.generating": "生成中",
+  "label.transcript.thinking_header": "思考过程",
+  "label.transcript.empty": "暂无消息",
+  "label.transcript.load_older": "加载更早消息",
 } satisfies Record<CoreMessageKey, string>;
 
 const EN_US = {
@@ -243,6 +247,10 @@ const EN_US = {
   "label.stream_metrics.line_with_rate": "Output {tokens} tok · {rate} tok/s",
   "label.attachment.action.delete": "Delete",
   "label.attachment.chip": "{action}:{path}",
+  "label.transcript.generating": "Generating",
+  "label.transcript.thinking_header": "Thinking",
+  "label.transcript.empty": "No messages yet",
+  "label.transcript.load_older": "Load earlier messages",
 } satisfies Partial<Record<CoreMessageKey, string>>;
 
 /** 各宿主同步建 translator 的内嵌数据（不读盘；YAML 是唯一真源）。 */

@@ -37,6 +37,8 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
       normalized === 'read'
     ) {
       const inputKeys = tool.input ? Object.keys(tool.input) : [];
+      // web bundle 无 logger 依赖：卡片路径解析失败诊断只能走 console
+      // （src/web 不在 log 守卫扫描面，spec C31）。
       console.warn(
         '[ToolGroup] write/edit/read 卡片无法解析路径',
         'tool=',

@@ -45,6 +45,11 @@ import type {WorkplaceService} from '@novel-master/core/workplace';
 import type {ChatConversationWebViewHandle} from '@/components/chat/ChatConversationWebView';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
+import type {TranscriptStreamingMessage} from '@/components/chat/ChatTranscriptBridge';
+import {
+  EMPTY_STREAM_ROW_IDS,
+  buildStreamingRows,
+} from '@/components/chat/transcript-stream-projection';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
@@ -91,6 +96,14 @@ export type ChatTabContextValue = {
    * partialText/partialThinking；任务卡 pending 映射 = pendingChildrenByTitle）。
    */
   readonly unitView: SessionStreamUnitView | null;
+  /**
+   * 流式行投影（spec C12）：最后一条是当前 streaming 行，前几条可能是
+   * finished-未接管行。`buildStreamingRows` 自带输入引用缓存，unitView 的
+   * metric tick 不换引用（宿主 memo 不被每 64ms 打穿）。
+   */
+  readonly streamingRows: readonly TranscriptStreamingMessage[];
+  /** DB message id → streamId 接管映射（宿主把 DB 行改写成流式行身份）。 */
+  readonly streamRowIds: ReadonlyMap<string, string>;
   /** 全局任意会话运行中（refcount 视图）。 */
   readonly agentActive: boolean;
   readonly chatMessages: readonly ChatMessageData[];
@@ -141,9 +154,9 @@ export type ChatTabContextValue = {
   /** WebView onReady 接线：bump ready 世代，驱动句柄 attach 进 manager。 */
   readonly onTranscriptWebviewReady: () => void;
   /**
-   * WebView ready 世代（每次 onReady 递增，0 = 尚未 ready）：除句柄 attach
-   * 外，也是「ready 前到达的投影动作」的补交驱动（如中断现场合成行提交
-   * useInterruptedPartialCommit——ui/B-1 的 tail 先于 ready 时序）。
+   * WebView ready 世代（每次 onReady 递增，0 = 尚未 ready）：句柄 attach 的
+   * 驱动。中断 partial 已改由单元 `streamRows` 投影随普通快照下发，不再有
+   * 「ready 前到达的合成行提交」补交链。
    */
   readonly transcriptReadyEpoch: number;
   readonly onLoadOlderMessages: () => void;
@@ -242,7 +255,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   >(() => (sessionId != null ? manager.readMessagesSnapshot(sessionId) : null));
   useEffect(() => {
     const sync = () => {
-      setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
+      const hasSession = sessionId != null;
+      const nextUnitView = hasSession ? manager.snapshot(sessionId) : null;
+      setUnitView(nextUnitView);
       setMessagesView(
         sessionId != null ? manager.readMessagesSnapshot(sessionId) : null,
       );
@@ -252,6 +267,20 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   }, [manager, sessionId]);
 
   const hasUnit = unitView != null;
+
+  // 流式投影（spec C12）：有单元走单元投影；单元出表后映射交接在 idle 视图，
+  // 两条来源任一命中都保留 db→streamId，避免已接管行回退 DB id 触发 remount。
+  const streamingRows = useMemo(
+    () => buildStreamingRows(unitView),
+    [unitView],
+  );
+  const streamRowIds = useMemo(
+    () =>
+      unitView?.streamRowIds ??
+      messagesView?.streamRowIds ??
+      EMPTY_STREAM_ROW_IDS,
+    [unitView, messagesView],
+  );
 
   // 消息面 tail 水合：会话切换或单元出现时取 tail（非 force——缓存命中即
   // 采纳的会话切换语义；运行中单元的后续刷新由 step/settle 边界自驱）。
@@ -325,9 +354,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       findLastVisibleMessage(chatMessages),
     );
     // 中断现场解锁输入：被杀 run 的尾部 user 消息是「没回完」的历史现场，
-    // 不是「等待回复中」。partial 非空的中断有合成行提交解锁（ui/B-1），
-    // partial 为空的（首字前被杀）没有任何可提交内容，锁死将无出口；
-    // 再发消息会替换吸收中断单元，是合法操作。
+    // 不是「等待回复中」。partial 非空的中断由流式行投影呈现（单元
+    // `streamRows` → 宿主快照）；partial 为空的（首字前被杀）没有任何可呈现
+    // 内容，锁死将无出口；再发消息会替换吸收中断单元，是合法操作。
     if (unitView?.status === 'interrupted') {
       return {...derived, lastMessageIsPlainUserText: false};
     }
@@ -443,6 +472,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       setChatSubview: scope.setChatSubview,
       agentMeta: scope.agentMeta,
       unitView,
+      streamingRows,
+      streamRowIds,
       agentActive,
       chatMessages,
       hasMoreMessages,
@@ -501,6 +532,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       sessionId,
       scope,
       unitView,
+      streamingRows,
+      streamRowIds,
       agentActive,
       chatMessages,
       hasMoreMessages,

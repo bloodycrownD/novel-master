@@ -641,7 +641,6 @@ describe('SessionStreamUnitManager', () => {
         },
         partialText: '',
         partialThinking: '',
-        injected: false,
         pendingChildren: [],
       }),
     );

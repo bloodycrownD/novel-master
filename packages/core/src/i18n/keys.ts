@@ -38,7 +38,7 @@ export const ERROR_KEY_DOMAINS = [
   "tool",
 ] as const;
 
-/** label.* 第二段（域）的固定词表（spec §2.2，9 域；用不到的域不预留）。 */
+/** label.* 第二段（域）的固定词表（spec §2.2，10 域；用不到的域不预留）。 */
 export const LABEL_KEY_DOMAINS = [
   "agent",
   "attachment",
@@ -47,6 +47,7 @@ export const LABEL_KEY_DOMAINS = [
   "workplace",
   "token_source",
   "stream_metrics",
+  "transcript",
   "prompt_preview",
   "smart_sort",
 ] as const;
@@ -285,6 +286,11 @@ const LABEL_MESSAGE_KEYS = [
   "label.stream_metrics.line_with_rate",
   // token_source
   "label.token_source.api",
+  // transcript：webview 转录渲染层 4 文案（宿主经 init.labels 下发）
+  "label.transcript.generating",
+  "label.transcript.thinking_header",
+  "label.transcript.empty",
+  "label.transcript.load_older",
   // workplace：UI 四态标签（filetree 宏标签保持 string，不在此列）
   "label.workplace.rule_on",
   "label.workplace.rule_off",

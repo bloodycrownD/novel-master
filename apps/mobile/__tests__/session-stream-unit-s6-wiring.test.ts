@@ -127,18 +127,6 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(second.streamPayloads).toHaveLength(1);
     expect(second.streamPayloads[0]).toMatchObject({type: 'stream-batch'});
 
-    // 控制消息（force-snapshot / reset-stream）对全句柄广播双达。
-    h.manager.requestForceSnapshot('s1');
-    h.manager.requestStreamReset('s1');
-    expect(first.controlMessages).toEqual([
-      {type: 'force-snapshot'},
-      {type: 'reset-stream'},
-    ]);
-    expect(second.controlMessages).toEqual([
-      {type: 'force-snapshot'},
-      {type: 'reset-stream'},
-    ]);
-
     // 摘除最后 attach 的句柄后，流式回落到前一可见句柄。
     h.manager.detachWebview('s1', 'screen-b');
     h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
@@ -149,6 +137,19 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     jest.advanceTimersByTime(96);
     expect(first.streamPayloads).toHaveLength(1);
     expect(second.streamPayloads).toHaveLength(1);
+
+    // 控制消息（force-snapshot / reset-stream）对当前 attach 的全句柄广播；
+    // reset 带被清掉的 streamIds。screen-b 已摘除，不再收到。
+    const streamingId = h.manager.snapshot('s1')?.streamRows[0]?.streamId;
+    h.manager.requestForceSnapshot('s1');
+    h.manager.requestStreamReset('s1');
+    expect(first.controlMessages).toEqual([
+      {type: 'force-snapshot'},
+      {type: 'reset-stream', streamIds: [streamingId]},
+    ]);
+    expect(second.controlMessages).toEqual([]);
+    // clearStreamProjection 生效：快照里不再有流式行（旧 partial 不复活）
+    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
   });
 
   it('主会话 + 子会话（消费型单元）双屏并行：流式各达各屏、pending 链接跨屏可见', async () => {
@@ -263,5 +264,79 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
 
     // 无在途 controller 的会话 stopRun 返回 false（不误触）。
     expect(h.manager.stopRun('s1')).toBe(false);
+  });
+});
+
+/**
+ * Step 8 / T-SP19：中断 partial 的单元侧投影与 rollback 清理。
+ *
+ * interrupted 水合单元把 `partialText/partialThinking` 投影成唯一一条
+ * `status='finished'` 的流式行（spec §2.1.2 规则 3）；rollback/fork 走
+ * `requestStreamReset` → `clearStreamProjection` 后该行必须消失，并由下一拍
+ * force-snapshot 让宿主按「已清空」的投影重发快照（partial 不复活）。
+ */
+describe('T-SP19: 中断 partial 投影与 requestStreamReset', () => {
+  let h: ReturnType<typeof buildHarness>;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setMobileAgentActive(false);
+    h = buildHarness();
+  });
+
+  afterEach(() => {
+    h.manager.dispose();
+    jest.useRealTimers();
+    setMobileAgentActive(false);
+  });
+
+  it('interrupted partial → 唯一 finished 流式行；reset 后清空并补发 force-snapshot', () => {
+    const unit = h.manager.adoptInterruptedUnit('s1', 'p1');
+    expect(
+      unit.hydrateFromRunState({
+        runId: 'r-old',
+        startedAtMs: 1_000,
+        settledAtMs: 4_000,
+        metrics: {
+          textChars: 4,
+          thinkingChars: 4,
+          completionTokens: 1,
+          tokenSource: 'heuristic',
+        },
+        partialText: '半截正文',
+        partialThinking: '半截思考',
+        pendingChildren: [],
+      }),
+    ).toBe(true);
+
+    const interruptedId = 'st:s1:interrupted:4000';
+    expect(h.manager.snapshot('s1')?.streamRows).toEqual([
+      {
+        streamId: interruptedId,
+        status: 'finished',
+        text: '半截正文',
+        thinking: '半截思考',
+        tools: [],
+        messageId: null,
+      },
+    ]);
+
+    const screen = probeHandle('screen');
+    h.manager.attachWebview('s1', screen);
+
+    // rollback/fork：先清单元投影，再广播 reset-stream（streamId 原样透传）。
+    h.manager.requestStreamReset('s1');
+    expect(screen.controlMessages).toEqual([
+      {type: 'reset-stream', streamIds: [interruptedId]},
+    ]);
+    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
+
+    // 下一拍 force-snapshot：宿主按清空后的投影重发快照，partial 行不复活。
+    jest.advanceTimersByTime(0);
+    expect(screen.controlMessages).toEqual([
+      {type: 'reset-stream', streamIds: [interruptedId]},
+      {type: 'force-snapshot'},
+    ]);
+    expect(h.manager.snapshot('s1')?.streamRows).toEqual([]);
   });
 });

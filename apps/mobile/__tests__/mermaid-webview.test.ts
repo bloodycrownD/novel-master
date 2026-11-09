@@ -173,10 +173,11 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
   const stream = () =>
     webSrc('chat-transcript/webview/runtime/stream/stream.ts');
 
-  it('T-MT1: sessionSnapshot/prependPage/appendTailRows/streamCommit 渲染后触发', () => {
+  it('T-MT1: sessionSnapshot/prependPage/appendTailRows 渲染后触发', () => {
     const src = snapshot();
-    // 5 处：applySnapshot / applyAppendTailRows / applyStreamCommit×2（早退与 promote 后）/ applyPrependPage
-    expect(src.match(/scheduleMermaidScan\(\)/g)).toHaveLength(5);
+    // 3 处：applySnapshot / applyAppendTailRows / applyPrependPage
+    // （streamCommit 路径已随协议删除，spec Step 6）
+    expect(src.match(/scheduleMermaidScan\(\)/g)).toHaveLength(3);
     expect(src).toContain("from '../mermaid'");
 
     // 源码真源仍在 chat-transcript/webview/runtime 下，

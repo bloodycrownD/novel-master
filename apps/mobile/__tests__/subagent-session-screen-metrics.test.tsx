@@ -9,8 +9,8 @@
  *   （cr-fix-spec mobile-metrics/C-4：指标条能显示时不再叠屏级横幅；
  *   指标条不可见时由横幅兜底，仍是单标识）。
  *
- * 屏幕的 webview 与中断注入 hook 在此套件只作哑元（本用例只锁指标条
- * 屏级装配，不重复 webview 引擎的既有覆盖）。
+ * 屏幕的 webview 在此套件只作哑元（本用例只锁指标条屏级装配，
+ * 不重复 webview 引擎的既有覆盖）。
  *
  * @module test/subagent-session-screen-metrics
  */
@@ -101,7 +101,7 @@ jest.mock('../src/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: null}),
 }));
 
-// 指标条链路之外的哑元：webview 引擎与中断注入 hook 不属本套件覆盖面。
+// 指标条链路之外的哑元：webview 引擎不属本套件覆盖面。
 // 工厂内 require（jest.mock 提升到 import 之前，工厂引用模块级绑定会报
 // "Invalid variable access"）。
 // transcript-converge 后子会话屏改用统一宿主 ChatConversationWebView
@@ -122,10 +122,6 @@ jest.mock('../src/components/chat/ChatConversationWebView', () => {
     ),
   };
 });
-
-jest.mock('../src/screens/tabs/chat-tab/useInterruptedPartialCommit', () => ({
-  useInterruptedPartialCommit: jest.fn(),
-}));
 
 import {SubagentSessionScreen} from '../src/screens/stack/SubagentSessionScreen';
 import {takePromptTurnDetail} from '../src/components/prompt/prompt-turn-callback';
@@ -240,6 +236,9 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     expect(mockChatWebViewProps.length).toBeGreaterThan(0);
     for (const props of mockChatWebViewProps) {
       expect(props.transcriptOnly).toBe(true);
+      // T-SP28：流式投影 props 必须真传到宿主（漏传 = 子会话屏没有流式正文）。
+      expect(props.streamingRows).toBeDefined();
+      expect(props.streamRowIds).toBeInstanceOf(Map);
     }
     // 变体位与主对话形态的关键分野：宿主不收 composer 域 props（子会话屏没有
     // 输入框，全套 composer* 传下去也只是把 dock 判成「该变体没有」）。

@@ -233,112 +233,87 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     );
   });
 
-  it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
+  it('T-BR-CT-03: 流式行相位 / 增量 / rich 新协议', () => {
     const script = bootScript();
     // 必须保留：相位 / 增量 / 符号（三列矩阵）
-    // minify 把这批内部函数/组件标识符全压成短符号（getStreamTailPhase /
-    // streamHasContent / setStreamToolInvokingDom / ensureStreamTextBody /
-    // updateStreamBubble / appendStreamDelta* / applyStreamBatch /
-    // renderStreamingMarkdown / scheduleStreamRichUpgrade / StreamTail /
-    // StreamBodyHost / applyTrustedHtml）。断言换它们的稳定面：
-    // 相位与 kind 的字符串字面量阶梯、state 字段名、DOM 类名/属性名、
-    // 「html 缺失退回空串」的表达式形态。
-    // ① 相位阶梯（getStreamTailPhase 的三档返回值，顺序即优先级）
+    // minify 把这批内部函数/组件标识符全压成短符号（getStreamingPhase /
+    // streamHasContent / ensureStreamTextBody / updateStreamBubble /
+    // appendStreamDelta* / applyStreamDelta / renderStreamingMarkdown /
+    // scheduleStreamRichUpgrade / StreamingMessageRow / StreamBodyHost /
+    // applyTrustedHtml）。断言换它们的稳定面：相位与 kind 的字符串字面量
+    // 阶梯、行字段名、DOM 类名/属性名、尾块分桶形态。
+    // ① 相位阶梯（getStreamingPhase：finished 短路 → streaming-content / waiting-first）
     expect(script).toMatch(
-      /['"]idle-after-content['"]\s*:\s*['"]waiting-first['"]\s*:\s*['"]active['"]/,
+      /['"]finished['"][\s\S]{0,160}?['"]streaming-content['"]\s*:\s*['"]waiting-first['"]/,
     );
-    // ② 有内容判定（streamHasContent）：text 或 thinking 任一 trim 后非空
+    // ② 有内容判定（streamHasContent）：row.text / row.thinking trim 或 tools 非空
     expect(script).toMatch(
-      /String\(\w+\.stream\.text\|\|['"]{2}\)\.trim\(\)\.length>0\|\|String\(\w+\.stream\.thinking\|\|['"]{2}\)\.trim\(\)\.length>0/,
+      /String\(\w+\.text\|\|['"]{2}\)\.trim\(\)\.length>0\|\|String\(\w+\.thinking\|\|['"]{2}\)\.trim\(\)\.length>0/,
     );
-    // ③ 文本壳（ensureStreamTextBody / setStreamToolInvokingDom 共用）：
-    //    .bubble-body 容器 + data-text-shell 标记
+    // ③ 文本壳（ensureStreamTextBody）：.bubble-body 容器 + data-text-shell 标记
     expect(script).toMatch(/querySelector\(['"]\.bubble-body['"]\)/);
     expect(script).toMatch(
       /setAttribute\(\s*['"]data-text-shell['"],\s*['"]1['"]\s*\)/,
     );
-    // ④ 流式累积状态字段名（updateStreamBubble 写的两个 html 位）
-    expect(script).toMatch(/stream\.textHtml=/);
-    expect(script).toMatch(/stream\.thinkingHtml=/);
-    // ⑤ kind 分派（appendStreamDelta / applyStreamBatch 的 text|thinking 二分）
+    // ④ kind 分派（appendStreamDelta 的 text|thinking 二分）
     expect(script).toMatch(
       /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
     );
-    // ⑥ 增量优先：按 kind 分桶累积（`<桶表>[kind].push(delta)`）
+    // ⑤ 尾块增量按 kind 分桶累积（`<parts>[kind].push(delta)`）
     expect(script).toMatch(/\w+\[\w+\]\.push\(/);
-    // ⑦ 两条下行协议分支（case 形态：minify 去掉 case 与冒号间空白）
-    expect(script).toMatch(/case\s*['"]streamBatch['"]\s*:/);
+    // ⑥ 下行协议分支：streamDelta / streamBlockCommit / streamStatus；
+    //    旧 streamBatch / streamCommit 已删（C1/C21）
+    expect(script).toMatch(/case\s*['"]streamDelta['"]\s*:/);
     expect(script).toMatch(/case\s*['"]streamBlockCommit['"]\s*:/);
-    // 可改为 token：waiting-first / text-shell / TrustedHtml（壳已迁 ui/stream）
+    expect(script).toMatch(/case\s*['"]streamStatus['"]\s*:/);
+    expect(script).not.toMatch(/case\s*['"]streamBatch['"]\s*:/);
+    expect(script).not.toMatch(/case\s*['"]streamCommit['"]\s*:/);
+    // 可改为 token：waiting-first / text-shell / TrustedHtml（壳在 ui/stream）
     expect(script).toContain('stream--waiting-first');
     expect(script).toContain('stream-waiting-indicator');
     expect(script).toContain('data-text-shell');
     expect(script).toMatch(/querySelector\(\s*['"]\.bubble['"]\s*\)/);
     // TrustedHtml 组件标识符被重命名；锁它唯一产出的 {__html:…} 属性字面量
     expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
-    // StreamTail 壳：#stream-tail 承载根 + stream 行类名
+    // 流式行壳（StreamingMessageRow）：行类名 + data-stream-* 稳定面；
+    // #stream-tail 只挂 streaming 行（runtime 增量路径仍按 id 找目标）
+    expect(script).toContain('data-stream-status');
+    expect(script).toContain('data-stream-id');
+    expect(script).toMatch(/['"]row message ['"]/);
     expect(script).toContain('getElementById("stream-tail")');
-    expect(script).toMatch(/className:\s*['"]row stream['"]/);
     // 允许删除：renderStream* / renderAssistantBubbleInner 纯 HTML 壳函数。
-    // 原先锚的是函数标识符（minify 下恒真失效），换成它们**产出**的形态——
-    // 一旦有人把拼串 HTML 壳搬回来，产物里就会重新出现
-    // 「<div …stream / …bubble」这类 HTML 字面量。
+    // 换成它们**产出**的形态——一旦有人把拼串 HTML 壳搬回来，产物里就会重新
+    // 出现「<div …stream / …bubble」这类 HTML 字面量。
     expect(script).not.toMatch(/['"][^'"]*<div[^'"]*stream/);
     expect(script).not.toMatch(/['"][^'"]*<div[^'"]*bubble/);
     expect(script).not.toMatch(/['"][^'"]*class=['"]?[^'"]*bubble/);
-    // 局部名可能因 Preact 打包重命名；保留 payload.html / 增量回退意图
-    expect(script).toMatch(/\w+\.html\s*\|\|\s*[\"'][\"']/);
-    // streamReset / streamCommit 两处把两个 html 位清空（minify 后是对象字面量形态）
-    expect(script).toMatch(/textHtml:\s*['"]['"]/);
-    expect(script).toMatch(/thinkingHtml:\s*['"]['"]/);
-    // rich 开关缺 html 时不得渲染空壳：现产物形态为
-    // `flags.richText&&<html>` 短路（局部名被压成短符号，用 \w+ 容忍）
-    expect(script).toMatch(/flags\.richText&&\w+/);
-    // tool-invoking 单路径：壳归 Preact ToolInvokingBar；runtime 不得再拼串/createElement 插条。
-    // ToolInvokingBar 标识符被重命名 → 锁它产出的三个类名。
+    // tool-invoking 单路径：壳归 Preact ToolInvokingBar（StreamingMessageRow 传
+    // label）；runtime 不得再拼串/createElement 插条。
     expect(script).toContain('tool-invoking-bar');
     expect(script).toContain('tool-invoking-dot');
     expect(script).toContain('tool-invoking-label');
-    // renderToolInvokingBar（runtime 侧旧拼串壳）标识符已不存在；
-    // 换锚：Preact 壳里那条「生成中」文案（runtime 手拼会产出同样的字面量，
-    // 故只锁类名不锁文案，防误伤）。
     expect(script).not.toMatch(/['"][^'"]*<div[^'"]*tool-invoking-bar/);
   });
 
   it('T-PH-06: 流式壳/增量分离与 P0-2 所有权', () => {
     const script = bootScript();
-    // minify 重命名 appendStreamDeltaIncremental / appendStreamDelta /
-    // StreamTail / StreamBodyHost / applyTrustedHtml。断言换稳定面：
-    // 增量分桶累积（appendStreamDelta* 的热路径）+ 按 kind 分派 +
-    // 文本壳 #stream-tail 承载根 + TrustedHtml 的 __html 字面量。
+    // minify 重命名 appendStreamDeltaIncremental / applyStreamDelta /
+    // StreamingMessageRow / StreamBodyHost / applyTrustedHtml。断言换稳定面：
+    // 尾块增量分桶（appendStreamDelta* 的热路径）+ 按 kind 分派 +
+    // 流式行 data-* 标记 + TrustedHtml 的 __html 字面量。
     expect(script).toMatch(/\w+\[\w+\]\.push\(/);
     expect(script).toMatch(
       /kind===\s*['"]thinking['"]\s*\?\s*['"]thinking['"]\s*:\s*['"]text['"]/,
     );
-    expect(script).toContain('getElementById("stream-tail")');
-    expect(script).toMatch(/className:\s*['"]row stream['"]/);
+    expect(script).toContain('data-stream-status');
+    expect(script).toContain('data-stream-id');
+    expect(script).toMatch(/['"]row message ['"]/);
     expect(script).toMatch(/dangerouslySetInnerHTML:\{__html:\w+\}/);
-    // delta 热路径不得整表重建 #stream-tail 内容根：增量优先，失败才整表回退。
+    // delta 热路径不得整表重建流式行内容根：增量优先，失败才整表回退。
     // 回退判据的稳定面 = 相位三档字面量（增量判据读的就是它）。
     expect(script).toMatch(
-      /['"]idle-after-content['"]\s*:\s*['"]waiting-first['"]\s*:\s*['"]active['"]/,
+      /['"]finished['"][\s\S]{0,160}?['"]streaming-content['"]\s*:\s*['"]waiting-first['"]/,
     );
-  });
-
-  it('T-BR-CT-04: streamCommit / promote tail', () => {
-    const script = bootScript();
-    // minify 重命名 applyStreamCommit / promoteStreamTailToRow 与 dispatcher
-    // 局部（state → 短符号）。断言换稳定面：case 形态 + 协议 type 字面量 +
-    // pending 队列的 kind 判别式 + 行数组 concat 形态 + 提升目标节点 id。
-    expect(script).toMatch(/case\s*['"]streamCommit['"]\s*:/);
-    expect(script).toMatch(/kind:\s*['"]streamCommit['"]/);
-    // applyStreamCommit 把行塞进 pending 队列（kind 三态：appendTail / prependPage / streamCommit）
-    expect(script).toMatch(/kind===\s*['"]appendTail['"]\?/);
-    expect(script).toMatch(/kind===\s*['"]prependPage['"]\?/);
-    // promoteStreamTailToRow：把流式尾节点提为行（目标节点 id 是稳定面）
-    expect(script).toContain('getElementById("stream-tail")');
-    // state.rows = state.rows.concat(toAppend) → `<短符号>.rows.concat(`
-    expect(script).toMatch(/rows=\w+\.rows\.concat\(/);
   });
 
   it('T-BR-CT-05: vfs tool path normalize symbols', () => {
@@ -354,13 +329,13 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
     const script = bootScript();
-    // 意图：文本壳 / fill-width；壳可由 TSX 产出，断言改 token（三列矩阵）
-    // hasThinking / hasTools / getStreamTailPhase 是局部变量与函数标识符，
+    // 意图：文本壳 / fill-width；壳由 TSX 产出，断言改 token（三列矩阵）
+    // hasThinking / hasTools / getStreamingPhase 是局部变量与函数标识符，
     // minify 下恒失——换它们驱动出的类名与相位字面量。
     expect(script).toContain('bubble--fill-width');
     expect(script).toContain('data-text-shell');
     expect(script).toContain('thinking-body-divided');
-    expect(script).toContain('idle-after-content');
+    expect(script).toContain('streaming-content');
   });
 
   it('T-BR-CT-07: no parseUserVfsAction / user-vfs-action regression', () => {

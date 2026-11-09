@@ -1,13 +1,13 @@
 /**
- * 助手气泡内层：思考 / 正文 / 生成中条 / 工具组。
+ * 助手气泡内层：思考 / 正文 / 工具组。
  * 宿主消毒 HTML（textHtml / thinkingHtml）一律经 TrustedHtml。
  * 角色行 + ⋯ 由 MessageRow 顶行提供，不在此重复。
+ * 「生成中」条只属于流式行（StreamingMessageRow），这里不再承载。
  */
 import type {ComponentChildren} from 'preact';
 import type {ToolCallRow} from '../../runtime/state/state';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {ThinkingSection} from './ThinkingSection';
-import {ToolInvokingBar} from './ToolInvokingBar';
 import {ToolGroup} from './ToolGroup';
 
 export type AssistantBubbleInnerProps = {
@@ -20,7 +20,6 @@ export type AssistantBubbleInnerProps = {
   tools: ToolCallRow[] | null | undefined;
   toolGroupKey: string;
   toolGroupExpanded: boolean;
-  showToolInvoking: boolean;
   richText: boolean;
 };
 
@@ -34,12 +33,10 @@ export function AssistantBubbleInner({
   tools,
   toolGroupKey,
   toolGroupExpanded,
-  showToolInvoking,
   richText,
 }: AssistantBubbleInnerProps) {
   const hasThinking = !!(thinking && String(thinking).trim());
   const hasTools = !!(tools && tools.length > 0);
-  const hasInvoking = !!showToolInvoking;
   const hasText = !!(text && String(text).trim());
   const useRichText = !!(richText && textHtml);
 
@@ -51,7 +48,7 @@ export function AssistantBubbleInner({
         thinkingKey={thinkingKey}
         expanded={thinkingExpanded}
         thinkingHtml={thinkingHtml}
-        showDividerBelow={hasText || hasTools || hasInvoking}
+        showDividerBelow={hasText || hasTools}
         richText={richText}
       />,
     );
@@ -72,9 +69,6 @@ export function AssistantBubbleInner({
         data-text-shell="1"
       />,
     );
-  }
-  if (hasInvoking) {
-    children.push(<ToolInvokingBar />);
   }
   if (hasTools) {
     children.push(

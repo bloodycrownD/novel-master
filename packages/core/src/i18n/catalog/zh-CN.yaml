@@ -286,3 +286,9 @@ label:
       full: 全内容
       header: 文件头
       filename: 文件名
+  # —— transcript：webview 转录渲染层文案（宿主经 init.labels 下发）——
+  transcript:
+    generating: 生成中
+    thinking_header: 思考过程
+    empty: 暂无消息
+    load_older: 加载更早消息

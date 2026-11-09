@@ -903,19 +903,24 @@ describe('F-B3 复用子会话：宽限期内二次 RUN_STARTED 替换吸收（H
 
     // —— 替换后新单元的副作用面（spec F-B3 三件）——
 
-    // ① 注入标记不残留：新单元自己没注入过，attach 才该收到恰一次 stream-delta
+    // ① 重进不注入：新句柄零 stream-delta；快照 streamRows 携带完整当前行
+    const secondRunStreamId = h.manager.snapshot('kid')?.streamRows.at(-1)
+      ?.streamId;
     const late = {payloads: [] as unknown[]};
     h.manager.attachWebview('kid', {
       handleId: 'w-kid-2',
       onStreamPayload: payload => late.payloads.push(payload),
     });
-    const lateDeltas = late.payloads.filter(
-      payload => (payload as {type?: string}).type === 'stream-delta',
-    ) as {kind?: string; delta?: string}[];
-    expect(lateDeltas).toHaveLength(1);
-    expect(lateDeltas[0]).toEqual(
-      expect.objectContaining({kind: 'text', delta: '第二轮'}),
-    );
+    expect(
+      late.payloads.filter(
+        payload => (payload as {type?: string}).type === 'stream-delta',
+      ),
+    ).toHaveLength(0);
+    expect(h.manager.snapshot('kid')?.streamRows.at(-1)).toMatchObject({
+      streamId: secondRunStreamId,
+      status: 'streaming',
+      text: '第二轮',
+    });
 
     // ② 二轮 STEP 按新 runId 收口：partial 清零，metrics 保留（属于二轮自己）
     publishStepCommitted(h.eventBus, 'kid', 'r2');

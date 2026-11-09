@@ -11,14 +11,18 @@
  * stream / menu / post 等副作用出口全部 mock，document 以最小 fake scroller
  * 提供；requestAnimationFrame 以同步队列 stub 替换（stick 路径含嵌套 RAF）。
  */
-jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => ({
-  renderRows: jest.fn(),
-}));
+jest.mock(
+  '../src/web/chat-transcript/webview/runtime/render/row-logic',
+  () => ({
+    renderRows: jest.fn(),
+  }),
+);
 jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
   scheduleMermaidScan: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => ({
-  setStreamToolInvokingDom: jest.fn(),
+  requestResync: jest.fn(),
+  resetStreamBlockRenderState: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
   closeContextMenu: jest.fn(),
@@ -28,11 +32,18 @@ jest.mock('../src/web/chat-transcript/webview/runtime/bridge', () => ({
 }));
 
 import {renderRows} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
-import {setStreamToolInvokingDom} from '../src/web/chat-transcript/webview/runtime/stream/stream';
 import {post} from '../src/web/chat-transcript/webview/runtime/bridge';
+import {
+  createFakeDocument,
+  createRowShell,
+  installFakeDocument,
+  uninstallFakeDocument,
+} from './helpers/fake-transcript-dom';
 
-type SnapshotModule = typeof import('../src/web/chat-transcript/webview/runtime/render/snapshot');
-type StateModule = typeof import('../src/web/chat-transcript/webview/runtime/state/state');
+type SnapshotModule =
+  typeof import('../src/web/chat-transcript/webview/runtime/render/snapshot');
+type StateModule =
+  typeof import('../src/web/chat-transcript/webview/runtime/state/state');
 
 /** 每个用例取全新模块实例（拼装状态与 state 单例都随 isolate 重建）。 */
 function loadFreshModules(): {
@@ -45,8 +56,8 @@ function loadFreshModules(): {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     snapshot = require('../src/web/chat-transcript/webview/runtime/render/snapshot');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    state = require('../src/web/chat-transcript/webview/runtime/state/state')
-      .state;
+    state =
+      require('../src/web/chat-transcript/webview/runtime/state/state').state;
   });
   return {snapshot: snapshot!, state: state!};
 }
@@ -67,7 +78,11 @@ function makeRows(prefix: string, count: number) {
 
 describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
   let rafQueue: Array<() => void>;
-  let fakeScroller: {scrollTop: number; scrollHeight: number; clientHeight: number};
+  let fakeScroller: {
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -76,11 +91,12 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     (global as unknown as {document: unknown}).document = {
       getElementById: (id: string) => (id === 'scroller' ? fakeScroller : null),
     };
-    (global as unknown as {requestAnimationFrame: unknown}).requestAnimationFrame =
-      (cb: () => void) => {
-        rafQueue.push(cb);
-        return rafQueue.length;
-      };
+    (
+      global as unknown as {requestAnimationFrame: unknown}
+    ).requestAnimationFrame = (cb: () => void) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    };
   });
 
   afterEach(() => {
@@ -115,7 +131,6 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       chunkTotal: 3,
       sessionKey: 'p1:s1',
       hasMore: true,
-      generating: true,
       rows: makeRows('a', 2),
     });
     snapshot.handleSnapshotPayload({
@@ -124,7 +139,6 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       chunkTotal: 3,
       sessionKey: 'p1:s1',
       hasMore: true,
-      generating: true,
       rows: makeRows('b', 2),
     });
     // 分片期间：不产生中间渲染、rows 基线不动
@@ -137,7 +151,6 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       chunkTotal: 3,
       sessionKey: 'p1:s1',
       hasMore: true,
-      generating: true,
       rows: makeRows('c', 1),
       scrollIntent: 'stick',
     });
@@ -152,7 +165,6 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     ]);
     expect(state.hasMore).toBe(true);
     expect(renderRows).toHaveBeenCalledTimes(1);
-    expect(setStreamToolInvokingDom).toHaveBeenCalledWith(true);
 
     // 对照：同数据单包直发（gen2 单片）rows 与分片拼装全等
     const chunkedRows = state.rows.slice();
@@ -162,12 +174,7 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
       chunkTotal: 1,
       sessionKey: 'p1:s1',
       hasMore: true,
-      generating: true,
-      rows: [
-        ...makeRows('a', 2),
-        ...makeRows('b', 2),
-        ...makeRows('c', 1),
-      ],
+      rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
       scrollIntent: 'stick',
     });
     flushRaf();
@@ -554,5 +561,59 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     ]);
     flushRaf();
     expect(renderRows).toHaveBeenCalledTimes(1);
+  });
+
+  it('stream checkpoint：每片 last-wins，末片与流式行同片原子应用；seed 后 reseed body', () => {
+    const helperDoc = createFakeDocument();
+    const scroller = helperDoc.createElement('div');
+    scroller.id = 'scroller';
+    scroller.scrollHeight = 2000;
+    scroller.clientHeight = 600;
+    helperDoc.body.appendChild(scroller);
+    installFakeDocument(helperDoc);
+    const shell = createRowShell(helperDoc, 'st:1', {streaming: true});
+    try {
+      const {snapshot, state} = loadFreshModules();
+      // 首片携带旧 checkpoint（seq 1）：分片期不应用
+      snapshot.handleSnapshotPayload({
+        generation: 1,
+        chunkIndex: 0,
+        chunkTotal: 2,
+        sessionKey: 'p1:s1',
+        hasMore: false,
+        rows: makeRows('a', 1),
+        stream: {id: 'st:1', seq: 1, status: 'streaming'},
+      });
+      expect(state.streamCheckpoint).toBeNull();
+      // 末片携带新 checkpoint（seq 2）：last-wins + 与流式行同片
+      snapshot.handleSnapshotPayload({
+        generation: 1,
+        chunkIndex: 1,
+        chunkTotal: 2,
+        sessionKey: 'p1:s1',
+        hasMore: false,
+        rows: [
+          {
+            kind: 'message',
+            id: 'st:1',
+            role: 'assistant',
+            status: 'streaming',
+            text: 'hello',
+          },
+        ],
+        stream: {id: 'st:1', seq: 2, status: 'streaming'},
+        scrollIntent: 'stick',
+      });
+      expect(state.streamCheckpoint).toEqual({
+        id: 'st:1',
+        seq: 2,
+        status: 'streaming',
+      });
+      flushRaf();
+      // 快照 seed → reseed 把完整正文一次性写进 body
+      expect(shell.textBody.textContent).toBe('hello');
+    } finally {
+      uninstallFakeDocument();
+    }
   });
 });

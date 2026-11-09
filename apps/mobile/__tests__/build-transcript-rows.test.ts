@@ -239,32 +239,11 @@ describe('buildTranscriptRows', () => {
     });
   });
 
-  it('appends stream tail row when streaming (text/thinking only)', () => {
+  it('流式正文不再是本函数的第二数据面（spec C10：流式行由宿主投影生成）', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
-    const rows = buildTranscriptRows(messages, {
-      text: 'partial',
-      thinking: '',
-    });
-    expect(rows[rows.length - 1]).toEqual({
-      kind: 'stream',
-      text: 'partial',
-      thinking: '',
-    });
-  });
-
-  it('stream tail never includes tools', () => {
-    const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
-    const rows = buildTranscriptRows(messages, {
-      text: 'partial',
-      thinking: 'hmm',
-    });
-    const tail = rows[rows.length - 1];
-    expect(tail).toMatchObject({
-      kind: 'stream',
-      text: 'partial',
-      thinking: 'hmm',
-    });
-    expect(tail).not.toHaveProperty('tools');
+    const rows = buildTranscriptRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows.every(row => row.kind === 'message')).toBe(true);
   });
 
   it('maps pending tools on message rows when incomplete', () => {
@@ -276,7 +255,7 @@ describe('buildTranscriptRows', () => {
         1,
       ),
     ];
-    const row = buildTranscriptRows(messages, undefined, {
+    const row = buildTranscriptRows(messages, {
       agentRunning: true,
     })[0];
     expect(row).toMatchObject({
@@ -394,7 +373,7 @@ describe('buildTranscriptRows', () => {
         true,
       ),
     ];
-    const tailOnly = buildTranscriptRows([messages[0]!], undefined, {
+    const tailOnly = buildTranscriptRows([messages[0]!], {
       agentRunning: true,
     })[0];
     const fromFull = selectTailTranscriptRows(messages, [messages[0]!], {
@@ -409,9 +388,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('T-R1: 空 tail 返回空数组', () => {
-    const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
-    ];
+    const messages = [msg('u1', 'user', [{type: 'text', text: 'hi'}], 1)];
     expect(selectTailTranscriptRows(messages, [])).toEqual([]);
   });
 });
@@ -430,7 +407,12 @@ function buildDenseToolMessages(rounds: number): ChatMessageData[] {
   let toolSeq = 0;
   for (let round = 0; round < rounds; round += 1) {
     messages.push(
-      msg(`q-${round}`, 'user', [{type: 'text', text: `第 ${round} 轮提问`}], seq++),
+      msg(
+        `q-${round}`,
+        'user',
+        [{type: 'text', text: `第 ${round} 轮提问`}],
+        seq++,
+      ),
     );
     const readId = `read-${toolSeq++}`;
     const listId = `list-${toolSeq++}`;
@@ -505,11 +487,9 @@ describe('T-R1 selectTailTranscriptRows 预扫构建等价（init-busy-yield Ste
       for (const tailSize of [3, 30, 539]) {
         const tailMessages = allMessages.slice(-tailSize);
         const tailIds = new Set(tailMessages.map(message => message.id));
-        const expected = buildTranscriptRows(
-          allMessages,
-          undefined,
-          options,
-        ).filter(row => row.kind === 'message' && tailIds.has(row.id));
+        const expected = buildTranscriptRows(allMessages, options).filter(
+          row => row.kind === 'message' && tailIds.has(row.id),
+        );
         expect(
           selectTailTranscriptRows(allMessages, tailMessages, options),
         ).toEqual(expected);

@@ -24,6 +24,10 @@
  */
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {join} from 'node:path';
+import {
+  TRANSCRIPT_CAPABILITIES,
+  TRANSCRIPT_READY_VERSION,
+} from '../src/web/chat-transcript/transcript-capabilities';
 
 const BUILD_GRADLE = join(__dirname, '../android/app/build.gradle');
 const BUILD_SCRIPT = join(__dirname, '../scripts/build-webview.mjs');
@@ -120,7 +124,9 @@ function readIosCopyScript(): string {
   const target = matches.find(m => {
     const before = src.slice(Math.max(0, m.index - 400), m.index);
     const names = [...before.matchAll(/name = "([^"]+)"/g)];
-    return names.length > 0 && names[names.length - 1]![1] === IOS_COPY_PHASE_NAME;
+    return (
+      names.length > 0 && names[names.length - 1]![1] === IOS_COPY_PHASE_NAME
+    );
   });
   expect(target).toBeDefined();
   return JSON.parse('"' + target![1] + '"') as string;
@@ -129,9 +135,7 @@ function readIosCopyScript(): string {
 /** 抠出 webview-asset-uri.ts 里 WebViewAssetPackageId 联合类型的成员（消费侧类型镜像）。 */
 function parseAssetUriUnionIds(): string[] {
   const src = readFileSync(ASSET_URI_SRC, 'utf8');
-  const decl = src.match(
-    /export type WebViewAssetPackageId =([\s\S]*?);/,
-  );
+  const decl = src.match(/export type WebViewAssetPackageId =([\s\S]*?);/);
   expect(decl).not.toBeNull();
   return Array.from(decl![1].matchAll(/'([^']+)'/g)).map(m => m[1]);
 }
@@ -248,5 +252,23 @@ describe('WebViewAssetPackageId 联合类型镜像（cr2-C-1）', () => {
     const union = parseAssetUriUnionIds();
     expect(union).not.toContain('chat-conversation');
     expect(union).toContain('chat-transcript');
+  });
+});
+
+/**
+ * ready 版本门源面（spec §6.3 / T-SP20）：宿主与 web dist 共用
+ * `transcript-capabilities.ts` 这一真源——`t2` + `streamProjection` 是两侧能
+ * 说同一种流式投影协议的最小契约。任何一侧漂移（改回 t1 / 删能力位）都会让
+ * 「旧 dist 立即错误态」的判定失效：宿主按 t1 拒绝新 dist、或按新协议灌旧
+ * dist，两种都是白屏，只是成因不同。
+ */
+describe('ready 版本与能力源面（T-SP20）', () => {
+  it("TRANSCRIPT_READY_VERSION 是 't2'（旧 t1 dist 必须被宿主拒绝）", () => {
+    expect(TRANSCRIPT_READY_VERSION).toBe('t2');
+  });
+
+  it('能力清单声明 streamProjection（缺了宿主立即错误态，不再半认）', () => {
+    expect(TRANSCRIPT_CAPABILITIES).toContain('streamBlockCommit');
+    expect(TRANSCRIPT_CAPABILITIES).toContain('streamProjection');
   });
 });

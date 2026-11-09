@@ -2,7 +2,6 @@
  * chat-transcript 启动序列：宿主桥监听 → 壳事件 → ready。
  * 与 main 的 Preact 注册分离，避免入口文件混杂委托细节。
  */
-import {state} from '../state/state';
 import {post, handleHostMessage} from '../bridge';
 import {bindHostMessageChannel} from '@web/shared/host-message-channel';
 import {TRANSCRIPT_CAPABILITIES} from '../../../transcript-capabilities';
@@ -42,7 +41,6 @@ export function bootTranscript(options: TranscriptBootOptions = {}): void {
       readyState: document.readyState,
     });
   }
-  state.ready = true;
 }
 
 /** 按 document.readyState 调度 bootTranscript。 */

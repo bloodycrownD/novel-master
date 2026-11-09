@@ -187,7 +187,7 @@ CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-
 
 **唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `registerRenderRows` + `registerRenderContextMenu`；RD `registerSetDocumentView`。
 
-**壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamTail` → `ToolInvokingBar`）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
+**壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamingMessageRow` → `ToolInvokingBar`，文案经 `label` prop 传入）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
 
 ### E2：ui 禁值导入 state（新组件 / 既有渐进）
 
@@ -195,8 +195,8 @@ Chat Transcript `webview/ui/**` 对 `runtime/state` 的纪律（对齐 post-1.3.
 
 | 规则                                 | 定案                                                                                                                         |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| **初始 allowlist（值导入 `state`）** | `{StreamTail, RowList, MessageRow}`                                                                                          |
-| 路径                                 | `ui/stream/StreamTail.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamTail 内 `StreamBodyHost`，同文件） |
+| **初始 allowlist（值导入 `state`）** | `{StreamingMessageRow, RowList, MessageRow}`                                                                                 |
+| 路径                                 | `ui/stream/StreamingMessageRow.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamingMessageRow 内 `StreamBodyHost`，同文件） |
 | type-only                            | `import type { … } from '…/state'` **允许**（不占白名单）                                                                    |
 | **新** `ui/**` 组件                  | **禁止**值导入 `state`；经 props / runtime 门面拿数据                                                                        |
 | 门禁                                 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关                            |

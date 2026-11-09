@@ -1,6 +1,7 @@
 /**
  * chat-transcript boot 共享状态与版本常量。
  */
+import {DEFAULT_LABELS, type TranscriptLabels} from '../../ui/labels';
 
 export const SCHEMA_V = 2;
 export const BRIDGE_V = 1;
@@ -44,11 +45,19 @@ export type AttachmentChip = {
   content?: string | null;
 };
 
+/** 行状态：流式起源的行恒有；纯历史行没有该字段。 */
+export type TranscriptRowStatus = 'streaming' | 'finished';
+
 /** 普通消息行。 */
 export type MessageRow = {
   kind: 'message';
+  /** 行身份：流式行 = streamId；历史行 = DB message id。 */
   id: string;
+  /** DB message id：流式期间缺省，DB 接管后补齐。菜单/回滚/分叉/置位只用它。 */
+  messageId?: string;
   role?: string;
+  /** 流式起源的行恒有 status；纯历史行没有该字段。 */
+  status?: TranscriptRowStatus;
   text?: string;
   textHtml?: string;
   thinking?: string;
@@ -65,12 +74,11 @@ export type TranscriptFlags = {
   menuDisabled: boolean;
 };
 
-export type StreamState = {
-  text: string;
-  thinking: string;
-  textHtml: string;
-  thinkingHtml: string;
-  toolInvoking: boolean;
+/** 流式检查点（spec §2.3.5 / C20）：任意 snapshot 携带到的最后内容序号。 */
+export type StreamCheckpoint = {
+  id: string;
+  seq: number;
+  status: TranscriptRowStatus;
 };
 
 export type MenuItem = {
@@ -86,7 +94,7 @@ export type MenuAnchor = {
   height: number;
 };
 
-export type ContextMenuState = {
+type ContextMenuState = {
   messageId: string;
   pageX: number;
   pageY: number;
@@ -94,13 +102,31 @@ export type ContextMenuState = {
   items: MenuItem[];
 };
 
-export type TranscriptState = {
-  ready: boolean;
+type TranscriptState = {
   nearBottom: boolean;
   sessionKey: string;
   rows: TranscriptRow[];
   hasMore: boolean;
-  stream: StreamState;
+  /** 当前/最近一条流式行的检查点；null = 没有流式行。 */
+  streamCheckpoint: StreamCheckpoint | null;
+  /** gap 等待中的 streamId；snapshot 到达后清空。 */
+  resyncPending: string | null;
+  /** 上一次 requestResync 发出的时间（performance.now）；同一 streamId 100ms 限流，snapshot 后保留。 */
+  resyncSentAt: number | null;
+  /** 连续异常快照计数；正常快照不变量通过后清零，连续 3 次停止自动 resync。 */
+  snapshotResyncAnomalyCount: number;
+  /** 连续异常退避截止（performance.now）；null = 不在退避。 */
+  snapshotResyncBackoffUntil: number | null;
+  /** 渲染层文案（宿主 init.labels 下发；缺省回退默认中文）。 */
+  labels: TranscriptLabels;
+  /** 快照 seed/gap 恢复后的 streamId：只接受全量 textHtml，忽略 tailHtml/块提交。 */
+  fullReplaceOnly: string | null;
+  /** 当前 stream 已应用的块 key 集合（重复投递幂等）。 */
+  appliedBlockKeys: Set<string>;
+  /** 该 streamId 已用富文本 html reseed 过（richText 从关到开时强制重播一次）。 */
+  lastStreamHtmlStreamId: string | null;
+  /** richText 从开→关时需要把该 streaming 行 body 重写为纯文本的 id；仅 !flags.richText 时消费。 */
+  plainReseedStreamId: string | null;
   flags: TranscriptFlags;
   menu: ContextMenuState | null;
   menuOverlayHandler: ((event: Event) => void) | null;
@@ -114,18 +140,20 @@ export type TranscriptState = {
 };
 
 export const state: TranscriptState = {
-  ready: false,
   nearBottom: true,
   sessionKey: '',
   rows: [],
   hasMore: false,
-  stream: {
-    text: '',
-    thinking: '',
-    textHtml: '',
-    thinkingHtml: '',
-    toolInvoking: false,
-  },
+  streamCheckpoint: null,
+  resyncPending: null,
+  resyncSentAt: null,
+  snapshotResyncAnomalyCount: 0,
+  snapshotResyncBackoffUntil: null,
+  labels: DEFAULT_LABELS,
+  fullReplaceOnly: null,
+  appliedBlockKeys: new Set(),
+  lastStreamHtmlStreamId: null,
+  plainReseedStreamId: null,
   flags: {richText: false, menuDisabled: false},
   menu: null,
   menuOverlayHandler: null,

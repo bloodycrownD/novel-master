@@ -1,16 +1,13 @@
 /**
- * RN ↔ Web transcript bridge: typed JSON envelopes ({ v, type, payload }).
- * Single source of truth for postMessage payloads — no ad-hoc strings.
+ * RN ↔ Web transcript 桥层数据类型（postMessage payload 的桥层形状）。
+ *
+ * 下行信封与宽松解码的唯一真源在 `ChatConversationBridge.ts`；本文件只保留
+ * 两端共享的载荷/行/主题类型，避免 web bundle 引 RN 模块。旧的零消费编解码
+ * 函数（encode/decode/parseScrollSnapshot）已随 C1 删除。
  */
-import { isRecord } from '@novel-master/core/common';
-
-export const CHAT_TRANSCRIPT_BRIDGE_VERSION = 1 as const;
-
-export type BridgeEnvelope<T extends string, P> = {
-  readonly v: typeof CHAT_TRANSCRIPT_BRIDGE_VERSION;
-  readonly type: T;
-  readonly payload: P;
-};
+export {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../../services/chat-transcript-scroll-cache';
+export type {ChatTranscriptScrollSnapshot} from '../../services/chat-transcript-scroll-cache';
+import type {ChatTranscriptScrollSnapshot} from '../../services/chat-transcript-scroll-cache';
 
 export type TranscriptToolView = {
   readonly toolUseId: string;
@@ -33,7 +30,7 @@ export type TranscriptSkillRef = {
 };
 
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
-export type TranscriptAttachmentView = {
+type TranscriptAttachmentView = {
   readonly source: 'workplace' | 'attach' | 'user_ops';
   readonly type: 'text' | 'image' | 'dir';
   readonly name: string;
@@ -53,28 +50,142 @@ export type TranscriptAttachmentView = {
   readonly content?: string | null;
 };
 
-export type TranscriptRow =
-  | {
-      readonly kind: 'message';
-      readonly id: string;
-      readonly role: 'user' | 'assistant';
-      readonly hidden: boolean;
-      readonly text: string;
-      readonly thinking: string;
-      /** Embedded tool group for assistant messages with tool_use. */
-      readonly tools?: readonly TranscriptToolView[];
-      /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
-      readonly textHtml?: string;
-      readonly thinkingHtml?: string;
-      /** user 消息附件摘要（展开为工具调用风格卡片）。 */
-      readonly attachments?: readonly TranscriptAttachmentView[];
-    }
-  | {
-      readonly kind: 'stream';
-      readonly text: string;
-      readonly thinking: string;
-    };
+/** 流式行状态（spec §2.1.1）：流式起源的行恒有 status；纯历史行没有该字段。 */
+export type TranscriptRowStatus = 'streaming' | 'finished';
 
+export type TranscriptRow = {
+  readonly kind: 'message';
+  /** 行身份：流式行 = streamId；历史行 = DB message id（I5）。 */
+  readonly id: string;
+  /** DB message id：流式期间缺省，DB 接管后补齐；菜单/回滚/分叉用它。 */
+  readonly messageId?: string;
+  readonly role: 'user' | 'assistant';
+  readonly hidden: boolean;
+  /** 流式 origin 的行带 status；历史行缺省（spec §2.1.1）。 */
+  readonly status?: TranscriptRowStatus;
+  readonly text: string;
+  readonly thinking: string;
+  /** Embedded tool group for assistant messages with tool_use. */
+  readonly tools?: readonly TranscriptToolView[];
+  /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
+  readonly textHtml?: string;
+  readonly thinkingHtml?: string;
+  /** user 消息附件摘要（展开为工具调用风格卡片）。 */
+  readonly attachments?: readonly TranscriptAttachmentView[];
+};
+
+export type TranscriptFlags = {
+  readonly richText: boolean;
+  /** When true, message action menu (⋯) is suppressed (e.g. agent running). */
+  readonly menuDisabled?: boolean;
+};
+
+/**
+ * 快照携带的流式检查点（spec §2.2.2）：本快照 `rows` 已包含到 `seq` 的最后内容。
+ * `status` 跟随最后一条流式行（streaming/finished）。
+ */
+export type TranscriptStreamCheckpoint = {
+  readonly id: string;
+  readonly seq: number;
+  readonly status: TranscriptRowStatus;
+};
+
+/**
+ * 宿主 → Web 的流式行投影（spec §2.1.2；与 unit 的
+ * `SessionStreamMessageProjection` 结构同形、分属两层）。
+ */
+export type TranscriptStreamingMessage = {
+  readonly streamId: string;
+  readonly status: TranscriptRowStatus;
+  readonly text: string;
+  readonly thinking: string;
+  readonly tools: readonly TranscriptToolView[];
+  /** DB message id：流式中为 null，DB 接管后补齐。 */
+  readonly messageId: string | null;
+};
+
+/** 转录渲染层文案（`init.labels` 下发；web 缺省回退内置中文常量）。 */
+export type TranscriptLabels = {
+  readonly generating: string;
+  readonly thinking: string;
+  readonly empty: string;
+  readonly loadOlder: string;
+};
+
+/** 流式 delta 的一段正文/思考（顺序即追加顺序）。 */
+type TranscriptStreamSegment = {
+  readonly kind: 'text' | 'thinking';
+  readonly delta: string;
+};
+
+/**
+ * `streamDelta` 载荷（spec §2.2.3）：`seq` 由宿主在最终 post 时分配，
+ * 1 起连续；`textHtml/thinkingHtml` 是全量正文 HTML（含已提交块 + 活跃尾块）。
+ */
+export type TranscriptStreamDeltaPayload = {
+  readonly streamId: string;
+  readonly seq: number;
+  readonly segments: readonly TranscriptStreamSegment[];
+  readonly textHtml?: string;
+  readonly thinkingHtml?: string;
+  /** 活跃尾块 HTML（块级增量 DOM 专用；非块模式忽略）。 */
+  readonly tailHtml?: string;
+  readonly thinkingTailHtml?: string;
+  /** 完整 tool 数组快照（仅 tool 状态变化时携带）。 */
+  readonly tools?: readonly TranscriptToolView[];
+};
+
+/** `streamBlockCommit` 载荷（spec §2.2.4）：seq 只做对账，不推进 checkpoint。 */
+export type TranscriptStreamBlockCommitPayload = {
+  readonly streamId: string;
+  /** 本块提交所对应的 delta seq。 */
+  readonly seq: number;
+  /** 块身份 `<streamId>:<kind>:<commitOrdinal>`；Web 用已应用集合去重。 */
+  readonly blockKey: string;
+  readonly kind: 'text' | 'thinking';
+  readonly html?: string;
+  readonly text: string;
+  readonly tailHtml?: string;
+  readonly tailText?: string;
+};
+
+/** `streamStatus` 载荷（spec §2.2.5）：收尾只改 status，`row` 为完整终态行。 */
+export type TranscriptStreamStatusPayload = {
+  readonly streamId: string;
+  readonly status: 'finished';
+  readonly messageId?: string;
+  readonly row?: TranscriptRow;
+};
+
+/** `streamReset` 载荷（spec §2.2.6）：`streamIds` 缺省 = 删除最后一条 streaming 行。 */
+export type TranscriptStreamResetPayload = {
+  readonly streamIds?: readonly string[];
+  /** 宿主分配的快照代次：Web 用它作废在途旧快照。 */
+  readonly generation: number;
+};
+
+export type TranscriptScrollIntent = 'stick' | 'restore' | 'preserve';
+
+export type TranscriptRestoreScroll = {
+  readonly offsetY: number;
+  readonly nearBottom: boolean;
+};
+
+// nm-style: keep-public — 旧 transcript 独立信封的 v 号契约（web runtime 上行恒
+// v:1）；宿主解码真源已迁 ChatConversationBridge，此处只锁协议形状。
+export const CHAT_TRANSCRIPT_BRIDGE_VERSION = 1 as const;
+
+// nm-style: keep-public — 跨端 envelope 协议类型（host ↔ web postMessage 形状
+// 真源；chat-transcript-stream-block 的源面契约测试锁 streamStatus/streamResync）。
+export type BridgeEnvelope<T extends string, P> = {
+  readonly v: typeof CHAT_TRANSCRIPT_BRIDGE_VERSION;
+  readonly type: T;
+  readonly payload: P;
+};
+
+// nm-style: keep-public — init/themeUpdate 载荷的主题形状（旧 transcript 独立入口
+// 协议面；当前宿主用 ConversationTheme 超集）。
+/** init/theme 载荷主题（宿主现用 ConversationTheme 超集）。 */
 export type TranscriptTheme = {
   readonly background: string;
   readonly text: string;
@@ -85,47 +196,25 @@ export type TranscriptTheme = {
   readonly borderLight: string;
 };
 
-export type TranscriptFlags = {
-  readonly richText: boolean;
-  /** When true, message action menu (⋯) is suppressed (e.g. agent running). */
-  readonly menuDisabled?: boolean;
-};
-
-export type TranscriptStreamState = {
-  readonly text: string;
-  readonly thinking: string;
-};
-
-export type TranscriptScrollIntent = 'stick' | 'restore' | 'preserve';
-
-export type TranscriptRestoreScroll = {
-  readonly offsetY: number;
-  readonly nearBottom: boolean;
-};
-
-/** Host → transcript */
+// nm-style: keep-public — Host → Web 全量下行协议类型（跨端契约；当前宿主发送面// 由 ChatConversationBridge 的 ConversationHostMessage 镜像）。
 export type HostToTranscriptMessage =
-  | BridgeEnvelope<'init', {theme: TranscriptTheme; flags: TranscriptFlags}>
+  | BridgeEnvelope<
+      'init',
+      {
+        theme: TranscriptTheme;
+        flags: TranscriptFlags;
+        labels?: TranscriptLabels;
+      }
+    >
   | BridgeEnvelope<
       'sessionSnapshot',
       {
         sessionKey: string;
         rows: readonly TranscriptRow[];
         hasMore: boolean;
-        /** @deprecated Stream tail is owned by streamDelta/streamReset only. */
-        stream?: TranscriptStreamState;
-        /** 分片协议下仅末片携带（chunkIndex === chunkTotal - 1）。 */
+        stream?: TranscriptStreamCheckpoint;
         scrollIntent?: TranscriptScrollIntent;
         restoreScroll?: TranscriptRestoreScroll;
-        /** RN 侧 uiRunning 时携带，applySnapshot 后重同步 generating DOM。 */
-        generating?: boolean;
-        /**
-         * 分片协议（init-busy-yield Step 6）：generation 单调递增——新快照
-         * 开新代次，在途旧代次分片在让步点作废；chunkTotal=1 等价旧单包。
-         * 字段分布约定：sessionKey/hasMore/generating 每片重复携带（任意片
-         * 到达即可读快照级标量）；rows 只含本片行；scrollIntent/restoreScroll
-         * 仅末片（chunkIndex === chunkTotal - 1）携带（滚动副作用聚合到末片）。
-         */
         generation: number;
         chunkIndex: number;
         chunkTotal: number;
@@ -136,88 +225,21 @@ export type HostToTranscriptMessage =
       {rows: readonly TranscriptRow[]; prependedCount: number}
     >
   | BridgeEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
-  | BridgeEnvelope<
-      'streamCommit',
-      {
-        rows: readonly TranscriptRow[];
-        scrollIntent?: 'preserve' | 'none';
-      }
-    >
-  | BridgeEnvelope<
-      'streamDelta',
-      {
-        kind: 'text' | 'thinking';
-        delta?: string;
-        /**
-         * 尾块范围 HTML（spec §6 渲染块级化）：块级渲染开启后只覆盖活跃
-         * 尾块（不再是全量累积）；尾块为空/超限降级时缺失，webview 走纯
-         * 文本增量 append。块级渲染关闭时仍为全量累积渲染（回滚开关语义）。
-         */
-        html?: string;
-      }
-    >
-  | BridgeEnvelope<
-      'streamBatch',
-      {
-        segments: readonly {
-          kind: 'text' | 'thinking';
-          delta: string;
-        }[];
-        /** 同 streamDelta.html：块级渲染开启后为尾块范围 HTML。 */
-        textHtml?: string;
-        thinkingHtml?: string;
-      }
-    >
-  | BridgeEnvelope<
-      'streamBlockCommit',
-      {
-        kind: 'text' | 'thinking';
-        /** 完成块的渲染 HTML（单块超限降级纯文本时缺失）。 */
-        html?: string;
-        /** 完成块源文本（降级显示与显示态对齐）。 */
-        text: string;
-        /**
-         * 块提交后活跃尾块的渲染 HTML（尾块空/超限时缺失）。
-         * C-orch-1：仅每 kind 每次切分的**最后一个** commit 携带，中间
-         * commit 缺省——webview 缺载荷时保持尾块现状。
-         */
-        tailHtml?: string;
-        /** 块提交后活跃尾块源文本（webview 侧 350ms 轻量升级的输入；同上仅末个 commit 携带）。 */
-        tailText?: string;
-      }
-    >
-  | BridgeEnvelope<'streamReset', Record<string, never>>
-  | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
+  | BridgeEnvelope<'streamDelta', TranscriptStreamDeltaPayload>
+  | BridgeEnvelope<'streamBlockCommit', TranscriptStreamBlockCommitPayload>
+  | BridgeEnvelope<'streamReset', TranscriptStreamResetPayload>
+  | BridgeEnvelope<'streamStatus', TranscriptStreamStatusPayload>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
   | BridgeEnvelope<'closeMenu', Record<string, never>>
-  /** Android 返回键：RN 拦截后下发，关闭 mermaid 全屏查看器。 */
-  | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>
-  /** 键盘抬高输入框后：若当前贴底则重新 stick，避免最后几条被挡在输入框下。 */
-  | BridgeEnvelope<'stickIfNearBottom', Record<string, never>>;
+  | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>;
 
-/** Transcript → host */
-import {
-  CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-  type ChatTranscriptScrollSnapshot,
-} from '../../services/chat-transcript-scroll-cache';
-
-export {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../../services/chat-transcript-scroll-cache';
-export type {ChatTranscriptScrollSnapshot} from '../../services/chat-transcript-scroll-cache';
-
+// nm-style: keep-public — Transcript → Host 上行协议类型（跨端契约；含 streamResync
+// 与 scrollSnapshot 的两段 published shape）。
 export type TranscriptToHostMessage =
   | BridgeEnvelope<
       'ready',
-      {
-        /** 辅助信息（不参与能力判定）；能力协商真源见 capabilities。 */
-        version: string;
-        /**
-         * webview 声明的能力清单（B-2）：缺省/未声明的能力按不支持处理——
-         * 旧 dist 未声明 streamBlockCommit 时 RN 不发块提交、退回全量 html。
-         */
-        capabilities?: readonly string[];
-        readyState?: string;
-      }
+      {version: string; capabilities?: readonly string[]; readyState?: string}
     >
   | BridgeEnvelope<
       'scrollSnapshot',
@@ -236,85 +258,22 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'openSubagentSession', {sessionId: string}>
   | BridgeEnvelope<
       'openSkillDetail',
-      {
-        domain: 'global' | 'project';
-        projectId?: string;
-        name: string;
-      }
+      {domain: 'global' | 'project'; projectId?: string; name: string}
     >
-  /** 工具结果阅读（search/curl/grep/glob 无跳转目标，正文直接进宿主阅读页）。 */
   | BridgeEnvelope<
       'openToolResult',
-      {
-        title: string;
-        content: string;
-        /**
-         * 入参原文 pretty JSON（2 空格缩进，webview 侧按 toolUseId 反查
-         * row.input 后 stringify）。无入参时不带此字段——宿主据此决定阅读页
-         * 是「输入 + 输出」两段还是只有输出。
-         */
-        inputJson?: string;
-      }
+      {title: string; content: string; inputJson?: string}
     >
   | BridgeEnvelope<'messageMenuAction', {messageId: string; action: string}>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>
-  /** mermaid 全屏查看器开（点击图表进全屏；RN 侧登记返回键拦截态）。 */
   | BridgeEnvelope<'mermaidViewerOpened', Record<string, never>>
-  /** mermaid 全屏查看器关（点空白/关闭按钮/返回键；RN 侧复位拦截态）。 */
   | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>
-  /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>
-  /** 可见性上报：WebView document visibilitychange；RN 侧据此判定是否需要强制重绘。 */
+  | BridgeEnvelope<'streamResync', {streamId: string; expectedSeq: number}>
   | BridgeEnvelope<'visibility', {hidden: boolean}>;
 
+// nm-style: keep-public — 协议 type 清单（跨端路由表契约）。
 export type HostToTranscriptType = HostToTranscriptMessage['type'];
+// nm-style: keep-public — 协议 type 清单（跨端路由表契约）。
 export type TranscriptToHostType = TranscriptToHostMessage['type'];
-
-export function encodeHostToTranscript(
-  message: HostToTranscriptMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function encodeTranscriptToHost(
-  message: TranscriptToHostMessage,
-): string {
-  return JSON.stringify(message);
-}
-
-export function decodeTranscriptToHost(raw: string): TranscriptToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== CHAT_TRANSCRIPT_BRIDGE_VERSION) {
-    throw new Error('Invalid transcript bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string' || !isRecord(parsed.payload)) {
-    throw new Error('Invalid transcript bridge envelope shape');
-  }
-  return parsed as TranscriptToHostMessage;
-}
-
-export function decodeHostToTranscript(raw: string): HostToTranscriptMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== CHAT_TRANSCRIPT_BRIDGE_VERSION) {
-    throw new Error('Invalid transcript bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string') {
-    throw new Error('Invalid transcript bridge envelope shape');
-  }
-  return parsed as HostToTranscriptMessage;
-}
-
-export function parseScrollSnapshotFromHost(
-  message: TranscriptToHostMessage,
-): ChatTranscriptScrollSnapshot | null {
-  if (message.type !== 'scrollSnapshot') {
-    return null;
-  }
-  const {schemaVersion, offsetY, nearBottom} = message.payload;
-  if (schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
-    return null;
-  }
-  return {schemaVersion, offsetY, nearBottom};
-}
-

@@ -17,17 +17,14 @@
  *
  * transcript-converge：组件级那半的宿主从已退役的 `ChatTranscriptWebView`
  * 迁到统一宿主 `ChatConversationWebView`（分片/代次逻辑一字未动，props 同名），
- * ready 握手改走 v2（`CONVERSATION_BRIDGE_V`）。
+ * ready 握手走共享 fixture（v2 + t2 + streamProjection，spec §9.1 / T-SP20）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {
-  CONVERSATION_BRIDGE_V,
-  decodeConversationUpstream,
-} from '@/components/chat/ChatConversationBridge';
+import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {planSnapshotChunkBounds} from '@/components/chat/snapshot-chunk-bounds';
 import {resetRollbackTiming} from '@/debug/run-timing';
@@ -35,6 +32,7 @@ import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
+import {simulateTranscriptReady} from '../test-utils/transcript-ready';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -156,9 +154,7 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
         // 贪心性：桶尾再加一条必超预算或超条数。
         if (end < messages.length) {
           const withNext = bytes + contentBytes(messages[end]!);
-          expect(
-            withNext > budget || end - start >= 50,
-          ).toBe(true);
+          expect(withNext > budget || end - start >= 50).toBe(true);
         }
       }
     }
@@ -175,7 +171,10 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
     const messages = Array.from({length: 51}, (_, i) =>
       textMessage(`s${i}`, i + 1, `small ${i}`),
     );
-    expect(planSnapshotChunkBounds(messages)).toEqual([[0, 50], [50, 51]]);
+    expect(planSnapshotChunkBounds(messages)).toEqual([
+      [0, 50],
+      [50, 51],
+    ]);
   });
 
   it('单条自身超预算独占一桶（无法再细分，与相邻条分桶）', () => {
@@ -187,7 +186,11 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
     ];
     const bounds = planSnapshotChunkBounds(messages);
     // a 与 b 分桶（a+b 超预算）；b 独占（单条超预算后 c 另起桶）。
-    expect(bounds).toEqual([[0, 1], [1, 2], [2, 3]]);
+    expect(bounds).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
   });
 
   it('空列表返回单空桶——空快照仍发单包（等价旧行为）', () => {
@@ -262,12 +265,10 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     });
   }
 
-  /** 统一宿主的最小 props 面（composer 域缺省空串）。 */
+  /** 统一宿主的最小 props 面（流式行投影由 Step 3 的 props 驱动，本套件用缺省）。 */
   function baseProps(overrides: Record<string, unknown> = {}) {
     return {
       sessionKey: 'p1:s1',
-      streamingText: '',
-      streamingThinking: '',
       ...overrides,
     };
   }
@@ -278,29 +279,6 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
         {...baseProps({messages, defaultScrollToBottom: true})}
       />,
     );
-  }
-
-  function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
-    const webView = root.findByType(
-      require('react-native-webview').default as React.ComponentType<{
-        onMessage?: (event: {nativeEvent: {data: string}}) => void;
-      }>,
-    );
-    act(() => {
-      webView.props.onMessage?.({
-        nativeEvent: {
-          data: JSON.stringify({
-            v: CONVERSATION_BRIDGE_V,
-            type: 'ready',
-            payload: {
-              version: 'test',
-              capabilities: ['streamBlockCommit'],
-              readyState: 'complete',
-            },
-          }),
-        },
-      });
-    });
   }
 
   /** 提取「最后一个到达的代次」的分片序列（webReady 双路径下首代次会被
@@ -326,7 +304,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     await act(async () => {
       tree = renderWithMessages(messages);
     });
-    simulateWebReady(tree.root);
+    simulateTranscriptReady(tree.root);
     await flushSnapshotChunks();
 
     const {stale, final} = finalGenerationChunks(snapshotChunks());
@@ -366,7 +344,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     await act(async () => {
       tree = renderWithMessages(messages);
     });
-    simulateWebReady(tree.root);
+    simulateTranscriptReady(tree.root);
     await flushSnapshotChunks();
 
     const {final} = finalGenerationChunks(snapshotChunks());
@@ -385,7 +363,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     await act(async () => {
       tree = renderWithMessages(messages);
     });
-    simulateWebReady(tree.root);
+    simulateTranscriptReady(tree.root);
     await flushSnapshotChunks();
 
     const {final} = finalGenerationChunks(snapshotChunks());
@@ -414,7 +392,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
       await act(async () => {
         tree = renderWithMessages(messages);
       });
-      simulateWebReady(tree.root);
+      simulateTranscriptReady(tree.root);
       await flushSnapshotChunks(40);
 
       const rollbackLines = logSpy.mock.calls

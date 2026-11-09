@@ -3,14 +3,17 @@ import {
   handleSnapshotPayload,
   applyPrependPage,
   applyAppendTailRows,
-  applyStreamCommit,
+  invalidateSnapshotPipeline,
 } from './render/snapshot';
 import {
-  appendStreamDelta,
-  applyStreamBatch,
   applyStreamBlockCommit,
+  applyStreamDelta,
+  applyStreamReset,
+  applyStreamStatus,
+  currentStreamingRow,
   resetStreamBlockRenderState,
-  setStreamToolInvokingDom,
+  type StreamDeltaPayload,
+  type StreamStatusPayload,
 } from './stream/stream';
 import {clearStreamRichUpgrade} from './stream/stream-markdown';
 import {closeContextMenu} from './menu/menu';
@@ -19,7 +22,7 @@ import {createBoundPost} from '@web/shared/post';
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {applyHostTheme} from '@web/shared/host-theme';
 import {flagsEqual, renderRows} from './render/row-logic';
-import {scheduleStickIfNearBottom} from './scroll/scroll';
+import {resolveLabels} from '../ui/labels';
 
 // HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
 export type {HostTheme} from '@web/shared/host-theme';
@@ -51,10 +54,12 @@ export function handleHostMessage(raw: unknown): void {
           menuDisabled: !!p.flags.menuDisabled,
         };
       }
+      // labels：宿主经 core i18n 下发；旧宿主/缺省/非法值回退默认中文（C30）。
+      state.labels = resolveLabels(p.labels);
       break;
     case 'sessionSnapshot':
-      // 分片协议统一入口（init-busy-yield Step 6）：单片等价旧 applySnapshot
-      // 直发；多片按代次拼装，末片到齐才整体应用。
+      // 分片协议统一入口：单片等价旧 applySnapshot 直发；多片按代次拼装，
+      // 末片到齐才整体应用（rows + streamCheckpoint 原子替换）。
       handleSnapshotPayload(p);
       break;
     case 'prependPage':
@@ -63,47 +68,25 @@ export function handleHostMessage(raw: unknown): void {
     case 'appendTailRows':
       applyAppendTailRows(p);
       break;
-    case 'streamDelta': {
-      appendStreamDelta(p.kind, p.delta || '', p.html || '');
+    case 'streamDelta':
+      applyStreamDelta(p as StreamDeltaPayload);
       break;
-    }
-    case 'streamBatch': {
-      applyStreamBatch(p);
-      break;
-    }
-    case 'streamBlockCommit': {
-      // 块提交（spec §6）：完成块 append-only，不触发 mermaid（懒加载只在
-      // streamCommit / 历史路径，现状保持）
+    case 'streamBlockCommit':
+      // 块提交：完成块 append-only，不触发 mermaid（懒加载只在历史/快照路径）
       applyStreamBlockCommit(p);
       break;
+    case 'streamStatus':
+      applyStreamStatus(p as StreamStatusPayload);
+      break;
+    case 'streamReset': {
+      // 先作废在途分片（旧代次末片不得复活被清掉的行），再清流。
+      const generation = p.generation >= 0 ? p.generation : 0;
+      clearStreamRichUpgrade();
+      resetStreamBlockRenderState();
+      invalidateSnapshotPipeline(generation);
+      applyStreamReset(p);
+      break;
     }
-    case 'streamReset':
-      clearStreamRichUpgrade();
-      resetStreamBlockRenderState();
-      state.stream = {
-        text: '',
-        thinking: '',
-        textHtml: '',
-        thinkingHtml: '',
-        toolInvoking: false,
-      };
-      renderRows();
-      break;
-    case 'streamCommit':
-      clearStreamRichUpgrade();
-      resetStreamBlockRenderState();
-      state.stream = {
-        text: '',
-        thinking: '',
-        textHtml: '',
-        thinkingHtml: '',
-        toolInvoking: false,
-      };
-      applyStreamCommit(p);
-      break;
-    case 'streamToolInvoking':
-      setStreamToolInvokingDom(!!p.active);
-      break;
     case 'flagsUpdate':
       if (p.flags) {
         const nextFlags: TranscriptFlags = {
@@ -114,12 +97,21 @@ export function handleHostMessage(raw: unknown): void {
           break;
         }
         const richToggledOn = !state.flags.richText && nextFlags.richText;
+        const richToggledOff = state.flags.richText && !nextFlags.richText;
         state.flags = nextFlags;
         if (state.flags.menuDisabled) {
           closeContextMenu(true);
         }
-        // Rich on: wait for sessionSnapshot rows with textHtml (avoid escapeHtml fallback).
-        if (!richToggledOn) {
+        if (richToggledOn) {
+          // rich 关→开：下一次快照强制 reseed streaming body（P2-7）。
+          state.lastStreamHtmlStreamId = null;
+          state.plainReseedStreamId = null;
+        } else if (richToggledOff) {
+          // rich 开→关：让 StreamingMessageRow 把 body 重写为 row.text 纯文本
+          // （否则 plain 增量会把转义文本追加进仍是 markdown HTML 的 body，P2-3）。
+          state.plainReseedStreamId = currentStreamingRow()?.id ?? null;
+          renderRows();
+        } else {
           renderRows();
         }
       }
@@ -133,9 +125,6 @@ export function handleHostMessage(raw: unknown): void {
     // Android 返回键：RN 拦截后下发关闭；关闭后回发 mermaidViewerClosed 复位 RN 态
     case 'closeMermaidViewer':
       closeMermaidViewer(true);
-      break;
-    case 'stickIfNearBottom':
-      scheduleStickIfNearBottom();
       break;
     default:
       break;

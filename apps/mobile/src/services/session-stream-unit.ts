@@ -15,9 +15,11 @@
  *   runId 所有权 + 活跃态双守卫（陈旧事件不进缓冲、不计指标）；
  * - 流式缓冲：32ms ingress 合并 + 64ms apply（蓝本 useSessionBatch），
  *   单元自持定时器、销毁即清理，不依赖 React；
- * - 单一注入：webview attach 时把本 step 已累积的 partial 经
- *   pushStreamDelta 等价载荷注入该句柄，恰好一次；step 边界与句柄摘除
- *   均复位标记（重进/新 step 需重新注入）；
+ * - 流式 step 记录（chat-streaming-projection Step 2）：每个 assistant step
+ *   一条 StreamStepRecord（streamId 进程内唯一），`streamRows` 投影出
+ *   「finished-未接管 + 当前 streaming」的流式行；DB 落库行经
+ *   pendingAdoptions 配对回填 messageId + streamRowIds。重进/重建不再注入
+ *   partial——宿主用快照投影恢复（文档见 §2.1.2）；
  * - 指标字段化：textChars/thinkingChars 事件即归账（run 级累计，step 边界
  *   不清）、startedAtMs 于 begin() 受理时置位（重进连续计时）、
  *   settle 时冻结 elapsedMs 为「上次生成」；
@@ -43,6 +45,7 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessageData} from '@novel-master/core/chat';
+import type {AgentStepCommittedPhase} from '@novel-master/core/events';
 import {
   composeStreamTokens,
   createTokenRateSampler,
@@ -54,6 +57,7 @@ import type {
   TokenRateSampler,
 } from '@novel-master/core/format';
 import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
+import {createLogger} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
 import {createStreamApplyBuffer} from './stream-apply-buffer';
@@ -65,6 +69,9 @@ import {
   setSessionViewCache,
 } from './chat-session-view-cache';
 import {prependOlderMessages} from './message-paging';
+
+/** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
+const log = createLogger('chat.stream-unit');
 
 /** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；测试可经构造参数覆盖。 */
 export const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -79,13 +86,10 @@ export const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
 export const SESSION_STREAM_MESSAGES_PAGE_SIZE = 40;
 
 /** 单元的活跃态：idle=已建未受理，starting=已受理未回填 runId，running=run 进行中。 */
-export type SessionStreamUnitActiveStatus = 'idle' | 'starting' | 'running';
+type SessionStreamUnitActiveStatus = 'idle' | 'starting' | 'running';
 
 /** 单元的终态子类型：interrupted 仅来自水合，finished/failed 来自事件收尾。 */
-export type SessionStreamUnitSettledStatus =
-  | 'interrupted'
-  | 'finished'
-  | 'failed';
+type SessionStreamUnitSettledStatus = 'interrupted' | 'finished' | 'failed';
 
 /** 单元全量状态（状态机节点）。 */
 export type SessionStreamUnitStatus =
@@ -105,31 +109,77 @@ export function isSessionStreamUnitSettled(
 export type SessionStreamRunSettledStatus = 'finished' | 'failed';
 
 /**
- * 流式载荷（onStreamPayload 的线上形状；Step 6 适配层映射到
- * ChatTranscriptWebViewHandle 的 pushStreamBatch / pushStreamDelta）：
- * - stream-batch：apply 缓冲下发的合并段（对应 pushStreamBatch({segments})）；
- * - stream-delta：注入路径的单条大段（对应 pushStreamDelta(kind, delta)）。
+ * 流式工具卡投影（与桥层 `TranscriptToolView` 结构同形、分属两层：
+ * service 不 import component，宿主侧 buildStreamingRows 做结构化映射）。
  */
-export type SessionStreamUnitStreamPayload =
-  | {
-      readonly type: 'stream-batch';
-      readonly segments: readonly StreamWireChunk[];
-    }
-  | {
-      readonly type: 'stream-delta';
-      readonly kind: StreamWireKind;
-      readonly delta: string;
-    };
+export type SessionStreamToolView = {
+  readonly toolUseId: string;
+  readonly name: string;
+  readonly input: Record<string, unknown>;
+  readonly status: string;
+};
+
+/** 流式行状态：一条 assistant 行从出现到 DB 接管只翻转一次（I5/I6）。 */
+export type SessionStreamMessageStatus = 'streaming' | 'finished';
+
+/**
+ * 流式行投影（`snapshot().streamRows` 的元素，宿主 `buildStreamingRows`
+ * 的结构化映射源；与桥类型 `TranscriptStreamingMessage` 结构同形）。
+ */
+export type SessionStreamMessageProjection = {
+  readonly streamId: string;
+  readonly status: SessionStreamMessageStatus;
+  readonly text: string;
+  readonly thinking: string;
+  readonly tools: readonly SessionStreamToolView[];
+  /** DB message id：流式中为 null，接管后补齐（行身份 id 始终是 streamId）。 */
+  readonly messageId: string | null;
+};
+
+/** 单元内部流式 step 记录（不暴露原始结构，只经 streamRows 投影）。 */
+type StreamStepRecord = {
+  streamId: string;
+  status: SessionStreamMessageStatus;
+  /** 冻结后不再变化的完整正文/思考（resetPartial 不影响已冻结值）。 */
+  text: string;
+  thinking: string;
+  tools: readonly SessionStreamToolView[];
+  messageId: string | null;
+};
+
+/** tool-use 事件入参（manager 路由后交给 ingestToolUse 的最小形状）。 */
+type StreamToolUseEvent = {
+  readonly id: string;
+  readonly name: string;
+  readonly input: Record<string, unknown>;
+};
+
+/**
+ * 流式载荷（onStreamPayload 的线上形状；适配器映射到宿主的
+ * `pushStream({streamId, segments, tools})`）：
+ * - stream-batch：apply 缓冲下发的合并段 + 当前 tools 快照（tools-only 时
+ *   `segments: []`）；`streamId` 由推送时从当前 step 记录取，不跨 step。
+ */
+export type SessionStreamUnitStreamPayload = {
+  readonly type: 'stream-batch';
+  readonly streamId: string;
+  readonly segments: readonly StreamWireChunk[];
+  readonly tools?: readonly SessionStreamToolView[];
+};
 
 /**
  * 控制类消息（onControlMessage 的线上形状；Step 6 屏幕接线消费）：
- * - reset-stream：对应 webview 的 resetStream；
+ * - reset-stream：对应 webview 的 resetStream(streamIds)，`streamIds` 为
+ *   `clearStreamProjection()` 清掉的流式行 id；
  * - force-snapshot：要求句柄侧立即直发全量快照（绕过 defer/streamActive
  *   拦截）——subagent 长任务期间消息可见的驱动面，蓝本是 webview 组件内
  *   pendingSubagentSessions 变化时的 force 直发。
+ *
+ * nm-style: keep-public — 单元 ↔ webview handle 的控制消息线上契约（跨层唯一
+ * 形状真源；适配器按此逐字段收窄，测试按此构造 reset/force 两变体）。
  */
 export type SessionStreamUnitControlMessage =
-  | {readonly type: 'reset-stream'}
+  | {readonly type: 'reset-stream'; readonly streamIds: readonly string[]}
   | {readonly type: 'force-snapshot'};
 
 /**
@@ -183,7 +233,7 @@ export type SessionStreamUnitTokenSource = StreamTokenSource;
  * 单元本体不持有 runtime——由 manager 构造时从 runtime.messages 透传
  * （结构上就是 core MessageService 的子集）。
  */
-export interface SessionStreamMessageStore {
+interface SessionStreamMessageStore {
   listBySessionTail(
     sessionId: string,
     options: {limit: number},
@@ -212,8 +262,20 @@ export interface SessionStreamUnitView {
   /** 本 step 的 in-flight partial（step 边界随 core streamRegistry 重置清零）。 */
   readonly partialText: string;
   readonly partialThinking: string;
-  /** 本 step 内是否已向句柄注入过 partial（step 边界/句柄摘除复位）。 */
-  readonly injected: boolean;
+  /**
+   * 流式行投影（旧→新；当前 streaming 记录恒在最后，见 §2.1.2 的投影规则）：
+   * - `finished && messageId == null` 且非空的冻结记录在前，最多最近 32 条
+   *   （step 提交到 DB reload 之间，上一轮行必须继续出现在快照里）；
+   * - 当前 streaming 记录（含空记录：宿主据它渲染 waiting-first）在最后；
+   * - interrupted 水合单元只投影那条 interrupted finished 行。
+   * 返回内部引用且仅在内容变化时换新数组（copy-on-write，T-SP32）。
+   */
+  readonly streamRows: readonly SessionStreamMessageProjection[];
+  /**
+   * DB message id → streamId 的接管映射（宿主把 DB 行改写成流式行身份用）。
+   * 引用稳定契约同 pendingChildrenByTitle：内容变化才换新 Map。
+   */
+  readonly streamRowIds: ReadonlyMap<string, string>;
   /** 子会话链接：run 进行中创建、尚未终态的 child session id（插入序）。 */
   readonly pendingChildren: readonly string[];
   /**
@@ -239,7 +301,7 @@ export interface SessionStreamUnitView {
 }
 
 /** 单元构造参数。 */
-export interface SessionStreamUnitOptions {
+interface SessionStreamUnitOptions {
   readonly sessionId: string;
   readonly projectId: string;
   /** 消息仓库窄口（消息管线回源 DB 用；由 manager 从 runtime.messages 透传）。 */
@@ -263,6 +325,19 @@ export interface SessionStreamUnitOptions {
   /** 投影变更回调（apply 节拍 / 字段变化时触发，manager 接 notifyChanged）。 */
   readonly onProjectionChanged?: () => void;
 }
+
+/**
+ * 进程级单元序号：同一毫秒建两个 unit 也不会撞 streamId。
+ * 用单调计数器而非 startedAtMs——同一毫秒内的重启/秒败重试都是不同单元；
+ * 进程重启后 Web 文档也是新基线，跨进程复用 id 无影响（spec §2.1.2）。
+ */
+let streamUnitEpoch = 0;
+
+/** streamRows 里 finished-未接管记录的最大保留条数（旧→新，投影时截取最近 N）。 */
+const FINISHED_STREAM_ROWS_LIMIT = 32;
+
+/** streamRowIds 映射的条数上限（超出丢最旧的 DB id）。 */
+const STREAM_ROW_IDS_LIMIT = 200;
 
 /**
  * 会话流式单元本体。
@@ -338,7 +413,30 @@ export class SessionStreamUnit {
   private partialThinkingCache = '';
   private partialTextDirty = false;
   private partialThinkingDirty = false;
-  private injectedValue = false;
+  /**
+   * 流式 step 记录（chat-streaming-projection §2.1.2）：
+   * - `currentStream`：当前 assistant step 的 streaming 记录（begin 即建，
+   *   assistant STEP_COMMITTED 冻结并开下一条）；
+   * - `finishedStreams`：已冻结记录（旧→新；DB 接管后仍保留，投影时按
+   *   messageId == null 过滤）；
+   * - `interruptedStream`：水合中断现场的 finished 投影（与 current 互斥）；
+   * - `pendingAdoptions`：等待 DB reload 配对 messageId 的冻结记录，配对时
+   *   记录当时的消息面 id 快照（`baseMessageIds`）用于识别新增 assistant。
+   */
+  private readonly streamEpoch: number;
+  private streamOrdinal = 0;
+  private currentStream: StreamStepRecord | null = null;
+  private finishedStreams: StreamStepRecord[] = [];
+  private interruptedStream: StreamStepRecord | null = null;
+  private interruptedPartialDismissed = false;
+  private pendingAdoptions: {
+    readonly record: StreamStepRecord;
+    readonly baseMessageIds: ReadonlySet<string>;
+  }[] = [];
+  /** streamRows 投影缓存（copy-on-write，内容变化才换新数组）。 */
+  private streamRowsValue: readonly SessionStreamMessageProjection[] = [];
+  /** DB message id → streamId 接管映射（copy-on-write，有界 200）。 */
+  private streamRowIdsValue: ReadonlyMap<string, string> = new Map();
   /**
    * 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。
    * copy-on-write：内容变化时整体换新 Map（snapshot 返回内部引用），引用
@@ -388,6 +486,8 @@ export class SessionStreamUnit {
     // 建成才启用估算器路径——半套状态会让正文/思考的增量口径不一致，
     // 不如整体回退。
     this.tokenEstimatorFactory = options.tokenEstimatorFactory;
+    // 进程级单调序号（同一毫秒建两个 unit 也不撞 streamId；见模块顶部注释）。
+    this.streamEpoch = ++streamUnitEpoch;
     this.applyBuffer = createStreamApplyBuffer(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},
@@ -416,6 +516,10 @@ export class SessionStreamUnit {
     this.baseTokens = 0;
     this.textTokenEstimator?.reset();
     this.thinkingTokenEstimator?.reset();
+    // 新 run 的首条 assistant step 记录（ordinal 0，空 streaming）：宿主据
+    // 它渲染 waiting-first，并在首个 delta 到来前就有行身份可对账。
+    this.startStream();
+    this.interruptedPartialDismissed = false;
     return true;
   }
 
@@ -439,10 +543,7 @@ export class SessionStreamUnit {
         this.thinkingTokenEstimator = thinking;
       }
     } catch (err) {
-      console.warn(
-        '[novel-master/session-stream-unit] token estimator init failed, fallback to heuristic',
-        err,
-      );
+      log.warn('token estimator init failed, fallback to heuristic', {err});
     }
   }
 
@@ -484,6 +585,9 @@ export class SessionStreamUnit {
       return false;
     }
     this.flushStreamBuffers();
+    // 当前 streaming 记录非空则冻结为 finished（文本/思考保留，只翻
+    // status），空记录丢弃——收尾只改 status，不重置正文（I6）。
+    this.freezeCurrentStream();
     // 收尾消息面：force 回源拿最终落库行并刷视图缓存（蓝本 FINISHED 的
     // flushRunUi reload 语义）。无 webview attach 的后台会话照常执行——
     // 缓存刷新不依赖屏幕在场（「后台会话不蒸发」）。异步吞错（DB 失败不
@@ -552,6 +656,21 @@ export class SessionStreamUnit {
     this.partialTextDirty = false;
     this.partialThinkingDirty = false;
     this.pendingChildrenValue = [...state.pendingChildren];
+    // 中断现场投影（§2.1.2 规则 3）：partial 非空即构造一条 finished 流式行，
+    // streamId 用 settledAtMs 固化（同一中断现场多次重启 id 稳定）；不
+    // startStream——interrupted 单元没有「当前 step」，宿主只展示这条终态行。
+    if (state.partialText.length > 0 || state.partialThinking.length > 0) {
+      this.interruptedStream = {
+        streamId: `st:${this.sessionId}:interrupted:${state.settledAtMs}`,
+        status: 'finished',
+        text: state.partialText,
+        thinking: state.partialThinking,
+        tools: [],
+        messageId: null,
+      };
+    } else {
+      this.interruptedStream = null;
+    }
     return true;
   }
 
@@ -560,10 +679,7 @@ export class SessionStreamUnit {
     try {
       this.onSettled?.(status);
     } catch (err) {
-      console.error(
-        '[novel-master/session-stream-unit] onSettled failed',
-        err,
-      );
+      log.error('onSettled failed', {err});
     }
   }
 
@@ -669,8 +785,33 @@ export class SessionStreamUnit {
     this.metricsAcc.completionTokens = composeStreamTokens(value, 0);
   }
 
-  /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle 字段返回内部引用——见字段注释的引用稳定契约）。 */
+  /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle/streamRows/streamRowIds 字段返回内部引用——见字段注释的引用稳定契约）。 */
   snapshot(): SessionStreamUnitView {
+    const streamRows = this.buildStreamRowsProjection();
+    const previous = this.streamRowsValue;
+    // 流式行投影等值判定（字段级；tools 数组按引用——写入点 copy-on-write）。
+    let same = previous === streamRows;
+    if (!same && previous.length === streamRows.length) {
+      same = true;
+      for (let index = 0; index < previous.length; index += 1) {
+        const left = previous[index]!;
+        const right = streamRows[index]!;
+        if (
+          left.streamId !== right.streamId ||
+          left.status !== right.status ||
+          left.text !== right.text ||
+          left.thinking !== right.thinking ||
+          left.tools !== right.tools ||
+          left.messageId !== right.messageId
+        ) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (!same) {
+      this.streamRowsValue = streamRows;
+    }
     return {
       sessionId: this.sessionId,
       projectId: this.projectId,
@@ -682,7 +823,8 @@ export class SessionStreamUnit {
       elapsedMs: this.elapsedMsValue,
       partialText: this.materializePartialText(),
       partialThinking: this.materializePartialThinking(),
-      injected: this.injectedValue,
+      streamRows: this.streamRowsValue,
+      streamRowIds: this.streamRowIdsValue,
       pendingChildren: [...this.pendingChildrenValue],
       // 引用稳定（修隐藏 webview 被记脏）：messages 数组与 title 映射在内容
       // 未变时必须保持同一引用——ChatTranscriptWebView 的 memo 与
@@ -748,12 +890,13 @@ export class SessionStreamUnit {
   /**
    * step 边界（STEP_COMMITTED，manager 按 sessionId 路由）。
    *
-   * 先冲刷两段缓冲（蓝本：step commit 前 flush，防被后续 reload/clear 丢弃），
-   * 再把 partial 清零（core 侧 streamRegistry 在 step 提交后重置，下一 step
-   * 从空开始，单元对齐）并复位注入标记（新 step 后再 attach 需重新注入）。
-   * 指标是 run 级累计，不在 step 边界清。返回是否生效（生效才触发投影通知）。
+   * 先冲刷两段缓冲（蓝本：step commit 前 flush，防被后续 reload/clear 丢弃）。
+   * `assistant` phase：把当前记录冻结为 finished（文本/思考保留）并压入
+   * 待接管队列，再 resetPartial 并开下一条空 streaming 记录；`tool_results`
+   * phase：只 flush + 清 partial，不轮转 stream（否则 tool 执行期凭空多一条
+   * assistant 行）。指标是 run 级累计，不在 step 边界清。返回是否生效。
    */
-  handleStepCommitted(runId: string): boolean {
+  handleStepCommitted(runId: string, phase: AgentStepCommittedPhase): boolean {
     if (
       this.destroyed ||
       this.status !== 'running' ||
@@ -762,20 +905,114 @@ export class SessionStreamUnit {
       return false;
     }
     this.flushStreamBuffers();
-    this.resetPartial();
-    this.injectedValue = false;
-    // step 边界重置流式尾巴（reset-stream 广播）：partial 清零后下一 step
-    // 从空开始，但 webview 侧的 stream tail 与 RN 组件的本地累积不清的话，
-    // 下一 step 的 thinking/text delta 会追加进上一 step 的残留尾巴（正文/
-    // 思考交替错段）。落库行由随后的 force 快照进基线，尾巴此时必须整体
-    // 重置——resetStreamTail 的 cancel RAF 还能拦截本步残余 delta 的迟到
-    // post（内容已由落库行接管，丢弃无碍）。
-    this.broadcastControlMessage({type: 'reset-stream'});
+    if (phase === 'assistant') {
+      this.freezeCurrentStream();
+      this.resetPartial();
+      this.startStream();
+    } else {
+      this.resetPartial();
+    }
     // step 落库行进消息面：partial 清零后 force 回源 reload（蓝本
-    // flushAgentStepUi 的 reload 方向；webview 侧的 streamCommit 是 Step 6
-    // 接线，这里只管数据面）。异步吞错。
+    // flushAgentStepUi 的 reload 方向）。异步吞错。
     this.kickTailReloadQuietly();
     return true;
+  }
+
+  /**
+   * tool-use 事件（manager 按 sessionId 路由，EVENT_AGENT_STREAM_TOOL_USE）：
+   * 追加当前 step 记录的 tools（按 toolUseId 去重）并**立即**向可见句柄推
+   * tools-only 的 stream-batch——工具状态不是持久字段，不能等 64ms apply
+   * 节拍（applyStreamSegments 在 segments 为空时早退，不能依赖它）。
+   * 守卫同 delta：running 态 + runId 所有权。返回是否生效。
+   *
+   * nm-style: keep-public — manager 的 tool-use 事件唯一入口；写入 unit 私有
+   * currentStream 投影并同步推送 tools-only batch，不能拆到调用侧。
+   */
+  ingestToolUse(runId: string, tool: StreamToolUseEvent): boolean {
+    const current = this.currentStream;
+    if (
+      this.destroyed ||
+      this.status !== 'running' ||
+      this.runIdValue !== runId ||
+      current == null ||
+      current.tools.some(entry => entry.toolUseId === tool.id)
+    ) {
+      return false;
+    }
+    const tools: readonly SessionStreamToolView[] = [
+      ...current.tools,
+      {toolUseId: tool.id, name: tool.name, input: tool.input, status: 'pending'},
+    ];
+    this.currentStream = {...current, tools};
+    this.pushStreamPayload({
+      type: 'stream-batch',
+      streamId: current.streamId,
+      segments: [],
+      tools,
+    });
+    this.onProjectionChanged?.();
+    return true;
+  }
+
+  /**
+   * 清空流式投影（rollback/fork 的消息操作入口，spec §2.2.6）：清
+   * currentStream/finishedStreams/pendingAdoptions/interrupted、复位 partial、
+   * 标记 interrupted partial 已 dismissed。**已接管的 streamRowIds 保留**
+   * （DB 行仍可按映射保持行身份）。返回被清掉的 streamId 列表（宿主据此
+   * 广播 streamReset）。
+   *
+   * nm-style: keep-public — manager rollback/fork 的唯一入口；清理 unit 私有
+   * currentStream/finishedStreams/pendingAdoptions/interrupted 状态机。
+   */
+  clearStreamProjection(): readonly string[] {
+    const removed: string[] = [];
+    if (this.currentStream != null) {
+      removed.push(this.currentStream.streamId);
+    }
+    for (const record of this.finishedStreams) {
+      removed.push(record.streamId);
+    }
+    if (this.interruptedStream != null) {
+      removed.push(this.interruptedStream.streamId);
+    }
+    this.currentStream = null;
+    this.finishedStreams = [];
+    this.pendingAdoptions = [];
+    this.interruptedStream = null;
+    this.interruptedPartialDismissed = true;
+    this.resetPartial();
+    return removed;
+  }
+
+  /** 已接管的 DB id → streamId 映射（只读内部引用；内容变化才换新 Map）。 */
+  getStreamRowIds(): ReadonlyMap<string, string> {
+    return this.streamRowIdsValue;
+  }
+
+  /**
+   * 继承被替换单元的接管映射（startRun/消费型替换吸收时与
+   * takeWebviewHandles 同批调用）：旧单元的 DB 行在跟新单元里继续以原
+   * streamId 呈现，避免 Web 行 remount/闪动（R5）。
+   */
+  inheritStreamRowIds(map: ReadonlyMap<string, string>): void {
+    if (map.size === 0) {
+      return;
+    }
+    let changed = false;
+    for (const [messageId, streamId] of map) {
+      if (this.streamRowIdsValue.get(messageId) !== streamId) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) {
+      return;
+    }
+    const next = new Map<string, string>(map);
+    for (const [messageId, streamId] of this.streamRowIdsValue) {
+      next.set(messageId, streamId);
+    }
+    this.streamRowIdsValue = trimStreamRowIds(next);
   }
 
   /**
@@ -853,14 +1090,11 @@ export class SessionStreamUnit {
   attachWebview(handle: SessionStreamWebviewHandle): void {
     this.detachWebview(handle.handleId);
     this.webviewHandles.push(handle);
-    // 新句柄挂上即尝试注入本 step 已累积的 partial（run 活跃且未注入过才生效）
-    this.tryInjectPartialInto(handle);
   }
 
   /**
    * 取出全部句柄并清空注册表（单元替换吸收时的迁移通道）：取出的句柄
    * 由 manager 转挂给替换者单元，保证流式推送目标在旧→新单元间不丢失。
-   * 不复位 injectedValue——句柄只是搬家，本单元随后即被销毁。
    */
   takeWebviewHandles(): SessionStreamWebviewHandle[] {
     const handles = [...this.webviewHandles];
@@ -868,19 +1102,13 @@ export class SessionStreamUnit {
     return handles;
   }
 
-  /**
-   * 摘除句柄（未注册的 handleId 静默 no-op）。
-   *
-   * 摘除即作废本 step 的注入标记：句柄走了（webview 卸载/切走），重进
-   * （再 attach）需重新注入——蓝本「mount 复位」的单元化等价。
-   */
+  /** 摘除句柄（未注册的 handleId 静默 no-op）。 */
   detachWebview(handleId: string): void {
     const index = this.webviewHandles.findIndex(
       handle => handle.handleId === handleId,
     );
     if (index >= 0) {
       this.webviewHandles.splice(index, 1);
-      this.injectedValue = false;
     }
   }
 
@@ -901,8 +1129,13 @@ export class SessionStreamUnit {
   /** 流式载荷只推给流式目标句柄（管线调用；句柄回调异常吞掉防断流）。 */
   pushStreamPayload(payload: unknown): void {
     const target = this.resolveStreamingWebview();
-    if (target != null) {
-      this.emitStreamPayload(target, payload);
+    if (target == null) {
+      return;
+    }
+    try {
+      target.onStreamPayload?.(payload);
+    } catch (err) {
+      log.error('onStreamPayload failed', {err});
     }
   }
 
@@ -912,10 +1145,7 @@ export class SessionStreamUnit {
       try {
         handle.onControlMessage?.(message);
       } catch (err) {
-        console.error(
-          '[novel-master/session-stream-unit] onControlMessage failed',
-          err,
-        );
+        log.error('onControlMessage failed', {err});
       }
     }
   }
@@ -1017,10 +1247,7 @@ export class SessionStreamUnit {
   /** step/settle 边界的 fire-and-forget force reload（错误吞掉不阻塞状态机）。 */
   private kickTailReloadQuietly(): void {
     void this.loadTailMessages({force: true}).catch(err => {
-      console.error(
-        '[novel-master/session-stream-unit] tail reload failed',
-        err,
-      );
+      log.error('tail reload failed', {err});
     });
   }
 
@@ -1091,11 +1318,59 @@ export class SessionStreamUnit {
     if (!unchanged) {
       this.messagesValue = [...messages];
     }
+    // DB 接管匹配（§2.1.3）：上一轮冻结的流式记录与本轮 reload 新增的
+    // assistant 一一配对，回填 messageId 与 streamRowIds（行身份保持
+    // streamId，不换 id、不新增行）。未配对记录保持 null，继续以 streamId
+    // 呈现（下一次快照仍完整）。
+    this.adoptPendingStreams(this.messagesValue);
     if (unchanged && this.hasMoreMessagesValue === hasMore) {
       return;
     }
     this.hasMoreMessagesValue = hasMore;
     this.onProjectionChanged?.();
+  }
+
+  /**
+   * 待接管记录与新增 assistant 按顺序配对（§2.1.3 DB 接管匹配算法）。
+   *
+   * 每个 pending 记录带冻结时的消息面 id 快照：本轮 reload 中「不在该快照
+   * 里、且未被前面的记录配走」的 assistant（seq 升序）就是它的落库行。
+   * 新增多于 pending 时多余行不配对（失败路径的 [生成失败] 行）；少于
+   * pending 时剩余记录保持 messageId=null 并清空队列。
+   *
+   * nm-style: keep-local — 共享 pendingAdoptions 队列与 streamRowIds copy-on-write
+   * 映射的接管状态机，内联会拆散配对与写映射的同一步。
+   */
+  private adoptPendingStreams(messages: readonly ChatMessageData[]): void {
+    if (this.pendingAdoptions.length === 0) {
+      return;
+    }
+    const pending = this.pendingAdoptions;
+    this.pendingAdoptions = [];
+    const adoptedIds = new Set<string>();
+    for (const entry of pending) {
+      const candidate = messages
+        .filter(
+          message =>
+            message.role === 'assistant' &&
+            !entry.baseMessageIds.has(message.id) &&
+            !adoptedIds.has(message.id),
+        )
+        .reduce<ChatMessageData | null>(
+          (oldest, message) =>
+            oldest == null || message.seq < oldest.seq ? message : oldest,
+          null,
+        );
+      if (candidate == null) {
+        continue;
+      }
+      entry.record.messageId = candidate.id;
+      adoptedIds.add(candidate.id);
+      // 写入一条 DB 接管映射（copy-on-write + 有界 200，超出丢最旧）。
+      const next = new Map(this.streamRowIdsValue);
+      next.set(candidate.id, entry.record.streamId);
+      this.streamRowIdsValue = trimStreamRowIds(next);
+    }
   }
 
   /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。返回是否生效。 */
@@ -1163,10 +1438,19 @@ export class SessionStreamUnit {
    * 触发投影变更通知（64ms 节拍，对齐蓝本 streamingText 的 setState 节奏）。
    *
    * 无句柄时推送自然落空，但 partial 照常累积——切走后事件仍消费（T-U2），
-   * 重进靠注入补齐。
+   * 重进由宿主快照投影补齐（不再注入）。`streamId` 取当前 step 记录：边界
+   * 前 flush 保证不跨 step（P0-5）；无当前记录（clearStreamProjection 后的
+   * 迟到缓冲）直接丢弃，不得复活已清空的投影。
+   *
+   * nm-style: keep-local — 共享 partialText/ThinkingSegments 与 currentStream
+   * 的 apply 累积阶段，partial 置脏与推送必须同拍。
    */
   private applyStreamSegments(segments: readonly StreamWireChunk[]): void {
     if (segments.length === 0) {
+      return;
+    }
+    const current = this.currentStream;
+    if (current == null) {
       return;
     }
     for (const seg of segments) {
@@ -1178,7 +1462,11 @@ export class SessionStreamUnit {
         this.partialThinkingDirty = true;
       }
     }
-    this.pushStreamPayload({type: 'stream-batch', segments});
+    this.pushStreamPayload({
+      type: 'stream-batch',
+      streamId: current.streamId,
+      segments,
+    });
     this.onProjectionChanged?.();
   }
 
@@ -1215,56 +1503,89 @@ export class SessionStreamUnit {
   }
 
   /**
-   * 单一注入实现（吸收 useChatStreamResumeInject + SubagentSessionScreen
-   * 内联版的共同语义）：把本 step 已累积的 partial 经 stream-delta 载荷
-   * 一次性注入指定句柄。
-   *
-   * 守卫顺序：未销毁 → 本 step 未注入过（恰好一次）→ run 活跃（结束后
-   * 不注入，落库消息接管）→ partial 非空。注入后置标记，step 边界与
-   * 句柄摘除复位。
+   * 开一条新的 assistant step 流式记录（ordinal 自增；streamId =
+   * `st:<sessionId>:<unitEpoch>:<ordinal>`，进程内唯一）。
    */
-  private tryInjectPartialInto(handle: SessionStreamWebviewHandle): void {
-    if (this.destroyed || this.injectedValue) {
-      return;
-    }
-    if (this.status !== 'running') {
+  private startStream(): void {
+    const ordinal = this.streamOrdinal;
+    this.streamOrdinal = ordinal + 1;
+    this.currentStream = {
+      streamId: `st:${this.sessionId}:${this.streamEpoch}:${ordinal}`,
+      status: 'streaming',
+      text: '',
+      thinking: '',
+      tools: [],
+      messageId: null,
+    };
+  }
+
+  /**
+   * 冻结当前 streaming 记录：把物化后的完整正文/思考抄进记录（之后只读
+   * 冻结值，resetPartial 不会清空），压入 finishedStreams 与待接管队列。
+   * 空记录（text/thinking/tools 全空）直接丢弃。
+   */
+  private freezeCurrentStream(): void {
+    const record = this.currentStream;
+    this.currentStream = null;
+    if (record == null) {
       return;
     }
     const text = this.materializePartialText();
     const thinking = this.materializePartialThinking();
-    if (text.length === 0 && thinking.length === 0) {
+    if (
+      text.length === 0 &&
+      thinking.length === 0 &&
+      record.tools.length === 0
+    ) {
       return;
     }
-    this.injectedValue = true;
-    if (text.length > 0) {
-      this.emitStreamPayload(handle, {
-        type: 'stream-delta',
-        kind: 'text',
-        delta: text,
-      });
-    }
-    if (thinking.length > 0) {
-      this.emitStreamPayload(handle, {
-        type: 'stream-delta',
-        kind: 'thinking',
-        delta: thinking,
-      });
-    }
+    const frozen: StreamStepRecord = {...record, status: 'finished', text, thinking};
+    this.finishedStreams = [...this.finishedStreams, frozen];
+    this.pendingAdoptions = [
+      ...this.pendingAdoptions,
+      {
+        record: frozen,
+        baseMessageIds: new Set(this.messagesValue.map(message => message.id)),
+      },
+    ];
   }
 
-  /** 定向发流式载荷给指定句柄（注入路径；回调异常吞掉防断流）。 */
-  private emitStreamPayload(
-    handle: SessionStreamWebviewHandle,
-    payload: unknown,
-  ): void {
-    try {
-      handle.onStreamPayload?.(payload);
-    } catch (err) {
-      console.error(
-        '[novel-master/session-stream-unit] onStreamPayload failed',
-        err,
-      );
+  /**
+   * 组装 streamRows 投影（§2.1.2 规则）：
+   * - interrupted 单元：只投影那条非空的 interrupted finished 行（未 dismissed）；
+   * - 其余：finished-未接管且非空（旧→新，最多最近 32 条）在前，当前
+   *   streaming 记录（含空记录）在最后。
+   * 每次调用新数组；引用稳定由 snapshot() 的等值比较兜住（T-SP32）。
+   *
+   * nm-style: keep-local — 共享 finishedStreams/currentStream/interruptedStream
+   * 与 partial 物化缓存的投影阶段，规则集中在一处才能保证行序。
+   */
+  private buildStreamRowsProjection(): SessionStreamMessageProjection[] {
+    if (this.status === 'interrupted') {
+      const record = this.interruptedStream;
+      if (
+        record == null ||
+        this.interruptedPartialDismissed ||
+        isStreamRecordEmpty(record)
+      ) {
+        return [];
+      }
+      return [projectStreamRecord(record)];
     }
+    const rows: SessionStreamMessageProjection[] = [];
+    const pendingFinished = this.finishedStreams.filter(
+      record => record.messageId == null && !isStreamRecordEmpty(record),
+    );
+    for (const record of pendingFinished.slice(-FINISHED_STREAM_ROWS_LIMIT)) {
+      rows.push(projectStreamRecord(record));
+    }
+    const current = this.currentStream;
+    if (current != null) {
+      const text = this.materializePartialText();
+      const thinking = this.materializePartialThinking();
+      rows.push(projectStreamRecord(current, text, thinking));
+    }
+    return rows;
   }
 
   private scheduleGraceDestroy(): void {
@@ -1273,4 +1594,40 @@ export class SessionStreamUnit {
       this.onGraceExpired?.(this);
     }, this.settledGraceMs);
   }
+}
+
+/** 记录 text/thinking/tools 是否全空（空记录不进入流式行投影）。 */
+function isStreamRecordEmpty(record: StreamStepRecord): boolean {
+  return (
+    record.text.length === 0 &&
+    record.thinking.length === 0 &&
+    record.tools.length === 0
+  );
+}
+
+/** 记录 → 投影（当前 streaming 记录用调用方传入的物化正文/思考）。 */
+function projectStreamRecord(
+  record: StreamStepRecord,
+  text = record.text,
+  thinking = record.thinking,
+): SessionStreamMessageProjection {
+  return {
+    streamId: record.streamId,
+    status: record.status,
+    text,
+    thinking,
+    tools: record.tools,
+    messageId: record.messageId,
+  };
+}
+
+/** streamRowIds 有界化：超出上限丢最旧（Map 插入序）。 */
+function trimStreamRowIds(
+  map: ReadonlyMap<string, string>,
+): ReadonlyMap<string, string> {
+  if (map.size <= STREAM_ROW_IDS_LIMIT) {
+    return map;
+  }
+  const entries = [...map.entries()];
+  return new Map(entries.slice(entries.length - STREAM_ROW_IDS_LIMIT));
 }

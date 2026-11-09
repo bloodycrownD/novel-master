@@ -62,14 +62,10 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     expect(commitFn).toContain(
       'const hasTailPayload = payload.tailHtml != null || payload.tailText != null;',
     );
-    // B-1：无 tailHtml 分支落纯文本标记（CSS 单源补 pre-wrap），并把
-    // state 的尾块 html 置空（防回退路径重放旧尾块 html）
-    expect(commitFn).toMatch(
-      /markStreamPlainTarget\(tailEl\);[\s\S]*?state\.stream\.textHtml = ''/,
-    );
-    expect(commitFn).toMatch(
-      /markStreamPlainTarget\(tailEl\);[\s\S]*?state\.stream\.thinkingHtml = ''/,
-    );
+    // C21/C22：块提交不写回行上的 textHtml/thinkingHtml——delta 已携带全量，
+    // 写回尾块会把 full 截成 tail（row.textHtml 只读用于 bubble 类名）。
+    expect(commitFn).not.toMatch(/row\.textHtml\s*=[^=]/);
+    expect(commitFn).not.toMatch(/row\.thinkingHtml\s*=[^=]/);
     // HTML 分支成功：清纯文本标记
     expect(commitFn).toMatch(
       /applyTrustedHtml\(tailEl, tailHtml\);[\s\S]*?setStreamTailPlainClass\(tailEl, false\)/,
@@ -174,15 +170,13 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     const incrementalFn = fnSlice(stream(), 'appendStreamDeltaIncremental');
     expect(incrementalFn.length).toBeGreaterThan(0);
     expect(incrementalFn).not.toContain('scheduleMermaidScan');
-    // streamReset / streamCommit 复位块级态（新一轮流从全量模式重新进入）
+    // streamReset 复位块级态（新一轮流从全量模式重新进入）
     expect(bridgeSrc).toMatch(
       /case 'streamReset':[\s\S]*?resetStreamBlockRenderState\(\);/,
     );
-    expect(bridgeSrc).toMatch(
-      /case 'streamCommit':[\s\S]*?resetStreamBlockRenderState\(\);/,
-    );
-    // 历史/commit 路径扫描挂接点保持 5 处（T-MT1 契约不回归）
-    expect(snapshot().match(/scheduleMermaidScan\(\)/g)).toHaveLength(5);
+    // 历史/快照路径扫描挂接点保持 3 处（applySnapshot / applyAppendTailRows /
+    // applyPrependPage；streamCommit 路径已随协议删除，T-MT1 契约不回归）
+    expect(snapshot().match(/scheduleMermaidScan\(\)/g)).toHaveLength(3);
   });
 
   it('协议契约：streamBlockCommit payload 形状（kind/html/text/tailHtml?/tailText?）', () => {
@@ -210,10 +204,60 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     expect(rn).toContain('const carriesTail = i === lastCommitIndex;');
     // 块级化只切分不 post 的顺序约束（delta 先行，块提交随后）
     expect(rn).toMatch(
-      /const blockSplits = takeStreamBlockSplits\(\);[\s\S]*?postStreamBlockSplits\(blockSplits\);/,
+      /const blockSplits = takeStreamBlockSplits\(\);[\s\S]*?postStreamBlockSplits\(blockSplits, streamId, seq\);/,
     );
     // abort overlay 全量物化口径：已提交块 parts + 活跃尾块
     expect(rn).toContain('streamCommittedTextPartsRef.current.join');
+  });
+
+  it('块提交守卫顺序与幂等：streamId → streaming → seq → blockKey → fullReplaceOnly', () => {
+    const src = stream();
+    const commitFn = fnSlice(src, 'applyStreamBlockCommit');
+    expect(commitFn).toContain('cp.id !== payload.streamId');
+    expect(commitFn).toContain("cp.status !== 'streaming'");
+    expect(commitFn).toContain('payload.seq > cp.seq');
+    expect(commitFn).toContain('state.appliedBlockKeys.has(payload.blockKey)');
+    expect(commitFn).toContain('state.fullReplaceOnly === payload.streamId');
+    // 检查顺序固定：早退放在去重/块写之前（finished 后的迟到 commit 零渲染）
+    const order = [
+      'cp.id !== payload.streamId',
+      "cp.status !== 'streaming'",
+      'payload.seq > cp.seq',
+      'state.appliedBlockKeys.has(payload.blockKey)',
+      'state.fullReplaceOnly === payload.streamId',
+    ].map(fragment => commitFn.indexOf(fragment));
+    expect(order.every(index => index >= 0)).toBe(true);
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]).toBeLessThan(order[i]);
+    }
+    // blockKey 只在通过全部守卫后写入（重复投递只 append 一次）
+    expect(commitFn).toContain('state.appliedBlockKeys.add(payload.blockKey)');
+    // 块级模式 delta 的尾块 html 参数是 tailHtml（不是全量 textHtml）：
+    // 全量 html 只允许写 body 自身（writeStreamBodyFull / resetStreamBlockRenderState 后）。
+    const incremental = fnSlice(src, 'appendStreamDeltaIncremental');
+    expect(incremental).not.toContain('payload.textHtml');
+    expect(src).toMatch(
+      /appendStreamDeltaIncremental\(\s*tail,\s*kind,\s*delta,\s*tailHtml \|\| '',/,
+    );
+  });
+
+  it('协议契约：streamBlockCommit 携带 streamId/seq/blockKey；流式收尾走 streamStatus', () => {
+    const bridgeTs = rnSrc('ChatTranscriptBridge.ts');
+    expect(bridgeTs).toContain('readonly streamId: string;');
+    expect(bridgeTs).toContain('readonly seq: number;');
+    expect(bridgeTs).toContain('readonly blockKey: string;');
+    // 收尾只改 status（全量终态行随行），不再有 streamCommit 变体
+    expect(bridgeTs).toContain("'streamStatus'");
+    expect(bridgeTs).toContain('row?: TranscriptRow;');
+    // 上行 resync 新协议
+    expect(bridgeTs).toMatch(/streamResync.*expectedSeq/s);
+  });
+
+  it('块级态复位：streamReset 分支先作废旧代次分片，再清块/升级态', () => {
+    const bridgeSrc = bridge();
+    expect(bridgeSrc).toMatch(
+      /case 'streamReset':[\s\S]*?clearStreamRichUpgrade\(\);[\s\S]*?resetStreamBlockRenderState\(\);[\s\S]*?invalidateSnapshotPipeline\(generation\);[\s\S]*?applyStreamReset\(p\);/,
+    );
   });
 
   it('es2018 约束：stream 源码禁 lookbehind 等新正则特性', () => {
@@ -228,15 +272,5 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
       expect(src).not.toContain('\\p{');
       expect(src).not.toContain('s})'); // dotAll flag 无出现面
     }
-  });
-
-  it('显示态累积数组化：per-delta += 收敛为 parts push + 读点物化', () => {
-    const src = stream();
-    expect(src).toContain('streamDisplayParts[kind].push(delta)');
-    expect(src).toContain('materializeStreamDisplay(kind)');
-    // 一批物化一次（applyStreamBatch 收尾）
-    expect(src).toMatch(
-      /appendStreamDeltaCore\(seg\.kind, seg\.delta, html\);[\s\S]*?materializeStreamDisplay\('text'\);/,
-    );
   });
 });

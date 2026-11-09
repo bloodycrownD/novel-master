@@ -1,20 +1,32 @@
 import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {escapeHtml} from '../util/html-escape';
 import {state} from '../state/state';
-import type {ToolCallRow} from '../state/state';
+import type {MessageRow, ToolCallRow} from '../state/state';
 import {scheduleStickIfNearBottom} from '../scroll/scroll';
 import {renderRows} from '../render/row-logic';
-import {scheduleStreamRichUpgrade, streamRichUpgrade} from './stream-markdown';
+import {reconcileFinishedStreamingRows} from '../render/snapshot';
+import {
+  clearStreamRichUpgrade,
+  scheduleStreamRichUpgrade,
+  streamRichUpgrade,
+} from './stream-markdown';
+import {decideStreamDelta} from './stream-checkpoint';
+import {post} from '../bridge';
 
 export type StreamKind = 'text' | 'thinking';
-export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
+
+/** 流式行相位：waiting-first（只有壳/生成中）| streaming-content（有内容）| finished（不再生成）。 */
+export type StreamingPhase = 'waiting-first' | 'streaming-content' | 'finished';
+
+/** 同一 streamId 的 resync 请求最小间隔（snapshot 到达后仍保留 resyncSentAt 用于限流）。 */
+const RESYNC_THROTTLE_MS = 100;
 
 /**
  * 块级渲染态（spec §6）：收到首个 streamBlockCommit 后进入——body 内出现
  * 独立尾块容器（.stream-active-tail），尾块的纯文本增量 append / html
  * 替换 / 350ms 轻量升级全部收敛到该容器；容器之前的已提交块 DOM 只做
  * insertAdjacentHTML append，零重渲（增量岛约束继续有效）。
- * streamReset / streamCommit 时复位（新一轮流从全量模式重新进入）。
+ * streamReset / 新 streamId / applySnapshot 换主时复位（新一轮流从全量模式重新进入）。
  */
 const streamBlockRender = {
   active: false,
@@ -34,50 +46,65 @@ const STREAM_ACTIVE_TAIL_CLASS = 'stream-active-tail';
  */
 const STREAM_TAIL_PLAIN_CLASS = 'stream-tail-plain';
 
-/**
- * 显示态累积数组（spec §5 低优先项）：per-delta `+=` 改数组追加，物化收敛
- * 到块提交 / 回退渲染 / batch 收尾等读点（applyStreamBatch 一批物化一次）。
- */
-const streamDisplayParts: {text: string[]; thinking: string[]} = {
-  text: [],
-  thinking: [],
-};
+/** 当前流式行：state.rows 最后一条且 status === 'streaming'（I1/I2 唯一真源）。 */
+export function currentStreamingRow(): MessageRow | null {
+  const rows = state.rows;
+  if (rows.length === 0) {
+    return null;
+  }
+  const last = rows[rows.length - 1];
+  return last.kind === 'message' && last.status === 'streaming' ? last : null;
+}
 
-function materializeStreamDisplay(kind: StreamKind): void {
-  const parts = streamDisplayParts[kind];
-  if (parts.length === 0) {
-    return;
+/** 按行 id 查 state.rows（流式行 id = streamId；DB 接管只补 messageId 不换 id）。 */
+export function findRowById(id: string): MessageRow | null {
+  for (let i = 0; i < state.rows.length; i++) {
+    const row = state.rows[i];
+    if (row.kind === 'message' && row.id === id) {
+      return row;
+    }
   }
-  const joined = parts.join('');
-  parts.length = 0;
-  if (kind === 'text') {
-    state.stream.text += joined;
-  } else {
-    state.stream.thinking += joined;
-  }
+  return null;
 }
 
 /**
- * 复位块级渲染态与显示态 parts（streamReset / streamCommit / 测试隔离）：
- * state.stream 由调用方整体替换，未物化的 parts 一并丢弃，避免残留字符
- * 混入下一轮流。
+ * 请求普通快照（上行 streamResync）：gap / 未知 streamId / 行不存在时调用。
+ * 100ms 限流 + 同一 streamId 等待中不重复请求（snapshot 到达后清 resyncPending，
+ * 但保留 resyncSentAt 继续限流——否则 snapshot 清空后 100ms 内的第二次 gap 会重复发）。
+ */
+export function requestResync(streamId: string, expectedSeq: number): void {
+  if (state.resyncPending === streamId) {
+    return;
+  }
+  const now = performance.now();
+  if (
+    state.resyncSentAt != null &&
+    now - state.resyncSentAt < RESYNC_THROTTLE_MS
+  ) {
+    return;
+  }
+  post('streamResync', {streamId, expectedSeq});
+  state.resyncPending = streamId;
+  state.resyncSentAt = now;
+}
+
+/**
+ * 复位块级渲染态（streamReset / 新 streamId / applySnapshot 换主 / 全量重写前）：
+ * 块模式退出、尾块 parts 清空。finished 时不调用（避免清掉已提交块 DOM）。
  */
 export function resetStreamBlockRenderState(): void {
   streamBlockRender.active = false;
   streamBlockRender.tailTextParts.text = [];
   streamBlockRender.tailTextParts.thinking = [];
-  streamDisplayParts.text = [];
-  streamDisplayParts.thinking = [];
 }
 
-/** 活跃尾块源文本：块级模式下取尾块 parts（350ms 轻量升级的输入），否则回退显示态全量。 */
+/** 活跃尾块源文本：块级模式下取尾块 parts（350ms 轻量升级的输入），否则取当前流式行全量。 */
 export function getStreamActiveTailText(kind: StreamKind): string {
-  if (!streamBlockRender.active) {
-    return String(
-      (kind === 'text' ? state.stream.text : state.stream.thinking) || '',
-    );
+  if (streamBlockRender.active) {
+    return streamBlockRender.tailTextParts[kind].join('');
   }
-  return streamBlockRender.tailTextParts[kind].join('');
+  const row = currentStreamingRow();
+  return String((kind === 'text' ? row?.text : row?.thinking) || '');
 }
 
 export function getStreamActiveTailEl(
@@ -147,47 +174,50 @@ export function streamRenderTarget(body: Element): Element {
 }
 
 /**
- * 流式尾部相位、增量 DOM 与 batch/delta 提交（不含 stream-markdown）。
- * P0-2 / ISD **非债**：壳/相位在 ui/stream；本文件 body 子树的 createElement /
+ * 流式行派生增量 / status / 块提交（不含 stream-markdown）。
+ * P0-2 / ISD **非债**：壳/相位在 ui；本文件 body 子树的 createElement /
  * insertAdjacentHTML 为刻意增量岛屿，禁止本迭代迁 Preact。
  * 块级渲染（spec §6）：完成块经 streamBlockCommit append（见
  * applyStreamBlockCommit），活跃尾块收敛到 .stream-active-tail 容器；
  * 图表懒加载与批注锚点语义不变（只在 commit/历史路径触发）。
- * tool-invoking「生成中」条：有且仅有一条 Preact 路径（StreamTail → ToolInvokingBar）；
- * 本文件只改 state.stream.toolInvoking 并 renderRows，禁止 bubble 内 createElement 插条。
+ * tool-invoking「生成中」条：有且仅有一条 Preact 路径（StreamingMessageRow →
+ * ToolInvokingBar），本文件不碰该条——状态由行 status 驱动。
  */
-export function streamHasContent(): boolean {
+export function streamHasContent(row: MessageRow | null | undefined): boolean {
+  if (row == null) {
+    return false;
+  }
   return (
-    String(state.stream.text || '').trim().length > 0 ||
-    String(state.stream.thinking || '').trim().length > 0
+    String(row.text || '').trim().length > 0 ||
+    String(row.thinking || '').trim().length > 0 ||
+    !!(row.tools && row.tools.length > 0)
   );
 }
 
-/** active | waiting-first | idle-after-content */
-export function getStreamTailPhase(): StreamTailPhase {
-  if (!state.stream.toolInvoking) {
-    return 'active';
+/** 相位判定：必须在 row.text/tools 变异之前求值（首包建壳规则依赖它）。 */
+export function getStreamingPhase(row: MessageRow): StreamingPhase {
+  if (row.status !== 'streaming') {
+    return 'finished';
   }
-  return streamHasContent() ? 'idle-after-content' : 'waiting-first';
+  return streamHasContent(row) ? 'streaming-content' : 'waiting-first';
 }
 
-export function shouldRenderStreamTail(): boolean {
-  return streamHasContent() || state.stream.toolInvoking;
+/** 是否渲染流式壳：只有当前 streaming 行走流式壳（finished 行按普通行重建）。 */
+export function shouldRenderStreamingRow(
+  row: MessageRow | null | undefined,
+): boolean {
+  return row != null && row.status === 'streaming';
 }
 
-export function streamThinkingHtml(): string | null {
-  if (state.flags.richText && state.stream.thinkingHtml) {
-    return state.stream.thinkingHtml;
-  }
-  return null;
-}
+type BubbleClassRow = {
+  textHtml?: string | null;
+  tools?: readonly ToolCallRow[] | null;
+  text?: unknown;
+  thinking?: unknown;
+};
 
-export function assistantBubbleExtraClasses(
-  _textHtml: string | null | undefined,
-  tools: ToolCallRow[] | null | undefined,
-  text: unknown,
-  thinking: unknown,
-): string {
+export function assistantBubbleExtraClasses(row: BubbleClassRow): string {
+  const {text, thinking, tools} = row;
   let extra = '';
   const hasText = !!(text && String(text).trim());
   const hasThinking = !!(thinking && String(thinking).trim());
@@ -218,15 +248,17 @@ export function appendEscapedDelta(el: Element, delta: string): void {
 }
 
 /**
- * 将当前 stream 状态同步进已有 bubble 的 body 挂载点（非整泡 innerHTML）。
+ * 将当前流式行同步进已有 bubble 的 body 挂载点（非整泡 innerHTML）。
  * 壳结构缺失时回退 renderRows，避免与 Preact VDOM 分叉。
- * 块级模式下目标是尾块容器——已提交块区不受回退路径影响（零重渲）。
+ * 调用方保证块级态已复位：全量 html 只能写 body 自身，禁止落进尾容器。
  */
 function syncStreamBodiesFromState(bubble: Element): void {
-  const hasThinking = !!(
-    state.stream.thinking && String(state.stream.thinking).trim()
-  );
-  const hasText = !!(state.stream.text && String(state.stream.text).trim());
+  const row = currentStreamingRow();
+  if (row == null) {
+    return;
+  }
+  const hasThinking = !!(row.thinking && String(row.thinking).trim());
+  const hasText = !!(row.text && String(row.text).trim());
 
   if (hasThinking) {
     const body = getStreamThinkingBody(bubble);
@@ -234,65 +266,71 @@ function syncStreamBodiesFromState(bubble: Element): void {
       renderRows();
       return;
     }
-    const target = streamRenderTarget(body);
-    const th = streamThinkingHtml();
-    if (state.flags.richText && th) {
-      applyTrustedHtml(target, th);
-      setStreamTailPlainClass(target, false);
+    if (state.flags.richText && row.thinkingHtml) {
+      applyTrustedHtml(body, row.thinkingHtml);
+      setStreamTailPlainClass(body, false);
       setStreamBodyRichClass(body, true);
     } else {
-      target.textContent = String(getStreamActiveTailText('thinking') || '');
+      body.textContent = String(getStreamActiveTailText('thinking') || '');
       // B-1：目标即尾块容器时不动 body 的 .rich（已提交块保持 rich）。
-      markStreamPlainTarget(target);
+      markStreamPlainTarget(body);
     }
-    if (hasText || getStreamTailPhase() === 'idle-after-content') {
+    if (hasText || (row.tools && row.tools.length > 0)) {
       body.classList.add('thinking-body-divided');
     }
   }
 
   if (hasText || hasThinking) {
     const textBody = ensureStreamTextBody(bubble);
-    const target = streamRenderTarget(textBody);
-    if (state.flags.richText && state.stream.textHtml) {
-      applyTrustedHtml(target, state.stream.textHtml);
-      setStreamTailPlainClass(target, false);
+    if (state.flags.richText && row.textHtml) {
+      applyTrustedHtml(textBody, row.textHtml);
+      setStreamTailPlainClass(textBody, false);
       setStreamBodyRichClass(textBody, true);
     } else if (hasText) {
-      target.textContent = String(getStreamActiveTailText('text') || '');
+      textBody.textContent = String(getStreamActiveTailText('text') || '');
       // B-1：同上，尾块容器只落纯文本标记，不摘 body 的 .rich。
-      markStreamPlainTarget(target);
+      markStreamPlainTarget(textBody);
     }
   }
-  // tool-invoking 条由 StreamTail/ToolInvokingBar 声明式产出，此处不碰
 }
 
 /**
- * 现网回退：增量失败时按状态刷新 body（对齐原 updateStreamBubble 语义）。
- * 不再整泡拼串 innerHTML，以免毁掉 Preact 壳与 StreamBodyHost。
+ * 增量失败回退（沿用 baseline `appendStreamDeltaCore` 的 `!incremental` 分支）：
+ * 按当前流式行刷新 body；rich 下补一次 350ms 升级。仅非 text 走这里——text
+ * 增量失败时整泡重建会连带 thinking DOM 副作用（baseline 同口径）。
+ */
+function fallbackStreamBubble(tail: Element, kind: StreamKind): void {
+  updateStreamBubble(tail);
+  scheduleStreamRichUpgrade(kind);
+}
+
+/**
+ * 现网回退：增量失败时按当前流式行刷新 body。
+ * 块级态先复位——否则全量 html 会被写进尾容器，复制已提交块（P1-4）。
  */
 export function updateStreamBubble(tail: Element): void {
-  let bubble = tail.querySelector('.bubble');
-  const bubbleClass =
-    'bubble assistant' +
-    assistantBubbleExtraClasses(
-      state.stream.textHtml,
-      [],
-      state.stream.text,
-      state.stream.thinking,
-    );
-  const hasThinking = !!(
-    state.stream.thinking && String(state.stream.thinking).trim()
-  );
+  const row = currentStreamingRow();
+  if (row == null) {
+    return;
+  }
+  const bubble = tail.querySelector('.bubble');
   if (!bubble) {
     renderRows();
     return;
   }
-  if (hasThinking && !getStreamThinkingBody(bubble)) {
+  if (
+    row.thinking &&
+    String(row.thinking).trim() &&
+    !getStreamThinkingBody(bubble)
+  ) {
     // 缺 thinking section/body：整表建壳（BodyHost 带稳定 key，text body 可保留）
     renderRows();
     return;
   }
-  bubble.className = bubbleClass;
+  if (streamBlockRender.active) {
+    resetStreamBlockRenderState();
+  }
+  bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
   syncStreamBodiesFromState(bubble);
 }
 
@@ -343,13 +381,16 @@ export function streamRichDomReady(bubble: Element, kind: StreamKind): boolean {
   );
 }
 
+/**
+ * 块级增量写尾容器（tailHtml 专用）：已提交块零触碰。
+ * html 缺失时按转义纯文本 append；禁止回落全量 html（会复制已提交块）。
+ */
 export function appendStreamDeltaIncremental(
   tail: Element,
   kind: StreamKind,
   delta: string,
   html: string,
 ): boolean {
-  // 主线程卡顿验证：增量 DOM 更新路径；耗时由 appendStreamDelta 外层 delta_trace 汇总
   if (!delta && !html) {
     return false;
   }
@@ -400,14 +441,6 @@ export function appendStreamDeltaIncremental(
       // HTML 替换成功：清纯文本降级标记（B-1），避免富文本被 pre-wrap 影响。
       setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(body, true);
-      bubble.className =
-        'bubble assistant' +
-        assistantBubbleExtraClasses(
-          state.stream.textHtml,
-          [],
-          state.stream.text,
-          state.stream.thinking,
-        );
       return true;
     }
     if (!delta) {
@@ -426,14 +459,6 @@ export function appendStreamDeltaIncremental(
       applyTrustedHtml(target, html);
       setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(textBody, true);
-      bubble.className =
-        'bubble assistant' +
-        assistantBubbleExtraClasses(
-          state.stream.textHtml,
-          [],
-          state.stream.text,
-          state.stream.thinking,
-        );
       return true;
     }
     if (!delta) {
@@ -441,31 +466,17 @@ export function appendStreamDeltaIncremental(
     }
     // WHY: text 从 0->1 仅更新 class/展示，不触发 thinking 重建。
     appendEscapedDelta(streamRenderTarget(textBody), delta);
-    bubble.className =
-      'bubble assistant' +
-      assistantBubbleExtraClasses(
-        state.stream.textHtml,
-        [],
-        state.stream.text,
-        state.stream.thinking,
-      );
     return true;
   }
   return false;
 }
 
-/**
- * 更新 toolInvoking 并经 Preact 壳刷新「生成中」条（单路径）。
- * 不在 bubble 内 createElement；StreamBodyHost 稳定 key + shouldComponentUpdate=false
- * 保证 renderRows 不会毁掉 P0-2 body 增量岛。
- */
-export function setStreamToolInvokingDom(active: boolean): void {
-  state.stream.toolInvoking = !!active;
-  renderRows();
-  scheduleStickIfNearBottom();
-}
-
 export type StreamBlockCommitPayload = {
+  streamId?: string;
+  /** 本块提交对应的 delta seq（只做对账，不推进 checkpoint）。 */
+  seq?: number;
+  /** 块身份：`<streamId>:<kind>:<commitOrdinal>`；Web 用已应用集合去重。 */
+  blockKey?: string;
   kind?: string;
   html?: string;
   text?: string;
@@ -476,15 +487,35 @@ export type StreamBlockCommitPayload = {
 /**
  * 块提交（spec §6）：完成块 append 到已提交块区（尾块容器之前的
  * insertAdjacentHTML，append-only 零重渲），尾块容器重置为 RN 下发的尾块
- * 态——delta 先行携带的已完成块字符在重置中被洗掉，最终态无重复。
- * 块 html 缺失（单块超 12k 降级 / sanitize 失败）时按转义纯文本 append。
- * 尾块载荷（tailHtml/tailText）按 C-orch-1 仅每 kind 每次切分的最后一个
- * commit 携带：缺载荷时保持尾块现状（中间 commit 的尾块态与最后一个相同）。
- * 不触发图表懒加载（其只在 streamCommit / 历史路径，现状保持——T-MT2 契约）。
+ * 态。**不把 tailHtml 写回行**：delta 已携带全量 html，行上的 textHtml
+ * 永远是全量（写回尾块会把 full 截成 tail）。
+ * 检查顺序固定：streamId 匹配 → streaming → seq 对账 → blockKey 去重 →
+ * fullReplaceOnly；任一不满足直接 return（finished 后的迟到 commit 不得
+ * 触发 renderRows 回退）。
+ * 不触发图表懒加载（其只在历史/快照路径，T-MT2 契约）。
  */
 export function applyStreamBlockCommit(
   payload: StreamBlockCommitPayload,
 ): void {
+  const cp = state.streamCheckpoint;
+  if (payload.streamId == null || cp == null || cp.id !== payload.streamId) {
+    return;
+  }
+  if (cp.status !== 'streaming') {
+    return;
+  }
+  if (typeof payload.seq !== 'number' || payload.seq > cp.seq) {
+    return;
+  }
+  if (
+    payload.blockKey != null &&
+    state.appliedBlockKeys.has(payload.blockKey)
+  ) {
+    return;
+  }
+  if (state.fullReplaceOnly === payload.streamId) {
+    return;
+  }
   const kind: StreamKind = payload.kind === 'thinking' ? 'thinking' : 'text';
   const blockHtml = payload.html || '';
   const blockText = String(payload.text || '');
@@ -499,7 +530,7 @@ export function applyStreamBlockCommit(
   }
   const bubble = tail.querySelector('.bubble');
   if (!bubble) {
-    // 相位建壳缺失：整表重建（与 appendStreamDelta 回退同口径）
+    // 相位建壳缺失：整表重建（与增量路径回退同口径）
     renderRows();
     scheduleStickIfNearBottom();
     return;
@@ -526,133 +557,348 @@ export function applyStreamBlockCommit(
       // HTML 分支成功：清纯文本降级标记（B-1）
       setStreamTailPlainClass(tailEl, false);
       setStreamBodyRichClass(body, true);
-      if (kind === 'text') {
-        state.stream.textHtml = tailHtml;
-      } else {
-        state.stream.thinkingHtml = tailHtml;
-      }
     } else {
       tailEl.textContent = tailText;
-      // 无 tailHtml 分支（B-1）：与增量纯文本路径同口径落标记类补 pre-wrap，
-      // 并清 state 的尾块 html——否则回退路径（updateStreamBubble /
-      // streamThinkingHtml）会拿旧尾块 html 把纯文本覆盖回富文本。
+      // 无 tailHtml 分支（B-1）：与增量纯文本路径同口径落标记类补 pre-wrap
       markStreamPlainTarget(tailEl);
-      if (kind === 'text') {
-        state.stream.textHtml = '';
-      } else {
-        state.stream.thinkingHtml = '';
-      }
     }
     streamBlockRender.tailTextParts[kind] = tailText ? [tailText] : [];
   }
-  materializeStreamDisplay(kind);
-  bubble.className =
-    'bubble assistant' +
-    assistantBubbleExtraClasses(
-      state.stream.textHtml,
-      [],
-      state.stream.text,
-      state.stream.thinking,
+  if (payload.blockKey != null) {
+    state.appliedBlockKeys.add(payload.blockKey);
+  }
+  const row = currentStreamingRow();
+  if (row != null) {
+    bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
+  }
+  scheduleStickIfNearBottom();
+}
+
+/** 全量 html 写 body 自身（禁止经 streamRenderTarget：块模式会落进尾容器）。 */
+function writeStreamBodyFull(
+  tail: Element,
+  kind: StreamKind,
+  html: string | undefined,
+  delta: string,
+): boolean {
+  const bubble = tail.querySelector('.bubble');
+  if (!bubble) {
+    return false;
+  }
+  const body =
+    kind === 'thinking'
+      ? getStreamThinkingBody(bubble)
+      : ensureStreamTextBody(bubble);
+  if (!body) {
+    return false;
+  }
+  if (html) {
+    applyTrustedHtml(body, html);
+    setStreamTailPlainClass(body, false);
+    setStreamBodyRichClass(body, true);
+    return true;
+  }
+  if (delta) {
+    appendEscapedDelta(body, delta);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 四态表写 DOM（P0-3）：
+ * - plain：始终 appendEscapedDelta 增量（忽略 html/tailHtml）；
+ * - rich + fullReplaceOnly：全量 html 替换 body；html 缺失回落增量；
+ * - rich + 块模式激活：tailHtml 走尾容器增量；tail 缺失回落增量（禁止全量）；
+ * - rich + 块模式未激活：全量 html 替换 body；html 缺失回落增量。
+ */
+function applyStreamBodyDelta(
+  tail: Element,
+  kind: StreamKind,
+  delta: string,
+  fullHtml: string | undefined,
+  tailHtml: string | undefined,
+): void {
+  if (!state.flags.richText) {
+    if (!delta) {
+      return;
+    }
+    const bubble = tail.querySelector('.bubble');
+    if (!bubble) {
+      return;
+    }
+    const body =
+      kind === 'thinking'
+        ? getStreamThinkingBody(bubble)
+        : ensureStreamTextBody(bubble);
+    if (body) {
+      appendEscapedDelta(streamRenderTarget(body), delta);
+    } else if (kind !== 'text') {
+      // thinking 在已有 text 壳之后首次到达（无 .thinking-body）：增量无从
+      // 落笔，回退建壳，否则该拍思考内容整拍丢失。
+      fallbackStreamBubble(tail, kind);
+    }
+    return;
+  }
+  const streamId = state.streamCheckpoint?.id;
+  // 空拍（tools-only 等）：无 delta/html 可写，不进入任何写路径——否则
+  // 「无输入」会被误判成增量失败而触发整 body 回退。
+  if (!delta && !fullHtml && !tailHtml) {
+    return;
+  }
+  if (streamId != null && state.fullReplaceOnly === streamId) {
+    writeStreamBodyFull(tail, kind, fullHtml, delta);
+    return;
+  }
+  if (streamBlockRender.active) {
+    const incremental = appendStreamDeltaIncremental(
+      tail,
+      kind,
+      delta,
+      tailHtml || '',
     );
-  scheduleStickIfNearBottom();
-}
-
-function appendStreamDeltaCore(
-  kind: StreamKind,
-  delta: string,
-  html?: string,
-): void {
-  // 显示态：数组追加（spec §5），物化收敛到出口 / 回退渲染 / 块提交
-  streamDisplayParts[kind].push(delta);
-  if (kind === 'text') {
-    if (html) {
-      state.stream.textHtml = html;
-    } else if (state.flags.richText) {
-      state.stream.textHtml = '';
+    if (!incremental && kind !== 'text') {
+      fallbackStreamBubble(tail, kind);
     }
-  } else {
-    if (html) {
-      state.stream.thinkingHtml = html;
-    } else if (state.flags.richText) {
-      state.stream.thinkingHtml = '';
-    }
-  }
-  const tail = document.getElementById('stream-tail');
-  if (!tail) {
-    materializeStreamDisplay(kind);
-    renderRows();
-    scheduleStickIfNearBottom();
     return;
   }
-  if (
-    tail.classList.contains('stream--waiting-first') ||
-    !tail.querySelector('.bubble')
-  ) {
-    // 相位建壳：允许一次整表 Preact；非 delta 热路径上的内容根 remount
-    materializeStreamDisplay(kind);
-    renderRows();
-    scheduleStickIfNearBottom();
-    return;
+  const written = writeStreamBodyFull(tail, kind, fullHtml, delta);
+  if (!written && kind !== 'text') {
+    fallbackStreamBubble(tail, kind);
   }
-  const incremental = appendStreamDeltaIncremental(
-    tail,
-    kind,
-    delta,
-    html || '',
-  );
-  if (!incremental && kind !== 'text') {
-    // WHY: 正文 text 不能在增量失败时整泡重建（会触发 thinking DOM 相关副作用）。
-    // 非 text：对齐现网 updateStreamBubble 回退（非一律 renderRows）。
-    materializeStreamDisplay(kind);
-    updateStreamBubble(tail);
-    if (state.flags.richText) {
-      scheduleStreamRichUpgrade(kind);
-    }
-  }
-  // 块级模式下尾块源文本 parts 跟随 delta（350ms 升级输入）
-  streamBlockRender.tailTextParts[kind].push(delta);
 }
 
-export function appendStreamDelta(
-  kind: StreamKind,
-  delta: string,
-  html?: string,
-): void {
-  appendStreamDeltaCore(kind, delta, html);
-  // 单 delta 出口物化：外部读点（Preact UI / streamHasContent）保持新鲜
-  materializeStreamDisplay(kind);
-  scheduleStickIfNearBottom();
-}
-
-export type StreamBatchPayload = {
-  segments?: Array<{kind: StreamKind; delta: string}>;
+export type StreamDeltaPayload = {
+  streamId: string;
+  /** 1 起连续；本条应用后 Web 的 appliedSeq 应等于 seq。 */
+  seq: number;
+  segments?: ReadonlyArray<{kind: StreamKind; delta: string}>;
+  /** 全量正文 HTML（richText 时；committed 块 + 活跃尾块）。 */
   textHtml?: string;
   thinkingHtml?: string;
+  /** 活跃尾块 HTML（块级增量 DOM 专用；非块级/未激活时忽略）。 */
+  tailHtml?: string;
+  thinkingTailHtml?: string;
+  /** 完整 tool 数组快照（仅 tool 状态变化时携带）。 */
+  tools?: readonly ToolCallRow[];
 };
 
-export function applyStreamBatch(payload: StreamBatchPayload): void {
+/**
+ * streamDelta 唯一入口（spec §3.5）：seq 判定 → 行派生 → 检查点推进 → 四态 DOM。
+ * 行对象原地更新不触发 renderRows；只有建壳 / 工具卡变化才整表刷新
+ * （StreamBodyHost.shouldComponentUpdate=false 保证正文不重建）。
+ */
+export function applyStreamDelta(payload: StreamDeltaPayload): void {
+  const streamId = String(payload.streamId || '');
+  const seq = typeof payload.seq === 'number' ? payload.seq : -1;
+  const decision = decideStreamDelta(state.streamCheckpoint, streamId, seq);
+  if (decision === 'ignore') {
+    return;
+  }
+  if (decision === 'resync') {
+    requestResync(streamId, state.streamCheckpoint?.seq ?? 0);
+    return;
+  }
+  const row = findRowById(streamId);
+  if (row == null || row.status !== 'streaming') {
+    // 行不存在/已收尾：不推进 checkpoint，请求普通快照对账。
+    requestResync(streamId, state.streamCheckpoint?.seq ?? 0);
+    return;
+  }
+  // 相位必须在 row.text/tools 变异之前求值（首包建壳规则）。
+  const phase = getStreamingPhase(row);
   const segments = payload.segments || [];
-  let lastTextIdx = -1;
-  let lastThinkIdx = -1;
+  let textDelta = '';
+  let thinkingDelta = '';
   for (let i = 0; i < segments.length; i++) {
-    if (segments[i].kind === 'text') {
-      lastTextIdx = i;
+    const seg = segments[i];
+    if (seg.kind === 'text') {
+      textDelta += seg.delta || '';
     } else {
-      lastThinkIdx = i;
+      thinkingDelta += seg.delta || '';
     }
   }
-  for (let j = 0; j < segments.length; j++) {
-    const seg = segments[j];
-    let html: string | undefined;
-    if (seg.kind === 'text' && j === lastTextIdx) {
-      html = state.flags.richText ? payload.textHtml || '' : undefined;
-    } else if (seg.kind === 'thinking' && j === lastThinkIdx) {
-      html = state.flags.richText ? payload.thinkingHtml || '' : undefined;
-    }
-    appendStreamDeltaCore(seg.kind, seg.delta, html);
+  row.text = String(row.text || '') + textDelta;
+  row.thinking = String(row.thinking || '') + thinkingDelta;
+  // 全量 html 只在携带时覆盖；plain 下清空（rich 缺失时也清，防 reconcile 按旧 html 渲染）。
+  if (payload.textHtml != null) {
+    row.textHtml = payload.textHtml;
+  } else if (!state.flags.richText) {
+    row.textHtml = '';
   }
-  // 一批物化一次（spec §5：显示态数组追加、物化收敛到读点）
-  materializeStreamDisplay('text');
-  materializeStreamDisplay('thinking');
+  if (payload.thinkingHtml != null) {
+    row.thinkingHtml = payload.thinkingHtml;
+  } else if (!state.flags.richText) {
+    row.thinkingHtml = '';
+  }
+  const toolsChanged = payload.tools != null && payload.tools !== row.tools;
+  if (payload.tools != null) {
+    row.tools = payload.tools as ToolCallRow[];
+  }
+  // 检查点先推进：任何早退（建壳）都不能让下一条 delta 被判 gap。
+  state.streamCheckpoint = {id: streamId, seq, status: 'streaming'};
+  const tail = document.getElementById('stream-tail');
+  if (!tail || phase === 'waiting-first' || !tail.querySelector('.bubble')) {
+    // 建壳一次：显示态已由 row.text 更新，不进入四态表。
+    renderRows();
+    scheduleStickIfNearBottom();
+    return;
+  }
+  applyStreamBodyDelta(
+    tail,
+    'thinking',
+    thinkingDelta,
+    payload.thinkingHtml,
+    payload.thinkingTailHtml,
+  );
+  applyStreamBodyDelta(
+    tail,
+    'text',
+    textDelta,
+    payload.textHtml,
+    payload.tailHtml,
+  );
+  // 350ms 轻量升级的源文本（spec §3.5）：块级模式下 delta 必须同步进尾块 parts，
+  // 否则升级读到的是上次块提交的旧 tailText，会用旧文本覆盖刚 append 的增量。
+  if (streamBlockRender.active) {
+    if (textDelta) {
+      streamBlockRender.tailTextParts.text.push(textDelta);
+    }
+    if (thinkingDelta) {
+      streamBlockRender.tailTextParts.thinking.push(thinkingDelta);
+    }
+  }
+  const bubble = tail.querySelector('.bubble');
+  if (bubble) {
+    bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
+  }
+  if (toolsChanged) {
+    // 工具卡在 body 岛外：整表刷新刷卡片；正文由 StreamBodyHost 保持。
+    renderRows();
+  }
   scheduleStickIfNearBottom();
+}
+
+export type StreamStatusPayload = {
+  streamId: string;
+  status?: string;
+  messageId?: string;
+  /** DB 接管/收尾时的完整终态行（id 必须等于 streamId，status=finished）。 */
+  row?: MessageRow;
+};
+
+/**
+ * 收尾只改 status（I6）：文本只增不减，textHtml/thinkingHtml 与 text/thinking
+ * 成对采用（incoming 更短时本地 text+html 成对保留，防 reconcile 按短 html 洗短 body）。
+ */
+export function applyStreamStatus(payload: StreamStatusPayload): void {
+  const cp = state.streamCheckpoint;
+  const row = findRowById(payload.streamId);
+  if (row == null) {
+    // 当前流式行丢失 → 请求普通快照；旧 step 的迟到 status（行已被快照收走）直接忽略。
+    if (cp == null || cp.id === payload.streamId) {
+      requestResync(payload.streamId, cp?.seq ?? 0);
+    }
+    return;
+  }
+  const incoming = payload.row;
+  if (
+    incoming != null &&
+    incoming.kind === 'message' &&
+    incoming.id === payload.streamId &&
+    incoming.role === 'assistant' &&
+    incoming.status === 'finished'
+  ) {
+    const prevText = typeof row.text === 'string' ? row.text : '';
+    const prevThinking = typeof row.thinking === 'string' ? row.thinking : '';
+    const inText = typeof incoming.text === 'string' ? incoming.text : '';
+    const inThinking =
+      typeof incoming.thinking === 'string' ? incoming.thinking : '';
+    const useIncomingText = inText.length >= prevText.length;
+    const useIncomingThinking = inThinking.length >= prevThinking.length;
+    const text = useIncomingText ? inText : prevText;
+    const thinking = useIncomingThinking ? inThinking : prevThinking;
+    const textHtml = useIncomingText ? incoming.textHtml : row.textHtml;
+    const thinkingHtml = useIncomingThinking
+      ? incoming.thinkingHtml
+      : row.thinkingHtml;
+    Object.assign(row, {
+      ...incoming,
+      id: payload.streamId,
+      text,
+      thinking,
+      textHtml,
+      thinkingHtml,
+      messageId: incoming.messageId ?? row.messageId,
+    });
+  }
+  row.status = 'finished';
+  if (payload.messageId != null) {
+    row.messageId = payload.messageId;
+  }
+  // 空行收尾（首字前失败/空 step，且尚未被 DB 接管）：直接移除，避免空 assistant 气泡。
+  if (
+    payload.messageId == null &&
+    !row.text &&
+    !row.thinking &&
+    !(row.tools && row.tools.length > 0)
+  ) {
+    state.rows = state.rows.filter(r => r.id !== payload.streamId);
+    if (cp?.id === payload.streamId) {
+      state.streamCheckpoint = null;
+    }
+    renderRows();
+    return;
+  }
+  // 只收掉「当前 checkpoint 就是这条」的情况；旧 step 的 status 不动机器，
+  // 也不清当前流的升级 timer。
+  if (cp?.id === payload.streamId) {
+    state.streamCheckpoint = {
+      id: payload.streamId,
+      seq: cp.seq,
+      status: 'finished',
+    };
+    clearStreamRichUpgrade();
+  }
+  renderRows(); // 壳重渲：bar 消失/菜单行出现；body host 不更新
+  reconcileFinishedStreamingRows();
+  scheduleStickIfNearBottom();
+}
+
+export type StreamResetPayload = {
+  streamIds?: readonly string[];
+  generation?: number;
+};
+
+/**
+ * 消息操作（rollback/fork）清流：`streamIds` 给出要删的行 id（streaming/finished
+ * 均可），空数组 = 什么都不删；仅缺省时回落删除最后一条 streaming 行。
+ * 分片代次作废由 bridge 在本函数之前调用 snapshot.invalidateSnapshotPipeline
+ * （本文件不 import snapshot.ts，避免循环依赖）。
+ */
+export function applyStreamReset(payload: StreamResetPayload): void {
+  const ids = payload.streamIds;
+  if (ids == null) {
+    for (let i = state.rows.length - 1; i >= 0; i--) {
+      if (state.rows[i].status === 'streaming') {
+        state.rows = state.rows.filter((_, j) => j !== i);
+        break;
+      }
+    }
+  } else {
+    const drop = new Set(ids);
+    if (drop.size > 0) {
+      state.rows = state.rows.filter(row => !drop.has(row.id));
+    }
+  }
+  const cp = state.streamCheckpoint;
+  if (cp != null && !state.rows.some(row => row.id === cp.id)) {
+    state.streamCheckpoint = null;
+  }
+  state.fullReplaceOnly = null;
+  state.appliedBlockKeys = new Set();
+  state.resyncPending = null;
+  resetStreamBlockRenderState();
+  clearStreamRichUpgrade();
+  renderRows();
 }

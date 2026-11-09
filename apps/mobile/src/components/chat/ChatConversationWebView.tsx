@@ -16,14 +16,16 @@
 
  * ## 两条硬纪律（动本文件前先读）
  *
- * **(A) deferred 队列只装改画三通道**（`appendTailRows` / `prependPage` / `streamCommit`）。
- * 其余域一律走 `postToWeb` 直发。理由：deferred 的唯一目的是防快照末片整体替换 rows 时
- * 抹掉增量行；误 defer 的代价是分片窗口（约 1.15s）内的增量被排队。composer 域已随
- * 剥离退役，本纪律对转录域其余直发消息同样生效。
+ * **(A) 流式 wire 只有一条通道**：unit 的 stream-batch 经 `pushStream` 进入
+ * `pendingWireSegmentsRef`，rAF 合流后由本组件**唯一**分配 `seq`（1 起连续）并发
+ * `streamDelta`；块提交 `streamBlockCommit` 复用同一 seq 做对账。宿主不再有
+ * defer 队列（Web 侧 `pendingChunkActions` 自己保序），也不再有第二条
+ * delta/batch 通道——任何「再开一条」都会重新制造 seq 空洞与双数据面。
  *
- * **(B) ready 只认 `v === 2`**。旧 dist 的 v:1 ready 被拒 → 走 8s 超时兜底错误态，
- * **不得**因为「收到了 ready」就置位 `webReady`：置位了就会把 v2 协议消息灌进一个
- * 根本不认得的页面（静默白屏，比报错更难查）。
+ * **(B) ready 只认 `v === 2` + `version === 't2'` + `streamProjection` 能力位**。
+ * 旧 dist 的 v:1 ready 被拒 → 走 8s 超时兜底错误态；v2 但版本/能力不符（陈旧 t1
+ * dist）→ **立即**错误态。**不得**因为「收到了 ready」就置位 `webReady`：置位了就会
+ * 把 v2 协议消息灌进一个根本不认得的页面（静默白屏，比报错更难查）。
  *
  * ## 回滚 SPA 化之后的形态
  *
@@ -34,6 +36,13 @@
  *    文档内状态、`ref` 状态、8s 握手计时全部天然归零，本组件内**不再有任何
  *    `[sessionKey]` 清场 effect**。这份「新增 ref 必须同步补清场」的负担随 key
  *    恢复一并消失（它在 SPA 化那轮才被引进来）。
+ *
+ * ## 流式投影（chat-streaming-projection Step 4 / C9 wire 段）
+ *
+ * 宿主是 wire 序号的唯一分配者：`pushStream` → rAF 合流 → `streamDelta{streamId,
+ * seq, segments, textHtml, tailHtml, tools?}`；`streamingRows` prop 的最后一条驱动
+ * `beginStream/finishStream/resetStream`（status 翻转不走句柄）。`sessionSnapshot`
+ * 是唯一全量真源，末片带 `stream{id, seq, status}` 检查点。
  */
 import React, {
   forwardRef,
@@ -51,19 +60,18 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {
-  bootTimingLog,
-  rollbackTimingLog,
-  timingLog,
-} from '@/debug/run-timing';
+import {bootTimingLog, rollbackTimingLog, timingLog} from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type {
   ChatTranscriptScrollSnapshot,
   TranscriptFlags,
   TranscriptRestoreScroll,
   TranscriptRow,
+  TranscriptRowStatus,
   TranscriptScrollIntent,
   TranscriptSkillRef,
+  TranscriptStreamingMessage,
+  TranscriptToolView,
 } from './ChatTranscriptBridge';
 import {
   CONVERSATION_BRIDGE_V,
@@ -72,6 +80,7 @@ import {
   parseConversationScrollSnapshot,
   readReadyCapabilities,
   type ConversationHostMessage,
+  type ConversationUpstreamEnvelope,
 } from './ChatConversationBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
 import {conversationThemeFromTokens} from './conversation-theme';
@@ -80,11 +89,22 @@ import {
   buildTranscriptRows,
   buildToolPairingContext,
   buildTranscriptRowsWithContext,
-  messageHasToolUse,
-  messageIsToolResultsOnly,
   selectTailTranscriptRows,
 } from './message-blocks';
-import {planSnapshotChunkBounds} from './snapshot-chunk-bounds';
+import {
+  planSnapshotChunkBounds,
+  planRowChunkBounds,
+} from './snapshot-chunk-bounds';
+import {
+  planMessagesUpdate,
+  planOpenSnapshot,
+} from './chat-conversation-update-plan';
+import {
+  EMPTY_STREAMING_ROWS,
+  EMPTY_STREAM_ROW_IDS,
+  applyStreamRowIds,
+  buildStreamingTranscriptRow,
+} from './transcript-stream-projection';
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
@@ -97,26 +117,30 @@ import {prepareStreamTailHtml} from './prepare-stream-tail-html';
 import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
 import {
   TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+  TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
+  TRANSCRIPT_READY_VERSION,
   transcriptCapabilitiesInclude,
 } from '@/web/chat-transcript/transcript-capabilities';
+import {createLogger} from '@novel-master/core/log';
+import {coreT} from '@/i18n/core';
+import {buildTranscriptLabels} from './transcript-labels';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import {appendWireChunk} from '@/services/stream-wire-queue';
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
-import {
-  CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS,
-} from './chat-transcript-selection-menu';
+import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
 export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
+const log = createLogger('chat.transcript-host');
+
 /**
- * 宿主句柄 = 转录七方法（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）。
+ * 宿主句柄 = 转录三命令（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）。
  *
  * composer 命令式写入（`setComposerText`）随 D4b 剥离删除：composer 域下行
  * `setText` 桥消息退役后该方法失去落点，M7 命令式通道语义由 Step 3 起的
  * `NativeChatComposer` ref 通道承接。`session-stream-webview-adapter` /
- * `ChatTabProvider` / `useInterruptedPartialCommit` / `SubagentSessionScreen`
- * 的转录七方法消费零改动。
+ * `ChatTabProvider` / `SubagentSessionScreen` 的转录三命令消费零改动；
+ * 中断 partial 由单元 `streamRows` 投影随普通快照下发（不再有独立合成提交通道）。
  *
  * `transcriptOnly` 变体（子会话屏）的行为面断言在
  * `__tests__/chat-conversation-webview.test.tsx` 的 transcriptOnly describe
@@ -127,17 +151,18 @@ export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle;
 
 /**
  * 会改变**转录**画面的宿主消息类型；用于「隐藏期间脏推送」计数。
+ *
+ * 流式投影协议后：`streamDelta` 合并原 delta/batch 两条通道，
+ * `streamStatus/streamReset` 取代 `streamCommit/streamToolInvoking`。
  */
 const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
   'sessionSnapshot',
   'prependPage',
   'appendTailRows',
   'streamDelta',
-  'streamBatch',
   'streamBlockCommit',
-  'streamCommit',
+  'streamStatus',
   'streamReset',
-  'streamToolInvoking',
   'flagsUpdate',
 ]);
 
@@ -149,6 +174,13 @@ const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
 const STREAM_BLOCK_RENDER_ENABLED = true;
 
 /**
+ * 流式投影回滚闸（spec §6.5 / C9 第 15 条）：false 时 `streamingRows` 与
+ * `streamRowIds` 全按空处理——快照只发 DB 行、行 id 保持 DB id、不发任何
+ * 流式消息。只影响本轮新增代码，不复活旧双数据面。
+ */
+const STREAM_PROJECTION_ENABLED = true;
+
+/**
  * ready 超时兜底窗口（spec T-CU15，锚 **onLoad** 而非 init）。
  *
  * 锚 init 是时序死锁：init 本身要等 ready 才发。白屏的成因链是「旧 dist 发不出
@@ -157,20 +189,24 @@ const STREAM_BLOCK_RENDER_ENABLED = true;
  */
 const READY_TIMEOUT_MS = 8000;
 
-export type ChatConversationWebViewProps = {
+type ChatConversationWebViewProps = {
   readonly sessionKey: string;
   readonly messages: readonly ChatMessageData[];
-  readonly streamingText?: string;
-  readonly streamingThinking?: string;
+  /**
+   * 流式行投影（copy-on-write 数组）：最后一条是当前 streaming 行，前面可能
+   * 还有 finished-未接管行。空会话 run 启动时据此发只含流式行的开屏快照。
+   */
+  readonly streamingRows?: readonly TranscriptStreamingMessage[];
+  /** DB message id → streamId 的接管映射（DB 行改写为流式行身份用）。 */
+  readonly streamRowIds?: ReadonlyMap<string, string>;
   readonly hasMore?: boolean;
   readonly flags?: Partial<TranscriptFlags>;
   readonly initialScroll?: ChatTranscriptScrollSnapshot | null;
   /** No cached snapshot: open pinned to bottom. */
   readonly defaultScrollToBottom?: boolean;
   readonly agentRunning?: boolean;
-  /** 菜单禁用与流式快照推迟；未传时回退 agentRunning。 */
+  /** 菜单禁用与流式快照；未传时回退 agentRunning。 */
   readonly uiRunning?: boolean;
-  readonly toolInvoking?: boolean;
   readonly menuCloseSignal?: number;
   readonly mermaidViewerCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
@@ -207,21 +243,14 @@ export type ChatConversationWebViewProps = {
   readonly transcriptOnly?: boolean;
 };
 
-function transcriptFlagsEqual(
-  a: Partial<TranscriptFlags> | undefined,
-  b: Partial<TranscriptFlags> | undefined,
-): boolean {
-  return (
-    (a?.richText ?? false) === (b?.richText ?? false) &&
-    (a?.menuDisabled ?? false) === (b?.menuDisabled ?? false)
-  );
-}
-
 /**
  * memo 比较器：转录域照旧（composer 域已随 D4b 剥离，比较面只剩转录字段）。
  *
  * 历史教训（spec 记过一次踩坑史）：`pendingSubagentSessions` 漏加 → 静默吞更新。
  * 往本比较器加字段时逐个入列，漏一个就是「改了没生效」且无任何报错。
+ *
+ * nm-style: keep-local — 比较器是 props 契约的逐字段登记表（漏字段 = 静默吞更新），
+ * 内联成 memo 第二参不消除任何层，且比较面必须保持命名以便逐字段审阅与回归引用。
  */
 function chatConversationWebViewPropsEqual(
   prev: ChatConversationWebViewProps,
@@ -231,18 +260,19 @@ function chatConversationWebViewPropsEqual(
     // ---- 转录域（照 ChatTranscriptWebView 原样） ----
     prev.sessionKey === next.sessionKey &&
     prev.messages === next.messages &&
-    prev.streamingText === next.streamingText &&
-    prev.streamingThinking === next.streamingThinking &&
+    prev.streamingRows === next.streamingRows &&
+    prev.streamRowIds === next.streamRowIds &&
     prev.hasMore === next.hasMore &&
     prev.agentRunning === next.agentRunning &&
     (prev.uiRunning ?? prev.agentRunning) ===
       (next.uiRunning ?? next.agentRunning) &&
-    prev.toolInvoking === next.toolInvoking &&
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.mermaidViewerCloseSignal === next.mermaidViewerCloseSignal &&
     prev.initialScroll === next.initialScroll &&
-    transcriptFlagsEqual(prev.flags, next.flags) &&
+    (prev.flags?.richText ?? false) === (next.flags?.richText ?? false) &&
+    (prev.flags?.menuDisabled ?? false) ===
+      (next.flags?.menuDisabled ?? false) &&
     prev.pendingSubagentSessions === next.pendingSubagentSessions &&
     // ---- 变体（transcript-converge）：漏比会吞掉子会话屏的降级形态 ----
     prev.transcriptOnly === next.transcriptOnly
@@ -254,75 +284,28 @@ function chatConversationWebViewPropsEqual(
  * （映射本体在 `conversation-theme.ts`，与原生 composer 共用一份）。
  */
 
-function resolveOpenScrollIntent(
-  initialScroll: ChatTranscriptScrollSnapshot | null,
-  defaultScrollToBottom: boolean,
-): {intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll} {
-  if (defaultScrollToBottom) {
-    return {intent: 'stick'};
-  }
-  if (initialScroll == null) {
-    return {intent: 'stick'};
-  }
-  if (initialScroll.nearBottom) {
-    return {intent: 'stick'};
-  }
-  return {
-    intent: 'restore',
-    restoreScroll: {
-      offsetY: initialScroll.offsetY,
-      nearBottom: initialScroll.nearBottom,
-    },
-  };
-}
-
-function emitScrollRestoreTelemetry(
-  intent: TranscriptScrollIntent,
-  restoreScroll?: TranscriptRestoreScroll,
-): void {
-  if (intent === 'restore' && restoreScroll != null) {
-    emitChatTranscriptTelemetry({
-      name: 'scroll_restore',
-      mode: restoreScroll.nearBottom ? 'near_bottom' : 'offset',
-      offsetY: restoreScroll.offsetY,
-      nearBottom: restoreScroll.nearBottom,
-    });
-    return;
-  }
-  if (intent === 'stick') {
-    emitChatTranscriptTelemetry({name: 'scroll_restore', mode: 'stick'});
-  }
-}
-
-/** streamCommit 已同步的行，跳过 messages effect 重复 snapshot/append。 */
-function shouldSkipSnapshotAfterStreamCommit(
-  messages: readonly ChatMessageData[],
-  prevCount: number,
-  committedIds: readonly string[],
-): boolean {
-  if (committedIds.length === 0 || messages.length <= prevCount) {
-    return false;
-  }
-  const addedIds = messages.slice(prevCount).map(message => message.id);
-  return addedIds.length > 0 && addedIds.every(id => committedIds.includes(id));
-}
-
-/** 跳过 snapshot 的前提是 streamCommit 同步过的行仍全部在当前列表里。 */
-function committedStreamRowsStillPresent(
-  messages: readonly ChatMessageData[],
-  committedIds: readonly string[],
-): boolean {
-  const idSet = new Set(messages.map(message => message.id));
-  return committedIds.every(id => idSet.has(id));
-}
-
-/** 分片在途期间推迟的动作（单一队列保序）：流式 flush 占位 + 改画三通道完整消息。 */
-type DeferredSnapshotAction =
-  | {kind: 'streamFlush'}
-  | {kind: 'post'; message: ConversationHostMessage};
+/** 上一拍最后一条流式行的身份（text 每拍变，不进依赖，只按 id/status/messageId 差分）。 */
+type LastStreamSnapshot = {
+  readonly id: string;
+  readonly status: TranscriptRowStatus;
+  readonly messageId: string | null;
+  readonly isEmpty: boolean;
+};
 
 /** 快照分片代次（模块级单调递增计数器，见 ChatTranscriptWebView 同款注释）。 */
 let snapshotGenerationCounter = 0;
+
+/** streamResync 宿主侧限流窗口（spec T-SP29）：同 streamId 100ms 内只补一次快照。 */
+const STREAM_RESYNC_MIN_INTERVAL_MS = 100;
+
+/** 全量正文 html = 已提交块 html 缓存 + 活跃尾块 html（空串降级为 undefined）。 */
+function joinStreamHtml(
+  committedHtml: readonly string[],
+  tailHtml: string | undefined,
+): string | undefined {
+  const full = committedHtml.join('') + (tailHtml ?? '');
+  return full.length > 0 ? full : undefined;
+}
 
 export const ChatConversationWebView = memo(
   forwardRef<ChatConversationWebViewHandle, ChatConversationWebViewProps>(
@@ -330,15 +313,14 @@ export const ChatConversationWebView = memo(
       {
         sessionKey,
         messages,
-        streamingText = '',
-        streamingThinking = '',
+        streamingRows: streamingRowsProp,
+        streamRowIds: streamRowIdsProp,
         hasMore = false,
         flags,
         initialScroll = null,
         defaultScrollToBottom = true,
         agentRunning = false,
         uiRunning: uiRunningProp,
-        toolInvoking = false,
         menuCloseSignal = 0,
         mermaidViewerCloseSignal = 0,
         onScrollSnapshot,
@@ -360,12 +342,19 @@ export const ChatConversationWebView = memo(
       ref,
     ) {
       const uiRunning = uiRunningProp ?? agentRunning;
-      const streamGenerating = uiRunning || toolInvoking;
-      useEffect(() => {
-        if (streamGenerating) {
-          timingLog('webview streamGenerating=true (conversation live)');
-        }
-      }, [streamGenerating]);
+      // 回滚闸：false 时按「无流式行 / 无映射」处理（快照只发 DB 行）。
+      const streamingRows = STREAM_PROJECTION_ENABLED
+        ? streamingRowsProp ?? EMPTY_STREAMING_ROWS
+        : EMPTY_STREAMING_ROWS;
+      const streamRowIds = STREAM_PROJECTION_ENABLED
+        ? streamRowIdsProp ?? EMPTY_STREAM_ROW_IDS
+        : EMPTY_STREAM_ROW_IDS;
+      const hasStreamingMessage = streamingRows.length > 0;
+      /** 投影最后一条（当前 streaming 行；status 翻转 effect 的依赖源）。 */
+      const lastStreamingRow =
+        streamingRows.length > 0
+          ? streamingRows[streamingRows.length - 1]!
+          : null;
 
       /**
        * 列表构建选项：memo 到「三个输入真变」为止。
@@ -397,7 +386,11 @@ export const ChatConversationWebView = memo(
       /** T-CU15：ready 超时兜底错误态（onLoad 后 8s 未收到 v:2 ready）。 */
       const [readyFailed, setReadyFailed] = useState(false);
 
-      const forceSnapshotOnReadyRef = useRef(false);
+      /**
+       * 本次 hidden 期间的改画推送计数（P2-14）：hidden:true 到达时清零，
+       * 恢复可见时读取——只统计 hidden 期间，可见期间的历史推送不参与
+       * 「hidden 零推送」判定。
+       */
       const statePushSinceResumeRef = useRef(0);
       /**
        * web 上报 `visibility {hidden:true}` 那一刻的 app 前台态快照（2026-10-05
@@ -414,37 +407,62 @@ export const ChatConversationWebView = memo(
        * 的方向约定不同（那边未知态当前台防误判死，这边未知态当后台保重挂兜底）。
        */
       const visibilityHiddenAppStateRef = useRef<string | null>(null);
-      const prevStreamTextRef = useRef('');
-      const prevStreamThinkingRef = useRef('');
       const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
       const prevMessageCountRef = useRef(0);
       const prevRichTextRef = useRef(flags?.richText ?? false);
       const prevMessagesRef = useRef(messages);
+      /**
+       * 快照构建只读 ref（C9 第 4 条）：`streamingRows` 每 64ms 换引用，若进
+       * 依赖数组会让发快照的 effect 被反复触发；渲染期写 ref 保证快照拿到当拍值。
+       */
+      const streamingRowsRef = useRef(streamingRows);
+      streamingRowsRef.current = streamingRows;
       const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
       const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
       const initialScrollRef = useRef(initialScroll);
       const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
       const needsOpenSnapshotRef = useRef(true);
-      const snapshotDeferTimerRef = useRef<ReturnType<
-        typeof setTimeout
-      > | null>(null);
-      const pendingSnapshotRef = useRef<{
-        intent: TranscriptScrollIntent;
-        restoreScroll?: TranscriptRestoreScroll;
-      } | null>(null);
+      /* ---- 流式 wire（C9）：宿主唯一 seq 分配 + rAF 合流 ---- */
       const streamRafRef = useRef<number | null>(null);
-      const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
-      const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
+      /** 待发 segments（单一队列，带归属 streamId；beginStream 切流前先 flush）。 */
+      const pendingWireSegmentsRef = useRef<{
+        streamId: string | null;
+        segments: StreamWireChunk[];
+      }>({streamId: null, segments: []});
       const streamTextAccumRef = useRef('');
       const streamThinkingAccumRef = useRef('');
       const streamCommittedTextPartsRef = useRef<string[]>([]);
       const streamCommittedThinkingPartsRef = useRef<string[]>([]);
+      /** 已提交块的 html 缓存（与 parts 一一对应；P2-10 全量 html 免重复 parse）。 */
+      const streamCommittedTextHtmlPartsRef = useRef<string[]>([]);
+      const streamCommittedThinkingHtmlPartsRef = useRef<string[]>([]);
+      const streamToolsRef = useRef<readonly TranscriptToolView[]>([]);
+      const streamToolsDirtyRef = useRef(false);
+      /** 当前流的 wire 序号（1 起连续；新流从 0 重新开始）。 */
+      const streamWireSeqRef = useRef(0);
+      const streamIdRef = useRef<string | null>(null);
+      /** 本宿主最后见过的 streamId（reset 清 streamIdRef 后仍保留，供迟到 status 判旧）。 */
+      const lastStreamIdRef = useRef<string | null>(null);
+      /** 块级渲染武装位：新 step / 空 streaming 行为 true，快照 seed 有内容后 false。 */
+      const streamBlockArmedRef = useRef(false);
+      /** 块提交序号（blockKey = `<streamId>:<kind>:<ordinal>`）。 */
+      const streamBlockCommitOrdinalRef = useRef(0);
       const streamBlockCapableRef = useRef(false);
       const richTextRef = useRef(flags?.richText ?? false);
-      const streamActiveRef = useRef(false);
-      const lastStreamCommitIdsRef = useRef<readonly string[]>([]);
-      const inFlightSnapshotGenerationRef = useRef<number | null>(null);
-      const deferredSnapshotActionsRef = useRef<DeferredSnapshotAction[]>([]);
+      /** 快照分片代次（唯一消费者：sendSessionSnapshotNow 的片间中止检查）。 */
+      const activeSnapshotGenerationRef = useRef<number | null>(null);
+      /** streamResync 宿主侧 100ms 限流（streamId → performance.now）。 */
+      const resyncSentAtRef = useRef<Map<string, number>>(new Map());
+      /** 上一拍最后一条流式行的身份（status 翻转 effect 的差分基准）。 */
+      const lastStreamSnapshotRef = useRef<LastStreamSnapshot | null>(null);
+      /** 快照直发入口（供 beginStream / streamResync / forceSnapshot 读当拍闭包）。 */
+      const sendSessionSnapshotRef =
+        useRef<
+          (
+            intent: TranscriptScrollIntent,
+            restoreScroll?: TranscriptRestoreScroll,
+          ) => void
+        >(null);
 
       const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null,
@@ -496,21 +514,6 @@ export const ChatConversationWebView = memo(
 
       useEffect(() => clearReadyTimeout, [clearReadyTimeout]);
 
-      const clearLocalStreamBuffers = useCallback(() => {
-        if (streamRafRef.current != null) {
-          cancelAnimationFrame(streamRafRef.current);
-          streamRafRef.current = null;
-        }
-        pendingStreamDeltaSegmentsRef.current = [];
-        pendingStreamSegmentsRef.current = [];
-        streamTextAccumRef.current = '';
-        streamThinkingAccumRef.current = '';
-        streamCommittedTextPartsRef.current = [];
-        streamCommittedThinkingPartsRef.current = [];
-        prevStreamTextRef.current = '';
-        prevStreamThinkingRef.current = '';
-      }, []);
-
       useEffect(() => {
         richTextRef.current = flags?.richText ?? false;
       }, [flags?.richText]);
@@ -523,12 +526,7 @@ export const ChatConversationWebView = memo(
         defaultScrollToBottomRef.current = defaultScrollToBottom;
       }, [defaultScrollToBottom]);
 
-      /**
-       * 唯一的下行出口。
-       *
-       * 纪律 (A)：只有改画三通道的调用方才允许改走 `postOrDeferSnapshotPaint`；
-       * 其余域一律直接走这里（不排队、不 defer）。
-       */
+      /** 唯一的下行出口（不再有宿主侧 defer 队列：Web 的 pendingChunkActions 自保序）。 */
       const postToWeb = useCallback((message: ConversationHostMessage) => {
         if (!webReadyRef.current) {
           return;
@@ -539,43 +537,6 @@ export const ChatConversationWebView = memo(
         webRef.current?.postMessage(encodeHostToConversation(message));
       }, []);
 
-      /**
-       * 改画基线消息的推迟发送（C-orch-1）：分片在途时三通道直发会插进分片序列
-       * 中间，末片 applySnapshot 用旧闭包整体替换会把增量行抹掉。此处入 deferred
-       * 队列，末片 post 后按入队原序补发。
-       */
-      const postOrDeferSnapshotPaint = useCallback(
-        (message: ConversationHostMessage) => {
-          if (inFlightSnapshotGenerationRef.current != null) {
-            deferredSnapshotActionsRef.current.push({kind: 'post', message});
-            return;
-          }
-          postToWeb(message);
-        },
-        [postToWeb],
-      );
-
-      /** 流式 flush 占位入队（幂等，flush 本身空转安全）。 */
-      const enqueueDeferredStreamFlush = useCallback(() => {
-        for (const action of deferredSnapshotActionsRef.current) {
-          if (action.kind === 'streamFlush') {
-            return;
-          }
-        }
-        deferredSnapshotActionsRef.current.push({kind: 'streamFlush'});
-      }, []);
-
-      const syncStreamToolInvoking = useCallback(() => {
-        if (!webReady) {
-          return;
-        }
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'streamToolInvoking',
-          payload: {active: streamGenerating},
-        });
-      }, [webReady, streamGenerating, postToWeb]);
-
       type PendingStreamBlockSplit = {
         kind: 'text' | 'thinking';
         commits: {html?: string; text: string}[];
@@ -583,10 +544,16 @@ export const ChatConversationWebView = memo(
         tailText: string;
       };
 
-      /** 块感知切分（照搬 ChatTranscriptWebView；未声明能力时恒返回 []）。 */
+      /**
+       * 块感知切分（照搬 ChatTranscriptWebView）：完成块移入 committed、accum 改成
+       * activeTail；每块 html 同步缓存进 `streamCommitted*HtmlPartsRef`（P2-10：全量
+       * html 用「committedHtml.join('') + tailHtml」拼，不重复 parse 已提交块）。
+       * 未武装（快照 seed 后）/未声明能力时恒返回 []。
+       */
       const takeStreamBlockSplits =
         useCallback((): PendingStreamBlockSplit[] => {
           if (
+            !streamBlockArmedRef.current ||
             !richTextRef.current ||
             !STREAM_BLOCK_RENDER_ENABLED ||
             !streamBlockCapableRef.current
@@ -599,26 +566,30 @@ export const ChatConversationWebView = memo(
               kind: 'text' as const,
               tail: streamTextAccumRef,
               committed: streamCommittedTextPartsRef,
+              committedHtml: streamCommittedTextHtmlPartsRef,
             },
             {
               kind: 'thinking' as const,
               tail: streamThinkingAccumRef,
               committed: streamCommittedThinkingPartsRef,
+              committedHtml: streamCommittedThinkingHtmlPartsRef,
             },
           ];
-          for (const {kind, tail, committed} of kinds) {
+          for (const {kind, tail, committed, committedHtml} of kinds) {
             const {blocks, activeTail} = splitStreamBlocks(tail.current);
             if (blocks.length === 0) {
               continue;
             }
             tail.current = activeTail;
             committed.current.push(...blocks);
+            const commits = blocks.map(block => {
+              const html = prepareStreamTailHtml(block, true);
+              committedHtml.current.push(html ?? '');
+              return {html, text: block};
+            });
             splits.push({
               kind,
-              commits: blocks.map(block => ({
-                html: prepareStreamTailHtml(block, true),
-                text: block,
-              })),
+              commits,
               tailHtml: prepareStreamTailHtml(activeTail, true),
               tailText: activeTail,
             });
@@ -627,7 +598,11 @@ export const ChatConversationWebView = memo(
         }, []);
 
       const postStreamBlockSplits = useCallback(
-        (splits: readonly PendingStreamBlockSplit[]) => {
+        (
+          splits: readonly PendingStreamBlockSplit[],
+          streamId: string,
+          seq: number,
+        ) => {
           for (const split of splits) {
             const lastCommitIndex = split.commits.length - 1;
             for (let i = 0; i <= lastCommitIndex; i += 1) {
@@ -638,6 +613,11 @@ export const ChatConversationWebView = memo(
                 v: CONVERSATION_BRIDGE_V,
                 type: 'streamBlockCommit',
                 payload: {
+                  streamId,
+                  seq,
+                  blockKey: `${streamId}:${
+                    split.kind
+                  }:${++streamBlockCommitOrdinalRef.current}`,
                   kind: split.kind,
                   html: commit.html,
                   text: commit.text,
@@ -652,146 +632,276 @@ export const ChatConversationWebView = memo(
         [postToWeb],
       );
 
-      const flushPendingStreamDeltas = useCallback(() => {
-        if (pendingStreamDeltaSegmentsRef.current.length === 0) {
-          return;
-        }
+      /**
+       * 把 rAF 队列里的 segments/tools 合流成**一条** `streamDelta`（seq 在此唯一
+       * 分配）。块切分先于 html 计算：完成块移入 committed、accum 只剩活跃尾块。
+       */
+      const flushPendingStreamNow = useCallback(() => {
         if (streamRafRef.current != null) {
+          cancelAnimationFrame(streamRafRef.current);
+          streamRafRef.current = null;
+        }
+        const pending = pendingWireSegmentsRef.current;
+        if (pending.segments.length === 0 && !streamToolsDirtyRef.current) {
           return;
         }
-        streamRafRef.current = requestAnimationFrame(() => {
-          streamRafRef.current = null;
-          if (inFlightSnapshotGenerationRef.current != null) {
-            enqueueDeferredStreamFlush();
-            return;
-          }
-          const segments = pendingStreamDeltaSegmentsRef.current;
-          if (segments.length === 0) {
-            return;
-          }
-          pendingStreamDeltaSegmentsRef.current = [];
-          const richText = richTextRef.current;
-          const blockSplits = takeStreamBlockSplits();
-          const textHtml = prepareStreamTailHtml(
-            streamTextAccumRef.current,
-            richText,
-          );
-          const thinkingHtml = prepareStreamTailHtml(
-            streamThinkingAccumRef.current,
-            richText,
-          );
-          for (const seg of segments) {
-            postToWeb({
-              v: CONVERSATION_BRIDGE_V,
-              type: 'streamDelta',
-              payload: {
-                kind: seg.kind,
-                delta: seg.delta,
-                html: seg.kind === 'text' ? textHtml : thinkingHtml,
-              },
-            });
-          }
-          postStreamBlockSplits(blockSplits);
+        const streamId = pending.streamId ?? streamIdRef.current;
+        const segments = pending.segments;
+        pending.segments = [];
+        if (streamId == null || !webReadyRef.current) {
+          streamToolsDirtyRef.current = false;
+          return;
+        }
+        pending.streamId = streamId;
+        const blockSplits = takeStreamBlockSplits();
+        const richText = richTextRef.current;
+        const tailHtml = prepareStreamTailHtml(
+          streamTextAccumRef.current,
+          richText,
+        );
+        const thinkingTailHtml = prepareStreamTailHtml(
+          streamThinkingAccumRef.current,
+          richText,
+        );
+        const textHtml = joinStreamHtml(
+          streamCommittedTextHtmlPartsRef.current,
+          tailHtml,
+        );
+        const thinkingHtml = joinStreamHtml(
+          streamCommittedThinkingHtmlPartsRef.current,
+          thinkingTailHtml,
+        );
+        const seq = ++streamWireSeqRef.current;
+        const toolsDirty = streamToolsDirtyRef.current;
+        postToWeb({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'streamDelta',
+          payload: {
+            streamId,
+            seq,
+            segments: segments.map(seg => ({
+              kind: seg.kind,
+              delta: seg.delta,
+            })),
+            ...(textHtml != null ? {textHtml} : {}),
+            ...(thinkingHtml != null ? {thinkingHtml} : {}),
+            ...(tailHtml != null ? {tailHtml} : {}),
+            ...(thinkingTailHtml != null ? {thinkingTailHtml} : {}),
+            ...(toolsDirty ? {tools: streamToolsRef.current} : {}),
+          },
         });
-      }, [
-        postToWeb,
-        enqueueDeferredStreamFlush,
-        takeStreamBlockSplits,
-        postStreamBlockSplits,
-      ]);
+        streamToolsDirtyRef.current = false;
+        postStreamBlockSplits(blockSplits, streamId, seq);
+      }, [postToWeb, takeStreamBlockSplits, postStreamBlockSplits]);
 
-      const flushPendingStreamBatch = useCallback(() => {
-        if (pendingStreamSegmentsRef.current.length === 0) {
-          return;
-        }
+      const scheduleStreamFlush = useCallback(() => {
         if (streamRafRef.current != null) {
           return;
         }
         streamRafRef.current = requestAnimationFrame(() => {
           streamRafRef.current = null;
-          if (inFlightSnapshotGenerationRef.current != null) {
-            enqueueDeferredStreamFlush();
+          flushPendingStreamNow();
+        });
+      }, [flushPendingStreamNow]);
+
+      /**
+       * 切到新流：先把旧流的尾 delta 按旧 seq 发完，再用投影行播种累加器。
+       * **幂等**：`pushStream` 抢先建流后 effect 不得再重置累加器（会丢掉已入队
+       * 的 delta）。
+       */
+      const beginStream = useCallback(
+        (streamId: string) => {
+          if (streamIdRef.current === streamId) {
+            if (
+              streamWireSeqRef.current === 0 &&
+              lastStreamIdRef.current === streamId &&
+              streamingRowsRef.current.some(
+                message => message.streamId === streamId,
+              )
+            ) {
+              // 同 id 的旧行已在文档里（cp.seq 可能大于 0）：先补一份快照对账，
+              // 否则后续新 delta 会因「seq <= applied」被全部 ignore。
+              bootTimingLog(
+                `stream begin: existing row ${streamId} at wire seq 0, forcing snapshot`,
+              );
+              sendSessionSnapshotRef.current?.('preserve');
+            }
             return;
           }
-          const segments = pendingStreamSegmentsRef.current;
-          if (segments.length === 0) {
+          flushPendingStreamNow();
+          streamIdRef.current = streamId;
+          lastStreamIdRef.current = streamId;
+          streamWireSeqRef.current = 0;
+          streamCommittedTextPartsRef.current = [];
+          streamCommittedThinkingPartsRef.current = [];
+          streamCommittedTextHtmlPartsRef.current = [];
+          streamCommittedThinkingHtmlPartsRef.current = [];
+          streamToolsDirtyRef.current = false;
+          streamBlockCommitOrdinalRef.current = 0;
+          const row =
+            streamingRowsRef.current.find(
+              message => message.streamId === streamId,
+            ) ?? null;
+          streamTextAccumRef.current = row?.text ?? '';
+          streamThinkingAccumRef.current = row?.thinking ?? '';
+          streamToolsRef.current = row?.tools ?? [];
+          // 新 step 重新允许块切分；Web 侧块状态由快照换主复位。
+          streamBlockArmedRef.current = true;
+          pendingWireSegmentsRef.current = {streamId, segments: []};
+        },
+        [flushPendingStreamNow],
+      );
+
+      /**
+       * 单元 stream-batch 的唯一入口：同拍把 segments 累加进正文/思考，入队待
+       * rAF 合流；tools 有值即标记 dirty（下一拍 delta 携带完整工具数组）。
+       */
+      const pushStream = useCallback(
+        (payload: {
+          streamId: string;
+          segments: readonly StreamWireChunk[];
+          tools?: readonly TranscriptToolView[];
+        }) => {
+          if (!STREAM_PROJECTION_ENABLED || !webReadyRef.current) {
             return;
           }
-          pendingStreamSegmentsRef.current = [];
-          const richText = richTextRef.current;
-          const blockSplits = takeStreamBlockSplits();
-          const textHtml = prepareStreamTailHtml(
-            streamTextAccumRef.current,
-            richText,
-          );
-          const thinkingHtml = prepareStreamTailHtml(
-            streamThinkingAccumRef.current,
-            richText,
+          const {streamId, segments, tools} = payload;
+          if (streamId !== streamIdRef.current) {
+            beginStream(streamId);
+          }
+          pendingWireSegmentsRef.current.streamId = streamId;
+          let queued = 0;
+          for (const segment of segments) {
+            if (segment.delta.length === 0) {
+              continue;
+            }
+            if (segment.kind === 'text') {
+              streamTextAccumRef.current += segment.delta;
+            } else {
+              streamThinkingAccumRef.current += segment.delta;
+            }
+            appendWireChunk(pendingWireSegmentsRef.current.segments, segment);
+            queued += 1;
+          }
+          if (tools != null) {
+            streamToolsRef.current = tools;
+            streamToolsDirtyRef.current = true;
+          }
+          if (queued > 0 || tools != null) {
+            scheduleStreamFlush();
+          }
+        },
+        [beginStream, scheduleStreamFlush],
+      );
+
+      /**
+       * 收尾只改 status，且**必带全量终态行**（多块 richText 下不能只带尾块，
+       * P0-1）。先 flush 保证尾 delta 的 seq 小于 status 引用的 seq。
+       */
+      const finishStream = useCallback(
+        (streamId: string) => {
+          flushPendingStreamNow();
+          const found =
+            streamingRowsRef.current.find(
+              message => message.streamId === streamId,
+            ) ?? null;
+          const isCurrent = streamId === streamIdRef.current;
+          if (found == null && !isCurrent) {
+            // 行已被快照收走：旧 step 的迟到 status 直接忽略（终态行由
+            // messages effect 的 stream-adopted 发送）。
+            return;
+          }
+          const text = isCurrent
+            ? streamCommittedTextPartsRef.current.join('') +
+              streamTextAccumRef.current
+            : found!.text;
+          const thinking = isCurrent
+            ? streamCommittedThinkingPartsRef.current.join('') +
+              streamThinkingAccumRef.current
+            : found!.thinking;
+          const message: TranscriptStreamingMessage =
+            found != null
+              ? {...found, status: 'finished'}
+              : {
+                  streamId,
+                  status: 'finished',
+                  text,
+                  thinking,
+                  tools: streamToolsRef.current,
+                  messageId: null,
+                };
+          const row = buildStreamingTranscriptRow(
+            message,
+            richTextRef.current,
+            {
+              text,
+              thinking,
+            },
           );
           postToWeb({
             v: CONVERSATION_BRIDGE_V,
-            type: 'streamBatch',
+            type: 'streamStatus',
             payload: {
-              segments: segments.map(seg => ({
-                kind: seg.kind,
-                delta: seg.delta,
-              })),
-              textHtml,
-              thinkingHtml,
+              streamId,
+              status: 'finished',
+              ...(message.messageId != null
+                ? {messageId: message.messageId}
+                : {}),
+              row,
             },
           });
-          postStreamBlockSplits(blockSplits);
-        });
-      }, [
-        postToWeb,
-        enqueueDeferredStreamFlush,
-        takeStreamBlockSplits,
-        postStreamBlockSplits,
-      ]);
+        },
+        [flushPendingStreamNow, postToWeb],
+      );
 
-      const queueStreamDelta = useCallback(
-        (kind: 'text' | 'thinking', delta: string) => {
-          if (!webReady || delta.length === 0) {
+      /**
+       * 清流式本地状态（resetStream 与「未被接管的合成 partial 收掉」共用）。
+       * `streamIds` 不含当前流时不动当前流（reset 只删旧行）。
+       */
+      const resetStreamState = useCallback((streamIds?: readonly string[]) => {
+        const activeId = streamIdRef.current;
+        const dropsActive =
+          streamIds == null || activeId == null || streamIds.includes(activeId);
+        if (!dropsActive) {
+          return;
+        }
+        if (streamRafRef.current != null) {
+          cancelAnimationFrame(streamRafRef.current);
+          streamRafRef.current = null;
+        }
+        pendingWireSegmentsRef.current = {streamId: null, segments: []};
+        streamWireSeqRef.current = 0;
+        streamTextAccumRef.current = '';
+        streamThinkingAccumRef.current = '';
+        streamCommittedTextPartsRef.current = [];
+        streamCommittedThinkingPartsRef.current = [];
+        streamCommittedTextHtmlPartsRef.current = [];
+        streamCommittedThinkingHtmlPartsRef.current = [];
+        streamToolsRef.current = [];
+        streamToolsDirtyRef.current = false;
+        streamBlockArmedRef.current = false;
+        streamBlockCommitOrdinalRef.current = 0;
+        streamIdRef.current = null;
+      }, []);
+
+      /** 消息操作（rollback/fork）清流：新代次作废在途旧快照（防 reset 后复活）。 */
+      const resetStream = useCallback(
+        (streamIds?: readonly string[]) => {
+          // 回滚闸关闭时不发任何流式消息（行 id 保持 DB id，由快照对账）。
+          if (!STREAM_PROJECTION_ENABLED) {
             return;
           }
-          streamActiveRef.current = true;
-          if (kind === 'text') {
-            streamTextAccumRef.current += delta;
-          } else {
-            streamThinkingAccumRef.current += delta;
-          }
-          appendWireChunk(pendingStreamDeltaSegmentsRef.current, {
-            kind,
-            delta,
+          resetStreamState(streamIds);
+          postToWeb({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'streamReset',
+            payload: {streamIds, generation: ++snapshotGenerationCounter},
           });
-          flushPendingStreamDeltas();
         },
-        [webReady, flushPendingStreamDeltas],
+        [resetStreamState, postToWeb],
       );
 
-      const queueStreamBatch = useCallback(
-        (payload: {segments: readonly StreamWireChunk[]}) => {
-          if (!webReady || payload.segments.length === 0) {
-            return;
-          }
-          streamActiveRef.current = true;
-          for (const seg of payload.segments) {
-            if (seg.delta.length === 0) {
-              continue;
-            }
-            if (seg.kind === 'text') {
-              streamTextAccumRef.current += seg.delta;
-            } else {
-              streamThinkingAccumRef.current += seg.delta;
-            }
-            appendWireChunk(pendingStreamSegmentsRef.current, seg);
-          }
-          flushPendingStreamBatch();
-        },
-        [webReady, flushPendingStreamBatch],
-      );
-
-            /**
+      /**
        * `init` 是 ready 后的一次性快照：取当拍值，此后变化各有专线消息
        * （richText/menuDisabled → `flagsUpdate`）。
        *
@@ -820,13 +930,26 @@ export const ChatConversationWebView = memo(
           payload: {
             theme: snapshot.theme,
             flags: snapshot.flags,
+            // 转录渲染层文案（spec §2.2.8）：4 个 `label.transcript.*` 经 core
+            // i18n 取值；web 缺省回退内置中文常量。
+            labels: buildTranscriptLabels(coreT),
             // 转录 only 变体（transcript-converge）：web 据此隐藏 dock。
             ...(transcriptOnly ? {transcriptOnly: true} : {}),
           },
         });
       }, [postToWeb, transcriptOnly]);
 
-      /** 快照分片化（照搬 ChatTranscriptWebView 全部语义）。 */
+      /**
+       * 快照分片化（唯一全量真源）：
+       * - DB 行按 50 行 / 256KB 分片，行 id 经接管映射改写为流式行身份；
+       * - 有流式行时追加只装流式行的片（同预算），末片携带 `stream` 检查点；
+       * - 开头与流式片前都 `flushPendingStreamNow()`（尾 delta 的 seq 必须先于快照）；
+       * - 开头捕获 `streamingRows`：片间 DB 接管把某行从投影剔除时，本次快照
+       *   仍带上它（不丢行），下一次快照再按映射对账；每片发送前再与当前
+       *   `streamingRowsRef` 按 id 合并，快照开始后新启动的 step 行也不丢；
+       * - 快照 seed 后的块状态：最后一条 streaming 有内容 → disarm（后续只发全量
+       *   textHtml）；空 streaming（新 step）→ 保持 armed（允许块切分）。
+       */
       const sendSessionSnapshotNow = useCallback(
         async (
           scrollIntent: TranscriptScrollIntent,
@@ -837,15 +960,76 @@ export const ChatConversationWebView = memo(
           const richText = flags?.richText ?? false;
           const snapshotSessionKey = sessionKey;
           const snapshotHasMore = hasMore;
-          const generating = uiRunning;
+          const rowIdMap = STREAM_PROJECTION_ENABLED
+            ? streamRowIds
+            : EMPTY_STREAM_ROW_IDS;
+          // 在途 rAF 的尾 delta 必须先以更小 seq 发出（快照 checkpoint 才能覆盖它）。
+          flushPendingStreamNow();
+          const streamRowsAtStart = streamingRowsRef.current;
           const generation = ++snapshotGenerationCounter;
-          inFlightSnapshotGenerationRef.current = generation;
+          activeSnapshotGenerationRef.current = generation;
           rollbackTimingLog(
             `snapshot build begin (msgs=${snapshotMessages.length})`,
           );
           const pairingContext = buildToolPairingContext(snapshotMessages);
-          const chunkBounds = planSnapshotChunkBounds(snapshotMessages);
-          const chunkTotal = chunkBounds.length;
+          // 发片时都重取「捕获行 + 当前行」的合并结果（spec C9 第 7 条）：
+          // 快照是异步分片的，期间新 step 启动会往 `streamingRowsRef` 追加新 id。
+          // 当前行覆盖捕获行、新 id 按捕获序之后追加；分片边界仍用开头规划的
+          // 预算（chunkTotal 已随 DB 片发出，不能中途变），末尾新增行由**最后
+          // 一个流式片**兜住，保证本次快照不丢行。
+          const currentStreamRows = () => {
+            const captured = streamRowsAtStart;
+            const current = streamingRowsRef.current;
+            if (captured === current) {
+              return current;
+            }
+            const merged = [...captured];
+            const indexById = new Map(
+              merged.map((message, index) => [message.streamId, index] as const),
+            );
+            for (const message of current) {
+              const index = indexById.get(message.streamId);
+              if (index == null) {
+                indexById.set(message.streamId, merged.length);
+                merged.push(message);
+                continue;
+              }
+              merged[index] = message;
+            }
+            return merged;
+          };
+          /** 当前 streaming 行的正文/思考用宿主累加器覆盖（块级：committed + 活跃尾块）。 */
+          const fullStreamTextFor = (
+            message: TranscriptStreamingMessage,
+          ): {text: string; thinking: string} | undefined => {
+            if (message.streamId !== streamIdRef.current) {
+              return undefined;
+            }
+            return {
+              text:
+                streamCommittedTextPartsRef.current.join('') +
+                streamTextAccumRef.current,
+              thinking:
+                streamCommittedThinkingPartsRef.current.join('') +
+                streamThinkingAccumRef.current,
+            };
+          };
+          const initialStreamRows = currentStreamRows();
+          // 空会话但已有流式行：只发流式片，不额外发空 DB 片。
+          const dbChunkBounds =
+            snapshotMessages.length === 0 && initialStreamRows.length > 0
+              ? []
+              : planSnapshotChunkBounds(snapshotMessages);
+          const streamWireRows = initialStreamRows.map(message =>
+            buildStreamingTranscriptRow(
+              message,
+              richText,
+              fullStreamTextFor(message),
+            ),
+          );
+          const streamChunkBounds = planRowChunkBounds(streamWireRows);
+          const dbChunkCount = dbChunkBounds.length;
+          const chunkTotal = dbChunkCount + streamChunkBounds.length;
           rollbackTimingLog(
             `snapshot prescan done (pairing+bucket, chunks=${chunkTotal})`,
           );
@@ -856,7 +1040,7 @@ export const ChatConversationWebView = memo(
           try {
             for (let chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex += 1) {
               if (
-                inFlightSnapshotGenerationRef.current !== generation ||
+                activeSnapshotGenerationRef.current !== generation ||
                 !webReadyRef.current
               ) {
                 bootTimingLog(
@@ -864,15 +1048,55 @@ export const ChatConversationWebView = memo(
                 );
                 return;
               }
-              const [chunkStart, chunkEnd] = chunkBounds[chunkIndex]!;
-              const rows = enrichTranscriptRows(
-                buildTranscriptRowsWithContext(
-                  snapshotMessages.slice(chunkStart, chunkEnd),
-                  pairingContext,
-                  listOptions,
-                ),
-                richText,
-              );
+              let rows: readonly TranscriptRow[];
+              // 每片都重取合并结果（快照期间新 step 启动 → 新 id 追加在末尾，
+              // 由最后一个流式片兜住，见上方 `currentStreamRows` 注释）。
+              const streamRowsForChunk = currentStreamRows();
+              if (chunkIndex < dbChunkCount) {
+                const [chunkStart, chunkEnd] = dbChunkBounds[chunkIndex]!;
+                rows = applyStreamRowIds(
+                  enrichTranscriptRows(
+                    buildTranscriptRowsWithContext(
+                      snapshotMessages.slice(chunkStart, chunkEnd),
+                      pairingContext,
+                      listOptions,
+                    ),
+                    richText,
+                  ),
+                  rowIdMap,
+                );
+              } else {
+                // 流式片前再 flush：快照期间新到的 delta 必须先以更小 seq 发出。
+                flushPendingStreamNow();
+                const streamChunkIndex = chunkIndex - dbChunkCount;
+                const [chunkStart, chunkEnd] =
+                  streamChunkBounds[streamChunkIndex]!;
+                const wireRows = streamRowsForChunk.map(message =>
+                  buildStreamingTranscriptRow(
+                    message,
+                    richText,
+                    fullStreamTextFor(message),
+                  ),
+                );
+                rows =
+                  streamChunkIndex === streamChunkBounds.length - 1
+                    ? wireRows.slice(chunkStart)
+                    : wireRows.slice(chunkStart, chunkEnd);
+              }
+              const lastStreamRow =
+                streamRowsForChunk[streamRowsForChunk.length - 1];
+              const streamCheckpoint =
+                lastStreamRow == null
+                  ? null
+                  : {
+                      id: lastStreamRow.streamId,
+                      // 该 streamId 自己的 wire seq（不能跨流复用全局计数）。
+                      seq:
+                        lastStreamRow.streamId === streamIdRef.current
+                          ? streamWireSeqRef.current
+                          : 0,
+                      status: lastStreamRow.status,
+                    };
               const isLastChunk = chunkIndex === chunkTotal - 1;
               postToWeb({
                 v: CONVERSATION_BRIDGE_V,
@@ -881,8 +1105,10 @@ export const ChatConversationWebView = memo(
                   sessionKey: snapshotSessionKey,
                   rows,
                   hasMore: snapshotHasMore,
+                  ...(streamCheckpoint != null
+                    ? {stream: streamCheckpoint}
+                    : {}),
                   ...(isLastChunk ? {scrollIntent} : {}),
-                  ...(generating ? {generating: true} : {}),
                   ...(isLastChunk &&
                   scrollIntent === 'restore' &&
                   restoreScroll != null
@@ -899,37 +1125,49 @@ export const ChatConversationWebView = memo(
                 })`,
               );
               rollbackTimingLog(
-                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
+                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${
+                  rows.length
+                })`,
               );
               if (!isLastChunk) {
                 await yieldFn();
               }
             }
-            syncStreamToolInvoking();
+            // 快照 seed 后的块状态（宿主侧规则，与 Web 的 fullReplaceOnly 同一条）：
+            // 有内容的 streaming 行 → 后续只发全量 html；空 streaming → 允许块切分。
+            // 当前流的内容以累加器为准（props 行可能落后于已 flush 的 delta）。
+            const finalRows = currentStreamRows();
+            const lastFinal =
+              finalRows.length > 0 ? finalRows[finalRows.length - 1]! : null;
+            const currentStreamText =
+              lastFinal != null && lastFinal.streamId === streamIdRef.current
+                ? streamCommittedTextPartsRef.current.join('') +
+                  streamTextAccumRef.current
+                : lastFinal?.text ?? '';
+            const currentStreamThinking =
+              lastFinal != null && lastFinal.streamId === streamIdRef.current
+                ? streamCommittedThinkingPartsRef.current.join('') +
+                  streamThinkingAccumRef.current
+                : lastFinal?.thinking ?? '';
+            const currentStreamToolCount =
+              lastFinal != null && lastFinal.streamId === streamIdRef.current
+                ? streamToolsRef.current.length
+                : lastFinal?.tools.length ?? 0;
+            streamBlockArmedRef.current =
+              lastFinal != null &&
+              lastFinal.streamId === streamIdRef.current &&
+              lastFinal.status === 'streaming' &&
+              currentStreamText.length === 0 &&
+              currentStreamThinking.length === 0 &&
+              currentStreamToolCount === 0;
             bootTimingLog(`snapshot all chunks done (gen=${generation})`);
             rollbackTimingLog(
               `snapshot all chunks done (gen=${generation}, chunks=${chunkTotal})`,
             );
-            const deferredActions = deferredSnapshotActionsRef.current;
-            if (deferredActions.length > 0) {
-              deferredSnapshotActionsRef.current = [];
-              for (const action of deferredActions) {
-                if (action.kind === 'streamFlush') {
-                  flushPendingStreamDeltas();
-                  flushPendingStreamBatch();
-                } else {
-                  postToWeb(action.message);
-                }
-              }
-            }
             onSnapshotComplete?.();
           } finally {
-            if (inFlightSnapshotGenerationRef.current === generation) {
-              inFlightSnapshotGenerationRef.current = null;
-              if (!webReadyRef.current) {
-                // 重挂作废：推迟队列整队丢弃（重挂后 ready 会重来，快照链重发）
-                deferredSnapshotActionsRef.current = [];
-              }
+            if (activeSnapshotGenerationRef.current === generation) {
+              activeSnapshotGenerationRef.current = null;
             }
           }
         },
@@ -939,99 +1177,16 @@ export const ChatConversationWebView = memo(
           postToWeb,
           sessionKey,
           flags?.richText,
-          uiRunning,
+          streamRowIds,
           onSnapshotComplete,
-          syncStreamToolInvoking,
           transcriptListOptions,
-          flushPendingStreamDeltas,
-          flushPendingStreamBatch,
+          flushPendingStreamNow,
         ],
       );
 
-      const flushPendingSnapshot = useCallback(() => {
-        if (snapshotDeferTimerRef.current != null) {
-          clearTimeout(snapshotDeferTimerRef.current);
-          snapshotDeferTimerRef.current = null;
-        }
-        const pending = pendingSnapshotRef.current;
-        pendingSnapshotRef.current = null;
-        if (pending != null) {
-          void sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
-        }
-      }, [sendSessionSnapshotNow]);
-
-      const sendSessionSnapshot = useCallback(
-        (
-          intent: TranscriptScrollIntent,
-          restoreScroll?: TranscriptRestoreScroll,
-          force?: boolean,
-        ) => {
-          if (force) {
-            if (snapshotDeferTimerRef.current != null) {
-              clearTimeout(snapshotDeferTimerRef.current);
-              snapshotDeferTimerRef.current = null;
-            }
-            const pending = pendingSnapshotRef.current;
-            pendingSnapshotRef.current = null;
-            void sendSessionSnapshotNow(
-              pending?.intent ?? intent,
-              pending?.restoreScroll ?? restoreScroll,
-            );
-            return;
-          }
-          if (!uiRunning) {
-            void sendSessionSnapshotNow(intent, restoreScroll);
-            return;
-          }
-          pendingSnapshotRef.current = {intent, restoreScroll};
-          if (streamActiveRef.current) {
-            return;
-          }
-          if (snapshotDeferTimerRef.current != null) {
-            return;
-          }
-          snapshotDeferTimerRef.current = setTimeout(() => {
-            snapshotDeferTimerRef.current = null;
-            if (streamActiveRef.current) {
-              return;
-            }
-            const pending = pendingSnapshotRef.current;
-            pendingSnapshotRef.current = null;
-            if (pending != null) {
-              void sendSessionSnapshotNow(
-                pending.intent,
-                pending.restoreScroll,
-              );
-            }
-          }, 0);
-        },
-        [uiRunning, sendSessionSnapshotNow],
-      );
-
-      const sendSessionSnapshotRef = useRef(sendSessionSnapshot);
       useEffect(() => {
-        sendSessionSnapshotRef.current = sendSessionSnapshot;
+        sendSessionSnapshotRef.current = sendSessionSnapshotNow;
       });
-
-      /**
-       * 卸载 cleanup：掐掉 defer 定时器并丢掉 pending 快照档。
-       *
-       * 这份清理原本挂在「视图切离对话」那条 effect 上（会话列表进同一文档期间
-       * 切离视图是唯一的「不进对话却还留着快照」场景）。列表域拆除后那条路径
-       * 不复存在，但**切会话 = `key` 重挂 = 组件卸载**这条路径仍在：uiRunning
-       * 期间挂起的 pending 档若没人掐，0ms 定时器会在实例已卸载后照常 fire，
-       * 拿已失效的 webRef 发起一次快照分片。清理顺序与 `flushPendingSnapshot`
-       * 同款：先掐定时器再丢档。
-       */
-      useEffect(() => {
-        return () => {
-          if (snapshotDeferTimerRef.current != null) {
-            clearTimeout(snapshotDeferTimerRef.current);
-            snapshotDeferTimerRef.current = null;
-          }
-          pendingSnapshotRef.current = null;
-        };
-      }, []);
 
       const sendAppendTailRows = useCallback(
         (tailMessages: readonly ChatMessageData[]) => {
@@ -1039,230 +1194,326 @@ export const ChatConversationWebView = memo(
             return;
           }
           const richText = flags?.richText ?? false;
-          const rows = enrichTranscriptRows(
-            selectTailTranscriptRows(
-              messages,
-              tailMessages,
-              transcriptListOptions,
+          const rows = applyStreamRowIds(
+            enrichTranscriptRows(
+              selectTailTranscriptRows(
+                messages,
+                tailMessages,
+                transcriptListOptions,
+              ),
+              richText,
             ),
-            richText,
+            STREAM_PROJECTION_ENABLED ? streamRowIds : EMPTY_STREAM_ROW_IDS,
           );
           if (rows.length === 0) {
             return;
           }
-          postOrDeferSnapshotPaint({
+          postToWeb({
             v: CONVERSATION_BRIDGE_V,
             type: 'appendTailRows',
             payload: {rows},
           });
         },
         [
-          postOrDeferSnapshotPaint,
+          postToWeb,
           flags?.richText,
           messages,
+          streamRowIds,
           transcriptListOptions,
         ],
       );
 
-      const commitStreamTail = useCallback(
-        (
-          rows: readonly TranscriptRow[],
-          scrollIntent: 'preserve' | 'none' = 'preserve',
-        ) => {
-          if (!webReady || rows.length === 0) {
-            return;
-          }
-          clearLocalStreamBuffers();
-          streamActiveRef.current = false;
-          pendingSnapshotRef.current = null;
-          if (snapshotDeferTimerRef.current != null) {
-            clearTimeout(snapshotDeferTimerRef.current);
-            snapshotDeferTimerRef.current = null;
-          }
-          lastStreamCommitIdsRef.current = rows
-            .filter(row => row.kind === 'message')
-            .map(row => row.id);
-          postOrDeferSnapshotPaint({
-            v: CONVERSATION_BRIDGE_V,
-            type: 'streamCommit',
-            payload: {rows, scrollIntent},
-          });
-          syncStreamToolInvoking();
-        },
-        [
-          webReady,
-          postOrDeferSnapshotPaint,
-          clearLocalStreamBuffers,
-          syncStreamToolInvoking,
-        ],
-      );
-
-      const tryCommitStreamTail = useCallback(
-        (allMessages: readonly ChatMessageData[], prevCount: number): boolean => {
-          if (!webReady) {
-            return false;
-          }
-          const added = allMessages.slice(prevCount);
-          if (added.length === 0) {
-            return false;
-          }
-          const addedIds = added.map(message => message.id);
-          if (
-            addedIds.every(id => lastStreamCommitIdsRef.current.includes(id))
-          ) {
-            return true;
-          }
-          const needsFullSnapshot =
-            added.some(messageIsToolResultsOnly) ||
-            added.some(
-              message =>
-                message.role === 'assistant' && messageHasToolUse(message),
-            );
-          if (needsFullSnapshot) {
-            return false;
-          }
-          const richText = flags?.richText ?? false;
-          const rows = enrichTranscriptRows(
-            selectTailTranscriptRows(allMessages, added, transcriptListOptions),
-            richText,
-          );
-          if (rows.length === 0) {
-            return false;
-          }
-          commitStreamTail(rows, 'preserve');
-          prevMessagesRef.current = allMessages;
-          prevMessageCountRef.current = allMessages.length;
-          prevFirstMessageIdRef.current = allMessages[0]?.id;
-          return true;
-        },
-        [webReady, flags?.richText, commitStreamTail, transcriptListOptions],
-      );
-
-      const commitAbortOverlaySnapshot = useCallback((): boolean => {
-        if (!webReady) {
-          return false;
-        }
-        const text =
-          streamCommittedTextPartsRef.current.join('') +
-          streamTextAccumRef.current;
-        const thinking =
-          streamCommittedThinkingPartsRef.current.join('') +
-          streamThinkingAccumRef.current;
-        if (text.length === 0 && thinking.length === 0) {
-          return false;
-        }
-        if (!streamActiveRef.current) {
-          return false;
-        }
-        const richText = flags?.richText ?? false;
-        const rows = enrichTranscriptRows(
-          [
-            {
-              kind: 'message',
-              id: `abort-overlay-${Date.now()}`,
-              role: 'assistant',
-              hidden: false,
-              text: decodeLiteralHtmlEntities(text),
-              thinking: decodeLiteralHtmlEntities(thinking),
-            },
-          ],
-          richText,
-        );
-        commitStreamTail(rows, 'preserve');
-        return true;
-      }, [webReady, flags?.richText, commitStreamTail]);
-
-      const commitSyntheticAssistantRow = useCallback(
-        (text: string, thinking: string): boolean => {
-          if (!webReady) {
-            return false;
-          }
-          if (text.length === 0 && thinking.length === 0) {
-            return false;
-          }
-          const richText = flags?.richText ?? false;
-          const rows = enrichTranscriptRows(
-            [
-              {
-                kind: 'message',
-                id: `interrupted-partial-${Date.now()}`,
-                role: 'assistant',
-                hidden: false,
-                text: decodeLiteralHtmlEntities(text),
-                thinking: decodeLiteralHtmlEntities(thinking),
-              },
-            ],
-            richText,
-          );
-          commitStreamTail(rows, 'preserve');
-          return true;
-        },
-        [webReady, flags?.richText, commitStreamTail],
-      );
-
       const forceSnapshotNow = useCallback(() => {
-        sendSessionSnapshotRef.current('preserve', undefined, true);
+        sendSessionSnapshotRef.current?.('preserve');
       }, []);
-
-      const resetStreamTail = useCallback(() => {
-        clearLocalStreamBuffers();
-        const wasActive = streamActiveRef.current;
-        streamActiveRef.current = false;
-        if (webReady && wasActive) {
-          postToWeb({v: CONVERSATION_BRIDGE_V, type: 'streamReset', payload: {}});
-          flushPendingSnapshot();
-          syncStreamToolInvoking();
-        }
-      }, [
-        webReady,
-        postToWeb,
-        flushPendingSnapshot,
-        clearLocalStreamBuffers,
-        syncStreamToolInvoking,
-      ]);
 
       useImperativeHandle(
         ref,
         () => ({
-          pushStreamDelta: queueStreamDelta,
-          pushStreamBatch: queueStreamBatch,
-          resetStream: resetStreamTail,
-          tryCommitStreamTail,
-          commitAbortOverlaySnapshot,
+          pushStream,
+          resetStream,
           forceSnapshot: forceSnapshotNow,
-          commitSyntheticAssistantRow,
         }),
-        [
-          queueStreamDelta,
-          queueStreamBatch,
-          resetStreamTail,
-          tryCommitStreamTail,
-          commitAbortOverlaySnapshot,
-          forceSnapshotNow,
-          commitSyntheticAssistantRow,
-        ],
+        [pushStream, resetStream, forceSnapshotNow],
       );
 
       const sendPrependPage = useCallback(
         (prependedCount: number) => {
           const richText = flags?.richText ?? false;
-          postOrDeferSnapshotPaint({
+          postToWeb({
             v: CONVERSATION_BRIDGE_V,
             type: 'prependPage',
             payload: {
-              rows: enrichTranscriptRows(
-                buildTranscriptRows(
-                  messages.slice(0, prependedCount),
-                  undefined,
-                  transcriptListOptions,
+              rows: applyStreamRowIds(
+                enrichTranscriptRows(
+                  buildTranscriptRows(
+                    messages.slice(0, prependedCount),
+                    transcriptListOptions,
+                  ),
+                  richText,
                 ),
-                richText,
+                STREAM_PROJECTION_ENABLED ? streamRowIds : EMPTY_STREAM_ROW_IDS,
               ),
               prependedCount,
             },
           });
         },
-        [messages, postOrDeferSnapshotPaint, flags?.richText, transcriptListOptions],
+        [
+          messages,
+          postToWeb,
+          flags?.richText,
+          streamRowIds,
+          transcriptListOptions,
+        ],
+      );
+
+      /* ---- 上行分发：每域一个 handler，依赖即该域闭包契约（见 handleUpstream） ---- */
+
+      /**
+       * ready 后的累加器播种（C9 第 10 条）：新文档的正文由快照全量 seed，
+       * 后续 delta 走全量 `textHtml` 替换，不再发块提交——否则块提交会把快照
+       * 已有的完成块再 append 一次（重复 DOM）。下一个新 step 的 beginStream
+       * 重新武装块模式。seq 不重置：后续 delta 从快照的 seq+1 继续。
+       */
+      const seedStreamAccumulatorsFromCurrentMessage = useCallback(() => {
+        const rows = streamingRowsRef.current;
+        const last = rows.length > 0 ? rows[rows.length - 1]! : null;
+        if (last == null) {
+          return;
+        }
+        streamIdRef.current = last.streamId;
+        lastStreamIdRef.current = last.streamId;
+        streamTextAccumRef.current = last.text;
+        streamThinkingAccumRef.current = last.thinking;
+        streamCommittedTextPartsRef.current = [];
+        streamCommittedThinkingPartsRef.current = [];
+        streamCommittedTextHtmlPartsRef.current = [];
+        streamCommittedThinkingHtmlPartsRef.current = [];
+        streamBlockArmedRef.current = false;
+      }, []);
+
+      const handleReady = useCallback(
+        (payload: Record<string, unknown>) => {
+          const capabilities = readReadyCapabilities(payload);
+          // 版本门（spec §6.2 / C3 / T-SP20）：v2 信封只说明语言对得上，旧 t1 dist
+          // 不认识流式投影协议——进了 webReady 会把 streamDelta/streamStatus 灌进
+          // 不认得的页面（半认：只在 step 边界补文本）。缺 streamProjection 同样
+          // 按旧 dist 处理：立即错误态，比静默白屏可诊断（纪律 B）。约束只有
+          // dist 与宿主同包构建，所以这里拒绝的一定是拼包/陈旧资源，重载也没用。
+          if (
+            payload.version !== TRANSCRIPT_READY_VERSION ||
+            !transcriptCapabilitiesInclude(
+              capabilities,
+              TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
+            )
+          ) {
+            webReadyRef.current = false;
+            setWebReady(false);
+            clearReadyTimeout();
+            setReadyFailed(true);
+            log.error('incompatible transcript dist', {
+              version: payload.version,
+              capabilities,
+            });
+            return;
+          }
+          webReadyRef.current = true;
+          setWebReady(true);
+          setReadyFailed(false);
+          clearReadyTimeout();
+          streamBlockCapableRef.current = transcriptCapabilitiesInclude(
+            capabilities,
+            TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+          );
+          seedStreamAccumulatorsFromCurrentMessage();
+          timingLog('conversation webview ready (v2 handshake done)');
+          bootTimingLog('conversation webview ready (v2 handshake done)');
+          onReady?.();
+          onWebMermaidViewerOpenChange?.(false);
+        },
+        [
+          clearReadyTimeout,
+          seedStreamAccumulatorsFromCurrentMessage,
+          onReady,
+          onWebMermaidViewerOpenChange,
+        ],
+      );
+
+      /**
+       * Web 的 gap/未知 streamId 重同步请求：同 streamId 100ms 内只补一次
+       * 普通快照（T-SP29 宿主限流）。
+       */
+      const handleStreamResync = useCallback(
+        (payload: Record<string, unknown>) => {
+          const streamId = String(payload.streamId ?? '');
+          if (streamId.length === 0) {
+            return;
+          }
+          const now = performance.now();
+          const lastSentAt = resyncSentAtRef.current.get(streamId);
+          if (
+            lastSentAt != null &&
+            now - lastSentAt < STREAM_RESYNC_MIN_INTERVAL_MS
+          ) {
+            return;
+          }
+          resyncSentAtRef.current.set(streamId, now);
+          sendSessionSnapshotRef.current?.('preserve');
+        },
+        [],
+      );
+
+      const handleCopyCode = useCallback((payload: Record<string, unknown>) => {
+        const code = String(payload.code ?? '');
+        if (code) {
+          Clipboard.setString(code);
+        }
+      }, []);
+
+      const handleScrollSnapshot = useCallback(
+        (message: ConversationUpstreamEnvelope) => {
+          const snap = parseConversationScrollSnapshot(
+            message,
+            CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+          );
+          if (snap != null) {
+            rollbackTimingLog('web render receipt (scrollSnapshot)');
+            lastScrollRef.current = {
+              nearBottom: snap.nearBottom,
+              offsetY: snap.offsetY,
+            };
+            onScrollSnapshot?.(snap);
+          }
+        },
+        [onScrollSnapshot],
+      );
+
+      const handleLoadOlder = useCallback(() => {
+        onLoadOlder?.();
+      }, [onLoadOlder]);
+
+      const handleOpenToolFile = useCallback(
+        (payload: Record<string, unknown>) => {
+          onOpenToolFile?.(String(payload.path ?? ''));
+        },
+        [onOpenToolFile],
+      );
+
+      const handleLinkClick = useCallback(
+        (payload: Record<string, unknown>) => {
+          onLinkClick?.(String(payload.href ?? ''));
+        },
+        [onLinkClick],
+      );
+
+      const handleOpenSubagentSession = useCallback(
+        (payload: Record<string, unknown>) => {
+          onOpenSubagentSession?.(String(payload.sessionId ?? ''));
+        },
+        [onOpenSubagentSession],
+      );
+
+      const handleOpenSkillDetail = useCallback(
+        (payload: Record<string, unknown>) => {
+          onOpenSkillDetail?.({
+            domain: payload.domain as TranscriptSkillRef['domain'],
+            name: String(payload.name ?? ''),
+            ...(payload.projectId != null
+              ? {projectId: String(payload.projectId)}
+              : {}),
+          });
+        },
+        [onOpenSkillDetail],
+      );
+
+      const handleOpenToolResult = useCallback(
+        (payload: Record<string, unknown>) => {
+          onOpenToolResult?.({
+            title: String(payload.title ?? ''),
+            content: String(payload.content ?? ''),
+            // 入参原文：无入参的卡片不带该字段，宿主据此只铺输出。
+            ...(typeof payload.inputJson === 'string'
+              ? {inputJson: payload.inputJson}
+              : {}),
+          });
+        },
+        [onOpenToolResult],
+      );
+
+      const handleOpenMessageMenu = useCallback(
+        (payload: Record<string, unknown>) => {
+          if (uiRunning) {
+            return;
+          }
+          emitChatTranscriptTelemetry({name: 'menu_open'});
+          onOpenMessageMenu?.(
+            String(payload.messageId ?? ''),
+            Number(payload.pageX ?? 0),
+            Number(payload.pageY ?? 0),
+          );
+        },
+        [uiRunning, onOpenMessageMenu],
+      );
+
+      const handleMessageMenuAction = useCallback(
+        (payload: Record<string, unknown>) => {
+          // 安全防线不弱化：rollback / fork / set-floor 仍在宿主回调处置
+          onMessageMenuAction?.(
+            String(payload.messageId ?? ''),
+            String(payload.action ?? ''),
+          );
+        },
+        [onMessageMenuAction],
+      );
+
+      const handleMenuVisibility = useCallback(
+        (open: boolean) => {
+          onWebMenuOpenChange?.(open);
+        },
+        [onWebMenuOpenChange],
+      );
+
+      const handleMermaidVisibility = useCallback(
+        (open: boolean) => {
+          onWebMermaidViewerOpenChange?.(open);
+        },
+        [onWebMermaidViewerOpenChange],
+      );
+
+      const handleVisibility = useCallback(
+        (payload: Record<string, unknown>) => {
+          if (payload.hidden) {
+            // 快照 hidden 时刻的 app 前台态，供恢复可见时区分成因（见 ref 声明注释）。
+            visibilityHiddenAppStateRef.current = AppState.currentState ?? null;
+            // 计数口径 = 本次 hidden 期间的改画推送：hidden:true 同拍清零，
+            // 否则可见期间的推送也会累进，「hidden 期间零推送」分支永不可达。
+            statePushSinceResumeRef.current = 0;
+            return;
+          }
+          const hiddenAppState = visibilityHiddenAppStateRef.current;
+          visibilityHiddenAppStateRef.current = null;
+          // 仅「hidden 发生在 app 前台期间」判为栈内被盖（不重挂）；后台/未知
+          // （null）沿用原脏重挂判据，保守兼容既有行为。
+          const coveredWhileForeground = hiddenAppState === 'active';
+          const pushesWhileHidden = statePushSinceResumeRef.current;
+          const dirty = !coveredWhileForeground && pushesWhileHidden > 0;
+          statePushSinceResumeRef.current = 0;
+          if (dirty) {
+            // 后台期间文档可能陈旧：换 key 重挂 + 重新握手（ready 后按当前消息面
+            // 补一次普通快照，见 webReady 触发的重发 effect）。
+            webReadyRef.current = false;
+            setWebReady(false);
+            setRepaintEpoch(epoch => epoch + 1);
+          } else if (coveredWhileForeground && pushesWhileHidden > 0) {
+            // 前台期间被盖（工作区 / FileEditor / 子会话）不重挂，避免 10-05 的
+            // 「对话页加载失败」；但被盖期间的状态推送可能没被 webview 消化
+            //（view 被 detach、画面停在旧帧），恢复可见时补一次普通全量快照
+            // 校正 DOM。快照是唯一真源：流式行与其 status 都随快照到达，
+            // 不需要 restore 之类的清流语义。
+            void sendSessionSnapshotNow('preserve');
+          }
+        },
+        [sendSessionSnapshotNow],
       );
 
       const handleUpstream = useCallback(
@@ -1276,168 +1527,86 @@ export const ChatConversationWebView = memo(
             }
             return;
           }
-          const message = decoded.message;
+          const {message} = decoded;
           const payload = message.payload;
-
-          /* ---- ready（v:2 单条；转录域能力协商） ---- */
-          if (message.type === 'ready') {
-            webReadyRef.current = true;
-            setWebReady(true);
-            setReadyFailed(false);
-            clearReadyTimeout();
-            const capabilities = readReadyCapabilities(payload);
-            streamBlockCapableRef.current = transcriptCapabilitiesInclude(
-              capabilities,
-              TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-            );
-            timingLog('conversation webview ready (v2 handshake done)');
-            bootTimingLog('conversation webview ready (v2 handshake done)');
-            onReady?.();
-            onWebMermaidViewerOpenChange?.(false);
-            return;
-          }
-
           // change / selectionChange / dockAction 三条 composer/dock 域上行已随
           // D4b 剥离删除（解码器对未知 type 宽松放行，本组件不再消费）。
           // 键盘链路由 keyboard-controller insets 驱动，focus / blur 无消费。
           // heightChange 不上行（heightReport: false，高度由文档内布局消化）。
-
-          /* ---- 转录域上行（v:1 单例） ---- */
-          if (message.type === 'copyCode') {
-            const code = String(payload.code ?? '');
-            if (code) {
-              Clipboard.setString(code);
-            }
-            return;
-          }
-          if (message.type === 'scrollSnapshot') {
-            const snap = parseConversationScrollSnapshot(
-              message,
-              CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-            );
-            if (snap != null) {
-              rollbackTimingLog('web render receipt (scrollSnapshot)');
-              lastScrollRef.current = {
-                nearBottom: snap.nearBottom,
-                offsetY: snap.offsetY,
-              };
-              onScrollSnapshot?.(snap);
-            }
-            return;
-          }
-          if (message.type === 'loadOlder') {
-            onLoadOlder?.();
-            return;
-          }
-          if (message.type === 'openToolFile') {
-            onOpenToolFile?.(String(payload.path ?? ''));
-            return;
-          }
-          if (message.type === 'linkClick') {
-            onLinkClick?.(String(payload.href ?? ''));
-            return;
-          }
-          if (message.type === 'openSubagentSession') {
-            onOpenSubagentSession?.(String(payload.sessionId ?? ''));
-            return;
-          }
-          if (message.type === 'openSkillDetail') {
-            onOpenSkillDetail?.({
-              domain: payload.domain as TranscriptSkillRef['domain'],
-              name: String(payload.name ?? ''),
-              ...(payload.projectId != null
-                ? {projectId: String(payload.projectId)}
-                : {}),
-            });
-            return;
-          }
-          if (message.type === 'openToolResult') {
-            onOpenToolResult?.({
-              title: String(payload.title ?? ''),
-              content: String(payload.content ?? ''),
-              // 入参原文：无入参的卡片不带该字段，宿主据此只铺输出。
-              ...(typeof payload.inputJson === 'string'
-                ? {inputJson: payload.inputJson}
-                : {}),
-            });
-            return;
-          }
-          if (message.type === 'openMessageMenu') {
-            if (uiRunning) {
+          switch (message.type) {
+            case 'ready':
+              handleReady(payload);
               return;
-            }
-            emitChatTranscriptTelemetry({name: 'menu_open'});
-            onOpenMessageMenu?.(
-              String(payload.messageId ?? ''),
-              Number(payload.pageX ?? 0),
-              Number(payload.pageY ?? 0),
-            );
-            return;
-          }
-          if (message.type === 'messageMenuAction') {
-            // 安全防线不弱化：rollback / fork / set-floor 仍在宿主回调处置
-            onMessageMenuAction?.(
-              String(payload.messageId ?? ''),
-              String(payload.action ?? ''),
-            );
-            return;
-          }
-          if (message.type === 'menuOpened') {
-            onWebMenuOpenChange?.(true);
-            return;
-          }
-          if (message.type === 'menuClosed') {
-            onWebMenuOpenChange?.(false);
-            return;
-          }
-          if (message.type === 'mermaidViewerOpened') {
-            onWebMermaidViewerOpenChange?.(true);
-            return;
-          }
-          if (message.type === 'mermaidViewerClosed') {
-            onWebMermaidViewerOpenChange?.(false);
-            return;
-          }
-          if (message.type === 'visibility') {
-            if (payload.hidden) {
-              // 快照 hidden 时刻的 app 前台态，供恢复可见时区分成因（见 ref 声明注释）。
-              visibilityHiddenAppStateRef.current = AppState.currentState ?? null;
+            case 'copyCode':
+              handleCopyCode(payload);
               return;
-            }
-            const hiddenAppState = visibilityHiddenAppStateRef.current;
-            visibilityHiddenAppStateRef.current = null;
-            // 仅「hidden 发生在 app 前台期间」判为栈内被盖（不重挂）；后台/未知
-            // （null）沿用原脏重挂判据，保守兼容既有行为。
-            const coveredWhileForeground = hiddenAppState === 'active';
-            const dirty =
-              !coveredWhileForeground && statePushSinceResumeRef.current > 0;
-            statePushSinceResumeRef.current = 0;
-            if (dirty) {
-              prevStreamTextRef.current = '';
-              prevStreamThinkingRef.current = '';
-              forceSnapshotOnReadyRef.current = true;
-              webReadyRef.current = false;
-              setWebReady(false);
-              setRepaintEpoch(epoch => epoch + 1);
-            }
-            return;
+            case 'scrollSnapshot':
+              handleScrollSnapshot(message);
+              return;
+            case 'loadOlder':
+              handleLoadOlder();
+              return;
+            case 'openToolFile':
+              handleOpenToolFile(payload);
+              return;
+            case 'linkClick':
+              handleLinkClick(payload);
+              return;
+            case 'openSubagentSession':
+              handleOpenSubagentSession(payload);
+              return;
+            case 'openSkillDetail':
+              handleOpenSkillDetail(payload);
+              return;
+            case 'openToolResult':
+              handleOpenToolResult(payload);
+              return;
+            case 'openMessageMenu':
+              handleOpenMessageMenu(payload);
+              return;
+            case 'messageMenuAction':
+              handleMessageMenuAction(payload);
+              return;
+            case 'menuOpened':
+              handleMenuVisibility(true);
+              return;
+            case 'menuClosed':
+              handleMenuVisibility(false);
+              return;
+            case 'mermaidViewerOpened':
+              handleMermaidVisibility(true);
+              return;
+            case 'mermaidViewerClosed':
+              handleMermaidVisibility(false);
+              return;
+            case 'visibility':
+              handleVisibility(payload);
+              return;
+            case 'streamResync':
+              handleStreamResync(payload);
+              return;
+            default:
+              // 宽松解码器放行的未知 type（旧 dist 的 composer 域残余 change/selectionChange/
+              // dockAction、诊断探针 __nmGhostProbe）一律静默丢弃——不要打日志刷屏。
+              return;
           }
         },
         [
-          onReady,
-          onLoadOlder,
-          onOpenToolFile,
-          onLinkClick,
-          onOpenSubagentSession,
-          onOpenSkillDetail,
-          onOpenToolResult,
-          onOpenMessageMenu,
-          onMessageMenuAction,
-          onWebMenuOpenChange,
-          onWebMermaidViewerOpenChange,
-          onScrollSnapshot,
-          uiRunning,
-          clearReadyTimeout,
+          handleReady,
+          handleCopyCode,
+          handleScrollSnapshot,
+          handleLoadOlder,
+          handleOpenToolFile,
+          handleLinkClick,
+          handleOpenSubagentSession,
+          handleOpenSkillDetail,
+          handleOpenToolResult,
+          handleOpenMessageMenu,
+          handleMessageMenuAction,
+          handleMenuVisibility,
+          handleMermaidVisibility,
+          handleVisibility,
+          handleStreamResync,
         ],
       );
 
@@ -1535,10 +1704,6 @@ export const ChatConversationWebView = memo(
       }, [webReady, mermaidViewerCloseSignal, postToWeb]);
 
       useEffect(() => {
-        syncStreamToolInvoking();
-      }, [syncStreamToolInvoking, toolInvoking]);
-
-      useEffect(() => {
         if (!webReady) {
           return;
         }
@@ -1547,22 +1712,104 @@ export const ChatConversationWebView = memo(
           return;
         }
         prevRichTextRef.current = richText;
-        sendSessionSnapshot('preserve');
-      }, [webReady, flags?.richText, sendSessionSnapshot]);
+        void sendSessionSnapshotNow('preserve');
+      }, [webReady, flags?.richText, sendSessionSnapshotNow]);
 
-      // pendingSubagentSessions 变化时 force 重发快照（照搬，注释见旧组件）
+      // pendingSubagentSessions 变化时重发快照（照搬，注释见旧组件）
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        const forceAfterRepaint = forceSnapshotOnReadyRef.current;
-        forceSnapshotOnReadyRef.current = false;
-        sendSessionSnapshotRef.current(
-          'preserve',
-          undefined,
-          forceAfterRepaint || (pendingSubagentSessions?.size ?? 0) > 0,
-        );
+        sendSessionSnapshotRef.current?.('preserve');
       }, [webReady, pendingSubagentSessions]);
+
+      /**
+       * 流式行状态翻转（C9 第 9 条）：一次更新里可能同时发生「旧 id finished +
+       * 新 id streaming」。依赖只列最后一行的 id/status/messageId + 映射引用——
+       * text 每 64ms 变，进依赖会把 effect 打成每帧一次。
+       */
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        const rows = streamingRowsRef.current;
+        const current = rows.length > 0 ? rows[rows.length - 1]! : null;
+        const previous = lastStreamSnapshotRef.current;
+        if (current == null) {
+          if (previous != null) {
+            // 先判是否已接管（P0-7）：adoption 已把行从投影剔除，终态行由
+            // messages effect 的 stream-adopted 补发，这里不动作、不发快照。
+            const adopted = [...streamRowIds.values()].includes(previous.id);
+            if (!adopted && previous.isEmpty) {
+              // 首字前结束/空 step 留下的空 streaming 行：快照收掉。
+              sendSessionSnapshotRef.current?.('preserve');
+            } else if (!adopted && previous.status === 'finished') {
+              // 未被接管的合成 partial（失败/移除）：按 id 移除，随后由 DB 错误行接管。
+              resetStream([previous.id]);
+            }
+          }
+          lastStreamSnapshotRef.current = null;
+          return;
+        }
+        if (previous != null && previous.id !== current.streamId) {
+          finishStream(previous.id);
+        } else if (
+          previous != null &&
+          previous.status === 'streaming' &&
+          current.status === 'finished'
+        ) {
+          finishStream(current.streamId);
+        }
+        if (previous == null || previous.id !== current.streamId) {
+          beginStream(current.streamId);
+          sendSessionSnapshotRef.current?.('preserve');
+        } else if (previous.messageId == null && current.messageId != null) {
+          // 防御分支：正常 adoption 会让该行从 streamRows 消失；这里只在
+          // 「记录尚未被剔除」的竞态下补一次终态行。
+          const isCurrent = current.streamId === streamIdRef.current;
+          const text = isCurrent
+            ? streamCommittedTextPartsRef.current.join('') +
+              streamTextAccumRef.current
+            : current.text;
+          const thinking = isCurrent
+            ? streamCommittedThinkingPartsRef.current.join('') +
+              streamThinkingAccumRef.current
+            : current.thinking;
+          postToWeb({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'streamStatus',
+            payload: {
+              streamId: current.streamId,
+              status: 'finished',
+              messageId: current.messageId,
+              row: buildStreamingTranscriptRow(
+                {...current, status: 'finished'},
+                richTextRef.current,
+                {text, thinking},
+              ),
+            },
+          });
+        }
+        lastStreamSnapshotRef.current = {
+          id: current.streamId,
+          status: current.status,
+          messageId: current.messageId,
+          isEmpty:
+            current.text.length === 0 &&
+            current.thinking.length === 0 &&
+            current.tools.length === 0,
+        };
+      }, [
+        webReady,
+        lastStreamingRow?.streamId,
+        lastStreamingRow?.status,
+        lastStreamingRow?.messageId,
+        streamRowIds,
+        beginStream,
+        finishStream,
+        resetStream,
+        postToWeb,
+      ]);
 
       // ② 快照（恢复链最后一步）
       useEffect(() => {
@@ -1572,168 +1819,112 @@ export const ChatConversationWebView = memo(
         // 无需再判「换会话」：切会话经 `key` 重挂，本组件整体重新初始化，
         // `needsOpenSnapshotRef` 从 true 起、流式基线本来就是空的。
         if (needsOpenSnapshotRef.current) {
-          if (messages.length === 0) {
+          const plan = planOpenSnapshot({
+            messageCount: messages.length,
+            hasStreamingMessage,
+            sessionKey,
+            initialScroll: initialScrollRef.current,
+            defaultScrollToBottom: defaultScrollToBottomRef.current,
+          });
+          if (plan.kind === 'wait-empty') {
             return;
           }
           needsOpenSnapshotRef.current = false;
-          const {intent, restoreScroll} = resolveOpenScrollIntent(
-            initialScrollRef.current,
-            defaultScrollToBottomRef.current,
-          );
-          void sendSessionSnapshotNow(intent, restoreScroll);
-          emitScrollRestoreTelemetry(intent, restoreScroll);
-          emitChatTranscriptTelemetry({
-            name: 'transcript_ready',
-            sessionKey,
-            rowCount: messages.length,
-            hasInitialScroll: initialScrollRef.current != null,
-            defaultScrollToBottom: defaultScrollToBottomRef.current,
-          });
+          void sendSessionSnapshotNow(plan.intent, plan.restoreScroll);
+          for (const event of plan.events) {
+            emitChatTranscriptTelemetry(event);
+          }
           prevFirstMessageIdRef.current = messages[0]?.id;
           prevMessageCountRef.current = messages.length;
           prevMessagesRef.current = messages;
           return;
         }
 
-        if (prevMessagesRef.current === messages) {
+        const plan = planMessagesUpdate({
+          messages,
+          previousMessages: prevMessagesRef.current,
+          prevFirstId: prevFirstMessageIdRef.current,
+          prevCount: prevMessageCountRef.current,
+          uiRunning,
+          streamRowIds,
+          lastScroll: lastScrollRef.current,
+        });
+        if (plan.kind === 'same-reference') {
           return;
         }
-
-        const firstId = messages[0]?.id;
-        const prevFirstId = prevFirstMessageIdRef.current;
-        const prevCount = prevMessageCountRef.current;
-        const grew = messages.length > prevCount;
-        const prependedOlder =
-          grew &&
-          prevFirstId != null &&
-          firstId != null &&
-          firstId !== prevFirstId;
-
-        if (
-          !grew &&
-          prevFirstId === firstId &&
-          prevCount === messages.length &&
-          prevCount > 0
-        ) {
-          const prevMsgs = prevMessagesRef.current;
-          if (prevMsgs != null && prevMsgs.length === messages.length) {
-            let hiddenChanged = false;
-            for (let i = 0; i < messages.length; i += 1) {
-              if (prevMsgs[i]!.hidden !== messages[i]!.hidden) {
-                hiddenChanged = true;
-                break;
-              }
-            }
-            if (hiddenChanged) {
-              sendSessionSnapshot('preserve');
-              prevFirstMessageIdRef.current = firstId;
-              prevMessageCountRef.current = messages.length;
-              prevMessagesRef.current = messages;
-              return;
-            }
-          }
+        if (plan.kind === 'hidden-changed') {
+          void sendSessionSnapshotNow('preserve');
+          prevFirstMessageIdRef.current = messages[0]?.id;
+          prevMessageCountRef.current = messages.length;
+          prevMessagesRef.current = messages;
+          return;
         }
-
         prevMessagesRef.current = messages;
-
-        if (prependedOlder) {
-          const prependedCount = messages.length - prevCount;
-          emitChatTranscriptTelemetry({
-            name: 'prepend_detected',
-            prependedCount,
-            wasNearBottom: lastScrollRef.current.nearBottom,
-            offsetYBefore: lastScrollRef.current.offsetY,
-          });
-          sendPrependPage(prependedCount);
-        } else if (
-          grew &&
-          shouldSkipSnapshotAfterStreamCommit(
-            messages,
-            prevCount,
-            lastStreamCommitIdsRef.current,
-          )
-        ) {
-          lastStreamCommitIdsRef.current = [];
-          prevFirstMessageIdRef.current = firstId;
-          prevMessageCountRef.current = messages.length;
-        } else if (uiRunning && grew) {
-          const added = messages.slice(prevCount);
-          const needsFullSnapshot =
-            added.some(messageIsToolResultsOnly) ||
-            added.some(
-              message =>
-                message.role === 'assistant' && messageHasToolUse(message),
-            );
-          if (needsFullSnapshot) {
-            sendSessionSnapshot('preserve', undefined, true);
-          } else {
-            sendAppendTailRows(added);
+        switch (plan.kind) {
+          case 'prepend':
+            emitChatTranscriptTelemetry(plan.event);
+            sendPrependPage(plan.prependedCount);
+            break;
+          case 'stream-adopted': {
+            // DB 接管：不发 append/快照，对每条命中补 streamStatus{row}（逐条
+            // 带 messageId，菜单/回滚可用）。
+            const pairingContext = buildToolPairingContext(messages);
+            const richText = flags?.richText ?? false;
+            for (const {streamId, messageId} of plan.adopted) {
+              const message = messages.find(item => item.id === messageId);
+              if (message == null) {
+                continue;
+              }
+              const row = applyStreamRowIds(
+                enrichTranscriptRows(
+                  buildTranscriptRowsWithContext(
+                    [message],
+                    pairingContext,
+                    transcriptListOptions,
+                  ),
+                  richText,
+                ),
+                STREAM_PROJECTION_ENABLED ? streamRowIds : EMPTY_STREAM_ROW_IDS,
+              ).find(
+                candidate =>
+                  candidate.kind === 'message' && candidate.id === streamId,
+              );
+              if (row == null) {
+                continue;
+              }
+              postToWeb({
+                v: CONVERSATION_BRIDGE_V,
+                type: 'streamStatus',
+                payload: {streamId, status: 'finished', messageId, row},
+              });
+            }
+            break;
           }
-        } else if (
-          lastStreamCommitIdsRef.current.length > 0 &&
-          messages.length === prevMessageCountRef.current &&
-          committedStreamRowsStillPresent(
-            messages,
-            lastStreamCommitIdsRef.current,
-          )
-        ) {
-          lastStreamCommitIdsRef.current = [];
-          prevFirstMessageIdRef.current = firstId;
-          prevMessageCountRef.current = messages.length;
-        } else {
-          const shrink = messages.length < prevCount;
-          const tailWindowReplaced =
-            !grew &&
-            prevFirstId != null &&
-            firstId != null &&
-            firstId !== prevFirstId;
-          sendSessionSnapshot(
-            shrink || tailWindowReplaced ? 'stick' : 'preserve',
-          );
+          case 'append':
+            sendAppendTailRows(plan.added);
+            break;
+          case 'force-snapshot':
+            void sendSessionSnapshotNow('preserve');
+            break;
+          case 'snapshot':
+            void sendSessionSnapshotNow(plan.intent);
+            break;
         }
-
-        prevFirstMessageIdRef.current = firstId;
+        prevFirstMessageIdRef.current = messages[0]?.id;
         prevMessageCountRef.current = messages.length;
       }, [
         webReady,
         sessionKey,
         messages,
+        hasStreamingMessage,
         uiRunning,
-        sendSessionSnapshot,
+        streamRowIds,
+        flags?.richText,
+        transcriptListOptions,
+        postToWeb,
         sendSessionSnapshotNow,
         sendPrependPage,
         sendAppendTailRows,
-      ]);
-
-      useEffect(() => {
-        if (!webReady) {
-          return;
-        }
-        const prevText = prevStreamTextRef.current;
-        const prevThinking = prevStreamThinkingRef.current;
-        if (
-          streamingText.length < prevText.length ||
-          streamingThinking.length < prevThinking.length
-        ) {
-          resetStreamTail();
-          return;
-        }
-        const textDelta = streamingText.slice(prevText.length);
-        const thinkingDelta = streamingThinking.slice(prevThinking.length);
-        prevStreamTextRef.current = streamingText;
-        prevStreamThinkingRef.current = streamingThinking;
-        if (textDelta.length > 0) {
-          queueStreamDelta('text', textDelta);
-        }
-        if (thinkingDelta.length > 0) {
-          queueStreamDelta('thinking', thinkingDelta);
-        }
-      }, [
-        webReady,
-        streamingText,
-        streamingThinking,
-        queueStreamDelta,
-        resetStreamTail,
       ]);
 
       /**
@@ -1757,7 +1948,9 @@ export const ChatConversationWebView = memo(
       /** iOS window.open / target="_blank" 兜底：拒绝 WebView 内打开，外跳系统浏览器。 */
       const handleOpenWindow = useCallback((event: WebViewOpenWindowEvent) => {
         event.preventDefault();
-        void Linking.openURL(event.nativeEvent.targetUrl).catch(() => undefined);
+        void Linking.openURL(event.nativeEvent.targetUrl).catch(
+          () => undefined,
+        );
       }, []);
 
       /** T-CU15：onLoad 锚点。每次 onLoad 重新计时。 */
@@ -1836,7 +2029,8 @@ export const ChatConversationWebView = memo(
             <Text
               style={[styles.retry, {color: tokens.primary}]}
               onPress={handleReload}
-              testID="chat-conversation-ready-retry">
+              testID="chat-conversation-ready-retry"
+            >
               重载
             </Text>
           </View>

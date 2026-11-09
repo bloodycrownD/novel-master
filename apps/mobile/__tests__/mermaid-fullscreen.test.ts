@@ -157,8 +157,12 @@ describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
     // chat：两消息照 menuOpened→onWebMenuOpenChange 先例上浮。
     // transcript-converge 后 chat 侧宿主是统一组件 ChatConversationWebView。
     const chatWeb = rnSrc('components/chat/ChatConversationWebView.tsx');
-    expect(chatWeb).toContain("message.type === 'mermaidViewerOpened'");
-    expect(chatWeb).toContain("message.type === 'mermaidViewerClosed'");
+    // handleUpstream 已从 if 链改成 switch：两条 mermaid 消息走
+    // case + handleMermaidVisibility(true/false)，上浮回调不变。
+    expect(chatWeb).toContain("case 'mermaidViewerOpened':");
+    expect(chatWeb).toContain("case 'mermaidViewerClosed':");
+    expect(chatWeb).toContain('handleMermaidVisibility(true)');
+    expect(chatWeb).toContain('handleMermaidVisibility(false)');
     expect(chatWeb).toContain('onWebMermaidViewerOpenChange');
     // 返回键关闭下发通道（照 menuCloseSignal 先例）
     expect(chatWeb).toContain("type: 'closeMermaidViewer'");

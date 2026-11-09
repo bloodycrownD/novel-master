@@ -64,6 +64,8 @@ function emitTranscriptReady(): void {
   // 壳 id 漂移时 renderRows 会静默跳过——同合成包闸门一样，此处直接返回把信号
   // 交回宿主超时兜底，「ready 不来」本身就是最有效的装配失败诊断。
   if (document.getElementById('rows') == null) {
+    // web bundle 无 logger 依赖：装配失败诊断只能走 console（src/web 不在
+    // log 守卫扫描面，spec C31）。
     console.error(
       '[chat-transcript] 装配未完成，不发 ready：壳元素未命中（#rows），' +
         '交由宿主 8s 超时兜底落错误态。',

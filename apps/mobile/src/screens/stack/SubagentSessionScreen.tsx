@@ -45,11 +45,14 @@ import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
 import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
-import {useInterruptedPartialCommit} from '@/screens/tabs/chat-tab/useInterruptedPartialCommit';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
+import {
+  EMPTY_STREAM_ROW_IDS,
+  buildStreamingRows,
+} from '../../components/chat/transcript-stream-projection';
 import {coreT} from '@/i18n/core';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
@@ -164,16 +167,6 @@ export function SubagentSessionScreen() {
       manager.detachWebview(sid, handle.handleId);
     };
   }, [manager, sessionId, webviewReadyEpoch, hasUnit]);
-
-  // 中断现场渲染（Step 6，语义说明见 hook 模块头）：与主屏
-  // ChatConversationPanel 共用同一份 effect（ui/C-1 抽取）；本屏的
-  // webviewReadyEpoch 直接入参，ready 世代驱动修 ui/B-1 的
-  // 「tail 先于 webview ready 到达」时序。
-  useInterruptedPartialCommit({
-    unitView,
-    webRef: transcriptWebRef,
-    readyEpoch: webviewReadyEpoch,
-  });
 
   // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
   // 而不是当前子会话的 id。
@@ -356,6 +349,14 @@ export function SubagentSessionScreen() {
           transcriptOnly
           sessionKey={sessionKey}
           messages={displayMessages}
+          streamingRows={buildStreamingRows(unitView)}
+          streamRowIds={
+            unitView?.streamRowIds ??
+            (sessionId != null
+              ? manager.readMessagesSnapshot(sessionId)?.streamRowIds
+              : undefined) ??
+            EMPTY_STREAM_ROW_IDS
+          }
           // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
           pendingSubagentSessions={unitView?.pendingChildrenByTitle}
           flags={flags}

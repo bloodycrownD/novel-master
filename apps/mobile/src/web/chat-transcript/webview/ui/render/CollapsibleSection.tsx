@@ -1,6 +1,6 @@
 /**
  * 折叠区骨架（web/C-2）：header 事件委托 + 展开体容器。
- * ToolGroup / AttachGroup 复用整个 section；StreamTail 与 ThinkingSection 的
+ * ToolGroup / AttachGroup 复用整个 section；StreamingMessageRow 与 ThinkingSection 的
  * thinking header 复用 CollapsibleHeader（title/chevron class 由 headerClass 前缀派生：
  * tool-group-header → tool-group-title / tool-group-chevron，thinking-header 同理）。
  * 约束：DOM 结构与 class 与抽离前逐属性一致（data-action 委托 key 不变）。

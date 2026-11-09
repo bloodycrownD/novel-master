@@ -10,6 +10,7 @@ import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
 import {assistantBubbleExtraClasses} from '../../runtime/stream/stream';
 import {AttachGroup} from './AttachGroup';
 import {AssistantBubbleInner} from './AssistantBubble';
+import {StreamingMessageRow} from '../stream/StreamingMessageRow';
 import {attachedRefTokensFrom, RefTokenText} from './RefTokenText';
 
 export type MessageRowProps = {
@@ -17,6 +18,12 @@ export type MessageRowProps = {
 };
 
 export function MessageRow({row}: MessageRowProps) {
+  // 流式起源的行（streaming / finished）统一走流式壳：同 id 同组件类型 → Preact
+  // 复用 DOM 岛屿，status 翻转只重渲 props（bar/菜单/折叠键）。纯历史行不写
+  // status 字段，保持普通行渲染。
+  if (row.status != null) {
+    return <StreamingMessageRow row={row} />;
+  }
   const role = row.role === 'user' ? 'user' : 'assistant';
   const hidden = row.hidden ? ' hidden' : '';
   const thinkingKey = 'msg:' + row.id;
@@ -88,17 +95,7 @@ export function MessageRow({row}: MessageRowProps) {
     const toolGroupKey = 'msg:' + row.id;
     const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
     bubble = (
-      <div
-        className={
-          'bubble' +
-          assistantBubbleExtraClasses(
-            row.textHtml,
-            row.tools,
-            row.text,
-            row.thinking,
-          )
-        }
-      >
+      <div className={'bubble' + assistantBubbleExtraClasses(row)}>
         {menuRow}
         <AssistantBubbleInner
           text={row.text}
@@ -110,7 +107,6 @@ export function MessageRow({row}: MessageRowProps) {
           tools={row.tools}
           toolGroupKey={toolGroupKey}
           toolGroupExpanded={toolGroupExpanded}
-          showToolInvoking={false}
           richText={state.flags.richText}
         />
       </div>

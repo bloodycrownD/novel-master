@@ -12,14 +12,14 @@
  * 布局按「窗口行实际高 ROW_PX、占位高按渲染时的平均槽高估算」计算，
  * 估算误差场景（fallback avg ≠ 实际行高）由此可行为级验证。
  */
-jest.mock('../src/web/chat-transcript/webview/runtime/render/row-logic', () => ({
-  renderRows: jest.fn(),
-}));
+jest.mock(
+  '../src/web/chat-transcript/webview/runtime/render/row-logic',
+  () => ({
+    renderRows: jest.fn(),
+  }),
+);
 jest.mock('../src/web/chat-transcript/webview/runtime/mermaid', () => ({
   scheduleMermaidScan: jest.fn(),
-}));
-jest.mock('../src/web/chat-transcript/webview/runtime/stream/stream', () => ({
-  setStreamToolInvokingDom: jest.fn(),
 }));
 jest.mock('../src/web/chat-transcript/webview/runtime/menu/menu', () => ({
   closeContextMenu: jest.fn(),
@@ -32,9 +32,30 @@ jest.mock('../src/web/chat-transcript/webview/ui/render/MessageRow', () => {
   (MsgRowStub as unknown as {__isMsgRowStub: boolean}).__isMsgRowStub = true;
   return {MessageRow: MsgRowStub};
 });
-jest.mock('../src/web/chat-transcript/webview/ui/stream/StreamTail', () => ({
-  StreamTail: () => null,
-}));
+
+/**
+ * T-SP11/T-SP13 的组件身份断言要真组件（不被上面的 MessageRow stub 影响）：
+ * requireActual 拿到真 MessageRow / StreamingMessageRow / ToolInvokingBar，
+ * 只调用函数拿 vnode，不在假 DOM 里 render。
+ */
+const actualMessageRow = (
+  jest.requireActual(
+    '../src/web/chat-transcript/webview/ui/render/MessageRow',
+  ) as typeof import('../src/web/chat-transcript/webview/ui/render/MessageRow')
+).MessageRow;
+const actualStreamingRow = jest.requireActual(
+  '../src/web/chat-transcript/webview/ui/stream/StreamingMessageRow',
+) as typeof import('../src/web/chat-transcript/webview/ui/stream/StreamingMessageRow');
+const ActualToolInvokingBar = (
+  jest.requireActual(
+    '../src/web/chat-transcript/webview/ui/render/ToolInvokingBar',
+  ) as typeof import('../src/web/chat-transcript/webview/ui/render/ToolInvokingBar')
+).ToolInvokingBar;
+const realState = (
+  jest.requireActual(
+    '../src/web/chat-transcript/webview/runtime/state/state',
+  ) as typeof import('../src/web/chat-transcript/webview/runtime/state/state')
+).state;
 
 type VNodeLike = {
   type: unknown;
@@ -42,7 +63,13 @@ type VNodeLike = {
   props: Record<string, unknown> & {style?: {height?: string}};
 };
 
-type TranscriptRowData = {kind: 'message'; id: string; role: string; text: string};
+type TranscriptRowData = {
+  kind: 'message';
+  id: string;
+  role: string;
+  text: string;
+  status?: 'streaming' | 'finished';
+};
 
 type Modules = {
   windowing: typeof import('../src/web/chat-transcript/webview/runtime/render/row-windowing');
@@ -66,6 +93,9 @@ const CLIENT_H = 600;
 /**
  * 最小布局模型：scrollHeight / 占位与窗口行位置由「当前渲染输出」推导；
  * scrollTop setter 带浏览器 clamp 语义。
+ *
+ * `pinnedTail`（spec C19）：下占位之后的钉住行真实占高；`streamTailHeight`
+ * 放大流式行高度，用于验证 measureRowWindow 把贴底流式行排除出平均槽高。
  */
 class FakeLayout {
   scrollTop = 0;
@@ -73,9 +103,15 @@ class FakeLayout {
   total = 0;
   winStart = 0;
   winEnd = 0;
+  winRowIds: string[] = [];
+  pinnedIds: string[] = [];
   topSpPx = 0;
   bottomSpPx = 0;
-  /** 最近一次渲染输出的行 id 序列（含首末，供断言）。 */
+  /** 流式行 id 与真实高度（#stream-tail 的 offsetTop/offsetHeight 依据）。 */
+  streamingRowId: string | null = null;
+  streamTailHeight = ROW_PX;
+  streamTailEl: {offsetTop: number; offsetHeight: number} | null = null;
+  /** 最近一次渲染输出的行 id 序列（含首末与钉住行，供断言）。 */
   lastRowIds: string[] = [];
 
   btnH(): number {
@@ -86,12 +122,29 @@ class FakeLayout {
     return Math.max(0, this.winEnd - this.winStart);
   }
 
+  private rowPx(id: string): number {
+    return id === this.streamingRowId ? this.streamTailHeight : ROW_PX;
+  }
+
+  private windowPx(): number {
+    let total = 0;
+    for (const id of this.winRowIds) total += this.rowPx(id);
+    return total;
+  }
+
+  private pinnedPx(): number {
+    let total = 0;
+    for (const id of this.pinnedIds) total += this.rowPx(id);
+    return total;
+  }
+
   get scrollHeight(): number {
     return (
       this.btnH() +
       this.topSpPx +
-      this.winRows() * ROW_PX +
+      this.windowPx() +
       this.bottomSpPx +
+      this.pinnedPx() +
       PAD_PX
     );
   }
@@ -106,18 +159,24 @@ class FakeLayout {
 
   bottomSpEl(): {offsetTop: number; offsetHeight: number} {
     return {
-      offsetTop: this.btnH() + this.topSpPx + this.winRows() * ROW_PX,
+      offsetTop: this.btnH() + this.topSpPx + this.windowPx(),
       offsetHeight: this.bottomSpPx,
     };
   }
 
   rowEls(): Array<{offsetTop: number; offsetHeight: number}> {
     const els: Array<{offsetTop: number; offsetHeight: number}> = [];
-    for (let i = 0; i < this.winRows(); i++) {
-      els.push({
-        offsetTop: this.btnH() + this.topSpPx + i * ROW_PX,
-        offsetHeight: ROW_PX,
-      });
+    let top = this.btnH() + this.topSpPx;
+    for (const id of this.winRowIds) {
+      const height = this.rowPx(id);
+      els.push({offsetTop: top, offsetHeight: height});
+      top += height;
+    }
+    top += this.bottomSpPx;
+    for (const id of this.pinnedIds) {
+      const height = this.rowPx(id);
+      els.push({offsetTop: top, offsetHeight: height});
+      top += height;
     }
     return els;
   }
@@ -153,47 +212,84 @@ class FakeLayout {
     if (id === 'row-win-bottom') {
       return this.winEnd < this.total ? this.bottomSpEl() : null;
     }
+    if (id === 'stream-tail') {
+      return this.streamTailEl;
+    }
     return null;
   }
 
   /** 应用 RowList 渲染输出到布局（renderRows mock 的实现体）。 */
-  applyChildren(children: VNodeLike[], rows: TranscriptRowData[], hasMore: boolean): void {
+  applyChildren(
+    children: VNodeLike[],
+    rows: TranscriptRowData[],
+    hasMore: boolean,
+  ): void {
     let topPx = 0;
     let bottomPx = 0;
+    let afterBottom = false;
     const ids: string[] = [];
+    const winIds: string[] = [];
+    const pinnedIds: string[] = [];
     for (const vnode of children) {
       if (!vnode || typeof vnode !== 'object') continue;
       if (vnode.key === 'row-win-top') {
         topPx = parseFloat(String(vnode.props.style?.height ?? '0'));
       } else if (vnode.key === 'row-win-bottom') {
         bottomPx = parseFloat(String(vnode.props.style?.height ?? '0'));
+        afterBottom = true;
       } else if (
         vnode.type != null &&
         (vnode.type as {__isMsgRowStub?: boolean}).__isMsgRowStub === true
       ) {
-        ids.push((vnode.props.row as {id: string}).id);
+        const id = (vnode.props.row as {id: string}).id;
+        ids.push(id);
+        (afterBottom ? pinnedIds : winIds).push(id);
       }
     }
     this.hasMore = hasMore;
     this.total = rows.length;
     this.topSpPx = topPx;
     this.bottomSpPx = bottomPx;
-    if (ids.length > 0) {
+    this.winRowIds = winIds;
+    this.pinnedIds = pinnedIds;
+    if (winIds.length > 0) {
       this.winStart = Math.max(
         0,
-        rows.findIndex(row => row.id === ids[0]),
+        rows.findIndex(row => row.id === winIds[0]),
       );
       this.winEnd =
         Math.max(
           0,
-          rows.findIndex(row => row.id === ids[ids.length - 1]),
+          rows.findIndex(row => row.id === winIds[winIds.length - 1]),
         ) + 1;
     } else {
       this.winStart = 0;
       this.winEnd = 0;
     }
     this.lastRowIds = ids;
+    this.recomputeStreamTail();
     this.scrollTop = this.clampScroll(this.scrollTop);
+  }
+
+  private recomputeStreamTail(): void {
+    this.streamTailEl = null;
+    if (this.streamingRowId == null) return;
+    const winIndex = this.winRowIds.indexOf(this.streamingRowId);
+    if (winIndex >= 0) {
+      let top = this.btnH() + this.topSpPx;
+      for (let i = 0; i < winIndex; i++) {
+        top += this.rowPx(this.winRowIds[i]);
+      }
+      this.streamTailEl = {offsetTop: top, offsetHeight: this.streamTailHeight};
+      return;
+    }
+    if (this.pinnedIds.indexOf(this.streamingRowId) >= 0) {
+      this.streamTailEl = {
+        offsetTop:
+          this.btnH() + this.topSpPx + this.windowPx() + this.bottomSpPx,
+        offsetHeight: this.streamTailHeight,
+      };
+    }
   }
 }
 
@@ -210,6 +306,20 @@ function makeRows(prefix: string, count: number): TranscriptRowData[] {
   return rows;
 }
 
+/** 最后一行是流式行（I1：streaming 行恒为最后一条）。 */
+function makeStreamingRows(prefix: string, count: number): TranscriptRowData[] {
+  const rows = makeRows(prefix, count);
+  if (rows.length > 0) {
+    const last = rows[rows.length - 1];
+    rows[rows.length - 1] = {...last, role: 'assistant', status: 'streaming'};
+  }
+  return rows;
+}
+
+function isMsgStub(v: VNodeLike): boolean {
+  return (v.type as {__isMsgRowStub?: boolean})?.__isMsgRowStub === true;
+}
+
 describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
   let layout: FakeLayout;
   let mods: Modules;
@@ -222,8 +332,9 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     (global as unknown as {document?: unknown}).document = {
       getElementById: (id: string) => layout.getElementById(id),
     };
-    (global as unknown as {requestAnimationFrame?: unknown})
-      .requestAnimationFrame = (cb: () => void) => {
+    (
+      global as unknown as {requestAnimationFrame?: unknown}
+    ).requestAnimationFrame = (cb: () => void) => {
       rafQueue.push(cb);
       return rafQueue.length;
     };
@@ -256,7 +367,11 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     mods = loaded!;
     // renderRows mock = 真调 RowList() 并应用到布局模型（模拟真实渲染）
     mods.renderRows.mockImplementation(() => {
-      layout.applyChildren(mods.RowList(), mods.state.rows as TranscriptRowData[], mods.state.hasMore);
+      layout.applyChildren(
+        mods.RowList(),
+        mods.state.rows as TranscriptRowData[],
+        mods.state.hasMore,
+      );
     });
   });
 
@@ -302,11 +417,13 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       // 贴尾无下占位
       expect(children.find(v => v.key === 'row-win-bottom')).toBeFalsy();
 
-      // 「加载更早」按钮与流式尾不回归
+      // 「加载更早」按钮保留；流式尾不再是独立兄弟节点（无流式行时也没有）
       const btn = children.find(v => v.key === 'load-older');
       expect(btn).toBeTruthy();
       expect(btn!.props['data-action']).toBe('load-older');
-      expect(children.some(v => v.key === 'stream-tail')).toBe(true);
+      expect(children.some(v => v.key === 'stream-tail')).toBe(false);
+      // 流式行不会再被排除出窗口循环：最后一条普通行也在 vnode 里
+      expect(msgs[msgs.length - 1]!.key).toBe('r-499');
     });
 
     it('短列表（不足一个窗口）：全量渲染、无占位', () => {
@@ -341,13 +458,401 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
     });
   });
 
+  describe('流式行并入行列表（T-SP13 / C24）', () => {
+    it('贴底：流式行在窗口循环内，唯一 vnode 且无独立 stream-tail 兄弟', () => {
+      mods.state.rows = makeStreamingRows('r', 500) as never;
+      mods.state.hasMore = false;
+      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+
+      const children = mods.RowList();
+      const msgs = children.filter(isMsgStub);
+      expect(msgs).toHaveLength(100);
+      // 流式行计入 total，且是窗口循环的最后一行
+      expect(msgs[msgs.length - 1]!.key).toBe('r-499');
+      expect(
+        msgs.filter(v => (v.props.row as {id: string}).id === 'r-499'),
+      ).toHaveLength(1);
+      expect(children.some(v => v.key === 'stream-tail')).toBe(false);
+      expect(children.find(v => v.key === 'row-win-bottom')).toBeFalsy();
+    });
+
+    it('用户上滚到窗口外：流式行钉在下占位之后、同 MessageRow 类型、下占位少算 1 行', () => {
+      mods.state.rows = makeStreamingRows('r', 500) as never;
+      mods.windowing.retargetRowWindow(500, 200); // 窗口 (180, 280)
+
+      const children = mods.RowList();
+      const bottomIdx = children.findIndex(v => v.key === 'row-win-bottom');
+      expect(bottomIdx).toBeGreaterThan(0);
+      // 下占位按 total - win.end - 1 行估算（钉住行不计）
+      expect(children[bottomIdx]!.props.style!.height).toBe(
+        `${(500 - 280 - 1) * FALLBACK_AVG}px`,
+      );
+      // 窗口循环里没有流式行；它单独钉在下占位之后
+      const windowMsgs = children.slice(0, bottomIdx).filter(isMsgStub);
+      expect(
+        windowMsgs.some(v => (v.props.row as {id: string}).id === 'r-499'),
+      ).toBe(false);
+      const pinVNodes = children
+        .slice(bottomIdx + 1)
+        .filter(
+          v => isMsgStub(v) && (v.props.row as {id: string}).id === 'r-499',
+        );
+      expect(pinVNodes).toHaveLength(1);
+      // 同一组件类型（换成 StreamingMessageRow 会按 type 卸载重建、丢 body 岛）
+      expect(pinVNodes[0]!.type).toBe(windowMsgs[0]!.type);
+
+      // 布局：钉住行在下占位之后；窗口范围不变
+      mods.renderRows();
+      expect(layout.pinnedIds).toEqual(['r-499']);
+      expect(layout.winStart).toBe(180);
+      expect(layout.winEnd).toBe(280);
+      expect(layout.lastRowIds[layout.lastRowIds.length - 1]).toBe('r-499');
+
+      // 窗口跨过流式行前后：vnode key/type 不变（同 id 复用）
+      mods.windowing.retargetRowWindow(500, 260);
+      const nextChildren = mods.RowList();
+      const nextBottom = nextChildren.findIndex(
+        v => v.key === 'row-win-bottom',
+      );
+      const nextPin = nextChildren
+        .slice(nextBottom + 1)
+        .filter(
+          v => isMsgStub(v) && (v.props.row as {id: string}).id === 'r-499',
+        );
+      expect(nextPin).toHaveLength(1);
+      expect(nextPin[0]!.key).toBe(pinVNodes[0]!.key);
+      expect(nextPin[0]!.type).toBe(pinVNodes[0]!.type);
+
+      // 钉住 → 窗口内（真正跨过流式行）：同一 row 对象 + 同 key/type ⇒ Preact
+      // 同一 fiber，StreamBodyHost(sCU=false) 的 fake body 节点引用不变；窗口
+      // 循环里只出现一次，下占位消失。
+      mods.windowing.retargetRowWindow(500, 460); // 窗口 (440, 500)
+      const acrossChildren = mods.RowList();
+      const acrossTail = acrossChildren
+        .filter(isMsgStub)
+        .filter(v => (v.props.row as {id: string}).id === 'r-499');
+      expect(acrossTail).toHaveLength(1);
+      expect(acrossTail[0]!.key).toBe(pinVNodes[0]!.key);
+      expect(acrossTail[0]!.type).toBe(pinVNodes[0]!.type);
+      expect(acrossTail[0]!.props.row).toBe(pinVNodes[0]!.props.row);
+      expect(acrossTail[0]!.props.row).toBe(mods.state.rows[499]);
+      expect(acrossChildren.some(v => v.key === 'row-win-bottom')).toBe(false);
+
+      // #stream-tail vnode 唯一：RowList 输出里流式行只出现一次，真实组件只给
+      // streaming 行挂 id；钉住 / 窗口内两种形态各恰好一个（窗口循环与钉住
+      // 分支都不会重复产出）。
+      const tailIdCount = (children: VNodeLike[]): number =>
+        children
+          .filter(isMsgStub)
+          .map(v => v.props.row as {status?: string})
+          .filter(row => row.status === 'streaming')
+          .map(
+            row =>
+              actualStreamingRow.StreamingMessageRow({
+                row: row as never,
+              }) as unknown as AnyVNode,
+          )
+          .filter(v => v.props?.id === 'stream-tail').length;
+      expect(tailIdCount(children)).toBe(1);
+      expect(tailIdCount(nextChildren)).toBe(1);
+      expect(tailIdCount(acrossChildren)).toBe(1);
+    });
+
+    it('measureRowWindow：贴底流式行排除出测量区间，平均槽高不被放大的流式行拉偏', () => {
+      mods.state.rows = makeStreamingRows('r', 500) as never;
+      mods.state.hasMore = false;
+      layout.streamingRowId = 'r-499';
+      // 流式行远高于普通行：不排除会把 avg 拉向 119.8（而非收敛到 80）
+      layout.streamTailHeight = 4000;
+      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.renderRows();
+
+      mods.windowing.measureRowWindow();
+      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+    });
+  });
+
+  describe('StreamingMessageRow / MessageRow 分派（T-SP11 / C25/C26）', () => {
+    type AnyVNode = {
+      type: unknown;
+      key?: string;
+      props?: Record<string, any>;
+    };
+
+    function vnodeChildren(vnode: AnyVNode): AnyVNode[] {
+      const out: AnyVNode[] = [];
+      const walk = (node: unknown): void => {
+        if (node == null) return;
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+          return;
+        }
+        if (typeof node !== 'object') return;
+        const n = node as AnyVNode;
+        out.push(n);
+        if (n.props != null) walk(n.props.children);
+      };
+      walk(vnode);
+      return out;
+    }
+
+    function streamingRow(overrides: Record<string, unknown> = {}) {
+      return {
+        kind: 'message' as const,
+        id: 'st:1',
+        role: 'assistant',
+        status: 'streaming' as const,
+        text: '',
+        thinking: '',
+        hidden: false,
+        ...overrides,
+      };
+    }
+
+    /** 取 vnode 树里的 `.bubble-body`（text host）。 */
+    function findBubbleBody(vnode: AnyVNode): AnyVNode | undefined {
+      return vnodeChildren(vnode).find(n =>
+        String(n.props?.className ?? '')
+          .split(/\s+/)
+          .includes('bubble-body'),
+      );
+    }
+
+    function countMarker(source: string, marker: string): number {
+      return source.split(marker).length - 1;
+    }
+
+    it('streaming 行：id=stream-tail、data-* 标记、有生成中条（label 来自 labels）', () => {
+      const vnode = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow({text: 'hello'}),
+      }) as unknown as AnyVNode;
+      expect(vnode.props!['data-id']).toBe('st:1');
+      expect(vnode.props!['data-stream-id']).toBe('st:1');
+      expect(vnode.props!['data-streaming']).toBe('1');
+      expect(vnode.props!['data-stream-status']).toBe('streaming');
+      expect(vnode.props!.id).toBe('stream-tail');
+      const all = vnodeChildren(vnode);
+      const bar = all.find(n => n.type === ActualToolInvokingBar);
+      expect(bar).toBeTruthy();
+      expect(bar!.props!.label).toBe('生成中');
+    });
+
+    it('finished 行：无 id=stream-tail / data-streaming、无生成中条、有 DB 菜单行', () => {
+      const vnode = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow({
+          status: 'finished',
+          messageId: 'db-1',
+          text: 'done',
+        }),
+      }) as unknown as AnyVNode;
+      expect(vnode.props!['data-id']).toBe('st:1');
+      expect(vnode.props!['data-stream-id']).toBe('st:1');
+      expect(vnode.props!['data-streaming']).toBeUndefined();
+      expect(vnode.props!['data-stream-status']).toBe('finished');
+      expect(vnode.props!.id).toBeUndefined();
+      const all = vnodeChildren(vnode);
+      expect(all.some(n => n.type === ActualToolInvokingBar)).toBe(false);
+      expect(all.some(n => n.props?.['aria-label'] === '消息操作')).toBe(true);
+    });
+
+    it('MessageRow 按 status 分派同一组件类型：streaming→finished 不 remount', () => {
+      const StreamingComponent = actualStreamingRow.StreamingMessageRow;
+      const active = actualMessageRow({
+        row: streamingRow({text: 'x'}) as never,
+      }) as unknown as AnyVNode;
+      const done = actualMessageRow({
+        row: streamingRow({
+          status: 'finished',
+          messageId: 'db-1',
+          text: 'x',
+        }) as never,
+      }) as unknown as AnyVNode;
+      const plain = actualMessageRow({
+        row: {kind: 'message', id: 'u1', role: 'user', text: 'hi'} as never,
+      }) as unknown as AnyVNode;
+      expect(active.type).toBe(StreamingComponent);
+      expect(done.type).toBe(StreamingComponent);
+      expect(active.key).toBe(done.key);
+      expect(plain.type).not.toBe(StreamingComponent);
+    });
+
+    it('waiting-first 只渲染行 + 生成中指示，不渲染 .bubble', () => {
+      const vnode = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow(),
+      }) as unknown as AnyVNode;
+      expect(vnode.props!.className).toContain('row message');
+      expect(vnode.props!.className).toContain('stream');
+      expect(vnode.props!.className).toContain('stream--waiting-first');
+      const all = vnodeChildren(vnode);
+      expect(
+        all.some(n =>
+          String(n.props?.className ?? '')
+            .split(/\s+/)
+            .includes('bubble'),
+        ),
+      ).toBe(false);
+      expect(
+        all.some(n => n.props?.className === 'stream-waiting-indicator'),
+      ).toBe(true);
+    });
+
+    it('streaming-content：空正文也挂唯一稳定 .bubble-body；thinking 键为 stream:thinking', () => {
+      // tools 先到、正文后到：两种状态下都只有一个 text host（壳稳定）
+      const toolsOnly = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow({
+          tools: [{name: 'read', status: 'running', toolUseId: 't1'}],
+        }),
+      }) as unknown as AnyVNode;
+      const toolsAndText = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow({
+          text: 'hi',
+          tools: [{name: 'read', status: 'running', toolUseId: 't1'}],
+        }),
+      }) as unknown as AnyVNode;
+      for (const vnode of [toolsOnly, toolsAndText]) {
+        const bodies = vnodeChildren(vnode).filter(n =>
+          String(n.props?.className ?? '')
+            .split(/\s+/)
+            .includes('bubble-body'),
+        );
+        expect(bodies).toHaveLength(1);
+      }
+      const withThinking = actualStreamingRow.StreamingMessageRow({
+        row: streamingRow({thinking: 'thought'}),
+      }) as unknown as AnyVNode;
+      const all = vnodeChildren(withThinking);
+      expect(
+        all.some(n => n.props?.['data-thinking-key'] === 'stream:thinking'),
+      ).toBe(true);
+      expect(
+        all.some(n =>
+          String(n.props?.className ?? '')
+            .split(/\s+/)
+            .includes('bubble-body'),
+        ),
+      ).toBe(true);
+    });
+
+    it('finished 折叠键从 stream:* 切到 msg:<id>（读 state.thinkingExpanded）', () => {
+      const key = 'msg:st:1';
+      realState.thinkingExpanded[key] = true;
+      try {
+        const vnode = actualStreamingRow.StreamingMessageRow({
+          row: streamingRow({
+            status: 'finished',
+            messageId: 'db-1',
+            thinking: 'thought',
+          }),
+        }) as unknown as AnyVNode;
+        const all = vnodeChildren(vnode);
+        expect(all.some(n => n.props?.['data-thinking-key'] === key)).toBe(
+          true,
+        );
+        // expanded=true 时才挂 thinking body
+        expect(
+          all.some(n =>
+            String(n.props?.className ?? '')
+              .split(/\s+/)
+              .includes('thinking-body'),
+          ),
+        ).toBe(true);
+      } finally {
+        delete realState.thinkingExpanded[key];
+      }
+    });
+
+    it('finished 行：plain seed 文本 === row.text；rich seed 为全量 html（多块 marker 各一次），重建不丢已提交块', () => {
+      const previousRich = realState.flags.richText;
+      try {
+        realState.flags.richText = false;
+        const plain = actualStreamingRow.StreamingMessageRow({
+          row: streamingRow({
+            status: 'finished',
+            messageId: 'db-1',
+            text: 'B1B2B3',
+          }),
+        }) as unknown as AnyVNode;
+        const plainBody = findBubbleBody(plain);
+        expect(plainBody).toBeTruthy();
+        expect(plainBody!.props!.seedText).toBe('B1B2B3');
+        expect(plainBody!.props!.seedHtml).toBeNull();
+
+        realState.flags.richText = true;
+        const html = '<p>B1</p><p>B2</p><p>B3</p>';
+        const richRow = streamingRow({
+          status: 'finished',
+          messageId: 'db-1',
+          text: 'B1B2B3',
+          textHtml: html,
+        });
+        const rich = actualStreamingRow.StreamingMessageRow({
+          row: richRow,
+        }) as unknown as AnyVNode;
+        const richBody = findBubbleBody(rich);
+        expect(richBody!.props!.seedHtml).toBe(html);
+        expect(richBody!.props!.seedText).toBeNull();
+        // 多块 rich：每个唯一 marker 恰好一次（不重复、不缺段）
+        expect(countMarker(html, 'B1')).toBe(1);
+        expect(countMarker(html, 'B2')).toBe(1);
+        expect(countMarker(html, 'B3')).toBe(1);
+
+        // 窗口卸载后重建（同一 row 再挂载）：seed 仍取行内全量 html，已提交块不丢
+        const rebuilt = actualStreamingRow.StreamingMessageRow({
+          row: richRow,
+        }) as unknown as AnyVNode;
+        expect(findBubbleBody(rebuilt)!.props!.seedHtml).toBe(html);
+      } finally {
+        realState.flags.richText = previousRich;
+      }
+    });
+
+    it('finished 折叠键 msg:<id> 两行互不影响、重建后展开态保持', () => {
+      const key1 = 'msg:st:1';
+      const key2 = 'msg:st:2';
+      const render = (id: string) =>
+        actualStreamingRow.StreamingMessageRow({
+          row: streamingRow({
+            id,
+            status: 'finished',
+            messageId: 'db-' + id,
+            thinking: 'thought-' + id,
+          }),
+        }) as unknown as AnyVNode;
+      const hasThinkingBody = (vnode: AnyVNode, key: string): boolean => {
+        const all = vnodeChildren(vnode);
+        return (
+          all.some(n => n.props?.['data-thinking-key'] === key) &&
+          all.some(n =>
+            String(n.props?.className ?? '')
+              .split(/\s+/)
+              .includes('thinking-body'),
+          )
+        );
+      };
+      realState.thinkingExpanded[key1] = true;
+      realState.thinkingExpanded[key2] = false;
+      try {
+        expect(hasThinkingBody(render('st:1'), key1)).toBe(true);
+        expect(hasThinkingBody(render('st:2'), key2)).toBe(false);
+
+        // 展开另一行不影响本行（键按 msg:<id> 独立）
+        realState.thinkingExpanded[key2] = true;
+        expect(hasThinkingBody(render('st:1'), key1)).toBe(true);
+        expect(hasThinkingBody(render('st:2'), key2)).toBe(true);
+
+        // 折叠/展开状态存在 state，重建（窗口卸载重挂）后保持
+        realState.thinkingExpanded[key1] = false;
+        expect(hasThinkingBody(render('st:1'), key1)).toBe(false);
+        expect(hasThinkingBody(render('st:2'), key2)).toBe(true);
+      } finally {
+        delete realState.thinkingExpanded[key1];
+        delete realState.thinkingExpanded[key2];
+      }
+    });
+  });
+
   describe('planRowWindowMove 纯逻辑（扩窗 / 缩窗 / 滞回）', () => {
-    function plan(
-      total: number,
-      start: number,
-      end: number,
-      v: number,
-    ) {
+    function plan(total: number, start: number, end: number, v: number) {
       return mods.windowing.planRowWindowMove(total, start, end, v);
     }
 
@@ -414,8 +919,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.windowing.retargetRowWindow(500, 440); // 窗口 (420, 500)
       mods.renderRows();
-      layout.scrollTop =
-        420 * FALLBACK_AVG + (440 - 420) * FALLBACK_AVG; // 估算行 440
+      layout.scrollTop = 420 * FALLBACK_AVG + (440 - 420) * FALLBACK_AVG; // 估算行 440
       expect(mods.windowing.handleRowWindowScroll()).toBe(false);
       expect(mods.renderRows).toHaveBeenCalledTimes(1);
     });
@@ -548,9 +1052,7 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       expect(win.end).toBe(502);
       expect(layout.lastRowIds).toContain('a-0');
       expect(layout.lastRowIds).toContain('a-1');
-      expect(layout.scrollTop).toBe(
-        layout.clampScroll(layout.scrollHeight),
-      );
+      expect(layout.scrollTop).toBe(layout.clampScroll(layout.scrollHeight));
       expect(scrollSnapshotPostCount()).toBe(1);
     });
   });
@@ -596,9 +1098,9 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
           end: 280,
         });
         // scrollTop 远大于 SCROLL_TOP_LOAD_OLDER(24)：不回发 loadOlder
-        expect(
-          mods.post.mock.calls.some(call => call[0] === 'loadOlder'),
-        ).toBe(false);
+        expect(mods.post.mock.calls.some(call => call[0] === 'loadOlder')).toBe(
+          false,
+        );
         jest.runAllTimers();
       } finally {
         jest.useRealTimers();
