@@ -11,11 +11,11 @@ import type {VNode} from 'preact';
 import {ToolGroup} from '../src/web/chat-transcript/webview/ui/render/ToolGroup';
 
 /**
- * 取 ToolGroup 里各工具卡 ToolGroupItem 的**执行产物** vnode。
+ * 取 ToolGroup 里各工具卡的**执行产物** vnode。
  *
- * `tools.map` 产出的 child 是未执行的组件元素 `{type: ToolGroupItem,
- * props: {tool}}`（children 惰性）；要断言卡片真实渲染的 data-* 键须
- * 再调一层 `type(props)` 展开到 ToolGroupItem 返回的 div。
+ * `tools.map` 产出的 child 若是组件元素（`{type: 函数, props}`），要断言卡片
+ * 真实渲染的 data-* 键须再调一层 `type(props)` 展开；卡片逻辑内联进 map 后
+ * child 已是最终的 `div` vnode（`type` 为字符串），直接用。
  */
 function itemVNodes(tools: object[]): VNode[] {
   const section = ToolGroup({
@@ -28,7 +28,9 @@ function itemVNodes(tools: object[]): VNode[] {
     throw new Error('ToolGroup children 结构不符合预期');
   }
   return children.map((el) =>
-    (el.type as (props: unknown) => VNode)(el.props),
+    typeof el.type === 'function'
+      ? (el.type as (props: unknown) => VNode)(el.props)
+      : el,
   );
 }
 

@@ -101,16 +101,14 @@ export function messageHasToolUse(message: ChatMessageData): boolean {
 /**
  * First user message after assistant whose tool_result ids cover all assistant tool_use ids.
  */
-export function resolveToolResultsMessageId(
-  messages: readonly ChatMessageData[],
-  assistantMessage: ChatMessageData,
-): string | undefined {
-  const required = new Set(toolUseIdsFromMessage(assistantMessage));
+// prettier-ignore
+export function resolveToolResultsMessageId(messages: readonly ChatMessageData[], assistant: ChatMessageData): string | undefined {
+  const required = new Set(toolUseIdsFromMessage(assistant));
   if (required.size === 0) {
     return undefined;
   }
   for (const message of messages) {
-    if (message.seq <= assistantMessage.seq || message.role !== 'user') {
+    if (message.seq <= assistant.seq || message.role !== 'user') {
       continue;
     }
     const resultIds = new Set<string>();
@@ -127,9 +125,8 @@ export function resolveToolResultsMessageId(
 }
 
 /** Maps tool_use id → tool_result block from user messages in session order. */
-export function buildToolResultByUseId(
-  messages: readonly ChatMessageData[],
-): Map<string, ToolResultBlock> {
+// prettier-ignore
+export function buildToolResultByUseId(messages: readonly ChatMessageData[]): Map<string, ToolResultBlock> {
   const map = new Map<string, ToolResultBlock>();
   // Pair against all messages so hidden tool_result rows still resolve assistant tool cards.
   for (const message of messages) {
@@ -143,21 +140,15 @@ export function buildToolResultByUseId(
 }
 
 /** True when every tool_use on the assistant has a paired tool_result. */
-export function turnToolResultsComplete(
-  assistant: ChatMessageData,
-  messages: readonly ChatMessageData[],
-): boolean {
-  return turnToolResultsCompleteWith(
-    assistant,
-    buildToolResultByUseId(messages),
-  );
+// prettier-ignore
+export function turnToolResultsComplete(assistant: ChatMessageData, messages: readonly ChatMessageData[]): boolean {
+  // prettier-ignore
+  return turnToolResultsCompleteWith(assistant, buildToolResultByUseId(messages));
 }
 
 /** O(1) 判定版本：tool_use id 全部命中预扫 map 即视为本轮工具结果齐备。 */
-function turnToolResultsCompleteWith(
-  assistant: ChatMessageData,
-  results: ReadonlyMap<string, ToolResultBlock>,
-): boolean {
+// prettier-ignore
+function turnToolResultsCompleteWith(assistant: ChatMessageData, results: ReadonlyMap<string, ToolResultBlock>): boolean {
   const required = toolUseIdsFromMessage(assistant);
   if (required.length === 0) {
     return true;
@@ -179,9 +170,8 @@ export interface ToolPairingContext {
 }
 
 /** 一次 O(n) 扫描构建工具配对上下文（等价旧 lastIncompleteToolAssistant 的全量扫描）。 */
-export function buildToolPairingContext(
-  messages: readonly ChatMessageData[],
-): ToolPairingContext {
+// prettier-ignore
+export function buildToolPairingContext(messages: readonly ChatMessageData[]): ToolPairingContext {
   const results = buildToolResultByUseId(messages);
   let lastIncompleteAssistant: ChatMessageData | undefined;
   for (const message of messages) {
@@ -196,24 +186,15 @@ export function buildToolPairingContext(
 }
 
 /** Current turn tool execution: agent running + last assistant with incomplete results. */
-export function isTurnToolExecuting(
-  assistant: ChatMessageData,
-  messages: readonly ChatMessageData[],
-  agentRunning: boolean,
-): boolean {
-  return isTurnToolExecutingWith(
-    assistant,
-    buildToolPairingContext(messages),
-    agentRunning,
-  );
+// prettier-ignore
+export function isTurnToolExecuting(assistant: ChatMessageData, messages: readonly ChatMessageData[], agentRunning: boolean): boolean {
+  // prettier-ignore
+  return isTurnToolExecutingWith(assistant, buildToolPairingContext(messages), agentRunning);
 }
 
 /** O(1) 判定版本：agent 运行中且该消息正是预扫出的最后一条结果不齐备 assistant。 */
-function isTurnToolExecutingWith(
-  assistant: ChatMessageData,
-  context: ToolPairingContext,
-  agentRunning: boolean,
-): boolean {
+// prettier-ignore
+function isTurnToolExecutingWith(assistant: ChatMessageData, context: ToolPairingContext, agentRunning: boolean): boolean {
   if (!agentRunning || !messageHasToolUse(assistant)) {
     return false;
   }
@@ -223,15 +204,8 @@ function isTurnToolExecutingWith(
   return context.lastIncompleteAssistant?.id === assistant.id;
 }
 
-function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
-  return resolveToolResultOk(result) ? 'success' : 'error';
-}
-
-export function toolCallViewFromUse(
-  use: ToolUseBlock,
-  results: ReadonlyMap<string, ToolResultBlock>,
-  options?: BuildChatListItemsOptions,
-): ToolCallView {
+// prettier-ignore
+export function toolCallViewFromUse(use: ToolUseBlock, results: ReadonlyMap<string, ToolResultBlock>, options?: BuildChatListItemsOptions): ToolCallView {
   const result = results.get(use.id);
   if (result == null) {
     const view: ToolCallView = {
@@ -244,20 +218,16 @@ export function toolCallViewFromUse(
     // child-created 事件，title 映射里没有它，这是复用场景唯一可靠来源；
     // 新建路径仍回退按 title 匹配 pendingSubagentSessions（执行中也能点进子会话）。
     if (use.name === 'task') {
-      const reused =
-        typeof use.input?.sessionId === 'string'
-          ? use.input.sessionId.trim()
-          : '';
+      // prettier-ignore
+      const reused = typeof use.input?.sessionId === 'string' ? use.input.sessionId.trim() : '';
       if (reused) {
         return {...view, subagentSessionId: reused};
       }
       if (options?.pendingSubagentSessions) {
-        const desc =
-          typeof use.input?.description === 'string'
-            ? use.input.description.trim()
-            : '';
-        const prompt =
-          typeof use.input?.prompt === 'string' ? use.input.prompt.trim() : '';
+        // prettier-ignore
+        const desc = typeof use.input?.description === 'string' ? use.input.description.trim() : '';
+        // prettier-ignore
+        const prompt = typeof use.input?.prompt === 'string' ? use.input.prompt.trim() : '';
         const title = desc || prompt.slice(0, 40);
         if (title) {
           const childSessionId = options.pendingSubagentSessions.get(title);
@@ -275,7 +245,7 @@ export function toolCallViewFromUse(
     toolUseId: use.id,
     name: use.name,
     input: use.input,
-    status: toolStatusFromResult(result),
+    status: resolveToolResultOk(result) ? 'success' : 'error',
     resultContent: result.content,
     ...(result.summary != null ? {summary: result.summary} : {}),
     ...(typeof subagentSessionId === 'string' && subagentSessionId.length > 0
@@ -301,10 +271,8 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
  * （read 缺省域命中生效副本的解析结果），否则从 tool_use 输入解析
  * （write/edit 必含；read 缺省域在 pending 时解析不出，返回 undefined）。
  */
-export function skillToolRef(
-  tool: ToolCallView,
-  projectId?: string,
-): SkillToolRef | undefined {
+// prettier-ignore
+export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolRef | undefined {
   if (tool.skillRef != null) return tool.skillRef;
   return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
@@ -324,31 +292,11 @@ export function toolCallSummary(tool: ToolCallView): string {
   return '';
 }
 
-/** 未配对 tool_use 的展示状态：runUiStopped 直接 error；agent 运行中且为本轮执行消息则 pending。 */
-function resolveUnpairedToolStatus(
-  assistant: ChatMessageData,
-  context: ToolPairingContext,
-  agentRunning: boolean,
-  runUiStopped: boolean,
-): ToolCallStatus {
-  if (runUiStopped) {
-    return 'error';
-  }
-  return isTurnToolExecutingWith(assistant, context, agentRunning)
-    ? 'pending'
-    : 'error';
-}
-
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
-export function buildChatListItems(
-  messages: readonly ChatMessageData[],
-  options: BuildChatListItemsOptions = {},
-): ChatListItem[] {
-  return buildChatListItemsWithContext(
-    messages,
-    buildToolPairingContext(messages),
-    options,
-  );
+// prettier-ignore
+export function buildChatListItems(messages: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): ChatListItem[] {
+  // prettier-ignore
+  return buildChatListItemsWithContext(messages, buildToolPairingContext(messages), options);
 }
 
 /**
@@ -356,14 +304,10 @@ export function buildChatListItems(
  * selectTailTranscriptRows 以「全量 messages 的上下文 + tail 消息」调用，
  * 保持与全量构建后按 tail id 过滤完全等价。
  */
-function buildChatListItemsWithContext(
-  messages: readonly ChatMessageData[],
-  context: ToolPairingContext,
-  options: BuildChatListItemsOptions,
-): ChatListItem[] {
+// prettier-ignore
+function buildChatListItemsWithContext(messages: readonly ChatMessageData[], context: ToolPairingContext, options: BuildChatListItemsOptions): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
   const runUiStopped = options.runUiStopped ?? false;
-  const results = context.results;
   const items: ChatListItem[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
@@ -408,19 +352,16 @@ function buildChatListItemsWithContext(
     const hasToolUse = toolUses.length > 0;
     // user ops 已拆除：遗留的 user_ops 操作日志附件（非 annotate）不再兼容展示，
     // 直接丢弃——仅保留批注（annotate）与其它来源附件。
-    const displayAttachments = (message.attachments ?? []).filter(
-      isDisplayableAttachment,
-    );
-    const hasAttachments = displayAttachments.length > 0;
-    const unpairedStatus = hasToolUse
-      ? resolveUnpairedToolStatus(message, context, agentRunning, runUiStopped)
-      : undefined;
-    const tools = toolUses.map(use => {
-      const view = toolCallViewFromUse(use, results, options);
-      if (view.status === 'pending' && unpairedStatus != null) {
-        return {...view, status: unpairedStatus};
-      }
-      return view;
+    // prettier-ignore
+    const hasAttachments = (message.attachments ?? []).some(isDisplayableAttachment);
+    // 未配对 tool_use 的展示状态：runUiStopped 一律 error；仅「本轮执行消息」保留 pending。
+    // prettier-ignore
+    const unpairedPending = hasToolUse && !runUiStopped && isTurnToolExecutingWith(message, context, agentRunning);
+    const tools = toolUses.map((use): ToolCallView => {
+      const view = toolCallViewFromUse(use, context.results, options);
+      return view.status === 'pending' && !unpairedPending
+        ? {...view, status: 'error'}
+        : view;
     });
 
     // 空正文但有 attachments 仍须进列表；否则真实提示词看得到、UI 没有。
@@ -448,20 +389,20 @@ function buildChatListItemsWithContext(
 function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
   // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
   // 仅保留批注与其它来源附件。
-  const userAttachments =
-    item.message.role === 'user' && (item.message.attachments?.length ?? 0) > 0
-      ? item.message.attachments!.filter(isDisplayableAttachment)!.map(a => ({
-          source: a.source,
-          type: a.type,
-          name: a.name,
-          path: a.path ?? a.name,
-          // skillAttach 的技能名真源（落库与 name 同值）：显式透传，
-          // 避免 path 兜底把技能名伪装成路径的形状错位
-          ...(a.skillName != null ? {skillName: a.skillName} : {}),
-          ...(a.action != null ? {action: a.action} : {}),
-          ...(a.content !== undefined ? {content: a.content} : {}),
-        }))
-      : undefined;
+  // prettier-ignore
+  const rawAttachments = item.message.role === 'user' ? item.message.attachments ?? [] : [];
+  // prettier-ignore
+  const rowAttachments = rawAttachments.filter(isDisplayableAttachment).map(a => ({
+      source: a.source,
+      type: a.type,
+      name: a.name,
+      path: a.path ?? a.name,
+      // skillAttach 的技能名真源（落库与 name 同值）：显式透传，
+      // 避免 path 兜底把技能名伪装成路径的形状错位
+      ...(a.skillName != null ? {skillName: a.skillName} : {}),
+      ...(a.action != null ? {action: a.action} : {}),
+      ...(a.content !== undefined ? {content: a.content} : {}),
+    }));
   return {
     kind: 'message',
     id: item.message.id,
@@ -469,7 +410,7 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
     hidden: item.message.hidden,
     text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
     thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-    ...(userAttachments != null ? {attachments: userAttachments} : {}),
+    ...(rawAttachments.length > 0 ? {attachments: rowAttachments} : {}),
     ...(item.tools.length > 0
       ? {
           tools: item.tools.map(t => ({
@@ -496,18 +437,14 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
  * 逐消息转换不依赖跨消息状态，故与「全量构建后按 tail id 过滤」语义严格等价，
  * 且省掉了 tail 之前所有消息的整段构建（原实现为全量 build 再 filter）。
  */
-export function selectTailTranscriptRows(
-  allMessages: readonly ChatMessageData[],
-  tailMessages: readonly ChatMessageData[],
-  options: BuildChatListItemsOptions = {},
-): TranscriptRow[] {
-  if (tailMessages.length === 0) {
+// prettier-ignore
+export function selectTailTranscriptRows(messages: readonly ChatMessageData[], tail: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): TranscriptRow[] {
+  if (tail.length === 0) {
     return [];
   }
-  const context = buildToolPairingContext(allMessages);
-  return buildChatListItemsWithContext(tailMessages, context, options).map(
-    transcriptRowFromItem,
-  );
+  const context = buildToolPairingContext(messages);
+  // prettier-ignore
+  return buildChatListItemsWithContext(tail, context, options).map(transcriptRowFromItem);
 }
 
 /**
@@ -516,10 +453,8 @@ export function selectTailTranscriptRows(
  * 流式正文不再是本函数的第二条数据面（spec C10）：流式行由宿主
  * `buildStreamingTranscriptRow` 生成、快照末片携带，本函数只产出 DB 历史行。
  */
-export function buildTranscriptRows(
-  messages: readonly ChatMessageData[],
-  options: BuildChatListItemsOptions = {},
-): TranscriptRow[] {
+// prettier-ignore
+export function buildTranscriptRows(messages: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): TranscriptRow[] {
   return buildChatListItems(messages, options).map(transcriptRowFromItem);
 }
 
@@ -529,12 +464,8 @@ export function buildTranscriptRows(
  * 顺序拼接」与单次全量 buildTranscriptRows 输出全等——流式行由宿主另行
  * 生成（spec C10），本函数只处理 DB 消息。
  */
-export function buildTranscriptRowsWithContext(
-  messages: readonly ChatMessageData[],
-  context: ToolPairingContext,
-  options: BuildChatListItemsOptions = {},
-): TranscriptRow[] {
-  return buildChatListItemsWithContext(messages, context, options).map(
-    transcriptRowFromItem,
-  );
+// prettier-ignore
+export function buildTranscriptRowsWithContext(messages: readonly ChatMessageData[], context: ToolPairingContext, options: BuildChatListItemsOptions = {}): TranscriptRow[] {
+  // prettier-ignore
+  return buildChatListItemsWithContext(messages, context, options).map(transcriptRowFromItem);
 }

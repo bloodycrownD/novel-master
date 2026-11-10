@@ -31,10 +31,9 @@ export const streamRichUpgrade: StreamRichUpgradeState = {
 
 export function renderStreamingInline(s: string): string {
   const escaped = escapeHtmlRaw(s);
-  return escaped
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
+  const bolded = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const italic = bolded.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  return italic.replace(/`([^`]+)`/g, '<code>$1</code>');
 }
 
 export function renderStreamingMarkdown(text: unknown): string {
@@ -108,12 +107,10 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
     if (!body) return;
     // 块级模式下只对活跃尾块做轻量升级（已提交块零重渲）；旧模式仍为
     // 全量显示态（回滚开关关闭时的形态）
-    const thinkingHtml = renderStreamingMarkdown(
-      getStreamActiveTailText('thinking'),
-    );
-    if (!thinkingHtml) return;
+    const html = renderStreamingMarkdown(getStreamActiveTailText('thinking'));
+    if (!html) return;
     const target = streamRenderTarget(body);
-    applyTrustedHtml(target, thinkingHtml);
+    applyTrustedHtml(target, html);
     // 轻量升级落富文本：清纯文本降级标记（B-1）
     setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(body, true);
@@ -121,10 +118,10 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
     // 会把 full 截成 tail（C22）。
   } else {
     const textBody = ensureStreamTextBody(bubble);
-    const textHtml = renderStreamingMarkdown(getStreamActiveTailText('text'));
-    if (!textHtml) return;
+    const html = renderStreamingMarkdown(getStreamActiveTailText('text'));
+    if (!html) return;
     const target = streamRenderTarget(textBody);
-    applyTrustedHtml(target, textHtml);
+    applyTrustedHtml(target, html);
     setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(textBody, true);
     // 同上：不写回 row.textHtml（全量真源在 delta）。
@@ -153,8 +150,6 @@ export function scheduleStreamRichUpgrade(kind: StreamKind): void {
   if (!state.flags.richText) return;
   streamRichUpgrade.kinds[kind] = true;
   if (streamRichUpgrade.timer != null) return;
-  streamRichUpgrade.timer = setTimeout(
-    flushStreamRichUpgrade,
-    STREAM_RICH_UPGRADE_MS,
-  );
+  const timer = setTimeout(flushStreamRichUpgrade, STREAM_RICH_UPGRADE_MS);
+  streamRichUpgrade.timer = timer;
 }

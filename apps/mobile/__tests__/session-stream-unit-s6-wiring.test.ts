@@ -138,14 +138,17 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(first.streamPayloads).toHaveLength(1);
     expect(second.streamPayloads).toHaveLength(1);
 
-    // 控制消息（force-snapshot / reset-stream）对当前 attach 的全句柄广播；
-    // reset 带被清掉的 streamIds。screen-b 已摘除，不再收到。
+    // 控制消息对当前 attach 的全句柄广播；reset 带被清掉的 streamIds，
+    // 并在下一拍触发 force-snapshot。screen-b 已摘除，不再收到。
     const streamingId = h.manager.snapshot('s1')?.streamRows[0]?.streamId;
-    h.manager.requestForceSnapshot('s1');
     h.manager.requestStreamReset('s1');
     expect(first.controlMessages).toEqual([
-      {type: 'force-snapshot'},
       {type: 'reset-stream', streamIds: [streamingId]},
+    ]);
+    jest.advanceTimersByTime(0);
+    expect(first.controlMessages).toEqual([
+      {type: 'reset-stream', streamIds: [streamingId]},
+      {type: 'force-snapshot'},
     ]);
     expect(second.controlMessages).toEqual([]);
     // clearStreamProjection 生效：快照里不再有流式行（旧 partial 不复活）

@@ -30,23 +30,21 @@ export function MessageRow({row}: MessageRowProps) {
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
   const roleLabel = role === 'user' ? '用户' : '助手';
 
-  /** ⋯ 菜单入口：与角色标签同一顶行（对齐 Desktop，不占右列）。 */
-  const onMenuBtnClick = (event: Event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const btn = event.currentTarget as HTMLButtonElement | null;
-    if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
-    openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
-  };
-
   const menuRow = (
     <div className="message-menu-row">
       <span className="message-role-label">{roleLabel}</span>
+      {/* ⋯ 菜单入口：与角色标签同一顶行（对齐 Desktop，不占右列）。 */}
       <button
         type="button"
         className="message-menu-btn"
         aria-label="消息操作"
-        onClick={onMenuBtnClick}
+        onClick={event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const btn = event.currentTarget as HTMLButtonElement | null;
+          if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+          openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+        }}
       >
         ⋯
       </button>

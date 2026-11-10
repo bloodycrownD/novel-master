@@ -16,7 +16,6 @@ import {
   notePrependHeightDelta,
   resetRowWindowForSnapshot,
   retargetRowWindowForPrepend,
-  retargetRowWindowFromBottom,
   type RowWindowPositioning,
 } from './row-windowing';
 import {requestResync, resetStreamBlockRenderState} from '../stream/stream';
@@ -27,6 +26,12 @@ import {reseedStreamingRow} from './finished-stream-row-dom';
 import {scheduleMermaidScan} from '../mermaid';
 
 export {reconcileFinishedStreamingRows} from './finished-stream-row-dom';
+
+/** 距底偏移 → scrollTop（scrollHeight/clientHeight 三参入口的收口）。 */
+function scrollTopFrom(scroller: Element, offset: number): number {
+  const {scrollHeight, clientHeight} = scroller;
+  return scrollTopForOffsetFromBottom(scrollHeight, clientHeight, offset);
+}
 
 export type RestoreScroll = {
   nearBottom?: boolean;
@@ -203,23 +208,15 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
     applySnapshot(assembled);
     // 末片应用后按原序重放分片期间挂起的增量动作（C-orch-1 web 侧）：
     // applySnapshot 用分片启动时的旧闭包整体替换 rows，挂起的增量行由此恢复。
-    replayPendingChunkActions();
-  }
-}
-
-/** 遍历挂起队列按到达序重放（各通道 Now 实现不再受挂起拦截）。 */
-function replayPendingChunkActions(): void {
-  if (pendingChunkActions.length === 0) {
-    return;
-  }
-  const actions = pendingChunkActions;
-  pendingChunkActions = [];
-  for (let i = 0; i < actions.length; i++) {
-    const action = actions[i];
-    if (action.kind === 'appendTail') {
-      applyAppendTailRowsNow(action.rows);
-    } else {
-      applyPrependPageNow(action.rows);
+    const actions = pendingChunkActions;
+    pendingChunkActions = [];
+    for (let i = 0; i < actions.length; i++) {
+      const action = actions[i];
+      if (action.kind === 'appendTail') {
+        applyAppendTailRowsNow(action.rows);
+      } else {
+        applyPrependPageNow(action.rows);
+      }
     }
   }
 }
@@ -294,8 +291,8 @@ export function applySnapshot(payload: SnapshotPayload): void {
   const scroller = document.getElementById('scroller');
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-  const sessionChanged =
-    !!payload.sessionKey && payload.sessionKey !== state.sessionKey;
+  const nextKey = payload.sessionKey;
+  const sessionChanged = !!nextKey && nextKey !== state.sessionKey;
   const prevCheckpointId = state.streamCheckpoint?.id;
   const localCheckpoint = state.streamCheckpoint;
 
@@ -387,9 +384,7 @@ export function applySnapshot(payload: SnapshotPayload): void {
     };
   }
   resetRowWindowForSnapshot(state.rows.length, positioning);
-  if (sessionChanged) {
-    closeContextMenu(false);
-  }
+  if (sessionChanged) closeContextMenu(false);
   const scrollAfterRender = function () {
     if (!scroller) return;
     if (intent === 'stick') {
@@ -399,22 +394,14 @@ export function applySnapshot(payload: SnapshotPayload): void {
       if (rs.nearBottom) {
         stickToBottom(scroller);
       } else {
-        scroller.scrollTop = scrollTopForOffsetFromBottom(
-          scroller.scrollHeight,
-          scroller.clientHeight,
-          rs.offsetY,
-        );
+        scroller.scrollTop = scrollTopFrom(scroller, rs.offsetY);
       }
     } else if (intent === 'preserve') {
       if (wasNearBottom) {
         stickToBottom(scroller);
       } else {
         // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
-        scroller.scrollTop = scrollTopForOffsetFromBottom(
-          scroller.scrollHeight,
-          scroller.clientHeight,
-          prevOffsetFromBottom,
-        );
+        scroller.scrollTop = scrollTopFrom(scroller, prevOffsetFromBottom);
       }
     }
     // 读位精确设定后再做一次窗口校正（幂等）：restore / preserve 的预定位
@@ -529,21 +516,18 @@ function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
     state.rows = state.rows.concat(newRows);
   }
   // 窗口跟随尾部追加（渲染前）：按追加前距底偏移重定位，新行进窗口。
-  retargetRowWindowFromBottom(
-    prevOffsetFromBottom,
-    scroller ? scroller.clientHeight : 0,
-  );
+  resetRowWindowForSnapshot(state.rows.length, {
+    kind: 'fromBottom',
+    offsetFromBottom: prevOffsetFromBottom,
+    clientHeight: scroller ? scroller.clientHeight : 0,
+  });
   renderRows();
   scheduleMermaidScan();
   if (scroller) {
     if (wasNearBottom) {
       stickToBottom(scroller);
     } else {
-      scroller.scrollTop = scrollTopForOffsetFromBottom(
-        scroller.scrollHeight,
-        scroller.clientHeight,
-        prevOffsetFromBottom,
-      );
+      scroller.scrollTop = scrollTopFrom(scroller, prevOffsetFromBottom);
     }
     state.nearBottom = isNearBottom(scroller);
     emitScrollSnapshot();
@@ -583,16 +567,12 @@ function applyPrependPageNow(newRows: TranscriptRow[]): void {
   scheduleMermaidScan();
   if (scroller) {
     const nextScrollHeight = scroller.scrollHeight;
-    scroller.scrollTop =
-      prependedScrollTop + (nextScrollHeight - prependedScrollHeight);
+    const deltaHeight = nextScrollHeight - prependedScrollHeight;
+    scroller.scrollTop = prependedScrollTop + deltaHeight;
     // 占位估算校正（Step 7）：新行全进窗口后差值折算为窗口新增行的真实
     // 平均高度（web/C-1：扣除占位置换/漂移），并入 EWMA 后续 prepend /
     // 扩窗估算更准。
-    notePrependHeightDelta(
-      nextScrollHeight - prependedScrollHeight,
-      newRows.length,
-      prependSpacerBefore,
-    );
+    notePrependHeightDelta(deltaHeight, newRows.length, prependSpacerBefore);
     // 窗口超稳态的部分收敛（新行全进窗口后窗口变长；下端收缩不动
     // scrollTop，不破坏刚补偿的读位）。
     handleRowWindowScroll();

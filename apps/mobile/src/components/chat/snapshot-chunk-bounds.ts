@@ -31,6 +31,7 @@ const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
 
 type Bounds = Array<readonly [number, number]>;
 type BytesAt = (index: number) => number;
+type Messages = readonly ChatMessageData[];
 
 /**
  * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
@@ -38,9 +39,7 @@ type BytesAt = (index: number) => number;
  * 即封桶；单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end)
  * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
  */
-export function planSnapshotChunkBounds(
-  messages: readonly ChatMessageData[],
-): Bounds {
+export function planSnapshotChunkBounds(messages: Messages): Bounds {
   return planChunkBounds(messages.length, index =>
     utf8ByteLength(JSON.stringify(messages[index]!.content)),
   );

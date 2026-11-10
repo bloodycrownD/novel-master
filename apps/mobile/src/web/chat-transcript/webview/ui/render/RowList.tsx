@@ -37,7 +37,7 @@ export function RowList() {
   const children: ComponentChildren[] = [];
 
   if (state.hasMore) {
-    children.push(
+    const loadOlderButton = (
       <button
         type="button"
         key="load-older"
@@ -45,18 +45,20 @@ export function RowList() {
         data-action="load-older"
       >
         {state.labels.loadOlder}
-      </button>,
+      </button>
     );
+    children.push(loadOlderButton);
   }
   if (win.start > 0) {
-    children.push(
+    const topSpacer = (
       <div
         key="row-win-top"
         id={ROW_WINDOW_TOP_SPACER_ID}
         className="row-window-spacer"
         style={{height: `${spacers.top}px`}}
-      />,
+      />
     );
+    children.push(topSpacer);
   }
   for (let i = win.start; i < win.end; i++) {
     const row = state.rows[i];
@@ -65,14 +67,15 @@ export function RowList() {
     }
   }
   if (win.end < total) {
-    children.push(
+    const bottomSpacer = (
       <div
         key="row-win-bottom"
         id={ROW_WINDOW_BOTTOM_SPACER_ID}
         className="row-window-spacer"
         style={{height: `${spacers.bottom}px`}}
-      />,
+      />
     );
+    children.push(bottomSpacer);
   }
   // 流式行被用户滚出窗口：钉在下占位之后（真实高度由 DOM 自己贡献，下占位
   // 已少算 1 行，估算不重复计入）。同一组件类型 → 窗口跨过它时不 remount。
@@ -80,11 +83,12 @@ export function RowList() {
     children.push(<MessageRow key={lastRow.id} row={lastRow} />);
   }
   if (showEmpty) {
-    children.push(
+    const emptyState = (
       <div key="empty-state" className="empty-state">
         {state.labels.empty}
-      </div>,
+      </div>
     );
+    children.push(emptyState);
   }
   return children;
 }

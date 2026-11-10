@@ -67,6 +67,7 @@ import {
   hydrateWindowFromCache,
   sessionViewCacheKey,
   setSessionViewCache,
+  type SessionViewCache,
 } from './chat-session-view-cache';
 import {prependOlderMessages} from './message-paging';
 
@@ -103,9 +104,8 @@ export type SessionStreamUnitStatus =
   | SessionStreamUnitSettledStatus;
 
 /** 状态是否为终态（settled 单元不阻塞同会话新 run，仅占 LRU 槽位）。 */
-export function isSessionStreamUnitSettled(
-  status: SessionStreamUnitStatus,
-): status is SessionStreamUnitSettledStatus {
+// prettier-ignore
+export function isSessionStreamUnitSettled(status: SessionStreamUnitStatus): status is SessionStreamUnitSettledStatus {
   return (
     status === 'interrupted' || status === 'finished' || status === 'failed'
   );
@@ -465,9 +465,7 @@ export class SessionStreamUnit {
   private tailReloadInFlight: Promise<readonly ChatMessageData[]> | null = null;
 
   private readonly webviewHandles: SessionStreamWebviewHandle[] = [];
-  private readonly messageStore?:
-    | SessionStreamMessageStore
-    | undefined;
+  private readonly messageStore?: SessionStreamMessageStore | undefined;
   private readonly onSettled?:
     | ((status: SessionStreamRunSettledStatus) => void)
     | undefined;
@@ -484,8 +482,8 @@ export class SessionStreamUnit {
     this.onSettled = options.onSettled;
     this.onGraceExpired = options.onGraceExpired;
     this.onProjectionChanged = options.onProjectionChanged;
-    this.settledGraceMs =
-      options.settledGraceMs ?? SESSION_STREAM_SETTLED_GRACE_PERIOD_MS;
+    const fallbackGraceMs = SESSION_STREAM_SETTLED_GRACE_PERIOD_MS;
+    this.settledGraceMs = options.settledGraceMs ?? fallbackGraceMs;
     // 实时 token 估算器**不在这里建**（构造时机＝会话切换时空闲预热，未就绪
     // 时在 `begin()` 同步兜底，见下）：首建 tiktoken 编码表约 180–420ms，
     // 放在构造函数里会让「启动水合 / 子会话懒建」白付一次启动卡顿。两条都
@@ -515,7 +513,22 @@ export class SessionStreamUnit {
     // 估算器在此建（不在构造函数）：会话切换时的空闲预热多半已备好编码表、
     // 这里命中缓存；没备好才真付一次 180–420ms。必须在请求发出前完成，
     // 不推迟首个 delta。水合 / 中断单元不经 `begin()`，天然免付这一次。
-    this.buildTokenEstimators();
+    // 两条都建成才启用——半套状态会让正文/思考的增量口径不一致，宁可整条
+    // 回退启发式；工厂抛错同样吞掉（构造失败只是「这次退启发式」，不该把
+    // run 受理打断）。
+    const factory = this.tokenEstimatorFactory;
+    if (factory != null) {
+      try {
+        const text = factory(this.sessionId);
+        const thinking = text == null ? null : factory(this.sessionId);
+        if (text != null && thinking != null) {
+          this.textTokenEstimator = text;
+          this.thinkingTokenEstimator = thinking;
+        }
+      } catch (err) {
+        log.warn('token estimator init failed, fallback to heuristic', {err});
+      }
+    }
     // 新 run：速率采样序列重 seed（防跨 run 差分污染首个窗口）；token 基线
     // 与两条估算器一并归零（新 run 从零起算）。
     this.rateSampler.reset();
@@ -527,30 +540,6 @@ export class SessionStreamUnit {
     this.startStream();
     this.interruptedPartialDismissed = false;
     return true;
-  }
-
-  /**
-   * 经注入的工厂建正文/思考两条估算器（`begin()` 里调用）。
-   *
-   * 两条都建成才启用——半套状态会让正文/思考的增量口径不一致，宁可整条
-   * 回退启发式；工厂抛错同样吞掉（构造失败只是「这次退启发式」，不该把
-   * run 受理打断）。
-   */
-  private buildTokenEstimators(): void {
-    const factory = this.tokenEstimatorFactory;
-    if (factory == null) {
-      return;
-    }
-    try {
-      const text = factory(this.sessionId);
-      const thinking = text == null ? null : factory(this.sessionId);
-      if (text != null && thinking != null) {
-        this.textTokenEstimator = text;
-        this.thinkingTokenEstimator = thinking;
-      }
-    } catch (err) {
-      log.warn('token estimator init failed, fallback to heuristic', {err});
-    }
   }
 
   /**
@@ -601,18 +590,30 @@ export class SessionStreamUnit {
     this.kickTailReloadQuietly();
     this.status = status;
     this.settledAtMsValue = Date.now();
-    this.elapsedMsValue =
-      this.startedAtMsValue > 0
-        ? Math.max(0, this.settledAtMsValue - this.startedAtMsValue)
-        : 0;
+    const span = Math.max(0, this.settledAtMsValue - this.startedAtMsValue);
+    this.elapsedMsValue = this.startedAtMsValue > 0 ? span : 0;
     // 父 run 收尾即清空子会话链接：落库 result meta 接管任务卡可点性，
     // 且避免同 title 陈旧条目串到下一 run（蓝本父 FINISHED 清理语义）。
-    this.clearPendingChildren();
-    this.scheduleGraceDestroy();
+    if (this.pendingChildrenValue.length > 0) {
+      this.requestForceSnapshot();
+    }
+    // 换新 Map 而非原位 clear：snapshot 返回内部引用，内容清空也必须换新
+    // 引用（消费方按引用比较感知变化——任务卡 pending 态随父收尾消失）。
+    this.pendingChildIdsByTitle = new Map();
+    this.pendingChildrenValue = [];
+    this.graceTimer = setTimeout(() => {
+      this.graceTimer = null;
+      this.onGraceExpired?.(this);
+    }, this.settledGraceMs);
     return true;
   }
 
-  /** 水合终态：idle → interrupted。不启动宽限定时器（常驻至替换或 LRU 淘汰）。 */
+  /**
+   * 水合终态：idle → interrupted。不启动宽限定时器（常驻至替换或 LRU 淘汰）。
+   *
+   * nm-style: keep-public — manager 水合建单元（adoptInterruptedUnit）与测试
+   * 驱动中断现场的唯一入口，写单元私有状态机。
+   */
   settleAsInterrupted(): boolean {
     if (this.destroyed || this.status !== 'idle') {
       return false;
@@ -631,6 +632,9 @@ export class SessionStreamUnit {
    * 语义自然退化为按 id 追加）；settledAtMs 用行的 updated_at_ms 近似
    * 中断时刻，保证多次重启不刷新 LRU 新旧序。本单元不挂写通 coalescer
    * （run 已死，只读）。
+   *
+   * nm-style: keep-public — manager 水合回填的唯一入口，写 partial 缓存/
+   * metrics/startedAtMs/pendingChildren 等单元私有现场。
    */
   hydrateFromRunState(state: {
     readonly runId: string;
@@ -728,7 +732,11 @@ export class SessionStreamUnit {
     return this.destroyed;
   }
 
-  /** 实时速率（token/秒；渲染节拍只读——暂停期随 nowMs 增长自然衰减）。 */
+  /**
+   * 实时速率（token/秒；渲染节拍只读——暂停期随 nowMs 增长自然衰减）。
+   *
+   * nm-style: keep-public — manager.rateTokensPerSecond 的单元侧委托入口。
+   */
   getRateTokensPerSecond(nowMs: number): number | null {
     return this.rateSampler.rateAt(nowMs);
   }
@@ -744,11 +752,8 @@ export class SessionStreamUnit {
 
   /** 记一个速率样本（token 每次变化处调用；序列维护语义见 core 采样器）。 */
   private sampleRate(): void {
-    this.rateSampler.sample(
-      this.metricsAcc.completionTokens,
-      this.metricsAcc.tokenSource,
-      Date.now(),
-    );
+    const {completionTokens, tokenSource} = this.metricsAcc;
+    this.rateSampler.sample(completionTokens, tokenSource, Date.now());
   }
 
   /**
@@ -764,18 +769,8 @@ export class SessionStreamUnit {
     if (text != null && thinking != null) {
       return text.tokens + thinking.tokens;
     }
-    return Math.ceil(
-      (this.metricsAcc.textChars + this.metricsAcc.thinkingChars) /
-        CHARACTERS_PER_TOKEN_RATIO,
-    );
-  }
-
-  /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
-  private recomputeCompletionTokens(): void {
-    this.metricsAcc.completionTokens = composeStreamTokens(
-      this.baseTokens,
-      this.estimateIncrementTokens(),
-    );
+    const chars = this.metricsAcc.textChars + this.metricsAcc.thinkingChars;
+    return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }
 
   /**
@@ -784,10 +779,8 @@ export class SessionStreamUnit {
    * 未收到 usage 前基线恒 0（纯估算），故重锚只发生在校正点。
    */
   private reanchorBase(value: number): void {
-    this.baseTokens = reanchorStreamTokenBase(
-      value,
-      this.estimateIncrementTokens(),
-    );
+    const increment = this.estimateIncrementTokens();
+    this.baseTokens = reanchorStreamTokenBase(value, increment);
     this.metricsAcc.completionTokens = composeStreamTokens(value, 0);
   }
 
@@ -853,12 +846,19 @@ export class SessionStreamUnit {
    * 或非 running 态时整体忽略。返回是否生效（Step 5 起 manager 以此
    * 决定是否把最新快照 append 进写通 coalescer——settled/interrupted
    * 单元的陈旧 delta 不产生持久层写）。
+   *
+   * nm-style: keep-public — manager 的 TEXT_DELTA 事件路由入口，写单元私有
+   * 指标/partial 缓冲；测试按事件口径直接驱动。
    */
   ingestTextDelta(runId: string, text: string): boolean {
     return this.ingestDelta(runId, 'text', text);
   }
 
-  /** 思考 delta 入口：语义同 {@link ingestTextDelta}。 */
+  /**
+   * 思考 delta 入口：语义同 {@link ingestTextDelta}。
+   *
+   * nm-style: keep-public — manager 的 THINKING_DELTA 事件路由入口。
+   */
   ingestThinkingDelta(runId: string, text: string): boolean {
     return this.ingestDelta(runId, 'thinking', text);
   }
@@ -873,6 +873,9 @@ export class SessionStreamUnit {
    * 门）。openai 流中零事件段由估算撑显示，step done 后 runner 补发的 run 级
    * 终值经本入口重锚、把估值校正到真值。守卫同 delta：running 态 + runId
    * 所有权（陈旧事件不计指标）。返回是否生效（生效才触发写通快照 append）。
+   *
+   * nm-style: keep-public — manager 的 STREAM_USAGE 事件路由入口，写单元私有
+   * token 基线与速率样本。
    */
   ingestUsage(runId: string, completionTokens: number): boolean {
     if (
@@ -1037,6 +1040,10 @@ export class SessionStreamUnit {
    * （新 child 接管该 title 的任务卡，旧 child 若无其他 title 归属则一并
    * 摘除）；同 childSessionId 已登记则不重复入投影。水合流程（Step 5）
    * 恢复链接也走本入口逐条回填。返回投影是否变化（变化才触发通知）。
+   *
+   * nm-style: keep-public — manager 的 child-created 路由入口，写入单元私有的
+   * pending 链接状态（pendingChildIdsByTitle/pendingChildrenValue），调用侧
+   * 拿不到这两个字段。
    */
   registerPendingChild(childSessionId: string, title: string): boolean {
     if (this.destroyed || childSessionId.length === 0) {
@@ -1054,11 +1061,17 @@ export class SessionStreamUnit {
     nextByTitle.set(title, childSessionId);
     this.pendingChildIdsByTitle = nextByTitle;
     let changed = false;
-    if (
-      previousId != null &&
-      previousId !== childSessionId &&
-      !this.isChildIdReferenced(previousId)
-    ) {
+    const replaced = previousId != null && previousId !== childSessionId;
+    let replacedInUse = false;
+    if (replaced) {
+      for (const id of this.pendingChildIdsByTitle.values()) {
+        if (id === previousId) {
+          replacedInUse = true;
+          break;
+        }
+      }
+    }
+    if (replaced && !replacedInUse) {
       this.pendingChildrenValue = this.pendingChildrenValue.filter(
         id => id !== previousId,
       );
@@ -1078,27 +1091,6 @@ export class SessionStreamUnit {
       this.requestForceSnapshot();
     }
     return changed;
-  }
-
-  /** 该 childSessionId 是否仍被任一 title 指向（覆盖判重的辅助）。 */
-  private isChildIdReferenced(childSessionId: string): boolean {
-    for (const id of this.pendingChildIdsByTitle.values()) {
-      if (id === childSessionId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** 清空全部子会话链接（父 run 收尾时由 settle 内部调用）。 */
-  private clearPendingChildren(): void {
-    if (this.pendingChildrenValue.length > 0) {
-      this.requestForceSnapshot();
-    }
-    // 换新 Map 而非原位 clear：snapshot 返回内部引用，内容清空也必须换新
-    // 引用（消费方按引用比较感知变化——任务卡 pending 态随父收尾消失）。
-    this.pendingChildIdsByTitle = new Map();
-    this.pendingChildrenValue = [];
   }
 
   /** 注册 webview 句柄（重复 handleId 先移除旧条目再追加，保持「最后 attach」序）。 */
@@ -1127,7 +1119,12 @@ export class SessionStreamUnit {
     }
   }
 
-  /** 最后 attach 的可见句柄（从后往前找第一个可见；无句柄或全不可见为 null）。 */
+  /**
+   * 最后 attach 的可见句柄（从后往前找第一个可见；无句柄或全不可见为 null）。
+   *
+   * nm-style: keep-public — spec §7.1.3 点名的观测面：生产侧由 pushStreamPayload
+   * 唯一消费，测试直接断言「最后 attach 的可见句柄」这条推送目标不变量。
+   */
   resolveStreamingWebview(): SessionStreamWebviewHandle | null {
     for (let i = this.webviewHandles.length - 1; i >= 0; i -= 1) {
       const handle = this.webviewHandles[i];
@@ -1168,7 +1165,7 @@ export class SessionStreamUnit {
   /**
    * 当前句柄数（诊断/测试用）。
    *
-   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（attach/detach
+   * nm-style: keep-public — spec §7.1.3 点名的测试访问器之一（register/unregister
    * 的观测基线），生产零调用但属公共观测面。
    */
   getWebviewCount(): number {
@@ -1191,7 +1188,14 @@ export class SessionStreamUnit {
    *   miss 才回源；force：无条件回源 DB 拿最新落库行；
    * - 回源结果（含 hasMore 探针）无条件写视图缓存——后台会话（无 attach）
    *   收尾后重进即最新；
-   * - force 在途去重：并发的 force 合流到同一 promise（蓝本 reloadInFlightRef）。
+   * - force 在途去重：并发的 force 合流到同一 promise（蓝本 reloadInFlightRef）；
+   * - 回源单查询（多取一条判定 hasMore，init-busy-yield Step 2）：tail 一次取
+   *   `页大小 + 1`，返回超过页大小即 hasMore=true 并裁去多取的最旧一行
+   *   （listBySessionTail 返回 seq 升序、最旧在前，多取的一行在数组头部
+   *   list[0]）；hasMore 探针的第二次往返消除；
+   * - 缓存写在状态采纳之前：单元若在中途被销毁/替换（宽限到期、LRU 淘汰、
+   *   新 run 替换吸收），缓存仍刷新到位——重进会话水合的就是最终行。同会话
+   *   新 run 的后续 reload 会覆盖写，旧单元晚到的写入是幂等 tail 读、无害。
    *
    * 蓝本的 sessionIdRef 作用域守卫在这里结构性消失：单元 per-session，
    * 结果只会落回自己家的状态与缓存键。
@@ -1203,7 +1207,34 @@ export class SessionStreamUnit {
     if (force && this.tailReloadInFlight != null) {
       return this.tailReloadInFlight;
     }
-    const task = this.performTailReload(force);
+    const task = (async (): Promise<readonly ChatMessageData[]> => {
+      const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
+      if (!force) {
+        const cached = getSessionViewCache(cacheKey);
+        if (cached != null) {
+          // 只有冷启动水合才裁窗口：已有消息面是用户自己翻出来的（loadOlder
+          // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
+          const cold = this.messagesValue.length === 0;
+          const adopted = cold ? hydrateWindowFromCache(cached) : cached;
+          this.applyMessages(adopted);
+          return [...adopted.messages];
+        }
+      }
+      const store = this.messageStore;
+      if (store == null) {
+        // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
+        return [...this.messagesValue];
+      }
+      const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
+      const fetched = await store.listBySessionTail(this.sessionId, {limit});
+      const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
+      const list = hasMore ? fetched.slice(1) : fetched;
+      // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
+      // 守卫点）；键是本会话自己的，天然不串会话。
+      setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+      this.applyMessages({messages: list, hasMoreMessages: hasMore});
+      return [...list];
+    })();
     if (!force) {
       return task;
     }
@@ -1217,7 +1248,12 @@ export class SessionStreamUnit {
     }
   }
 
-  /** 分页加载更早消息（蓝本 loadOlderMessages）：以当前首行 seq 为锚向上翻页。 */
+  /**
+   * 分页加载更早消息（蓝本 loadOlderMessages）：以当前首行 seq 为锚向上翻页。
+   *
+   * nm-style: keep-public — manager 的 loadOlderSessionMessages 唯一路由入口，
+   * 读写单元私有 messagesValue/loadingMoreMessagesValue 与视图缓存。
+   */
   async loadOlderMessages(): Promise<void> {
     if (
       this.destroyed ||
@@ -1230,16 +1266,15 @@ export class SessionStreamUnit {
     if (beforeSeq == null) {
       return;
     }
-    if (this.messageStore == null) {
+    const store = this.messageStore;
+    if (store == null) {
       return;
     }
     this.loadingMoreMessagesValue = true;
     this.onProjectionChanged?.();
     try {
-      const older = await this.messageStore.listBySessionPage(
-        this.sessionId,
-        {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq},
-      );
+      const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
+      const older = await store.listBySessionPage(this.sessionId, page);
       if (this.destroyed) {
         return;
       }
@@ -1272,52 +1307,6 @@ export class SessionStreamUnit {
   }
 
   /**
-   * tail reload 本体：缓存命中采纳（非 force，**仅冷启动面空时窗口化**）→
-   * 回源单查询（多取一条判定 hasMore，init-busy-yield Step 2）→ 无条件写
-   * 缓存 → 采纳进消息面。
-   *
-   * 单查询化：tail 一次取 `页大小 + 1`，返回超过页大小即 hasMore=true 并
-   * 裁去多取的最旧一行（listBySessionTail 返回 seq 升序、最旧在前，多取
-   * 的一行在数组头部 list[0]）；hasMore 探针的第二次往返消除。
-   *
-   * 缓存写在状态采纳之前：单元若在中途被销毁/替换（宽限到期、LRU 淘汰、
-   * 新 run 替换吸收），缓存仍刷新到位——重进会话水合的就是最终行。同会话
-   * 新 run 的后续 reload 会覆盖写，旧单元晚到的写入是幂等 tail 读、无害。
-   */
-  private async performTailReload(
-    force: boolean,
-  ): Promise<readonly ChatMessageData[]> {
-    const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
-    if (!force) {
-      const cached = getSessionViewCache(cacheKey);
-      if (cached != null) {
-        // 只有冷启动水合才裁窗口：已有消息面是用户自己翻出来的（loadOlder
-        // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
-        const adopted =
-          this.messagesValue.length === 0
-            ? hydrateWindowFromCache(cached)
-            : cached;
-        this.applyMessages(adopted.messages, adopted.hasMoreMessages);
-        return [...adopted.messages];
-      }
-    }
-    if (this.messageStore == null) {
-      // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
-      return [...this.messagesValue];
-    }
-    const fetched = await this.messageStore.listBySessionTail(this.sessionId, {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
-    });
-    const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
-    const list = hasMore ? fetched.slice(1) : fetched;
-    // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
-    // 守卫点）；键是本会话自己的，天然不串会话。
-    setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
-    this.applyMessages(list, hasMore);
-    return [...list];
-  }
-
-  /**
    * 采纳消息面并触发投影通知（销毁后跳过状态更新——缓存已照常写）。
    *
    * 引用稳定守卫：内容未变（长度一致且元素逐一同一引用）时保持原数组
@@ -1325,16 +1314,15 @@ export class SessionStreamUnit {
    * 事件到达但内容未变的重建（如缓存命中的重复采纳）会打穿 memo 使隐藏
    * webview 被记脏。hasMore 标志仍照常收口；两者均未变时不再触发通知。
    */
-  private applyMessages(
-    messages: readonly ChatMessageData[],
-    hasMore: boolean,
-  ): void {
+  private applyMessages(view: SessionViewCache): void {
     if (this.destroyed) {
       return;
     }
-    const unchanged =
-      this.messagesValue.length === messages.length &&
-      this.messagesValue.every((message, index) => message === messages[index]);
+    const messages = view.messages;
+    let unchanged = this.messagesValue.length === messages.length;
+    for (let index = 0; unchanged && index < messages.length; index += 1) {
+      unchanged = this.messagesValue[index] === messages[index];
+    }
     if (!unchanged) {
       this.messagesValue = [...messages];
     }
@@ -1343,10 +1331,10 @@ export class SessionStreamUnit {
     // streamId，不换 id、不新增行）。未配对记录保持 null，继续以 streamId
     // 呈现（下一次快照仍完整）。
     this.adoptPendingStreams(this.messagesValue);
-    if (unchanged && this.hasMoreMessagesValue === hasMore) {
+    if (unchanged && this.hasMoreMessagesValue === view.hasMoreMessages) {
       return;
     }
-    this.hasMoreMessagesValue = hasMore;
+    this.hasMoreMessagesValue = view.hasMoreMessages;
     this.onProjectionChanged?.();
   }
 
@@ -1389,11 +1377,8 @@ export class SessionStreamUnit {
   }
 
   /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。返回是否生效。 */
-  private ingestDelta(
-    runId: string,
-    kind: StreamWireKind,
-    text: string,
-  ): boolean {
+  // prettier-ignore
+  private ingestDelta(runId: string, kind: StreamWireKind, text: string): boolean {
     if (this.destroyed || text.length === 0) {
       return false;
     }
@@ -1412,7 +1397,9 @@ export class SessionStreamUnit {
     // 一条）；未注入时是旧启发式 `ceil(累计字符 / 3.35)`（基线为 0 时与既有
     // 行为严格一致）。usage 真值成为基线后增量继续叠加——数字持续增长，
     // 不再停在上一条 usage 的累计值上（多步 run 冻结缺陷的修复点）。
-    this.recomputeCompletionTokens();
+    const increment = this.estimateIncrementTokens();
+    const tokens = composeStreamTokens(this.baseTokens, increment);
+    this.metricsAcc.completionTokens = tokens;
     this.sampleRate();
     appendWireChunk(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {
@@ -1606,13 +1593,6 @@ export class SessionStreamUnit {
       rows.push(projectStreamRecord({...current, text, thinking}));
     }
     return rows;
-  }
-
-  private scheduleGraceDestroy(): void {
-    this.graceTimer = setTimeout(() => {
-      this.graceTimer = null;
-      this.onGraceExpired?.(this);
-    }, this.settledGraceMs);
   }
 }
 

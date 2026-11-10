@@ -455,13 +455,6 @@ describe('T-U6: subagent 长任务期间消息可见（force 快照驱动）', (
     expect(snap?.partialText).toBe('子代理跑着呢');
     expect(snap?.status).toBe('running');
 
-    // 屏幕侧直驱入口（Step 6 接线消费）：同一控制消息可再触发
-    h.manager.requestForceSnapshot('sess-a');
-    expect(w1.controls).toEqual([
-      {type: 'force-snapshot'},
-      {type: 'force-snapshot'},
-    ]);
-
     // 子会话 run 终态：链接保留（并行 task 批整批 fork-join，tool_results
     // 要等最慢子 agent 完成才落库，窗口期任务卡可点性由 pending 映射承担）
     // 且不广播——pending 集合未变化
@@ -470,15 +463,15 @@ describe('T-U6: subagent 长任务期间消息可见（force 快照驱动）', (
     expect(h.manager.snapshot('sess-a')?.pendingChildren).toEqual([
       'child-1',
     ]);
-    expect(w1.controls).toHaveLength(2); // 子终态不再触发 force 快照
+    expect(w1.controls).toHaveLength(1); // 子终态不再触发 force 快照
     // 父 run 不受子终态影响
     expect(h.manager.snapshot('sess-a')?.status).toBe('running');
 
     // 父 run 收尾：链接清空（任务卡交给落库 result meta）+ force 快照广播刷新基线
     publishFinished(h.eventBus, 'sess-a', 'ra');
     expect(h.manager.snapshot('sess-a')?.pendingChildren).toEqual([]);
-    expect(w1.controls).toHaveLength(3);
-    expect(w1.controls[2]).toEqual({type: 'force-snapshot'});
+    expect(w1.controls).toHaveLength(2);
+    expect(w1.controls[1]).toEqual({type: 'force-snapshot'});
   });
 
   it('force 快照广播只走控制通道，不产生流式载荷', async () => {

@@ -43,6 +43,10 @@ type StreamBodyHostProps = {
  * 命令式岛屿：首次渲染后永久跳过 diff，保护 runtime 增量 DOM。
  */
 class StreamBodyHost extends Component<StreamBodyHostProps> {
+  /**
+   * nm-style: keep-public — Preact 生命周期入口（框架按组件实例动态调用，
+   * 静态引用恒为 0）；返回 false 保护 runtime 增量写入的 body DOM，是防 wipe 不变量。
+   */
   shouldComponentUpdate(): boolean {
     return false;
   }

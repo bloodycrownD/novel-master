@@ -953,6 +953,9 @@ describe('step 边界不再广播 reset-stream（Step 2：清尾交给 streamRes
 
     publishStepCommitted(h.eventBus, 's1', 'other-run');
     expect(controls).toEqual([]);
+    // 本 describe 走真实定时器：dispose 清 calibration 轮询与单元宽限定时器，
+    // 否则句柄漏到环境拆除后触发，回调里的 Platform 惰性 require 会炸掉 Jest 进程。
+    h.manager.dispose();
   });
 });
 
@@ -997,6 +1000,8 @@ describe('settled 旧单元替换吸收：句柄迁移（HANDLE-NULL 回归）',
         JSON.stringify(p).includes('second run text'),
       ),
     ).toBe(true);
+    // 同上一例：真实定时器下的 manager 必须 dispose（清轮询 + 宽限定时器）。
+    h.manager.dispose();
   });
 });
 

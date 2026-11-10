@@ -34,6 +34,9 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const CLEANUP_CONFIRM_TEXT = '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？';
+const IMPORT_CONFIRM_TEXT = '将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？';
+
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -44,9 +47,7 @@ export function StorageConfigScreen() {
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [agentActive, setAgentActive] = useState(false);
   const [dbFileBytes, setDbFileBytes] = useState<number | null>(null);
-  const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
-    null,
-  );
+  const [dbReclaimBytes, setDbReclaimBytes] = useState<number | null>(null);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -63,11 +64,11 @@ export function StorageConfigScreen() {
     try {
       const stats = await getDatabaseMaintenanceStats(runtime);
       setDbFileBytes(stats.fileBytes);
-      setDbReclaimableBytes(stats.reclaimableBytes);
+      setDbReclaimBytes(stats.reclaimableBytes);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
-      setDbReclaimableBytes(null);
+      setDbReclaimBytes(null);
     }
   }, [runtime]);
 
@@ -90,12 +91,10 @@ export function StorageConfigScreen() {
     return subscribeMobileAgentActivity(setAgentActive);
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshCloudConfigured().catch(() => undefined);
-      refreshMaintenanceStats().catch(() => undefined);
-    }, [refreshCloudConfigured, refreshMaintenanceStats]),
-  );
+  useFocusEffect(useCallback(() => {
+    refreshCloudConfigured().catch(() => undefined);
+    refreshMaintenanceStats().catch(() => undefined);
+  }, [refreshCloudConfigured, refreshMaintenanceStats]));
 
   return (
     <ScrollView
@@ -108,7 +107,7 @@ export function StorageConfigScreen() {
         hint="数据库文件体积与清理可回收的空间"
         metrics={[
           {label: '库体积', value: formatStorageBytes(dbFileBytes)},
-          {label: '可回收', value: formatStorageBytes(dbReclaimableBytes)},
+          {label: '可回收', value: formatStorageBytes(dbReclaimBytes)},
         ]}
         tokens={tokens}
       />
@@ -128,30 +127,24 @@ export function StorageConfigScreen() {
           if (dbBusy) {
             return;
           }
-          Alert.alert(
-            '数据清理',
-            '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？',
-            [
-              {text: '取消', style: 'cancel'},
-              {
-                text: '开始清理',
-                onPress: () => {
-                  setDbBusy(true);
-                  runDatabaseMaintenance(runtime)
-                    .then(({beforeBytes, afterBytes}) => {
-                      showToast(
-                        `清理完成：${formatStorageBytes(
-                          beforeBytes,
-                        )} → ${formatStorageBytes(afterBytes)}`,
-                      );
-                      refreshMaintenanceStats().catch(() => undefined);
-                    })
-                    .catch(err => showToast(toastMessage('清理失败', err)))
-                    .finally(() => setDbBusy(false));
-                },
+          Alert.alert('数据清理', CLEANUP_CONFIRM_TEXT, [
+            {text: '取消', style: 'cancel'},
+            {
+              text: '开始清理',
+              onPress: () => {
+                setDbBusy(true);
+                runDatabaseMaintenance(runtime)
+                  .then(({beforeBytes, afterBytes}) => {
+                    const before = formatStorageBytes(beforeBytes);
+                    const after = formatStorageBytes(afterBytes);
+                    showToast(`清理完成：${before} → ${after}`);
+                    refreshMaintenanceStats().catch(() => undefined);
+                  })
+                  .catch(err => showToast(toastMessage('清理失败', err)))
+                  .finally(() => setDbBusy(false));
               },
-            ],
-          );
+            },
+          ]);
         }}
       />
       <ProfileMenuItem
@@ -203,23 +196,19 @@ export function StorageConfigScreen() {
           if (dbBusy) {
             return;
           }
-          Alert.alert(
-            '导入数据库',
-            '将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？',
-            [
-              {text: '取消', style: 'cancel'},
-              {
-                text: '继续选择文件',
-                onPress: () => {
-                  setDbBusy(true);
-                  importDatabaseBackup(retry)
-                    .then(() => showToast('正在重新加载，请稍候…'))
-                    .catch(err => showToast(toastMessage('导入失败', err)))
-                    .finally(() => setDbBusy(false));
-                },
+          Alert.alert('导入数据库', IMPORT_CONFIRM_TEXT, [
+            {text: '取消', style: 'cancel'},
+            {
+              text: '继续选择文件',
+              onPress: () => {
+                setDbBusy(true);
+                importDatabaseBackup(retry)
+                  .then(() => showToast('正在重新加载，请稍候…'))
+                  .catch(err => showToast(toastMessage('导入失败', err)))
+                  .finally(() => setDbBusy(false));
               },
-            ],
-          );
+            },
+          ]);
         }}
       />
     </ScrollView>

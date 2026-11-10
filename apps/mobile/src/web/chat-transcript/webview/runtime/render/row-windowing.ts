@@ -75,38 +75,29 @@ export function getRowWindowAvgSlotPx(): number {
 }
 
 /** 目标窗口（纯函数）：视口行 ± 缓冲，clamp 到 [0, total]。 */
-export function desiredRowWindow(
-  total: number,
-  viewportFirstRow: number,
-): RowWindowRange {
-  const start = clamp(
-    Math.floor(viewportFirstRow) - ROW_WINDOW_BUFFER_ROWS,
-    0,
-    // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
-    // 也避免短会话中间出现占位空段。
-    Math.max(0, total - (ROW_WINDOW_ROWS + 2 * ROW_WINDOW_BUFFER_ROWS)),
-  );
-  const end = clamp(
-    Math.ceil(viewportFirstRow) + ROW_WINDOW_ROWS + ROW_WINDOW_BUFFER_ROWS,
-    0,
-    total,
-  );
+export function desiredRowWindow(total: number, first: number): RowWindowRange {
+  const bufferRows = ROW_WINDOW_BUFFER_ROWS;
+  const steadyRows = ROW_WINDOW_ROWS + 2 * bufferRows;
+  // 短列表（总行数不足一个稳态窗口）始终全量渲染：不留上占位，
+  // 也避免短会话中间出现占位空段。
+  const maxStart = Math.max(0, total - steadyRows);
+  const start = clamp(Math.floor(first) - bufferRows, 0, maxStart);
+  const end = clamp(Math.ceil(first) + steadyRows - bufferRows, 0, total);
   return {start, end};
 }
+
+type RowWindowMove = {startDelta: number; endDelta: number};
 
 /**
  * 窗口移动计划（纯函数）：对两端分别判扩 / 缩（缩带滞回），
  * 无移动返回 null。一次计划允许两端同时动——上端动由调用方做
  * scrollHeight 差值补偿，下端动不影响视口上方内容（文档流性质）无需补偿。
  */
-export function planRowWindowMove(
-  total: number,
-  start: number,
-  end: number,
-  viewportFirstRow: number,
-): {startDelta: number; endDelta: number} | null {
+// nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function planRowWindowMove(total: number, start: number, end: number, v: number): RowWindowMove | null {
   if (total <= 0) return null;
-  const desired = desiredRowWindow(total, viewportFirstRow);
+  const desired = desiredRowWindow(total, v);
   let startDelta = 0;
   let endDelta = 0;
   if (desired.start < start) {
@@ -132,21 +123,6 @@ function windowTopPxInDocument(): number | null {
   return null;
 }
 
-/**
- * 估算视口顶对应的全局行号（可为小数）：以窗口首行文档位置为锚，
- * scrollTop 偏移量按平均槽高折算行数。无 scroller / 无锚点返回 null。
- * totalHint 只用于 clamp（prepend 平移场景传旧坐标系总数）。
- */
-function estimateViewportFirstRow(totalHint: number): number | null {
-  const scroller = document.getElementById('scroller');
-  if (!scroller) return null;
-  const top = windowTopPxInDocument();
-  if (top == null) return null;
-  const v = win.start + (scroller.scrollTop - top) / avgSlotPx;
-  if (!isFinite(v)) return null;
-  return clamp(v, 0, Math.max(0, totalHint - 1));
-}
-
 /** 直接把窗口设为目标（不渲染、不补偿——渲染与读位锚定由调用方统一处理）。 */
 export function retargetRowWindow(total: number, firstRow: number): void {
   win = desiredRowWindow(total, firstRow);
@@ -168,31 +144,16 @@ export type RowWindowPositioning =
  * stick 贴尾；restore / preserve 按距底偏移从底反推视口行。
  * 无 scroller（clientHeight 未知）时退化为贴尾。
  */
-export function resetRowWindowForSnapshot(
-  total: number,
-  positioning: RowWindowPositioning,
-): void {
+// nm style 要求签名单行；签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function resetRowWindowForSnapshot(total: number, positioning: RowWindowPositioning): void {
   if (positioning.kind === 'tail' || positioning.clientHeight <= 0) {
     retargetRowWindow(total, total);
     return;
   }
-  const v =
-    total -
-    (Math.max(0, positioning.offsetFromBottom) + positioning.clientHeight) /
-      avgSlotPx;
+  const offsetBottom = Math.max(0, positioning.offsetFromBottom);
+  const v = total - (offsetBottom + positioning.clientHeight) / avgSlotPx;
   retargetRowWindow(total, v);
-}
-
-/** append / streamCommit 追加尾部行后的窗口重定位（渲染前调用）。 */
-export function retargetRowWindowFromBottom(
-  offsetFromBottom: number,
-  clientHeight: number,
-): void {
-  resetRowWindowForSnapshot(state.rows.length, {
-    kind: 'fromBottom',
-    offsetFromBottom,
-    clientHeight,
-  });
 }
 
 /**
@@ -211,7 +172,9 @@ export function retargetRowWindowForPrepend(prependedRows: number): void {
 }
 
 /**
- * 应用窗口移动：两端分步——先上端后下端。
+ * 滚动驱动的窗口维护（onScroll / 快照读位设定后调用，幂等）：
+ * 估算视口行 → 计划移动 → 应用（含渲染与读位补偿）。
+ * 返回是否发生窗口移动。
  *
  * 上端移动的读位锚定用「行坐标线性重映射」：渲染前把视口顶折算成
  * 全局行坐标（窗口外按平均槽高线性折算），渲染后按新窗口锚反算回
@@ -221,21 +184,36 @@ export function retargetRowWindowForPrepend(prependedRows: number): void {
  * 残余误差仅在窗口内行高分布不均（±1 平均行高容差内）。
  * 下端移动不影响视口上方内容（文档流性质），scrollTop 原地不动。
  */
-function applyRowWindowMove(
-  move: {startDelta: number; endDelta: number},
-  total: number,
-): void {
+export function handleRowWindowScroll(): boolean {
+  const total = state.rows.length;
+  const scroller = document.getElementById('scroller');
+  if (!scroller) return false;
+  const top = windowTopPxInDocument();
+  if (top == null) return false;
+  const v = win.start + (scroller.scrollTop - top) / avgSlotPx;
+  if (!isFinite(v)) return false;
+  const firstRow = clamp(v, 0, Math.max(0, total - 1));
+  const move = planRowWindowMove(total, win.start, win.end, firstRow);
+  if (!move) return false;
+  // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
+  // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
+  // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
+  // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
+  // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
+  if (move.startDelta > 0 && win.end >= total) {
+    return false;
+  }
+  // 两端分步：先上端（渲染 + 读位重映射），后下端（渲染，不动 scrollTop）。
   if (move.startDelta !== 0) {
-    const scroller = document.getElementById('scroller');
     const topBefore = windowTopPxInDocument();
-    const rowBefore =
-      scroller && topBefore != null
-        ? win.start + (scroller.scrollTop - topBefore) / avgSlotPx
-        : null;
+    let rowBefore: number | null = null;
+    if (topBefore != null) {
+      rowBefore = win.start + (scroller.scrollTop - topBefore) / avgSlotPx;
+    }
     const nextStart = clamp(win.start + move.startDelta, 0, win.end);
     win = {start: nextStart, end: win.end};
     renderRows();
-    if (scroller && rowBefore != null && isFinite(rowBefore)) {
+    if (rowBefore != null && isFinite(rowBefore)) {
       const topAfter = windowTopPxInDocument();
       if (topAfter != null) {
         scroller.scrollTop = topAfter + (rowBefore - win.start) * avgSlotPx;
@@ -249,28 +227,6 @@ function applyRowWindowMove(
       renderRows();
     }
   }
-}
-
-/**
- * 滚动驱动的窗口维护（onScroll / 快照读位设定后调用，幂等）：
- * 估算视口行 → 计划移动 → 应用（含渲染与读位补偿）。
- * 返回是否发生窗口移动。
- */
-export function handleRowWindowScroll(): boolean {
-  const total = state.rows.length;
-  const v = estimateViewportFirstRow(total);
-  if (v == null) return false;
-  const move = planRowWindowMove(total, win.start, win.end, v);
-  if (!move) return false;
-  // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
-  // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
-  // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
-  // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
-  // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
-  if (move.startDelta > 0 && win.end >= total) {
-    return false;
-  }
-  applyRowWindowMove(move, total);
   return true;
 }
 
@@ -355,6 +311,8 @@ export function getRowWindowSpacerPxTotal(): number {
   return total;
 }
 
+type SpacerBefore = {rows: number; spacerPx: number};
+
 /**
  * prepend 后的占位估算校正（任务点：按 scrollHeight 差值校正一次）：
  * 差值折算到新行的平均高度，并入 EWMA 样本——新行未全进窗口时
@@ -368,22 +326,18 @@ export function getRowWindowSpacerPxTotal(): number {
  * 采样时扣除占位漂移、分母并入被置换行数，样本恢复为「窗口新增行的
  * 真实平均高」。缺省时保持旧行为（不扣除、分母仅新行数）。
  */
-export function notePrependHeightDelta(
-  heightDeltaPx: number,
-  prependedRows: number,
-  topSpacerBefore?: {rows: number; spacerPx: number},
-): void {
+// nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function notePrependHeightDelta(heightDeltaPx: number, prependedRows: number, topSpacerBefore?: SpacerBefore): void {
   const displacedRows = topSpacerBefore?.rows ?? 0;
-  const spacerPxBefore =
-    topSpacerBefore?.spacerPx ?? getRowWindowSpacerPxTotal();
+  const beforePx = topSpacerBefore?.spacerPx ?? getRowWindowSpacerPxTotal();
   const sampledRows = prependedRows + displacedRows;
   if (prependedRows <= 0 || sampledRows <= 0) {
     return;
   }
-  const per =
-    (heightDeltaPx - (getRowWindowSpacerPxTotal() - spacerPxBefore)) /
-    sampledRows;
+  const spacerDelta = getRowWindowSpacerPxTotal() - beforePx;
+  const per = (heightDeltaPx - spacerDelta) / sampledRows;
   if (!(per > 0)) return;
-  avgSlotPx =
-    avgSlotPx * (1 - ROW_WINDOW_AVG_ALPHA) + per * ROW_WINDOW_AVG_ALPHA;
+  const keep = 1 - ROW_WINDOW_AVG_ALPHA;
+  avgSlotPx = avgSlotPx * keep + per * ROW_WINDOW_AVG_ALPHA;
 }

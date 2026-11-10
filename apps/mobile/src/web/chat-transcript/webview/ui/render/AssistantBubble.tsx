@@ -4,7 +4,6 @@
  * 角色行 + ⋯ 由 MessageRow 顶行提供，不在此重复。
  * 「生成中」条只属于流式行（StreamingMessageRow），这里不再承载。
  */
-import type {ComponentChildren} from 'preact';
 import type {ToolCallRow} from '../../runtime/state/state';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {ThinkingSection} from './ThinkingSection';
@@ -40,45 +39,39 @@ export function AssistantBubbleInner({
   const hasText = !!(text && String(text).trim());
   const useRichText = !!(richText && textHtml);
 
-  const children: ComponentChildren[] = [];
-  if (hasThinking) {
-    children.push(
-      <ThinkingSection
-        text={thinking}
-        thinkingKey={thinkingKey}
-        expanded={thinkingExpanded}
-        thinkingHtml={thinkingHtml}
-        showDividerBelow={hasText || hasTools}
-        richText={richText}
-      />,
-    );
-  }
-  if (hasText) {
-    children.push(
-      useRichText ? (
-        <TrustedHtml html={textHtml!} className="bubble-body rich" />
-      ) : (
-        <div className="bubble-body">{String(text)}</div>
-      ),
-    );
-  } else if (hasThinking) {
-    // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
-    children.push(
-      <div
-        className={'bubble-body' + (richText && textHtml ? ' rich' : '')}
-        data-text-shell="1"
-      />,
-    );
-  }
-  if (hasTools) {
-    children.push(
-      <ToolGroup
-        tools={tools!}
-        groupKey={toolGroupKey}
-        expanded={toolGroupExpanded}
-        showDividerBelow={false}
-      />,
-    );
-  }
-  return children;
+  return (
+    <>
+      {hasThinking ? (
+        <ThinkingSection
+          text={thinking}
+          thinkingKey={thinkingKey}
+          expanded={thinkingExpanded}
+          thinkingHtml={thinkingHtml}
+          showDividerBelow={hasText || hasTools}
+          richText={richText}
+        />
+      ) : null}
+      {hasText ? (
+        useRichText ? (
+          <TrustedHtml html={textHtml!} className="bubble-body rich" />
+        ) : (
+          <div className="bubble-body">{String(text)}</div>
+        )
+      ) : hasThinking ? (
+        // WHY: 仅有 thinking、正文为空时预置空壳，供后续 text 增量挂载。
+        <div
+          className={'bubble-body' + (useRichText ? ' rich' : '')}
+          data-text-shell="1"
+        />
+      ) : null}
+      {hasTools ? (
+        <ToolGroup
+          tools={tools!}
+          groupKey={toolGroupKey}
+          expanded={toolGroupExpanded}
+          showDividerBelow={false}
+        />
+      ) : null}
+    </>
+  );
 }

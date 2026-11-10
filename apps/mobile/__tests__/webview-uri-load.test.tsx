@@ -60,8 +60,19 @@ jest.mock('react-native-blob-util', () => ({
 
 describe('WebView URI load (T-BB-04)', () => {
   const originalOs = Platform.OS;
+  /**
+   * 已挂载树：用例结束必须卸载。宿主的 8s ready 兜底计时器靠卸载清场，
+   * 留着会在环境拆除后到期，回调里的 AppState 惰性 require 再炸一次 Jest 进程。
+   */
+  const mounted: TestRenderer.ReactTestRenderer[] = [];
 
-  afterEach(() => {
+  afterEach(async () => {
+    while (mounted.length > 0) {
+      const tree = mounted.pop()!;
+      await act(async () => {
+        tree.unmount();
+      });
+    }
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
       get: () => originalOs,
@@ -135,6 +146,7 @@ describe('WebView URI load (T-BB-04)', () => {
           <ChatConversationWebView sessionKey="p1:s1" messages={[]} />,
         );
       });
+      mounted.push(root!);
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
@@ -166,6 +178,7 @@ describe('WebView URI load (T-BB-04)', () => {
       act(() => {
         root = TestRenderer.create(<RichDocumentWebView html="<p>x</p>" />);
       });
+      mounted.push(root!);
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
@@ -195,6 +208,7 @@ describe('WebView URI load (T-BB-04)', () => {
           />,
         );
       });
+      mounted.push(root!);
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );

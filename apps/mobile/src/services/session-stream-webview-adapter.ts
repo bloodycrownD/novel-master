@@ -22,10 +22,8 @@ import type {
 /** 载荷里的工具卡元素类型（经 SessionStreamUnitStreamPayload 派生，避免再导出内部类型）。 */
 type ToolView = NonNullable<SessionStreamUnitStreamPayload['tools']>[number];
 
-export function createTranscriptStreamHandle(
-  handleId: string,
-  web: ChatTranscriptWebViewHandle,
-): SessionStreamWebviewHandle {
+// prettier-ignore
+export function createTranscriptStreamHandle(handleId: string, web: ChatTranscriptWebViewHandle): SessionStreamWebviewHandle {
   return {
     handleId,
     onStreamPayload: payload => {

@@ -19,7 +19,6 @@ import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_READY_VERSION,
   CONVERSATION_THEME_KEYS,
-  conversationCapabilitiesInclude,
   decodeConversationUpstream,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
@@ -31,6 +30,7 @@ import {
   TRANSCRIPT_CAPABILITIES,
   TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
   TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
+  transcriptCapabilitiesInclude,
 } from '@/web/chat-transcript/transcript-capabilities';
 // 主题键集的唯一真源（web 侧 shared/host-theme；RN 与 web 两侧清单都从它派生）
 import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
@@ -138,23 +138,23 @@ describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
       TRANSCRIPT_CAPABILITY_STREAM_PROJECTION,
     );
     expect(
-      conversationCapabilitiesInclude(
+      transcriptCapabilitiesInclude(
         TRANSCRIPT_CAPABILITIES,
         'streamBlockCommit',
       ),
     ).toBe(true);
     expect(
-      conversationCapabilitiesInclude(
+      transcriptCapabilitiesInclude(
         TRANSCRIPT_CAPABILITIES,
         'streamProjection',
       ),
     ).toBe(true);
     // 「未声明 = 不支持」：空清单一律 false
-    expect(conversationCapabilitiesInclude([], 'streamBlockCommit')).toBe(
+    expect(transcriptCapabilitiesInclude([], 'streamBlockCommit')).toBe(
       false,
     );
     expect(
-      conversationCapabilitiesInclude(undefined, 'streamBlockCommit'),
+      transcriptCapabilitiesInclude(undefined, 'streamBlockCommit'),
     ).toBe(false);
   });
 });

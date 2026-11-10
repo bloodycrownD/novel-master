@@ -31,6 +31,12 @@ export type RenderContextMenuView = (
   props: MenuOverlayViewProps | null,
 ) => void;
 
+/** 菜单触发元素（⋯ 按钮等）：只用于命中的工具卡判定。 */
+type HitEl = EventTarget | null;
+
+/** 调用参数：null = 卸载 overlay，非 null = 刷新 props。 */
+type MenuProps = MenuOverlayViewProps | null;
+
 let _renderContextMenuView: RenderContextMenuView | null = null;
 
 /** 由 main 注册 Preact MenuOverlay 刷新/卸载实现。 */
@@ -41,9 +47,7 @@ export function registerRenderContextMenu(fn: RenderContextMenuView): void {
 /**
  * 调用已注册实现；未注册时返回 false。
  */
-export function invokeRegisteredRenderContextMenu(
-  props: MenuOverlayViewProps | null,
-): boolean {
+export function invokeRegisteredRenderContextMenu(props: MenuProps): boolean {
   if (!_renderContextMenuView) return false;
   _renderContextMenuView(props);
   return true;
@@ -66,18 +70,12 @@ export function viewportHeight(): number {
 
 export type ContextMenuLayout = AnchoredMenuLayout;
 
-export function layoutContextMenu(
-  anchor: MenuAnchor,
-  contentHeight: number,
-  menuWidth: number,
-): ContextMenuLayout {
-  return layoutAnchoredMenuForHeight(
-    anchor,
-    contentHeight,
-    menuWidth,
-    window.innerWidth,
-    viewportHeight(),
-  );
+// nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function layoutContextMenu(anchor: MenuAnchor, contentHeight: number, menuWidth: number): ContextMenuLayout {
+  const vw = window.innerWidth;
+  const vh = viewportHeight();
+  return layoutAnchoredMenuForHeight(anchor, contentHeight, menuWidth, vw, vh);
 }
 
 export function findMessageRow(messageId: string): MessageRow | null {
@@ -93,23 +91,14 @@ export function findMessageRow(messageId: string): MessageRow | null {
   return null;
 }
 
-export function buildMenuItems(
-  row: TranscriptRow,
-  hitEl: EventTarget | null,
-): MenuItem[] {
+export function buildMenuItems(row: TranscriptRow, hit: HitEl): MenuItem[] {
   const items: MenuItem[] = [];
   if ('text' in row && row.text) items.push({label: '编辑', action: 'edit'});
   items.push({label: '复制', action: 'copy'});
-  const hitElement = hitEl as Element | null;
-  const showSetFloor =
-    row.kind === 'message' &&
-    row.role === 'user' &&
-    !(
-      hitElement &&
-      hitElement.closest &&
-      hitElement.closest('.tool-card, .tool-group-item')
-    );
-  if (showSetFloor) items.push({label: '置位', action: 'set-floor'});
+  const hitElement = hit as Element | null;
+  const inTool = !!hitElement?.closest?.('.tool-card, .tool-group-item');
+  const isUser = row.kind === 'message' && row.role === 'user';
+  if (isUser && !inTool) items.push({label: '置位', action: 'set-floor'});
   items.push({label: '分叉', action: 'fork'});
   items.push({label: '回滚', action: 'rollback', danger: true});
   return items;
@@ -130,30 +119,19 @@ export function attachMenuNativeTextBlock(): void {
       suppressNativeTextMenu(event);
     }
   };
-  document.addEventListener(
-    'contextmenu',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
-  document.addEventListener(
-    'selectstart',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
+  // 单源契约：监听器直接挂 state.menuNativeTextBlockHandler（attach/detach 对称）。
+  // prettier-ignore
+  document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+  // prettier-ignore
+  document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
 }
 
 export function detachMenuNativeTextBlock(): void {
   if (!state.menuNativeTextBlockHandler) return;
-  document.removeEventListener(
-    'contextmenu',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
-  document.removeEventListener(
-    'selectstart',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
+  // prettier-ignore
+  document.removeEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+  // prettier-ignore
+  document.removeEventListener('selectstart', state.menuNativeTextBlockHandler, true);
   state.menuNativeTextBlockHandler = null;
   document.body.classList.remove('menu-open');
 }
@@ -235,11 +213,9 @@ export function renderContextMenu(): void {
  * 钉死入口：⋯ 点击传入按钮 `getBoundingClientRect()`（或等价 MenuAnchor）。
  * 不再依赖长按触摸点。
  */
-export function openContextMenuFromAnchor(
-  messageId: string,
-  rect: Pick<DOMRect, 'x' | 'y' | 'width' | 'height'> | MenuAnchor,
-  hitEl: EventTarget | null = null,
-): void {
+// nm style 要求签名单行；三参签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function openContextMenuFromAnchor(messageId: string, rect: MenuAnchor, hitEl: HitEl = null): void {
   if (state.flags.menuDisabled) return;
   const row = findMessageRow(messageId);
   if (!row) return;

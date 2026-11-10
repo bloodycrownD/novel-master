@@ -58,7 +58,7 @@ import {coreT} from '@/i18n/core';
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
 
 /** 子会话 webview 句柄在单元注册表里的稳定标识（attach/detach 对账用）。 */
-const SUBAGENT_TRANSCRIPT_HANDLE_ID = 'subagent-transcript';
+const SUBAGENT_HANDLE_ID = 'subagent-transcript';
 
 export function SubagentSessionScreen() {
   const {tokens} = useTheme();
@@ -136,9 +136,8 @@ export function SubagentSessionScreen() {
     if (appUi == null) {
       return;
     }
-    readChatRichTextEnabled(appUi)
-      .then(setRichTextEnabled)
-      .catch(() => undefined);
+    const prefRead = readChatRichTextEnabled(appUi);
+    prefRead.then(setRichTextEnabled).catch(() => undefined);
   }, [appUi]);
 
   // ===== webview 句柄 attach（ready 后挂进单元——注入/流式推送的落点） =====
@@ -158,10 +157,7 @@ export function SubagentSessionScreen() {
     const sid = sessionId;
     // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
     // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = createTranscriptStreamHandle(
-      SUBAGENT_TRANSCRIPT_HANDLE_ID,
-      web,
-    );
+    const handle = createTranscriptStreamHandle(SUBAGENT_HANDLE_ID, web);
     manager.attachWebview(sid, handle);
     return () => {
       manager.detachWebview(sid, handle.handleId);
@@ -247,15 +243,15 @@ export function SubagentSessionScreen() {
   // 这里按当前子会话所属项目补齐——补不出来（无项目）则不跳，避免进错项目。
   const openSkillDetail = useCallback(
     (ref: SkillToolRef) => {
-      const targetProjectId =
-        ref.domain === 'project' ? ref.projectId ?? projectId : undefined;
-      if (ref.domain === 'project' && targetProjectId == null) {
+      const isProject = ref.domain === 'project';
+      const target = isProject ? ref.projectId ?? projectId : undefined;
+      if (isProject && target == null) {
         return;
       }
       navigation.navigate('SkillDetail', {
         domain: ref.domain,
         name: ref.name,
-        ...(targetProjectId != null ? {projectId: targetProjectId} : {}),
+        ...(target != null ? {projectId: target} : {}),
       });
     },
     [navigation, projectId],
@@ -269,14 +265,13 @@ export function SubagentSessionScreen() {
   // 稳定引用是它唯一的兜底（每次渲染新建函数会让整个 webview 重挂）。
   const openToolResult = useCallback(
     (payload: {title: string; content: string; inputJson?: string}) => {
-      const body =
-        payload.inputJson != null && payload.inputJson !== ''
-          ? `【输入】\n${payload.inputJson}\n\n【输出】\n${payload.content}`
-          : payload.content;
-      setPromptTurnDetail({title: payload.title, body});
+      const {title, content, inputJson} = payload;
+      const bodyWithInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
+      const body = inputJson ? bodyWithInput : content;
+      setPromptTurnDetail({title, body});
       navigation.navigate('PromptTurnDetail', {
-        title: payload.title,
-        turnId: `tool-result-${payload.title}`,
+        title,
+        turnId: `tool-result-${title}`,
       });
     },
     [navigation],
@@ -308,20 +303,19 @@ export function SubagentSessionScreen() {
     );
   }
 
-  const agentRunning =
-    unitView?.status === 'starting' || unitView?.status === 'running';
+  const status = unitView?.status;
+  const agentRunning = status === 'starting' || status === 'running';
   const displayMessages = unitView?.messages ?? messages;
   // 中断态只有一处标识（cr-fix-spec mobile-metrics/C-4）：指标条已能显示
   // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
   // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
-  const interruptedBannerVisible =
-    unitView?.status === 'interrupted' &&
-    sessionId != null &&
-    !hasVisibleSettledMetrics(unitView);
+  const interrupted = status === 'interrupted';
+  const hasMetrics = unitView != null && hasVisibleSettledMetrics(unitView);
+  const showInterrupted = interrupted && sessionId != null && !hasMetrics;
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {interruptedBannerVisible ? (
+      {showInterrupted ? (
         // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
         // 复用既有视觉 token，不动 webview 协议。
         <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>

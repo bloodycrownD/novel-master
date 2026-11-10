@@ -105,25 +105,22 @@ export function getStreamActiveTailText(kind: StreamKind): string {
   return String((kind === 'text' ? row?.text : row?.thinking) || '');
 }
 
-export function getStreamActiveTailEl(
-  body: Element | null | undefined,
-): HTMLElement | null {
+/** 可空 DOM 元素（查询/建壳/类名写入路径的公共输入形态）。 */
+type NullableEl = Element | null | undefined;
+
+export function getStreamActiveTailEl(body: NullableEl): HTMLElement | null {
   if (!body) {
     return null;
   }
-  return body.querySelector(
-    '.' + STREAM_ACTIVE_TAIL_CLASS,
-  ) as HTMLElement | null;
+  const selector = '.' + STREAM_ACTIVE_TAIL_CLASS;
+  return body.querySelector(selector) as HTMLElement | null;
 }
 
 /**
  * 纯文本降级标记：plain=true 挂标记类（CSS 单源补 pre-wrap），false 移除
  * （HTML 替换成功后调用）。
  */
-export function setStreamTailPlainClass(
-  el: Element | null | undefined,
-  plain: boolean,
-): void {
+export function setStreamTailPlainClass(el: NullableEl, plain: boolean): void {
   if (!el) return;
   if (plain) {
     el.classList.add(STREAM_TAIL_PLAIN_CLASS);
@@ -237,6 +234,11 @@ export function appendEscapedDelta(el: Element, delta: string): void {
  * 将当前流式行同步进已有 bubble 的 body 挂载点（非整泡 innerHTML）。
  * 壳结构缺失时回退 renderRows，避免与 Preact VDOM 分叉。
  * 调用方保证块级态已复位：全量 html 只能写 body 自身，禁止落进尾容器。
+ *
+ * nm-style: keep-local — 块级渲染不变量（增量岛）的唯一收口：thinking/text
+ * 两条同步链都必须经 streamRenderTarget 决定落点，禁止直写 body 全量 html。
+ * chat-transcript-stream-block.test.ts 按 `function syncStreamBodiesFromState`
+ * 源码切片钉住这两个 target 路由（测试在本组之外，内联会让契约失去锚点）。
  */
 function syncStreamBodiesFromState(bubble: Element): void {
   const row = currentStreamingRow();
@@ -342,10 +344,7 @@ function streamBodyFor(bubble: Element, kind: StreamKind): Element | null {
   return ensureStreamTextBody(bubble);
 }
 
-export function setStreamBodyRichClass(
-  el: Element | null | undefined,
-  rich: boolean,
-): void {
+export function setStreamBodyRichClass(el: NullableEl, rich: boolean): void {
   if (!el) return;
   if (rich) {
     el.classList.add('rich');
@@ -377,12 +376,9 @@ export function streamRichDomReady(bubble: Element, kind: StreamKind): boolean {
  * 块级增量写尾容器（tailHtml 专用）：已提交块零触碰。
  * html 缺失时按转义纯文本 append；禁止回落全量 html（会复制已提交块）。
  */
-export function appendStreamDeltaIncremental(
-  tail: Element,
-  kind: StreamKind,
-  delta: string,
-  html: string,
-): boolean {
+// nm style 要求签名单行；四参签名超过 prettier 默认宽度，用忽略标记保留单行。
+// prettier-ignore
+export function appendStreamDeltaIncremental(tail: Element, kind: StreamKind, delta: string, html: string): boolean {
   if (!delta && !html) {
     return false;
   }
@@ -412,10 +408,8 @@ export function appendStreamDeltaIncremental(
     } else if (kind === 'text') {
       // WHY: richText=true 且 html 缺失时，text 首包必须稳定走 delta append，
       // 不能被 DOM-ready 门槛拦截，否则 appendStreamDeltaIncremental 会返回 false 且 text 分支禁止整泡重建。
-      appendEscapedDelta(
-        streamRenderTarget(ensureStreamTextBody(bubble)),
-        delta,
-      );
+      const target = streamRenderTarget(ensureStreamTextBody(bubble));
+      appendEscapedDelta(target, delta);
     } else {
       return false;
     }
@@ -463,7 +457,7 @@ export function appendStreamDeltaIncremental(
   return false;
 }
 
-export type StreamBlockCommitPayload = {
+export type BlockCommitPayload = {
   streamId?: string;
   /** 本块提交对应的 delta seq（只做对账，不推进 checkpoint）。 */
   seq?: number;
@@ -486,9 +480,7 @@ export type StreamBlockCommitPayload = {
  * 触发 renderRows 回退）。
  * 不触发图表懒加载（其只在历史/快照路径，T-MT2 契约）。
  */
-export function applyStreamBlockCommit(
-  payload: StreamBlockCommitPayload,
-): void {
+export function applyStreamBlockCommit(payload: BlockCommitPayload): void {
   const cp = state.streamCheckpoint;
   if (payload.streamId == null || cp == null || cp.id !== payload.streamId) {
     return;
@@ -535,10 +527,8 @@ export function applyStreamBlockCommit(
   }
   const tailEl = ensureStreamActiveTail(body);
   // 完成块 append：插在尾块容器之前，已提交块区只增不改
-  tailEl.insertAdjacentHTML(
-    'beforebegin',
-    blockHtml ? blockHtml : escapeHtml(blockText),
-  );
+  const blockContent = blockHtml ? blockHtml : escapeHtml(blockText);
+  tailEl.insertAdjacentHTML('beforebegin', blockContent);
   // 尾块重置：tailHtml 有值走信任边界替换，否则按源文本降级纯文本
   if (hasTailPayload) {
     if (tailHtml) {

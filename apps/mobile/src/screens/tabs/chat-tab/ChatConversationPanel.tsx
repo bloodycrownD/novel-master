@@ -85,9 +85,10 @@ export type ChatConversationPanelProps = {
  * 两者皆必填，**不**在本组件里做二次判空（判空就得放 hook 之前 early return，
  * 那会让「本次渲染 hook 数」随入参变化，React 直接报 hook 顺序错）。
  *
- * nm-style: keep-local — 把 useChatTabController / useChatComposerController 与其
- * 派生收敛在稳定子树；hook 归属决定不能内联进面板本体（内联会让 hook 在可见性
- * 分支上条件执行）。
+ * nm-style: keep-local — 组件边界承载「scope 非空才挂载」的 hook 生命周期：
+ * useChatTabController / useChatComposerController 的 scope 参数要求 projectId /
+ * sessionId 皆非空，而面板本体拿到的是可空 ctx——判空只能落在挂载条件上（hook
+ * 不能写在 early return 之后），内联会让 controller 在 undefined scope 下执行。
  */
 function ChatConversationWebSurface(props: {
   readonly projectId: string;
@@ -126,8 +127,8 @@ function ChatConversationWebSurface(props: {
 
   // 当前会话 run 是否活跃（单元投影派生：starting|running；含受理未回填的
   // 保护窗——starting 投影即时可见，乐观置位已随单元化退役）。
-  const unitActive =
-    unitView?.status === 'starting' || unitView?.status === 'running';
+  const status = unitView?.status;
+  const unitActive = status === 'starting' || status === 'running';
 
   const transcriptFlags = useMemo(
     () => ({richText: chatRichTextEnabled}),
@@ -315,8 +316,8 @@ export function ChatConversationPanel({
   } = ctx;
 
   // 当前会话 run 是否活跃（单元投影派生：starting|running）。
-  const unitActive =
-    unitView?.status === 'starting' || unitView?.status === 'running';
+  const status = unitView?.status;
+  const unitActive = status === 'starting' || status === 'running';
 
   const sessionVfsScope = useMemo((): VfsScope | null => {
     if (projectId == null || sessionId == null) {
@@ -382,31 +383,30 @@ export function ChatConversationPanel({
     styles.chatPanel,
     chatPanelHidden && styles.panelHidden,
   ];
-  const chatPointerEvents = chatPanelHidden
-    ? ('none' as const)
-    : ('auto' as const);
-  const chatHeader =
-    projectId != null && sessionId != null ? (
-      <>
-        <ChatMetaBar
-          meta={agentMeta}
-          onPressAgent={openAgentPicker}
-          onPressModel={openModelPicker}
-        />
-        <ChatStreamMetricsBarLive
-          agentRunning={unitActive}
-          sessionId={sessionId}
-          // 「上下文占用」行与顶部 chip 同源（agentMeta.tokenLabel 现成字符串）。
-          contextTokenLabel={
-            agentMeta?.tokenLabel ? agentMeta.tokenLabel : undefined
-          }
-        />
-      </>
-    ) : null;
+  const chatPointerEvents: 'none' | 'auto' = chatPanelHidden ? 'none' : 'auto';
 
   /** WebView 容器是否渲染：scope 就绪才挂，否则落「请先选择会话」占位。 */
   const surfaceReady = projectId != null && sessionId != null;
-  const chatBody = surfaceReady ? (
+  const chatHeaderContent = (
+    <>
+      <ChatMetaBar
+        meta={agentMeta}
+        onPressAgent={openAgentPicker}
+        onPressModel={openModelPicker}
+      />
+      <ChatStreamMetricsBarLive
+        agentRunning={unitActive}
+        sessionId={sessionId}
+        // 「上下文占用」行与顶部 chip 同源（agentMeta.tokenLabel 现成字符串）。
+        contextTokenLabel={
+          agentMeta?.tokenLabel ? agentMeta.tokenLabel : undefined
+        }
+      />
+    </>
+  );
+  const chatHeader = surfaceReady ? chatHeaderContent : null;
+
+  const chatSurface = (
     // 转录 webview（flex:1 吃满余高）+ 原生 dock（自然高度贴底）：输入框长高
     // 挤压转录区，flex 布局当帧生效，无跨桥 heightChange。
     <ChatConversationWebSurface
@@ -414,7 +414,8 @@ export function ChatConversationPanel({
       sessionId={sessionId!}
       onOpenComposerFullscreen={onOpenComposerFullscreen}
     />
-  ) : null;
+  );
+  const chatBody = surfaceReady ? chatSurface : null;
 
   return (
     <View

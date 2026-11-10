@@ -94,8 +94,8 @@ export type ConversationTheme = {
  * `keyof HostTheme`，若宿主加了第 10 个 token 而上面的 `ConversationTheme`
  * 没跟着补字段，这里立刻类型不匹配——RN 侧漏键在 build 阶段就红，不必等 UI 变色。
  */
-export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
-  HOST_THEME_KEYS;
+// prettier-ignore
+export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] = HOST_THEME_KEYS;
 
 /* ------------------------------------------------------------------ *
  * dock 域残余类型面（纯类型载体，不再经桥收发）
@@ -183,12 +183,6 @@ export type ConversationHostMessage =
   | ConversationEnvelope<'closeMenu', Record<string, never>>
   | ConversationEnvelope<'closeMermaidViewer', Record<string, never>>;
 
-export function encodeHostToConversation(
-  message: ConversationHostMessage,
-): string {
-  return JSON.stringify(message);
-}
-
 /* ------------------------------------------------------------------ *
  * 上行（Web → Host）宽松解码
  * ------------------------------------------------------------------ */
@@ -224,9 +218,8 @@ export type ConversationDecodeResult =
  *   单例恒为 v:1；剥离后的 composer 域残余上行（旧 dist 的 change 等）也按
  *   「宽松放行、宿主不消费」处理，校验即丢消息反而掩盖问题。
  */
-export function decodeConversationUpstream(
-  raw: unknown,
-): ConversationDecodeResult {
+// prettier-ignore
+export function decodeConversationUpstream(raw: unknown): ConversationDecodeResult {
   let parsed: unknown = raw;
   if (typeof raw === 'string') {
     try {
@@ -256,34 +249,15 @@ export function decodeConversationUpstream(
 }
 
 /** ready 携带的能力清单（缺省/非数组 → 空清单；「未声明 = 不支持」是硬约定）。 */
-export function readReadyCapabilities(
-  payload: Record<string, unknown>,
-): readonly string[] {
+// prettier-ignore
+export function readReadyCapabilities(payload: Record<string, unknown>): readonly string[] {
   const raw = payload.capabilities;
   return Array.isArray(raw) ? (raw as readonly string[]) : [];
 }
 
-/** 能力清单判定：显式循环（老内核风格，与 `transcriptCapabilitiesInclude` 一致）。 */
-export function conversationCapabilitiesInclude(
-  capabilities: readonly string[] | undefined | null,
-  target: string,
-): boolean {
-  if (!capabilities) {
-    return false;
-  }
-  for (let i = 0; i < capabilities.length; i += 1) {
-    if (capabilities[i] === target) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /** `scrollSnapshot` → 滚动缓存快照（schema 版本不符返回 null；与旧宿主同口径）。 */
-export function parseConversationScrollSnapshot(
-  message: ConversationUpstreamEnvelope,
-  schemaVersion: number,
-): ChatTranscriptScrollSnapshot | null {
+// prettier-ignore
+export function parseConversationScrollSnapshot(message: ConversationUpstreamEnvelope, schemaVersion: number): ChatTranscriptScrollSnapshot | null {
   if (message.type !== 'scrollSnapshot') {
     return null;
   }

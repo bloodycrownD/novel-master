@@ -76,7 +76,7 @@ import {useChatTabScrollCache} from './useChatTabStream';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /** 主会话 webview 句柄在单元注册表里的稳定标识（attach/detach 对账用）。 */
-const CHAT_TAB_TRANSCRIPT_HANDLE_ID = 'chat-tab-transcript';
+const CHAT_TAB_HANDLE_ID = 'chat-tab-transcript';
 
 export type ChatTabContextValue = {
   readonly tokens?: never;
@@ -253,12 +253,13 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   >(() => (sessionId != null ? manager.readMessagesSnapshot(sessionId) : null));
   useEffect(() => {
     const sync = () => {
-      const hasSession = sessionId != null;
-      const nextUnitView = hasSession ? manager.snapshot(sessionId) : null;
-      setUnitView(nextUnitView);
-      setMessagesView(
-        sessionId != null ? manager.readMessagesSnapshot(sessionId) : null,
-      );
+      if (sessionId == null) {
+        setUnitView(null);
+        setMessagesView(null);
+        return;
+      }
+      setUnitView(manager.snapshot(sessionId));
+      setMessagesView(manager.readMessagesSnapshot(sessionId));
     };
     sync();
     return manager.subscribe(sync);
@@ -283,9 +284,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     if (sessionId == null || chatSubview !== 'conversation') {
       return;
     }
-    void manager
-      .loadSessionTailMessages(sessionId, {projectId})
-      .catch(() => undefined);
+    const tail = manager.loadSessionTailMessages(sessionId, {projectId});
+    void tail.catch(() => undefined);
   }, [manager, sessionId, projectId, chatSubview, hasUnit]);
 
   // ===== webview 句柄 attach/detach =====
@@ -312,10 +312,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     const sid = sessionId;
     // 单元流式载荷/控制消息 → webview handle 的适配层（哑引擎契约不动，
     // 映射细节见 services/session-stream-webview-adapter）。
-    const handle = createTranscriptStreamHandle(
-      CHAT_TAB_TRANSCRIPT_HANDLE_ID,
-      web,
-    );
+    const handle = createTranscriptStreamHandle(CHAT_TAB_HANDLE_ID, web);
     manager.attachWebview(sid, handle);
     return () => {
       manager.detachWebview(sid, handle.handleId);
@@ -342,9 +339,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   // 发送态推导基于显示源：用户消息 append 后 force 回源刷新（有单元走
   // 投影、无单元走 idle），推导随消息面即时更新。
   const composerSendState = useMemo(() => {
-    const derived = deriveComposerSendState(
-      findLastVisibleMessage(chatMessages),
-    );
+    const lastVisibleMessage = findLastVisibleMessage(chatMessages);
+    const derived = deriveComposerSendState(lastVisibleMessage);
     // 中断现场解锁输入：被杀 run 的尾部 user 消息是「没回完」的历史现场，
     // 不是「等待回复中」。partial 非空的中断由流式行投影呈现（单元
     // `streamRows` → 宿主快照）；partial 为空的（首字前被杀）没有任何可呈现
@@ -357,9 +353,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
   const onLoadOlderMessages = useCallback(() => {
     if (sessionId != null) {
-      void manager
-        .loadOlderSessionMessages(sessionId, projectId)
-        .catch(() => undefined);
+      const older = manager.loadOlderSessionMessages(sessionId, projectId);
+      void older.catch(() => undefined);
     }
   }, [manager, sessionId, projectId]);
 
@@ -442,17 +437,13 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     await readChatTranscriptEngine(appUi);
   }, [appUi]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshChatRichTextPref().catch(() => undefined);
-      refreshChatTranscriptEngine().catch(() => undefined);
-      refreshChatMeta().catch(() => undefined);
-    }, [
-      refreshChatRichTextPref,
-      refreshChatTranscriptEngine,
-      refreshChatMeta,
-    ]),
-  );
+  const refreshOnFocus = useCallback(() => {
+    refreshChatRichTextPref().catch(() => undefined);
+    refreshChatTranscriptEngine().catch(() => undefined);
+    refreshChatMeta().catch(() => undefined);
+  }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatMeta]);
+
+  useFocusEffect(refreshOnFocus);
 
   const value = useMemo(
     (): ChatTabContextValue => ({
