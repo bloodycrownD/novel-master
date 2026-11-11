@@ -1,8 +1,8 @@
 ---
-date: 2026-09-06 18:00
+date: 2026-11-12 01:05
 title: pi-web-access 原理探索与 novel-master 搜索工具落点
-keywords: pi-web-access, web search, 搜索工具, 搜索引擎 API, tavily, brave, bocha, searxng, SKSP, 工具系统, 搜索协议, curl 截断, VFS 落盘, 输出预算, 50KB
-abstract: 探索 pi-web-access 与 novel-master 工具系统：搜索 API 无通用协议，做法是内置引擎适配器+统一接口+设 key；国内格局为博查独立 REST、智谱挂 GLM tool_calls、大厂均绑自家 LLM 平台；curl 实有 256KB 截断但阈值过大且首段截断取不回，计划加 output 落盘（vfs.write 必填可用）。
+keywords: pi-web-access, web search, 搜索工具, 搜索引擎 API, tavily, brave, bocha, searxng, duckduckgo, DDG 兜底, SKSP, 工具系统, 搜索协议, curl 截断, VFS 落盘, 输出预算, 50KB, curl 模板, 自定义引擎, HTTP 请求模板, 响应字段映射, DeepSeek search, 智谱 web_search, 引擎开关, params 透传, 工具描述动态化, web-search-curl
+abstract: 搜索工具全程记忆：brainstorm（搜索 API 无通用协议，内置适配器+设 key 为行业做法）→ PRD/spec（四引擎+SKSP/KKV+50KB 统一预算+超预算落 VFS /tmp）→ 开发与两轮 CR 修复合入 main → 修订轮两级配置 UI+串行降级链 → DDG HTML 抓取兜底内置（含用户 DDG 背景问答）→ 后续轮次：curl 模板化二期（用户反转旧「不做请求模板」拍板——任意搜索 API=curl 形态 HTTP 请求+响应映射，配置页模板化+工具 params 透传+引擎开关，全收编老四家适配器，PRD 落盘 docs/Iterations/web-search-curl/prd.md 待确认）。
 ---
 
 user:
@@ -148,3 +148,57 @@ round2 修复执行完毕（两个并行 worker：fix2-core 5d3d2295/e8625b9a、
 user: 没问题，合并到主分支（真 main），然后写 changelog。
 assistant:
 终态收尾：CHANGELOG Unreleased 校对（串行链补未配置跳过、空行，fdcb24f6）三条定稿（新增搜索/两级页面、变更落盘）；合并被主仓未跟踪的旧版迭代文档挡道（brainstorm 阶段初稿，diff 确认无独有内容后清除）——da87c895 合入 main（--no-ff 保留合并记录），dev 快进同步，主仓 core dist 重建跟上。教训（本轮两次踩）：①「免费兜底 移除」被误读为移除 DDG 功能→派回退 worker 被用户掐掉（工作区半成品全量 checkout 恢复，零损失）；②纠正后人家又顺手多改了帮助弹窗两处→再被点「就是列表那一处」。最终 c788cbdf 只改列表副标题一处（「内置 · 免费兜底」→「内置」）。**模糊指代先问一句再动手，用户指名的范围之外一个字都不碰**。worker 子代理在 worktree 的 docs/apm/memory/ 留有过程记忆（未入库，不随合并回主仓）。
+
+user:
+DuckDuckGo 是什么网站吗？为什么可以用来当搜索引擎？
+
+assistant:
+通用知识答复（对照仓内 duckduckgo.ts 适配器讲清）：DuckDuckGo（duckduckgo.com）本身就是一个搜索引擎网站，2008 年 Gabriel Weinberg 创立的独立公司（美国宾州），卖点是隐私——不记搜索历史、不做用户画像，广告只看当次搜索词不看人。它能当搜索引擎是因为索引靠聚合：普通网页结果主要来自微软 Bing 的索引（合作），加自家爬虫 DuckDuckBot 与维基百科等即时答案源，不必自爬全网；收入靠不追踪的关键词广告+联盟链接，对用户免费。novel-master 能零 key 兜底是因为适配器直接 GET html.duckduckgo.com/html/（给老浏览器的无 JS 纯 HTML 端点）并正则解析结果列表，社区 duckduckgo-search 库同款思路；代价是非官方接口、页面改版会挂，所以放引擎链尾兜底、0 结果抛 invalid 供串行链感知降级。
+
+user:
+SearXNG 又是什么原理，它有 QPS 限制吗？
+
+assistant:
+原理答复：SearXNG 是元搜索引擎（聚合器）——自己不爬网不建索引，收到查询后并行转发给 settings.yml 勾选的上游引擎（Google/Bing/DDG/百度/搜狗等），聚合去重后统一返回；JSON 输出默认关闭需在 search.formats 加 json。QPS 口径分两层：软件本身无账号/计费/官方配额（自托管自己用没有 QPS 帽的概念）；真实限流在两头——①上游引擎对你实例服务器 IP 的反爬（个人写作频率远碰不到，高频会触发 CAPTCHA，SearXNG 自动临时挂起该引擎指数退避、其余引擎顶上，outgoing 可配代理）；②实例自身 limiter 插件限的是「访问你实例的人」（自用无关），公共实例普遍限流且 JSON API 常关防白嫖——所以 app 不内置公共实例地址、baseUrl 用户自填。仓内适配器：GET {base}/search?q=...&format=json、无鉴权、30s 超时、不传 language 尊重自托管者的中文聚合偏好。
+
+user:
+（2026-11-11）我想重构搜索配置页面。新想法：搜索引擎确实没有标准协议，但想复杂了——完全可以基于「curl 协议」（HTTP 请求本身）做可视化配置，用户像填表单一样配任意搜索 API。举例两文档：DeepSeek search（POST /v1/tools/search，Bearer，body{query,count,need_content}，结果 results[]{title,url,snippet,summary}）与智谱 web_search（POST /v4/web_search，Bearer，body{search_query,search_engine,search_intent,count}，结果 search_result[]{title,link,content,media}）。
+
+assistant:
+方案分析（待用户拍板后切 prd）：「curl 协议」=把一次 HTTP 请求拆成可视化字段：method+URL 模板+headers+body JSON 模板+响应字段映射（结果列表点路径+title/url/snippet 字段名）。验证覆盖度：DeepSeek/智谱/bocha/tavily/brave/searxng 六例全可模板表达（brave GET+header 认证、searxng GET 无 key 也行），仅 DDG HTML 解析不可模板化（内置兜底不冲突）。推荐温和版：内置五适配器保留（有精细容错：bocha 业务码脱敏、多字段名兜底、freshness 映射，模板表达不了），新增「自定义引擎」类型走模板，新引擎（DeepSeek/智谱）可做出厂预置模板用户填 key 即用，自定义与内置混排同一条串行降级链。三个关键技术点：①JSON 占位符注入必须结构层面做（parse 模板后 walk 字符串值替换+转义，防 query 带引号打坏 JSON，最大坑）；②engineOrder 从静态 ENGINE_IDS 全排列变动态列表（custom:{uuid} 独立 id 段，normalizeEngineChain/串行链/上移下移 UI/配置 DTO 全要动）；③安全口径不破（模板落 KKV 永远 {{apiKey}} 占位，明文只在请求瞬间 SKSP 现读，错误照旧 redact）。待拍板五点：多自定义实例（默认支持）/curl 命令粘贴导入解析（建议做）/测试搜索按钮（内置引擎时代拍板不做，自定义引擎建议重新拍板做）/占位符集合 {{query}}{{count}}{{apiKey}} 起步（recency/domainFilter 不进模板）/answer 摘要字段映射可选。
+
+user:
+search 工具本身也想改：各引擎都有自己的搜索语法，现在只提供了最简单的搜索方式。想把 search 做成 MCP 的感觉——提供更多自定义参数、给提示词，相当于一个专门的搜索 MCP。
+
+assistant:
+（理解有偏差的一轮）现状核实：schema 只开放 query/maxResults/engine（search-tool.ts inputSchema 注释+L149 ⚠️「生产恒不带 domainFilter/recencyFilter」），但五适配器过滤映射已全线实现（bocha freshness+客户端域名、tavily time_range+include/exclude_domains 服务端、brave/searxng freshness+site:、DDG 域名客户端+recency 忽略）。当时推荐「单工具做深统一参数面」：L1 开闸 recency/domainFilter、L2 query 内嵌语法 description 教学、L3 引擎特有参数不进 schema；反对拆 N 个 per-engine 工具（N 倍描述上下文、降级链被绕过、选型归用户）。DeepSeek fetch API 不另做（curl+落盘+read 已覆盖）。
+
+user:
+纠正理解：「像 MCP」不是统一参数面——是 search 工具允许指定搜索引擎+自己设置参数，其实就是 curl：对应的 URL 和 AK 被隐藏、替换为 engine 标识，参数和 curl 一样自由透传。
+
+assistant:
+理解修正后方案定型（与配置页 curl 模板合体为同一体系）：配置页模板=请求静态骨架（URL/认证/body 模板/响应映射），工具调用 params=动态部分（引擎方言自由参数）。工具 schema：query（统一必填，占位符替换靠它）+ engine（可选钉死/缺省串行链）+ maxResults（保留统一，1..20 收敛是 50KB 保险丝体系一部分）+ params（自由 JSON 引擎方言透传）。透传机制：内置适配器构造标准 body 后浅合并 params（同名字段 params 覆盖，DDG 无 body 忽略）；模板引擎先替换占位符再合并 params。降级链语义推荐链式时 params 原样合并进每个引擎、引擎自行忽略未知字段（DeepSeek 文档明说未知字段忽略，最 curl 的做法），备选 params 必须钉死 engine。提示词落点：工具描述=静态通用段+per-engine 参数说明拼接（内置出厂写死；自定义引擎配置页加可选「参数说明」文本框拼进描述）——引入工具描述动态化（catalog 从配置读+配置变更刷新），实施雷区记 PRD。DeepSeek fetch API 不另做（curl+落盘+read 已覆盖）。
+
+user:
+拍板：①query+maxResults 留统一、recencyFilter/domainFilter 砍掉全走 params；②没有指定引擎则自动走链；②+.1 新能力：引擎开关——每个引擎的说明会透传给 agent，agent 看到就以为能用，所以必须有开关控制，默认关闭、只有 duckduckgo 默认可用；③per-engine 说明是核心能力。问还有没有问题。
+
+assistant:
+拍板定型：参数面 query+maxResults 统一+砍 recency/domain 映射；链式缺省走链+params 原样透传；引擎开关=启用闸（关=不进链+说明不透传+agent 完全不可见，配置与开关独立状态，默认全关仅 DDG 开=开箱即用且不偷偷暴露未批准引擎）；per-engine 说明核心能力（内置出厂+自定义引擎配置页填写拼进工具描述）。回复遗留两问：①存量迁移——搜索功能已发版，存量配了 key 的引擎升级后若默认全关会被打回只有 DDG（配了 key 悄悄失效），建议迁移规则「存量已配置 key 升级时自动开」、默认关只对全新安装生效，待用户确认；②配置页轮五点报默认值待确认：多自定义实例支持/curl 粘贴导入做/测试搜索按钮做/占位符 {{query}}{{count}}{{apiKey}}/answer 可选映射。两问答完即合成一个 PRD（配置页 curl 模板化+search 工具 curl 参数化+引擎开关）切 prd-generate。
+
+user:
+存量迁移：就当不存在，不迁移，丢弃（升级后一律从只有 DDG 开始）。配置页五点：先做，做完看效果，反正只是 UI 层。
+
+assistant:
+全部拍板收齐后切 prd-generate。探索 3 个 readonly 子代理（core 搜索链路 / 双端配置 UI 与装配 / 文档惯例与 CLI），报告主代理落盘 tmp/explore-reports/prd-search-curl-{core,ui,docs}.md。关键发现：①recencyFilter/domainFilter 是「生产恒不传、测试锁活」完整预留链（search-tool.ts:149-152 注释明写勿当死码删，砍除需同步拆五适配器+types 纯函数+≥8 处测试锁）；②ENGINE_IDS 静态枚举渗透 core schema（inputSchema/outputSchema 双 z.enum）/config（engineOrder 全排列不变量+setEngineOrder 校验）/dispatch switch/双端 UI meta/4 测试文件约 15 处，自定义引擎要求放宽 string+重构 configured 语义为开关；③工具 description 是同步 (ctx)=>string、search 现忽略 ctx，动态说明须走装配期快照注入先例（skills.effective/agents，BuiltinToolSearchContext 现仅 resolveEngineChain 一成员）；④formatter/summary 按形状判断不卡枚举天然兼容自定义 id；⑤测试按钮可抄云同步「先保存再测」先例（desktop SettingsViews.tsx:279+mobile CloudSyncConfigScreen）；mobile 新增 core 导出必须同步 core-shim 否则测试红；⑥旧 PRD 不包含范围明文排除「不做请求模板」（prd.md:49）与「测试连接按钮」（prd.md:46），本次双反转；同主题二次迭代先例 chat-history-search→seq-range 路径式 dependency；iterations.yaml 无 web-search-tool 条目需补登；CHANGELOG 现状无 Unreleased 段（1.5.48 已发）；CLI 零 search 引用延续 known limitation。
+
+澄清轮：内置引擎与模板关系（用户初问「模板化和适配器冲突吗」→解释后拍板**全收编**：bocha/tavily/brave/searxng 适配器退役改出厂模板，全系统只剩模板一种机制，DDG 唯一代码兜底）。
+
+PRD 落盘 docs/Iterations/web-search-curl/prd.md（2026-11-12，dependency: [Iterations/web-search-tool/prd.md]）：R1 模板执行器+六出厂模板（占位符 {{query}}/{{count}}/{{apiKey}} 结构化替换、点路径响应映射、超时统一 30s、串行链/钉死/120s 预算/attempts 四口径原样保留）；R2 配置页模板化（动态列表平级混排+开关控件+模板编辑表单+curl 导入-失败整体拒绝+测试按钮先保存再测+恢复默认+删除清 key）；R3 工具参数面（query/engine string/maxResults/params 自由透传同名覆盖、砍 recency/domain、outputSchema 放宽 string）；R4 引擎开关（全引擎可关含 DDG、默认仅 DDG 开、关=不进链+说明不透传+值域不含、全关=可读提示不崩溃、开关与 key 解耦）；R5 per-engine 说明透传（静态通用段+逐引擎段拼装、装配期快照、限长 500 字符、双端 catalog 同步）；R6 存量处置（不迁移不读取不主动清除、iterations.yaml 补登、CHANGELOG 随发版号）。默认决策：明文 key 启发式检测拒存、出厂模板 core 常量+覆盖副本落 KKV、engineOrder 动态列表容错归一。风险：测试锁大面积重写（8+ 映射锁 20+ 链/配置断言作废）、模板执行器新路径需充分单测。
+
+user:
+（用户直接调用 spec-generate skill = PRD 确认，spec 阶段启动。期间穿插 worktree 清理拍板：能删的都删、记忆文件保留、本地分支清理、远程分支也清理——已执行完毕，D:/worktree 只剩 transcript-rn 活工作。）
+
+assistant:
+spec 阶段：3 个技术视角探索子代理（core 链路+测试锁逐用例 / 双端 UI+IPC 全链 / 外部 API 文档抓取+模板原料），关键发现：①Tool.description 同步 (ctx)=>string 由 toolsFromRegistry 求值——引擎说明快照必须装配期注入（照 skills.effective 先例，BuiltinToolSearchContext 现仅 resolveEngineChain）；②bocha 收编真行为=候选字段容错（url|link|href、snippet 四候选）+信封业务码校验（code!==200）——模板 schema 必须支持候选字段名列表+可选 envelope，否则收编丢行为；③智谱字段名 search_query（非 query）/search_engine 必填枚举（固化 search_std 可 params 覆盖）/search_domain_filter 是 string；DeepSeek results[] 含 snippet/summary/content 三层+need_content 开关、query 支持 site:/after: 语法、未知字段忽略；④SKSP 端口是 set 非 save；SearchConfigDto 全 string 弱类型天然容纳动态 id；desktop 云同步测试=先保存再测而 mobile=草稿直测（双端不一致）；⑤测试锁 61 存量用例处置表（删12/改24/留25）；mobile core-shim 白名单漏补即 Jest 解析炸。
+
+spec 落盘 docs/Iterations/web-search-curl/spec.md（2026-11-12）：9 Step（模板core→dispatch→config-store→tool-surface→exports-shim→desktop-ui→mobile-ui→tests-rewrite→docs-release），T-E/T-P/T-C/T-S/T-R/T-U 六组约 30 新增用例。三处 PRD 口径微调（spec 已注明理由）：①测试按钮改草稿直测（mobile 云同步同款，双端统一坏配置不落库）；②占位符 3→4 增 {{baseUrl}}（searxng 自填实例必需）；③brave 域名过滤强制 count20/tavily snippet 折叠空白/bocha 客户端过滤兜底三处随收编丢弃（已知让渡）。存储新键 enabledEngines/engineOrderV2/customEngines/presetOverrides/engineBaseUrls（旧键 engineOrder/searxngBaseUrl 读路径删除=存量丢弃落地）；{{count}} 整值字符串替换为 number 保 integer 类型。待用户确认 spec。
