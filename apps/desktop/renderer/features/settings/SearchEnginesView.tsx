@@ -49,7 +49,8 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   },
 ];
 
-/** 搜索配置帮助弹窗（形态参考 AddModelModal：overlay 点击关闭，纯展示无表单态）。 */
+// nm-style: keep-local — 单点展示组件承载帮助弹窗的 overlay/dialog 边界与
+// aria 语义；内联进列表 JSX 会拆散弹窗结构（20+ 行纯展示 markup）
 function SearchHelpModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="text-prompt-overlay" onClick={onClose}>
@@ -70,19 +71,6 @@ function SearchHelpModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
-  );
-}
-
-/** 行状态标签：内置 / 自定义分类 + 配置完整度警示（开关只管启用，不表示可用）。 */
-function EngineStatusTags({ engine }: { engine: SearchEngineStatusDto }) {
-  return (
-    <>
-      {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
-      {engine.isCustom ? <span className="settings-tag settings-tag--muted">自定义</span> : null}
-      {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">未设密钥</span> : null}
-      {engine.needsBaseUrl && engine.baseUrl == null ? <span className="settings-tag settings-tag--warn">未设实例地址</span> : null}
-      {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? <span className="settings-tag settings-tag--ok">已配置</span> : null}
-    </>
   );
 }
 
@@ -138,6 +126,8 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
     void runWrite(() => ipcSearchSetEngineOrder({ engineOrder: next }));
   };
 
+  // nm-style: keep-local — 删除失败也要收起确认框（错误经页内 SettingsStatus 展示），
+  // 共享 busy 互斥态、回读与 toast；内联进 ConfirmModal onConfirm 会拆散收框不变量
   const removeEngine = async (): Promise<void> => {
     if (deleteTarget == null) return;
     setBusy(true);
@@ -158,14 +148,6 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
     } finally {
       setBusy(false);
     }
-  };
-
-  const handleMenuSelect = (action: string) => {
-    const engine = config?.engines.find((item) => item.id === menu?.engineId);
-    if (engine == null) return;
-    if (action === "up") moveEngine(engine, -1);
-    if (action === "down") moveEngine(engine, 1);
-    if (action === "delete") setDeleteTarget(engine);
   };
 
   const order = config?.engines.map((engine) => engine.id) ?? [];
@@ -200,7 +182,11 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
                 {engine.isCustom || ENGINE_META[engine.id] == null ? null : <span className="settings-row__desc">{ENGINE_META[engine.id]?.desc}</span>}
               </span>
               <span className="settings-list-item__meta">
-                <EngineStatusTags engine={engine} />
+                {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
+                {engine.isCustom ? <span className="settings-tag settings-tag--muted">自定义</span> : null}
+                {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">未设密钥</span> : null}
+                {engine.needsBaseUrl && engine.baseUrl == null ? <span className="settings-tag settings-tag--warn">未设实例地址</span> : null}
+                {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? <span className="settings-tag settings-tag--ok">已配置</span> : null}
               </span>
               <span className="settings-list-item__chevron" aria-hidden="true">
                 ›
@@ -238,7 +224,13 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
                 ...(config?.engines.find((engine) => engine.id === menu.engineId)?.isCustom === true ? [{ label: "删除", action: "delete", danger: true }] : []),
               ]
         }
-        onSelect={handleMenuSelect}
+        onSelect={(action) => {
+          const engine = config?.engines.find((item) => item.id === menu?.engineId);
+          if (engine == null) return;
+          if (action === "up") moveEngine(engine, -1);
+          if (action === "down") moveEngine(engine, 1);
+          if (action === "delete") setDeleteTarget(engine);
+        }}
         onClose={() => setMenu(null)}
       />
       <ConfirmModal

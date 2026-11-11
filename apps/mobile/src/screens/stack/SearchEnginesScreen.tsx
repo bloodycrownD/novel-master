@@ -76,6 +76,7 @@ export function SearchEnginesScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
+  const searchStore = getSearchConfigStore(runtime);
   const navigation = useNavigation<Nav>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
@@ -104,27 +105,27 @@ export function SearchEnginesScreen() {
   // menuIcon/onMenu，见 ProviderDetailScreen 标题 override 同一链路）。
   // 用 useFocusEffect 而非 useEffect：进入详情页再返回时，详情页的 cleanup
   // 会清空 header 覆盖，列表页须在重新聚焦时重设，否则「?」按钮丢失。
-  useFocusEffect(
-    useCallback(() => {
-      setStackOverride({
-        title: '搜索配置',
-        showMenu: true,
-        menuIcon: <HelpIcon color={tokens.text} />,
-        onMenu: () => setHelpVisible(true),
-      });
-      return () => setStackOverride(undefined);
-    }, [setStackOverride, tokens.text]),
-  );
+  const syncHeaderOverride = useCallback(() => {
+    setStackOverride({
+      title: '搜索配置',
+      showMenu: true,
+      menuIcon: <HelpIcon color={tokens.text} />,
+      onMenu: () => setHelpVisible(true),
+    });
+    return () => setStackOverride(undefined);
+  }, [setStackOverride, tokens.text]);
+  useFocusEffect(syncHeaderOverride);
 
   const {rows, loading, error, reload, setRows} = useFocusListReload({
     fetcher: useCallback(
-      async () => (await getSearchConfigStore(runtime).readConfig()).engines,
-      [runtime],
+      async () => (await searchStore.readConfig()).engines,
+      [searchStore],
     ),
     fallbackValue: EMPTY_ROWS,
   });
 
-  /** 行开关：乐观翻转 + 失败回滚（开关只动 enabledEngines，与 key 解耦）。 */
+  // nm-style: keep-local — 行开关乐观翻转 + 失败回滚同一行数据，togglingId
+  // 互斥在途；内联进 renderItem 会拆散回滚不变量
   const setEnabled = async (engineId: string, on: boolean) => {
     if (togglingId != null) {
       return;
@@ -134,7 +135,7 @@ export function SearchEnginesScreen() {
       current.map(row => (row.id === engineId ? {...row, enabled: on} : row)),
     );
     try {
-      await getSearchConfigStore(runtime).setEnabled(engineId, on);
+      await searchStore.setEnabled(engineId, on);
     } catch (cause) {
       setRows(current =>
         current.map(row =>
@@ -161,7 +162,7 @@ export function SearchEnginesScreen() {
     [order[index], order[target]] = [order[target], order[index]];
     setMoving(true);
     try {
-      await getSearchConfigStore(runtime).setEngineOrder(order);
+      await searchStore.setEngineOrder(order);
       // 重读刷新：顺序与各引擎状态以库内新值为准。
       await reload({silent: true});
     } catch (cause) {
@@ -171,27 +172,15 @@ export function SearchEnginesScreen() {
     }
   };
 
-  /** 删除自定义实例：core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。 */
-  const deleteEngine = async (engineId: string) => {
-    if (deleting) {
-      return;
-    }
-    setDeleting(true);
-    try {
-      await getSearchConfigStore(runtime).deleteCustomEngine(engineId);
-      showToast('已删除自定义引擎');
-      setPendingDelete(undefined);
-      await reload({silent: true});
-    } catch (cause) {
-      showToast(toastMessage('删除失败', cause));
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const menuRow = rows.find(row => row.id === menuEngineId);
   const menuIndex = menuRow == null ? -1 : rows.indexOf(menuRow);
   const deleteRow = rows.find(row => row.id === pendingDelete);
+  // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
+  let deleteNotice = '';
+  if (pendingDelete != null) {
+    const label = engineTitle(pendingDelete, deleteRow?.name ?? pendingDelete);
+    deleteNotice = `「${label}」的模板配置与已存密钥会一并清除，此操作不可撤销。`;
+  }
 
   return (
     <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
@@ -322,12 +311,7 @@ export function SearchEnginesScreen() {
           删除自定义引擎
         </Text>
         <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>
-          {pendingDelete == null
-            ? ''
-            : `「${engineTitle(
-                pendingDelete,
-                deleteRow?.name ?? pendingDelete,
-              )}」的模板配置与已存密钥会一并清除，此操作不可撤销。`}
+          {deleteNotice}
         </Text>
         <View style={styles.confirmActions}>
           <View style={styles.confirmAction}>
@@ -344,9 +328,21 @@ export function SearchEnginesScreen() {
               tokens={tokens}
               fullWidth
               label={deleting ? '删除中…' : '删除'}
-              onPress={() => {
-                if (pendingDelete != null) {
-                  deleteEngine(pendingDelete).catch(() => undefined);
+              onPress={async () => {
+                if (pendingDelete == null || deleting) {
+                  return;
+                }
+                setDeleting(true);
+                try {
+                  // core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。
+                  await searchStore.deleteCustomEngine(pendingDelete);
+                  showToast('已删除自定义引擎');
+                  setPendingDelete(undefined);
+                  await reload({silent: true});
+                } catch (cause) {
+                  showToast(toastMessage('删除失败', cause));
+                } finally {
+                  setDeleting(false);
                 }
               }}
               disabled={deleting}

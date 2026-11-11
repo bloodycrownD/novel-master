@@ -126,18 +126,41 @@ const AUTH_MODES: ReadonlyArray<{
   mode: AuthMode;
   header?: string;
   label: string;
+  value: string;
 }> = [
-  {mode: 'bearer', header: 'Authorization', label: 'Authorization: Bearer'},
-  {mode: 'x-api-key', header: 'X-API-KEY', label: 'X-API-KEY'},
+  {
+    mode: 'bearer',
+    header: 'Authorization',
+    label: 'Authorization: Bearer',
+    value: 'Bearer {{apiKey}}',
+  },
+  {
+    mode: 'x-api-key',
+    header: 'X-API-KEY',
+    label: 'X-API-KEY',
+    value: '{{apiKey}}',
+  },
   {
     mode: 'subscription',
     header: 'X-Subscription-Token',
     label: 'X-Subscription-Token',
+    value: '{{apiKey}}',
   },
-  {mode: 'none', label: '不使用密钥'},
+  {mode: 'none', label: '不使用密钥', value: ''},
 ];
 
 const HEADERS_INVALID_HINT = 'Headers 须为 JSON 对象，且每个值为字符串';
+const TEMPLATE_INVALID_KEY = 'error.tool.search_template_invalid';
+
+/** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
+type WriteOp = 'save' | 'clear' | 'reset' | 'delete';
+
+const WRITE_FAIL_MESSAGES: Record<WriteOp, string> = {
+  save: '保存失败',
+  clear: '清除失败',
+  reset: '恢复默认失败',
+  delete: '删除失败',
+};
 
 /** 候选字段列表：逗号分隔（title/url/snippet 与 envelope.okValues 共用）。 */
 function splitCandidates(text: string): string[] {
@@ -378,6 +401,7 @@ export function SearchEngineDetailScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
+  const searchStore = getSearchConfigStore(runtime);
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
@@ -388,11 +412,8 @@ export function SearchEngineDetailScreen() {
 
   const [config, setConfig] = useState<SearchConfigPublic | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  /** 正在清除 key（与保存互斥）。 */
-  const [clearing, setClearing] = useState(false);
-  /** 正在删除自定义实例（与保存互斥）。 */
-  const [deleting, setDeleting] = useState(false);
+  /** 在途写操作（保存/清除/恢复默认/删除互斥；null = 空闲）。 */
+  const [writeOp, setWriteOp] = useState<WriteOp | null>(null);
   /** 删除确认弹窗开关。 */
   const [confirmDelete, setConfirmDelete] = useState(false);
   /** 模板高级编辑折叠区（仅预置引擎）。 */
@@ -426,63 +447,64 @@ export function SearchEngineDetailScreen() {
   const draftNeedsKey = draftText.includes('{{apiKey}}');
   const draftNeedsBaseUrl = draftText.includes('{{baseUrl}}');
   const headersForAuth = readHeaders(draft.headersText);
-  const authMode: AuthMode | null =
-    headersForAuth == null
-      ? null
-      : AUTH_MODES.find(
-          option =>
-            option.header != null &&
-            headersForAuth[option.header]?.includes('{{apiKey}}') === true,
-        )?.mode ?? 'none';
+  let authMode: AuthMode | null = null;
+  if (headersForAuth != null) {
+    authMode = 'none';
+    for (const option of AUTH_MODES) {
+      if (
+        option.header != null &&
+        headersForAuth[option.header]?.includes('{{apiKey}}') === true
+      ) {
+        authMode = option.mode;
+        break;
+      }
+    }
+  }
 
   // 详情页标题用引擎名（自定义实例回落到配置读模型 name）。
-  useFocusEffect(
-    useCallback(() => {
-      setStackOverride({title});
-      return () => setStackOverride(undefined);
-    }, [setStackOverride, title]),
-  );
+  const syncHeader = useCallback(() => {
+    setStackOverride({title});
+    return () => setStackOverride(undefined);
+  }, [setStackOverride, title]);
+  useFocusEffect(syncHeader);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const nextConfig = await getSearchConfigStore(runtime).readConfig();
+      const nextConfig = await searchStore.readConfig();
       setConfig(nextConfig);
-      const engine =
-        engineId == null
-          ? undefined
-          : nextConfig.engines.find(item => item.id === engineId);
+      const {engines, customEngines} = nextConfig;
+      const engine = engines.find(item => item.id === engineId);
       if (engineId != null && engine == null) {
         return;
       }
+      const custom = customEngines.find(def => def.id === engineId);
       let template: SearchEngineTemplate | undefined;
       if (engine?.isCustom === true) {
-        template = nextConfig.customEngines.find(
-          def => def.id === engineId,
-        )?.template;
+        template = custom?.template;
       } else if (engine != null && engineId != null) {
         template = PRESET_TEMPLATES[engineId];
       }
-      setDraft(
-        template == null
-          ? EMPTY_DRAFT
-          : {
-              name: template.name,
-              method: template.method,
-              url: template.url,
-              headersText: JSON.stringify(template.headers, null, 2),
-              bodyText: template.bodyTemplate ?? '',
-              resultPath: template.resultPath,
-              titleFields: template.fieldMap.title.join(', '),
-              urlFields: template.fieldMap.url.join(', '),
-              snippetFields: template.fieldMap.snippet.join(', '),
-              answerPath: template.answerPath ?? '',
-              envelopeCodePath: template.envelope?.codePath ?? '',
-              envelopeMsgPath: template.envelope?.msgPath ?? '',
-              envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
-              paramHint: template.paramHint,
-            },
-      );
+      if (template == null) {
+        setDraft(EMPTY_DRAFT);
+      } else {
+        setDraft({
+          name: template.name,
+          method: template.method,
+          url: template.url,
+          headersText: JSON.stringify(template.headers, null, 2),
+          bodyText: template.bodyTemplate ?? '',
+          resultPath: template.resultPath,
+          titleFields: template.fieldMap.title.join(', '),
+          urlFields: template.fieldMap.url.join(', '),
+          snippetFields: template.fieldMap.snippet.join(', '),
+          answerPath: template.answerPath ?? '',
+          envelopeCodePath: template.envelope?.codePath ?? '',
+          envelopeMsgPath: template.envelope?.msgPath ?? '',
+          envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
+          paramHint: template.paramHint,
+        });
+      }
       setBaseUrlDraft(engine?.baseUrl ?? '');
       setApiKeyDraft('');
       setTestResult(undefined);
@@ -491,7 +513,7 @@ export function SearchEngineDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [engineId, runtime, showToast]);
+  }, [engineId, searchStore, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -555,20 +577,20 @@ export function SearchEngineDetailScreen() {
       paramHint: draft.paramHint,
     });
     if (!validated.ok) {
-      showToast(
-        coreT(
-          validated.error.messageKey == null
-            ? {key: 'error.tool.search_template_invalid', params: {reason: validated.error.message}}
-            : {key: validated.error.messageKey, params: validated.error.messageParams},
-        ),
-      );
+      const err = validated.error;
+      const invalidKey = err.messageKey == null;
+      const params = invalidKey ? {reason: err.message} : err.messageParams;
+      const key = invalidKey ? TEMPLATE_INVALID_KEY : err.messageKey;
+      showToast(coreT({key, params}));
       return undefined;
     }
     return validated.value;
   };
 
+  // nm-style: keep-local — 保存分流 create/自定义/预置三分支，共享 writeOp 互斥态、
+  // key/baseUrl 草稿与失败回读；内联进 footer 按钮会拆散互斥与回读状态机
   const handleSave = async () => {
-    if (saving || clearing || deleting || testing) {
+    if (writeOp != null || testing) {
       return;
     }
     const template = validatedTemplate();
@@ -577,16 +599,13 @@ export function SearchEngineDetailScreen() {
     }
     const keyDraft = apiKeyDraft.trim();
     const baseUrl = baseUrlDraft.trim();
-    setSaving(true);
+    setWriteOp('save');
     try {
-      const store = getSearchConfigStore(runtime);
       if (engineId == null) {
         // 本地实例 id：8 位 base36 随机串（core 校验 `custom:{8}` 形态并拒绝重复）。
-        const id = `custom:${Math.random()
-          .toString(36)
-          .slice(2, 10)
-          .padEnd(8, '0')}`;
-        await store.createCustomEngine({
+        const rand = Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+        const id = `custom:${rand}`;
+        await searchStore.createCustomEngine({
           def: {
             id,
             name: template.name,
@@ -601,7 +620,7 @@ export function SearchEngineDetailScreen() {
         return;
       }
       if (entry?.isCustom === true) {
-        await store.updateCustomEngine(engineId, {
+        await searchStore.updateCustomEngine(engineId, {
           template,
           ...(keyDraft.length > 0 ? {apiKey: keyDraft} : {}),
           ...(draftNeedsBaseUrl ? {baseUrl} : {}),
@@ -624,14 +643,14 @@ export function SearchEngineDetailScreen() {
             }
           }
           if (Object.keys(patch).length > 0) {
-            await store.updatePresetOverride(engineId, patch);
+            await searchStore.updatePresetOverride(engineId, patch);
           }
         }
         if (keyDraft.length > 0) {
-          await store.saveEngineKey(engineId, keyDraft);
+          await searchStore.saveEngineKey(engineId, keyDraft);
         }
         if (draftNeedsBaseUrl) {
-          await store.setEngineBaseUrl(engineId, baseUrl);
+          await searchStore.setEngineBaseUrl(engineId, baseUrl);
         }
       }
       showToast('配置已保存');
@@ -641,12 +660,14 @@ export function SearchEngineDetailScreen() {
       // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）。
       await load();
     } finally {
-      setSaving(false);
+      setWriteOp(null);
     }
   };
 
+  // nm-style: keep-local — 草稿直测共享 testing 互斥态与 testResult 回填
+  // （成功拼样本行/失败译文案双分支），内联进按钮会拆散测试状态机
   const handleTest = async () => {
-    if (testing || saving || clearing || deleting) {
+    if (writeOp != null || testing) {
       return;
     }
     const query = testQuery.trim();
@@ -658,34 +679,29 @@ export function SearchEngineDetailScreen() {
     if (template == null) {
       return;
     }
+    const key = apiKeyDraft.trim();
+    const url = baseUrlDraft.trim();
     setTesting(true);
     setTestResult(undefined);
     try {
-      const outcome = await getSearchConfigStore(runtime).testEngine({
-        ...(engineId == null ? {} : {engineId}),
-        draft: {
-          template,
-          ...(apiKeyDraft.trim().length > 0
-            ? {apiKey: apiKeyDraft.trim()}
-            : {}),
-          ...(baseUrlDraft.trim().length > 0
-            ? {baseUrl: baseUrlDraft.trim()}
-            : {}),
-        },
-        query,
-      });
-      setTestResult(
-        outcome.ok
-          ? [
-              `返回 ${outcome.value.resultCount} 条结果`,
-              ...outcome.value.sample
-                .slice(0, 3)
-                .map(
-                  (item, index) => `${index + 1}. ${item.title} — ${item.url}`,
-                ),
-            ].join('\n')
-          : `测试失败：${coreT(outcome.error.message)}`,
-      );
+      const testDraft = {
+        template,
+        ...(key.length > 0 ? {apiKey: key} : {}),
+        ...(url.length > 0 ? {baseUrl: url} : {}),
+      };
+      const enginePart = engineId == null ? {} : {engineId};
+      const req = {...enginePart, draft: testDraft, query};
+      const outcome = await searchStore.testEngine(req);
+      if (outcome.ok) {
+        const top = outcome.value.sample.slice(0, 3);
+        const samples = top.map(
+          (item, index) => `${index + 1}. ${item.title} — ${item.url}`,
+        );
+        const lines = [`返回 ${outcome.value.resultCount} 条结果`, ...samples];
+        setTestResult(lines.join('\n'));
+      } else {
+        setTestResult(`测试失败：${coreT(outcome.error.message)}`);
+      }
     } catch (cause) {
       showToast(toastMessage('测试失败', cause));
     } finally {
@@ -693,92 +709,18 @@ export function SearchEngineDetailScreen() {
     }
   };
 
-  const handleImportCurl = () => {
-    const parsed = parseCurlCommand(curlText);
-    if (!parsed.ok) {
-      showToast(toastMessage('导入失败', coreT(parsed.error.message)));
+  /** 短写操作互斥模板：任一写操作在途即忽略；失败 toast 按操作映射，复位交 finally。 */
+  const runWrite = async (op: WriteOp, go: (id: string) => Promise<void>) => {
+    if (engineId == null || writeOp != null || testing) {
       return;
     }
-    const imported = parsed.value;
-    patchDraft({
-      method: imported.method,
-      url: imported.url,
-      headersText: JSON.stringify(imported.headers, null, 2),
-      ...(imported.bodyTemplate == null
-        ? {}
-        : {bodyText: imported.bodyTemplate}),
-    });
-    if (imported.apiKey != null) {
-      setApiKeyDraft(imported.apiKey);
-    }
-    showToast('已解析 curl 命令，请补全结果映射后再保存');
-  };
-
-  const applyAuthMode = (mode: AuthMode) => {
-    const headers = readHeaders(draft.headersText);
-    if (headers == null) {
-      showToast(HEADERS_INVALID_HINT);
-      return;
-    }
-    for (const option of AUTH_MODES) {
-      if (option.header != null) {
-        delete headers[option.header];
-      }
-    }
-    const chosen = AUTH_MODES.find(option => option.mode === mode);
-    if (chosen?.header != null) {
-      headers[chosen.header] =
-        mode === 'bearer' ? 'Bearer {{apiKey}}' : '{{apiKey}}';
-    }
-    patchDraft({headersText: JSON.stringify(headers, null, 2)});
-  };
-
-  const handleClearKey = async () => {
-    if (engineId == null || saving || clearing || deleting) {
-      return;
-    }
-    setClearing(true);
+    setWriteOp(op);
     try {
-      await getSearchConfigStore(runtime).clearEngineKey(engineId);
-      showToast(`已清除 ${title} API Key`);
-      await load();
+      await go(engineId);
     } catch (cause) {
-      showToast(toastMessage('清除失败', cause));
+      showToast(toastMessage(WRITE_FAIL_MESSAGES[op], cause));
     } finally {
-      setClearing(false);
-    }
-  };
-
-  const handleResetPreset = async () => {
-    if (engineId == null || saving || clearing || deleting) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await getSearchConfigStore(runtime).resetPresetOverride(engineId);
-      showToast('已恢复默认模板');
-      await load();
-    } catch (cause) {
-      showToast(toastMessage('恢复默认失败', cause));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (engineId == null || saving || clearing || deleting) {
-      return;
-    }
-    setDeleting(true);
-    try {
-      await getSearchConfigStore(runtime).deleteCustomEngine(engineId);
-      showToast('已删除自定义引擎');
-      setConfirmDelete(false);
-      navigation.goBack();
-    } catch (cause) {
-      showToast(toastMessage('删除失败', cause));
-    } finally {
-      setDeleting(false);
+      setWriteOp(null);
     }
   };
 
@@ -853,8 +795,9 @@ export function SearchEngineDetailScreen() {
       />
     </FormField>
   );
-  const authModeField =
-    authMode == null ? null : (
+  let authModeField: React.ReactNode = null;
+  if (authMode != null) {
+    authModeField = (
       <FormField
         label="密钥注入方式"
         tokens={tokens}
@@ -867,10 +810,27 @@ export function SearchEngineDetailScreen() {
             label: option.label,
           }))}
           value={authMode}
-          onChange={applyAuthMode}
+          onChange={mode => {
+            const headers = readHeaders(draft.headersText);
+            if (headers == null) {
+              showToast(HEADERS_INVALID_HINT);
+              return;
+            }
+            for (const option of AUTH_MODES) {
+              if (option.header != null) {
+                delete headers[option.header];
+              }
+            }
+            const chosen = AUTH_MODES.find(item => item.mode === mode);
+            if (chosen?.header != null) {
+              headers[chosen.header] = chosen.value;
+            }
+            patchDraft({headersText: JSON.stringify(headers, null, 2)});
+          }}
         />
       </FormField>
     );
+  }
   const templateCard = (
     <FormSectionCard
       tokens={tokens}
@@ -903,7 +863,7 @@ export function SearchEngineDetailScreen() {
         onPress={() => {
           handleTest().catch(() => undefined);
         }}
-        disabled={saving || clearing || deleting || testing}
+        disabled={writeOp != null || testing}
       />
       {testResult == null ? null : (
         <Text style={[styles.testResult, {color: tokens.textSecondary}]}>
@@ -923,8 +883,8 @@ export function SearchEngineDetailScreen() {
           onPress={() => {
             handleSave().catch(() => undefined);
           }}
-          loading={saving}
-          disabled={clearing || deleting || testing}
+          loading={writeOp === 'save'}
+          disabled={writeOp != null || testing}
         />
       }
     >
@@ -947,8 +907,28 @@ export function SearchEngineDetailScreen() {
             tokens={tokens}
             fullWidth
             label="解析并预填"
-            onPress={handleImportCurl}
-            disabled={curlText.trim().length === 0 || saving}
+            onPress={() => {
+              const parsed = parseCurlCommand(curlText);
+              if (!parsed.ok) {
+                const reason = coreT(parsed.error.message);
+                showToast(toastMessage('导入失败', reason));
+                return;
+              }
+              const imported = parsed.value;
+              patchDraft({
+                method: imported.method,
+                url: imported.url,
+                headersText: JSON.stringify(imported.headers, null, 2),
+                ...(imported.bodyTemplate == null
+                  ? {}
+                  : {bodyText: imported.bodyTemplate}),
+              });
+              if (imported.apiKey != null) {
+                setApiKeyDraft(imported.apiKey);
+              }
+              showToast('已解析 curl 命令，请补全结果映射后再保存');
+            }}
+            disabled={curlText.trim().length === 0 || writeOp != null}
           />
         </FormSectionCard>
       ) : null}
@@ -976,11 +956,15 @@ export function SearchEngineDetailScreen() {
           <SecondaryButton
             tokens={tokens}
             fullWidth
-            label={clearing ? '清除中…' : '清除已存密钥'}
+            label={writeOp === 'clear' ? '清除中…' : '清除已存密钥'}
             onPress={() => {
-              handleClearKey().catch(() => undefined);
+              void runWrite('clear', async id => {
+                await searchStore.clearEngineKey(id);
+                showToast(`已清除 ${title} API Key`);
+                await load();
+              });
             }}
-            disabled={saving || clearing || deleting || testing}
+            disabled={writeOp != null || testing}
           />
         )}
       </FormSectionCard>
@@ -1020,9 +1004,13 @@ export function SearchEngineDetailScreen() {
               fullWidth
               label="恢复默认模板"
               onPress={() => {
-                handleResetPreset().catch(() => undefined);
+                void runWrite('reset', async id => {
+                  await searchStore.resetPresetOverride(id);
+                  showToast('已恢复默认模板');
+                  await load();
+                });
               }}
-              disabled={saving || clearing || deleting || testing}
+              disabled={writeOp != null || testing}
             />
           ) : null}
         </FormSectionCard>
@@ -1036,9 +1024,9 @@ export function SearchEngineDetailScreen() {
           <SecondaryButton
             tokens={tokens}
             fullWidth
-            label={deleting ? '删除中…' : '删除此自定义引擎'}
+            label={writeOp === 'delete' ? '删除中…' : '删除此自定义引擎'}
             onPress={() => setConfirmDelete(true)}
-            disabled={saving || clearing || deleting || testing}
+            disabled={writeOp != null || testing}
           />
         </FormSectionCard>
       ) : null}
@@ -1063,18 +1051,23 @@ export function SearchEngineDetailScreen() {
               fullWidth
               label="取消"
               onPress={() => setConfirmDelete(false)}
-              disabled={deleting}
+              disabled={writeOp === 'delete'}
             />
           </View>
           <View style={styles.confirmAction}>
             <SecondaryButton
               tokens={tokens}
               fullWidth
-              label={deleting ? '删除中…' : '删除'}
+              label={writeOp === 'delete' ? '删除中…' : '删除'}
               onPress={() => {
-                handleDelete().catch(() => undefined);
+                void runWrite('delete', async id => {
+                  await searchStore.deleteCustomEngine(id);
+                  showToast('已删除自定义引擎');
+                  setConfirmDelete(false);
+                  navigation.goBack();
+                });
               }}
-              disabled={deleting}
+              disabled={writeOp === 'delete'}
             />
           </View>
         </View>

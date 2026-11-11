@@ -16,7 +16,7 @@
  * 保存 / 清除 / 测试互斥（在途期间按钮禁用 + 交错点击直接忽略）。
  */
 import { useCallback, useEffect, useState } from "react";
-import type { SearchConfigDto } from "@shared/ipc-types";
+import type { IpcResult, SearchConfigDto } from "@shared/ipc-types";
 import { coreT } from "@shared/logic/core-i18n";
 import {
   PRESET_ENGINE_TEMPLATES,
@@ -249,25 +249,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     return validated.value;
   };
 
-  const clearKey = async () => {
-    if (busy) return;
-    setClearing(true);
-    setError(undefined);
-    try {
-      const res = await ipcSearchClearEngineKey({ engineId });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
-      }
-      await reload();
-      toastSettingsSuccess("已清除");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setClearing(false); // 异常也不残留互斥态
-    }
-  };
-
+  // nm-style: keep-local — 保存分流 create/自定义/预置三分支，共享 saving 互斥态、
+  // key/baseUrl 草稿与逐 IPC 失败短路；内联进 footer 按钮会拆散互斥与错误回显
   const save = async () => {
     if (busy) return;
     setSaving(true);
@@ -334,6 +317,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     }
   };
 
+  // nm-style: keep-local — 草稿直测共享 busy/testing 互斥态，成功回填 testResult、
+  // 失败回显 error；内联进测试按钮会拆散测试状态机
   const runTest = async () => {
     if (busy) return;
     const template = readTemplate();
@@ -364,71 +349,26 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     }
   };
 
-  const resetTemplate = async () => {
-    if (busy) return;
-    setSaving(true);
+  /** busy 互斥的短写模板（清除/恢复默认/删除共用）：失败置页内 error 返回 false；成功回读后 toast，flag 复位交 finally。 */
+  const runWrite = async (setFlag: (on: boolean) => void, action: (id: string) => Promise<IpcResult<void>>, success: string): Promise<boolean> => {
+    if (busy) return false;
+    setFlag(true);
     setError(undefined);
     try {
-      const res = await ipcSearchResetPresetOverride({ engineId });
+      const res = await action(engineId);
       if (!res.ok) {
         setError(res.error.message);
-        return;
+        return false;
       }
       await reload();
-      toastSettingsSuccess("已恢复默认");
+      toastSettingsSuccess(success);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
-      setSaving(false);
+      setFlag(false);
     }
-  };
-
-  const removeEngine = async () => {
-    if (busy) return;
-    setSaving(true);
-    setError(undefined);
-    try {
-      const res = await ipcSearchDeleteCustomEngine({ engineId });
-      // 失败也收起确认框：错误经页内 SettingsStatus 展示，避免弹窗挡住原因
-      setDeleteOpen(false);
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
-      }
-      toastSettingsSuccess("已删除");
-      nav.pop();
-    } catch (e) {
-      setDeleteOpen(false);
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /** curl 导入：解析失败整体拒绝（toast 原因），成功预填 method/URL/headers/body 与识别出的密钥。 */
-  const importCurl = () => {
-    const parsed = parseCurlCommand(curlText);
-    if (!parsed.ok) {
-      toastSettingsError(coreT(parsed.error.message));
-      return;
-    }
-    const draft = parsed.value;
-    setForm({ ...form, method: draft.method, url: draft.url, headersJson: JSON.stringify(draft.headers, null, 2), bodyTemplate: draft.bodyTemplate ?? form.bodyTemplate });
-    if (draft.apiKey != null) setApiKey(draft.apiKey);
-    setImportedKey(draft.apiKey != null);
-    toastSettingsSuccess("已导入 curl 配置，请补全结果映射");
-  };
-
-  /** 注入方式快捷选择：把选中的 header（值含 `{{apiKey}}`）写进 Headers JSON。 */
-  const applyInjection = (label: string) => {
-    const option = INJECTION_OPTIONS.find((item) => item.label === label);
-    if (option == null) return;
-    const headers = parseHeaders(form.headersJson);
-    if (typeof headers === "string") {
-      toastSettingsError(headers);
-      return;
-    }
-    setForm({ ...form, headersJson: JSON.stringify({ ...headers, [option.header]: option.value }, null, 2) });
   };
 
   // 编辑态但库里已找不到（如自定义实例被删）：回到列表页
@@ -508,7 +448,22 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
             <SettingsField label="curl 命令">
               <textarea rows={5} value={curlText} onChange={(e) => setCurlText(e.target.value)} placeholder={"curl -X POST https://api.example.com/search -H 'Authorization: Bearer sk-xxx' -d '{\"query\":\"{{query}}\"}'"} />
             </SettingsField>
-            <Button variant="secondary" onClick={importCurl}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                // curl 导入：解析失败整体拒绝；成功一次回填表单/密钥/识别提示
+                const parsed = parseCurlCommand(curlText);
+                if (!parsed.ok) {
+                  toastSettingsError(coreT(parsed.error.message));
+                  return;
+                }
+                const draft = parsed.value;
+                setForm({ ...form, method: draft.method, url: draft.url, headersJson: JSON.stringify(draft.headers, null, 2), bodyTemplate: draft.bodyTemplate ?? form.bodyTemplate });
+                if (draft.apiKey != null) setApiKey(draft.apiKey);
+                setImportedKey(draft.apiKey != null);
+                toastSettingsSuccess("已导入 curl 配置，请补全结果映射");
+              }}
+            >
               解析并预填
             </Button>
             {importedKey ? <p className="settings-hint">已识别到密钥，已填入下方 API Key 输入框；保存后写入安全密钥库。</p> : null}
@@ -533,7 +488,20 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           ) : null}
           {isCreate || customDef != null ? (
             <SettingsField label="密钥注入方式（快捷写入 Headers，模板里保留 {{apiKey}} 占位符）">
-              <select value="" onChange={(e) => applyInjection(e.target.value)}>
+              <select
+                value=""
+                onChange={(e) => {
+                  // 注入方式快捷选择：先解析现有 Headers（失败短路），再按选中项写回
+                  const option = INJECTION_OPTIONS.find((item) => item.label === e.target.value);
+                  if (option == null) return;
+                  const headers = parseHeaders(form.headersJson);
+                  if (typeof headers === "string") {
+                    toastSettingsError(headers);
+                    return;
+                  }
+                  setForm({ ...form, headersJson: JSON.stringify({ ...headers, [option.header]: option.value }, null, 2) });
+                }}
+              >
                 <option value="">选择注入方式…</option>
                 {INJECTION_OPTIONS.map((option) => (
                   <option key={option.label} value={option.label}>
@@ -544,7 +512,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
             </SettingsField>
           ) : null}
           {engine?.hasKey === true && !isCreate ? (
-            <Button variant="secondary" disabled={busy} onClick={() => void clearKey()}>
+            <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setClearing, (id) => ipcSearchClearEngineKey({ engineId: id }), "已清除"); }}>
               {clearing ? "清除中…" : "清除密钥"}
             </Button>
           ) : null}
@@ -563,7 +531,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                   {templateOpen ? "收起高级编辑" : "高级编辑"}
                 </Button>
                 {config?.presetOverrides[engineId] === true ? (
-                  <Button variant="secondary" disabled={busy} onClick={() => void resetTemplate()}>
+                  <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认"); }}>
                     恢复默认
                   </Button>
                 ) : null}
@@ -603,7 +571,13 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         confirmLabel="删除"
         danger
         busy={busy}
-        onConfirm={() => void removeEngine()}
+        onConfirm={() => {
+          // 删除走 runWrite：无论成败都收起确认框（错误经页内 SettingsStatus 展示，避免弹窗挡住原因），成功后回列表页
+          void runWrite(setSaving, (id) => ipcSearchDeleteCustomEngine({ engineId: id }), "已删除").then((ok) => {
+            setDeleteOpen(false);
+            if (ok) nav.pop();
+          });
+        }}
         onCancel={() => setDeleteOpen(false)}
       />
     </SettingsPanel>
