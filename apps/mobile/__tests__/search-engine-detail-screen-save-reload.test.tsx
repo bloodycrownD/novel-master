@@ -1,16 +1,22 @@
 /**
- * SearchEngineDetailScreen 保存语义（ui/B-3 迁移，修订轮两级）：
- * 单引擎表单保存失败时 toast 后立即回读（catch 内补 `await load()`），
- * 状态标签反映已生效 configured；key 引擎留空保存拦截提示、不触碰
- * 密钥库（与 desktop 同口径）。
+ * SearchEngineDetailScreen 保存语义（web-search-curl T-U3/T-U4，动态清单版）：
+ * 详情页经 `getSearchConfigStore(runtime)` 直接消费 core store 方法，本套件
+ * 锁 key 分支的既有语义（与 desktop 同口径）：
  *
- * 照 search-engines-screen-save-reload.test.tsx（旧列表单屏版，已删）的
- * TestRenderer 直测风格：输入框 / 保存按钮 / 状态标签 mock 成带标记的
- * 可交互节点，树文本断言。
+ * - 标题 override 用配置读模型里的引擎名；
+ * - 保存失败 toast 后立即回读（catch 内补 `await load()`），状态标签反映已生效
+ *   configured；
+ * - 保存成功 toast 且标签同步 set；
+ * - 需 key 的预置引擎留空保存：拦截提示，不触碰密钥库、不回读。
+ *
+ * 照 search-engines-screen-reorder.test.tsx 的 TestRenderer 直测风格：输入框 /
+ * 保存按钮 / 状态标签 mock 成带标记的可交互节点，树文本断言；store mock 扩到
+ * core `SearchConfigStore` 全方法（本套件只驱动 key 分支）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import type {SearchConfigPublic} from '@novel-master/core';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -21,8 +27,10 @@ jest.mock('@/theme/ThemeProvider', () => ({
       textSecondary: '#666',
       textTertiary: '#999',
       border: '#ccc',
+      borderLight: '#ddd',
       primary: '#007aff',
       danger: '#f00',
+      success: '#0a0',
     },
   }),
 }));
@@ -31,22 +39,20 @@ const mockShowToast = jest.fn();
 const mockGoBack = jest.fn();
 const mockSetStackOverride = jest.fn();
 
-// 路由参数：bocha（key 引擎表单分支）。
+// 路由参数：bocha（需 key 的预置引擎表单分支）。
 jest.mock('@react-navigation/native', () => {
   const mockReact = require('react');
   return {
-    // 挂载时执行一次，对齐真实 focus 语义。
+    // 依赖数组跟随回调身份：标题变化后重设 override，对齐 focus 语义。
     useFocusEffect: (cb: () => void | (() => void)) => {
-      mockReact.useEffect(cb, []);
+      mockReact.useEffect(cb, [cb]);
     },
     useRoute: () => ({params: {engineId: 'bocha'}}),
     useNavigation: () => ({goBack: mockGoBack}),
   };
 });
 
-// 顶栏 override：详情页标题用引擎名。
 jest.mock('@/navigation/HeaderContext', () => ({
-  useHeaderContext: () => ({setStackOverride: mockSetStackOverride}),
   useStackOverrideSetter: () => mockSetStackOverride,
 }));
 
@@ -61,6 +67,18 @@ jest.mock('@/components/provider/ApiKeyStatusTag', () => {
   return {
     ApiKeyStatusTag: (props: {status: 'set' | 'not set'}) =>
       mockReact.createElement(Text, {tag: props.status}, `tag:${props.status}`),
+  };
+});
+
+// 弹窗骨架：visible 时才渲染 children（详情页删除确认默认关闭，无需真实 Modal）。
+jest.mock('@/components/ui/ModalShell', () => {
+  const mockReact = require('react');
+  const {Text} = require('react-native');
+  return {
+    ModalShell: (props: {visible: boolean; children?: React.ReactNode}) =>
+      props.visible
+        ? mockReact.createElement(Text, null, props.children ?? null)
+        : null,
   };
 });
 
@@ -113,6 +131,7 @@ jest.mock('@/components/form/StickyFormFooter', () => {
 });
 
 jest.mock('@/components/ui/Buttons', () => ({
+  PrimaryButton: () => null,
   SecondaryButton: () => null,
 }));
 
@@ -129,19 +148,27 @@ jest.mock('@/components/form/FormTextInput', () => {
   };
 });
 
-// searchConfig store mock：readConfig 的 bocha 状态随 saveEngineKey 调用
-// 次数动态变化，模拟「key 已落库生效」状态。
+// searchConfig store（core `SearchConfigStore` 形状）：readConfig 的 bocha
+// hasKey 随 saveEngineKey 调用次数动态变化，模拟「key 已落库生效」状态；
+// 其余写方法只需存在（本套件不驱动）。
+const mockReadConfig = jest.fn();
 const mockSaveEngineKey = jest.fn();
 const mockClearEngineKey = jest.fn();
-const mockSetSearxngBaseUrl = jest.fn();
-const mockReadConfig = jest.fn();
 
 const mockRuntime = {
   searchConfig: {
     readConfig: (...args: unknown[]) => mockReadConfig(...args),
     saveEngineKey: (...args: unknown[]) => mockSaveEngineKey(...args),
     clearEngineKey: (...args: unknown[]) => mockClearEngineKey(...args),
-    setSearxngBaseUrl: (...args: unknown[]) => mockSetSearxngBaseUrl(...args),
+    setEnabled: jest.fn(),
+    setEngineOrder: jest.fn(),
+    setEngineBaseUrl: jest.fn(),
+    createCustomEngine: jest.fn(),
+    updateCustomEngine: jest.fn(),
+    deleteCustomEngine: jest.fn(),
+    updatePresetOverride: jest.fn(),
+    resetPresetOverride: jest.fn(),
+    testEngine: jest.fn(),
   },
 };
 
@@ -154,6 +181,27 @@ import {SearchEngineDetailScreen} from '@/screens/stack/SearchEngineDetailScreen
 // 自定义 props 复制到内部嵌套节点，按 props findAll 会重复匹配）。
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+
+/** 动态读模型 fixture：bocha 的 hasKey 跟随 saveEngineKey 调用次数。 */
+function makeConfig(): SearchConfigPublic {
+  return {
+    engines: [
+      {
+        id: 'bocha',
+        name: '博查搜索',
+        enabled: true,
+        needsKey: true,
+        hasKey: mockSaveEngineKey.mock.calls.length > 0,
+        needsBaseUrl: false,
+        isCustom: false,
+        paramHint: '博查参数',
+      },
+    ],
+    customEngines: [],
+    presetOverrides: {},
+    canRun: [],
+  };
+}
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(
@@ -172,10 +220,6 @@ function treeText(
   return out;
 }
 
-function json(renderer: TestRenderer.ReactTestRenderer) {
-  return treeText(renderer.root);
-}
-
 /** 取 key 输入框（bocha 详情表单仅一个 secureTextEntry 输入框）。 */
 function keyInput(root: TestRenderer.ReactTestInstance) {
   const nodes = root
@@ -190,9 +234,13 @@ function saveFooter(root: TestRenderer.ReactTestInstance) {
 }
 
 async function renderScreen() {
-  let renderer: TestRenderer.ReactTestRenderer;
+  let renderer: TestRenderer.ReactTestRenderer | undefined;
   await act(async () => {
     renderer = TestRenderer.create(<SearchEngineDetailScreen />);
+    // 首轮 load（readConfig → setConfig/setDraft）的 promise 链落定。
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+    }
   });
   return {renderer: renderer!};
 }
@@ -216,36 +264,25 @@ async function tapSave(root: TestRenderer.ReactTestInstance) {
   });
 }
 
-describe('SearchEngineDetailScreen 保存语义（ui/B-3 迁移）', () => {
+describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单）', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
     mockGoBack.mockReset();
     mockSetStackOverride.mockReset();
     mockSaveEngineKey.mockReset().mockResolvedValue(undefined);
     mockClearEngineKey.mockReset().mockResolvedValue(undefined);
-    mockSetSearxngBaseUrl.mockReset().mockResolvedValue(undefined);
-    // bocha 的 configured 跟随 saveEngineKey 调用次数：key 提交后即视为已落库。
-    mockReadConfig.mockReset().mockImplementation(async () => ({
-      engineOrder: ['bocha', 'tavily', 'brave', 'searxng'],
-      searxngBaseUrl: '',
-      engines: {
-        bocha: {configured: mockSaveEngineKey.mock.calls.length > 0},
-        tavily: {configured: false},
-        brave: {configured: false},
-        searxng: {configured: false},
-      },
-    }));
+    mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
   });
 
-  it('详情页标题 override 用引擎名', async () => {
+  it('详情页标题 override 用配置读模型里的引擎名', async () => {
     await renderScreen();
     expect(mockSetStackOverride).toHaveBeenCalledWith({title: 'Bocha'});
   });
 
-  it('B-3: 保存失败后回读，toast 失败且 readConfig 被再次调用', async () => {
+  it('保存失败后回读，toast 失败且 readConfig 被再次调用', async () => {
     mockSaveEngineKey.mockRejectedValueOnce(new Error('盘炸了'));
     const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('tag:not set');
+    expect(treeText(renderer.root)).toContain('tag:not set');
     const readsBefore = mockReadConfig.mock.calls.length;
 
     await typeKey(renderer.root, 'sk-bocha-1');
@@ -264,7 +301,7 @@ describe('SearchEngineDetailScreen 保存语义（ui/B-3 迁移）', () => {
 
     expect(mockShowToast).toHaveBeenCalledTimes(1);
     expect(mockShowToast).toHaveBeenCalledWith('配置已保存');
-    expect(json(renderer)).toContain('tag:set');
+    expect(treeText(renderer.root)).toContain('tag:set');
   });
 
   it('留空保存：拦截并提示，不触碰密钥库、不回读', async () => {

@@ -2496,6 +2496,15 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--text);
 }
 
+/* 列表行内嵌开关（搜索配置：启用/停用与行点击解耦） */
+.settings-list-item__switch {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-left: 1px solid var(--settings-item-border);
+}
+
 /* 智能排序规则列表（SettingsViews SmartSortRulesView，spec D9 拖拽） */
 .smart-sort-rule__drag-handle {
   flex-shrink: 0;

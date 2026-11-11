@@ -15,7 +15,7 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-import type { EngineId, ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
+import type { ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 export interface ResolveChildModelIdResult {
@@ -148,19 +148,29 @@ export interface BuiltinToolAgentsContext {
  * `search` 工具读取的搜索闭包；装配点（runAgentTurn / runChildAgent）
  * 从 `runtime.searchConfig`（SearchConfigStore 工厂装配）注入。
  *
- * 引擎链解析与凭证明文读取全部发生在工具 run 内（resolveEngineChain），
- * 装配期零 IO——与 skills（装配期预算）/ task（装配期名单快照）不同，
- * search 的 description 是静态文案，无需装配期取数。未注入时（CLI 无
- * kkv、旧测试 mock）search 的 run 抛 ToolError（FAILED），工具对 LLM
- * 仍可见。
+ * 两个读取面：
+ * - `resolveEngineChain`：引擎链解析与凭证明文读取全部发生在工具 run 内，
+ *   装配期不预读 key 明文；
+ * - `engineSnapshot`：装配期一次 `readConfig()` 预算的描述快照（照
+ *   `skills.effective` 先例）——工具 description 是同步 lambda，逐引擎参数
+ *   说明只能在此预算。口径与串行链同款：enabled ∩ 配置完整（key 存在性经
+ *   secretStore.has），按 engineOrderV2 序，回合内改配置下回合生效。
+ *
+ * 未注入时（CLI 无 kkv、旧测试 mock）search 的 run 抛 ToolError（FAILED），
+ * 工具对 LLM 仍可见；description 退化为通用段（无逐引擎段）。
  */
 export interface BuiltinToolSearchContext {
   /**
-   * 解析本次调用的串行引擎链（engineOrder 优先级序；显式 inputEngine
-   * 时从该引擎起截取；只含 configured 引擎；全无返回空数组，工具回落
-   * 未配置提示）。
+   * 解析本次调用的串行引擎链（engineOrderV2 优先级序；显式 inputEngine
+   * 时钉链首或沿序顺位回落；只含 enabled ∩ 配置完整的引擎；链空返回
+   * 空数组，工具回落中性配置指引文案）。
    */
-  readonly resolveEngineChain: (inputEngine?: EngineId) => Promise<ResolvedEngineConfig[]>;
+  readonly resolveEngineChain: (inputEngine?: string) => Promise<ResolvedEngineConfig[]>;
+  /**
+   * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 装配期防御性截断
+   * 500 字符——保存路径已硬校验，此为第二道）。空数组 = 当前没有可跑引擎。
+   */
+  readonly engineSnapshot: readonly { readonly id: string; readonly name: string; readonly paramHint: string }[];
 }
 
 /** 注入到内置工具 `run()` 的运行时上下文。 */

@@ -222,28 +222,34 @@ export type {
  * desktop / mobile runtime 用 `createSearchConfigStore` 工厂包
  * `kkv + secretStore` 装配到 `AgentTurnRuntimePort.searchConfig`。
  *
- * `ENGINE_IDS` / `KEY_ENGINE_IDS` 是引擎清单单一真源（ui/C-1）：双端
- * 配置页的清单/顺序一律从这两个常量派生，不再各自手工副本。
+ * 引擎实例 id 已动态化（六预置 ∪ `duckduckgo` ∪ customEngines 现存 id）：
+ * 静态清单 `ENGINE_IDS` / `KEY_ENGINE_IDS` 与 `EngineId` / `KeyEngineId`
+ * 收窄类型已退役，id 与顺序一律读 `readConfig()`。模板校验走
+ * `validateSearchEngineTemplate`，curl 导入走 `parseCurlCommand`（双端共用），
+ * 出厂模板常量 `PRESET_ENGINE_TEMPLATES` 供预置模板编辑表单预填与恢复默认。
  */
-export {
-  ENGINE_IDS,
-  KEY_ENGINE_IDS,
-} from "./domain/tool/builtin/search/types.js";
 export type {
-  EngineId,
-  KeyEngineId,
   SearchResponse,
   SearchResult,
-  SearchRecency,
   SearchToolOptions,
   SearchOversizeOutput,
   ResolvedEngineConfig,
+  SearchEngineFieldMap,
+  SearchEngineEnvelope,
+  SearchEngineTemplate,
+  CustomEngineDef,
 } from "./domain/tool/builtin/search/types.js";
+export { validateSearchEngineTemplate } from "./domain/tool/builtin/search/types.js";
 export type {
   SearchConfigPublic,
   SearchConfigStore,
   SearchConfigDeps,
-  SearchEngineStatus,
+  CreateCustomEngineInput,
+  UpdateCustomEngineInput,
+  TestEngineDraft,
+  TestEngineInput,
+  TestEngineSuccess,
+  TestEngineFailure,
 } from "./domain/tool/builtin/search/search-config.js";
 export {
   SEARCH_KKV_MODULE,
@@ -252,6 +258,12 @@ export {
   readSearchConfig,
   resolveEngineChain,
 } from "./domain/tool/builtin/search/search-config.js";
+export { PRESET_ENGINE_TEMPLATES } from "./domain/tool/builtin/search/preset-templates.js";
+export { parseCurlCommand } from "./domain/tool/builtin/search/curl-import.js";
+export type {
+  CurlCommandDraft,
+  CurlParseError,
+} from "./domain/tool/builtin/search/curl-import.js";
 
 /**
  * 基础序列化能力：供跨端配置读写共用。

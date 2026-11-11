@@ -1,52 +1,27 @@
 /**
- * 搜索引擎配置：薄封装 `runtime.searchConfig`（core `createSearchConfigStore`
- * 工厂在 create-mobile-runtime 装配，闭包注入 kkv + secretStore）。
+ * 搜索引擎配置入口：`getSearchConfigStore(runtime)` 取 core
+ * `createSearchConfigStore` 工厂在 create-mobile-runtime 装配好的存储
+ * （闭包注入 kkv + secretStore），UI 直接调 store 方法
+ * （`readConfig` / `setEnabled` / `setEngineOrder` / `createCustomEngine` /
+ * `testEngine` 等），不再在本模块造转手便捷函数。
  *
  * 凭证安全口径与 core 侧一致：API key 明文只经 SKSP（ref
- * `search/{engineId}/apiKey`）写入，本模块与 UI 全程只消费
- * `configured: boolean` 状态，不读取、不回显明文——形态照
- * cloud-sync-config.store 的 secretKeySet 先例。
+ * `search/{engineId}/apiKey`）写入，本模块与 UI 全程只消费读模型里的
+ * `hasKey` 状态，不读取、不回显明文——形态照 cloud-sync-config.store 的
+ * secretKeySet 先例。
  *
  * @module services/search-config.store
  */
-import type {
-  EngineId,
-  KeyEngineId,
-  SearchConfigPublic,
-  SearchConfigStore,
-} from '@novel-master/core';
+import type {SearchConfigStore} from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
-export type {EngineId, KeyEngineId, SearchConfigPublic, SearchConfigStore};
-
 /**
- * 需要 API key 的引擎（searxng 走自托管 baseUrl，无 key）。
- * 清单真源是 core 的 `KEY_ENGINE_IDS`（ui/C-1 收敛），此处仅重导出
- * 供 UI 使用，不再维护本地副本。
+ * 取 runtime 装配好的搜索配置存储。
+ * nm-style: keep-public — spec §7/§8 双端 UI 访问搜索配置 store 的唯一入口
+ * （闭包注入 kkv + secretStore，UI 不感知依赖装配）。
  */
-export {KEY_ENGINE_IDS} from '@novel-master/core';
-
-/** 取 runtime 装配好的搜索配置存储（读写入口统一收口到本模块）。 */
 export function getSearchConfigStore(
   runtime: MobileNovelMasterRuntime,
 ): SearchConfigStore {
   return runtime.searchConfig;
-}
-
-/** 读取对外搜索配置（便捷入口；语义同 store.readConfig）。 */
-export async function readSearchEngineConfig(
-  runtime: MobileNovelMasterRuntime,
-): Promise<SearchConfigPublic> {
-  return getSearchConfigStore(runtime).readConfig();
-}
-
-/**
- * 保存引擎优先级顺序（便捷入口；语义同 store.setEngineOrder）。
- * order 须为全部引擎（ENGINE_IDS）的合法排列，非法由 core 校验抛错。
- */
-export async function setSearchEngineOrder(
-  runtime: MobileNovelMasterRuntime,
-  order: readonly EngineId[],
-): Promise<void> {
-  return getSearchConfigStore(runtime).setEngineOrder(order);
 }

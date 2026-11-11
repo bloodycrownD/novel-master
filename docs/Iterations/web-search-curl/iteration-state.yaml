@@ -1,0 +1,25 @@
+# web-search-curl 开发 DAG（code-dev-loop 编排状态，主代理维护）
+spec_path: docs/Iterations/web-search-curl/spec.md
+prd_path: docs/Iterations/web-search-curl/prd.md
+worktree: D:/worktree/web-search-curl
+branch: feat/web-search-curl
+base_sha: 9d912b6af
+dag_version: 1
+wave_plan:
+  - [impl-step1-template-core]
+  - [impl-step2-config-store]
+  - [impl-step3-dispatch]
+  - [impl-step4-tool-surface]
+  - [impl-step5-exports-shim]
+  - [cr-core, impl-step6-desktop-ui, impl-step7-mobile-ui]   # 读写集不相交：cr-core 只读 core，6/7 各写各端
+  - [impl-tests-new-core, impl-tests-rewrite-core, impl-tests-ui]
+  - [gate-all-tests, fix-loop]
+  - [style-pass]
+  - [cr-final, impl-step9-docs]
+node_status: {}
+open_must_fix: []
+spec_deviations: []
+notes: >
+  gate 命令一律 npm run --prefix D:/worktree/web-search-curl/<pkg> <script>（world.run cwd 固定主仓）；
+  check-style.mjs 必须 cd 到 worktree 跑（基于 cwd 的 git 检测）；qa 口径见 spec「详细实现步骤」头注
+  （Step 2-5 core 绿即可，双端红容忍至 Step 6/7，Step 8 全仓收口）。

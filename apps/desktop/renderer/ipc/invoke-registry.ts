@@ -119,10 +119,18 @@ import {
   type SkillsUpdateInfoRequest,
   type SkillsWriteRequest,
   type SearchConfigDto,
+  type SearchCreateCustomEngineRequest,
+  type SearchDeleteCustomEngineRequest,
+  type SearchResetPresetOverrideRequest,
   type SearchSaveEngineKeyRequest,
   type SearchClearEngineKeyRequest,
-  type SearchSetSearxngBaseUrlRequest,
+  type SearchSetEnabledRequest,
+  type SearchSetEngineBaseUrlRequest,
   type SearchSetEngineOrderRequest,
+  type SearchTestEngineRequest,
+  type SearchTestEngineResultDto,
+  type SearchUpdateCustomEngineRequest,
+  type SearchUpdatePresetOverrideRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -680,14 +688,18 @@ export function createInvokeClient(invoke: InvokeFn) {
       SearchClearEngineKeyRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
-    ipcSearchSetSearxngBaseUrl: withReq<
-      SearchSetSearxngBaseUrlRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL),
     ipcSearchSetEngineOrder: withReq<
       SearchSetEngineOrderRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
+    ipcSearchSetEnabled: withReq<SearchSetEnabledRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SET_ENABLED),
+    ipcSearchSetEngineBaseUrl: withReq<SearchSetEngineBaseUrlRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL),
+    ipcSearchCreateCustomEngine: withReq<SearchCreateCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE),
+    ipcSearchUpdateCustomEngine: withReq<SearchUpdateCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE),
+    ipcSearchDeleteCustomEngine: withReq<SearchDeleteCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE),
+    ipcSearchUpdatePresetOverride: withReq<SearchUpdatePresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE),
+    ipcSearchResetPresetOverride: withReq<SearchResetPresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE),
+    ipcSearchTestEngine: withReq<SearchTestEngineRequest, IpcResult<SearchTestEngineResultDto>>(invoke, IPC_CHANNELS.SEARCH_TEST_ENGINE),
     ipcShellMenuPopup: withReq<
       {
         menuId: 'file' | 'edit' | 'view' | 'window' | 'help';

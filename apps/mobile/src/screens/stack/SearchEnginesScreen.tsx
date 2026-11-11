@@ -1,30 +1,34 @@
 /**
- * 搜索配置列表页（修订轮两级结构）：按 engineOrder 顺序列出全部引擎（ENGINE_IDS） +
- * 配置状态标签；行菜单上移/下移调整串行链优先级（首位上移/末位下移
- * 禁用，照 ProvidersScreen 的 BottomSheetMenu 先例）；点击行进详情页。
+ * 搜索配置列表页：全部已知引擎（六预置 + 自定义实例 + DDG）按
+ * `readConfig().engines` 动态渲染 + 行内启用开关 + 行菜单（上移/下移/
+ * 删除自定义实例）+ 底部「新建自定义引擎」入口；点击行进详情页。
  *
- * 读写经 `runtime.searchConfig`（core `createSearchConfigStore` 装配）：
- * 对外状态只显 configured 标签，不回显 key 明文。列表页不留长说明文案，
- * 引擎优先级 / 自动降级 / 密钥安全三段使用说明收进标题栏「?」帮助弹窗。
+ * 读写直接经 `getSearchConfigStore(runtime)`（core `createSearchConfigStore`
+ * 装配）：对外状态只读配置读模型，不回显 key 明文。列表页不留长说明文案，
+ * 开关语义 / 串行降级 / 模板说明 / 测试消耗配额 / 密钥安全收进标题栏
+ * 「?」帮助弹窗。
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {EngineId} from '@novel-master/core';
+import type {SearchConfigPublic} from '@novel-master/core';
 import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
+import {BuiltinTag} from '@/components/provider/BuiltinTag';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '@/components/ui/ConfigListCard';
 import {HelpIcon} from '@/components/icons/TabIcons';
 import {ModalShell} from '@/components/ui/ModalShell';
+import {SecondaryButton} from '@/components/ui/Buttons';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -32,43 +36,17 @@ import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
-import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {getSearchConfigStore} from '@/services/search-config.store';
 import {
-  readSearchEngineConfig,
-  setSearchEngineOrder,
-} from '@/services/search-config.store';
+  CUSTOM_ENGINE_HINT,
+  ENGINE_HINTS,
+  engineTitle,
+} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-/** 引擎显示名（行标题 / 详情页标题共用）。 */
-export const ENGINE_LABELS: Record<EngineId, string> = {
-  bocha: 'Bocha',
-  tavily: 'Tavily',
-  brave: 'Brave',
-  searxng: 'SearXNG',
-  duckduckgo: 'DuckDuckGo',
-};
-
-/** 行副标题短语（计费/部署口径）；详情页表单卡片 hint 用独立短文案。 */
-export const ENGINE_HINTS: Record<EngineId, string> = {
-  bocha: '按量计费 · 中文检索',
-  tavily: '按量计费 · 国际',
-  brave: '按量计费 · 国际',
-  searxng: '自托管 · 免费',
-  duckduckgo: '内置',
-};
-
-/** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），用主题色
- * 胶囊标「内置」，尺寸/形状与 ApiKeyStatusTag 协调、仅换主题色。 */
-export function BuiltinTag({tokens}: {tokens: ThemeTokens}) {
-  return (
-    <View style={[styles.builtinTag, {backgroundColor: `${tokens.primary}1A`}]}>
-      <Text style={[styles.builtinTagText, {color: tokens.primary}]}>内置</Text>
-    </View>
-  );
-}
+type SearchEngineEntry = SearchConfigPublic['engines'][number];
 
 /** 帮助弹窗一段说明：小标题 + 一句话。 */
 function HelpSection({
@@ -82,7 +60,9 @@ function HelpSection({
 }) {
   return (
     <View style={styles.helpSection}>
-      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
+      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>
+        {title}
+      </Text>
       <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>
         {body}
       </Text>
@@ -90,13 +70,7 @@ function HelpSection({
   );
 }
 
-/** 列表行数据：engineOrder 序 + 单引擎配置状态。 */
-interface SearchEngineRow {
-  engineId: EngineId;
-  configured: boolean;
-}
-
-const EMPTY_ROWS: SearchEngineRow[] = [];
+const EMPTY_ROWS: readonly SearchEngineEntry[] = [];
 
 export function SearchEnginesScreen() {
   const {tokens} = useTheme();
@@ -106,14 +80,21 @@ export function SearchEnginesScreen() {
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
   /** 行菜单当前指向的引擎（undefined = 收起）。 */
-  const [menuEngineId, setMenuEngineId] = useState<EngineId | undefined>();
+  const [menuEngineId, setMenuEngineId] = useState<string | undefined>();
   /** 排序写库进行中（互斥连点）。 */
   const [moving, setMoving] = useState(false);
+  /** 开关写库进行中的引擎 id（互斥连点）。 */
+  const [togglingId, setTogglingId] = useState<string | undefined>();
+  /** 待确认删除的自定义实例（undefined = 弹窗收起）。 */
+  const [pendingDelete, setPendingDelete] = useState<string | undefined>();
+  /** 删除写库进行中。 */
+  const [deleting, setDeleting] = useState(false);
   /** 使用说明弹窗开关（标题栏「?」按钮）。 */
   const [helpVisible, setHelpVisible] = useState(false);
 
   const dismissAllOverlays = useCallback(() => {
     setMenuEngineId(undefined);
+    setPendingDelete(undefined);
     setHelpVisible(false);
   }, []);
 
@@ -135,49 +116,82 @@ export function SearchEnginesScreen() {
     }, [setStackOverride, tokens.text]),
   );
 
-  const {rows, loading, error, reload} = useFocusListReload({
-    fetcher: useCallback(async () => {
-      const config = await readSearchEngineConfig(runtime);
-      return config.engineOrder.map(engineId => ({
-        engineId,
-        configured: config.engines[engineId].configured,
-      }));
-    }, [runtime]),
+  const {rows, loading, error, reload, setRows} = useFocusListReload({
+    fetcher: useCallback(
+      async () => (await getSearchConfigStore(runtime).readConfig()).engines,
+      [runtime],
+    ),
     fallbackValue: EMPTY_ROWS,
   });
 
-  /** 上移（delta=-1）/ 下移（delta=+1）：交换相邻位后整单写库并重读。 */
-  const moveEngine = useCallback(
-    async (engineId: EngineId, delta: -1 | 1) => {
-      if (moving) {
-        return;
-      }
-      const order = rows.map(row => row.engineId);
-      const index = order.indexOf(engineId);
-      const target = index + delta;
-      if (index < 0 || target < 0 || target >= order.length) {
-        return;
-      }
-      [order[index], order[target]] = [order[target], order[index]];
-      setMoving(true);
-      try {
-        await setSearchEngineOrder(runtime, order);
-        // 重读刷新：engineOrder 与 configured 状态以库内新值为准。
-        await reload({silent: true});
-      } catch (cause) {
-        showToast(toastMessage('调整顺序失败', cause));
-      } finally {
-        setMoving(false);
-      }
-    },
-    [moving, rows, runtime, reload, showToast],
-  );
+  /** 行开关：乐观翻转 + 失败回滚（开关只动 enabledEngines，与 key 解耦）。 */
+  const setEnabled = async (engineId: string, on: boolean) => {
+    if (togglingId != null) {
+      return;
+    }
+    setTogglingId(engineId);
+    setRows(current =>
+      current.map(row => (row.id === engineId ? {...row, enabled: on} : row)),
+    );
+    try {
+      await getSearchConfigStore(runtime).setEnabled(engineId, on);
+    } catch (cause) {
+      setRows(current =>
+        current.map(row =>
+          row.id === engineId ? {...row, enabled: !on} : row,
+        ),
+      );
+      showToast(toastMessage('切换启用状态失败', cause));
+    } finally {
+      setTogglingId(undefined);
+    }
+  };
 
-  // 菜单项禁用态：首位上移 / 末位下移不可点（置灰保留，照 ProvidersScreen 先例）。
-  const menuIndex =
-    menuEngineId != null
-      ? rows.findIndex(row => row.engineId === menuEngineId)
-      : -1;
+  /** 上移（delta=-1）/ 下移（delta=+1）：交换相邻位后整单写库并重读。 */
+  const moveEngine = async (engineId: string, delta: -1 | 1) => {
+    if (moving) {
+      return;
+    }
+    const order = rows.map(row => row.id);
+    const index = order.indexOf(engineId);
+    const target = index + delta;
+    if (index < 0 || target < 0 || target >= order.length) {
+      return;
+    }
+    [order[index], order[target]] = [order[target], order[index]];
+    setMoving(true);
+    try {
+      await getSearchConfigStore(runtime).setEngineOrder(order);
+      // 重读刷新：顺序与各引擎状态以库内新值为准。
+      await reload({silent: true});
+    } catch (cause) {
+      showToast(toastMessage('调整顺序失败', cause));
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  /** 删除自定义实例：core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。 */
+  const deleteEngine = async (engineId: string) => {
+    if (deleting) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await getSearchConfigStore(runtime).deleteCustomEngine(engineId);
+      showToast('已删除自定义引擎');
+      setPendingDelete(undefined);
+      await reload({silent: true});
+    } catch (cause) {
+      showToast(toastMessage('删除失败', cause));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const menuRow = rows.find(row => row.id === menuEngineId);
+  const menuIndex = menuRow == null ? -1 : rows.indexOf(menuRow);
+  const deleteRow = rows.find(row => row.id === pendingDelete);
 
   return (
     <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
@@ -193,46 +207,92 @@ export function SearchEnginesScreen() {
       ) : (
         <FlatList
           data={rows}
-          keyExtractor={item => item.engineId}
+          keyExtractor={item => item.id}
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
-          renderItem={({item}) => (
-            <ConfigListCard
-              tokens={tokens}
-              onPress={() =>
-                navigation.navigate('SearchEngineDetail', {
-                  engineId: item.engineId,
-                })
-              }
-              title={ENGINE_LABELS[item.engineId]}
-              subtitle={ENGINE_HINTS[item.engineId]}
-              trailingMeta={
-                item.engineId === 'duckduckgo' ? (
-                  <BuiltinTag tokens={tokens} />
-                ) : (
-                  <ApiKeyStatusTag
-                    status={item.configured ? 'set' : 'not set'}
-                    tokens={tokens}
-                  />
-                )
-              }
-              onMenuPress={() => setMenuEngineId(item.engineId)}
-            />
-          )}
+          renderItem={({item}) => {
+            const hint = ENGINE_HINTS[item.id] ?? CUSTOM_ENGINE_HINT;
+            const issues = [
+              ...(item.enabled ? [] : ['已关闭']),
+              ...(item.needsKey && !item.hasKey ? ['未配置密钥'] : []),
+              ...(item.needsBaseUrl && item.baseUrl == null
+                ? ['未配置实例地址']
+                : []),
+            ];
+            return (
+              <ConfigListCard
+                tokens={tokens}
+                onPress={() =>
+                  navigation.navigate('SearchEngineDetail', {
+                    engineId: item.id,
+                  })
+                }
+                title={engineTitle(item.id, item.name)}
+                subtitle={
+                  issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`
+                }
+                trailingMeta={
+                  <View style={styles.rowMeta}>
+                    {item.id === 'duckduckgo' ? (
+                      <BuiltinTag tokens={tokens} />
+                    ) : item.needsKey ? (
+                      <ApiKeyStatusTag
+                        status={item.hasKey ? 'set' : 'not set'}
+                        tokens={tokens}
+                      />
+                    ) : item.needsBaseUrl ? (
+                      <ApiKeyStatusTag
+                        status={item.baseUrl == null ? 'not set' : 'set'}
+                        tokens={tokens}
+                      />
+                    ) : null}
+                    <Switch
+                      value={item.enabled}
+                      onValueChange={next => {
+                        setEnabled(item.id, next).catch(() => undefined);
+                      }}
+                      disabled={togglingId != null || deleting}
+                      trackColor={{false: tokens.border, true: tokens.primary}}
+                    />
+                  </View>
+                }
+                onMenuPress={() => setMenuEngineId(item.id)}
+              />
+            );
+          }}
         />
       )}
+      <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
+        <SecondaryButton
+          tokens={tokens}
+          fullWidth
+          label="新建自定义引擎"
+          onPress={() => navigation.navigate('SearchEngineDetail')}
+          disabled={deleting}
+        />
+      </View>
       <BottomSheetMenu
         visible={menuEngineId != null}
-        title={menuEngineId != null ? ENGINE_LABELS[menuEngineId] : undefined}
+        title={menuRow && engineTitle(menuRow.id, menuRow.name)}
         items={[
-          {label: '上移', action: 'up', disabled: menuIndex <= 0},
+          {label: '上移', action: 'up', disabled: menuIndex <= 0 || moving},
           {
             label: '下移',
             action: 'down',
-            disabled: menuIndex < 0 || menuIndex >= rows.length - 1,
+            disabled: menuIndex < 0 || menuIndex >= rows.length - 1 || moving,
           },
+          ...(menuRow?.isCustom === true
+            ? [
+                {
+                  label: '删除',
+                  action: 'delete',
+                  danger: true,
+                  disabled: moving || deleting,
+                },
+              ]
+            : []),
         ]}
         onClose={() => setMenuEngineId(undefined)}
         onSelect={action => {
@@ -245,10 +305,56 @@ export function SearchEnginesScreen() {
             moveEngine(engineId, -1).catch(() => undefined);
           } else if (action === 'down') {
             moveEngine(engineId, 1).catch(() => undefined);
+          } else if (action === 'delete') {
+            setPendingDelete(engineId);
           }
         }}
       />
-      {/* 使用说明弹窗：三段短文案（优先级 / 降级 / 密钥安全），无输入不避键盘。 */}
+      {/* 删除确认：自定义实例的模板 / 密钥 / 排序项一并清除，不可撤销。 */}
+      <ModalShell
+        visible={pendingDelete != null}
+        onClose={() => setPendingDelete(undefined)}
+        variant="center"
+        animationType="fade"
+        panelStyle={styles.helpPanel}
+      >
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>
+          删除自定义引擎
+        </Text>
+        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>
+          {pendingDelete == null
+            ? ''
+            : `「${engineTitle(
+                pendingDelete,
+                deleteRow?.name ?? pendingDelete,
+              )}」的模板配置与已存密钥会一并清除，此操作不可撤销。`}
+        </Text>
+        <View style={styles.confirmActions}>
+          <View style={styles.confirmAction}>
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label="取消"
+              onPress={() => setPendingDelete(undefined)}
+              disabled={deleting}
+            />
+          </View>
+          <View style={styles.confirmAction}>
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label={deleting ? '删除中…' : '删除'}
+              onPress={() => {
+                if (pendingDelete != null) {
+                  deleteEngine(pendingDelete).catch(() => undefined);
+                }
+              }}
+              disabled={deleting}
+            />
+          </View>
+        </View>
+      </ModalShell>
+      {/* 使用说明弹窗：开关 / 优先级 / 模板 / 测试配额 / 密钥安全，无输入不避键盘。 */}
       <ModalShell
         visible={helpVisible}
         onClose={() => setHelpVisible(false)}
@@ -259,13 +365,23 @@ export function SearchEnginesScreen() {
         <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
         <HelpSection
           tokens={tokens}
-          title="引擎优先级"
-          body="列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兜底（无需密钥）。"
+          title="启用开关"
+          body="只有打开开关的引擎参与搜索；默认仅内置 DuckDuckGo 启用。关闭全部引擎后搜索会返回提示，不会偷偷兜底。"
         />
         <HelpSection
           tokens={tokens}
-          title="自动降级"
-          body="请求失败（如密钥失效、超时）时自动尝试下一个已配置引擎，直到成功。"
+          title="引擎优先级"
+          body="列表顺序即搜索时尝试引擎的顺序；请求失败（如密钥失效、超时）自动尝试下一个已启用且配置完整的引擎。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="模板与自定义引擎"
+          body="预置引擎的请求模板可在详情页高级区编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="测试消耗配额"
+          body="详情页的「测试搜索」会真实请求引擎接口，可能消耗引擎配额或产生计费。"
         />
         <HelpSection
           tokens={tokens}
@@ -274,10 +390,7 @@ export function SearchEnginesScreen() {
         />
         <Pressable
           onPress={() => setHelpVisible(false)}
-          style={[
-            styles.helpCloseRow,
-            {borderTopColor: tokens.border},
-          ]}
+          style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}
         >
           <Text style={{color: tokens.primary, fontWeight: '600'}}>知道了</Text>
         </Pressable>
@@ -306,14 +419,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
   },
-  builtinTag: {
-    alignSelf: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
+  rowMeta: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  createBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  builtinTagText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  confirmBody: {fontSize: 14, lineHeight: 21, marginBottom: 8},
+  confirmActions: {flexDirection: 'row', gap: 12},
+  confirmAction: {flex: 1},
 });

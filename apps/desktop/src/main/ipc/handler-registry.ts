@@ -50,10 +50,17 @@ import {
 } from './handlers/cloud-sync.js';
 import {
   handleSearchClearEngineKey,
+  handleSearchCreateCustomEngine,
+  handleSearchDeleteCustomEngine,
   handleSearchGetConfig,
+  handleSearchResetPresetOverride,
   handleSearchSaveEngineKey,
+  handleSearchSetEnabled,
+  handleSearchSetEngineBaseUrl,
   handleSearchSetEngineOrder,
-  handleSearchSetSearxngBaseUrl,
+  handleSearchTestEngine,
+  handleSearchUpdateCustomEngine,
+  handleSearchUpdatePresetOverride,
 } from './handlers/search.js';
 import {
   handleAppCheckForUpdates,
@@ -446,14 +453,15 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, handleSearchGetConfig);
   bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, handleSearchSaveEngineKey);
   bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, handleSearchClearEngineKey);
-  bindReq(
-    IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL,
-    handleSearchSetSearxngBaseUrl,
-  );
-  bindReq(
-    IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER,
-    handleSearchSetEngineOrder,
-  );
+  bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER, handleSearchSetEngineOrder);
+  bindReq(IPC_CHANNELS.SEARCH_SET_ENABLED, handleSearchSetEnabled);
+  bindReq(IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL, handleSearchSetEngineBaseUrl);
+  bindReq(IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE, handleSearchCreateCustomEngine);
+  bindReq(IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE, handleSearchUpdateCustomEngine);
+  bindReq(IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE, handleSearchDeleteCustomEngine);
+  bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, handleSearchUpdatePresetOverride);
+  bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, handleSearchResetPresetOverride);
+  bindReq(IPC_CHANNELS.SEARCH_TEST_ENGINE, handleSearchTestEngine);
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(

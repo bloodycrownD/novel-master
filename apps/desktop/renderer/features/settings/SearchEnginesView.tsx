@@ -1,41 +1,51 @@
 /**
  * 设置 · 搜索配置列表页（两级结构第一级）：
- * 每行 = 引擎名（按 engineOrder 优先级序）+ 计费/部署形态短副标题 +
- * 配置状态标签 + ⋮ 菜单（上移/下移调整串行降级链顺序，首位的「上移」
- * 与末位的「下移」禁用）；点击行进入单引擎详情页。排序即优先级：
- * search 工具按 engineOrder 顺序串行降级请求。详细说明收进页首「?」
- * 按钮的帮助弹窗，页内不再铺长文案（双端同构口径）。
+ * 行清单完全来自 `SearchConfigDto.engines`（core 按 engineOrderV2 归一：六预置 +
+ * 自定义实例 + DDG，顺序即串行降级链优先级）。每行 = 名称 + 状态标签 +
+ * 启用开关 + ⋮ 菜单（上移/下移调整优先级，自定义引擎另有删除）；点击行进入
+ * 单引擎详情页；页首「新建自定义引擎」进详情页 create 模式（复用
+ * `searchEngineDetail` viewId + `editingEngineId` 哨兵，不新增 viewId）。
+ * 详细说明收进页首「?」按钮的帮助弹窗，页内不再铺长文案（双端同构口径）。
  */
 import { useCallback, useEffect, useState } from "react";
-import { ENGINE_IDS, type EngineId } from "@shared/logic/search-engines";
-import type { SearchConfigDto } from "@shared/ipc-types";
-import { ipcSearchGetConfig, ipcSearchSetEngineOrder } from "@/ipc/client";
-import { Button } from "@/components/ui/Button";
-import { ContextMenu } from "@/components/ui/ContextMenu";
-import type { SettingsNavHandle } from "./settings-nav";
-import { ENGINE_META } from "./search-engine-meta";
+import type { IpcResult, SearchConfigDto, SearchEngineStatusDto } from "@shared/ipc-types";
 import {
-  ApiKeyStatusTag,
+  ipcSearchDeleteCustomEngine,
+  ipcSearchGetConfig,
+  ipcSearchSetEnabled,
+  ipcSearchSetEngineOrder,
+} from "@/ipc/client";
+import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ContextMenu } from "@/components/ui/ContextMenu";
+import { Switch } from "@/components/ui/Switch";
+import { toastSettingsSuccess } from "@/utils/settings-feedback";
+import type { SettingsNavHandle } from "./settings-nav";
+import { ENGINE_META, NEW_ENGINE_SENTINEL } from "./search-engine-meta";
+import {
   BuiltinEngineTag,
-  SettingsListItem,
   SettingsListSection,
   SettingsPanel,
   SettingsStatus,
 } from "./settings-ui";
 
-/** 帮助弹窗三段口径（与 mobile 同构改造保持一致，双端文案勿漂移）。 */
+/** 帮助弹窗分段口径（与 mobile 同构改造保持一致，双端文案勿漂移）。 */
 const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   {
-    title: "引擎优先级",
-    body: "列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兜底（无需密钥）。",
+    title: "引擎开关",
+    body: "只有开关打开的引擎才会参与搜索；打开后还需配置完整（API Key / 实例地址）才算可用。全部关掉时搜索工具会提示没有可用引擎，不再自动兜底。",
   },
   {
-    title: "自动降级",
-    body: "请求失败（如密钥失效、超时）时自动尝试下一个已配置引擎，直到成功。",
+    title: "优先级与降级",
+    body: "列表顺序即搜索尝试顺序（⋮ 菜单上移/下移）；请求失败（密钥失效、超时等）时自动尝试下一个可用引擎，直到成功。开关与密钥互不影响。",
   },
   {
-    title: "密钥安全",
-    body: "API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。",
+    title: "引擎模板",
+    body: "预置引擎与自定义引擎共用同一套请求模板（method / URL / headers / 请求体 / 结果字段映射）。预置模板在详情页「高级编辑」里修改，改坏可一键恢复默认；自定义引擎可用 curl 命令导入或手填模板。模板里的 {{query}} / {{count}} / {{apiKey}} / {{baseUrl}} 会在请求时替换。",
+  },
+  {
+    title: "测试消耗配额",
+    body: "详情页的「测试」会用当前表单配置真实发起一次搜索（草稿直测，不保存），会消耗该引擎的调用配额。",
   },
 ];
 
@@ -43,13 +53,7 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
 function SearchHelpModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="text-prompt-overlay" onClick={onClose}>
-      <div
-        className="text-prompt-modal text-prompt-modal--wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="search-help-title"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="search-help-title" onClick={(e) => e.stopPropagation()}>
         <h3 id="search-help-title" className="text-prompt-modal__title">
           使用说明
         </h3>
@@ -69,121 +73,156 @@ function SearchHelpModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** 行状态标签：内置 / 自定义分类 + 配置完整度警示（开关只管启用，不表示可用）。 */
+function EngineStatusTags({ engine }: { engine: SearchEngineStatusDto }) {
+  return (
+    <>
+      {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
+      {engine.isCustom ? <span className="settings-tag settings-tag--muted">自定义</span> : null}
+      {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">未设密钥</span> : null}
+      {engine.needsBaseUrl && engine.baseUrl == null ? <span className="settings-tag settings-tag--warn">未设实例地址</span> : null}
+      {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? <span className="settings-tag settings-tag--ok">已配置</span> : null}
+    </>
+  );
+}
+
 export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
   const [config, setConfig] = useState<SearchConfigDto | null>(null);
-  const [menu, setMenu] = useState<{
-    engineId: EngineId;
-    x: number;
-    y: number;
-  } | null>(null);
-  /** 排序 IPC 在途（菜单项整体禁点，避免交错提交错序排列）。 */
-  const [reordering, setReordering] = useState(false);
+  const [menu, setMenu] = useState<{ engineId: string; x: number; y: number } | null>(null);
+  /** 排序 / 开关 / 删除在途（行控件整体禁点，避免交错提交）。 */
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  /** 页首「?」按钮控制的帮助弹窗开关。 */
   const [helpOpen, setHelpOpen] = useState(false);
+  /** 待确认删除的自定义引擎（null = 无）。 */
+  const [deleteTarget, setDeleteTarget] = useState<SearchEngineStatusDto | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     const res = await ipcSearchGetConfig();
-    if (res.ok) {
-      setConfig(res.data);
-    } else {
-      setError(res.error.message);
-    }
+    if (res.ok) setConfig(res.data);
+    else setError(res.error.message);
   }, []);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  /** 上移/下移：与相邻引擎交换后提交完整 engineOrder，再重读刷新。 */
-  const moveEngine = async (engineId: EngineId, dir: -1 | 1) => {
-    if (config == null || reordering) return;
-    const order = [...config.engineOrder];
-    const index = order.indexOf(engineId);
+  const runWrite = async (action: () => Promise<IpcResult<void>>, success?: string): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const res = await action();
+      if (!res.ok) {
+        setError(res.error.message);
+        return;
+      }
+      await reload();
+      if (success != null) toastSettingsSuccess(success);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** 上移/下移：与相邻引擎交换后提交完整顺序（动态 id 全集，缺项由 core 读侧补齐）。 */
+  const moveEngine = (engine: SearchEngineStatusDto, dir: -1 | 1) => {
+    if (config == null) return;
+    const order = config.engines.map((engine) => engine.id);
+    const index = order.indexOf(engine.id);
     const target = index + dir;
     // 越界双保险：菜单项已禁用，此处再挡一次绕过 UI 的调用
     if (index < 0 || target < 0 || target >= order.length) return;
     const next = [...order];
     [next[index], next[target]] = [next[target], next[index]];
-    setReordering(true);
+    void runWrite(() => ipcSearchSetEngineOrder({ engineOrder: next }));
+  };
+
+  const removeEngine = async (): Promise<void> => {
+    if (deleteTarget == null) return;
+    setBusy(true);
     setError(undefined);
     try {
-      const res = await ipcSearchSetEngineOrder({ engineOrder: next });
-      if (res.ok) {
-        await reload();
-      } else {
+      const res = await ipcSearchDeleteCustomEngine({ engineId: deleteTarget.id });
+      // 失败也收起确认框：错误经页内 SettingsStatus 展示，避免弹窗挡住原因
+      setDeleteTarget(null);
+      if (!res.ok) {
         setError(res.error.message);
+        return;
       }
+      await reload();
+      toastSettingsSuccess("已删除");
     } catch (e) {
+      setDeleteTarget(null);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setReordering(false); // 异常也不残留互斥态
+      setBusy(false);
     }
   };
 
   const handleMenuSelect = (action: string) => {
-    const target = menu;
-    setMenu(null);
-    if (target == null) return;
-    if (action === "up") void moveEngine(target.engineId, -1);
-    if (action === "down") void moveEngine(target.engineId, 1);
+    const engine = config?.engines.find((item) => item.id === menu?.engineId);
+    if (engine == null) return;
+    if (action === "up") moveEngine(engine, -1);
+    if (action === "down") moveEngine(engine, 1);
+    if (action === "delete") setDeleteTarget(engine);
   };
 
-  // 行序 = engineOrder（core 读取时已容错归一为全部引擎（ENGINE_IDS）全排列）
-  const order: readonly EngineId[] = config?.engineOrder ?? [...ENGINE_IDS];
+  const order = config?.engines.map((engine) => engine.id) ?? [];
 
   return (
     <SettingsPanel>
       <SettingsListSection
         header={
           <div className="settings-toolbar settings-toolbar--end">
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="使用说明"
-              onClick={() => setHelpOpen(true)}
-            >
+            <Button variant="secondary" disabled={busy} onClick={() => { nav.navState.editingEngineId = NEW_ENGINE_SENTINEL; nav.push("searchEngineDetail"); }}>
+              新建自定义引擎
+            </Button>
+            <button type="button" className="icon-btn" aria-label="使用说明" onClick={() => setHelpOpen(true)}>
               ?
             </button>
           </div>
         }
       >
-        {config == null && error == null ? (
-          <SettingsListItem title="加载中…" />
-        ) : null}
-        {order.map((engineId) => {
-          const meta = ENGINE_META[engineId];
-          const configured = config?.engines[engineId]?.configured ?? false;
-          return (
-            <SettingsListItem
-              key={engineId}
-              title={meta.label}
-              desc={meta.desc}
-              meta={
-                engineId === "duckduckgo" ? (
-                  <BuiltinEngineTag />
-                ) : (
-                  <ApiKeyStatusTag
-                    status={configured ? "set" : "not set"}
-                  />
-                )
-              }
+        {config == null && error == null ? <p className="settings-hint">加载中…</p> : null}
+        {(config?.engines ?? []).map((engine) => (
+          <div key={engine.id} className="settings-list-item-row">
+            <button
+              type="button"
+              className="settings-list-item"
               onClick={() => {
-                nav.navState.editingEngineId = engineId;
+                nav.navState.editingEngineId = engine.id;
                 nav.push("searchEngineDetail");
               }}
-              onMenu={(e) => {
-                if (reordering) return;
+            >
+              <span className="settings-list-item__label">
+                {engine.name}
+                {engine.isCustom || ENGINE_META[engine.id] == null ? null : <span className="settings-row__desc">{ENGINE_META[engine.id]?.desc}</span>}
+              </span>
+              <span className="settings-list-item__meta">
+                <EngineStatusTags engine={engine} />
+              </span>
+              <span className="settings-list-item__chevron" aria-hidden="true">
+                ›
+              </span>
+            </button>
+            <span className="settings-list-item__switch">
+              <Switch checked={engine.enabled} disabled={busy} onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))} aria-label={`启用 ${engine.name}`} />
+            </span>
+            <button
+              type="button"
+              className="settings-list-item__menu-btn"
+              aria-label={`更多 ${engine.name}`}
+              onClick={(e) => {
+                if (busy) return;
                 const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({
-                  engineId,
-                  x: Math.max(8, rect.left),
-                  y: Math.max(8, rect.bottom + 4),
-                });
+                setMenu({ engineId: engine.id, x: Math.max(8, rect.left), y: Math.max(8, rect.bottom + 4) });
               }}
-            />
-          );
-        })}
+            >
+              ⋮
+            </button>
+          </div>
+        ))}
       </SettingsListSection>
       <SettingsStatus error={error} />
       <ContextMenu
@@ -194,25 +233,23 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
           menu == null
             ? []
             : [
-                {
-                  label: "上移",
-                  action: "up",
-                  // 首位引擎的上移禁用（已在链首）
-                  disabled:
-                    order.indexOf(menu.engineId) === 0 || reordering,
-                },
-                {
-                  label: "下移",
-                  action: "down",
-                  // 末位引擎的下移禁用（已在链尾）
-                  disabled:
-                    order.indexOf(menu.engineId) === order.length - 1 ||
-                    reordering,
-                },
+                { label: "上移", action: "up", disabled: order.indexOf(menu.engineId) === 0 || busy },
+                { label: "下移", action: "down", disabled: order.indexOf(menu.engineId) === order.length - 1 || busy },
+                ...(config?.engines.find((engine) => engine.id === menu.engineId)?.isCustom === true ? [{ label: "删除", action: "delete", danger: true }] : []),
               ]
         }
         onSelect={handleMenuSelect}
         onClose={() => setMenu(null)}
+      />
+      <ConfirmModal
+        open={deleteTarget != null}
+        title="删除自定义引擎"
+        message={`确定删除「${deleteTarget?.name ?? ""}」吗？其密钥与本机保存的实例地址会一并清除。`}
+        confirmLabel="删除"
+        danger
+        busy={busy}
+        onConfirm={() => void removeEngine()}
+        onCancel={() => setDeleteTarget(null)}
       />
       {helpOpen ? <SearchHelpModal onClose={() => setHelpOpen(false)} /> : null}
     </SettingsPanel>

@@ -6,7 +6,7 @@
 #
 # 字段说明：
 #   id            —— 迭代目录名（唯一）
-#   status        —— active | superseded | obsolete | merged
+#   status        —— active | in-progress | superseded | obsolete | merged
 #   supersedes    —— 本迭代取代的旧 iteration id（列表）
 #   superseded-by —— 取代本迭代的后续 iteration id
 #   notes         —— 漂移 / 状态备注
@@ -251,6 +251,29 @@ iterations:
       可选 --log-file（stdout 是数据通道，64 处 console.log 不收口）。脱敏为硬要求：
       key 黑名单 + 正文键只记 {chars, hash} + 深度/长度/条数三重截断，在 core emit 时统一执行。
       不引新依赖（mobile 的 react-native-blob-util / @react-native-documents/picker 已在依赖里）。
+
+  # ---- 搜索 curl 化改造（web-search-tool 2026-09-06 立项 / web-search-curl 2026-11-12 立项）----
+  - id: web-search-tool
+    status: superseded
+    superseded-by: web-search-curl
+    notes: >
+      AI 搜索的引擎供给改为模板化：五引擎硬编码适配器供给形态由 web-search-curl
+      取代（DDG 仍保留代码适配器兜底）。
+      该迭代「不包含范围」中的「任意搜索引擎通用接入（无协议可依赖，不做请求模板）」
+      与「搜索引擎连通性『测试』按钮」两条被反转——引擎以 curl 形态的请求模板 +
+      响应字段映射接入，配置页提供测试搜索。其串行降级链、显式 engine 钉死不降级、
+      120s 链总预算、attempts 轨迹与 50KB 落盘口径在新迭代原样保留。
+
+  - id: web-search-curl
+    status: in-progress
+    supersedes:
+      - web-search-tool
+    notes: >
+      搜索 curl 化：core 模板执行器 + 六份出厂模板（bocha/tavily/brave/searxng
+      四适配器收编，新增 DeepSeek/智谱，DDG 保留代码适配器兜底）+ 引擎开关
+      （默认仅 DDG 启用）+ search 工具 params 透传 + 双端搜索配置页重做
+      （自定义引擎/curl 导入/草稿直测/模板编辑与恢复默认）。存量 key、排序与
+      searxng baseUrl 不迁移、不读取、不主动清除。开发期登记（in-progress）。
 
 
 # ---- S-2 漂移对齐跟踪表（9 处）----

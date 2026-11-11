@@ -37,6 +37,7 @@ import type {
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
 import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-config.js";
+import { SEARCH_PARAM_HINT_MAX_LENGTH } from "@/domain/tool/builtin/search/types.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -90,6 +91,7 @@ import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("agent.turn");
+const searchLog = createLogger("tool.search");
 
 export interface AgentTurnScope {
   readonly projectId: string;
@@ -228,16 +230,30 @@ export async function assembleSkillsToolContext(
 
 /**
  * 装配 `search` 工具闭包（主 / 子两个装配点共用）：绑定 runtime 的
- * SearchConfigStore；引擎解析与凭证明文读取全部延迟到工具 run 内，
- * 装配期零 IO（与 skills 的装配期预算模式不同，search 的 description
- * 是静态文案）。
+ * SearchConfigStore，并装配期预读一次 `readConfig()` 拼描述快照
+ * （照 `skills.effective` 先例——工具 description 是同步 lambda，逐引擎
+ * 参数说明只能在装配期预算）。
+ *
+ * 快照口径 = 串行链同款：`canRun`（enabled ∩ 配置完整，含 key / baseUrl
+ * 就绪）∩ 按 engineOrderV2 序；paramHint 防御性截断 500（保存路径已硬
+ * 校验，此为第二道）。
+ *
+ * 装配失败降级：`readConfig` 抛错 → 空快照 + 一条 warn，search 工具照旧
+ * 装配（引擎链解析在 run 内自会报错），不让搜索配置读取失败击穿整个
+ * agent turn。
  */
-export function assembleSearchToolContext(
-  store: SearchConfigStore
-): BuiltinToolSearchContext {
+export async function assembleSearchToolContext(store: SearchConfigStore): Promise<BuiltinToolSearchContext> {
+  let engineSnapshot: BuiltinToolSearchContext["engineSnapshot"] = [];
+  try {
+    const config = await store.readConfig();
+    const runnable = new Set(config.canRun);
+    engineSnapshot = config.engines.filter((engine) => runnable.has(engine.id)).map((engine) => ({ id: engine.id, name: engine.name, paramHint: engine.paramHint.slice(0, SEARCH_PARAM_HINT_MAX_LENGTH) }));
+  } catch (error) {
+    searchLog.warn("读取搜索配置失败，search 工具描述快照降级为空", { error });
+  }
   return {
-    resolveEngineChain: (inputEngine) =>
-      store.resolveEngineChain(inputEngine),
+    resolveEngineChain: (inputEngine) => store.resolveEngineChain(inputEngine),
+    engineSnapshot,
   };
 }
 
@@ -942,10 +958,11 @@ async function runAgentTurnWithController(
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
     ...(agentsCtx != null ? { agents: agentsCtx } : {}),
-    // search 工具读取：闭包绑定 runtime.searchConfig（CLI / 旧 mock 未注入时不装配，
-    // 工具 run 返回可读错误；引擎解析延迟到 run 内，装配期零 IO）。
+    // search 工具读取：闭包绑定 runtime.searchConfig + 装配期 readConfig 拼
+    // 描述快照（readConfig 失败降级空快照，不击穿 turn）；CLI / 旧 mock 未
+    // 注入时不装配，工具 run 返回可读错误。
     ...(runtime.searchConfig != null
-      ? { search: assembleSearchToolContext(runtime.searchConfig) }
+      ? { search: await assembleSearchToolContext(runtime.searchConfig) }
       : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
@@ -1322,9 +1339,10 @@ async function runChildAgent(args: {
       ...(skillsCtx != null ? { skills: skillsCtx } : {}),
       // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
-      // search：子代理同主代理注入（引擎配置全局共享，解析链与凭据读取在 run 内）。
+      // search：子代理同主代理注入（引擎配置全局共享；描述快照装配期预算，
+      // 链解析与凭据读取仍在 run 内）。
       ...(runtime.searchConfig != null
-        ? { search: assembleSearchToolContext(runtime.searchConfig) }
+        ? { search: await assembleSearchToolContext(runtime.searchConfig) }
         : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {

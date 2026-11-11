@@ -1,7 +1,12 @@
 /**
  * IPC channel names and serializable DTOs shared by main, preload, and renderer.
  * Single source of truth — handlers must not invent ad-hoc channel strings.
+ *
+ * 搜索配置的模板族（`SearchEngineTemplate` / `CustomEngineDef` / `SearchResult`）
+ * 是 core 的同一份定义——DTO 只做类型引用（type-only，运行期纯 JSON 形状），
+ * 不另抄一份以免与 core 校验口径漂移。
  */
+import type { CustomEngineDef, SearchEngineTemplate, SearchResult } from '@novel-master/core';
 
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: 'nm:bootstrap/status',
@@ -188,8 +193,15 @@ export const IPC_CHANNELS = {
   SEARCH_GET_CONFIG: 'nm:search/getConfig',
   SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
   SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
-  SEARCH_SET_SEARXNG_BASE_URL: 'nm:search/setSearxngBaseUrl',
   SEARCH_SET_ENGINE_ORDER: 'nm:search/setEngineOrder',
+  SEARCH_SET_ENABLED: 'nm:search/setEnabled',
+  SEARCH_SET_ENGINE_BASE_URL: 'nm:search/setEngineBaseUrl',
+  SEARCH_CREATE_CUSTOM_ENGINE: 'nm:search/createCustomEngine',
+  SEARCH_UPDATE_CUSTOM_ENGINE: 'nm:search/updateCustomEngine',
+  SEARCH_DELETE_CUSTOM_ENGINE: 'nm:search/deleteCustomEngine',
+  SEARCH_UPDATE_PRESET_OVERRIDE: 'nm:search/updatePresetOverride',
+  SEARCH_RESET_PRESET_OVERRIDE: 'nm:search/resetPresetOverride',
+  SEARCH_TEST_ENGINE: 'nm:search/testEngine',
 
   SHELL_MENU_POPUP: 'nm:shell/menuPopup',
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
@@ -1833,16 +1845,28 @@ export type CloudSyncPushResult = {
   readonly rev: number;
 };
 
-/** 单引擎配置状态（不含 key 明文，只有 configured 布尔）。 */
+/** 单引擎配置状态（形状同 core `SearchConfigPublic.engines` 项；不含 key 明文）。 */
 export type SearchEngineStatusDto = {
-  readonly configured: boolean;
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly needsKey: boolean;
+  readonly hasKey: boolean;
+  readonly needsBaseUrl: boolean;
+  readonly baseUrl?: string;
+  readonly isCustom: boolean;
+  /** 参数说明（合并覆盖后的生效模板；与描述快照同源）。 */
+  readonly paramHint: string;
 };
 
-/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串；engineOrder 即串行降级链优先级）。 */
+/** 搜索引擎配置读模型（形状同 core `SearchConfigPublic`；engines 按 engineOrderV2 序、含 DDG）。 */
 export type SearchConfigDto = {
-  readonly engineOrder: readonly string[];
-  readonly searxngBaseUrl: string;
-  readonly engines: Readonly<Record<string, SearchEngineStatusDto>>;
+  readonly engines: readonly SearchEngineStatusDto[];
+  readonly customEngines: readonly CustomEngineDef[];
+  /** 预置模板覆盖状态回显（键=预置 id；true = 存在覆盖副本）。 */
+  readonly presetOverrides: Readonly<Record<string, boolean>>;
+  /** enabled ∩ 配置完整（= 串行链成员），按 engineOrderV2 序。 */
+  readonly canRun: readonly string[];
 };
 
 export type SearchSaveEngineKeyRequest = {
@@ -1854,13 +1878,72 @@ export type SearchClearEngineKeyRequest = {
   readonly engineId: string;
 };
 
-export type SearchSetSearxngBaseUrlRequest = {
+/** 开关引擎（只动 enabledEngines，与密钥解耦；未知 id 由 core 拒绝）。 */
+export type SearchSetEnabledRequest = {
+  readonly engineId: string;
+  readonly enabled: boolean;
+};
+
+/** 引擎优先级顺序（动态已知 id 的不重复序列；core 内校验非法抛错）。 */
+export type SearchSetEngineOrderRequest = {
+  readonly engineOrder: readonly string[];
+};
+
+/** 实例地址保存（空串 = 清除；服务模板里引用 `{{baseUrl}}` 的引擎）。 */
+export type SearchSetEngineBaseUrlRequest = {
+  readonly engineId: string;
   readonly baseUrl: string;
 };
 
-/** 引擎优先级顺序（须为全部引擎（ENGINE_IDS）的合法排列；core 内校验非法抛错）。 */
-export type SearchSetEngineOrderRequest = {
-  readonly engineOrder: readonly string[];
+/** 草稿直测的表单草稿（不落库；apiKey/baseUrl 缺省时回退已存值；仅本文件内组合用，不对外导出）。 */
+type SearchEngineDraftDto = {
+  readonly template: SearchEngineTemplate;
+  readonly apiKey?: string;
+  readonly baseUrl?: string;
+};
+
+/** 测试搜索入参（draft 优先于 engineId；DDG 仅支持 engineId 模式）。 */
+export type SearchTestEngineRequest = {
+  readonly engineId?: string;
+  readonly draft?: SearchEngineDraftDto;
+  readonly query: string;
+  readonly maxResults?: number;
+};
+
+/** 测试搜索成功载荷（前 5 条样例）。 */
+export type SearchTestEngineResultDto = {
+  readonly resultCount: number;
+  readonly sample: readonly SearchResult[];
+};
+
+/** 新建自定义引擎（id 由 renderer 生成 `custom:{8 位}`；key/baseUrl 拆分落库）。 */
+export type SearchCreateCustomEngineRequest = {
+  readonly def: CustomEngineDef;
+  readonly apiKey?: string;
+  readonly baseUrl?: string;
+};
+
+/** 更新自定义引擎（apiKey/baseUrl 缺省保留、空串清除、非空覆盖）。 */
+export type SearchUpdateCustomEngineRequest = {
+  readonly engineId: string;
+  readonly name?: string;
+  readonly template?: SearchEngineTemplate;
+  readonly apiKey?: string;
+  readonly baseUrl?: string;
+};
+
+export type SearchDeleteCustomEngineRequest = {
+  readonly engineId: string;
+};
+
+/** 预置模板覆盖（浅合并且嵌套对象整体替换；core 内校验 + 明文检测）。 */
+export type SearchUpdatePresetOverrideRequest = {
+  readonly engineId: string;
+  readonly patch: Partial<SearchEngineTemplate>;
+};
+
+export type SearchResetPresetOverrideRequest = {
+  readonly engineId: string;
 };
 
 export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';

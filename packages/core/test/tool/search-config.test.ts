@@ -2,20 +2,41 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  KEY_CUSTOM_ENGINES,
+  KEY_ENABLED_ENGINES,
+  KEY_ENGINE_BASE_URLS,
+  KEY_ENGINE_ORDER_V2,
+  KEY_PRESET_OVERRIDES,
   SEARCH_KKV_MODULE,
   createSearchConfigStore,
-  normalizeSearxngBaseUrl,
+  normalizeEngineBaseUrl,
   readSearchConfig,
   resolveEngineChain,
   searchApiKeyRef,
-  KEY_ENGINE_ORDER,
-  KEY_SEARXNG_BASE_URL,
   type SearchConfigDeps,
 } from "../../src/domain/tool/builtin/search/search-config.js";
+import {
+  DUCKDUCKGO_ENGINE_META,
+  PRESET_ENGINE_TEMPLATES,
+} from "../../src/domain/tool/builtin/search/preset-templates.js";
+import {
+  validateSearchEngineTemplate,
+  type SearchEngineTemplate,
+} from "../../src/domain/tool/builtin/search/types.js";
 import { AppError } from "../../src/errors/app-error.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
-import { tCore } from "../helpers/core-i18n.js";
+
+/** 出厂缺省序（对象声明序即出厂序，DDG 队尾）。 */
+const DEFAULT_ORDER = [
+  "bocha",
+  "tavily",
+  "brave",
+  "searxng",
+  "deepseek",
+  "zhipu",
+  "duckduckgo",
+];
 
 /** 内存 fake SecretStore：记录 has/get 调用日志供断言。 */
 function fakeSecretStore(): SecretStore & {
@@ -71,7 +92,6 @@ function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
         throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
       }
       map.delete(composite);
-      return true;
     },
   };
 }
@@ -85,272 +105,591 @@ function makeDeps(): SearchConfigDeps & {
   return { kkv, secretStore };
 }
 
+/** 断言 AppError 的 i18n descriptor（store 写路径 / 链解析错误契约）。 */
+function assertErrorDescriptor(error: unknown, messageKey: string, params?: Record<string, unknown>): boolean {
+  assert.ok(error instanceof AppError, `应为 AppError：${String(error)}`);
+  assert.equal(error.messageKey, messageKey);
+  for (const [name, value] of Object.entries(params ?? {})) assert.equal(error.messageParams?.[name], value);
+  return true;
+}
+
+/** 合法 GET 模板（各校验用例在此基础上做单点破坏）。 */
+function validTemplate(): SearchEngineTemplate {
+  return {
+    name: "测试引擎",
+    method: "GET",
+    url: "https://api.example.com/search?q={{query}}",
+    headers: { Accept: "application/json" },
+    resultPath: "results",
+    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
+    paramHint: "测试参数说明",
+  };
+}
+
+/** 自定义实例 fixture（模板引用 apiKey 与 baseUrl，覆盖占位符判据）。 */
+function customTemplate(): SearchEngineTemplate {
+  return {
+    name: "我的引擎",
+    method: "GET",
+    url: "{{baseUrl}}/api/search?q={{query}}",
+    headers: { "X-API-Key": "{{apiKey}}" },
+    resultPath: "results",
+    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
+    paramHint: "自定义实例参数说明",
+  };
+}
+
+/** 仅引用 baseUrl 的模板（草稿直测 baseUrl 优先级用例：不触发 key 占位符）。 */
+function baseUrlTemplate(): SearchEngineTemplate {
+  return {
+    name: "草稿引擎",
+    method: "GET",
+    url: "{{baseUrl}}/search?q={{query}}",
+    headers: { Accept: "application/json" },
+    resultPath: "results",
+    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
+    paramHint: "草稿直测参数说明",
+  };
+}
+
+/** 断言模板校验失败并返回错误（Result 失败分支收窄）。 */
+function invalidTemplateError(raw: unknown): AppError<"TOOL_SEARCH_TEMPLATE_INVALID"> {
+  const result = validateSearchEngineTemplate(raw);
+  assert.equal(result.ok, false, "预期模板校验失败");
+  if (result.ok) throw new Error("expected invalid search engine template");
+  return result.error;
+}
+
+/** 读取 KKV 原始 JSON 值（断言落库形态用）。 */
+function readKkvJson(deps: SearchConfigDeps & { readonly kkv: KkvService & { readonly map: Map<string, string> } }, key: string): unknown {
+  const raw = deps.kkv.map.get(`${SEARCH_KKV_MODULE}/${key}`);
+  return raw == null ? undefined : JSON.parse(raw);
+}
+
 describe("search-config：ref / kkv-key 常量", () => {
-  it("SKSP ref 命名为 search/{engineId}/apiKey，KKV 模块为 nm-search", () => {
+  it("SKSP ref 命名为 search/{engineId}/apiKey，KKV 模块为 nm-search，五键全部新键名", () => {
     assert.equal(searchApiKeyRef("bocha"), "search/bocha/apiKey");
-    assert.equal(searchApiKeyRef("tavily"), "search/tavily/apiKey");
-    assert.equal(searchApiKeyRef("brave"), "search/brave/apiKey");
+    assert.equal(searchApiKeyRef("custom:abc12345"), "search/custom:abc12345/apiKey");
     assert.equal(SEARCH_KKV_MODULE, "nm-search");
-    assert.equal(KEY_ENGINE_ORDER, "engineOrder");
-    assert.equal(KEY_SEARXNG_BASE_URL, "searxngBaseUrl");
+    assert.equal(KEY_ENABLED_ENGINES, "enabledEngines");
+    assert.equal(KEY_ENGINE_ORDER_V2, "engineOrderV2");
+    assert.equal(KEY_CUSTOM_ENGINES, "customEngines");
+    assert.equal(KEY_PRESET_OVERRIDES, "presetOverrides");
+    assert.equal(KEY_ENGINE_BASE_URLS, "engineBaseUrls");
   });
 });
 
-describe("search-config：searxng baseUrl 规范化", () => {
+describe("search-config：引擎实例地址规范化（normalizeEngineBaseUrl）", () => {
   it("仅 http/https、禁 userinfo、剥尾斜杠与 search/hash", () => {
-    assert.equal(normalizeSearxngBaseUrl("https://search.example.com/"), "https://search.example.com");
-    assert.equal(
-      normalizeSearxngBaseUrl("http://192.168.1.5:8080/searx///"),
-      "http://192.168.1.5:8080/searx"
-    );
-    assert.equal(
-      normalizeSearxngBaseUrl("https://s.example.com/x?q=1#frag"),
-      "https://s.example.com/x"
-    );
-    assert.equal(normalizeSearxngBaseUrl("ftp://x"), null);
-    assert.equal(normalizeSearxngBaseUrl("https://u:p@x.com"), null);
-    assert.equal(normalizeSearxngBaseUrl("not a url"), null);
-    assert.equal(normalizeSearxngBaseUrl("  "), null);
+    assert.equal(normalizeEngineBaseUrl("https://search.example.com/"), "https://search.example.com");
+    assert.equal(normalizeEngineBaseUrl("http://192.168.1.5:8080/searx///"), "http://192.168.1.5:8080/searx");
+    assert.equal(normalizeEngineBaseUrl("https://s.example.com/x?q=1#frag"), "https://s.example.com/x");
+    assert.equal(normalizeEngineBaseUrl("ftp://x"), null);
+    assert.equal(normalizeEngineBaseUrl("https://u:p@x.com"), null);
+    assert.equal(normalizeEngineBaseUrl("not a url"), null);
+    assert.equal(normalizeEngineBaseUrl("  "), null);
   });
 });
 
-describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
-  it("全空状态：key 引擎 configured 均 false、duckduckgo 恒 true、engineOrder 为默认序（DDG 队尾）、baseUrl 空串", async () => {
+describe("search-config：T-C1 新键缺省态与存量丢弃", () => {
+  it("全空状态：出厂序（DDG 队尾）、仅 DDG 启用、canRun=[duckduckgo]、预置 needsKey/needsBaseUrl 判定", async () => {
     const config = await readSearchConfig(makeDeps());
-    assert.deepEqual(config.engineOrder, [
-      "bocha",
-      "tavily",
-      "brave",
-      "searxng",
-      "duckduckgo",
-    ]);
-    assert.equal(config.searxngBaseUrl, "");
-    assert.deepEqual(config.engines, {
-      bocha: { configured: false },
-      tavily: { configured: false },
-      brave: { configured: false },
-      searxng: { configured: false },
-      // duckduckgo 内置兜底：无存储依赖，恒 configured。
-      duckduckgo: { configured: true },
-    });
+    assert.deepEqual(config.engines.map((engine) => engine.id), DEFAULT_ORDER);
+    // 缺省仅 DDG 启用（PRD R1.2），其余全部关闭。
+    for (const engine of config.engines) assert.equal(engine.enabled, engine.id === "duckduckgo");
+    assert.deepEqual(config.canRun, ["duckduckgo"]);
+    assert.deepEqual(config.customEngines, []);
+    assert.deepEqual(config.presetOverrides, {});
+
+    const byId = new Map(config.engines.map((engine) => [engine.id, engine]));
+    const duckduckgo = byId.get("duckduckgo")!;
+    assert.equal(duckduckgo.name, DUCKDUCKGO_ENGINE_META.name);
+    assert.equal(duckduckgo.paramHint, DUCKDUCKGO_ENGINE_META.paramHint);
+    assert.equal(duckduckgo.needsKey, false);
+    assert.equal(duckduckgo.needsBaseUrl, false);
+    assert.equal(duckduckgo.isCustom, false);
+    for (const engineId of ["bocha", "tavily", "brave", "deepseek", "zhipu"] as const) {
+      assert.equal(byId.get(engineId)!.needsKey, true, `${engineId} 模板应引用 {{apiKey}}`);
+      assert.equal(byId.get(engineId)!.needsBaseUrl, false);
+      assert.equal(byId.get(engineId)!.hasKey, false);
+    }
+    const searxng = byId.get("searxng")!;
+    assert.equal(searxng.needsKey, false);
+    assert.equal(searxng.needsBaseUrl, true);
+    assert.equal(searxng.baseUrl, undefined);
   });
 
-  it("保存 key 后 configured=true，清除后回落；明文不出现在任何返回值", async () => {
+  it("存量旧键（engineOrder / searxngBaseUrl）写入后读路径不触达（存量丢弃语义）", async () => {
+    const deps = makeDeps();
+    await deps.kkv.set(SEARCH_KKV_MODULE, "engineOrder", JSON.stringify(["tavily", "bocha", "brave", "searxng"]));
+    await deps.kkv.set(SEARCH_KKV_MODULE, "searxngBaseUrl", "http://legacy.local:8080");
+
+    const config = await readSearchConfig(deps);
+    assert.deepEqual(config.engines.map((engine) => engine.id), DEFAULT_ORDER);
+    assert.equal(config.engines.find((engine) => engine.id === "searxng")!.baseUrl, undefined);
+    // 链解析同样只认新键：旧 searxngBaseUrl 不产生可用引擎。
+    assert.deepEqual(await resolveEngineChain(deps), [{ engine: "duckduckgo" }]);
+  });
+});
+
+describe("search-config：key 通道（保存 / 清除 / 空串拒绝）", () => {
+  it("保存 key 后 hasKey=true，清除后回落；明文不出现在任何返回值", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
 
     await store.saveEngineKey("bocha", "sk-plain-bocha");
     let config = await readSearchConfig(deps);
-    assert.equal(config.engines.bocha.configured, true);
-    assert.equal(config.engines.tavily.configured, false);
-    assert.equal(
-      JSON.stringify(config).includes("sk-plain-bocha"),
-      false,
-      "对外配置不得携带 key 明文"
-    );
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
+    assert.equal(config.engines.find((engine) => engine.id === "tavily")!.hasKey, false);
+    assert.equal(JSON.stringify(config).includes("sk-plain-bocha"), false, "对外配置不得携带 key 明文");
 
     await store.clearEngineKey("bocha");
     config = await readSearchConfig(deps);
-    assert.equal(config.engines.bocha.configured, false);
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, false);
   });
 
-  it("searxng 仅配 baseUrl 即 configured=true（不触碰 secretStore），且存规范化值", async () => {
+  it("saveEngineKey 空串拒绝；自定义实例 id 同样走统一 key 通道", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
-    await store.setSearxngBaseUrl("http://localhost:8888/");
-
-    const config = await readSearchConfig(deps);
-    assert.equal(config.engines.searxng.configured, true);
-    assert.equal(config.searxngBaseUrl, "http://localhost:8888");
-    // searxng 的 configured 判定不查 secretStore（has 日志为空）。
-    assert.equal(deps.secretStore.hasCalls.length, 3);
-    for (const ref of deps.secretStore.hasCalls) {
-      assert.equal(ref.startsWith("search/searxng"), false);
-    }
-  });
-
-  it("setSearxngBaseUrl 空串清除；非法值抛错；setEngineOrder 存取与非法排列抛错", async () => {
-    const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-
-    // descriptor 迁移后 message 退为英文 desc，判 key（G1-G3 契约）
-    await assert.rejects(store.setSearxngBaseUrl("ftp://bad"), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_searxng_base_url_invalid");
-    await assert.rejects(store.setSearxngBaseUrl("https://u:p@h.com"), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_searxng_base_url_invalid");
-
-    await store.setSearxngBaseUrl("http://localhost:8888");
-    await store.setSearxngBaseUrl("");
-    assert.equal((await readSearchConfig(deps)).engines.searxng.configured, false);
-
-    // setEngineOrder：合法排列写入 + 读回；缺项 / 重复 / 含非法 id 抛错。
-    await store.setEngineOrder([
-      "searxng",
-      "tavily",
-      "brave",
-      "bocha",
-      "duckduckgo",
-    ]);
-    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
-      "searxng",
-      "tavily",
-      "brave",
-      "bocha",
-      "duckduckgo",
-    ]);
-    await assert.rejects(
-      store.setEngineOrder(["bocha", "tavily", "brave"]),
-      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
-    );
-    await assert.rejects(
-      store.setEngineOrder(["bocha", "bocha", "tavily", "brave", "searxng"]),
-      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
-    );
-    await assert.rejects(
-      store.setEngineOrder([
-        "bocha",
-        "tavily",
-        "brave",
-        "google" as never,
-      ]),
-      (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_engine_order_invalid"
-    );
-  });
-
-  it("saveEngineKey 空串拒绝", async () => {
-    const store = createSearchConfigStore(makeDeps());
-    await assert.rejects(store.saveEngineKey("bocha", "  "), (e: unknown) => (e as {messageKey?: string}).messageKey === "error.tool.search_api_key_required");
+    await assert.rejects(store.saveEngineKey("bocha", "  "), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_api_key_required"));
+    await store.saveEngineKey("custom:abc12345", "sk-custom");
+    assert.equal(deps.secretStore.map.get("search/custom:abc12345/apiKey"), "sk-custom");
   });
 });
 
-describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
-  it("非 JSON / 非数组：整体回落 ENGINE_IDS 默认序（含 duckduckgo 队尾）", async () => {
+describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () => {
+  it("engineOrderV2 损坏回出厂序；未知 id 丢弃、已知项保序、缺失项按出厂序补尾", async () => {
     const deps = makeDeps();
-    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, "not-json");
-    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
-      "bocha",
-      "tavily",
-      "brave",
-      "searxng",
-      "duckduckgo",
-    ]);
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, "not-json");
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), DEFAULT_ORDER);
 
-    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, '"tavily"');
-    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
-      "bocha",
-      "tavily",
-      "brave",
-      "searxng",
-      "duckduckgo",
-    ]);
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '"tavily"');
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), DEFAULT_ORDER);
+
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '["tavily","tavily","google","searxng"]');
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), ["tavily", "searxng", "bocha", "brave", "deepseek", "zhipu", "duckduckgo"]);
+
+    // 存量四引擎序缺 DDG：按出厂序补尾，用户既有排序保留（点名用例 263 的 engineOrderV2 语义）。
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2, '["tavily","bocha","brave","searxng"]');
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), ["tavily", "bocha", "brave", "searxng", "deepseek", "zhipu", "duckduckgo"]);
   });
 
-  it("含非法项 / 重复 / 缺项：合法前缀去重保留 + 缺项按默认序补齐", async () => {
+  it("enabledEngines dangling id 丢弃；损坏 / 缺省回落仅 DDG 启用", async () => {
     const deps = makeDeps();
-    await deps.kkv.set(
-      SEARCH_KKV_MODULE,
-      KEY_ENGINE_ORDER,
-      '["tavily","tavily","google","searxng"]'
-    );
-    // tavily/searxng 合法保留（重复去重），google 剔除，bocha/brave/duckduckgo 缺项补齐。
-    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
-      "tavily",
-      "searxng",
-      "bocha",
-      "brave",
-      "duckduckgo",
-    ]);
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENABLED_ENGINES, '["bocha","ghost"]');
+    let config = await readSearchConfig(deps);
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.enabled, true);
+    assert.equal(config.engines.find((engine) => engine.id === "duckduckgo")!.enabled, false);
+    assert.deepEqual(config.canRun, [], "bocha 未配置 key，enabled 也不入链");
+
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENABLED_ENGINES, '"bocha"');
+    config = await readSearchConfig(deps);
+    assert.equal(config.engines.find((engine) => engine.id === "duckduckgo")!.enabled, true);
+    assert.deepEqual(config.canRun, ["duckduckgo"]);
   });
 
-  it("存量四引擎 order（第三轮修订前落库）：归一后 duckduckgo 自然补尾", async () => {
+  it("setEngineOrder 放宽：缺项容忍、未知 id / 重复项拒绝、合法序列存取（点名用例 172 的 order 部分）", async () => {
     const deps = makeDeps();
-    await deps.kkv.set(
-      SEARCH_KKV_MODULE,
-      KEY_ENGINE_ORDER,
-      '["tavily","bocha","brave","searxng"]'
-    );
-    // 存量值缺 DDG 时按 ENGINE_IDS 默认序补尾，不丢弃用户既有排序。
-    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
-      "tavily",
-      "bocha",
-      "brave",
-      "searxng",
-      "duckduckgo",
-    ]);
+    const store = createSearchConfigStore(deps);
+
+    // 缺项容忍：读侧按出厂序补尾。
+    await store.setEngineOrder(["tavily", "bocha"]);
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), ["tavily", "bocha", "brave", "searxng", "deepseek", "zhipu", "duckduckgo"]);
+
+    await assert.rejects(store.setEngineOrder(["bocha", "bocha"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
+    await assert.rejects(store.setEngineOrder(["bocha", "google"]), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_order_invalid"));
+
+    // 合法全量序列存取回读（DDG 无队尾特权）。
+    await store.setEngineOrder(["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]);
+    assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), ["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]);
   });
 });
 
-describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () => {
-  it("engineOrder 顺序返回全部 configured（DDG 恒在链尾）；显式 inputEngine 从该引擎起截取", async () => {
+describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", () => {
+  it("链 = enabled ∩ 配置完整（占位符判据），按 order 序且条目携带 template（DDG 无模板）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.saveEngineKey("bocha", "sk-bocha");
+    await store.setEnabled("bocha", true);
+    await store.setEnabled("brave", true); // 启用但无 key → 过滤
+    await store.setEnabled("searxng", true); // 启用但无 baseUrl → 过滤
+    await store.setEngineBaseUrl("searxng", "http://192.168.1.5:8080/");
+
+    const chain = await resolveEngineChain(deps);
+    assert.deepEqual(chain.map((entry) => entry.engine), ["bocha", "searxng", "duckduckgo"]);
+    assert.equal(chain[0]!.apiKey, "sk-bocha");
+    assert.equal(chain[0]!.template, PRESET_ENGINE_TEMPLATES.bocha);
+    assert.equal(chain[1]!.baseUrl, "http://192.168.1.5:8080");
+    assert.equal(chain[1]!.template, PRESET_ENGINE_TEMPLATES.searxng);
+    assert.equal("apiKey" in chain[1]!, false, "searxng 模板不引用 apiKey，不得读取 key");
+    assert.equal("template" in chain[2]!, false, "DDG 无模板");
+  });
+
+  it("DDG 不再恒队尾 / 恒在链：重排后随序、关闭后链空（点名用例 282/337）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.setEngineOrder(["duckduckgo", "bocha", "tavily"]);
+    await store.saveEngineKey("bocha", "sk-bocha");
+    await store.setEnabled("bocha", true);
+    assert.deepEqual((await resolveEngineChain(deps)).map((entry) => entry.engine), ["duckduckgo", "bocha"]);
+
+    await store.setEnabled("duckduckgo", false);
+    await store.setEnabled("bocha", false);
+    assert.deepEqual(await resolveEngineChain(deps), []);
+    assert.deepEqual((await readSearchConfig(deps)).canRun, []);
+  });
+
+  it("显式三分支：①钉链首 ②顺位回落（截尾不全局回落）③未知 id 抛 AppError 含引擎 id", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await store.saveEngineKey("bocha", "sk-bocha");
     await store.saveEngineKey("tavily", "sk-tavily");
+    await store.setEnabled("bocha", true);
+    await store.setEnabled("tavily", true);
+    await store.setEnabled("searxng", true);
+    await store.setEngineBaseUrl("searxng", "http://192.168.1.5:8080/");
 
-    // ① 无 input：默认序全量 configured 链（duckduckgo 无凭据直接入链）。
-    assert.deepEqual(await resolveEngineChain(deps), [
-      { engine: "bocha", apiKey: "sk-bocha" },
-      { engine: "tavily", apiKey: "sk-tavily" },
-      { engine: "duckduckgo" },
-    ]);
+    // ① 已知且通过过滤 → 钉为该引擎单发。
+    assert.deepEqual((await resolveEngineChain(deps, "tavily")).map((entry) => entry.engine), ["tavily"]);
 
-    // ② engineOrder 重排后链随序：tavily 领先，DDG 仍队尾。
-    await store.setEngineOrder([
-      "tavily",
-      "bocha",
-      "brave",
-      "searxng",
-      "duckduckgo",
-    ]);
-    assert.deepEqual(await resolveEngineChain(deps), [
-      { engine: "tavily", apiKey: "sk-tavily" },
-      { engine: "bocha", apiKey: "sk-bocha" },
-      { engine: "duckduckgo" },
-    ]);
+    // ② 已知但未通过过滤 → 沿 order 从该 id 起截尾取第一个可用项：
+    // brave 未启用，往后 searxng（已配 baseUrl）命中；不回落排位更前的 bocha/tavily。
+    assert.deepEqual((await resolveEngineChain(deps, "brave")).map((entry) => entry.engine), ["searxng"]);
 
-    // ③ 显式 bocha：从 bocha 起截取（tavily 位于其前，不再入链），
-    // 后续 configured（DDG 兜底）照常入链。
-    assert.deepEqual(await resolveEngineChain(deps, "bocha"), [
-      { engine: "bocha", apiKey: "sk-bocha" },
-      { engine: "duckduckgo" },
-    ]);
+    // ② 截尾后链空 → 空数组（调用方走链空提示）。
+    await store.setEnabled("searxng", false);
+    await store.setEnabled("duckduckgo", false);
+    assert.deepEqual(await resolveEngineChain(deps, "searxng"), []);
 
-    // ④ 显式 brave（未配置）：截取链 [brave, searxng, duckduckgo] 内
-    // 顺位回落到 DDG 兜底（不全局回落 tavily/bocha）。
-    assert.deepEqual(await resolveEngineChain(deps, "brave"), [
-      { engine: "duckduckgo" },
-    ]);
-  });
-
-  it("searxng-only：仅配 baseUrl（无任何 key）首发命中，DDG 队尾兜底，key 引擎零读取", async () => {
-    const deps = makeDeps();
-    const store = createSearchConfigStore(deps);
-    await store.setSearxngBaseUrl("http://192.168.1.5:8080/");
-
-    const chain = await resolveEngineChain(deps);
-    assert.deepEqual(chain, [
-      { engine: "searxng", baseUrl: "http://192.168.1.5:8080" },
-      { engine: "duckduckgo" },
-    ]);
-    // searxng / duckduckgo 入链均不读任何 key 明文（get 日志为空）。
-    assert.equal(deps.secretStore.getCalls.length, 0);
-  });
-
-  it("全无 key/baseUrl：链恒含 duckduckgo 兜底（PRD R1.2，链常规非空）", async () => {
-    assert.deepEqual(await resolveEngineChain(makeDeps()), [
-      { engine: "duckduckgo" },
-    ]);
+    // ③ 不在动态全集 → AppError + i18n key（params 带引擎 id）。
+    await assert.rejects(resolveEngineChain(deps, "google"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
   });
 });
 
-/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
-function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
-}
+describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
+  it("createCustomEngine：模板校验 + append orderV2 + apiKey/baseUrl 拆分落库（不入 enabled）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.createCustomEngine({
+      def: { id: "custom:abc12345", name: "我的引擎", template: customTemplate(), createdAt: "2026-01-01T00:00:00.000Z" },
+      apiKey: "sk-custom",
+      baseUrl: "https://custom.example.com/",
+    });
 
-/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
-function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
-}
+    const config = await readSearchConfig(deps);
+    const entry = config.engines.find((engine) => engine.id === "custom:abc12345")!;
+    assert.equal(entry.name, "我的引擎");
+    assert.equal(entry.isCustom, true);
+    assert.equal(entry.enabled, false, "新建自定义实例默认不启用");
+    assert.equal(entry.needsKey, true);
+    assert.equal(entry.hasKey, true);
+    assert.equal(entry.needsBaseUrl, true);
+    assert.equal(entry.baseUrl, "https://custom.example.com");
+    // orderV2 append（双键之一）；SKSP / engineBaseUrls 拆分落库（模板本体无明文）。
+    assert.deepEqual(readKkvJson(deps, KEY_ENGINE_ORDER_V2), [...DEFAULT_ORDER, "custom:abc12345"]);
+    assert.equal((readKkvJson(deps, KEY_CUSTOM_ENGINES) as unknown[]).length, 1);
+    assert.equal(deps.secretStore.map.get("search/custom:abc12345/apiKey"), "sk-custom");
+    assert.deepEqual(readKkvJson(deps, KEY_ENGINE_BASE_URLS), { "custom:abc12345": "https://custom.example.com" });
+    assert.equal(JSON.stringify(config.customEngines).includes("sk-custom"), false);
+
+    // 收录契约：启用后即可入链（模板 + key/baseUrl 就绪）。
+    await store.setEnabled("custom:abc12345", true);
+    assert.deepEqual((await readSearchConfig(deps)).canRun, ["duckduckgo", "custom:abc12345"]);
+    assert.deepEqual((await resolveEngineChain(deps)).map((engine) => engine.engine), ["duckduckgo", "custom:abc12345"]);
+  });
+
+  it("updateCustomEngine：名称 / 模板更新；apiKey/baseUrl 缺省保留、空串清除", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.createCustomEngine({
+      def: { id: "custom:abc12345", name: "我的引擎", template: customTemplate(), createdAt: "2026-01-01T00:00:00.000Z" },
+      apiKey: "sk-custom",
+      baseUrl: "https://custom.example.com",
+    });
+
+    await store.updateCustomEngine("custom:abc12345", {
+      template: { ...customTemplate(), name: "改名后的引擎", paramHint: "新说明" },
+    });
+    let entry = (await readSearchConfig(deps)).engines.find((engine) => engine.id === "custom:abc12345")!;
+    assert.equal(entry.name, "改名后的引擎", "缺省 name 随模板 name");
+    assert.equal(entry.paramHint, "新说明");
+    assert.equal(entry.hasKey, true, "apiKey 缺省保留");
+    assert.equal(entry.baseUrl, "https://custom.example.com", "baseUrl 缺省保留");
+
+    await store.updateCustomEngine("custom:abc12345", { apiKey: "", baseUrl: "" });
+    entry = (await readSearchConfig(deps)).engines.find((engine) => engine.id === "custom:abc12345")!;
+    assert.equal(entry.hasKey, false);
+    assert.equal(entry.baseUrl, undefined);
+    assert.deepEqual(readKkvJson(deps, KEY_ENGINE_BASE_URLS), undefined);
+    assert.deepEqual((await readSearchConfig(deps)).canRun, ["duckduckgo"]);
+  });
+
+  it("deleteCustomEngine：prune orderV2 / enabledEngines / engineBaseUrls + 清 SKSP ref", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.createCustomEngine({
+      def: { id: "custom:abc12345", name: "我的引擎", template: customTemplate(), createdAt: "2026-01-01T00:00:00.000Z" },
+      apiKey: "sk-custom",
+      baseUrl: "https://custom.example.com",
+    });
+    await store.setEnabled("custom:abc12345", true);
+
+    await store.deleteCustomEngine("custom:abc12345");
+    const config = await readSearchConfig(deps);
+    assert.deepEqual(config.customEngines, []);
+    assert.equal(config.engines.some((engine) => engine.id === "custom:abc12345"), false);
+    assert.deepEqual(readKkvJson(deps, KEY_ENGINE_ORDER_V2), DEFAULT_ORDER);
+    assert.equal(deps.secretStore.map.has("search/custom:abc12345/apiKey"), false);
+    assert.equal(JSON.stringify(readKkvJson(deps, KEY_ENGINE_BASE_URLS) ?? {}).includes("custom:abc12345"), false);
+    const enabledRaw = deps.kkv.map.get(`${SEARCH_KKV_MODULE}/${KEY_ENABLED_ENGINES}`) ?? "[]";
+    assert.equal(JSON.parse(enabledRaw).includes("custom:abc12345"), false);
+  });
+
+  it("presetOverrides：浅合并 + 嵌套对象整体替换、恢复默认；setEnabled 只动开关不动 key", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.saveEngineKey("bocha", "sk-bocha");
+    await store.setEnabled("bocha", true);
+
+    await store.updatePresetOverride("bocha", {
+      fieldMap: { title: ["headline"], url: ["link"], snippet: ["desc"] },
+      paramHint: "覆盖说明",
+    });
+    let config = await readSearchConfig(deps);
+    assert.deepEqual(config.presetOverrides, { bocha: true });
+    assert.ok(deps.kkv.map.has(`${SEARCH_KKV_MODULE}/${KEY_PRESET_OVERRIDES}`), "覆盖副本应落 presetOverrides 键");
+    let chain = await resolveEngineChain(deps);
+    let template = chain.find((entry) => entry.engine === "bocha")!.template!;
+    assert.deepEqual(template.fieldMap, { title: ["headline"], url: ["link"], snippet: ["desc"] }, "嵌套对象整体替换");
+    assert.equal(template.url, PRESET_ENGINE_TEMPLATES.bocha.url, "未覆盖字段保留出厂值");
+    assert.equal(template.envelope?.codePath, "code", "未覆盖的嵌套对象保留出厂值");
+    assert.equal(template.paramHint, "覆盖说明");
+
+    // setEnabled 独立性：开关只动 enabledEngines，不动 key。
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
+    await store.setEnabled("bocha", false);
+    config = await readSearchConfig(deps);
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.enabled, false);
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, true);
+    await assert.rejects(store.setEnabled("google", true), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
+
+    // updatePresetOverride 仅预置 id；恢复默认 = 删除覆盖条目。
+    await assert.rejects(store.updatePresetOverride("custom:abc12345", { paramHint: "x" }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "custom:abc12345" }));
+    await store.setEnabled("bocha", true);
+    await store.resetPresetOverride("bocha");
+    config = await readSearchConfig(deps);
+    assert.deepEqual(config.presetOverrides, {});
+    chain = await resolveEngineChain(deps);
+    template = chain.find((entry) => entry.engine === "bocha")!.template!;
+    assert.equal(template, PRESET_ENGINE_TEMPLATES.bocha);
+  });
+
+  it("setEngineBaseUrl：空串清除、非空规范化、未知引擎拒绝（点名用例 172）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+
+    await assert.rejects(store.setEngineBaseUrl("searxng", "ftp://bad"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
+    await assert.rejects(store.setEngineBaseUrl("searxng", "https://u:p@h.com"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_searxng_base_url_invalid"));
+    await assert.rejects(store.setEngineBaseUrl("google", "http://x"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
+
+    await store.setEngineBaseUrl("searxng", "http://localhost:8888/");
+    assert.deepEqual(readKkvJson(deps, KEY_ENGINE_BASE_URLS), { searxng: "http://localhost:8888" });
+    await store.setEngineBaseUrl("searxng", "");
+    assert.equal(readKkvJson(deps, KEY_ENGINE_BASE_URLS), undefined);
+  });
+});
+
+describe("search-config：T-C5 testEngine（草稿直测 / baseUrl 优先级 / engineId 分支）", () => {
+  it("草稿直测：KKV / SKSP 零写入；draft.baseUrl > KKV 现存值 > 空；失败返回脱敏 descriptor", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    const urls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (url: string | URL | Request) => {
+        urls.push(String(url));
+        return new Response(JSON.stringify({ results: [{ title: "t", url: "https://r.example.com", snippet: "s" }] }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof globalThis.fetch;
+
+      const direct = await store.testEngine({ draft: { template: baseUrlTemplate(), baseUrl: "http://draft.local:8080/" }, query: "abc" });
+      assert.equal(direct.ok, true);
+      if (!direct.ok) throw new Error("草稿直测应成功");
+      assert.equal(direct.value.resultCount, 1);
+      assert.equal(direct.value.sample.length, 1);
+      assert.equal(urls[0], "http://draft.local:8080/search?q=abc");
+      // 零写入：草稿校验 / 请求不落 KKV / SKSP。
+      assert.equal(deps.kkv.map.size, 0);
+      assert.equal(deps.secretStore.map.size, 0);
+
+      // draft.baseUrl 为空 → 回落 KKV 现存值（engineId 定位 baseUrl 存储槽）。
+      await store.setEngineBaseUrl("searxng", "http://stored.local:9999");
+      const fromStored = await store.testEngine({ engineId: "searxng", draft: { template: baseUrlTemplate(), baseUrl: "" }, query: "abc" });
+      assert.equal(fromStored.ok, true);
+      assert.equal(urls[1], "http://stored.local:9999/search?q=abc");
+
+      // 非法 draft.baseUrl → 失败 descriptor（reason 脱敏可读）。
+      const badBaseUrl = await store.testEngine({ draft: { template: baseUrlTemplate(), baseUrl: "ftp://x" }, query: "abc" });
+      assert.equal(badBaseUrl.ok, false);
+      if (badBaseUrl.ok) throw new Error("非法 baseUrl 应失败");
+      assert.equal(badBaseUrl.error.message.key, "error.tool.search_test_failed");
+      assert.match(String(badBaseUrl.error.message.params?.reason), /invalid base URL/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("engineId 模式：预置合并 override + 现读 key；自定义实例走已存模板；未知 id 失败；DDG 走适配器", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.saveEngineKey("bocha", "sk-bocha");
+    await store.updatePresetOverride("bocha", { url: "https://api.bochaai.com/v2/web-search" });
+    await store.createCustomEngine({
+      def: { id: "custom:abc12345", name: "我的引擎", template: { ...validTemplate(), url: "https://custom.example.com/search?q={{query}}", headers: { "X-API-Key": "{{apiKey}}" } }, createdAt: "2026-01-01T00:00:00.000Z" },
+      apiKey: "sk-custom",
+    });
+
+    const calls: Array<{ readonly url: string; readonly headers: Headers }> = [];
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        const target = String(url);
+        calls.push({ url: target, headers: new Headers(init?.headers) });
+        if (target.startsWith("https://html.duckduckgo.com/html/")) {
+          return new Response('<div class="result results_links web-result"><a rel="nofollow" class="result__a" href="https://ddg.example.com/p">DDG 标题</a><a class="result__snippet">DDG 摘要</a></div>', { status: 200, headers: { "content-type": "text/html" } });
+        }
+        if (target.startsWith("https://custom.example.com")) {
+          return new Response(JSON.stringify({ results: [{ title: "c", url: "https://c.example.com", snippet: "cs" }] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify({ code: 200, data: { webPages: { value: [{ title: "b", url: "https://b.example.com", summary: "bs" }] } } }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof globalThis.fetch;
+
+      const preset = await store.testEngine({ engineId: "bocha", query: "q" });
+      assert.equal(preset.ok, true);
+      assert.equal(calls[0]!.url, "https://api.bochaai.com/v2/web-search", "预置分支应合并 presetOverrides");
+      assert.equal(calls[0]!.headers.get("Authorization"), "Bearer sk-bocha", "预置分支现读 SKSP key");
+
+      const custom = await store.testEngine({ engineId: "custom:abc12345", query: "q" });
+      assert.equal(custom.ok, true);
+      assert.equal(calls[1]!.url, "https://custom.example.com/search?q=q");
+      assert.equal(calls[1]!.headers.get("X-API-Key"), "sk-custom", "自定义分支现读 SKSP key");
+
+      const unknown = await store.testEngine({ engineId: "nope", query: "q" });
+      assert.equal(unknown.ok, false);
+      if (unknown.ok) throw new Error("未知引擎应失败");
+      assert.match(String(unknown.error.message.params?.reason), /unknown search engine: nope/);
+
+      const duckduckgo = await store.testEngine({ engineId: "duckduckgo", query: "q" });
+      assert.equal(duckduckgo.ok, true);
+      assert.ok(calls[2]!.url.startsWith("https://html.duckduckgo.com/html/"), "DDG 分支走原文适配器");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("失败 descriptor 脱敏：401 响应体回显的 key 明文不出现在 reason 里", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.saveEngineKey("bocha", "sk-bocha-secret");
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response("unauthorized token sk-bocha-secret", { status: 401 })) as typeof globalThis.fetch;
+      const result = await store.testEngine({ engineId: "bocha", query: "q" });
+      assert.equal(result.ok, false);
+      if (result.ok) throw new Error("401 应失败");
+      const reason = String(result.error.message.params?.reason);
+      assert.match(reason, /API error 401/);
+      assert.equal(reason.includes("sk-bocha-secret"), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("草稿模板不合法：失败 descriptor 的 reason 携带模板校验 descriptor（search_template_invalid）", async () => {
+    const store = createSearchConfigStore(makeDeps());
+    const result = await store.testEngine({ draft: { template: { ...customTemplate(), method: "PUT" as never } }, query: "q" });
+    assert.equal(result.ok, false);
+    if (result.ok) throw new Error("非法模板应失败");
+    assert.equal(result.error.message.key, "error.tool.search_test_failed");
+    const reason = result.error.message.params?.reason as { key?: string; params?: Record<string, unknown> };
+    assert.equal(reason.key, "error.tool.search_template_invalid");
+    assert.match(String(reason.params?.reason), /method must be GET or POST/);
+  });
+});
+
+describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存路径密钥拒绝", () => {
+  it("六份出厂模板全部通过校验；searxng 的 {{baseUrl}} 形态经占位符感知 URL 校验", () => {
+    for (const [engineId, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
+      const result = validateSearchEngineTemplate(template);
+      assert.equal(result.ok, true, `${engineId} 出厂模板应通过校验`);
+    }
+  });
+
+  it("结构规则：method / URL / bodyTemplate / 占位符 / paramHint / fieldMap / 点路径", () => {
+    // 合法基线 + trim 归一。
+    const okTemplate = validateSearchEngineTemplate({ ...validTemplate(), name: "  测试引擎  " });
+    assert.equal(okTemplate.ok, true);
+    if (okTemplate.ok) assert.equal(okTemplate.value.name, "测试引擎");
+
+    // 结构性错误统一 TOOL_SEARCH_TEMPLATE_INVALID + search_template_invalid（params 带原因）。
+    const methodError = invalidTemplateError({ ...validTemplate(), method: "PUT" });
+    assert.equal(methodError.key, "TOOL_SEARCH_TEMPLATE_INVALID");
+    assert.equal(methodError.messageKey, "error.tool.search_template_invalid");
+    assert.match(String(methodError.messageParams?.reason), /method must be GET or POST/);
+
+    assert.match(String(invalidTemplateError({ ...validTemplate(), url: "ftp://x" }).messageParams?.reason), /http or https/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), url: "" }).messageParams?.reason), /url is required/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), url: "https://x.com/?q={{limit}}" }).messageParams?.reason), /unknown placeholder/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST" }).messageParams?.reason), /bodyTemplate is required/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: "{oops" }).messageParams?.reason), /valid JSON/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '"text"' }).messageParams?.reason), /JSON object/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"n":"x{{count}}"}' }).messageParams?.reason), /whole-string/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), fieldMap: { title: [], url: ["url"], snippet: ["snippet"] } }).messageParams?.reason), /fieldMap/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), resultPath: "a..b" }).messageParams?.reason), /resultPath/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), answerPath: "a[0]" }).messageParams?.reason), /answerPath/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "" } }).messageParams?.reason), /codePath/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "code", okValues: [true] } }).messageParams?.reason), /okValues/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), paramHint: "x".repeat(501) }).messageParams?.reason), /at most 500/);
+    assert.match(String(invalidTemplateError(null).messageParams?.reason), /expected an object/);
+  });
+
+  it("明文密钥检测：url / headers / bodyTemplate 命中拒绝（{{apiKey}} 占位符自身不命中）", () => {
+    const headerSecret = invalidTemplateError({ ...validTemplate(), headers: { Authorization: "Bearer sk-live-abcdef" } });
+    assert.equal(headerSecret.messageKey, "error.tool.search_secret_detected");
+    assert.equal(headerSecret.messageParams?.field, "headers.Authorization");
+
+    const urlSecret = invalidTemplateError({ ...validTemplate(), url: "https://x.com/?api_key=abcdefghij1234567890" });
+    assert.equal(urlSecret.messageKey, "error.tool.search_secret_detected");
+    assert.equal(urlSecret.messageParams?.field, "url");
+
+    const bodySecret = invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"q":"{{query}}","api_key":"sk-secret123"}' });
+    assert.equal(bodySecret.messageKey, "error.tool.search_secret_detected");
+    assert.equal(bodySecret.messageParams?.field, "bodyTemplate");
+
+    // 占位符自身 / 短 token 不是命中项。
+    const placeholderOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { Authorization: "Bearer {{apiKey}}", "X-API-KEY": "{{apiKey}}" } });
+    assert.equal(placeholderOk.ok, true);
+    const shortTokenOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { Authorization: "Bearer short-token" } });
+    assert.equal(shortTokenOk.ok, true);
+  });
+
+  it("保存路径密钥拒绝：createCustomEngine / updatePresetOverride 双入口命中即拒绝且零写入", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+
+    await assert.rejects(
+      store.createCustomEngine({
+        def: { id: "custom:abc12345", name: "我的引擎", template: { ...validTemplate(), headers: { Authorization: "Bearer sk-live-abcdef" } }, createdAt: "2026-01-01T00:00:00.000Z" },
+        apiKey: "sk-custom",
+      }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "headers.Authorization" })
+    );
+    assert.equal(deps.kkv.map.size, 0, "拒绝保存时不得写 KKV");
+    assert.equal(deps.secretStore.map.size, 0, "拒绝保存时不得写 SKSP");
+
+    await assert.rejects(
+      store.updatePresetOverride("bocha", { bodyTemplate: '{"query":"{{query}}","count":"{{count}}","api_key":"sk-secret123"}' }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "bodyTemplate" })
+    );
+    assert.equal(deps.kkv.map.size, 0);
+  });
+});

@@ -1,15 +1,27 @@
 /**
- * 搜索引擎详情页（修订轮两级结构）：单引擎表单——key 引擎
- * （bocha/tavily/brave）密码框留空不改 + 清除入口；searxng 编辑自托管
- * 实例 baseUrl（空串保存即清除）。无默认引擎控件（优先级由列表屏排序）。
+ * 搜索引擎详情页（两级结构第二级）：按引擎类别三分支 + create 模式。
  *
- * 凭证安全口径与列表屏一致：只显 configured 标签，不回显 key 明文。
- * 表单校验仅非空 / URL 形状（含 userinfo 禁入），无连通性测试；保存
- * 失败 catch 内 toast 后回读（部分提交已生效时标签立即反映，与
- * desktop 93f534ea 口径对齐）。
+ * - duckduckgo：内置代码引擎，只读说明卡（无凭据可配）；
+ * - 预置引擎：key（模板需 `{{apiKey}}` 时）/ baseUrl（模板需 `{{baseUrl}}`
+ *   时）表单 + 测试搜索 + 模板高级编辑折叠区（可恢复默认）；
+ * - 自定义实例：key（含「密钥注入方式」快捷写入 Headers）/ baseUrl +
+ *   测试搜索 + 全量模板表单 + 删除；
+ * - create 模式（无 route 参数）：curl 导入粘贴域 + 凭据 + 全量模板表单。
+ *
+ * 模板表单照 FormField/FormTextInput 骨架，保存前统一走 core 的
+ * `validateSearchEngineTemplate`；测试走 store 的 `testEngine` 草稿直测
+ * （不落库），失败 descriptor 经 `coreT`（toast 通道同款翻译入口）译后展示。
+ * 已知 id 判定查 `readConfig()` 动态清单（预置 ∪ DDG ∪ 自定义实例）。
+ * 凭证安全口径同列表页：只显配置状态标签，不回显 key 明文。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -17,46 +29,349 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {EngineId} from '@novel-master/core';
+import {
+  parseCurlCommand,
+  validateSearchEngineTemplate,
+  type SearchConfigPublic,
+  type SearchEngineTemplate,
+} from '@novel-master/core';
 import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
+import {BuiltinTag} from '@/components/provider/BuiltinTag';
+import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {coreT} from '@/i18n/core';
+import {getSearchConfigStore} from '@/services/search-config.store';
 import {
-  getSearchConfigStore,
-  readSearchEngineConfig,
-} from '@/services/search-config.store';
-import {ENGINE_HINTS, ENGINE_LABELS, BuiltinTag} from './SearchEnginesScreen';
+  CUSTOM_ENGINE_HINT,
+  ENGINE_HINTS,
+  ENGINE_LABELS,
+  PRESET_TEMPLATES,
+  engineTitle,
+} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SearchEngineDetail'>;
 
-/** URL 形状预检：与 core normalizeSearxngBaseUrl 同规则（http/https、禁 userinfo）。 */
-function isValidHttpBaseUrl(value: string): boolean {
+/** 模板表单草稿：文本字段原样保存，提交前再解析/校验（headers 为 JSON 文本）。 */
+interface TemplateDraft {
+  name: string;
+  method: 'GET' | 'POST';
+  url: string;
+  headersText: string;
+  bodyText: string;
+  resultPath: string;
+  titleFields: string;
+  urlFields: string;
+  snippetFields: string;
+  answerPath: string;
+  envelopeCodePath: string;
+  envelopeMsgPath: string;
+  envelopeOkValues: string;
+  paramHint: string;
+}
+
+const EMPTY_DRAFT: TemplateDraft = {
+  name: '',
+  method: 'GET',
+  url: '',
+  headersText: '{}',
+  bodyText: '',
+  resultPath: '',
+  titleFields: '',
+  urlFields: '',
+  snippetFields: '',
+  answerPath: '',
+  envelopeCodePath: '',
+  envelopeMsgPath: '',
+  envelopeOkValues: '',
+  paramHint: '',
+};
+
+const METHOD_OPTIONS: ReadonlyArray<ChipOption<'GET' | 'POST'>> = [
+  {value: 'GET', label: 'GET'},
+  {value: 'POST', label: 'POST'},
+];
+
+/** 预置覆盖按差异提交时比较的模板字段（与 SearchEngineTemplate 字段一一对应）。 */
+const TEMPLATE_FIELDS: readonly (keyof SearchEngineTemplate)[] = [
+  'name',
+  'method',
+  'url',
+  'headers',
+  'bodyTemplate',
+  'resultPath',
+  'fieldMap',
+  'answerPath',
+  'envelope',
+  'paramHint',
+];
+
+/** 密钥注入方式（自定义实例快捷写入 Headers；`none` = 清掉已知鉴权头）。 */
+type AuthMode = 'bearer' | 'x-api-key' | 'subscription' | 'none';
+
+const AUTH_MODES: ReadonlyArray<{
+  mode: AuthMode;
+  header?: string;
+  label: string;
+}> = [
+  {mode: 'bearer', header: 'Authorization', label: 'Authorization: Bearer'},
+  {mode: 'x-api-key', header: 'X-API-KEY', label: 'X-API-KEY'},
+  {
+    mode: 'subscription',
+    header: 'X-Subscription-Token',
+    label: 'X-Subscription-Token',
+  },
+  {mode: 'none', label: '不使用密钥'},
+];
+
+const HEADERS_INVALID_HINT = 'Headers 须为 JSON 对象，且每个值为字符串';
+
+/** 候选字段列表：逗号分隔（title/url/snippet 与 envelope.okValues 共用）。 */
+function splitCandidates(text: string): string[] {
+  const items = text.split(',').map(item => item.trim());
+  return items.filter(item => item.length > 0);
+}
+
+/** headers 文本 → 对象；非 JSON 对象或存在非字符串值返回 null（由调用方提示）。 */
+function readHeaders(raw: string): Record<string, string> | null {
   try {
-    const url = new URL(value);
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') &&
-      !url.username &&
-      !url.password
-    );
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const headers: Record<string, string> = {};
+    for (const [headerName, headerValue] of Object.entries(parsed)) {
+      if (typeof headerValue !== 'string') {
+        return null;
+      }
+      headers[headerName] = headerValue;
+    }
+    return headers;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** route 参数防御：类型系统之外（深链/外部 navigate）可能拿到任意值。 */
-function isKnownEngineId(value: unknown): value is EngineId {
-  return typeof value === 'string' && value in ENGINE_LABELS;
+/** 模板表单字段（预置高级区 / 自定义全量 / create 模式共用同一套输入骨架）。 */
+function TemplateFields({
+  draft,
+  onPatch,
+  tokens,
+}: {
+  draft: TemplateDraft;
+  onPatch: (patch: Partial<TemplateDraft>) => void;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <>
+      <FormField
+        label="显示名"
+        tokens={tokens}
+        hint="列表行标题与工具描述中的引擎名"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.name}
+          onChangeText={text => onPatch({name: text})}
+          placeholder="如 我的搜索"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField label="请求方法" tokens={tokens}>
+        <FormChipGroup
+          tokens={tokens}
+          options={METHOD_OPTIONS}
+          value={draft.method}
+          onChange={method => onPatch({method})}
+        />
+      </FormField>
+      <FormField
+        label="请求 URL"
+        tokens={tokens}
+        hint="支持 {{query}}（URL 内自动百分号编码）/ {{count}} / {{apiKey}} / {{baseUrl}} 占位符"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.url}
+          onChangeText={text => onPatch({url: text})}
+          placeholder="https://api.example.com/search"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="请求头 Headers（JSON）"
+        tokens={tokens}
+        hint='值为字符串，可内插占位符（如 "Authorization": "Bearer {{apiKey}}"）'
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.headersText}
+          onChangeText={text => onPatch({headersText: text})}
+          placeholder='{"Accept": "application/json"}'
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="请求体 Body（POST，JSON）"
+        tokens={tokens}
+        hint='占位符写在字符串值里；整数占位用整值 "{{count}}"（执行器替换为数字）'
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.bodyText}
+          onChangeText={text => onPatch({bodyText: text})}
+          placeholder='{"query": "{{query}}", "count": "{{count}}"}'
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="结果数组路径 resultPath"
+        tokens={tokens}
+        hint="点路径（不支持数组下标），如 data.webPages.value；留空 = 根节点即数组"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.resultPath}
+          onChangeText={text => onPatch({resultPath: text})}
+          placeholder="data.webPages.value"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="标题字段候选"
+        tokens={tokens}
+        hint="逗号分隔，按序取第一个非空字段；全空时回填链接"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.titleFields}
+          onChangeText={text => onPatch({titleFields: text})}
+          placeholder="title, name"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="链接字段候选"
+        tokens={tokens}
+        hint="逗号分隔，按序取第一个非空字段"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.urlFields}
+          onChangeText={text => onPatch({urlFields: text})}
+          placeholder="url, link, href"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="摘要字段候选"
+        tokens={tokens}
+        hint="逗号分隔，按序取第一个非空字段；全空按空串展示"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.snippetFields}
+          onChangeText={text => onPatch({snippetFields: text})}
+          placeholder="snippet, content"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="answer 路径（可选）"
+        tokens={tokens}
+        hint="点路径，取到非空字符串时透传 answer；留空不透传"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.answerPath}
+          onChangeText={text => onPatch({answerPath: text})}
+          placeholder="answer"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="业务码路径（可选）"
+        tokens={tokens}
+        hint="如 code；留空不校验业务信封（取不到业务码时也视为通过）"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.envelopeCodePath}
+          onChangeText={text => onPatch({envelopeCodePath: text})}
+          placeholder="code"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="业务消息路径（可选）"
+        tokens={tokens}
+        hint="失败时取该路径消息（脱敏后进错误文案）"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.envelopeMsgPath}
+          onChangeText={text => onPatch({envelopeMsgPath: text})}
+          placeholder="msg"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="成功业务码（可选）"
+        tokens={tokens}
+        hint="逗号分隔，默认 200；如 0, 200"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.envelopeOkValues}
+          onChangeText={text => onPatch({envelopeOkValues: text})}
+          placeholder="200"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <FormField
+        label="参数说明 paramHint"
+        tokens={tokens}
+        hint="≤500 字符；拼进工具描述，告诉模型本引擎可经 params 透传哪些原生参数"
+      >
+        <FormTextInput
+          tokens={tokens}
+          value={draft.paramHint}
+          onChangeText={text => onPatch({paramHint: text})}
+          placeholder="可经 params 透传 xxx 等原生字段；同名参数覆盖模板默认值"
+          multiline
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+    </>
+  );
 }
 
 export function SearchEngineDetailScreen() {
@@ -68,135 +383,404 @@ export function SearchEngineDetailScreen() {
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
 
+  /** undefined = create 模式（新建自定义引擎），区别于「参数缺失」的非法路径。 */
   const engineId = route.params?.engineId;
-  const knownEngine = isKnownEngineId(engineId);
-  const isSearxng = knownEngine && engineId === 'searxng';
-  /** 内置兜底引擎：无凭据可配，详情页为只读说明（无表单无保存）。 */
-  const isDuckduckgo = knownEngine && engineId === 'duckduckgo';
 
+  const [config, setConfig] = useState<SearchConfigPublic | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  /** 正在清除 key（互斥保存；仅 key 引擎）。 */
+  /** 正在清除 key（与保存互斥）。 */
   const [clearing, setClearing] = useState(false);
-  const [configured, setConfigured] = useState(false);
-  /** key 引擎草稿（留空 = 不改已存密钥；回读后清空）。 */
+  /** 正在删除自定义实例（与保存互斥）。 */
+  const [deleting, setDeleting] = useState(false);
+  /** 删除确认弹窗开关。 */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  /** 模板高级编辑折叠区（仅预置引擎）。 */
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [draft, setDraft] = useState<TemplateDraft>(EMPTY_DRAFT);
+  /** key 草稿（留空 = 不改已存密钥；回读后清空）。 */
   const [apiKeyDraft, setApiKeyDraft] = useState('');
-  /** searxng baseUrl 草稿（非密钥字段直接回显编辑；空串保存即清除）。 */
+  /** baseUrl 草稿（非密钥字段直接回显编辑；空串保存即清除）。 */
   const [baseUrlDraft, setBaseUrlDraft] = useState('');
+  /** 测试搜索关键词与结果（结果只展示条数/前几条样例或失败文案）。 */
+  const [testQuery, setTestQuery] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | undefined>();
+  /** create 模式的 curl 粘贴域。 */
+  const [curlText, setCurlText] = useState('');
 
-  // 详情页标题用引擎名（静态映射，无需等异步数据）。
+  const entry = config?.engines.find(item => item.id === engineId);
+  const isCreate = engineId == null;
+  const isCustom = entry?.isCustom === true;
+  let title = '新建自定义引擎';
+  if (engineId != null) {
+    title = engineTitle(engineId, entry?.name ?? '搜索引擎');
+  }
+  let configured = entry != null;
+  if (entry?.needsKey === true) {
+    configured = entry.hasKey;
+  } else if (entry?.needsBaseUrl === true) {
+    configured = entry.baseUrl != null;
+  }
+  const draftText = `${draft.url}\n${draft.headersText}\n${draft.bodyText}`;
+  const draftNeedsKey = draftText.includes('{{apiKey}}');
+  const draftNeedsBaseUrl = draftText.includes('{{baseUrl}}');
+  const headersForAuth = readHeaders(draft.headersText);
+  const authMode: AuthMode | null =
+    headersForAuth == null
+      ? null
+      : AUTH_MODES.find(
+          option =>
+            option.header != null &&
+            headersForAuth[option.header]?.includes('{{apiKey}}') === true,
+        )?.mode ?? 'none';
+
+  // 详情页标题用引擎名（自定义实例回落到配置读模型 name）。
   useFocusEffect(
     useCallback(() => {
-      setStackOverride(
-        knownEngine ? {title: ENGINE_LABELS[engineId]} : undefined,
-      );
+      setStackOverride({title});
       return () => setStackOverride(undefined);
-    }, [knownEngine, engineId, setStackOverride]),
+    }, [setStackOverride, title]),
   );
 
   const load = useCallback(async () => {
-    if (!knownEngine || isDuckduckgo) {
-      // 只读说明卡不依赖库内数据（configured 恒 true），免读库。
-      return;
-    }
     setLoading(true);
     try {
-      const config = await readSearchEngineConfig(runtime);
-      setConfigured(config.engines[engineId].configured);
-      setBaseUrlDraft(config.searxngBaseUrl);
+      const nextConfig = await getSearchConfigStore(runtime).readConfig();
+      setConfig(nextConfig);
+      const engine =
+        engineId == null
+          ? undefined
+          : nextConfig.engines.find(item => item.id === engineId);
+      if (engineId != null && engine == null) {
+        return;
+      }
+      let template: SearchEngineTemplate | undefined;
+      if (engine?.isCustom === true) {
+        template = nextConfig.customEngines.find(
+          def => def.id === engineId,
+        )?.template;
+      } else if (engine != null && engineId != null) {
+        template = PRESET_TEMPLATES[engineId];
+      }
+      setDraft(
+        template == null
+          ? EMPTY_DRAFT
+          : {
+              name: template.name,
+              method: template.method,
+              url: template.url,
+              headersText: JSON.stringify(template.headers, null, 2),
+              bodyText: template.bodyTemplate ?? '',
+              resultPath: template.resultPath,
+              titleFields: template.fieldMap.title.join(', '),
+              urlFields: template.fieldMap.url.join(', '),
+              snippetFields: template.fieldMap.snippet.join(', '),
+              answerPath: template.answerPath ?? '',
+              envelopeCodePath: template.envelope?.codePath ?? '',
+              envelopeMsgPath: template.envelope?.msgPath ?? '',
+              envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
+              paramHint: template.paramHint,
+            },
+      );
+      setBaseUrlDraft(engine?.baseUrl ?? '');
       setApiKeyDraft('');
-    } catch (error) {
-      showToast(toastMessage('加载搜索配置失败', error));
+      setTestResult(undefined);
+    } catch (cause) {
+      showToast(toastMessage('加载搜索配置失败', cause));
     } finally {
       setLoading(false);
     }
-  }, [knownEngine, isDuckduckgo, engineId, runtime, showToast]);
+  }, [engineId, runtime, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
   }, [load]);
 
-  // 参数缺失/非法：提示后退回列表，不渲染表单。
+  // route 参数防御：动态清单里没有该 id（深链 / 已删除实例）→ 提示后退回列表。
+  // 与 load 分开：navigation 对象在测试 mock 里每次渲染换引用，放进 load 依赖会自激重载。
   useEffect(() => {
-    if (!knownEngine) {
-      showToast('缺少引擎参数');
+    if (engineId != null && config != null && entry == null) {
+      showToast(`未找到搜索引擎：${engineId}`);
       navigation.goBack();
     }
-  }, [knownEngine, navigation, showToast]);
+  }, [config, engineId, entry, navigation, showToast]);
+
+  const patchDraft = (patch: Partial<TemplateDraft>) => {
+    setDraft(current => ({...current, ...patch}));
+  };
+
+  /** 草稿 → 校验通过的模板；headers JSON 非法 / 校验失败时 toast 并返回 undefined。 */
+  const validatedTemplate = (): SearchEngineTemplate | undefined => {
+    const headers = readHeaders(draft.headersText);
+    if (headers == null) {
+      showToast(HEADERS_INVALID_HINT);
+      return undefined;
+    }
+    const okValues = splitCandidates(draft.envelopeOkValues);
+    const validated = validateSearchEngineTemplate({
+      name: draft.name,
+      method: draft.method,
+      url: draft.url,
+      headers,
+      ...(draft.bodyText.trim().length > 0
+        ? {bodyTemplate: draft.bodyText.trim()}
+        : {}),
+      resultPath: draft.resultPath,
+      fieldMap: {
+        title: splitCandidates(draft.titleFields),
+        url: splitCandidates(draft.urlFields),
+        snippet: splitCandidates(draft.snippetFields),
+      },
+      ...(draft.answerPath.trim().length > 0
+        ? {answerPath: draft.answerPath.trim()}
+        : {}),
+      ...(draft.envelopeCodePath.trim().length > 0
+        ? {
+            envelope: {
+              codePath: draft.envelopeCodePath.trim(),
+              ...(draft.envelopeMsgPath.trim().length > 0
+                ? {msgPath: draft.envelopeMsgPath.trim()}
+                : {}),
+              ...(okValues.length > 0
+                ? {
+                    okValues: okValues.map(value =>
+                      /^-?\d+$/.test(value) ? Number(value) : value,
+                    ),
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      paramHint: draft.paramHint,
+    });
+    if (!validated.ok) {
+      showToast(
+        coreT(
+          validated.error.messageKey == null
+            ? {key: 'error.tool.search_template_invalid', params: {reason: validated.error.message}}
+            : {key: validated.error.messageKey, params: validated.error.messageParams},
+        ),
+      );
+      return undefined;
+    }
+    return validated.value;
+  };
 
   const handleSave = async () => {
-    if (!knownEngine || isDuckduckgo || saving || clearing) {
+    if (saving || clearing || deleting || testing) {
       return;
     }
-    const store = getSearchConfigStore(runtime);
+    const template = validatedTemplate();
+    if (template == null) {
+      return;
+    }
+    const keyDraft = apiKeyDraft.trim();
+    const baseUrl = baseUrlDraft.trim();
     setSaving(true);
     try {
-      if (isSearxng) {
-        const baseUrl = baseUrlDraft.trim();
-        if (baseUrl.length > 0 && !isValidHttpBaseUrl(baseUrl)) {
-          showToast('实例地址无效：仅支持 http/https，且不允许携带用户名密码');
-          return;
-        }
-        await store.setSearxngBaseUrl(baseUrl);
+      const store = getSearchConfigStore(runtime);
+      if (engineId == null) {
+        // 本地实例 id：8 位 base36 随机串（core 校验 `custom:{8}` 形态并拒绝重复）。
+        const id = `custom:${Math.random()
+          .toString(36)
+          .slice(2, 10)
+          .padEnd(8, '0')}`;
+        await store.createCustomEngine({
+          def: {
+            id,
+            name: template.name,
+            template,
+            createdAt: new Date().toISOString(),
+          },
+          ...(keyDraft.length > 0 ? {apiKey: keyDraft} : {}),
+          ...(draftNeedsBaseUrl && baseUrl.length > 0 ? {baseUrl} : {}),
+        });
+        showToast('已创建自定义引擎');
+        navigation.goBack();
+        return;
+      }
+      if (entry?.isCustom === true) {
+        await store.updateCustomEngine(engineId, {
+          template,
+          ...(keyDraft.length > 0 ? {apiKey: keyDraft} : {}),
+          ...(draftNeedsBaseUrl ? {baseUrl} : {}),
+        });
       } else {
-        // key 引擎空 draft：密钥不回显、无 diff 可比，直接拦截提示
-        // （与 desktop 同口径：不发虚假成功 toast、不回读）。
-        const draft = apiKeyDraft.trim();
-        if (draft.length === 0) {
+        if (draftNeedsKey && keyDraft.length === 0 && entry?.hasKey !== true) {
           showToast('请输入 API Key（留空不会修改已保存的密钥）');
           return;
         }
-        await store.saveEngineKey(engineId, draft);
+        // 预置覆盖按差异提交：只写入与出厂模板不同的字段，未改字段保留既有覆盖
+        // （高级编辑显示出厂模板，见卡片提示；与 desktop 同一语义）。
+        const preset = PRESET_TEMPLATES[engineId];
+        if (preset != null) {
+          const patch: Partial<SearchEngineTemplate> = {};
+          for (const field of TEMPLATE_FIELDS) {
+            if (
+              JSON.stringify(preset[field]) !== JSON.stringify(template[field])
+            ) {
+              Object.assign(patch, {[field]: template[field]});
+            }
+          }
+          if (Object.keys(patch).length > 0) {
+            await store.updatePresetOverride(engineId, patch);
+          }
+        }
+        if (keyDraft.length > 0) {
+          await store.saveEngineKey(engineId, keyDraft);
+        }
+        if (draftNeedsBaseUrl) {
+          await store.setEngineBaseUrl(engineId, baseUrl);
+        }
       }
       showToast('配置已保存');
       await load();
-    } catch (error) {
-      showToast(toastMessage('保存失败', error));
-      // 回读让状态标签立即反映已生效部分（保存链路失败后状态与真值对齐的兜底口径）。
+    } catch (cause) {
+      showToast(toastMessage('保存失败', cause));
+      // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）。
       await load();
     } finally {
       setSaving(false);
     }
   };
 
+  const handleTest = async () => {
+    if (testing || saving || clearing || deleting) {
+      return;
+    }
+    const query = testQuery.trim();
+    if (query.length === 0) {
+      showToast('请输入测试关键词');
+      return;
+    }
+    const template = validatedTemplate();
+    if (template == null) {
+      return;
+    }
+    setTesting(true);
+    setTestResult(undefined);
+    try {
+      const outcome = await getSearchConfigStore(runtime).testEngine({
+        ...(engineId == null ? {} : {engineId}),
+        draft: {
+          template,
+          ...(apiKeyDraft.trim().length > 0
+            ? {apiKey: apiKeyDraft.trim()}
+            : {}),
+          ...(baseUrlDraft.trim().length > 0
+            ? {baseUrl: baseUrlDraft.trim()}
+            : {}),
+        },
+        query,
+      });
+      setTestResult(
+        outcome.ok
+          ? [
+              `返回 ${outcome.value.resultCount} 条结果`,
+              ...outcome.value.sample
+                .slice(0, 3)
+                .map(
+                  (item, index) => `${index + 1}. ${item.title} — ${item.url}`,
+                ),
+            ].join('\n')
+          : `测试失败：${coreT(outcome.error.message)}`,
+      );
+    } catch (cause) {
+      showToast(toastMessage('测试失败', cause));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleImportCurl = () => {
+    const parsed = parseCurlCommand(curlText);
+    if (!parsed.ok) {
+      showToast(toastMessage('导入失败', coreT(parsed.error.message)));
+      return;
+    }
+    const imported = parsed.value;
+    patchDraft({
+      method: imported.method,
+      url: imported.url,
+      headersText: JSON.stringify(imported.headers, null, 2),
+      ...(imported.bodyTemplate == null
+        ? {}
+        : {bodyText: imported.bodyTemplate}),
+    });
+    if (imported.apiKey != null) {
+      setApiKeyDraft(imported.apiKey);
+    }
+    showToast('已解析 curl 命令，请补全结果映射后再保存');
+  };
+
+  const applyAuthMode = (mode: AuthMode) => {
+    const headers = readHeaders(draft.headersText);
+    if (headers == null) {
+      showToast(HEADERS_INVALID_HINT);
+      return;
+    }
+    for (const option of AUTH_MODES) {
+      if (option.header != null) {
+        delete headers[option.header];
+      }
+    }
+    const chosen = AUTH_MODES.find(option => option.mode === mode);
+    if (chosen?.header != null) {
+      headers[chosen.header] =
+        mode === 'bearer' ? 'Bearer {{apiKey}}' : '{{apiKey}}';
+    }
+    patchDraft({headersText: JSON.stringify(headers, null, 2)});
+  };
+
   const handleClearKey = async () => {
-    if (!knownEngine || isSearxng || isDuckduckgo || saving || clearing) {
+    if (engineId == null || saving || clearing || deleting) {
       return;
     }
     setClearing(true);
     try {
       await getSearchConfigStore(runtime).clearEngineKey(engineId);
-      showToast(`已清除 ${ENGINE_LABELS[engineId]} API Key`);
+      showToast(`已清除 ${title} API Key`);
       await load();
-    } catch (error) {
-      showToast(toastMessage('清除失败', error));
+    } catch (cause) {
+      showToast(toastMessage('清除失败', cause));
     } finally {
       setClearing(false);
     }
   };
 
-  if (!knownEngine) {
-    return (
-      <View style={[styles.centered, {backgroundColor: tokens.background}]} />
-    );
-  }
+  const handleResetPreset = async () => {
+    if (engineId == null || saving || clearing || deleting) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await getSearchConfigStore(runtime).resetPresetOverride(engineId);
+      showToast('已恢复默认模板');
+      await load();
+    } catch (cause) {
+      showToast(toastMessage('恢复默认失败', cause));
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  // 内置兜底引擎：只读说明卡，无输入框、无保存 footer、无清除。
-  if (isDuckduckgo) {
-    return (
-      <ScreenFormLayout tokens={tokens}>
-        <FormSectionCard
-          tokens={tokens}
-          title={ENGINE_LABELS[engineId]}
-          hint={ENGINE_HINTS[engineId]}
-          rightAction={<BuiltinTag tokens={tokens} />}>
-          <Text style={[styles.builtinDesc, {color: tokens.textSecondary}]}>
-            内置兜底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
-          </Text>
-        </FormSectionCard>
-      </ScreenFormLayout>
-    );
-  }
+  const handleDelete = async () => {
+    if (engineId == null || saving || clearing || deleting) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await getSearchConfigStore(runtime).deleteCustomEngine(engineId);
+      showToast('已删除自定义引擎');
+      setConfirmDelete(false);
+      navigation.goBack();
+    } catch (cause) {
+      showToast(toastMessage('删除失败', cause));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -206,87 +790,316 @@ export function SearchEngineDetailScreen() {
     );
   }
 
+  // 已删除/脏参数退场中：不渲染表单（load 内已提示并 goBack）。
+  if (engineId != null && entry == null) {
+    return (
+      <View style={[styles.centered, {backgroundColor: tokens.background}]} />
+    );
+  }
+
+  // 内置代码引擎：只读说明卡，无输入框、无保存 footer。
+  if (engineId === 'duckduckgo') {
+    return (
+      <ScreenFormLayout tokens={tokens}>
+        <FormSectionCard
+          tokens={tokens}
+          title={ENGINE_LABELS.duckduckgo}
+          hint={ENGINE_HINTS.duckduckgo}
+          rightAction={<BuiltinTag tokens={tokens} />}
+        >
+          <Text style={[styles.hintText, {color: tokens.textSecondary}]}>
+            内置代码引擎，无需 API Key，开箱即用；在列表页可开关与调整优先级，
+            关闭后不参与搜索。
+          </Text>
+        </FormSectionCard>
+      </ScreenFormLayout>
+    );
+  }
+
+  const keyField = (
+    <FormField
+      label="API Key"
+      tokens={tokens}
+      hint={
+        entry?.hasKey === true
+          ? '已保存；留空则保留原密钥'
+          : '保存时写入本机密钥库'
+      }
+    >
+      <FormTextInput
+        tokens={tokens}
+        value={apiKeyDraft}
+        onChangeText={setApiKeyDraft}
+        placeholder={entry?.hasKey === true ? '留空保留已存密钥' : ''}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </FormField>
+  );
+  const baseUrlField = (
+    <FormField
+      label="实例地址 Base URL"
+      tokens={tokens}
+      hint="含 http(s)://；留空保存即清除"
+    >
+      <FormTextInput
+        tokens={tokens}
+        value={baseUrlDraft}
+        onChangeText={setBaseUrlDraft}
+        placeholder="https://search.example.com"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+    </FormField>
+  );
+  const authModeField =
+    authMode == null ? null : (
+      <FormField
+        label="密钥注入方式"
+        tokens={tokens}
+        hint="快捷写入 Headers；也可直接在模板 Headers 里手写占位符"
+      >
+        <FormChipGroup
+          tokens={tokens}
+          options={AUTH_MODES.map(option => ({
+            value: option.mode,
+            label: option.label,
+          }))}
+          value={authMode}
+          onChange={applyAuthMode}
+        />
+      </FormField>
+    );
+  const templateCard = (
+    <FormSectionCard
+      tokens={tokens}
+      title="引擎模板"
+      hint="模板决定请求形状与结果字段映射；保存前会校验合法性并拦截明文密钥"
+    >
+      <TemplateFields draft={draft} onPatch={patchDraft} tokens={tokens} />
+    </FormSectionCard>
+  );
+  const testCard = (
+    <FormSectionCard
+      tokens={tokens}
+      title="测试搜索"
+      hint="草稿直测，不落库；会真实请求引擎接口，可能消耗引擎配额"
+    >
+      <FormField label="测试关键词" tokens={tokens}>
+        <FormTextInput
+          tokens={tokens}
+          value={testQuery}
+          onChangeText={setTestQuery}
+          placeholder="如 人工智能"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </FormField>
+      <SecondaryButton
+        tokens={tokens}
+        fullWidth
+        label={testing ? '测试中…' : '测试搜索'}
+        onPress={() => {
+          handleTest().catch(() => undefined);
+        }}
+        disabled={saving || clearing || deleting || testing}
+      />
+      {testResult == null ? null : (
+        <Text style={[styles.testResult, {color: tokens.textSecondary}]}>
+          {testResult}
+        </Text>
+      )}
+    </FormSectionCard>
+  );
+
   return (
     <ScreenFormLayout
       tokens={tokens}
       footer={
         <StickyFormFooter
           tokens={tokens}
-          label="保存配置"
+          label={isCreate ? '创建引擎' : '保存配置'}
           onPress={() => {
             handleSave().catch(() => undefined);
           }}
           loading={saving}
-          disabled={clearing}
+          disabled={clearing || deleting || testing}
         />
       }
     >
+      {isCreate ? (
+        <FormSectionCard
+          tokens={tokens}
+          title="从 curl 导入"
+          hint="粘贴 curl 命令自动预填请求方法 / URL / Headers / Body；疑似密钥替换为 {{apiKey}} 占位符，保存时写入密钥库"
+        >
+          <FormTextInput
+            tokens={tokens}
+            value={curlText}
+            onChangeText={setCurlText}
+            placeholder="curl -X POST https://api.example.com/search -H 'Authorization: Bearer ...' -d '{...}'"
+            multiline
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <SecondaryButton
+            tokens={tokens}
+            fullWidth
+            label="解析并预填"
+            onPress={handleImportCurl}
+            disabled={curlText.trim().length === 0 || saving}
+          />
+        </FormSectionCard>
+      ) : null}
       <FormSectionCard
         tokens={tokens}
-        title={ENGINE_LABELS[engineId]}
+        title={isCreate ? '凭据（可选）' : title}
         hint={
-          isSearxng ? ENGINE_HINTS[engineId] : '密钥仅存本机安全密钥库'
+          isCreate
+            ? '密钥 / 实例地址按模板占位符取用；留空可稍后再配'
+            : ENGINE_HINTS[engineId] ?? CUSTOM_ENGINE_HINT
         }
         rightAction={
-          <ApiKeyStatusTag
-            status={configured ? 'set' : 'not set'}
-            tokens={tokens}
-          />
+          isCreate ? undefined : (
+            <ApiKeyStatusTag
+              status={configured ? 'set' : 'not set'}
+              tokens={tokens}
+            />
+          )
         }
       >
-        {isSearxng ? (
-          <FormField
-            label="实例地址 Base URL"
+        {isCreate || isCustom || draftNeedsKey ? keyField : null}
+        {isCreate || isCustom ? authModeField : null}
+        {draftNeedsBaseUrl ? baseUrlField : null}
+        {isCreate || entry?.hasKey !== true ? null : (
+          <SecondaryButton
             tokens={tokens}
-            hint="含 http(s)://，如 https://searxng.example.com；留空保存即清除"
-          >
-            <FormTextInput
-              tokens={tokens}
-              value={baseUrlDraft}
-              onChangeText={setBaseUrlDraft}
-              placeholder="https://searxng.example.com"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </FormField>
-        ) : (
-          <>
-            <FormField
-              label="API Key"
-              tokens={tokens}
-              hint={
-                configured ? '已保存；留空则保留原密钥' : '保存时写入本机密钥库'
-              }
-            >
-              <FormTextInput
-                tokens={tokens}
-                value={apiKeyDraft}
-                onChangeText={setApiKeyDraft}
-                placeholder={configured ? '留空保留已存密钥' : ''}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </FormField>
-            {configured ? (
-              <SecondaryButton
-                tokens={tokens}
-                fullWidth
-                label={clearing ? '清除中…' : '清除已存密钥'}
-                onPress={() => {
-                  handleClearKey().catch(() => undefined);
-                }}
-                disabled={saving || clearing}
-              />
-            ) : null}
-          </>
+            fullWidth
+            label={clearing ? '清除中…' : '清除已存密钥'}
+            onPress={() => {
+              handleClearKey().catch(() => undefined);
+            }}
+            disabled={saving || clearing || deleting || testing}
+          />
         )}
       </FormSectionCard>
+      {testCard}
+      {isCreate || isCustom ? (
+        templateCard
+      ) : (
+        <FormSectionCard
+          tokens={tokens}
+          title="模板（高级）"
+          hint="修改请求形状与结果映射；保存后作为本机覆盖，可随时恢复默认"
+        >
+          {config?.presetOverrides[engineId] === true ? (
+            <Text style={[styles.hintText, {color: tokens.textSecondary}]}>
+              该引擎已有自定义覆盖；高级编辑显示出厂模板，保存时只提交你修改过的字段，
+              未改字段保留既有覆盖。
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => setAdvancedOpen(current => !current)}
+            style={[styles.advancedToggle, {borderColor: tokens.borderLight}]}
+          >
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>
+              {advancedOpen ? '收起模板编辑' : '展开模板编辑'}
+            </Text>
+          </Pressable>
+          {advancedOpen ? (
+            <TemplateFields
+              draft={draft}
+              onPatch={patchDraft}
+              tokens={tokens}
+            />
+          ) : null}
+          {engineId != null && config?.presetOverrides[engineId] === true ? (
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label="恢复默认模板"
+              onPress={() => {
+                handleResetPreset().catch(() => undefined);
+              }}
+              disabled={saving || clearing || deleting || testing}
+            />
+          ) : null}
+        </FormSectionCard>
+      )}
+      {isCustom ? (
+        <FormSectionCard
+          tokens={tokens}
+          title="删除引擎"
+          hint="删除后模板配置与已存密钥一并清除，不可恢复"
+        >
+          <SecondaryButton
+            tokens={tokens}
+            fullWidth
+            label={deleting ? '删除中…' : '删除此自定义引擎'}
+            onPress={() => setConfirmDelete(true)}
+            disabled={saving || clearing || deleting || testing}
+          />
+        </FormSectionCard>
+      ) : null}
+      {/* 删除确认：删除即清模板 / 密钥 / 排序项，二次确认。 */}
+      <ModalShell
+        visible={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        variant="center"
+        animationType="fade"
+        panelStyle={styles.confirmPanel}
+      >
+        <Text style={[styles.confirmTitle, {color: tokens.text}]}>
+          删除自定义引擎
+        </Text>
+        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>
+          {`「${title}」的模板配置与已存密钥会一并清除，此操作不可撤销。`}
+        </Text>
+        <View style={styles.confirmActions}>
+          <View style={styles.confirmAction}>
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label="取消"
+              onPress={() => setConfirmDelete(false)}
+              disabled={deleting}
+            />
+          </View>
+          <View style={styles.confirmAction}>
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label={deleting ? '删除中…' : '删除'}
+              onPress={() => {
+                handleDelete().catch(() => undefined);
+              }}
+              disabled={deleting}
+            />
+          </View>
+        </View>
+      </ModalShell>
     </ScreenFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  builtinDesc: {fontSize: 14, lineHeight: 21},
+  hintText: {fontSize: 14, lineHeight: 21},
+  testResult: {fontSize: 13, lineHeight: 19},
+  advancedToggle: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmPanel: {
+    borderRadius: 16,
+    width: '100%',
+    padding: 20,
+  },
+  confirmTitle: {fontSize: 17, fontWeight: '600', marginBottom: 10},
+  confirmBody: {fontSize: 14, lineHeight: 21, marginBottom: 14},
+  confirmActions: {flexDirection: 'row', gap: 12},
+  confirmAction: {flex: 1},
 });

@@ -71,6 +71,7 @@ export const ErrorCodes = {
   TOOL_INVALID_ARGUMENT: {code: 104001, desc: "invalid tool argument"},
   TOOL_SEARCH_INVALID_ARGUMENT: {code: 104002, desc: "invalid search configuration argument"},
   TOOL_SEARCH_FAILED: {code: 104003, desc: "search engine request failed"},
+  TOOL_SEARCH_TEMPLATE_INVALID: {code: 104004, desc: "invalid search engine template"},
 
   // 105 PROVIDER 001-999：provider logic/model 的入参、模型 id 与密钥校验。
   PROVIDER_INVALID_ARGUMENT: {code: 105001, desc: "invalid provider argument"},

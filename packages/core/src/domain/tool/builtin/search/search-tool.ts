@@ -1,26 +1,27 @@
 /**
- * `search` 工具实现：经已配置的搜索引擎（bocha / tavily / brave /
- * searxng / duckduckgo）检索网页，回流统一形状的结果列表（title /
- * url / snippet），让 agent 具备联网检索能力（写作考据、事实核验、
- * 资料收集）；未配置付费引擎时由内置 DuckDuckGo 免费搜索兜底（PRD
- * R1.2，搜索开箱即用）。
+ * `search` 工具实现：经当前配置的搜索引擎（模板引擎 / DuckDuckGo 内置
+ * 适配器，id 动态）检索网页，回流统一形状的结果列表（title / url /
+ * snippet），让 agent 具备联网检索能力（写作考据、事实核验、资料收集）。
  *
- * 设计口径（SPEC web-search-tool Step 4，修订轮串行链）：
- * - 引擎链经 `ctx.search` 闭包解析（engineOrder 优先级序；显式
- *   input.engine 时从该引擎起截取、未配置顺位回落链中下一个
- *   configured）；全无 → 返回含配置入口指引的提示（成功输出、非错误）。
- * - 串行执行：从链首起依次请求已配置引擎，请求失败（任何错误类型）
- *   → 尝试链中下一个；显式 input.engine 时钉死链首、失败不降级直接
- *   报错。链总预算 120s（每引擎尝试前检查剩余额度，耗尽带已收集
- *   错误返回）；全链失败抛聚合错误（每引擎一行摘要，不泄漏 key）。
- * - 成功输出携带 `attempts` 尝试轨迹（如「bocha 失败(401) → tavily
- *   成功」；首发成功省略该字段）。
- * - 网络入口经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch，照 curl）；
- *   适配器错误统一 `toolFailed("search", cause)` 包装。
+ * 设计口径（SPEC web-search-curl §6/§7）：
+ * - 引擎链经 `ctx.search` 闭包解析（engineOrderV2 顺序，只含 enabled ∩
+ *   配置完整的引擎；显式 input.engine 时先钉链首、该引擎不可用则沿序
+ *   顺位回落；未知 id 由链解析抛错）；链空 → 返回中性配置指引提示
+ *   （成功输出、非错误）。
+ * - 串行执行：从链首起依次请求，单引擎失败（任何错误类型）→ 尝试链中
+ *   下一个；显式 input.engine 时钉死链首、失败不降级直接报错。链总预算
+ *   120s（每引擎尝试前检查剩余额度，耗尽带已收集错误返回）；全链失败
+ *   抛聚合错误（每引擎一行摘要，不泄漏 key）。
+ * - `params` 是自由 JSON 对象，原样透传给模板执行器（引擎方言参数，
+ *   未知字段由引擎忽略）；DuckDuckGo 忽略 params。
+ * - 成功输出携带 `attempts` 尝试轨迹（首发成功省略该字段）。
+ * - 网络入口经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch，照 curl）。
  * - 输出预算保险丝：结果序列化超过 `TOOL_OUTPUT_MAX_BYTES`（50KB）时
  *   全文落盘会话工作区 `/tmp/` 并返回 `{savedPath, message}`
- *   （overflow-sink 公共机制，curl 同机制）；落盘失败回落完整结果
- *   （正常搜索结果约 15KB 封顶，超预算与落盘失败双罕见）。
+ *   （overflow-sink 公共机制，curl 同机制）；落盘失败回落完整结果。
+ * - description 由装配期快照（`ctx.search.engineSnapshot`，口径与串行链
+ *   同款）拼装：引擎无关通用段 + 逐引擎参数说明段；回合内改配置下回合
+ *   生效（照 skills 快照语义）。
  * - 不在任何 registry 摘除分支内，主/子/孙 agent 全深度可用（照 curl）。
  *
  * @module domain/tool/builtin/search/search-tool
@@ -34,7 +35,7 @@ import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
 import { sinkOversizedOutput } from "../overflow-sink.js";
-import { DEFAULT_MAX_RESULTS, ENGINE_IDS, MAX_RESULTS_LIMIT, normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
+import { DEFAULT_MAX_RESULTS, MAX_RESULTS_LIMIT, normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
 import { dispatchSearch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
 import { createLogger } from "@/infra/log/logger.js";
 
@@ -49,26 +50,28 @@ export const SEARCH_CHAIN_BUDGET_MS = 120_000;
 /** 聚合错误 / attempts 轨迹里单引擎错误摘要的截断长度。 */
 const ENGINE_ERROR_SUMMARY_LIMIT = 300;
 
-/** `search` 工具输入（schema 本期只开放 query / maxResults / engine）。 */
+/** `search` 工具输入（schema 开放 query / maxResults / engine / params）。 */
 export interface SearchToolInput {
   /** 搜索关键词。 */
   readonly query: string;
   /** 结果条数：缺省 5；小于 1 回落 5、超过 20 收敛到 20（不报错）。 */
   readonly maxResults?: number;
   /**
-   * 可选：指定引擎；缺省按 engineOrder 优先级串行尝试已配置引擎，
-   * 前一个失败自动降级到下一个；显式指定时钉死该引擎（未配置顺位
-   * 回落），失败不降级直接报错。
+   * 可选：指定引擎 id（动态全集，见描述里的可用引擎清单）；缺省按
+   * engineOrderV2 优先级串行尝试，前一个失败自动降级到下一个；显式指定
+   * 时钉死该引擎（不可用则沿序顺位回落），失败不降级直接报错。
    */
-  readonly engine?: (typeof ENGINE_IDS)[number];
+  readonly engine?: string;
+  /** 可选：自由 JSON，原样透传引擎方言参数（模板引擎忽略未知字段；DDG 忽略）。 */
+  readonly params?: Readonly<Record<string, unknown>>;
 }
 
 /**
  * `search` 工具输出三形态：
  * - `SearchChainOutput`：正常结果（engine + 可选 answer + results +
  *   可选 attempts 轨迹）；
- * - `SearchOversizeOutput`：超 50KB 落盘形态（Step 6 接线后出现）；
- * - `string`：未配置任何引擎时的配置指引提示。
+ * - `SearchOversizeOutput`：超 50KB 落盘形态；
+ * - `string`：链空（无可用已启用引擎）时的配置指引提示。
  */
 export type SearchToolOutput = SearchChainOutput | SearchOversizeOutput | string;
 
@@ -92,26 +95,35 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
  */
 export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolContext> = {
   name: SEARCH_TOOL_NAME,
-  description: () =>
-    `联网搜索：经已配置的搜索引擎（bocha / tavily / brave / searxng / duckduckgo）检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据；未配置付费引擎时自动使用内置 DuckDuckGo 免费搜索（无需密钥）。
+  description: (ctx) => {
+    // 逐引擎段来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
+    const engines = ctx.search?.engineSnapshot ?? [];
+    const engineSection = engines.length === 0 ? "当前没有可用的已启用引擎；调用会返回配置指引，请到 设置 → 搜索配置 开启或配置引擎。" : engines.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
+    return `联网搜索：按当前配置的搜索引擎串行检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据。
 
 入参：
 - query：搜索关键词（必填）
-- maxResults：结果条数，默认 5，范围 1..20（超出范围自动收敛）
-- engine：可选，指定引擎 bocha/tavily/brave/searxng/duckduckgo；缺省按配置顺序（engineOrder）串行尝试已配置引擎，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
+- engine：可选，指定搜索引擎 id（见下方可用引擎清单）；缺省按配置顺序串行尝试，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
+- maxResults：结果条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（超出范围自动收敛，不报错）
+- params：可选，自由 JSON 对象，原样透传给引擎方言参数（如时间范围、结果深度、域名过滤等）；同名参数覆盖模板默认值，引擎忽略未知字段
 
-结果格式：可读文本，非 JSON——首行为「search 引擎 · N 条结果」，发生过降级时下一行展示尝试轨迹（如「bocha 失败(401) → tavily 成功」），tavily 的原生回答（如有）紧随其后，其后为「- 标题 — 链接 — 摘要」紧凑列表；结果超过 50KB 时全文自动保存到会话工作区 /tmp/（可用 read 读取）并显示落盘路径。
+可用引擎（按串行链顺序）：
+${engineSection}
 
-注意：未配置付费引擎（bocha/tavily/brave 的 API key、自托管 searxng 的 baseUrl）时使用内置 DuckDuckGo 免费搜索，无需任何配置即可用；可在设置中配置付费引擎获得更稳定的质量；串行链总预算 120s，全链失败返回逐引擎聚合错误。`,
+结果格式：可读文本，非 JSON——首行为「search 引擎 · N 条结果」，发生过降级时下一行展示尝试轨迹（「引擎 失败(原因) → 引擎 成功」），引擎返回的原生回答（如有）紧随其后，其后为「- 标题 — 链接 — 摘要」紧凑列表；结果超过 50KB 时全文自动保存到会话工作区 /tmp/（可用 read 读取）并显示落盘路径。
+
+串行链总预算 ${SEARCH_CHAIN_BUDGET_MS / 1000}s；全链失败返回逐引擎聚合错误。引擎配置在 设置 → 搜索配置 中管理，当回合内改配置下回合生效。`;
+  },
   inputSchema: z.object({
     query: z.string().min(1).describe("搜索关键词"),
     maxResults: z.number().int().min(0).optional().describe(`结果条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（超出范围自动收敛，不报错）`),
-    engine: z.enum(ENGINE_IDS).optional().describe("可选：指定搜索引擎；缺省按配置顺序串行尝试已配置引擎（失败自动降级），显式指定时钉死该引擎、失败不降级"),
+    engine: z.string().min(1).optional().describe("可选：指定搜索引擎 id（当前启用且配置完整的引擎，见描述「可用引擎」）；缺省按配置顺序串行尝试（失败自动降级），显式指定时钉死该引擎、失败不降级"),
+    params: z.record(z.string(), z.unknown()).optional().describe("可选：自由 JSON 对象，原样透传引擎方言参数（时间范围 / 结果深度 / 域名过滤等）；同名参数覆盖模板默认值，引擎忽略未知字段"),
   }),
   outputSchema: z.union([
     z.string(),
     z.object({
-      engine: z.enum(ENGINE_IDS),
+      engine: z.string(),
       answer: z.string().optional(),
       attempts: z.string().optional(),
       results: z.array(z.object({
@@ -121,7 +133,7 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
         })),
     }),
     z.object({
-      engine: z.enum(ENGINE_IDS),
+      engine: z.string(),
       savedPath: z.string(),
       message: z.string(),
     }),
@@ -133,10 +145,9 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
       throw toolFailed(SEARCH_TOOL_NAME, new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"));
     }
 
-    // 引擎链解析：engineOrder 优先级序（显式 input.engine 时从该引擎起
-    // 截取，未配置顺位回落截取链中下一个 configured）；链常规非空
-    //（duckduckgo 恒 configured 队尾兜底），空链仅防御路径可达 →
-    // 未配置提示（成功输出，含双端配置入口指引，非错误）。
+    // 引擎链解析：engineOrderV2 优先级序（显式 input.engine 时先钉该引擎，
+    // 不可用则沿序顺位回落）；链空是合法常态（全关）→ 中性配置指引提示
+    //（成功输出、非错误）。
     const chain = await search.resolveEngineChain(input.engine);
     if (chain.length === 0) {
       return SEARCH_NOT_CONFIGURED_MESSAGE;
@@ -146,11 +157,6 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
     // 直接报错；缺省调用才沿链降级。
     const candidates: readonly ResolvedEngineConfig[] = input.engine != null ? chain.slice(0, 1) : chain;
     const fetchFn = ctx.fetchFn ?? globalThis.fetch;
-    // ⚠️ 生产恒不带 domainFilter / recencyFilter：inputSchema（上方）未开放这两项，
-    // 五个引擎适配器里的过滤分支因此永远命中 `types.ts:177-179` 的早退。
-    // 有意保留实现与测试（web-search-tool spec 的 T-A5 / T-A6 锁着它们），勿当死码删。
-    // 同理，description 不得新增这两个入参。
-    const options = { maxResults: normalizeMaxResults(input.maxResults) };
     const startedAt = Date.now();
     // 每引擎一行聚合摘要（全链失败 / 预算耗尽时随错误返回）。
     const failureLines: string[] = [];
@@ -166,7 +172,7 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
         throw toolFailed(SEARCH_TOOL_NAME, new Error(buildChainErrorMessage(failureLines, candidates.length - i)));
       }
       try {
-        const response = await dispatchSearch(entry, input.query, options, fetchFn);
+        const response = await dispatchSearch(entry, input.query, { maxResults: normalizeMaxResults(input.maxResults) }, input.params ?? {}, fetchFn);
         // 降级后成功：输出携带 attempts 轨迹；链首首发成功省略该字段。
         const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.engine} 成功`;
         success = attempts == null ? response : { ...response, attempts };
@@ -179,7 +185,7 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
         const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
         failureLines.push(`${entry.engine}: ${safe}`);
         attemptParts.push(`${entry.engine} 失败(${brief})`);
-        // 循环继续：尝试链中下一个 configured 引擎（钉死时仅一员，自然止）。
+        // 循环继续：尝试链中下一个引擎（钉死时仅一员，自然止）。
       }
     }
 

@@ -37,7 +37,7 @@ import { SkillsManageView } from "../features/settings/SkillsManageView";
 import { SkillDetailView } from "../features/settings/SkillDetailView";
 import { SearchEnginesView } from "../features/settings/SearchEnginesView";
 import { SearchEngineDetailView } from "../features/settings/SearchEngineDetailView";
-import { engineLabel } from "../features/settings/search-engine-meta";
+import { engineLabel, NEW_ENGINE_SENTINEL } from "../features/settings/search-engine-meta";
 import {
   OPEN_SETTINGS_VIEW_EVENT,
   type OpenSettingsViewDetail,
@@ -74,6 +74,8 @@ function getSettingsMainTitle(
     return navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
   }
   if (viewId === "searchEngineDetail") {
+    // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
+    if (navState.editingEngineId === NEW_ENGINE_SENTINEL) return "新建自定义引擎";
     const label = engineLabel(navState.editingEngineId);
     return label ? `搜索引擎 · ${label}` : "搜索引擎";
   }

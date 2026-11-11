@@ -1,13 +1,15 @@
 /**
- * DuckDuckGo 适配器（内置免费兜底引擎，参考 `.reference/pi-web-access/
- * duckduckgo.ts` 请求/解析/过滤逻辑；环境偏离同其它引擎：AbortController
- * + setTimeout 超时、无 SSRF、无 activityMonitor；DOM 解析（参考用
- * linkedom）换正则——RN/Hermes 无 DOM 实现，正则是唯一可移植解）。
+ * DuckDuckGo 适配器（内置免费引擎，唯一保留的代码适配器；bocha / tavily /
+ * brave / searxng / deepseek / zhipu 与自定义实例均走模板执行器。参考
+ * `.reference/pi-web-access/duckduckgo.ts` 请求/解析逻辑；环境偏离同其它
+ * 引擎：AbortController + setTimeout 超时、无 SSRF、无 activityMonitor；
+ * DOM 解析（参考用 linkedom）换正则——RN/Hermes 无 DOM 实现，正则是唯一
+ * 可移植解）。
  *
  * 请求：GET `https://html.duckduckgo.com/html/?q=...`、无 key 无 baseUrl
- * （内置兜底，解析链恒可用）；headers 只有 `Accept: text/html` 与自报
- * 轻客户端 UA（不伪装浏览器）。HTML 端点无条数/时间范围参数：maxResults
- * 客户端截断（照 searxng 模式）、recencyFilter 忽略（PRD R1.2 口径）。
+ * （DDG 无模板，凭据面为空）；headers 只有 `Accept: text/html` 与自报
+ * 轻客户端 UA（不伪装浏览器）。HTML 端点无条数参数：maxResults 客户端
+ * 截断（模板执行器同口径）。
  *
  * 解析（正则模拟 DOM 查询，class 一律 token 精确匹配——`result__url`
  * 等近形类名不得误伤）：按 `.result` 块分块（`result--ad` 广告块跳过）
@@ -16,12 +18,12 @@
  * ?uddg=<encoded>` 重定向时解码 uddg 取真实 URL（仅接受 http/https）。
  * 解析 0 个可解析结果（有块但全无有效 title/url，或无块——页面改版 /
  * 反爬拦截页）抛 invalid response 错误，供串行链感知降级。
- * answer 省略（仅 tavily 透传原生 answer 的统一口径）。
+ * answer 省略（只有模板 answerPath 命中才透传）。
  *
  * @module domain/tool/builtin/search/engines/duckduckgo
  */
 
-import { engineApiErrorMessage, engineFailed, engineTimeoutError, matchesDomainFilters, normalizeMaxResults, parseDomainFilters, type DomainFilters, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxResults, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
 
 /** DuckDuckGo HTML 端点（硬编码，内置引擎无自定义 baseUrl）。 */
 export const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
@@ -129,18 +131,14 @@ function splitResultBlocks(html: string): ResultBlock[] {
 }
 
 /**
- * DuckDuckGo 搜索适配器：无任何凭据依赖（`_resolved` 仅保持与其它适配器
- * 统一的签名，dispatch 统一路由）；超时 30s；域名过滤纯客户端
- * （HTML 端点无 `site:` 服务端过滤能力，不拼查询词——与 brave/searxng
- * 的双保险模式不同，参考实现同口径）。
+ * DuckDuckGo 搜索适配器：无任何凭据依赖（`_resolved` 仅保持与模板执行器
+ * 统一的签名，dispatch 统一按 id 路由）；超时 30s；maxResults 客户端截断。
  */
 export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const numResults = normalizeMaxResults(options.maxResults);
-  const filters: DomainFilters = parseDomainFilters(options.domainFilter);
 
   const url = new URL(DUCKDUCKGO_SEARCH_URL);
   url.searchParams.set("q", query);
-  // recencyFilter 忽略：HTML 端点无时间范围参数（PRD R1.2 拍板口径）。
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DUCKDUCKGO_TIMEOUT_MS);
@@ -175,10 +173,8 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
       const href = anchor != null ? anchorHref(anchor) : "";
       const resultUrl = href.length > 0 ? decodeResultUrl(href) : null;
       if (!title || resultUrl == null) continue;
-      // parseable 计数在域名过滤之前：改版/反爬页判 invalid，
-      // 「有结果但全被 domainFilter 滤掉」是正常空结果（参考实现同口径）。
+      // parseable 计数不受 maxResults 截断影响：改版 / 反爬拦截页（零可解析结果）判 invalid。
       parseableResults++;
-      if (!matchesDomainFilters(resultUrl, filters)) continue;
       const snippetAnchor = findAnchorByClass(block.html, "result__snippet");
       results.push({
         title,
