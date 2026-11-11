@@ -6,6 +6,7 @@
  * 走路由参数不可行，残留就会让下一次进详情显示上一轮的内容。
  */
 import React from 'react';
+import type {MessageLike} from '@novel-master/core/i18n';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
@@ -92,7 +93,7 @@ const TURN = {
   // main/A-2 后 UI 不再读 body，字段仅为满足 core 类型（`body` 是必填）。
   body: '',
   summaryText: '好的，我来看看。',
-  metaText: [META_TEXT],
+  metaText: [META_TEXT] as MessageLike[],
   cards: [
     {type: 'text' as const, id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
   ],
@@ -151,6 +152,18 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     expect(textsOf(summary.props.children)).toEqual([TURN.summaryText]);
     expect(textsOf(meta.props.children)).toEqual([META_TEXT]);
     expect(textsOf(summary.props.children)).not.toContain(TURN.summary);
+  });
+
+  it('T-MP1-6 metaText 为 descriptor 时逐段翻译，不把 map 下标当 locale', () => {
+    // 回归：`metaText.map(coreT)` 会把数组下标作为 translate 的 locale 传入，
+    // descriptor 分支执行 locale.split 时抛 "undefined is not a function"。
+    const tree = renderCard({
+      metaText: [{key: 'prompt.turn-card.unmapped-meta-key'}],
+    });
+    const meta = tree.root.findByProps({testID: 'prompt-turn-meta'});
+    expect(textsOf(meta.props.children)).toEqual([
+      'prompt.turn-card.unmapped-meta-key',
+    ]);
   });
 
   it('T-MP1-3 默认收起不挂载展开区，展开时挂载 children', () => {

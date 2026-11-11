@@ -51,23 +51,6 @@ const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
   system: 'system',
 };
 
-function roleBadgeStyle(
-  tokens: ReturnType<typeof useTheme>['tokens'],
-  kind: PromptPreviewTurn['kind'],
-) {
-  if (kind === 'user') {
-    return {backgroundColor: tokens.primary, color: '#fff'};
-  }
-  return {backgroundColor: tokens.bgSecondary, color: tokens.text};
-}
-
-/** 标题截断口径（详情页 header 与卡片标题同一上限）。 */
-function promptDetailTitle(summary: string): string {
-  return summary.length > DETAIL_TITLE_LIMIT
-    ? `${summary.slice(0, DETAIL_TITLE_LIMIT - 1)}…`
-    : summary;
-}
-
 /**
  * 叶子级全屏的统一出口：写回调载荷 → navigate。
  *
@@ -78,12 +61,15 @@ export function useOpenPromptDetail() {
   const navigation = useNavigation<Nav>();
   return useCallback(
     (payload: {title: string; body: string; leafId?: string; turnId: string}) => {
-      const title = promptDetailTitle(payload.title);
-      setPromptTurnDetail(
-        payload.leafId === undefined
-          ? {title, body: payload.body}
-          : {title, body: payload.body, leafId: payload.leafId},
-      );
+      let title = payload.title;
+      if (title.length > DETAIL_TITLE_LIMIT) {
+        title = `${title.slice(0, DETAIL_TITLE_LIMIT - 1)}…`;
+      }
+      if (payload.leafId === undefined) {
+        setPromptTurnDetail({title, body: payload.body});
+      } else {
+        setPromptTurnDetail({title, body: payload.body, leafId: payload.leafId});
+      }
       navigation.navigate('PromptTurnDetail', {title, turnId: payload.turnId});
     },
     [navigation],
@@ -103,7 +89,11 @@ type Props = {
 export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const {tokens} = useTheme();
 
-  const roleBadge = roleBadgeStyle(tokens, turn.kind);
+  const roleBadge = {backgroundColor: tokens.bgSecondary, color: tokens.text};
+  if (turn.kind === 'user') {
+    roleBadge.backgroundColor = tokens.primary;
+    roleBadge.color = '#fff';
+  }
   const roleLabel = TURN_ROLE_LABEL[turn.kind];
   // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
   const summaryTail = coreT(turn.summaryText).slice(0, 20);
@@ -148,7 +138,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
           testID="prompt-turn-meta"
           style={[styles.meta, {color: tokens.textTertiary}]}
           numberOfLines={1}>
-          {turn.metaText.map(coreT).join(' · ')}
+          {turn.metaText.map(text => coreT(text)).join(' · ')}
         </Text>
         <Text
           testID="prompt-turn-chevron"
