@@ -37,7 +37,9 @@ it("BUILTIN_TOOL_CATALOG 含 search 条目（与 registerBuiltinTools 同步）"
   assert.equal(search.label, "search");
   assert.ok(search.description.length > 0, "search 条目描述不应为空");
   assert.match(search.description, /搜索/);
-  assert.match(search.description, /bocha\/tavily\/brave\/searxng/);
+  assert.match(search.description, /串行检索/);
+  assert.match(search.description, /设置 → 搜索配置/);
+  assert.ok(!/bocha/.test(search.description), "search 条目描述不应枚举五引擎 id");
 });
 
 it("BUILTIN_TOOL_CATALOG 条目字段完整（name/label/description）", () => {

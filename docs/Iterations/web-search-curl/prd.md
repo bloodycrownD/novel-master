@@ -36,7 +36,7 @@ v1.5.15 上线的 AI 搜索（web-search-tool 迭代）内置五引擎硬编码�
 
 1. **core 模板执行器**：占位符（`{{query}}`/`{{count}}`/`{{apiKey}}`/`{{baseUrl}}`）结构化替换 + 响应点路径字段映射（title/url/snippet/可选 answer），统一超时/错误脱敏/降级错误语义。
 2. **六份出厂预置模板**：bocha/tavily/brave/searxng（适配器收编）+ DeepSeek（api.deepseek.com/v1/tools/search）+ 智谱（open.bigmodel.cn/api/paas/v4/web_search）；DDG 保留 HTML 解析代码适配器。
-3. **自定义引擎**：多实例新建/编辑/复制/删除，模板含 method/URL/headers/body JSON 模板/响应映射/参数说明；curl 命令粘贴导入；测试搜索按钮。
+3. **自定义引擎**：多实例新建/编辑/删除，模板含 method/URL/headers/body JSON 模板/响应映射/参数说明；curl 命令粘贴导入；测试搜索按钮。
 4. **引擎开关**：每引擎独立启用/停用（含 DDG 可关），默认全关仅 DDG 开；关 = 不进串行链 + 说明不透传 + agent 不可见。
 5. **search 工具参数面**：query + engine（值域放宽为已启用引擎 id）+ maxResults + params（自由 JSON，原样透传合并进请求体，引擎自行忽略未知字段）；砍除 recencyFilter/domainFilter 统一面及适配器内映射实现。
 6. **per-engine 参数说明**：出厂模板内置说明文案，自定义引擎由用户填写；经装配期快照拼进工具描述（关闭引擎的说明不拼入）。

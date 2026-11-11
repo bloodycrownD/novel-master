@@ -46,7 +46,7 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
     name: "search",
     label: "search",
     description:
-      "联网搜索（bocha/tavily/brave/searxng/duckduckgo 五引擎；未配置时使用内置 DuckDuckGo 免费搜索，无需配置），返回标题/链接/摘要结果列表",
+      "联网搜索：按当前启用的搜索引擎串行检索网页，返回标题/链接/摘要结果列表；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）",
   },
 ] as const;
 

@@ -16,9 +16,31 @@ wave_plan:
   - [gate-all-tests, fix-loop]
   - [style-pass]
   - [cr-final, impl-step9-docs]
-node_status: {}
+node_status:
+  impl-step1-template-core: { status: done }
+  impl-step2-config-store: { status: done }
+  impl-step3-dispatch: { status: done }
+  impl-step4-tool-surface: { status: done }
+  impl-step5-exports-shim: { status: done }
+  cr-core: { status: done }
+  impl-step6-desktop-ui: { status: done }
+  impl-step7-mobile-ui: { status: done }
+  impl-tests-new-core: { status: done }
+  impl-tests-rewrite-core: { status: done }
+  impl-tests-ui: { status: done }
+  gate-all-tests: { status: done }
+  fix-loop: { status: done }
+  style-pass: { status: done }
+  cr-final: { status: done }
+  impl-step9-docs: { status: done }   # 文档收尾（catalog 双端文案 / PRD 口径 / 偏离补登）随本节点完成
 open_must_fix: []
-spec_deviations: []
+spec_deviations:
+  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: 预置引擎保存强制要求 API Key（draftNeedsKey 且无 key 早退），desktop 不强制——双端行为不一致，采 mobile 严口径"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: SearchConfigPublic.engines 与 DTO 增加 paramHint 字段（spec §5 未列，§7 快照需要，良性扩展）"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: presetOverrides 落库为完整校验生效模板而非 spec §5 的 Partial patch 形态（读路径语义等价）"
+  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: isKnownEngineId 未改查动态清单而是整体删除（详情屏改从 nextConfig.engines 查找，行为等价）"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: 自定义实例 id 存储层校验放宽为 custom:[A-Za-z0-9_-]{1,64}（UI 仍生成 8 位）"
+  - "docs/Iterations/web-search-curl/prd.md: PRD R2 的「复制」功能未实现，本次已从 PRD 移除该口径"
 notes: >
   gate 命令一律 npm run --prefix D:/worktree/web-search-curl/<pkg> <script>（world.run cwd 固定主仓）；
   check-style.mjs 必须 cd 到 worktree 跑（基于 cwd 的 git 检测）；qa 口径见 spec「详细实现步骤」头注
