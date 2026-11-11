@@ -20,8 +20,7 @@
  * abortRegistry 的 abort 语义）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  Linking, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -305,7 +304,22 @@ export function SubagentSessionScreen() {
 
   const status = unitView?.status;
   const agentRunning = status === 'starting' || status === 'running';
-  const displayMessages = unitView?.messages ?? messages;
+  // 消费型单元复用（同一子会话第二轮 run）会先出现「新单元 + 空消息面」的
+  // 一拍（tail 还在路上）；空数组不是 nullish，直接采用会向宿主发一帧空
+  // 转录（判 shrunk → 清屏 + 回滚滚动）。非空才采用单元投影，否则回落本地
+  // 消息面（与 manager readMessagesSnapshot 的 idle 回落同语义，P2-5）。
+  const unitMessages = unitView == null ? [] : unitView.messages;
+  const displayMessages = unitMessages.length > 0 ? unitMessages : messages;
+  // 单元刚建立时 streamRowIds 是空 Map（不是 null），`??` 会遮住 manager
+  // idle 里上一轮交接的映射；非空优先（P1-3），避免已接管行回退 DB id。
+  const unitRowIds = unitView?.streamRowIds;
+  let viewRowIds: ReadonlyMap<string, string> | undefined;
+  if (sessionId != null) {
+    viewRowIds = manager.readMessagesSnapshot(sessionId)?.streamRowIds;
+  }
+  const hasUnitRowIds = unitRowIds != null && unitRowIds.size > 0;
+  const fallbackRowIds = viewRowIds ?? EMPTY_STREAM_ROW_IDS;
+  const streamRowIds = hasUnitRowIds ? unitRowIds : fallbackRowIds;
   // 中断态只有一处标识（cr-fix-spec mobile-metrics/C-4）：指标条已能显示
   // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
   // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
@@ -344,13 +358,7 @@ export function SubagentSessionScreen() {
           sessionKey={sessionKey}
           messages={displayMessages}
           streamingRows={buildStreamingRows(unitView)}
-          streamRowIds={
-            unitView?.streamRowIds ??
-            (sessionId != null
-              ? manager.readMessagesSnapshot(sessionId)?.streamRowIds
-              : undefined) ??
-            EMPTY_STREAM_ROW_IDS
-          }
+          streamRowIds={streamRowIds}
           // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
           pendingSubagentSessions={unitView?.pendingChildrenByTitle}
           flags={flags}

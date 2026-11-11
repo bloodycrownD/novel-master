@@ -2,28 +2,28 @@
  * 全仓裸 console 基线守卫（spec C31 / §7.3 二段式第 2 段）。
  *
  * 扫描 `apps/mobile/src/**`（排除 `src/web/**`）：`src/web` 的 `main.ts` /
- * `ToolGroup.tsx` 是 web bundle 装配失败诊断的唯一出口（无 logger 依赖），
- * 按 §7.3 保留。`debug/run-timing.ts`（`__DEV__` 门控）与
+ * `ToolGroup.tsx` / `snapshot.ts` 是 web bundle 装配/诊断的唯一出口（无 logger 依赖），
+ * 按 §7.3 保留并在 spec 清单登记。`debug/run-timing.ts`（`__DEV__` 门控）与
  * `services/log-sink.mobile.ts`（日志落盘 sink 本尊）两个白名单单独固定；
- * 其余业务文件按本轮实测基线**只允许下降**。
+ * 其余业务文件按实测基线**只允许下降**。
  *
- * 基线来源：spec §7.3 本轮实测 20 文件 / 51 处（白名单 2 文件 / 6 处 +
- * 业务 18 文件 / 45 处）。Step 10 把 `session-stream-unit`（5 处）与
- * `session-stream-unit-manager`（10 处）收口到 `createLogger`，实际降到
- * 18 文件 / 36 处——基线不变，下降天然放行；新增文件或计数上升即红。
+ * 口径：spec §7.3 原始实测 20 文件 / 51 处（白名单 2 文件 / 6 处 + 业务 18 文件 / 45 处）；
+ * Step 10 把 `session-stream-unit`（5 处）与 `session-stream-unit-manager`（10 处）
+ * 收口到 `createLogger` 后，当前实际为 **18 文件 / 36 处**（白名单 2/6 + 业务 16/30）。
+ * 两个已清零文件不再保留基线条目（= 0），业务总预算同步收到 30；新增文件或计数上升即红。
  */
 import {readFileSync, readdirSync} from 'node:fs';
 import {join, relative} from 'node:path';
 
 const SRC_ROOT = join(__dirname, '../src');
 
-/** 白名单：需保留的系统级 console（固定计数，不参与业务 45 处预算）。 */
+/** 白名单：需保留的系统级 console（固定计数，不参与业务 30 处预算）。 */
 const WHITELIST_BASELINE: Readonly<Record<string, number>> = {
   'src/debug/run-timing.ts': 5,
   'src/services/log-sink.mobile.ts': 1,
 };
 
-/** 业务文件既有基线（spec §7.3 实测；计数只允许下降）。 */
+/** 业务文件既有基线（spec §7.3；计数只允许下降；已清零文件不保留条目 = 0）。 */
 const BUSINESS_BASELINE: Readonly<Record<string, number>> = {
   'src/components/chat/useChatComposerController.ts': 1,
   'src/db/connection.ts': 2,
@@ -37,16 +37,14 @@ const BUSINESS_BASELINE: Readonly<Record<string, number>> = {
   'src/services/llm-native-fetch-shim.ts': 1,
   'src/services/run-state-writethrough.ts': 1,
   'src/services/session-prompt-input.service.ts': 5,
-  'src/services/session-stream-unit-manager.service.ts': 10,
-  'src/services/session-stream-unit.ts': 5,
   'src/services/vfs-operations.service.ts': 1,
   'src/storage/app-ui-pref-io.ts': 1,
   'src/storage/chat-composer-draft.ts': 1,
   'src/theme/ThemeProvider.tsx': 1,
 };
 
-/** 业务文件（白名单之外）裸 console 总预算（§7.3 实测 45 处）。 */
-const BUSINESS_BUDGET = 45;
+/** 业务文件（白名单之外）裸 console 总预算（当前实际 30 处）。 */
+const BUSINESS_BUDGET = 30;
 
 const RAW_CONSOLE = /console\.(log|info|warn|error|debug|trace)\(/g;
 
@@ -103,7 +101,7 @@ describe('全仓裸 console 基线不增长（spec C31）', () => {
     }
   });
 
-  it('业务文件裸 console 总数不超过 45 处（本轮收口后实际 30 处）', () => {
+  it('业务文件裸 console 总数不超过 30 处（当前实际 30 处）', () => {
     let total = 0;
     for (const [file, count] of actual) {
       if (!(file in WHITELIST_BASELINE)) {

@@ -13,7 +13,7 @@ import {AssistantBubbleInner} from './AssistantBubble';
 import {StreamingMessageRow} from '../stream/StreamingMessageRow';
 import {attachedRefTokensFrom, RefTokenText} from './RefTokenText';
 
-export type MessageRowProps = {
+type MessageRowProps = {
   row: MessageRowModel;
 };
 
@@ -99,6 +99,7 @@ export function MessageRow({row}: MessageRowProps) {
           text={row.text}
           textHtml={row.textHtml}
           thinking={row.thinking}
+          thinkingTitle={state.labels.thinking}
           thinkingKey={thinkingKey}
           thinkingExpanded={thinkingExpanded}
           thinkingHtml={row.thinkingHtml}

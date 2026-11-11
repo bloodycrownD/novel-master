@@ -11,11 +11,32 @@
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {openContextMenuFromAnchor} from '../src/web/chat-transcript/webview/runtime/menu/menu';
+import {state} from '../src/web/chat-transcript/webview/runtime/state/state';
 
 const root = join(__dirname, '..');
 
 function readSrc(...parts: string[]): string {
   return readFileSync(join(root, ...parts), 'utf8');
+}
+
+type PostedEnvelope = {
+  v: number;
+  type: string;
+  payload: Record<string, unknown>;
+};
+
+/** 捕获上行信封（@web/shared/post 出口为 fake window.ReactNativeWebView）。 */
+function postedEnvelopes(): PostedEnvelope[] {
+  const bridge = (
+    window as unknown as {
+      ReactNativeWebView?: {postMessage: (msg: string) => void};
+    }
+  ).ReactNativeWebView;
+  if (!bridge) return [];
+  return (bridge.postMessage as unknown as jest.Mock).mock.calls.map(call =>
+    JSON.parse(call[0] as string),
+  );
 }
 
 describe('message menu entry (T-MN1 / T-MN2)', () => {
@@ -56,5 +77,84 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(bindShell).not.toContain('onMessagePointerDown');
     expect(bindShell).not.toContain('touchstart');
     expect(bindShell).toContain('onRowsClick');
+  });
+});
+
+/**
+ * P2-18d：上面的源码契约只能证明「写了 messageId ?? id」，钉不住落点。
+ * 这里用真实 `openContextMenuFromAnchor` + fake state/window 跑行为：流式行
+ * id 开菜单时，上行 `messageId` 必须是 DB id（C28），退回 `row.id` 会让
+ * 回滚/分叉/置位找不到 DB 消息。
+ */
+describe('message menu entry · 行为（C28 DB id 落点）', () => {
+  let postMessage: jest.Mock;
+
+  beforeEach(() => {
+    postMessage = jest.fn();
+    (window as unknown as {ReactNativeWebView?: unknown}).ReactNativeWebView = {
+      postMessage,
+    };
+    state.rows = [];
+    state.menu = null;
+    state.menuOpenedAt = 0;
+    state.flags = {richText: false, menuDisabled: false};
+  });
+
+  afterEach(() => {
+    delete (window as unknown as {ReactNativeWebView?: unknown})
+      .ReactNativeWebView;
+    state.rows = [];
+    state.menu = null;
+    state.menuOpenedAt = 0;
+  });
+
+  it('T-MN3: 用流式行 id 开菜单 → 上行 messageId 用 DB id', () => {
+    state.rows = [
+      {
+        kind: 'message',
+        id: 'st:1',
+        messageId: 'db-1',
+        role: 'assistant',
+        status: 'finished',
+        text: 'hi',
+      },
+    ];
+    openContextMenuFromAnchor('st:1', {x: 10, y: 20, width: 30, height: 40});
+    expect(postedEnvelopes()).toEqual([
+      {
+        v: 1,
+        type: 'openMessageMenu',
+        payload: {messageId: 'db-1', pageX: 25, pageY: 40},
+      },
+      {v: 1, type: 'menuOpened', payload: {}},
+    ]);
+    expect(state.menu?.messageId).toBe('db-1');
+  });
+
+  it('T-MN4: 历史行无 messageId → 回落 row.id', () => {
+    state.rows = [
+      {kind: 'message', id: 'db-2', role: 'user', hidden: false, text: 'yo'},
+    ];
+    openContextMenuFromAnchor('db-2', {x: 0, y: 0, width: 0, height: 0});
+    expect(postedEnvelopes()).toEqual([
+      {
+        v: 1,
+        type: 'openMessageMenu',
+        payload: {messageId: 'db-2', pageX: 0, pageY: 0},
+      },
+      {v: 1, type: 'menuOpened', payload: {}},
+    ]);
+  });
+
+  it('T-MN5: 行不存在 → 不上行任何消息', () => {
+    state.rows = [{kind: 'message', id: 'db-3', role: 'user', hidden: false}];
+    openContextMenuFromAnchor('st-missing', {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    });
+    expect(postedEnvelopes()).toEqual([]);
+    expect(state.menu).toBeNull();
   });
 });

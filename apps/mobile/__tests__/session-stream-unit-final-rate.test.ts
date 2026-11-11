@@ -26,23 +26,33 @@ import {
   SESSION_KKV_DOMAIN_STREAM_METRICS,
   STREAM_METRICS_FINAL_RATE_KEY,
 } from '@novel-master/core/session-kkv';
-import type {SessionRunState} from '@novel-master/core/session-run-state';
+import type {
+  SessionRunState,
+  SessionRunStateSettleInput,
+  SessionRunStatus,
+} from '@novel-master/core/session-run-state';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
 import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
-import {
-  SessionStreamUnitManager,
-  type SessionStreamRunStateStore,
-} from '@/services/session-stream-unit-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 const TEST_SETTLED_GRACE_MS = 5_000;
+
+/** 与 manager 构造参数同形的 run 状态服务窄口（实现类型模块私有）。 */
+interface TestRunStateStore {
+  upsert(state: SessionRunState): Promise<void>;
+  settle(input: SessionRunStateSettleInput): Promise<void>;
+  listByStatuses(
+    statuses: readonly SessionRunStatus[],
+  ): Promise<SessionRunState[]>;
+}
 
 /** 内存版 run 状态服务（真实 upsert/settle/listByStatuses 语义）。 */
 function createFakeRunStateStore() {
   const rows = new Map<string, SessionRunState>();
-  const store: SessionStreamRunStateStore = {
+  const store: TestRunStateStore = {
     async upsert(state) {
       rows.set(state.sessionId, {...state});
     },
@@ -101,7 +111,7 @@ function createFakeSessionKkv() {
 }
 
 function buildHarness(options?: {
-  runStateStore?: SessionStreamRunStateStore;
+  runStateStore?: TestRunStateStore;
   sessionKkv?: ReturnType<typeof createFakeSessionKkv>['service'];
 }) {
   const eventBus = new SimpleEventBus();
@@ -171,7 +181,7 @@ function finishRun(eventBus: SimpleEventBus): void {
  * 行身份比对」这一段，不跑真实收尾链路。
  */
 async function seedSettledRow(
-  store: SessionStreamRunStateStore,
+  store: TestRunStateStore,
   options?: {
     readonly runId?: string;
     readonly completionTokens?: number;
@@ -373,7 +383,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     const kkv = createFakeSessionKkv();
     const store = createFakeRunStateStore();
     const settleCalls: string[] = [];
-    const spyStore: SessionStreamRunStateStore = {
+    const spyStore: TestRunStateStore = {
       ...store,
       async settle(input) {
         settleCalls.push(input.sessionId);

@@ -20,9 +20,18 @@ const webSrc = (rel: string) =>
 const rnSrc = (rel: string) =>
   readFileSync(join(__dirname, '../src/components/chat', rel), 'utf8');
 
-/** 截取函数源码切片（G-1：脆断言改按函数切片，避免整源误报/漏报）。 */
-const fnSlice = (src: string, name: string): string =>
-  src.split(`function ${name}(`)[1]?.split('\nfunction ')[0] ?? '';
+/**
+ * 截取函数源码切片（G-1：脆断言改按函数切片，避免整源误报/漏报）。
+ * 函数名找不到时 fail-fast（P2-18h）：静默返回空串会让所有 `not.toContain`
+ * 断言恒真，实现改名/重组后测试谎报通过。
+ */
+const fnSlice = (src: string, name: string): string => {
+  const slice = src.split(`function ${name}(`)[1]?.split('\nfunction ')[0];
+  if (slice == null) {
+    throw new Error(`fnSlice: 源码里找不到函数 ${name}（锚点契约失效）`);
+  }
+  return slice;
+};
 
 describe('T-N7 webview 块提交 append-only 契约', () => {
   const stream = () =>
@@ -33,6 +42,10 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
   const snapshot = () =>
     webSrc('chat-transcript/webview/runtime/render/snapshot.ts');
   const richStyles = () => webSrc('shared/rich-content-styles.ts');
+
+  it('P2-18h: fnSlice 在函数锚点缺失时 fail-fast（不再静默返回空串）', () => {
+    expect(() => fnSlice(stream(), '__missing_fn__')).toThrow(/__missing_fn__/);
+  });
 
   it('块提交 append：完成块插在尾块容器之前（insertAdjacentHTML beforebegin）', () => {
     const src = stream();
@@ -135,7 +148,7 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     expect(incremental).toContain('streamRenderTarget(');
     expect(incremental).not.toContain('applyTrustedHtml(body,');
     expect(incremental).not.toContain('applyTrustedHtml(textBody,');
-    // 现网回退（updateStreamBubble → syncStreamBodiesFromState）同样不碰块区
+    // 现网回退（fallbackStreamBubble → syncStreamBodiesFromState）同样不碰块区
     expect(src).toMatch(
       /function syncStreamBodiesFromState[\s\S]*?streamRenderTarget\(body\)/,
     );
@@ -206,9 +219,12 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
     expect(rn).toMatch(
       /const blockSplits = takeStreamBlockSplits\(\);[\s\S]*?postStreamBlockSplits\(\{splits: blockSplits, streamId, seq\}\);/,
     );
-    // abort overlay 全量物化口径：已提交块 parts + 活跃尾块
+    // abort overlay 全量物化口径：已提交块 parts + 活跃尾块（尾块经 textTail
+    // 变量取自 streamTextAccumRef；宿主 P2-4 改为与 props 行取长后，断言跟随
+    // 当前源码契约，不再直读 ref）
     expect(rn).toContain('const textParts = committedTextPartsRef.current;');
-    expect(rn).toContain('accumulated(textParts, streamTextAccumRef.current)');
+    expect(rn).toContain('const textTail = streamTextAccumRef.current;');
+    expect(rn).toContain('accumulated(textParts, textTail)');
   });
 
   it('块提交守卫顺序与幂等：streamId → streaming → seq → blockKey → fullReplaceOnly', () => {

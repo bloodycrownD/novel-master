@@ -1262,10 +1262,10 @@ describe('ChatConversationWebView · 快照在途时切会话（key 重挂归零
     closeChunkGate();
     simulateReadyV2(tree.root);
     await flushMicrotasks();
-    // ready 后两轮快照竞发（开屏 gen1 + pendingSubagent force gen2），首片都
-    // 赶在让步前过桥，余片全挂在闸上
+    // ready 后只有开屏一轮快照（P2-6：pendingSubagent 效应在首次 ready 让位给
+    // 开屏快照），首片赶在让步前过桥，余片全挂在闸上
     const inFlight = sentOfType('sessionSnapshot');
-    expect(inFlight).toHaveLength(2);
+    expect(inFlight).toHaveLength(1);
     expect(inFlight[0]).toMatchObject({chunkIndex: 0, chunkTotal: 3});
 
     // 切会话 → key 变 → 旧实例卸载。放闸：旧循环的余片不会补发。
@@ -1282,8 +1282,8 @@ describe('ChatConversationWebView · 快照在途时切会话（key 重挂归零
     });
     releaseChunkGate();
     await flushSnapshotChunks();
-    // 仍停在两轮首片：余片一条都没补
-    expect(sentOfType('sessionSnapshot')).toHaveLength(2);
+    // 仍停在那一轮首片：余片一条都没补
+    expect(sentOfType('sessionSnapshot')).toHaveLength(1);
 
     // 新实例自己重新握手 + 开屏：文档全新，onReady 第二次握手、快照按新
     // sessionKey 重发（无 needsResume 补铺——新文档本来就是空的）
@@ -2702,5 +2702,593 @@ describe('ChatConversationWebView · 中断 partial 流式行（T-SP19）', () =
         (payload.rows as Array<{id: string}>).map(row => row.id),
       ).not.toContain(INTERRUPTED_STREAM_ID);
     }
+  });
+});
+
+/* ================================================================== *
+ * CR1 合并报告（chat-streaming-projection）本组条目：
+ * P1-1（宿主半）/ P2-1 / P2-2 / P2-3 / P2-4 / P2-6 / P2-11（宿主半）/ P2-18a / P2-18b
+ *
+ * 每条都对应一个能变红的牙口：去掉实现里的那一处改动，用例即红。
+ * ================================================================== */
+
+describe('ChatConversationWebView · CR1 host-webview 组', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+    telemetryMock.mockClear();
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    releaseChunkGate();
+    await unmountAll();
+    clearMockWebViewPostMessages();
+  });
+
+  function streamingRow(
+    streamId: string,
+    overrides: Partial<TranscriptStreamingMessage> = {},
+  ): TranscriptStreamingMessage {
+    return {
+      streamId,
+      status: 'streaming',
+      text: '',
+      thinking: '',
+      tools: [],
+      messageId: null,
+      ...overrides,
+    };
+  }
+
+  function assistantRow(
+    id: string,
+    seq: number,
+    text: string,
+  ): ChatMessageData {
+    return {
+      ...sampleMessage(id, seq),
+      role: 'assistant',
+      content: {blocks: [{type: 'text', text}]},
+    };
+  }
+
+  function bigMessages(count = 120): ChatMessageData[] {
+    return Array.from({length: count}, (_, index) =>
+      sampleMessage(`m${index}`, index + 1),
+    );
+  }
+
+  function generationChunks(
+    generation: number,
+  ): Array<Record<string, unknown>> {
+    return sentOfType('sessionSnapshot').filter(
+      payload => payload.generation === generation,
+    );
+  }
+
+  async function mountWithRef(overrides: Record<string, unknown> = {}) {
+    const ref = React.createRef<ChatConversationWebViewHandle>();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(
+        TestRenderer.create(
+          <ChatConversationWebView ref={ref} {...baseProps(overrides)} />,
+        ),
+      );
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    await flushSnapshotChunks();
+    return {ref, tree};
+  }
+
+  it('P1-1: 快照在途完成接管 → 捕获行以 finished+messageId 收尾，不再以 streaming 复活', async () => {
+    const messages = bigMessages();
+    const ref = React.createRef<ChatConversationWebViewHandle>();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(
+        TestRenderer.create(
+          <ChatConversationWebView
+            ref={ref}
+            {...baseProps({
+              messages,
+              streamingRows: [streamingRow('st-adopted', {text: '已收尾正文'})],
+            })}
+          />,
+        ),
+      );
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    await flushSnapshotChunks();
+
+    // 关闸起一轮在途快照（3 个 DB 片 + 1 个流式片），首片已过桥。
+    closeChunkGate();
+    await act(async () => {
+      ref.current!.forceSnapshot();
+    });
+    const gated = sentOfType('sessionSnapshot').at(-1)!;
+    const gatedGeneration = gated.generation as number;
+    expect(gatedGeneration).toBeGreaterThan(0);
+    expect(generationChunks(gatedGeneration)).toHaveLength(1);
+
+    // 片间：旧行被 DB 接管（a1 落库 + 映射），投影里已经把它剔除——这一步
+    // 不触发新快照（接管走 streamStatus），所以在途代次能跑完，末片可观察。
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            messages: [...messages, assistantRow('a1', 121, '已收尾正文')],
+            streamingRows: [],
+            streamRowIds: new Map([['a1', 'st-adopted']]),
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    // 在途代次没有被顶替（接管走 streamStatus，不发快照）。
+    expect(sentOfType('sessionSnapshot').at(-1)!.generation).toBe(
+      gatedGeneration,
+    );
+
+    releaseChunkGate();
+    await flushSnapshotChunks();
+
+    // 该代次的流式末片：捕获行必须是 finished + messageId，不能再以 streaming
+    // 身份复活（变异点：不核对已消失的捕获行 → 此处仍为 streaming、无 messageId）。
+    const gatedChunks = generationChunks(gatedGeneration);
+    expect(gatedChunks).toHaveLength(4);
+    const streamChunk = gatedChunks.find(chunk => chunk.chunkIndex === 3)!;
+    const streamRows = streamChunk.rows as Array<Record<string, unknown>>;
+    const adoptedRows = streamRows.filter(row => row.id === 'st-adopted');
+    expect(adoptedRows).toHaveLength(1);
+    expect(adoptedRows[0]).toMatchObject({
+      status: 'finished',
+      messageId: 'a1',
+      text: '已收尾正文',
+    });
+    expect(streamRows.filter(row => row.status === 'streaming')).toHaveLength(
+      0,
+    );
+
+    // 下一次快照：A 由 DB 行承载（同一身份），同一代次不出现重复行 id。
+    ref.current!.forceSnapshot();
+    await flushSnapshotChunks();
+    const newest = sentOfType('sessionSnapshot').at(-1)!;
+    const newestChunks = generationChunks(newest.generation as number);
+    const ids = newestChunks.flatMap(chunk =>
+      (chunk.rows as Array<{id: string}>).map(row => row.id),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter(id => id === 'st-adopted')).toHaveLength(1);
+  });
+
+  it('P2-1: 片间起新流 → 已发片不带「本片没有该行」的 stream 检查点', async () => {
+    const messages = bigMessages();
+    const ref = React.createRef<ChatConversationWebViewHandle>();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(
+        TestRenderer.create(
+          <ChatConversationWebView
+            ref={ref}
+            {...baseProps({messages, streamingRows: []})}
+          />,
+        ),
+      );
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    await flushSnapshotChunks();
+
+    closeChunkGate();
+    await act(async () => {
+      ref.current!.forceSnapshot();
+    });
+    const gatedGeneration = sentOfType('sessionSnapshot').at(-1)!
+      .generation as number;
+    expect(generationChunks(gatedGeneration)).toHaveLength(1);
+
+    // 片间起新流：快照开始没有流，chunkTotal 已按 DB 片定死（3 片）。
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            messages,
+            streamingRows: [streamingRow('st-new', {text: '新流正文'})],
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+
+    // 新流触发的快照被挂闸在首片（DB 片，不含 st-new）：变异点 —— 去掉
+    // 「本片包含该行」判定后，这里会挂上新 streamId 的检查点 → Web 判异常。
+    const nextGeneration = sentOfType('sessionSnapshot').at(-1)!
+      .generation as number;
+    expect(nextGeneration).toBeGreaterThan(gatedGeneration);
+    const nextFirst = generationChunks(nextGeneration)[0]!;
+    expect(nextFirst.chunkIndex).toBe(0);
+    expect(nextFirst.stream).toBeUndefined();
+
+    releaseChunkGate();
+    await flushSnapshotChunks();
+
+    // 全量不变量：每一片只要带 stream，检查点指向的行就必须在本片 rows 里。
+    for (const chunk of sentOfType('sessionSnapshot')) {
+      const checkpoint = chunk.stream as {id: string} | undefined;
+      if (checkpoint == null) {
+        continue;
+      }
+      expect(
+        (chunk.rows as Array<{id: string}>).some(
+          row => row.id === checkpoint.id,
+        ),
+      ).toBe(true);
+    }
+    // 开始无流的那一代全程不带检查点。
+    expect(
+      generationChunks(gatedGeneration).some(chunk => chunk.stream != null),
+    ).toBe(false);
+  });
+
+  it('P2-2: 快照/终态行取流内最新 tools（props 行尚未回流）', async () => {
+    const {ref, tree} = await mountWithRef({
+      streamingRows: [streamingRow('st-tools')],
+    });
+    const tool = {
+      toolUseId: 't1',
+      name: 'read',
+      input: {path: 'a.md'},
+      status: 'pending',
+    };
+    ref.current!.pushStream({
+      streamId: 'st-tools',
+      segments: [],
+      tools: [tool],
+    });
+    await flushAnimationFrame();
+    expect(sentOfType('streamDelta').at(-1)!.tools).toEqual([tool]);
+
+    // props 行仍是空 tools：快照行必须用宿主内最新的工具数组。
+    ref.current!.forceSnapshot();
+    await flushSnapshotChunks();
+    const snapshotRow = (
+      sentOfType('sessionSnapshot').at(-1)!.rows as Array<
+        Record<string, unknown>
+      >
+    )[0]!;
+    expect(snapshotRow.tools).toEqual([tool]);
+
+    // 收尾同理（变异点：沿用 props 行 → tools 消失）。
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            streamingRows: [streamingRow('st-tools', {status: 'finished'})],
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    const status = sentOfType('streamStatus').at(-1)!;
+    expect((status.row as Record<string, unknown>).tools).toEqual([tool]);
+  });
+
+  it('P2-2: ready 播种 tools —— 新文档基线后 props 回退为空也不丢工具卡', async () => {
+    const tool = {
+      toolUseId: 't9',
+      name: 'grep',
+      input: {pattern: 'x'},
+      status: 'pending',
+    };
+    const {ref, tree} = await mountWithRef({
+      streamingRows: [streamingRow('st-seed', {text: 'x', tools: [tool]})],
+    });
+
+    // ready 已把文档基线的 tools 播种进宿主；Provider 下一拍给回空数组也不回退。
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            streamingRows: [streamingRow('st-seed', {text: 'x'})],
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    ref.current!.forceSnapshot();
+    await flushSnapshotChunks();
+
+    const snapshotRow = (
+      sentOfType('sessionSnapshot').at(-1)!.rows as Array<
+        Record<string, unknown>
+      >
+    )[0]!;
+    expect(snapshotRow.tools).toEqual([tool]);
+  });
+
+  it('P2-3: 投影在单元未 settle 时变空 → 当前流按异常收尾发终态行', async () => {
+    const {tree} = await mountWithRef({
+      streamingRows: [streamingRow('st-lost', {text: '残留正文'})],
+    });
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView {...baseProps({streamingRows: []})} />,
+      );
+    });
+    await flushMicrotasks();
+
+    // 变异点：没有这条兜底分支 → 这里零下行，Web 永久停在「生成中」。
+    const statuses = sentOfType('streamStatus', baseline);
+    expect(statuses.length).toBeGreaterThanOrEqual(1);
+    expect(statuses[0]!).toMatchObject({
+      streamId: 'st-lost',
+      status: 'finished',
+    });
+    expect((statuses[0]!.row as Record<string, unknown>).text).toBe('残留正文');
+  });
+
+  it('P2-4: props 行比累加器长（丢过 delta）→ 快照/终态行不截断', async () => {
+    const {ref, tree} = await mountWithRef({
+      streamingRows: [streamingRow('st-dual', {text: 'ab'})],
+    });
+    const baseline = mockWebViewPostMessages.length;
+
+    // 模拟 !webReady 期间 delta 被丢弃：累加器停在 'ab'，props 行已到 'abcdef'。
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            streamingRows: [streamingRow('st-dual', {text: 'abcdef'})],
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    ref.current!.forceSnapshot();
+    await flushSnapshotChunks();
+    const snapshotRow = (
+      sentOfType('sessionSnapshot', baseline).at(-1)!.rows as Array<
+        Record<string, unknown>
+      >
+    )[0]!;
+    expect(snapshotRow.text).toBe('abcdef');
+
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          ref={ref}
+          {...baseProps({
+            streamingRows: [
+              streamingRow('st-dual', {status: 'finished', text: 'abcdef'}),
+            ],
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    const status = sentOfType('streamStatus', baseline).at(-1)!;
+    expect((status.row as Record<string, unknown>).text).toBe('abcdef');
+  });
+
+  it('P2-6: 首次 ready（大转录 + 流式行）只发一代全量快照', async () => {
+    const messages = bigMessages();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(
+        TestRenderer.create(
+          <ChatConversationWebView
+            {...baseProps({
+              messages,
+              streamingRows: [streamingRow('st-boot')],
+            })}
+          />,
+        ),
+      );
+    });
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    await flushSnapshotChunks();
+
+    const snapshots = sentOfType('sessionSnapshot');
+    // 变异点：去掉 pendingSubagent/翻转效应的让位 → 同拍 2~4 代互相顶替。
+    expect(new Set(snapshots.map(payload => payload.generation)).size).toBe(1);
+    expect(snapshots).toHaveLength(4);
+    expect(snapshots.filter(payload => payload.chunkIndex === 0)).toHaveLength(
+      1,
+    );
+  });
+
+  it('P2-11: resync 限流条目随 streamReset 清掉，同一时间窗内可再补快照', async () => {
+    const {ref, tree} = await mountWithRef();
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(2000);
+    try {
+      const baseline = sentOfType('sessionSnapshot').length;
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-x'});
+      await flushSnapshotChunks();
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-x'});
+      await flushSnapshotChunks();
+      expect(sentOfType('sessionSnapshot')).toHaveLength(baseline + 1);
+
+      await act(async () => {
+        ref.current!.resetStream(['st-x']);
+      });
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-x'});
+      await flushSnapshotChunks();
+      // 变异点：reset 不清限流条目 → 这里仍是 baseline + 1。
+      expect(sentOfType('sessionSnapshot')).toHaveLength(baseline + 2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('P2-11: 流收尾后清掉该 streamId 的 resync 限流条目', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    const {tree} = await mountWithRef({
+      messages,
+      streamingRows: [streamingRow('st-fin', {text: 'x'})],
+    });
+    // 一轮快照 = 多片（DB 片 + 流式片），按首片计轮次。
+    const snapshotRounds = () =>
+      sentOfType('sessionSnapshot').filter(payload => payload.chunkIndex === 0)
+        .length;
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(3000);
+    try {
+      const baseline = snapshotRounds();
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-fin'});
+      await flushSnapshotChunks();
+      expect(snapshotRounds()).toBe(baseline + 1);
+
+      await act(async () => {
+        tree.update(
+          <ChatConversationWebView
+            {...baseProps({
+              messages,
+              streamingRows: [
+                streamingRow('st-fin', {status: 'finished', text: 'x'}),
+              ],
+            })}
+          />,
+        );
+      });
+      await flushMicrotasks();
+      const beforeResync = snapshotRounds();
+
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-fin'});
+      await flushSnapshotChunks();
+      // 变异点：finishStream 不删条目 → 这里仍停在 beforeResync（100ms 限流）。
+      expect(snapshotRounds()).toBe(beforeResync + 1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('P2-11: DB 接管（stream-adopted）发终态行后同样清掉 resync 限流条目', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    const {tree} = await mountWithRef({
+      messages,
+      streamingRows: [streamingRow('st-adopt', {text: 'x'})],
+    });
+    const snapshotRounds = () =>
+      sentOfType('sessionSnapshot').filter(payload => payload.chunkIndex === 0)
+        .length;
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(4000);
+    try {
+      const baseline = snapshotRounds();
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-adopt'});
+      await flushSnapshotChunks();
+      expect(snapshotRounds()).toBe(baseline + 1);
+
+      // 接管：新 assistant 落库 + 映射写入，投影行已被剔除 → 走 stream-adopted。
+      await act(async () => {
+        tree.update(
+          <ChatConversationWebView
+            {...baseProps({
+              messages: [...messages, assistantRow('a1', 2, '已收尾正文')],
+              streamingRows: [],
+              streamRowIds: new Map([['a1', 'st-adopt']]),
+            })}
+          />,
+        );
+      });
+      await flushMicrotasks();
+      expect(sentOfType('streamStatus').at(-1)).toMatchObject({
+        streamId: 'st-adopt',
+        status: 'finished',
+        messageId: 'a1',
+      });
+      const beforeResync = snapshotRounds();
+
+      simulateUpstream(tree.root, 'streamResync', {streamId: 'st-adopt'});
+      await flushSnapshotChunks();
+      // 变异点：接管分支不删条目 → 这里仍停在 beforeResync（100ms 限流）。
+      expect(snapshotRounds()).toBe(beforeResync + 1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('P2-18a: tools-only batch 恰一条 delta（segments 空、tools 数组、seq+1）；重复推送不产第二条', async () => {
+    const {ref} = await mountWithRef({
+      streamingRows: [streamingRow('st-tools-delta')],
+    });
+    const baseline = mockWebViewPostMessages.length;
+    ref.current!.pushStream({
+      streamId: 'st-tools-delta',
+      segments: [{kind: 'text', delta: 'a'}],
+    });
+    await flushAnimationFrame();
+
+    const tool = {
+      toolUseId: 't1',
+      name: 'read',
+      input: {path: 'a.md'},
+      status: 'pending',
+    };
+    const tools = [tool];
+    ref.current!.pushStream({
+      streamId: 'st-tools-delta',
+      segments: [],
+      tools,
+    });
+    await flushAnimationFrame();
+
+    const deltas = sentOfType('streamDelta', baseline);
+    expect(deltas).toHaveLength(2);
+    expect(deltas[1]).toMatchObject({
+      streamId: 'st-tools-delta',
+      seq: 2,
+      segments: [],
+    });
+    expect(deltas[1]!.tools).toEqual([tool]);
+
+    // 同 tools 再推：不产第二条（变异点：tools 非空即 dirty → 这里变 3 条）。
+    ref.current!.pushStream({
+      streamId: 'st-tools-delta',
+      segments: [],
+      tools,
+    });
+    await flushAnimationFrame();
+    expect(sentOfType('streamDelta', baseline)).toHaveLength(2);
+  });
+
+  it('P2-18b: 快照后 delta seq 从检查点 +1 续接', async () => {
+    const {ref} = await mountWithRef({
+      streamingRows: [streamingRow('st-seq')],
+    });
+    ref.current!.pushStream({
+      streamId: 'st-seq',
+      segments: [{kind: 'text', delta: 'a'}],
+    });
+    await flushAnimationFrame();
+    const baseline = mockWebViewPostMessages.length;
+
+    ref.current!.forceSnapshot();
+    await flushSnapshotChunks();
+    const streamChunk = sentOfType('sessionSnapshot', baseline).find(
+      payload => payload.stream != null,
+    )!;
+    expect(streamChunk.stream).toMatchObject({id: 'st-seq', seq: 1});
+
+    ref.current!.pushStream({
+      streamId: 'st-seq',
+      segments: [{kind: 'text', delta: 'b'}],
+    });
+    await flushAnimationFrame();
+    const deltas = sentOfType('streamDelta', baseline);
+    expect(deltas).toHaveLength(1);
+    expect(deltas[0]!.seq).toBe(2);
   });
 });

@@ -11,9 +11,9 @@
  * 会话 state」的共享面）。本文件断言这一等价语义：并行/在途加载期间
  * 各会话快照只含本会话行、属主缓存照常刷新。
  */
-import {
-  SessionStreamUnitManager,
-} from '../src/services/session-stream-unit-manager.service';
+import {readFileSync} from 'fs';
+import {join} from 'path';
+import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
   clearAllSessionViewCaches,
@@ -119,13 +119,16 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     let releaseOlder: ((list: ChatMessageData[]) => void) | null = null;
     const {manager} = createHarness(async () => []);
     // listBySessionPage 受控（分页在途）
-    (manager as unknown as {runtime: {messages: {listBySessionPage: jest.Mock}}})
-      .runtime.messages.listBySessionPage.mockImplementation(
-        () =>
-          new Promise(resolve => {
-            releaseOlder = (list: ChatMessageData[]) => resolve(list ?? []);
-          }),
-      );
+    (
+      manager as unknown as {
+        runtime: {messages: {listBySessionPage: jest.Mock}};
+      }
+    ).runtime.messages.listBySessionPage.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          releaseOlder = (list: ChatMessageData[]) => resolve(list ?? []);
+        }),
+    );
     // 预置 B 的 idle 视图（缓存水合路径）
     setSessionViewCache(sessionViewCacheKey('proj-1', 'sess-B'), {
       messages: rowsB,
@@ -156,12 +159,35 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     // 建立带消息的 settled 单元（宽限 0 —— 立即销毁）后读取 idle 交接。
     const finalRows = [makeMessage('sess-A', 9)];
     const {manager, runtime} = createHarness(async () => finalRows);
-    (runtime.messages as {listBySessionPage: jest.Mock})
-      .listBySessionPage.mockImplementation(async () => []);
+    (
+      runtime.messages as {listBySessionPage: jest.Mock}
+    ).listBySessionPage.mockImplementation(async () => []);
 
     // 水合 idle（缓存 miss → 回源 tail）。
     await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});
     expect(manager.readMessagesSnapshot('sess-A')?.messages).toEqual(finalRows);
     manager.dispose();
+  });
+});
+
+/**
+ * P1-3 消费侧（ChatTabProvider）：单元刚建立时 `streamRowIds` 是空 Map
+ * （不是 null），`unitView?.streamRowIds ?? messagesView?.streamRowIds` 会
+ * 选中空 Map、把 idle 交接的映射遮掉 → 已接管行回退 DB id、Web remount。
+ *
+ * Provider 不能在单测里挂载（会牵进整个 chat-tab 依赖树，见
+ * chat-tab-real-prompt-nav.test.tsx 的头注释），因此这里锁源码的取法：
+ * 「非空优先」表达式在、旧的 `??` 链不在。退回旧写法该用例立即红。
+ */
+describe('P1-3: ChatTabProvider 的 streamRowIds 消费侧非空优先', () => {
+  const source = readFileSync(
+    join(__dirname, '../src/screens/tabs/chat-tab/ChatTabProvider.tsx'),
+    'utf8',
+  );
+
+  it('单元空 Map 不用 ?? 遮蔽 idle 交接映射', () => {
+    expect(source).toContain('unitRowIds.size > 0');
+    expect(source).toContain('viewRowIds');
+    expect(source).not.toMatch(/unitRowIds\s*\?\?/);
   });
 });

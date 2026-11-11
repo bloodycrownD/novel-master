@@ -27,17 +27,19 @@ import {
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
-import {SESSION_STREAM_SETTLED_GRACE_PERIOD_MS} from '@/services/session-stream-unit';
-import {
-  SessionStreamUnitManager,
-  SESSION_STREAM_MAX_SETTLED_UNITS,
-} from '@/services/session-stream-unit-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {Platform} from 'react-native';
 import notifee, {onForegroundEventUnsubscribe} from '@notifee/react-native';
 import {
   resetKeepAliveStateForTests,
   setKeepAliveResidentEnabled,
 } from '@/services/agent-finished-notification';
+
+/** 与实现同值的默认宽限销毁时长（单元模块私有的 30s 默认值）。 */
+const DEFAULT_SETTLED_GRACE_PERIOD_MS = 30_000;
+
+/** 与实现同值的 settled 单元 LRU 上限（manager 模块私有的 8）。 */
+const MAX_SETTLED_UNITS = 8;
 
 /** 等待 fire-and-forget promise 链（catch+finally）收敛。 */
 async function flushAsync(): Promise<void> {
@@ -670,7 +672,7 @@ describe('SessionStreamUnitManager', () => {
       expect(h.manager.snapshot('a')?.status).toBe('finished');
       expect(h.manager.unitCount()).toBe(1);
 
-      jest.advanceTimersByTime(SESSION_STREAM_SETTLED_GRACE_PERIOD_MS - 1);
+      jest.advanceTimersByTime(DEFAULT_SETTLED_GRACE_PERIOD_MS - 1);
       expect(h.manager.snapshot('a')?.status).toBe('finished');
 
       jest.advanceTimersByTime(1);
@@ -689,7 +691,7 @@ describe('SessionStreamUnitManager', () => {
     for (let i = 1; i <= 9; i += 1) {
       h.manager.adoptInterruptedUnit(`s${i}`, 'p');
     }
-    expect(h.manager.unitCount()).toBe(SESSION_STREAM_MAX_SETTLED_UNITS);
+    expect(h.manager.unitCount()).toBe(MAX_SETTLED_UNITS);
     expect(h.manager.snapshot('s1')).toBe(null); // 最旧被淘汰
     expect(h.manager.snapshot('s2')?.status).toBe('interrupted');
     expect(h.manager.snapshot('s9')?.status).toBe('interrupted');
@@ -697,7 +699,7 @@ describe('SessionStreamUnitManager', () => {
     // 活跃单元不计入 LRU 槽位：settled 8 个 + active 1 个并存
     h.manager.startRun('active', 'p', 'hi');
     publishStarted(h.eventBus, 'active', 'ra');
-    expect(h.manager.unitCount()).toBe(SESSION_STREAM_MAX_SETTLED_UNITS + 1);
+    expect(h.manager.unitCount()).toBe(MAX_SETTLED_UNITS + 1);
     expect(h.manager.snapshot('s2')?.status).toBe('interrupted'); // 不因 active 入表被淘汰
   });
 
@@ -895,9 +897,9 @@ describe('SessionStreamUnitManager', () => {
       // 完成通知未发（前台口径独立于开关）；常驻语义反转（原断言停服）：
       // 摘标签后服务不停，通知内容刷回空闲文案
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
-      expect(
-        notifee.displayNotification.mock.calls[0][0].title,
-      ).toBe('novel master · 空闲');
+      expect(notifee.displayNotification.mock.calls[0][0].title).toBe(
+        'novel master · 空闲',
+      );
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     });
 
@@ -993,9 +995,9 @@ describe('SessionStreamUnitManager', () => {
       await flushAsync();
       // 常驻前置空闲 1 次 + 带标签刷新 1 次，最后一条为「正在生成」
       expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
-      expect(
-        notifee.displayNotification.mock.calls[1][0].title,
-      ).toBe('正在生成 · 会话-a');
+      expect(notifee.displayNotification.mock.calls[1][0].title).toBe(
+        '正在生成 · 会话-a',
+      );
 
       notifee.stopForegroundService.mockClear();
       h1.manager.dispose();
@@ -1056,12 +1058,16 @@ describe('SessionStreamUnit', () => {
     expect(finished.snapshot()).toEqual(
       expect.objectContaining({status: 'finished', runId: 'r1'}),
     );
+    // settle 会启 30s 宽限定时器；单测要主动销毁，避免全量 jest 被
+    // open handle 拖住（P2-20）。
+    finished.destroy();
 
     const failed = new SessionStreamUnit({sessionId: 's', projectId: 'p'});
     failed.begin();
     failed.markRunning('r2');
     expect(failed.settle('failed')).toBe(true);
     expect(failed.getStatus()).toBe('failed');
+    failed.destroy();
 
     // interrupted 终态（水合路径：idle 直达）
     const interrupted = new SessionStreamUnit({sessionId: 's', projectId: 'p'});

@@ -30,6 +30,10 @@ function writeBodyFull(body: Element, seed: BodySeed): void {
     body.classList.add('rich');
     return;
   }
+  // rich 开→关（P1-5）：与 streaming 行 plain-reseed 同口径摘掉 rich，否则
+  // `.bubble-body.rich{white-space:normal}` 会把纯文本的换行/空行折叠成一段。
+  body.classList.remove('rich');
+  body.classList.remove('stream-tail-plain');
   body.textContent = String(seed.text || '');
 }
 
@@ -69,6 +73,28 @@ type StreamRenderSignature = {
 };
 
 const lastStreamRenderSignature = new Map<string, StreamRenderSignature>();
+
+/**
+ * 清理已不在 rows 的签名条目（P2-11）：行被删除（streamReset / 窗口外重建）
+ * 后签名不应长期滞留，否则长会话按 streamId 单调增长。
+ *
+ * nm-style: keep-public — stream.ts `applyStreamReset` 的跨模块唯一清理入口；
+ * 签名表是模块私有的渲染态，不能为了内联把它暴露给调用方。
+ */
+export function pruneFinishedStreamRowSignatures(): void {
+  if (lastStreamRenderSignature.size === 0) {
+    return;
+  }
+  const live = new Set<string>();
+  for (let i = 0; i < state.rows.length; i++) {
+    live.add(state.rows[i].id);
+  }
+  lastStreamRenderSignature.forEach((_signature, id) => {
+    if (!live.has(id)) {
+      lastStreamRenderSignature.delete(id);
+    }
+  });
+}
 
 /**
  * finished 流式行的正文校正：只处理窗口内命中的 `[data-id]`，签名（四个

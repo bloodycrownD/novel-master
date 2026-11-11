@@ -22,10 +22,12 @@
  */
 import {describe, expect, it, beforeEach, afterEach} from '@jest/globals';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
-import {
-  SESSION_STREAM_APPLY_INTERVAL_MS,
-  SESSION_STREAM_INGRESS_COALESCE_MS,
-} from '@/services/session-stream-unit';
+
+/** 与单元实现同值的 ingress 合并窗口（32ms）。 */
+const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
+
+/** 与单元实现同值的 apply 节拍（64ms）。 */
+const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
 
 /** 模拟流总量（字符）。 */
 const TOTAL_CHARS = 100_000;

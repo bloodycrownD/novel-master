@@ -19,8 +19,6 @@ export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 /** 子 agent 会话创建：task 工具执行中即可点击进入子会话浏览。 */
 export const EVENT_SUBAGENT_CHILD_SESSION_CREATED = "subagent.child-session.created" as const;
 
-export type NovelMasterEventType = typeof EVENT_AGENT_RUN_STARTED | typeof EVENT_AGENT_RUN_FINISHED | typeof EVENT_AGENT_RUN_FAILED | typeof EVENT_AGENT_STREAM_TEXT_DELTA | typeof EVENT_AGENT_STREAM_THINKING_DELTA | typeof EVENT_AGENT_STREAM_TOOL_USE | typeof EVENT_AGENT_STREAM_USAGE | typeof EVENT_AGENT_STEP_COMMITTED | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED;
-
 export interface AgentRunStartedPayload {
   readonly sessionId: string;
   readonly projectId: string;
@@ -85,6 +83,8 @@ export interface AgentStepCommittedPayload {
   readonly projectId: string;
   readonly runId: string;
   readonly phase: AgentStepCommittedPhase;
+  /** 仅 phase === 'assistant' 时存在：本条落库 assistant 消息 id（宿主 DB 接管直接配对用）。 */
+  readonly messageId?: string;
   /** 仅 phase === 'tool_results' 时存在；本轮是否突变 session VFS */
   readonly vfsMutated?: boolean;
 }

@@ -7,7 +7,6 @@
 import { truncateText } from "@/common/text.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
-  ContentBlock,
   ToolResultBlock,
   ToolUseBlock,
 } from "@/domain/chat/model/content-block.js";
@@ -55,8 +54,6 @@ import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
-import type { PromptSkillIndexEntry } from "@/domain/prompt/model/prompt-render-context.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
@@ -80,7 +77,7 @@ import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 const log = createLogger("agent.runner");
 
-export interface DefaultAgentRunnerDeps {
+interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
@@ -120,87 +117,6 @@ export interface DefaultAgentRunnerDeps {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
-}
-
-/**
- * 从装配期 toolCtx.skills 预算提示词技能索引（Step 10 / D4）。
- *
- * runAgentTurn 装配期已按本会话 projectId 调 SkillService.effectiveSkills
- * 预算生效清单并挂在 toolCtx.skills（与 skill 工具同源）；resolve 后
- * registry 不含 skill（policy deny）时该闭包为空，skillsIndex 随之置空
- * ——工具与索引同进退。
- */
-function budgetSkillsIndexEntries(
-  toolCtx: BuiltinToolContext
-): PromptSkillIndexEntry[] | undefined {
-  const skills = toolCtx.skills;
-  if (skills == null) {
-    return undefined;
-  }
-  return skills.effective
-    .filter((s) => s.effective)
-    .map((s) => ({
-      name: s.name,
-      description: s.description ?? "",
-      domain: s.domain,
-    }));
-}
-
-/** 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。 */
-function hasMeaningfulAssistantBlocks(
-  blocks: readonly ContentBlock[]
-): boolean {
-  for (const block of blocks) {
-    switch (block.type) {
-      case "tool_use":
-      case "image":
-        return true;
-      case "text":
-      case "thinking":
-        if (block.text.trim() !== "") {
-          return true;
-        }
-        break;
-      case "redacted_thinking":
-        return true;
-      default:
-        break;
-    }
-  }
-  return false;
-}
-
-/**
- * 从 task 工具的 outcome.output 提取 `subagentSessionId`（P0-1）。
- *
- * 仅 task 工具有该字段；其他工具输出不含 subagentSessionId，返回 undefined。
- * 本函数与 {@link buildToolResultBlock} 内部检测互补：build 内部会优先看 output，
- * 这里显式提取是为了让 agent-runner 调用处意图更明显（C34），便于追踪。
- *
- * phase-1-abort-reflow：导出以供单测固化「中断回流场景仍走同一提取路径」
- * （output.stopped=true 也带 subagentSessionId，本函数不看 stopped，只看
- * subagentSessionId 是否为 string，天然覆盖）。
- */
-export function extractSubagentSessionIdFromOutcome(
-  outcome:
-    | { readonly ok: boolean; readonly output?: unknown }
-    | {
-        readonly ok: boolean;
-        readonly error?: unknown;
-      }
-): string | undefined {
-  if (!outcome.ok) return undefined;
-  const output = (outcome as { output?: unknown }).output;
-  if (
-    output != null &&
-    typeof output === "object" &&
-    !Array.isArray(output) &&
-    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
-      "string"
-  ) {
-    return (output as { subagentSessionId: string }).subagentSessionId;
-  }
-  return undefined;
 }
 
 /**
@@ -263,7 +179,14 @@ export class DefaultAgentRunner implements AgentRunner {
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
     // 回合内技能启停不即时反映）；skill 被 policy 禁用时闭包为空，
     // 索引随之置空（D4：工具与索引同进退）。
-    const skillsIndex = budgetSkillsIndexEntries(this.deps.toolCtx);
+    const skillBudget = this.deps.toolCtx.skills?.effective.filter(
+      (s) => s.effective
+    );
+    const skillsIndex = skillBudget?.map((s) => ({
+      name: s.name,
+      description: s.description ?? "",
+      domain: s.domain,
+    }));
     // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 等于自身；子 session
     // 指向父 session（子 agent 在父 session 工作区工作，规则评估与文件列表都按
     // 父工作区）。VFS 也用同一归属 session 视图。
@@ -380,10 +303,18 @@ export class DefaultAgentRunner implements AgentRunner {
       // wt 提升到循环外（仅取一次）：工厂每次调用会 new 新服务实例，
       // 每步重建会让 liveViewInFlight 并发去重跨 step 失效。
       const wt = this.deps.workplace(wtScope);
-      const turnFiletree = await resolveTurnFiletreeSnapshot(
-        options.definition.prompts,
-        wt
-      );
+      // 回合快照预取：文本含 `$filetree` 时渲染一次供回合内全部 step 复用，
+      // 否则不渲染（回退实时渲染，等价旧行为——不含该宏时也不会走到渲染）。
+      const macroLayout = options.definition.prompts;
+      const macroParts: string[] = [];
+      if (typeof macroLayout.customAttach === "string") {
+        macroParts.push(macroLayout.customAttach);
+      }
+      if (macroLayout.dynamicEnabled === true) {
+        macroParts.push(...macroLayout.dynamic.map((block) => block.content));
+      }
+      const wantsTree = macroParts.join("\n").includes("$filetree");
+      const turnFiletree = wantsTree ? await wt.renderFileTree() : undefined;
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
           await handleAbort("loop_start");
@@ -711,7 +642,20 @@ export class DefaultAgentRunner implements AgentRunner {
           }
         }
 
-        const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
+        // 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。
+        const meaningful = result.blocks.some((block) => {
+          switch (block.type) {
+            case "tool_use":
+            case "image":
+            case "redacted_thinking":
+              return true;
+            case "text":
+            case "thinking":
+              return block.text.trim() !== "";
+            default:
+              return false;
+          }
+        });
 
         // abort 时仍写入 partial assistant（用户能看到模型刚吐出的内容），然后退出
         const aborted = signal?.aborted;
@@ -752,6 +696,9 @@ export class DefaultAgentRunner implements AgentRunner {
               projectId,
               runId,
               phase: "assistant",
+              // 落库行 id 已在手：宿主据此直接完成流式行 DB 接管，不再靠 tail
+              // reload 猜「哪条新增 assistant 是本 step 的」（P1-2 根修）。
+              messageId: assistantMessage.id,
             });
             // per-step reset：assistant 消息已落库，下一步从空累积开始，
             // 避免用户在 step N≥2 重进子会话时拿到 step1+…+stepN 的拼接
@@ -875,11 +822,8 @@ export class DefaultAgentRunner implements AgentRunner {
               projectId,
               sessionId: session.workplaceScopeSessionId,
             },
-            // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
-            // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
-            subagentSessionId: extractSubagentSessionIdFromOutcome(
-              outcomes[i]!
-            ),
+            // task 工具输出对象含 subagentSessionId：buildToolResultBlock
+            // 内部从 outcome.output.subagentSessionId 自动检测并透传到 meta（P0-1）。
             // skill：read 缺省域命中生效副本的解析结果由输出携带，
             // projectId 上下文从这里补进 meta.skillRef（T-SK8）。
             skillProjectId: projectId,
@@ -1033,6 +977,11 @@ export class DefaultAgentRunner implements AgentRunner {
 /**
  * @internal Exposed for stream-bus deferral unit tests.
  *
+ * nm-style: keep-public — 本函数独立承载「单 microtask 合批」状态机
+ * （pendingQueue / flushScheduled）与跨批次顺序不变量，6 条 stream-bus 测试
+ * 直接钉住该语义；内联进 run() 会把状态机与 step 循环耦合，顺序测试也不得不
+ * 驱动整个 runner，故保留模块级导出作为测试支持 API。
+ *
  * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
  * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
  *
@@ -1059,7 +1008,8 @@ export function wrapStreamForBus(
   const pendingQueue: Array<() => void> = [];
   let flushScheduled = false;
 
-  const scheduleFlush = (): void => {
+  const enqueuePublish = (publish: () => void): void => {
+    pendingQueue.push(publish);
     if (flushScheduled) {
       return;
     }
@@ -1072,11 +1022,6 @@ export function wrapStreamForBus(
         publish();
       }
     });
-  };
-
-  const enqueuePublish = (publish: () => void): void => {
-    pendingQueue.push(publish);
-    scheduleFlush();
   };
 
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
@@ -1134,35 +1079,4 @@ export function wrapStreamForBus(
     scheduleStreamPublish(ev);
     userOnStream(ev);
   };
-}
-
-/**
- * 汇总会参与宏展开的文本：customAttach（trim 非空即生效）与开启 dynamic 区的块内容。
- * persist 区不做宏展开（原样注入），不参与预检。
- */
-function collectMacroExpandableText(layout: AgentPromptLayout): string {
-  const parts: string[] = [];
-  if (typeof layout.customAttach === "string") {
-    parts.push(layout.customAttach);
-  }
-  if (layout.dynamicEnabled === true) {
-    for (const block of layout.dynamic) {
-      parts.push(block.content);
-    }
-  }
-  return parts.join("\n");
-}
-
-/**
- * 回合快照预取：文本含 `$filetree` 时渲染一次供回合内全部 step 复用，
- * 否则返回 undefined（回退实时渲染，等价旧行为——不含该宏时也不会走到渲染）。
- */
-async function resolveTurnFiletreeSnapshot(
-  layout: AgentPromptLayout,
-  workplace: WorkplaceService
-): Promise<string | undefined> {
-  if (!collectMacroExpandableText(layout).includes("$filetree")) {
-    return undefined;
-  }
-  return workplace.renderFileTree();
 }

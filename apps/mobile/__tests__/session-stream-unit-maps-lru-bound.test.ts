@@ -14,13 +14,11 @@
  */
 import {describe, expect, it, jest, afterEach} from '@jest/globals';
 import {SimpleEventBus} from '@novel-master/core/events';
-import {
-  SessionStreamUnitManager,
-  SESSION_STREAM_MAX_MESSAGE_VIEWS,
-} from '@/services/session-stream-unit-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {clearAllSessionViewCaches} from '@/services/chat-session-view-cache';
 
-const CAP = SESSION_STREAM_MAX_MESSAGE_VIEWS;
+/** 与 manager 两张常驻表的 500 LRU 上限同值。 */
+const CAP = 500;
 
 const liveManagers: SessionStreamUnitManager[] = [];
 

@@ -33,6 +33,7 @@ jest.mock('@web/shared/mermaid-fullscreen/mermaid-fullscreen', () => ({
 }));
 
 import {renderRows} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
+import {scheduleMermaidScan} from '../src/web/chat-transcript/webview/runtime/mermaid';
 import type {MessageRow} from '../src/web/chat-transcript/webview/runtime/state/state';
 import {
   countDescendantHtmlOccurrences,
@@ -68,6 +69,9 @@ type Loaded = {
   bridge: BridgeModule;
   StreamingMessageRow: StreamingRowModule['StreamingMessageRow'];
 };
+
+/** 350ms 轻量升级定时（与 stream-markdown 内部常量同值；测试本地常量）。 */
+const RICH_UPGRADE_MS = 350;
 
 function loadFreshModules(): Loaded {
   let loaded: Loaded | null = null;
@@ -446,40 +450,52 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
   });
 
   it('T-SP9: snapshot 到达后清 resyncPending、保留 resyncSentAt；gap 恢复 reseed 全量正文', () => {
-    const {state, snapshot, stream} = loadFreshModules();
-    const shell = createRowShell(doc, 'st:1', {streaming: true});
-    snapshot.handleSnapshotPayload({
-      generation: 1,
-      rows: [assistantRow('st:1', {text: 'hello'})],
-      sessionKey: 'p1:s1',
-      stream: {id: 'st:1', seq: 5, status: 'streaming'},
-    });
-    flushRaf();
-    emulateShellSeed(shell, state.rows[0]);
+    // P2-20：100ms 限流注入时钟，不依赖两条语句的真实耗时（CI 卡顿不能翻红）。
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(5000);
+    try {
+      const {state, snapshot, stream} = loadFreshModules();
+      const shell = createRowShell(doc, 'st:1', {streaming: true});
+      snapshot.handleSnapshotPayload({
+        generation: 1,
+        rows: [assistantRow('st:1', {text: 'hello'})],
+        sessionKey: 'p1:s1',
+        stream: {id: 'st:1', seq: 5, status: 'streaming'},
+      });
+      flushRaf();
+      emulateShellSeed(shell, state.rows[0]);
 
-    stream.applyStreamDelta({streamId: 'st:1', seq: 8, segments: []});
-    expect(state.resyncPending).toBe('st:1');
-    const sentAt = state.resyncSentAt;
-    expect(sentAt).not.toBeNull();
+      stream.applyStreamDelta({streamId: 'st:1', seq: 8, segments: []});
+      expect(state.resyncPending).toBe('st:1');
+      const sentAt = state.resyncSentAt;
+      expect(sentAt).toBe(5000);
 
-    snapshot.handleSnapshotPayload({
-      generation: 2,
-      rows: [assistantRow('st:1', {text: 'hello gap-filled'})],
-      sessionKey: 'p1:s1',
-      stream: {id: 'st:1', seq: 8, status: 'streaming'},
-    });
-    // 同步块：resyncPending 清空，resyncSentAt 保留（100ms 限流依据）
-    expect(state.resyncPending).toBeNull();
-    expect(state.resyncSentAt).toBe(sentAt);
-    flushRaf();
+      snapshot.handleSnapshotPayload({
+        generation: 2,
+        rows: [assistantRow('st:1', {text: 'hello gap-filled'})],
+        sessionKey: 'p1:s1',
+        stream: {id: 'st:1', seq: 8, status: 'streaming'},
+      });
+      // 同步块：resyncPending 清空，resyncSentAt 保留（100ms 限流依据）
+      expect(state.resyncPending).toBeNull();
+      expect(state.resyncSentAt).toBe(sentAt);
+      flushRaf();
 
-    // reseed：plain body.textContent === row.text（漏掉的 delta 被补齐）
-    expect(shell.textBody.textContent).toBe('hello gap-filled');
+      // reseed：plain body.textContent === row.text（漏掉的 delta 被补齐）
+      expect(shell.textBody.textContent).toBe('hello gap-filled');
 
-    // 紧随其后的 gap：仍受 resyncSentAt 100ms 限流（不重复发）
-    const before = resyncPosts().length;
-    stream.applyStreamDelta({streamId: 'st:1', seq: 10, segments: []});
-    expect(resyncPosts().length).toBe(before);
+      // 紧随其后的 gap（+49ms）：仍在限流窗口内，不重复发
+      nowSpy.mockReturnValue(5049);
+      const before = resyncPosts().length;
+      stream.applyStreamDelta({streamId: 'st:1', seq: 10, segments: []});
+      expect(resyncPosts().length).toBe(before);
+
+      // 超窗（+101ms）：允许再补一次快照
+      nowSpy.mockReturnValue(5101);
+      stream.applyStreamDelta({streamId: 'st:1', seq: 10, segments: []});
+      expect(resyncPosts().length).toBe(before + 1);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   /* ---------------- T-SP10：streamBlockCommit ---------------- */
@@ -650,13 +666,13 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
         textHtml: '<p>AB</p>',
       });
       expect(stream.getStreamActiveTailText('text')).toBe('AB');
-      const tailEl = stream.getStreamActiveTailEl(shell.textBody);
+      const tailEl = shell.textBody.querySelector('.stream-active-tail');
       expect(tailEl).not.toBeNull();
       // 块提交后的富文本尾块 + 纯文本 append（fake DOM 不解析 HTML，直接看源码）
       expect(tailEl!.innerHTML).toBe('<p>A</p>B');
 
       // 350ms 升级：源文本必须是 parts 全量（'A' + 'B'），不能被旧 tailText 覆盖
-      jest.advanceTimersByTime(streamMarkdown.STREAM_RICH_UPGRADE_MS);
+      jest.advanceTimersByTime(RICH_UPGRADE_MS);
       expect(tailEl!.innerHTML).toBe('<p>AB</p>');
       expect(countDescendantHtmlOccurrences(shell.textBody, 'AB')).toBe(1);
     } finally {
@@ -686,7 +702,7 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
       (renderRows as jest.Mock).mockClear();
       resetWriteCounts(doc);
 
-      jest.advanceTimersByTime(streamMarkdown.STREAM_RICH_UPGRADE_MS);
+      jest.advanceTimersByTime(RICH_UPGRADE_MS);
       expect(renderRows).not.toHaveBeenCalled();
       expect(totalWriteCount(doc)).toBe(0);
     } finally {
@@ -1257,8 +1273,61 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
     const tailEl = shell.textBody.querySelector('.stream-active-tail');
     expect(tailEl).not.toBeNull();
     expect(tailEl!.innerHTML).toBe('<p>A</p>');
-    // 已提交块在尾块容器之前 append（不写回 body 全量、不复制）
-    expect(countHtmlOccurrences(shell.bubble, 'A')).toBeGreaterThanOrEqual(1);
+    // 已提交块在尾块容器之前 append（不写回 body 全量、不复制）：'A' 恰好两处
+    // ——已提交块与尾块容器各一次；第三次出现即说明块内容被复制（P2-18g）。
+    expect(countHtmlOccurrences(shell.bubble, 'A')).toBe(2);
+  });
+
+  it('T-SP30b: 旧 #stream-tail 与 delta/block 的 streamId 不一致时零写入并整表刷新', () => {
+    const {state, snapshot, stream, streamMarkdown} = loadFreshModules();
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:new', {text: 'seed'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:new', seq: 1, status: 'streaming'},
+    });
+    flushRaf();
+    const stale = createRowShell(doc, 'st:old', {streaming: true});
+    stale.textBody.textContent = 'old';
+    resetWriteCounts(doc);
+    (renderRows as jest.Mock).mockClear();
+
+    stream.applyStreamDelta({
+      streamId: 'st:new',
+      seq: 2,
+      segments: [{kind: 'text', delta: ' NEW'}],
+    });
+    expect(stale.textBody.textContent).toBe('old');
+    expect(stale.textBody.writeCount).toBe(0);
+    expect(renderRows).toHaveBeenCalled();
+
+    state.fullReplaceOnly = null;
+    (renderRows as jest.Mock).mockClear();
+    stream.applyStreamBlockCommit({
+      streamId: 'st:new',
+      seq: 2,
+      blockKey: 'st:new:text:0',
+      kind: 'text',
+      html: '<p>NEW</p>',
+      text: 'NEW',
+      tailHtml: '<p>NEW</p>',
+      tailText: 'NEW',
+    });
+    expect(stale.bubble.innerHTML).not.toContain('NEW');
+    expect(state.appliedBlockKeys.has('st:new:text:0')).toBe(false);
+    expect(renderRows).toHaveBeenCalled();
+
+    // 350ms 富文本升级也不能写旧尾巴。
+    state.flags.richText = true;
+    resetWriteCounts(doc);
+    jest.useFakeTimers();
+    try {
+      streamMarkdown.scheduleStreamRichUpgrade('text');
+      jest.advanceTimersByTime(RICH_UPGRADE_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(stale.textBody.writeCount).toBe(0);
   });
 
   /* ---------------- T-SP31：plain 增量 / rich 开关 reseed ---------------- */
@@ -1650,5 +1719,269 @@ describe('web 流式投影 runtime（T-SP7~T-SP14 / T-SP23~T-SP25 / T-SP30 / T-S
     expect(new Set(state.rows.map(r => r.id)).size).toBe(state.rows.length);
     // 原地接管：同一行元素被 reconcile 校正成终态文本
     expect(shell.textBody.textContent).toBe('done');
+  });
+
+  /* ---------------- CR1 web-runtime：P1-1 / P1-5 / P2-1 / P2-7 / P2-10 / P2-11 ---------------- */
+
+  it('P1-1: 在途快照的旧捕获行不回退已收尾终态（status/messageId/tools/text）', () => {
+    const {state, snapshot, stream} = loadFreshModules();
+    const shell = createRowShell(doc, 'st:1', {streaming: true});
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [userRow('u1'), assistantRow('st:1', {text: 'partial'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:1', seq: 5, status: 'streaming'},
+    });
+    flushRaf();
+    emulateShellSeed(shell, state.rows[1]);
+
+    const tools = [{name: 'read', status: 'completed', toolUseId: 't1'}];
+    stream.applyStreamStatus({
+      streamId: 'st:1',
+      status: 'finished',
+      messageId: 'db-1',
+      row: assistantRow('st:1', {
+        status: 'finished',
+        text: 'partial done',
+        messageId: 'db-1',
+        tools,
+      }),
+    });
+    expect(state.rows[1].status).toBe('finished');
+
+    // 分片在途的末片（捕获行仍是 streaming、无 messageId、正文更短）后到
+    snapshot.handleSnapshotPayload({
+      generation: 2,
+      rows: [userRow('u1'), assistantRow('st:1', {text: 'partial'})],
+      sessionKey: 'p1:s1',
+    });
+    flushRaf();
+    const row = state.rows[1];
+    expect(row.status).toBe('finished');
+    expect(row.messageId).toBe('db-1');
+    expect(row.tools).toEqual(tools);
+    expect(row.text).toBe('partial done');
+  });
+
+  it('P1-1: 会话切换按新基线采用（终态保护不跨会话）', () => {
+    const {state, snapshot, stream} = loadFreshModules();
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:1', {text: 'old'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:1', seq: 2, status: 'streaming'},
+    });
+    flushRaf();
+    stream.applyStreamStatus({
+      streamId: 'st:1',
+      status: 'finished',
+      messageId: 'db-1',
+      row: assistantRow('st:1', {
+        status: 'finished',
+        text: 'old',
+        messageId: 'db-1',
+      }),
+    });
+
+    snapshot.handleSnapshotPayload({
+      generation: 2,
+      rows: [assistantRow('st:1', {text: 'other'})],
+      sessionKey: 'p2:s9',
+    });
+    flushRaf();
+    expect(state.rows[0].status).toBe('streaming');
+    expect(state.rows[0].messageId).toBeUndefined();
+    expect(state.rows[0].text).toBe('other');
+  });
+
+  it('P1-5: finished 行 richText 开→关后摘 rich，纯文本换行保留', () => {
+    const {state, snapshot} = loadFreshModules();
+    state.flags.richText = true;
+    const shell = createRowShell(doc, 'st:f', {streaming: false});
+    state.rows = [
+      assistantRow('st:f', {
+        status: 'finished',
+        text: 'L1\nL2',
+        textHtml: '<p>L1</p><p>L2</p>',
+      }),
+    ];
+    snapshot.reconcileFinishedStreamingRows();
+    expect(shell.textBody.classList.contains('rich')).toBe(true);
+
+    // rich 关闭：同一行（无 textHtml）经快照 -> reconcile 走 plain 分支
+    state.flags.richText = false;
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:f', {status: 'finished', text: 'L1\nL2'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:f', seq: 3, status: 'finished'},
+    });
+    flushRaf();
+    expect(shell.textBody.classList.contains('rich')).toBe(false);
+    expect(shell.textBody.classList.contains('stream-tail-plain')).toBe(false);
+    expect(shell.textBody.textContent).toBe('L1\nL2');
+  });
+
+  it('P2-1(web): 分片在途起新流——cp 指向组装基线外的行时按无流快照收敛', () => {
+    const {state, snapshot} = loadFreshModules();
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 0,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      rows: [userRow('u1')],
+      stream: {id: 'st:new', seq: 1, status: 'streaming'},
+    });
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 1,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      rows: [userRow('u2')],
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+    expect(state.rows.map(r => r.id)).toEqual(['u1', 'u2']);
+    // 组装基线里没有 st:new：不能把 cp 挂上去触发异常重传风暴
+    expect(state.streamCheckpoint).toBeNull();
+    expect(state.snapshotResyncAnomalyCount).toBe(0);
+    expect(resyncPosts()).toHaveLength(0);
+  });
+
+  it('P2-7: 行缺失时带 row/messageId 的终态请求对账；纯 status 迟到忽略', () => {
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(1000);
+    try {
+      const {state, snapshot, stream} = loadFreshModules();
+      snapshot.handleSnapshotPayload({
+        generation: 1,
+        rows: [assistantRow('st:b')],
+        sessionKey: 'p1:s1',
+        stream: {id: 'st:b', seq: 3, status: 'streaming'},
+      });
+      flushRaf();
+
+      stream.applyStreamStatus({
+        streamId: 'st:a',
+        status: 'finished',
+        messageId: 'db-a',
+        row: assistantRow('st:a', {
+          status: 'finished',
+          messageId: 'db-a',
+        }),
+      });
+      expect(resyncPosts()).toHaveLength(1);
+      expect(resyncPosts()[0].payload).toEqual({
+        streamId: 'st:a',
+        expectedSeq: 3,
+      });
+
+      // 快照未带回 st:a：纯 status 的迟到消息保持忽略（不再触发对账）
+      state.resyncPending = null;
+      nowSpy.mockReturnValue(2000);
+      stream.applyStreamStatus({streamId: 'st:a', status: 'finished'});
+      expect(resyncPosts()).toHaveLength(1);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('P2-7: 空流式行收尾移除时块/升级态与 applyStreamReset 对齐', () => {
+    jest.useFakeTimers({doNotFake: ['requestAnimationFrame']});
+    try {
+      const {state, snapshot, stream, streamMarkdown} = loadFreshModules();
+      state.flags.richText = true;
+      createRowShell(doc, 'st:1', {streaming: true});
+      snapshot.handleSnapshotPayload({
+        generation: 1,
+        rows: [assistantRow('st:1')],
+        sessionKey: 'p1:s1',
+        stream: {id: 'st:1', seq: 0, status: 'streaming'},
+      });
+      flushRaf();
+      state.appliedBlockKeys = new Set(['st:1:text:0']);
+      streamMarkdown.scheduleStreamRichUpgrade('text');
+      expect(streamMarkdown.streamRichUpgrade.timer).not.toBeNull();
+
+      stream.applyStreamStatus({streamId: 'st:1', status: 'finished'});
+      expect(state.rows).toEqual([]);
+      expect(state.streamCheckpoint).toBeNull();
+      expect(state.fullReplaceOnly).toBeNull();
+      expect(state.appliedBlockKeys.size).toBe(0);
+      expect(streamMarkdown.streamRichUpgrade.timer).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('P2-7: 非法 status（streaming）不得收尾', () => {
+    const {state, snapshot, stream} = loadFreshModules();
+    createRowShell(doc, 'st:1', {streaming: true});
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:1', {text: 'x'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:1', seq: 2, status: 'streaming'},
+    });
+    flushRaf();
+    stream.applyStreamStatus({streamId: 'st:1', status: 'streaming'} as never);
+    expect(state.rows[0].status).toBe('streaming');
+    expect(state.streamCheckpoint).toEqual({
+      id: 'st:1',
+      seq: 2,
+      status: 'streaming',
+    });
+  });
+
+  it('P2-10: 收尾后补一次 mermaid 扫描（流式行失去 #stream-tail）', () => {
+    const {snapshot, stream} = loadFreshModules();
+    createRowShell(doc, 'st:1', {streaming: true});
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:1', {text: '```mermaid\ngraph TD;\n```'})],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:1', seq: 1, status: 'streaming'},
+    });
+    flushRaf();
+    (scheduleMermaidScan as jest.Mock).mockClear();
+
+    stream.applyStreamStatus({streamId: 'st:1', status: 'finished'});
+    expect(scheduleMermaidScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('P2-11: streamReset 后清理已删行的渲染签名（同 id 重建重新写 body）', () => {
+    const {state, snapshot, stream} = loadFreshModules();
+    const shell = createRowShell(doc, 'st:f', {streaming: false});
+    state.rows = [assistantRow('st:f', {status: 'finished', text: 'done'})];
+    snapshot.reconcileFinishedStreamingRows();
+    expect(shell.textBody.textContent).toBe('done');
+
+    stream.applyStreamReset({streamIds: ['st:f']});
+    state.rows = [assistantRow('st:f', {status: 'finished', text: 'done'})];
+    shell.textBody.textContent = 'stale';
+    snapshot.reconcileFinishedStreamingRows();
+    expect(shell.textBody.textContent).toBe('done');
+  });
+
+  it('P2-11: 快照换基线（新 streamId）后清理已不在 rows 的渲染签名', () => {
+    const {state, snapshot} = loadFreshModules();
+    const shell = createRowShell(doc, 'st:old', {streaming: false});
+    state.rows = [assistantRow('st:old', {status: 'finished', text: 'old'})];
+    snapshot.reconcileFinishedStreamingRows();
+    expect(shell.textBody.textContent).toBe('old');
+
+    // 新 streamId 快照：基线里不再有 st:old（旧行被 DB id 接管/淘汰）
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      rows: [assistantRow('st:new')],
+      sessionKey: 'p1:s1',
+      stream: {id: 'st:new', seq: 0, status: 'streaming'},
+    });
+    flushRaf();
+
+    // 旧行以同 id 重现时签名必须已失效，否则旧签名会让 reconcile 跳过重写
+    state.rows = [assistantRow('st:old', {status: 'finished', text: 'old'})];
+    shell.textBody.textContent = 'stale';
+    snapshot.reconcileFinishedStreamingRows();
+    expect(shell.textBody.textContent).toBe('old');
   });
 });

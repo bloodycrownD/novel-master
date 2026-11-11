@@ -15,7 +15,6 @@ export {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from "../domain/events/model/event-types.js";
 export type {
-  NovelMasterEventType,
   AgentRunStartedPayload,
   AgentRunFinishedPayload,
   AgentRunFailedPayload,

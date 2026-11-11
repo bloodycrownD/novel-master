@@ -347,6 +347,14 @@ function accumulated(parts: readonly string[], tail: string) {
 }
 
 /**
+ * 文本双源取长（P2-4）：宿主累加器 vs 投影行。`!webReady` 期间 `pushStream`
+ * 丢弃的 delta 不进累加器，此时以 props 行为准；html 由同一份文本生成。
+ */
+function pickLonger(accumulatorText: string, rowText: string) {
+  return accumulatorText.length >= rowText.length ? accumulatorText : rowText;
+}
+
+/**
  * 稳定身份回调：deps 表在 prettier 80 列下必然拆行，与 check-signatures 的
  * 「调用写一行」互斥；而 eslint react-hooks/exhaustive-deps 只接受**字面量**
  * 依赖数组（传变量会报 "not an array literal"）。这里用 ref 持有最新实现，
@@ -461,6 +469,12 @@ const ConversationHost = forwardRef<Handle, Props>(
      */
     const streamingRowsRef = useRef(streamingRows);
     streamingRowsRef.current = streamingRows;
+    /**
+     * 接管映射的当拍镜像：快照是异步分片的，映射在片间到达时运行中的快照
+     * 闭包仍是旧值——捕获行对账（P1-1）必须读当拍映射才能补上 messageId。
+     */
+    const streamRowIdsRef = useRef(streamRowIds);
+    streamRowIdsRef.current = streamRowIds;
     const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
     const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
     const initialScrollRef = useRef(initialScroll);
@@ -738,11 +752,11 @@ const ConversationHost = forwardRef<Handle, Props>(
           lastStreamIdRef.current === streamId &&
           streamingRowsRef.current.some(item => item.streamId === streamId)
         ) {
-          // 同 id 的旧行已在文档里（cp.seq 可能大于 0）：先补一份快照对账，
-          // 否则后续新 delta 会因「seq <= applied」被全部 ignore。
-          const where = `stream begin: existing row ${streamId}`;
-          bootTimingLog(`${where} at wire seq 0, forcing snapshot`);
-          sendSessionSnapshotRef.current?.({intent: 'preserve'});
+          // 同 id 的旧行已在文档里（cp.seq 可能大于 0）：需要一份快照对账，
+          // 否则后续新 delta 会因「seq <= applied」被全部 ignore。对账快照
+          // 统一由本分支唯一调用方（status 翻转 effect）在同一拍发出——两处
+          // 各发一份会让 ready 后的全量快照互相顶替（P2-6）。
+          bootTimingLog(`stream begin: existing row ${streamId} at wire seq 0`);
         }
         return;
       }
@@ -797,11 +811,15 @@ const ConversationHost = forwardRef<Handle, Props>(
         appendWireChunk(pendingWireSegmentsRef.current.segments, segment);
         queued += 1;
       }
-      if (tools != null) {
-        streamToolsRef.current = tools;
+      // tools 只在内容真变时进下一拍 delta（P2-18a）：重复推送同一份工具数组
+      // 不再产第二条 tools-only delta（unit 侧每次变更都会换新数组）。
+      const prevTools = streamToolsRef.current;
+      const toolsChanged = tools != null && tools !== prevTools;
+      streamToolsRef.current = tools ?? prevTools;
+      if (toolsChanged) {
         streamToolsDirtyRef.current = true;
       }
-      if (queued > 0 || tools != null) {
+      if (queued > 0 || toolsChanged) {
         if (streamRafRef.current == null) {
           streamRafRef.current = requestAnimationFrame(() => {
             streamRafRef.current = null;
@@ -832,27 +850,29 @@ const ConversationHost = forwardRef<Handle, Props>(
         return;
       }
       const textParts = committedTextPartsRef.current;
+      const thinkParts = committedThinkingPartsRef.current;
+      const textTail = streamTextAccumRef.current;
+      const thinkTail = streamThinkingAccumRef.current;
       let text = found?.text ?? '';
-      if (isCurrent) {
-        text = accumulated(textParts, streamTextAccumRef.current);
-      }
-      const thinkingParts = committedThinkingPartsRef.current;
       let thinking = found?.thinking ?? '';
+      let tools = found?.tools ?? [];
       if (isCurrent) {
-        thinking = accumulated(thinkingParts, streamThinkingAccumRef.current);
+        // 累加器与 props 行取长：webReady=false 期间丢的 delta 不能把终态截短
+        // （P2-4）；tools 同理以宿主内的最新数组为准（P2-2）。
+        text = pickLonger(accumulated(textParts, textTail), text);
+        thinking = pickLonger(accumulated(thinkParts, thinkTail), thinking);
+        const liveTools = streamToolsRef.current;
+        if (liveTools.length > 0) tools = liveTools;
       }
       const finished: TranscriptStreamingMessage = {
         streamId,
         status: 'finished',
         text,
         thinking,
-        tools: streamToolsRef.current,
+        tools,
         messageId: null,
       };
-      let message = finished;
-      if (found != null) {
-        message = {...found, status: 'finished'};
-      }
+      const message = {...finished, messageId: found?.messageId ?? null};
       const body = {text, thinking};
       const richText = richTextRef.current;
       const row = buildStreamingTranscriptRow(message, richText, body);
@@ -866,6 +886,8 @@ const ConversationHost = forwardRef<Handle, Props>(
           row,
         },
       });
+      // 该流已收尾：删掉它的 resync 限流条目，避免表按 streamId 单调增长（P2-11）。
+      resyncSentAtRef.current.delete(streamId);
     };
     const finishStream = useLatest(finishStreamNow);
 
@@ -907,6 +929,14 @@ const ConversationHost = forwardRef<Handle, Props>(
         type: 'streamReset',
         payload: {streamIds, generation: ++snapshotGenerationCounter},
       });
+      // 被 reset 的流不会有后续 status：连同 resync 限流条目一起清掉（P2-11）。
+      if (streamIds == null) {
+        resyncSentAtRef.current.clear();
+      } else {
+        for (const streamId of streamIds) {
+          resyncSentAtRef.current.delete(streamId);
+        }
+      }
     };
     const resetStream = useLatest(resetStreamNow);
 
@@ -998,9 +1028,32 @@ const ConversationHost = forwardRef<Handle, Props>(
             }
             merged[index] = message;
           }
-          return merged;
+          // 捕获行已不在当前投影（被接管/被清掉）时不能原样按旧身份发出——
+          // 那会让已收尾的行以 `streaming` 复活（P1-1）。已接管且 DB 行不在
+          // 本次快照里 → 用捕获文本补一条 finished 行 + 映射到的 messageId；
+          // 已由本次快照的 DB 行承载（applyStreamRowIds 会改写成同一身份）或
+          // 未接管（reset/失败移除）→ 丢弃，保证同代次不出现两条同 id 行。
+          const liveIds = new Set(current.map(row => row.streamId));
+          const settled = new Map<string, string>();
+          for (const [messageId, streamId] of streamRowIdsRef.current) {
+            settled.set(streamId, messageId);
+          }
+          const dbIds = new Set(snapshotMessages.map(message => message.id));
+          const reconciled = merged.map(row => {
+            if (liveIds.has(row.streamId)) {
+              return row;
+            }
+            const messageId = settled.get(row.streamId);
+            if (messageId != null && !dbIds.has(messageId)) {
+              return {...row, status: 'finished' as const, messageId};
+            }
+            return null;
+          });
+          return reconciled.filter(
+            (row): row is TranscriptStreamingMessage => row != null,
+          );
         };
-        /** 流式投影行 → wire 行（正文/思考优先取宿主累加器）。 */
+        /** 流式投影行 → wire 行（正文/思考优先取宿主累加器，取长一方）。 */
         const toWireRow = (message: TranscriptStreamingMessage) => {
           if (message.streamId !== streamIdRef.current) {
             return buildStreamingTranscriptRow(message, richText, undefined);
@@ -1009,10 +1062,18 @@ const ConversationHost = forwardRef<Handle, Props>(
           const thinkingParts = committedThinkingPartsRef.current;
           const textTail = streamTextAccumRef.current;
           const thinkingTail = streamThinkingAccumRef.current;
-          const text = accumulated(textParts, textTail);
-          const thinking = accumulated(thinkingParts, thinkingTail);
+          // 两份来源取长的那份：`!webReady` 期间丢的 delta 不会让快照把正文
+          // 截短（P2-4）；html 由同一份文本生成，成对。tools 以宿主内最新
+          // 数组为准（Provider 的 streamingRows 要等下一次渲染，P2-2）。
+          const liveText = accumulated(textParts, textTail);
+          const liveThinking = accumulated(thinkingParts, thinkingTail);
+          const text = pickLonger(liveText, message.text);
+          const thinking = pickLonger(liveThinking, message.thinking);
+          const liveTools = streamToolsRef.current;
+          const tools = liveTools.length > 0 ? liveTools : message.tools;
           const body = {text, thinking};
-          return buildStreamingTranscriptRow(message, richText, body);
+          const wireRow = {...message, tools};
+          return buildStreamingTranscriptRow(wireRow, richText, body);
         };
         const initialStreamRows = currentStreamRows();
         // 空会话但已有流式行：只发流式片，不额外发空 DB 片。
@@ -1069,7 +1130,12 @@ const ConversationHost = forwardRef<Handle, Props>(
               seq = streamWireSeqRef.current;
             }
             let streamCp: StreamCheckpoint | null = null;
-            if (tailRow != null) {
+            // 检查点只挂到**本片真的包含该行**的片上（P2-1）：快照开始没有流、
+            // 片间起新流时 DB 片里没有该行，带上 cp 会让 Web 判协议异常并重同步。
+            if (
+              tailRow != null &&
+              rows.some(row => row.id === tailRow.streamId)
+            ) {
               const {streamId: id, status} = tailRow;
               streamCp = {id, seq, status};
             }
@@ -1244,6 +1310,10 @@ const ConversationHost = forwardRef<Handle, Props>(
         lastStreamIdRef.current = last.streamId;
         streamTextAccumRef.current = last.text;
         streamThinkingAccumRef.current = last.thinking;
+        // tools 也随文档基线播种（P2-2）：重挂后的收尾/快照不能再从上一份
+        // 文档的数组里取值。
+        streamToolsRef.current = last.tools;
+        streamToolsDirtyRef.current = false;
         committedTextPartsRef.current = [];
         committedThinkingPartsRef.current = [];
         committedTextHtmlPartsRef.current = [];
@@ -1542,9 +1612,12 @@ const ConversationHost = forwardRef<Handle, Props>(
       void sendSessionSnapshotNow({intent: 'preserve'});
     }, [webReady, flags?.richText, sendSessionSnapshotNow]);
 
-    // pendingSubagentSessions 变化时重发快照（照搬，注释见旧组件）
+    // pendingSubagentSessions 变化时重发快照（照搬，注释见旧组件）。
+    // 首次 ready 不发：开屏快照（声明序在后、同一拍执行）已带上当前映射，
+    // 多发一份只会互相顶替（P2-6）。ready 重进时 needsOpenSnapshotRef 已被
+    // 消费，这里仍负责「重挂后按当前消息面补一次普通快照」。
     useEffect(() => {
-      if (!webReady) {
+      if (!webReady || needsOpenSnapshotRef.current) {
         return;
       }
       sendSessionSnapshotRef.current?.({intent: 'preserve'});
@@ -1577,6 +1650,15 @@ const ConversationHost = forwardRef<Handle, Props>(
           } else if (!adopted && previous.status === 'finished') {
             // 未被接管的合成 partial（失败/移除）：按 id 移除，随后由 DB 错误行接管。
             resetStream([previous.id]);
+          } else if (!adopted && previous.status === 'streaming') {
+            // 兜底（P2-3）：投影在单元未 settle 的情况下直接变空（manager 拆
+            // 单元/终态事件丢失）——当前流按异常收尾保住正文，随后由 DB 行
+            // 接管；不是当前流的 id 无法确认内容，发一次普通快照对账。
+            if (previous.id === streamIdRef.current) {
+              finishStream(previous.id);
+            } else {
+              sendSessionSnapshotRef.current?.({intent: 'preserve'});
+            }
           }
         }
         lastStreamSnapshotRef.current = null;
@@ -1593,22 +1675,29 @@ const ConversationHost = forwardRef<Handle, Props>(
       }
       if (previous == null || previous.id !== current.streamId) {
         beginStream(current.streamId);
-        sendSessionSnapshotRef.current?.({intent: 'preserve'});
+        // 开屏快照在同一拍随后执行时由它兜底，这里不再多发一份（P2-6）：
+        // ready 后同拍连发多份全量快照只会互相顶替。
+        if (!needsOpenSnapshotRef.current) {
+          sendSessionSnapshotRef.current?.({intent: 'preserve'});
+        }
       } else if (previous.messageId == null && current.messageId != null) {
         // 防御分支：正常 adoption 会让该行从 streamRows 消失；这里只在
         // 「记录尚未被剔除」的竞态下补一次终态行。
         const isCurrent = current.streamId === streamIdRef.current;
         const textParts = committedTextPartsRef.current;
-        const thinkingParts = committedThinkingPartsRef.current;
+        const thinkParts = committedThinkingPartsRef.current;
         const textTail = streamTextAccumRef.current;
-        const thinkingTail = streamThinkingAccumRef.current;
-        const liveText = accumulated(textParts, textTail);
-        const liveThinking = accumulated(thinkingParts, thinkingTail);
+        const thinkTail = streamThinkingAccumRef.current;
         let text = current.text;
-        if (isCurrent) text = liveText;
         let thinking = current.thinking;
-        if (isCurrent) thinking = liveThinking;
-        const finished = {...current, status: 'finished' as const};
+        let tools = current.tools;
+        if (isCurrent) {
+          text = pickLonger(accumulated(textParts, textTail), text);
+          thinking = pickLonger(accumulated(thinkParts, thinkTail), thinking);
+          const liveTools = streamToolsRef.current;
+          if (liveTools.length > 0) tools = liveTools;
+        }
+        const finished = {...current, status: 'finished' as const, tools};
         const body = {text, thinking};
         const richText = richTextRef.current;
         const row = buildStreamingTranscriptRow(finished, richText, body);
@@ -1622,6 +1711,8 @@ const ConversationHost = forwardRef<Handle, Props>(
             row,
           },
         });
+        // 终态行已发：该流的 resync 限流条目不再需要（P2-11）。
+        resyncSentAtRef.current.delete(current.streamId);
       }
       lastStreamSnapshotRef.current = {
         id: current.streamId,
@@ -1732,6 +1823,9 @@ const ConversationHost = forwardRef<Handle, Props>(
               type: 'streamStatus',
               payload: {streamId, status: 'finished', messageId, row},
             });
+            // 接管路径的终态行同样结束该流的 resync 限流窗口（P2-11）：不删
+            // 条目会让紧随其后的合法 resync 被 100ms 窗口误限流。
+            resyncSentAtRef.current.delete(streamId);
           }
           break;
         }

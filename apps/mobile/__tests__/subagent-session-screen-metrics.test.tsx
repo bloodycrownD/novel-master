@@ -27,6 +27,8 @@ import {
 } from '@novel-master/core/events';
 import {setMobileAgentActive} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
+import type {ChatMessageData} from '@novel-master/core/chat';
+import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
 
 const CHILD_SESSION_ID = 'child-1';
 
@@ -227,7 +229,10 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('transcript-converge: 子会话屏以统一宿主的 transcriptOnly 变体装配', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
     driveConsumptiveRun(h.eventBus, 3);
 
     const {unmount} = await renderScreen();
@@ -236,8 +241,15 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     expect(mockChatWebViewProps.length).toBeGreaterThan(0);
     for (const props of mockChatWebViewProps) {
       expect(props.transcriptOnly).toBe(true);
-      // T-SP28：流式投影 props 必须真传到宿主（漏传 = 子会话屏没有流式正文）。
-      expect(props.streamingRows).toBeDefined();
+      // T-SP28 / P2-18c：流式投影 props 必须真传到宿主（漏传 = 子会话屏没有
+      // 流式正文）。只断言 defined/instanceof 会被 `streamingRows={[]}` 或空
+      // Map 骗过——这里钉住 driveConsumptiveRun 产出的当前 streaming 行本身。
+      const streamingRows = props.streamingRows as Array<
+        Record<string, unknown>
+      >;
+      expect(Array.isArray(streamingRows)).toBe(true);
+      expect(streamingRows.length).toBeGreaterThan(0);
+      expect(streamingRows[streamingRows.length - 1]?.status).toBe('streaming');
       expect(props.streamRowIds).toBeInstanceOf(Map);
     }
     // 变体位与主对话形态的关键分野：宿主不收 composer 域 props（子会话屏没有
@@ -251,7 +263,10 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
     driveConsumptiveRun(h.eventBus, 3);
 
     const {texts, unmount} = await renderScreen();
@@ -265,7 +280,10 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N tok · N tok/s」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
     driveConsumptiveRun(h.eventBus, 6);
     finishRun(h.eventBus);
 
@@ -281,7 +299,10 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('中断（指标条可见）：「已中断」只在条上出现一次（不叠屏级横幅）', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
     // 重启水合现场：run 被杀 → interrupted 单元（常驻，无 settled 投影）。
     const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
     unit.hydrateFromRunState({
@@ -310,7 +331,10 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('中断（指标条不可见）：「已中断」由屏级横幅兜底，仍是单标识', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
     // starting 阶段被杀：起点与指标皆零 → 指标条全零守卫不渲染。
     const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
     unit.hydrateFromRunState({
@@ -388,7 +412,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
       node =>
         node.props?.accessibilityRole === 'button' &&
         typeof node.props?.onPress === 'function' &&
-        Array.isArray(node.props?.style) === false // 指标条 Pressable（屏上还有停止按钮等）
+        Array.isArray(node.props?.style) === false, // 指标条 Pressable（屏上还有停止按钮等）
     );
     await act(async () => {
       pressable.props.onPress();
@@ -607,6 +631,165 @@ describe('F-B4 子会话屏兜底：force 回源 + 孙任务 pending 映射注�
     expect(
       (latest.pendingSubagentSessions as Map<string, string>).get('孙任务'),
     ).toBe('grand-1');
+    unmount();
+  });
+});
+
+/** 造一条可用的只手写投影视图（屏幕只消费视图字段，不关心单元内部状态机）。 */
+function makeUnitView(
+  overrides: Partial<SessionStreamUnitView>,
+): SessionStreamUnitView {
+  return {
+    sessionId: CHILD_SESSION_ID,
+    projectId: 'p1',
+    status: 'idle',
+    runId: null,
+    settledAtMs: null,
+    metrics: {
+      textChars: 0,
+      thinkingChars: 0,
+      completionTokens: 0,
+      tokenSource: 'heuristic',
+    },
+    startedAtMs: 0,
+    elapsedMs: null,
+    partialText: '',
+    partialThinking: '',
+    streamRows: [],
+    streamRowIds: new Map<string, string>(),
+    pendingChildren: [],
+    pendingChildrenByTitle: new Map<string, string>(),
+    messages: [],
+    hasMoreMessages: false,
+    loadingMoreMessages: false,
+    ...overrides,
+  };
+}
+
+function makeAssistantMessage(id: string): ChatMessageData {
+  return {
+    id,
+    sessionId: CHILD_SESSION_ID,
+    seq: 1,
+    role: 'assistant',
+    content: `正文-${id}`,
+    createdAtMs: 1_000,
+  } as unknown as ChatMessageData;
+}
+
+/**
+ * CR1 消费侧接线（P1-3 / P2-5 / P2-18c）。
+ *
+ * 这三条都在锁「屏幕从 manager 视图取的到底是什么」：单元空 Map 不得遮住
+ * idle 交接映射、单元空消息面不得清空转录、流式 props 必须带内容而不只是
+ * 有个空壳。
+ */
+describe('SubagentSessionScreen 消费侧投影接线（P1-3/P2-5/P2-18c）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setMobileAgentActive(false);
+  });
+
+  afterEach(() => {
+    mockManager?.dispose();
+    mockManager = undefined;
+    mockRuntime = undefined;
+    mockGetSessionUsageDetail.mockClear();
+    mockChatWebViewProps.length = 0;
+    mockNavigate.mockClear();
+    jest.useRealTimers();
+    setMobileAgentActive(false);
+  });
+
+  function installManager(manager: SessionStreamUnitManager): void {
+    mockManager = manager;
+    mockRuntime = {
+      sessionStreamUnitManager: manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
+  }
+
+  it('P2-18c：streamingRows/streamRowIds 的内容真传到宿主（不止 defined/instanceof）', async () => {
+    const h = buildHarness();
+    installManager(h.manager);
+    const streamRows = [
+      {
+        streamId: 'st-1',
+        status: 'streaming',
+        text: '流式正文',
+        thinking: '流式思考',
+        tools: [],
+        messageId: null,
+      },
+    ];
+    const rowIds = new Map([['db-1', 'st-1']]);
+    jest.spyOn(h.manager, 'snapshot').mockReturnValue(
+      makeUnitView({
+        status: 'running',
+        runId: 'rc',
+        startedAtMs: 1_000,
+        streamRows,
+        streamRowIds: rowIds,
+        messages: [makeAssistantMessage('db-1')],
+      }),
+    );
+
+    const {unmount} = await renderScreen();
+    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+    const passedRows = props.streamingRows as Array<Record<string, unknown>>;
+    expect(passedRows).toHaveLength(1);
+    expect(passedRows[0]?.streamId).toBe('st-1');
+    expect(passedRows[0]?.status).toBe('streaming');
+    expect(passedRows[0]?.text).toBe('流式正文');
+    expect(passedRows[0]?.thinking).toBe('流式思考');
+    const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
+    expect(passedIds).toBeInstanceOf(Map);
+    expect(passedIds.size).toBe(1);
+    expect(passedIds.get('db-1')).toBe('st-1');
+    unmount();
+  });
+
+  it('P1-3：单元 streamRowIds 是空 Map 时不遮蔽 idle 交接映射', async () => {
+    const h = buildHarness();
+    installManager(h.manager);
+    jest.spyOn(h.manager, 'snapshot').mockReturnValue(
+      makeUnitView({
+        status: 'running',
+        runId: 'rc',
+        startedAtMs: 1_000,
+        messages: [makeAssistantMessage('db-a')],
+        // 新单元刚建立：空 Map（不是 null）——旧写法 `unit ?? idle` 会选中它。
+        streamRowIds: new Map<string, string>(),
+      }),
+    );
+    jest.spyOn(h.manager, 'readMessagesSnapshot').mockReturnValue({
+      messages: [makeAssistantMessage('db-a')],
+      hasMoreMessages: false,
+      loadingMoreMessages: false,
+      streamRowIds: new Map([['db-a', 'st-a']]),
+    });
+
+    const {unmount} = await renderScreen();
+    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+    const passedIds = props.streamRowIds as ReadonlyMap<string, string>;
+    expect(passedIds.size).toBe(1);
+    expect(passedIds.get('db-a')).toBe('st-a');
+    unmount();
+  });
+
+  it('P2-5：单元消息面为空（二轮替换的中间态）时回落本地消息，不发空转录', async () => {
+    const h = buildHarness();
+    installManager(h.manager);
+    const history = [makeAssistantMessage('db-hist')];
+    jest
+      .spyOn(h.manager, 'snapshot')
+      .mockReturnValue(makeUnitView({status: 'starting'}));
+    jest.spyOn(h.manager, 'loadSessionTailMessages').mockResolvedValue(history);
+
+    const {texts, unmount} = await renderScreen();
+    expect(texts.join(' | ')).not.toContain('子会话暂无消息');
+    const props = mockChatWebViewProps[mockChatWebViewProps.length - 1]!;
+    expect(props.messages).toEqual(history);
     unmount();
   });
 });

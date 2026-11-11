@@ -21,8 +21,11 @@ import {
 import {requestResync, resetStreamBlockRenderState} from '../stream/stream';
 import {clearStreamRichUpgrade} from '../stream/stream-markdown';
 import {mergeCheckpoint} from '../stream/stream-checkpoint';
-import {reconcileFinishedStreamingRows} from './finished-stream-row-dom';
-import {reseedStreamingRow} from './finished-stream-row-dom';
+import {
+  pruneFinishedStreamRowSignatures,
+  reconcileFinishedStreamingRows,
+  reseedStreamingRow,
+} from './finished-stream-row-dom';
 import {scheduleMermaidScan} from '../mermaid';
 
 export {reconcileFinishedStreamingRows} from './finished-stream-row-dom';
@@ -33,12 +36,12 @@ function scrollTopFrom(scroller: Element, offset: number): number {
   return scrollTopForOffsetFromBottom(scrollHeight, clientHeight, offset);
 }
 
-export type RestoreScroll = {
+type RestoreScroll = {
   nearBottom?: boolean;
   offsetY: number;
 };
 
-export type SnapshotPayload = {
+type SnapshotPayload = {
   scrollIntent?: string;
   sessionKey?: string;
   rows?: TranscriptRow[];
@@ -52,7 +55,7 @@ export type SnapshotPayload = {
   chunkTotal?: number;
 };
 
-export type RowsPayload = {
+type RowsPayload = {
   rows?: TranscriptRow[];
   scrollIntent?: string;
 };
@@ -115,6 +118,10 @@ function numberOf(value: unknown): number {
  * 等价旧协议；多片则按代次拼装——未知/迟到代次与乱序分片一律丢弃
  * （凑不齐的代次由 RN 侧 force 新代次重传兜底）。
  * 每个片（含末片）先做代次判旧：旧代次末片不会整体替换 rows。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口；分片收集器
+ * （pendingChunkAcc/pendingChunkActions/appliedSnapshotGeneration）是本模块
+ * 私有状态，bridge 只做转发。
  */
 export function handleSnapshotPayload(payload: SnapshotPayload): void {
   const rawChunkTotal = numberOf(payload.chunkTotal);
@@ -194,12 +201,18 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
   acc.received = chunkIndex + 1;
   if (chunkIndex === chunkTotal - 1) {
     // 末片到齐：滚动字段仅在末片携带，拼齐后整体应用（一次 renderRows、
-    // 一次滚动副作用）。
+    // 一次滚动副作用）。checkpoint 只认组装基线里确实存在的行（P2-1）：分片
+    // 期间新流起步会把 cp 挂到不含该行的 DB 片，按无流快照收敛，避免
+    // 「cp 指向不存在的行」触发异常重传（1s/5s 退避，连续 3 次停摆）。
+    let stream: StreamCheckpoint | undefined;
+    if (acc.stream != null && findRowByIdIn(acc.rows, acc.stream.id) != null) {
+      stream = acc.stream;
+    }
     const assembled: SnapshotPayload = {
       sessionKey: acc.sessionKey,
       rows: acc.rows,
       hasMore: !!acc.hasMore,
-      stream: acc.stream,
+      stream,
       scrollIntent: payload.scrollIntent || 'stick',
       restoreScroll: payload.restoreScroll,
     };
@@ -237,6 +250,8 @@ type MergeInput = {
   cp0: StreamCheckpoint | null;
   rows1: Rows;
   cp1: StreamCheckpoint | null;
+  /** 会话切换：旧行不属于同一会话，终态保护不适用（新基线全量采用）。 */
+  sessionChanged: boolean;
 };
 
 type MergeResult = {
@@ -248,15 +263,47 @@ type MergeResult = {
  * 快照行组装（纯函数）：rows 永远是完整基线；同 id 且本地 seq 更大时走
  * rewind 保护（保留本地行与本地 seq，绝不把已显示正文回退）。
  *
+ * 终态不回退（P1-1）：分片快照是异步拼装的，捕获行可能还停在 streaming /
+ * 缺 messageId 的旧对象；晚到的末片整体替换 rows 时不得把本地已收尾终态
+ * （status/messageId/text/thinking/textHtml/thinkingHtml/tools）回退。行序
+ * 仍按 incoming；会话切换时旧行不属于同一会话，按新基线全量采用。
+ *
  * nm-style: keep-local — spec §3.4.1 明示的纯函数（rows + checkpoint 组装 /
  * rewind 分支独立成段）；内联会把「原子提交」与「旧代次保护」搅在一起，
  * 且该函数是 rewind 不变量（I3/I4）的唯一收口点。
  */
 function mergeRows(input: MergeInput): MergeResult {
   const {rows0: localRows, cp0: localCp} = input;
-  const {rows1: incomingRows, cp1: incomingCp} = input;
+  const {rows1: incomingRows, cp1: incomingCp, sessionChanged} = input;
+  const rows = incomingRows.slice();
+  if (!sessionChanged) {
+    for (let i = 0; i < rows.length; i++) {
+      const incoming = rows[i];
+      const local = findRowByIdIn(localRows, incoming.id);
+      if (local == null) {
+        continue;
+      }
+      const localFinished = local.status === 'finished';
+      const incomingNotFinished = incoming.status !== 'finished';
+      const statusLost = localFinished && incomingNotFinished;
+      const idLost = local.messageId != null && incoming.messageId == null;
+      const keepTerminal = statusLost || idLost;
+      if (!keepTerminal) {
+        continue;
+      }
+      const merged: TranscriptRow = {...incoming};
+      if (local.status != null) merged.status = local.status;
+      if (local.messageId != null) merged.messageId = local.messageId;
+      if (local.text != null) merged.text = local.text;
+      if (local.thinking != null) merged.thinking = local.thinking;
+      if (local.textHtml != null) merged.textHtml = local.textHtml;
+      if (local.thinkingHtml != null) merged.thinkingHtml = local.thinkingHtml;
+      if (local.tools != null) merged.tools = local.tools;
+      rows[i] = merged;
+    }
+  }
   if (incomingCp == null) {
-    return {rows: incomingRows.slice(), checkpoint: null};
+    return {rows, checkpoint: null};
   }
   // rewind 必须拿 incoming 的原始 seq 比较，不能先 merge（merge 同 id 取 max
   // 会让 rewind 永假）。
@@ -268,25 +315,25 @@ function mergeRows(input: MergeInput): MergeResult {
     const hitLocal = findRowByIdIn(localRows, localCp.id);
     const localRow = hitLocal ?? findRowByIdIn(incomingRows, localCp.id);
     if (localRow == null) {
-      return {rows: incomingRows.slice(), checkpoint: incomingCp};
+      return {rows, checkpoint: incomingCp};
     }
-    const rows = incomingRows.filter(r => r.id !== localCp.id);
-    rows.push(localRow);
+    const rewound = rows.filter(r => r.id !== localCp.id);
+    rewound.push(localRow);
     const localDone = localCp.status === 'finished';
     const incomingDone = incomingCp.status === 'finished';
     const status = localDone || incomingDone ? 'finished' : 'streaming';
-    return {rows, checkpoint: {...localCp, status}};
+    return {rows: rewound, checkpoint: {...localCp, status}};
   }
   const hit = findRowByIdIn(localRows, incomingCp.id) != null;
   const nextCp = hit ? mergeCheckpoint(localCp, incomingCp) : incomingCp;
-  return {rows: incomingRows.slice(), checkpoint: nextCp};
+  return {rows, checkpoint: nextCp};
 }
 
 /**
  * 会话快照编排：rows 与 checkpoint 在同一同步块原子替换（中间无渲染），
  * RAF 内一次 renderRows + 一次滚动副作用；流式行 seed/gap 恢复在此重播 body。
  */
-export function applySnapshot(payload: SnapshotPayload): void {
+function applySnapshot(payload: SnapshotPayload): void {
   const intent = payload.scrollIntent || 'stick';
   const scroller = document.getElementById('scroller');
   const wasNearBottom = state.nearBottom;
@@ -301,7 +348,7 @@ export function applySnapshot(payload: SnapshotPayload): void {
   const rows1 = payload.rows || [];
   const cp0 = localCheckpoint;
   const cp1 = payload.stream ?? null;
-  const merged = mergeRows({rows0, cp0, rows1, cp1});
+  const merged = mergeRows({rows0, cp0, rows1, cp1, sessionChanged});
   let nextCheckpoint = merged.checkpoint;
   const sameCpId = localCheckpoint?.id === nextCheckpoint?.id;
   const localAppliedSeq = sameCpId ? localCheckpoint?.seq ?? -1 : -1;
@@ -323,6 +370,9 @@ export function applySnapshot(payload: SnapshotPayload): void {
   // 2) 原子提交：同一同步块内完成，中间不渲染
   state.sessionKey = payload.sessionKey || state.sessionKey;
   state.rows = merged.rows;
+  // 快照换基线后清理已不在 rows 的渲染签名（P2-11）：新 streamId 起步 /
+  // 旧行被 DB id 接管 / 历史淘汰都会让旧 id 消失，签名不应按会话历史单调增长。
+  pruneFinishedStreamRowSignatures();
   state.streamCheckpoint = nextCheckpoint;
   state.resyncPending = null;
   state.hasMore = !!payload.hasMore;
@@ -492,6 +542,9 @@ function scheduleSnapshotAnomalyResync(streamId: string): void {
  * appendTailRows: 追加落库行；全量路径走 Preact renderRows（保留滚动锚点）。
  * 流式行必须保持最后一条（I1）：新行插到它之前。
  * 分片收集在途时挂起（C-orch-1），末片应用后重放。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口：挂起队列
+ * （pendingChunkAcc/pendingChunkActions）是本模块私有状态，bridge 只做转发。
  */
 export function applyAppendTailRows(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();
@@ -538,6 +591,9 @@ function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
  * prependPage: only new older rows — NOT a full sessionSnapshot reload.
  * Anchor reading position: scrollTop += scrollHeight - prependedScrollHeight.
  * 分片收集在途时挂起（C-orch-1），末片应用后重放。
+ *
+ * nm-style: keep-public — bridge.ts 的 wire 分发唯一入口：挂起队列
+ * （pendingChunkAcc/pendingChunkActions）是本模块私有状态，bridge 只做转发。
  */
 export function applyPrependPage(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();

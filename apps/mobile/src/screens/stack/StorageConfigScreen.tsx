@@ -34,7 +34,9 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+// prettier-ignore
 const CLEANUP_CONFIRM_TEXT = '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？';
+// prettier-ignore
 const IMPORT_CONFIRM_TEXT = '将用所选备份完全替换当前应用数据（项目、会话、消息等）。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。此操作不可撤销，是否继续？';
 
 export function StorageConfigScreen() {
@@ -91,10 +93,12 @@ export function StorageConfigScreen() {
     return subscribeMobileAgentActivity(setAgentActive);
   }, []);
 
-  useFocusEffect(useCallback(() => {
+  const refreshStorageOnFocus = useCallback(() => {
     refreshCloudConfigured().catch(() => undefined);
     refreshMaintenanceStats().catch(() => undefined);
-  }, [refreshCloudConfigured, refreshMaintenanceStats]));
+  }, [refreshCloudConfigured, refreshMaintenanceStats]);
+
+  useFocusEffect(refreshStorageOnFocus);
 
   return (
     <ScrollView
@@ -121,7 +125,9 @@ export function StorageConfigScreen() {
       <ProfileMenuItem
         icon="🧹"
         label="数据清理"
-        value={dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'}
+        value={
+          dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'
+        }
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {

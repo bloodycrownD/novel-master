@@ -9,10 +9,12 @@ import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {ThinkingSection} from './ThinkingSection';
 import {ToolGroup} from './ToolGroup';
 
-export type AssistantBubbleInnerProps = {
+type AssistantBubbleInnerProps = {
   text: unknown;
   textHtml: string | null | undefined;
   thinking: unknown;
+  /** 折叠标题（state.labels.thinking；Ask 方负责下发，避免组件直读 state）。 */
+  thinkingTitle: string;
   thinkingKey: string;
   thinkingExpanded: boolean;
   thinkingHtml: string | null | undefined;
@@ -26,6 +28,7 @@ export function AssistantBubbleInner({
   text,
   textHtml,
   thinking,
+  thinkingTitle,
   thinkingKey,
   thinkingExpanded,
   thinkingHtml,
@@ -44,6 +47,7 @@ export function AssistantBubbleInner({
       {hasThinking ? (
         <ThinkingSection
           text={thinking}
+          title={thinkingTitle}
           thinkingKey={thinkingKey}
           expanded={thinkingExpanded}
           thinkingHtml={thinkingHtml}

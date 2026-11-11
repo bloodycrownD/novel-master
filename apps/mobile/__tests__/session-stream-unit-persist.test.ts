@@ -27,25 +27,21 @@ import {
   EVENT_AGENT_STREAM_THINKING_DELTA,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import type {SessionRunState} from '@novel-master/core/session-run-state';
+import type {
+  SessionRunState,
+  SessionRunStateSettleInput,
+  SessionRunStatus,
+} from '@novel-master/core/session-run-state';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
-import {
-  SessionStreamUnitManager,
-  SESSION_STREAM_MAX_SETTLED_UNITS,
-} from '@/services/session-stream-unit-manager.service';
-import type {SessionStreamRunStateStore} from '@/services/session-stream-unit-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {
   createRunStateWritethrough,
   RUN_STATE_WRITETHROUGH_INTERVAL_MS,
   RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS,
 } from '@/services/run-state-writethrough';
-import {
-  SESSION_STREAM_APPLY_INTERVAL_MS,
-  SESSION_STREAM_INGRESS_COALESCE_MS,
-} from '@/services/session-stream-unit';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 
 /** 时钟起点（fake timers 的 Date.now 从此起算，断言可精确）。 */
@@ -53,6 +49,24 @@ const CLOCK_START_MS = 1_000_000;
 
 /** 测试用宽限销毁时长（短值，方便推进宽限到期断言）。 */
 const TEST_SETTLED_GRACE_MS = 5_000;
+
+/** 与实现同值的 settled 单元 LRU 上限（manager 模块私有的 8）。 */
+const MAX_SETTLED_UNITS = 8;
+
+/** 与单元实现同值的 ingress 合并窗口（32ms）。 */
+const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
+
+/** 与单元实现同值的 apply 节拍（64ms）。 */
+const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
+
+/** 与 manager 构造参数同形的 run 状态服务窄口（实现类型模块私有）。 */
+interface TestRunStateStore {
+  upsert(state: SessionRunState): Promise<void>;
+  settle(input: SessionRunStateSettleInput): Promise<void>;
+  listByStatuses(
+    statuses: readonly SessionRunStatus[],
+  ): Promise<SessionRunState[]>;
+}
 
 /** 推过两段缓冲（32ms 合并 + 64ms apply）所需的全部时间。 */
 function advanceStreamTimers(extraMs = 10): void {
@@ -79,7 +93,7 @@ function createFakeRunStateStore() {
   const rows = new Map<string, SessionRunState>();
   const calls: StoreCall[] = [];
   let failUpsert = false;
-  const store: SessionStreamRunStateStore = {
+  const store: TestRunStateStore = {
     async upsert(state) {
       calls.push({op: 'upsert', at: Date.now(), sessionId: state.sessionId});
       if (failUpsert) {
@@ -155,7 +169,7 @@ function createFakeRunStateStore() {
 }
 
 function createHarness(options?: {
-  readonly runStateStore?: SessionStreamRunStateStore;
+  readonly runStateStore?: TestRunStateStore;
   /**
    * 水合让步点注入（Step 2 分片测试面）：缺省同步 mock（fake timers 下
    * await hydrate() 不挂死）；T-H1/H2/H3 传计数/插队/dispose 变体。
@@ -845,7 +859,7 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
 
   it('LRU 上限约束水合 interrupted 单元（超限淘汰最旧，settled 投影不受影响）', async () => {
     const fake = createFakeRunStateStore();
-    for (let i = 0; i < SESSION_STREAM_MAX_SETTLED_UNITS + 2; i += 1) {
+    for (let i = 0; i < MAX_SETTLED_UNITS + 2; i += 1) {
       fake.seed(
         makeRow(`s${i}`, 'p', {
           updatedAtMs: 10_000 + i, // settledAtMs 单调，淘汰从旧到新
@@ -862,13 +876,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     const h = createHarness({runStateStore: fake.store});
     await h.manager.hydrate();
 
-    expect(h.manager.unitCount()).toBe(SESSION_STREAM_MAX_SETTLED_UNITS);
+    expect(h.manager.unitCount()).toBe(MAX_SETTLED_UNITS);
     // 最旧的 s0/s1 被淘汰、最新的还在
     expect(h.manager.snapshot('s0')).toBe(null);
     expect(h.manager.snapshot('s1')).toBe(null);
-    expect(
-      h.manager.snapshot(`s${SESSION_STREAM_MAX_SETTLED_UNITS + 1}`),
-    ).toEqual(expect.objectContaining({status: 'interrupted'}));
+    expect(h.manager.snapshot(`s${MAX_SETTLED_UNITS + 1}`)).toEqual(
+      expect.objectContaining({status: 'interrupted'}),
+    );
     // settled 投影独立于单元生命周期，不受 LRU 影响
     expect(h.manager.getSettledProjection('done')?.metrics.textChars).toBe(7);
   });

@@ -77,6 +77,7 @@ type Modules = {
   RowList: () => VNodeLike[];
   snapshot: typeof import('../src/web/chat-transcript/webview/runtime/render/snapshot');
   scroll: typeof import('../src/web/chat-transcript/webview/runtime/scroll/scroll');
+  stream: typeof import('../src/web/chat-transcript/webview/runtime/stream/stream');
   renderRows: ReturnType<typeof jest.fn>;
   /** isolate 内 bridge post（与 snapshot/scroll 实际引用同一 mock 实例）。 */
   post: ReturnType<typeof jest.fn>;
@@ -354,12 +355,14 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       const rowLogic = require('../src/web/chat-transcript/webview/runtime/render/row-logic');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bridge = require('../src/web/chat-transcript/webview/runtime/bridge');
+      const stream = require('../src/web/chat-transcript/webview/runtime/stream/stream');
       loaded = {
         windowing,
         state: stateMod.state,
         RowList: rowListMod.RowList,
         snapshot,
         scroll,
+        stream,
         renderRows: rowLogic.renderRows,
         post: bridge.post,
       } as Modules;
@@ -985,6 +988,47 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       mods.renderRows();
       mods.windowing.measureRowWindow();
       expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+    });
+
+    it('P2-8: 删行后 win.end 超过 total 时按 clamp 后行数做分母（不低估平均槽高）', () => {
+      mods.state.rows = makeRows('r', 3) as never;
+      mods.windowing.resetRowWindowForSnapshot(3, {kind: 'tail'});
+      mods.renderRows();
+      mods.windowing.measureRowWindow(); // 3 行 × 80 / 3 = 80：avg 120 → 110
+      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+
+      // 模拟「删一行但窗口未收敛」：win 仍 {0,3}，实际只有 2 行可渲染
+      mods.state.rows = makeRows('r', 2) as never;
+      mods.windowing.resetRowWindowForSnapshot(3, {kind: 'tail'});
+      mods.renderRows();
+      expect(mods.windowing.getRowWindowRange(2)).toEqual({start: 0, end: 2});
+      mods.windowing.measureRowWindow();
+      // 正确分母 2：110 + (80 − 110) × 0.25 = 102.5；未 clamp（分母 3）得 95.83
+      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+    });
+
+    it('P2-8: applyStreamReset 删行后窗口按当前 rows 重定位（与渲染行数一致）', () => {
+      mods.state.rows = makeStreamingRows('r', 500) as never;
+      mods.state.hasMore = false;
+      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'});
+      mods.renderRows();
+      expect(mods.windowing.getRowWindowRange(500)).toEqual({
+        start: 400,
+        end: 500,
+      });
+
+      // 贴底用户（距底 0）删行：窗口应继续贴尾
+      layout.scrollTop = layout.scrollHeight - CLIENT_H;
+      mods.state.streamCheckpoint = {id: 'r-499', seq: 1, status: 'streaming'};
+      mods.stream.applyStreamReset({streamIds: ['r-499']});
+      expect(mods.state.rows).toHaveLength(499);
+      // 删除后 win 不重定位会停在 {400,500}（clamp 后 99 行）；重定位到
+      // 稳态尾部 {399,499}，与 RowList 实际渲染行数一致。
+      expect(mods.windowing.getRowWindowRange(499)).toEqual({
+        start: 399,
+        end: 499,
+      });
+      expect([layout.winStart, layout.winEnd]).toEqual([399, 499]);
     });
 
     it('prepend 差值样本并入 EWMA（占位估算校正）', () => {

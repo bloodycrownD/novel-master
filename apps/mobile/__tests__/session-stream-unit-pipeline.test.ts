@@ -35,14 +35,16 @@ import {
 } from '@/runtime/agent-activity';
 import {HeuristicTokenCounter} from '@novel-master/core/provider';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
-import {
-  SESSION_STREAM_APPLY_INTERVAL_MS,
-  SESSION_STREAM_INGRESS_COALESCE_MS,
-} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {createIncrementalTokenCounter} from '@novel-master/core/format';
 import type {IncrementalTokenCounter} from '@novel-master/core/format';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+
+/** 与单元实现同值的 ingress 合并窗口（32ms）。 */
+const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
+
+/** 与单元实现同值的 apply 节拍（64ms）。 */
+const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
 
 /** 时钟起点（fake timers 的 Date.now 从此起算，断言可精确）。 */
 const CLOCK_START_MS = 1_000_000;

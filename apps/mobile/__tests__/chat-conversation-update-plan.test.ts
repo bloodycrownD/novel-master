@@ -90,6 +90,14 @@ describe('planOpenSnapshot（纯函数 · 开屏滚动意图与遥测）', () =>
     expect(plan.intent).toBe('stick');
     expect(plan.restoreScroll).toBeUndefined();
     expect(plan.events[0]).toEqual({name: 'scroll_restore', mode: 'stick'});
+    // P2-19：hasInitialScroll=true 与 defaultScrollToBottom=true 此前从未断言。
+    expect(plan.events[1]).toEqual({
+      name: 'transcript_ready',
+      sessionKey: 'p1:s1',
+      rowCount: 1,
+      hasInitialScroll: true,
+      defaultScrollToBottom: true,
+    });
   });
 
   it('O3: 无缓存快照（initialScroll null）→ stick，hasInitialScroll=false', () => {
@@ -117,6 +125,11 @@ describe('planOpenSnapshot（纯函数 · 开屏滚动意图与遥测）', () =>
       mode: 'offset',
       offsetY: 120,
       nearBottom: false,
+    });
+    expect(plan.events[1]).toMatchObject({
+      name: 'transcript_ready',
+      hasInitialScroll: true,
+      defaultScrollToBottom: false,
     });
   });
 
@@ -212,6 +225,29 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
     });
   });
 
+  it('M4b: prepend 时 wasNearBottom 取真实值（true 不被写死）', () => {
+    const prev = [message('m1', 1)];
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [message('m0', 0), message('m1', 1)],
+        previousMessages: prev,
+        prevCount: 1,
+        prevFirstId: 'm1',
+        lastScroll: {nearBottom: true, offsetY: 0},
+      }),
+    );
+    expect(plan).toEqual({
+      kind: 'prepend',
+      prependedCount: 1,
+      event: {
+        name: 'prepend_detected',
+        prependedCount: 1,
+        wasNearBottom: true,
+        offsetYBefore: 0,
+      },
+    });
+  });
+
   it('M5: grew 但 prevFirstId 未知 → 不是 prepend（落 snapshot preserve）', () => {
     const plan = planMessagesUpdate(
       updateInput({
@@ -227,6 +263,36 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
   it('M6: grew + uiRunning + 普通文本 → append，added 为尾部切片', () => {
     const prev = [message('m1', 1)];
     const added = message('m2', 2);
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [prev[0]!, added],
+        previousMessages: prev,
+        prevCount: 1,
+        prevFirstId: 'm1',
+        uiRunning: true,
+      }),
+    );
+    expect(plan).toEqual({kind: 'append', added: [added]});
+  });
+
+  it('M6b: grew + uiRunning + 多行普通文本 → append 全量尾部切片', () => {
+    const prev = [message('m1', 1)];
+    const added = [message('m2', 2), message('m3', 3)];
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [prev[0]!, ...added],
+        previousMessages: prev,
+        prevCount: 1,
+        prevFirstId: 'm1',
+        uiRunning: true,
+      }),
+    );
+    expect(plan).toEqual({kind: 'append', added});
+  });
+
+  it('M6c: grew + uiRunning + assistant 纯文本新增 → append（不是 force-snapshot）', () => {
+    const prev = [message('m1', 1)];
+    const added = assistant('a1', 2);
     const plan = planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, added],
@@ -258,6 +324,26 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
     expect(plan.kind).toBe('force-snapshot');
   });
 
+  it('M7b: 混合新增（普通文本 + tool_results-only）→ force-snapshot（some 不是 every）', () => {
+    const prev = [message('m1', 1)];
+    const plain = message('u2', 2);
+    const toolResult = message('tr1', 3, {
+      content: {
+        blocks: [{type: 'tool_result', toolUseId: 'c1', content: 'ok'}],
+      },
+    });
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [prev[0]!, plain, toolResult],
+        previousMessages: prev,
+        prevCount: 1,
+        prevFirstId: 'm1',
+        uiRunning: true,
+      }),
+    );
+    expect(plan.kind).toBe('force-snapshot');
+  });
+
   it('M8: grew + uiRunning + assistant tool_use → force-snapshot', () => {
     const prev = [message('m1', 1)];
     const toolUse = message('a1', 2, {
@@ -269,6 +355,27 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
     const plan = planMessagesUpdate(
       updateInput({
         messages: [prev[0]!, toolUse],
+        previousMessages: prev,
+        prevCount: 1,
+        prevFirstId: 'm1',
+        uiRunning: true,
+      }),
+    );
+    expect(plan.kind).toBe('force-snapshot');
+  });
+
+  it('M8b: 混合新增（assistant tool_use + 普通文本）→ force-snapshot（some 不是 every）', () => {
+    const prev = [message('m1', 1)];
+    const toolUse = message('a1', 2, {
+      role: 'assistant',
+      content: {
+        blocks: [{type: 'tool_use', id: 'c1', name: 'read', input: {}}],
+      },
+    });
+    const plain = message('u2', 3);
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [prev[0]!, toolUse, plain],
         previousMessages: prev,
         prevCount: 1,
         prevFirstId: 'm1',
@@ -304,11 +411,37 @@ describe('planMessagesUpdate（纯函数 · 分支优先级）', () => {
     expect(plan).toEqual({kind: 'snapshot', intent: 'stick'});
   });
 
+  it('M10b: 缩到 0 条 → snapshot stick', () => {
+    const prev = [message('m1', 1), message('m2', 2), message('m3', 3)];
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [],
+        previousMessages: prev,
+        prevCount: 3,
+        prevFirstId: 'm1',
+      }),
+    );
+    expect(plan).toEqual({kind: 'snapshot', intent: 'stick'});
+  });
+
   it('M11: 等长 + 首条 id 变化 → snapshot stick', () => {
     const prev = [message('m1', 1), message('m2', 2)];
     const plan = planMessagesUpdate(
       updateInput({
         messages: [message('m0', 0), message('m2', 2)],
+        previousMessages: prev,
+        prevCount: 2,
+        prevFirstId: 'm1',
+      }),
+    );
+    expect(plan).toEqual({kind: 'snapshot', intent: 'stick'});
+  });
+
+  it('M11b: 等长 + 首条 id 变化 + hidden 也变 → snapshot stick（不是 hidden-changed）', () => {
+    const prev = [message('m1', 1), message('m2', 2)];
+    const plan = planMessagesUpdate(
+      updateInput({
+        messages: [{...message('m0', 0), hidden: true}, prev[1]!],
         previousMessages: prev,
         prevCount: 2,
         prevFirstId: 'm1',

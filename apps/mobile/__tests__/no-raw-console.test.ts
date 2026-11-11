@@ -5,6 +5,9 @@
  * 生产文件（`src/web/**` 不在 E6 扫描面，见 §7.3；两个 log 守卫测试自身含
  * `console` 正则字样，不进扫描面）。日志统一走 core `createLogger`，
  * detail 只放 id/status/err，正文不进日志。
+ * `src/web/.../runtime/render/snapshot.ts` 的 `console.error` 与 `main.ts` /
+ * `ToolGroup.tsx` 同类（web bundle 无 logger 依赖，装配/诊断唯一出口），已在
+ * spec §7.3 保留清单显式登记，因此不进下方 `CHANGED_FILES`。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';

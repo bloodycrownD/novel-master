@@ -26,7 +26,7 @@ import {state} from '../../runtime/state/state';
 import type {MessageRow} from '../../runtime/state/state';
 import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
 import {ToolInvokingBar} from '../render/ToolInvokingBar';
-import {CollapsibleHeader} from '../render/CollapsibleSection';
+import {ThinkingSection} from '../render/ThinkingSection';
 import {ToolGroup} from '../render/ToolGroup';
 
 type StreamBodyHostProps = {
@@ -70,20 +70,6 @@ class StreamBodyHost extends Component<StreamBodyHostProps> {
   }
 }
 
-type BodySeed = {
-  seedHtml: string | null;
-  seedText: string | null;
-  rich: boolean;
-};
-
-/** 正文/思考 body 播种：rich 用全量 html，否则用明文（首次 mount 生效）。 */
-function bodySeed(html: string | null | undefined, text: unknown): BodySeed {
-  const rich = !!(state.flags.richText && html);
-  if (rich) return {seedHtml: html!, seedText: null, rich};
-  const value = String(text || '');
-  return {seedHtml: null, seedText: value.length > 0 ? value : null, rich};
-}
-
 type StreamingMessageRowProps = {
   row: MessageRow;
 };
@@ -92,10 +78,18 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
   const {text, thinking, textHtml, thinkingHtml, tools} = row;
   const streaming = row.status === 'streaming';
   const phase = streamRuntime.getStreamingPhase(row);
-  const hiddenClass = row.hidden ? 'hidden ' : '';
-  const waiting = phase === 'waiting-first';
-  const waitingClass = waiting ? ' stream--waiting-first' : '';
-  const outerClass = 'row message ' + hiddenClass + 'stream' + waitingClass;
+  const hiddenCls = row.hidden ? 'hidden ' : '';
+  const waitCls = phase === 'waiting-first' ? ' stream--waiting-first' : '';
+  // `assistant` 行类与普通 assistant 行同面（P2-9）：`.row.assistant .bubble
+  // .bubble--fill-width` 等行级选择器对流式起源行同样生效。
+  const outerClass = `row message ${hiddenCls}assistant stream${waitCls}`;
+  // `#stream-tail` 单主（P1-1 纵深防御）：只挂 checkpoint 指向的 streaming 行，
+  // 旧 step 残留的 streaming 行不得抢走 delta 的落笔点（双 id 时
+  // getElementById 取文档序第一条）。checkpoint 缺省（尚无基线快照）时退化为
+  // 「streaming 行即尾」，保持 shell 自身可被增量路径定位。
+  const cp = state.streamCheckpoint;
+  const isTail = streaming && (cp == null || cp.id === row.id);
+  const tailId = isTail ? 'stream-tail' : undefined;
 
   if (phase === 'waiting-first') {
     return (
@@ -105,7 +99,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
         data-stream-id={row.id}
         data-streaming="1"
         data-stream-status={row.status}
-        id="stream-tail"
+        id={tailId}
       >
         <div className="stream-waiting-indicator">
           <span className="tool-invoking-dot" aria-hidden="true" />
@@ -155,15 +149,12 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
 
   const bubbleExtra = streamRuntime.assistantBubbleExtraClasses(row);
   const bubbleClass = 'bubble assistant' + bubbleExtra;
-  const thinkSeed = hasThinking ? bodySeed(thinkingHtml, thinking) : null;
-  const showDivided = thinkingExpanded && (hasText || hasTools);
-  const divided = showDivided ? ' thinking-body-divided' : '';
-  const thinkingRich = thinkSeed?.rich ? ' rich' : '';
-  const thinkingClass = 'thinking-body' + thinkingRich + divided;
-  const textSeed = bodySeed(textHtml, text);
-  const textClass = 'bubble-body' + (textSeed.rich ? ' rich' : '');
-  // streaming-content 时即使正文为空也挂稳定 text host；finished 静态行只在有正文时挂。
-  const mountTextHost = streaming ? true : hasText;
+  // 正文播种：rich 用全量 html，否则用明文（首次 mount 生效）。
+  const textRich = !!(state.flags.richText && textHtml);
+  const textClass = 'bubble-body' + (textRich ? ' rich' : '');
+  // 稳定 text host：streaming 期即使正文为空也挂（runtime 首个 delta 直接落笔）；
+  // finished 行按普通 assistant 行等价面挂（有正文，或仅 thinking 时空壳兜后续正文）。
+  const mountTextHost = streaming || hasText || hasThinking;
 
   return (
     <div
@@ -172,7 +163,7 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
       data-stream-id={row.id}
       data-streaming={streaming ? '1' : undefined}
       data-stream-status={row.status}
-      id={streaming ? 'stream-tail' : undefined}
+      id={tailId}
     >
       <div className={bubbleClass}>
         {showMenu ? (
@@ -197,37 +188,36 @@ export function StreamingMessageRow({row}: StreamingMessageRowProps) {
             </button>
           </div>
         ) : null}
-        {hasThinking && thinkSeed ? (
-          <div
-            key="stream-thinking"
-            className="thinking-section"
-            data-thinking-key={thinkingKey}
-          >
-            <CollapsibleHeader
-              headerClass="thinking-header"
-              title={state.labels.thinking}
-              action="toggle-thinking"
-              dataKey="thinking-key"
-              dataValue={thinkingKey}
-              expanded={thinkingExpanded}
-            />
-            {thinkingExpanded ? (
-              <StreamBodyHost
-                key="stream-thinking-body"
-                className={thinkingClass}
-                seedHtml={thinkSeed.seedHtml}
-                seedText={thinkSeed.seedText}
-              />
-            ) : null}
-          </div>
-        ) : null}
+        {hasThinking
+          ? // 复用 ThinkingSection（P2-9 等价面，标题读 labels）：直接调用纯函数组件
+            // 而不是 <ThinkingSection/>，让 header/body 留在返回的 vnode 树里
+            // （T-SP11 的 data-thinking-key / thinking-body / toggle-thinking 契约
+            // 依赖它们可见）。body 注入 StreamBodyHost，保住增量 DOM 岛。
+            ThinkingSection({
+              text: thinking,
+              title: state.labels.thinking,
+              thinkingKey,
+              expanded: thinkingExpanded,
+              thinkingHtml,
+              showDividerBelow: hasText || hasTools,
+              richText: state.flags.richText,
+              renderBody: (bodyClass, useRich) => (
+                <StreamBodyHost
+                  key="stream-thinking-body"
+                  className={bodyClass}
+                  seedHtml={useRich ? thinkingHtml! : null}
+                  seedText={useRich ? null : String(thinking || '')}
+                />
+              ),
+            })
+          : null}
         {mountTextHost ? (
           <StreamBodyHost
             key="stream-text-body"
             className={textClass}
             dataTextShell={!hasText && (hasThinking || hasTools)}
-            seedHtml={textSeed.seedHtml}
-            seedText={textSeed.seedText}
+            seedHtml={textRich ? textHtml! : null}
+            seedText={textRich ? null : String(text || '') || null}
           />
         ) : null}
         {hasTools ? (

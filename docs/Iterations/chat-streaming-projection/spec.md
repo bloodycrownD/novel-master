@@ -196,7 +196,7 @@ type ConversationSnapshotPayload = {
   chunkTotal: number;
   scrollIntent?: TranscriptScrollIntent;      // 仅末片
   restoreScroll?: TranscriptRestoreScroll;    // 仅末片且 restore
-  /** 流式检查点：任一 occurrence 均可携带，最后到达者为准；末片必须与流式行同片。 */
+  /** 流式检查点：任一 occurrence 均可携带，最后到达者为准；只在承载该 id 行的片携带（本片 rows 无该 id 时省略）。 */
   stream?: {
     id: string;
     seq: number;
@@ -206,7 +206,7 @@ type ConversationSnapshotPayload = {
 ```
 
 - **删除 `generating` 字段**（`native.md` §2.2、`web.md` §2.3 的 R-8 根治）：生成中姿态由流式行的 `status` 表达。
-- 有流式行时，`chunkTotal = DB 分片数 + 流式片数`；**额外片只装流式行（可多条：finished-未接管 + 当前 streaming），DB 行不进该片**，并按与 DB 行相同的 256KB 字节预算单独分桶（`snapshot-chunk-bounds.ts:17,29` 的 50 行/256KB 规则扩展到流式行；超预算拆成多个额外片）。末片携带 `stream` 与 `scrollIntent/restoreScroll`；`rows` 是「本片流式行」，不是永远只有一条。
+- 有流式行时，`chunkTotal = DB 分片数 + 流式片数`；**额外片只装流式行（可多条：finished-未接管 + 当前 streaming），DB 行不进该片**，并按与 DB 行相同的 256KB 字节预算单独分桶（`snapshot-chunk-bounds.ts:17,29` 的 50 行/256KB 规则扩展到流式行；超预算拆成多个额外片）。末片携带 `stream` 与 `scrollIntent/restoreScroll`；`rows` 是「本片流式行」，不是永远只有一条。**`stream` 只挂在 `rows` 含该 id 的片**；快照开始无流、片间起新流时，本次快照不携带新流的 checkpoint（新流由下一次翻转/普通快照建立 checkpoint），不允许把 cp 挂到不含该行的 DB 片。
 - 无流式行时退回现有分片语义（末片带滚动字段）。
 - 分片代次/乱序/丢片规则不变（`snapshot.ts:89-180`）。
 
@@ -282,8 +282,8 @@ type StreamResetPayload = {
 };
 ```
 
-- 仅消息操作（rollback/fork）经 `manager.requestStreamReset` 广播（`session-stream-unit-manager.service.ts:846-848`、`useChatTabController.ts:40-44`），以及宿主收掉未被 DB 接管的合成 partial 时使用；`streamIds` 给出要删除的行 id（streaming/finished 均可），缺省 = 删除当前最后一条 streaming 行。
-- **rollback/fork 必须同时清 unit 投影**：`requestStreamReset` 先调 `unit.clearStreamProjection()`（清 currentStream/finishedStreams/pendingAdoptions/partial），拿到被清掉的 streamId 列表后再广播 `{streamIds}`，并由 manager 立即发一次 `force-snapshot`（清空后的投影）。否则 reloadMessages 后的普通快照会把 `streamRows` 规则 2/3 的 finished partial 又加回来，回滚看起来无效（P0-4）。
+- 仅消息操作（rollback/fork）经 `manager.requestStreamReset` 广播（`session-stream-unit-manager.service.ts:846-848`、`useChatTabController.ts:40-44`），以及宿主收掉未被 DB 接管的合成 partial 时使用；`streamIds` 只给出**投影可见（尚未 DB 接管）**的行 id（streaming/finished 均可）；已接管行（`messageId != null`）不进列表，由 `streamRowIds` 映射/快照继续呈现。缺省 = 删除当前最后一条 streaming 行。
+- **rollback/fork 必须同时清 unit 投影**：`requestStreamReset` 先调 `unit.clearStreamProjection()`（清 currentStream/finishedStreams/pendingAdoptions/partial），拿到被清掉的**投影可见** streamId 列表后再广播 `{streamIds}`（列表为空时跳过 `streamReset`、只发 force snapshot），并由 manager 立即发一次 `force-snapshot`（清空后的投影）。否则 reloadMessages 后的普通快照会把 `streamRows` 规则 2/3 的 finished partial 又加回来，回滚看起来无效（P0-4）。
 - 不再承担 step 边界的清尾职责。
 
 #### 2.2.7 上行 `streamResync`
@@ -337,6 +337,7 @@ type TranscriptLabels = {
 3. 宿主：
    - finished：flush 后 `finishStream` 发 `streamStatus`（**必带全量 row**；已拿到 `messageId` 时一并带）。
    - null：发 `sessionSnapshot('preserve')` 收掉之前可能已渲染的空流式行（空会话 run 立即结束的边角）。
+   - **异常收尾兜底（P2-3）**：若投影在单元未 settle 时直接变空（终态事件丢失 / `dispose` 的防御路径），而上一拍是**非空 streaming 且未被接管**，宿主不得静默留行——`previous.id === streamIdRef.current` 时 `finishStream(previous.id)`（保正文，等 DB 行接管）；无法确认内容时 `resetStream([previous.id])`；id 不是当前流时发一次 preserve 快照对账。
 4. 不再发 `streamToolInvoking{active:false}`；`generating` 字段不存在。收尾后的「生成中」消失完全由 status 驱动。
 
 #### 2.3.4 可见性恢复
@@ -476,7 +477,7 @@ type TranscriptState = {
 
 - 外层 ``<div className={`row message ${row.hidden ? 'hidden' : ''} stream`} data-id={row.id} data-stream-id={row.id} data-streaming={row.status==='streaming' ? '1' : undefined} data-stream-status={row.status} id={row.status==='streaming' ? 'stream-tail' : undefined}>``。
   - `hidden` 类必须保留：adopted DB 行会永久带 `status:'finished'` 一直走新组件，hidden assistant 行仍要有 `.row.hidden .bubble{opacity:.45}` 的可见提示。
-  - `StreamingMessageRow` 的 bubble/正文渲染必须复用 `AssistantBubbleInner` 的等价面（bubble 类、`thinking-body-divided`、`data-text-shell`、内层组件），不能另起一套。
+  - `StreamingMessageRow` 的 bubble/正文渲染必须复用 `AssistantBubbleInner` 的等价面（bubble 类、`thinking-body-divided`、`data-text-shell`、内层组件），不能另起一套。外层行类必须含 `assistant`（或把 CSS 选择器扩为 `.row.assistant, .row.stream`，保证 `bubble--fill-width` 生效）；thinking 段复用共享 `ThinkingSection`（标题经 `title` prop 传入），不手搭第二套 section；`data-text-shell` 条件与普通行一致。
   - `#stream-tail` **只挂当前 streaming 行**：runtime 增量路径（`stream.ts:494,580`、`stream-markdown.ts:140`）继续按 id 找目标；finished 行不再占用该 id，避免多 step 后出现重复 id。
   - finished 行的正文校正走 `[data-id="<streamId>"]` / `[data-stream-id]` 查询（`reconcileFinishedStreamingRow`），不依赖 `#stream-tail`。
   - `data-id` 让窗口测量（`row-windowing.ts:314-321`）与行数一致；行在窗口内时计数自然包含它。
@@ -612,6 +613,8 @@ function mergeSnapshotRows(localRows, localCp, incomingRows, incomingCp) {
 - **`reconcileFinishedStreamingRows()`**：只遍历 `status==='finished'` 的流式起源行，且只处理窗口内命中的 `[data-id]`；维护 `lastStreamRenderSignature: Map<id, {text,thinking,textHtml,thinkingHtml}>`，四个字符串全等直接跳过（长度相同但内容不同的情况也能识别）；无壳直接跳过，**不调用 renderRows**；**只写 `.bubble-body/.thinking-body` 自身，不得经 `streamRenderTarget`（块模式会返回 `.stream-active-tail`，把全量 html 写进尾容器会复制已提交块）**。任何快照（visibility/翻页/回滚）对未变历史行零写入（P1-14）。
 - 不变量校验：`nextCheckpoint != null` 但 `rows` 中找不到同 id 的行 → 视为协议异常：`nextCheckpoint = null` 并 `requestResync(id, 0)`，交给下一次普通快照兜底。**但 `applySnapshot` 在同一同步块已清 `resyncPending`，不能在同步块里再 `requestResync`（否则宿主持续发异常快照会形成 快照→resync→快照 的全量分片循环）。改为 `queueMicrotask` 触发，并复用 §2.3.5 的 100ms 限流 + 连续异常退避（1s/5s，连续 3 次停止自动 resync，留日志/错误态）；计数与退避截止写 `state.snapshotResyncAnomalyCount` / `state.snapshotResyncBackoffUntil`（§3.1），正常快照不变量通过时清零，连续 3 次后停止自动 resync，下一次 visibility/force 快照不自动重试。**
 - `applySnapshot` 仍然是「一次 renderRows、一次滚动副作用」；分片末片才调用（`snapshot.ts:89-180` 的收集器保留）。
+- **实现说明（S12 accepted）**：异常重试实现用 `Promise.resolve().then(...)` + `setTimeout` 代替原生 `queueMicrotask`——目标 WebView（Chromium 58）没有 `queueMicrotask`，语义等价，不要求改回。
+- **实现说明（S14 accepted）**：`mergeSnapshotRows`/`mergeRows` 实现为模块内私有纯函数，表驱动断言经 `handleSnapshotPayload` 间接覆盖；不要求为单测单独导出。
 
 #### 3.4.2 为什么还需要 rewind 保护
 
@@ -659,8 +662,8 @@ function mergeSnapshotRows(localRows, localCp, incomingRows, incomingCp) {
 const cp = state.streamCheckpoint;
 const row = findRowById(payload.streamId);
 if (row == null) {
-  // 当前流式行丢失 → 请求普通快照；旧 step 的迟到 status（行已被快照收走）直接忽略
-  if (cp == null || cp.id === payload.streamId) {
+  // 带权威终态（row/messageId）的缺失必须请求普通快照；纯 status 的迟到消息（行已被快照收走）才忽略
+  if (payload.row != null || payload.messageId != null || cp == null || cp.id === payload.streamId) {
     requestResync(payload.streamId, cp?.seq ?? 0);
   }
   return;
@@ -791,15 +794,15 @@ apps/mobile/__tests__/
     chat-conversation-update-plan.test.ts       [改] stream-adopted / 删 committed / prepend+adopted
     session-stream-webview-adapter.test.ts      [新] streamId 透传 / reset ids / force
     no-raw-console.test.ts                      [新] 本轮改动文件零裸 console
-    raw-console-baseline.test.ts                [新] 全仓 18 文件/45 处基线不增长
+    raw-console-baseline.test.ts                [新] 全仓 18 文件/36 处（业务 16/30）基线不增长
     transcript-labels.test.ts                   [新] i18n 映射
     helpers/fake-transcript-dom.ts              [新] 最小 DOM harness（不用 jsdom）
 test-utils/
     transcript-ready.ts                         [新] t2 + streamProjection 共享 ready fixture
-apps/mobile/e2e/
-    pageobjects/chat-transcript.page.ts          [改] 流式行观测
-    specs/chat.streaming-projection.e2e.ts      [新] 流式 e2e
-    scripts/mock-anthropic-provider.mjs         [改] 可配置慢流
+apps/mobile/e2e/                              [deferred] 本轮未交付（详见 §9.3）
+    pageobjects/chat-transcript.page.ts          [deferred] 流式行观测方法未落地
+    specs/chat.streaming-projection.e2e.ts       [deferred] 流式 e2e 未落地
+    scripts/mock-anthropic-provider.mjs          [deferred] 慢流/tool_use 开关未落地
 packages/core/src/i18n/
     keys.ts / catalog/zh-CN.yaml / catalog/en-US.yaml / generated-catalog.ts [改] 4 个新 key
 ```
@@ -990,7 +993,7 @@ export function buildStreamingTranscriptRow(
    - **effect 顺序**：`messages` effect 与 `streamingRows` effect 可能同拍；`stream-adopted` 先发终态行、streaming effect 靠 `streamRowIds` 判定跳过 reset；反之 streaming effect 先跳过 reset、messages effect 再发终态行。两种顺序都不能删最终行（T-SP6/T-SP28）。
    - `messages` 判路 effect（`:1614-1664`）：`planMessagesUpdate` 增加 `streamRowIds`；`stream-adopted` 分支不发 append/snapshot，而是对 `plan.adopted` 的**每一条**：用 `buildToolPairingContext(messages)` + `buildTranscriptRowsWithContext([该消息], ctx, listOptions)` + `enrichTranscriptRows` + `applyStreamRowIds` 构建终态行，`postToWeb({type:'streamStatus', payload:{streamId, status:'finished', messageId, row}})`（每条都补 `messageId`，保证菜单/回滚可用）。混合新增走 `force-snapshot`（C11）。
 10. **`handleReady`**（`:1204-1221`）：通过 t2/capability 判定后，`seedStreamAccumulatorsFromCurrentMessage()`：
-    - 取 `streamingRows` 最后一条，`streamIdRef = lastStreamIdRef = row.id`（让后续 effect 的 `beginStream` 幂等命中，不会重新武装块模式）、`streamTextAccumRef = row.text`、`streamThinkingAccumRef = row.thinking`、`streamCommitted*PartsRef = []`；
+    - 取 `streamingRows` 最后一条，`streamIdRef = lastStreamIdRef = row.id`（让后续 effect 的 `beginStream` 幂等命中，不会重新武装块模式）、`streamTextAccumRef = row.text`、`streamThinkingAccumRef = row.thinking`、`streamCommitted*PartsRef = []`、`streamToolsRef = last?.tools ?? []`、`streamToolsDirtyRef = false`；
     - `streamBlockArmedRef = false`：新文档的正文由 snapshot 全量 seed，**后续 delta 走全量 `textHtml` 替换**，不再发块提交——否则块提交会把 snapshot 已有的完成块再 append 一次（重复 DOM）。下一个新 step 的 `beginStream` 重新置 true；
     - seq 不重置：后续 delta 从 snapshot 的 seq+1 继续。
 11. **`handleUpstream`**（`:1373-1461`）：新增 `case 'streamResync'` → 同一 streamId 100ms 内只发一次（`resyncSentAtRef: Map<string, number>`；命中 `<100ms` 直接忽略，否则记录 `performance.now()` 并 `sendSessionSnapshotRef.current('preserve')`）。
@@ -1061,7 +1064,7 @@ export function buildStreamingTranscriptRow(
 
 #### C12 `apps/mobile/src/screens/tabs/chat-tab/ChatTabProvider.tsx`
 
-- 新增/传递 `streamingRows`（`useMemo(() => buildStreamingRows(unitView), [unitView])`；`buildStreamingRows` 自身有输入引用缓存，unitView 变但 streamRows 未变时返回同一数组）与 `streamRowIds`（`unitView?.streamRowIds ?? messagesView?.streamRowIds ?? EMPTY_MAP`，active 与 idle 两个来源）到 context。
+- 新增/传递 `streamingRows`（直接 `buildStreamingRows(unitView)`；引用稳定由函数内部输入缓存保证，不强制包 `useMemo`——S13）与 `streamRowIds`（**非空优先**：`unitView?.streamRowIds != null && unitView.streamRowIds.size > 0 ? unitView.streamRowIds : (messagesView?.streamRowIds ?? EMPTY_MAP)`，active 与 idle 两个来源；空 Map 不得遮蔽 idle 映射）到 context。
 - `ChatTabContextValue` 增加两字段；`value` 的 `useMemo` 依赖数组同步加入 `streamingRows`、`streamRowIds`（漏加 = 消费者永远看不到新行）。
 - 删除 `ghostProbe` import 与 `ghostStatusRef` 打点（`:51,244-266`；CR3 P2-11）。
 - attach effect（`:293-322`）不变（ready 后 attach）；adapter 已改。
@@ -1075,7 +1078,7 @@ export function buildStreamingTranscriptRow(
 #### C14 `apps/mobile/src/screens/stack/SubagentSessionScreen.tsx`
 
 - 删除 `useInterruptedPartialCommit` import 与调用（`:48,172`）。
-- `ChatConversationWebView` 传 `streamingRows`（`buildStreamingRows(unitView)`）与 `streamRowIds`（`unitView?.streamRowIds ?? manager.readMessagesSnapshot(sessionId)?.streamRowIds ?? EMPTY_MAP`）；删 `toolInvoking`（本屏原本未传，不用动）。
+- `ChatConversationWebView` 传 `streamingRows`（`buildStreamingRows(unitView)`）与 `streamRowIds`（**非空优先**：`unitView?.streamRowIds != null && unitView.streamRowIds.size > 0 ? unitView.streamRowIds : (manager.readMessagesSnapshot(sessionId)?.streamRowIds ?? EMPTY_MAP)`）；删 `toolInvoking`（本屏原本未传，不用动）。
 - `uiRunning={agentRunning}` 保留。
 
 #### C15 `apps/mobile/src/screens/tabs/chat-tab/useInterruptedPartialCommit.ts`
@@ -1164,7 +1167,7 @@ export function buildStreamingTranscriptRow(
 - 按 §3.3 实现；`StreamBodyHost` 从旧 `StreamTail.tsx:39-61` 迁入本文件（或抽到 `StreamBodyHost.tsx`，二选一，不保留两份）。
 - 结构：外层 row → bubble → thinking section（有则）→ **稳定 text host（`streaming-content` 时即使正文为空也挂 `.bubble-body`）** → tools（`ToolGroup`）→ `ToolInvokingBar`（仅 streaming，`label` 由本组件传入，C29）。
 - waiting-first：只渲染 row + 生成中指示，不渲染 `.bubble`；首个 delta 由 `renderRows` 建完整壳（§3.3）。
-- 折叠键：streaming 用 `stream:thinking`/`stream:tools:<streamId>`；finished 用 `'msg:'+row.id`，读 `state.thinkingExpanded/toolGroupExpanded`（P1-6）。thinking/tool 区**始终用同一组件类型**（`ThinkingSection`/`ToolGroup`），status 只改 props（key/expanded/菜单），不换组件类型（P2-6）。
+- 折叠键：streaming 用 `stream:thinking`/`stream:tools:<streamId>`；finished 用 `'msg:'+row.id`，读 `state.thinkingExpanded/toolGroupExpanded`（P1-6）。thinking/tool 区**始终用同一组件类型**（`ThinkingSection`/`ToolGroup`），status 只改 props（key/expanded/菜单），不换组件类型（P2-6）；`ThinkingSection` 增加可选 `title`（流式行传 `state.labels.thinking`），不得在 `StreamingMessageRow` 里手搭第二套 thinking section。外层行类含 `assistant`（或 CSS 同步扩选择器），保证 `.bubble--fill-width` 对流式起源行生效。
 - `id="stream-tail"` 只挂在 streaming 行；finished 行用 `data-stream-id` 定位，`data-streaming` 移除。
 - 菜单行仅 `finished && messageId != null` 渲染；`aria-label` 文案沿用现有 `消息操作`（E 桶，不迁 i18n）。
 - 更新 `apps/mobile/README.md` E2 allowlist：`StreamTail` → `StreamingMessageRow`（`ToolInvokingBar` 改为 label prop，不再进 allowlist）。
@@ -1197,7 +1200,7 @@ export function buildStreamingTranscriptRow(
 
 - C4/C5 的 `createLogger` scope：`chat.stream-unit`、`chat.stream-manager`。
 - 新增 `apps/mobile/__tests__/no-raw-console.test.ts`：只扫本轮改动文件，零裸 console；
-- 新增 `apps/mobile/__tests__/raw-console-baseline.test.ts`：扫 `apps/mobile/src/**`（排除 `src/web/**`），按文件记录既有 20 文件/51 处（业务 18/45）基线，计数只允许下降；与 `logger-normalization/spec.md:502` E6 的「全仓仅 log-sink」偏差见 §7.3。
+- 新增 `apps/mobile/__tests__/raw-console-baseline.test.ts`：扫 `apps/mobile/src/**`（排除 `src/web/**`），按文件记录既有基线（原 20 文件/51 处；收口后 **18 文件/36 处，业务 16/30**），计数只允许下降；与 `logger-normalization/spec.md:502` E6 的「全仓仅 log-sink」偏差见 §7.3。
 - `src/web/.../main.ts:67` 与 `ToolGroup.tsx:40` 的裸 console 保留（E6 扫描面排除 `src/web/**`），文件内加注释说明「web bundle 无 logger 依赖，装配失败诊断唯一出口」。
 
 #### C32 i18n
@@ -1306,10 +1309,11 @@ export function buildStreamingTranscriptRow(
 
 `gates.md` §4.3 实测：
 
-- `session-stream-unit.ts`：DEAD=6、TEST_ONLY=3；`check-signatures` 与 manager 合计 95 处；`check-methods` 3 个类文件 63 处（DEAD_METHOD 6 是测试访问器）。
+- `session-stream-unit.ts`：DEAD=6、TEST_ONLY=3；`check-signatures` 与 manager 合计 95 处（历史基线）；`check-methods` 两 service 文件为 0 处阻断（`snapshot/attachWebview/detachWebview` 跨类同名只作 AMBIGUOUS 信息项）。
 - `session-stream-unit-manager.service.ts`：DEAD=7、TEST_ONLY=3。
 - `stream-apply-buffer.ts` DEAD=1/INLINE=1；`stream-wire-queue.ts` INLINE=2；`stream-token-estimator.ts` DEAD=1/TEST_ONLY=1/INLINE=3；`chat-session-view-cache.ts` DEAD=1/TEST_ONLY=3/INLINE=1。
 - 处理口径：本轮只要求「改动路径新增行 0 发现 + 新模块整文件 0」；既有 DEAD/TEST_ONLY 逐条列入交付报告，`nm-style: keep-public — 测试观测面/调参基线` 的写明理由（测试访问器：`isHydrated/hasActiveRun/unitCount/getWebviewCount/idleMessageViewsSize/settledProjectionsSize`）。不允许用 `check-style --all` 退出码当通过条件（它恒 exit 1，`gates.md` §4.4）。
+- `check-methods` 的 `AMBIGUOUS_METHOD`（同名方法跨类）自本轮起为**信息项**，不参与退出码；同名方法全局引用 0 时仍判 `DEAD_METHOD`。`snapshot/attachWebview/detachWebview` 的跨文件同名是真实跨层调用，按文件分别跑得到可判定计数，不因聚合口径阻断。
 
 #### 7.1.4 命令
 
@@ -1317,7 +1321,10 @@ export function buildStreamingTranscriptRow(
 # 分项、按新增行判定
 node .agents/skills/nm-code-style/scripts/check-inline.mjs --changed
 node .agents/skills/nm-code-style/scripts/check-signatures.mjs --changed
-node .agents/skills/nm-code-style/scripts/check-methods.mjs apps/mobile/src/services/session-stream-unit.ts apps/mobile/src/services/session-stream-unit-manager.service.ts
+# 跨类同名方法（snapshot/attachWebview/detachWebview）按文件分别跑，取可判定计数；
+# 两文件聚合时 AMBIGUOUS_METHOD 只作信息项（不阻断），见 §7.1.3。
+node .agents/skills/nm-code-style/scripts/check-methods.mjs apps/mobile/src/services/session-stream-unit.ts
+node .agents/skills/nm-code-style/scripts/check-methods.mjs apps/mobile/src/services/session-stream-unit-manager.service.ts
 # 新模块整文件 0
 node .agents/skills/nm-code-style/scripts/check-signatures.mjs apps/mobile/src/components/chat/transcript-stream-projection.ts
 node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs apps/mobile/src/components/chat/transcript-stream-projection.ts --strict
@@ -1325,7 +1332,7 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs apps/mobile/src/
 node .agents/skills/nm-code-style/scripts/check-style.mjs --all
 ```
 
-- **`--changed` 基线前提（P2-13）**：本轮实跑 `node .agents/skills/nm-code-style/scripts/check-signatures.mjs --changed` → exit 1，「22 处（扫描 7 个文件）」，全部来自 CR3 未提交改动（`ChatConversationWebView.tsx:1204-1340` 的 18 条 ARGS、`ChatConversationPanel.tsx:361`、`ChatTabProvider.tsx:248`、`chat-run-ghost-probe.ts:14,34`）。因此门禁口径写成「**以 CR3 提交后的 base sha 为起点，本迭代新增行 0**」；若 CR3 尚未提交，先把这 22 条列为既存基线（不阻断），交付报告按文件逐条列。不允许把未提交的 CR3 改动算成本轮新增红。
+- **`--changed` 与 base 判定口径（P2-14）**：`--changed` 只覆盖未提交工作树（干净树扫描面 0，不可复现历史数字）；按 base 判定本迭代新增行改用 `--since <base>`（等价 `<base>...HEAD`）或 `--range main...HEAD`（两者都读 range 右端 blob，不读工作树）。历史记录：CR3 未提交时 `--changed` 曾报 22 处/7 文件，这些改动随 `fa9e3952b` 提交后不再计入；本轮 `--range main...HEAD` 与 `--since 27534b0f2` 实测均为 **0 处 / 39 文件**。不允许把未提交的其它轮改动算成本轮新增红。
 
 ### 7.2 either
 
@@ -1353,12 +1360,13 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --all
 | `ChatConversationWebView.tsx` | 0 | 新增代码不得引入 console |
 | `web/.../main.ts` | 1 处 `console.error`（`:67`） | 保留；`src/web/**` 不在 E6 扫描面（`gates.md` §7.2），文件内注释 |
 | `web/.../ToolGroup.tsx` | 1 处 `console.warn`（`:40`） | 保留（同上） |
+| `web/.../runtime/render/snapshot.ts` | 1 处 `console.error` | 保留；web bundle 无 logger 依赖，是异常快照诊断的唯一出口（与 `main.ts`/`ToolGroup.tsx` 同类，E6 扫描面排除 `src/web/**`） |
 | `debug/run-timing.ts` | `__DEV__` 门控 console | 保留；guard 白名单 |
 
-- **守卫口径（P0-6，二段式）**（计数来自本轮 Node 递归统计：`apps/mobile/src` 下 `console.(log|info|warn|error|debug|trace)(` 共 22 文件/53 处，含 `src/web` 2 文件/2 处；排除后 20/51，再剔除 2 个白名单后 18/45）：
+- **守卫口径（P0-6，二段式）**（计数来自本轮 Node 递归统计：`apps/mobile/src` 下 `console.(log|info|warn|error|debug|trace)(` 共 21 文件/39 处，含 `src/web` 3 文件/3 处；排除后 **18 文件/36 处**，即白名单 2 文件/6 处 + 业务 16 文件/30 处）：
   1. `apps/mobile/__tests__/no-raw-console.test.ts` 只扫描**本轮改动文件**（C1/C4/C5/C6/C7/C8/C12/C13/C14/C31/C32 列出的 `.ts/.tsx`），断言零裸 `console.(log|info|warn|error|debug|trace)`；
-  2. `apps/mobile/__tests__/raw-console-baseline.test.ts` 扫描 `apps/mobile/src/**`（排除 `src/web/**`），按文件记录既有基线：本轮实测 **20 文件 / 51 处**（含白名单 `debug/run-timing.ts` 5 处、`services/log-sink.mobile.ts` 1 处；剔除后 **18 文件 / 45 处**），断言「基线文件集合与每文件计数不增长」。基线表用显式常量列出 20 个文件及计数（2 个白名单单独固定；业务 18 文件/45 处不增长），新增文件或计数上升即红。
-- 与 `logger-normalization/spec.md:502` E6 的差异登记为显式偏差：E6 要求全仓命中恰好 `{services/log-sink.mobile.ts}`，但当前仓库实际有 18 文件/45 处既有裸 console；本轮不扩大清理范围，用「本轮改动文件零命中 + 全仓基线不增长」替代，避免 blocking 步骤一落地即红。
+  2. `apps/mobile/__tests__/raw-console-baseline.test.ts` 扫描 `apps/mobile/src/**`（排除 `src/web/**`），按文件记录既有基线：当前实测 **18 文件 / 36 处**（白名单 `debug/run-timing.ts` 5 处、`services/log-sink.mobile.ts` 1 处单独固定；业务 **16 文件 / 30 处**），断言「基线文件集合与每文件计数不增长」。基线表用显式常量列出业务文件及计数（`session-stream-unit`/`session-stream-unit-manager` 已清零，不保留条目 = 0；业务总预算 30），新增文件或计数上升即红。
+- 与 `logger-normalization/spec.md:502` E6 的差异登记为显式偏差：E6 要求全仓命中恰好 `{services/log-sink.mobile.ts}`，但当前仓库实际有 18 文件/36 处既有裸 console（业务 16/30）；本轮不扩大清理范围，用「本轮改动文件零命中 + 全仓基线不增长」替代，避免 blocking 步骤一落地即红。
 - 验收：`npm run test -w @novel-master/mobile -- --silent no-raw-console` 与 `... --silent raw-console-baseline`。
 
 ### 7.4 i18n
@@ -1391,6 +1399,10 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --all
 # 1) 分项 nm style（新模块整文件 0 + 改动行 0）
 node .agents/skills/nm-code-style/scripts/check-inline.mjs --changed
 node .agents/skills/nm-code-style/scripts/check-signatures.mjs --changed
+# 干净树 --changed 扫描面为 0；按 base 判定改用 --since <base> 或 --range main...HEAD
+node .agents/skills/nm-code-style/scripts/check-signatures.mjs --since <base>
+node .agents/skills/nm-code-style/scripts/check-methods.mjs apps/mobile/src/services/session-stream-unit.ts
+node .agents/skills/nm-code-style/scripts/check-methods.mjs apps/mobile/src/services/session-stream-unit-manager.service.ts
 node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs apps/mobile/src/components/chat/transcript-stream-projection.ts --strict
 node .agents/skills/nm-code-style/scripts/check-signatures.mjs apps/mobile/src/components/chat/transcript-stream-projection.ts
 node .agents/skills/nm-code-style/scripts/check-style.mjs --all      # 仅记录
@@ -1475,7 +1487,7 @@ npm run check:encoding
 | `subagent-session-screen-metrics.test.tsx:126-127` | 8 | 删除 `jest.mock('@/screens/tabs/chat-tab/useInterruptedPartialCommit')`（模块整文件删除，残留 mock 会让套件解析失败） |
 | `chat-conversation-panel.integration.test.tsx:55,64,74,498-616` | 3 | mock ref 方法面 7→3；补 `streamingRows/streamRowIds` props；`:498-616` 的 `commitSyntheticAssistantRow` ready 后补交/去重/重挂重提整段删；`interruptedUnitView`（`:507-527`）补 `streamRows/streamRowIds` 字段 |
 | `chat-tab-screen.integration.test.tsx:15,601-700,657` | 3/4 | 删 `CONVERSATION_CAPABILITY_COMPOSER_DOCK` import；T-R3 的 streamDelta 注入改走 `pushStream/streamStatus` 或删除注入用例；ready `u1`→t2+能力 |
-| `chat-transcript-bridge.test.ts:1-9,32-33,49-50,65-66` | 4/6 | 删 `encodeHostToTranscript/encodeTranscriptToHost/decodeHostToTranscript/parseScrollSnapshotFromHost` round-trip 用例；改测 C1 新编解码/ready t2 |
+| `chat-transcript-bridge.test.ts:1-9,32-33,49-50,65-66` | 4/6 | 删 `encodeHostToTranscript/encodeTranscriptToHost/decodeHostToTranscript/parseScrollSnapshotFromHost` round-trip 用例；保留 `scroll schema re-export` 运行时 parity，并保留 T-BR1/T-BR2：用 `declaredWireTypes()` 解析 `ChatTranscriptBridge.ts` 的 union 声明源做运行时清单对账（下行 12 条、上行含 `streamResync` 17 条），与 `Record<Union, true>` 的 tsc 穷尽一起构成**运行时 parity + 编译期穷尽双层守护**（S11）；不恢复已删的运行时编解码 round-trip，也不得把 T-BR1/T-BR2 视为“只靠 tsc”而删除 |
 | `mermaid-webview.test.ts:176-179` | 6 | `scheduleMermaidScan` 断言点去掉 `applyStreamCommit` 两处（计数 5→3） |
 | `chat-conversation-webview.test.tsx:236-237,683-771,1118-1229,1268-1329,1745-1772` | 4/7/8/11 | 逐条：`streamingText` props 用例删；`restore` 断言改 `preserve`；`pushStreamDelta/pushStreamBatch/tryCommitStreamTail` 用例改 `pushStream/streamStatus`；F（0ms defer）删并按 T-SP27 重写 |
 
@@ -1520,8 +1532,12 @@ npm run check:encoding
 | T-SP33 | yes | 纯函数/宿主 | 回滚开关等价面（不切模块常量）：`applyStreamRowIds(rows, EMPTY_MAP)` 原样返回；`planMessagesUpdate` 收空 `streamRowIds` 时不会返回 `stream-adopted`（走原 append/snapshot）；`buildStreamingRows(null)` 空数组 | 空 map 仍改写 id → 行 id 断言红；空 map 仍 adopted → planner 断言红 | 3/4 |
 
 > 说明：T-SP23~T-SP26 覆盖用户点名的 mid-run resume、finished resume、delta gap、snapshot/delta 乱序、最终消息不重复；滚动由 T-SP14 覆盖；旧 bundle 兼容由 T-SP20 覆盖；rich 多块收尾/重建由 T-SP5/T-SP11/T-SP30 覆盖。`T-SP1` 在 Step 3 落地；`T-SP33` 在 Step 3/4（projection + planner）；`T-SP21`（adapter 三映射）在 Step 2；log 守卫由 Step 10 的 `no-raw-console`/`raw-console-baseline` 独立覆盖。
+>
+> 测试口径（S10）：T-SP16 的宿主 `streamDelta{segments:[],tools}` 端到端、T-SP26 的 `seq = cp.seq + 1` 续接、T-SP28 的 props 内容断言（非 defined/instanceof 级）、T-SP30 的 marker 恰好一次、T-SP11 的 fake body 节点引用断言，均按原强度保留，由 P2-18 补测落地，不降级。
 
 ### 9.3 e2e 计划
+
+> **本轮状态：deferred（文件未交付）**。`apps/mobile/e2e/pageobjects/chat-transcript.page.ts` 的 5 个观测方法、`e2e/scripts/mock-anthropic-provider.mjs` 的 `E2E_MOCK_STREAM_DELAY_MS`/`E2E_MOCK_STREAM_CHUNKS`/`E2E_MOCK_TOOL_USE` 三个开关与 `e2e/specs/chat.streaming-projection.e2e.ts` 均未落地（`git diff --name-status main...HEAD -- apps/mobile/e2e` 为空；`apps/mobile/e2e/specs` 只有既有 6 个 spec）。替代 QA：按 §12「真机 QA」人工覆盖「流式行存在且是最后一行 / finished 后 data-id 不变且无重复行 / tool step 状态 pending→completed / mid-run 切后台返回」；自动化 e2e 留作后续迭代，`manual_user` 不阻断合并（对应 P2-12）。
 
 现状（`gates.md` §3）：6 个 spec 零 stream/visibility 断言；`chat-transcript.page.ts` 没有流式观测方法；mock provider 只回最小 SSE。计划：
 
@@ -1602,7 +1618,7 @@ E2E_UDID=<serial> E2E_RUN_FIXTURE_SPECS=1 npm run mobile:e2e -- --spec e2e/specs
 | R2 | 流式行被窗口卸载后块级 DOM 丢失 | 块级已完成块只存在于 DOM（`web.md` R-5；`stream.ts:485-558`） | streaming 行钉在窗口外下占位之后（§3.2），流式期间不卸载；finished 行可卸载，重挂时用行内完整 text/textHtml 重建；T-SP13 |
 | R3 | snapshot 与 delta 乱序/重复正文/漏 delta | 分片 yield + rAF 合流 + 旧代次；`StreamBodyHost.shouldUpdate=false` | 宿主在快照开始与流式片前 flush；Web checkpoint + rewind 保护；gap snapshot 后 `reseedStreamingRow` 重写 body（§3.4）；T-SP8/T-SP9/T-SP23 |
 | R4 | 旧 dist 进入新协议导致白屏 | 资源随 APK 同包，但手工安装/陈旧 dist 可能 | ready `t2 + streamProjection` 严格判定，立即错误态；T-SP20 |
-| R5 | 单元 30s 宽限销毁后 `streamRowIds` 丢失 → 行 id 回退触发 remount | `removeUnit` 只交接 messages（`manager:1755-1771`） | `streamRowIds` 一并交接 idle 视图；冷启动无映射走 DB id（Web 文档重挂，无抖动） |
+| R5 | 单元 30s 宽限销毁后 `streamRowIds` 丢失 → 行 id 回退触发 remount | `removeUnit` 只交接 messages（`manager:1755-1771`） | `streamRowIds` 一并交接 idle 视图（合并后 trim 到 200）；出表后新单元 `startRun`/`adoptConsumptiveUnit` 从 idle `inheritStreamRowIds`；消费侧按**非空优先**，空 Map 不遮蔽 idle 映射；冷启动无映射走 DB id（Web 文档重挂，无抖动） |
 | R6 | 收尾截短文本 | `resetPartial` 在冻结前执行会清空 `streamRows` 的当前行文本 | 先冻结再 reset（T-SP15）；Web 端只增不减（T-SP12/T-SP18） |
 | R7 | tool 状态不更新 | manager 当前未订阅 `EVENT_AGENT_STREAM_TOOL_USE`（`event-types.ts:14`；`manager:452-523`） | 新增订阅 + T-SP16；DB 接管时用 DB tools 覆盖 |
 | R8 | 流式期间 CPU/桥流量：每个 delta 全量 html | P0-1 修正后 `textHtml` 为全文；`prepareTranscriptRichHtml` 对 12k 文本 markdown-it+sanitize，64ms 约 15 次/秒；**Web 侧：任何 mid-run 快照（visibility/pendingSubagents/richText/force）只要带来更新内容就置 `fullReplaceOnly`，此后整个 step 的每个 delta 都 `applyTrustedHtml(.bubble-body, 全量 html)`（64ms 约 15 次/秒、12k 文本），从块级增量岛退回全量重绘** | `streamCommitted*HtmlPartsRef` 缓存已提交块 html，每拍只 parse activeTail，`committedHtml.join('') + tail`；`fullReplaceOnly` 按 §3.5 保持到新 streamId/streamReset，宿主 seed 后 `streamBlockArmedRef=false` 直到下一个新 step（§3.5 快照 seed 规则），**本 step 内不可能恢复块模式**——这是已知成本，不写「首个 delta 后恢复」；缓解改为：mid-run 快照只在必要时发（visibility 有推送才发、pendingSubagents 合并）、快照后不重复发；要恢复块模式必须同时改宿主 armed 与 Web fullReplaceOnly 两处，不在本轮；R8 同时保留 props 引用/effect 频率缓解 |
@@ -1650,7 +1666,8 @@ E2E_UDID=<serial> E2E_RUN_FIXTURE_SPECS=1 npm run mobile:e2e -- --spec e2e/specs
 - [ ] 可见性恢复只发普通 `preserve` 快照；dirty 仍重挂；pushes=0 无动作。
 - [ ] 旧 dist（ready t1 / 无 streamProjection）立即错误态，不白屏。
 - [ ] `session-stream-unit` 不再注入 partial；mid-run resume 由 snapshot 完成。
-- [ ] log 守卫绿（本轮改动文件零裸 console + 全仓 18 文件/45 处基线不增长）；either 审计无新增；i18n 4 key + labels 下发；nm style 报告表完整（含 CR3 未提交 22 条签名基线说明）。
+- [ ] log 守卫绿（本轮改动文件零裸 console + 全仓 18 文件/36 处（业务 16/30）基线不增长）；either 审计无新增；i18n 4 key + labels 下发；nm style 报告表完整（含 check-methods AMBIGUOUS 信息项口径说明）。
 - [ ] 全量 jest（`--maxWorkers=2`）+ 三处 typecheck + `build:webview` 门 A/B/C + prettier 新增不新增红。
+- [ ] e2e（`chat.streaming-projection.e2e.ts`）本轮 **deferred**（文件未交付，见 §9.3）；以真机 QA 替代，合并后 `manual_user` 验收。
 - [ ] 真机 QA（manual_user）：mid-run 打开 FileEditor/工作区返回、finished 返回、滚动不跳、无重复行、tool step 正常。
 - [ ] `STREAM_PROJECTION_ENABLED=false` 回滚演练：行 id 保持 DB id、无流式行、无 ghost。

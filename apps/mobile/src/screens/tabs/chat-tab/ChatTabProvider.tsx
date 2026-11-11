@@ -78,7 +78,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 /** 主会话 webview 句柄在单元注册表里的稳定标识（attach/detach 对账用）。 */
 const CHAT_TAB_HANDLE_ID = 'chat-tab-transcript';
 
-export type ChatTabContextValue = {
+type ChatTabContextValue = {
   readonly tokens?: never;
   readonly projectId: string | undefined;
   readonly sessionId: string | undefined;
@@ -245,8 +245,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   // 保证 manager 订阅先于 UI 建立——UI 侧同名事件回调执行时投影已更新。
   // 消息面（Step 7 收口）单一来源 manager：readMessagesSnapshot 有单元走
   // 投影、无单元走 idle 视图，Provider 不再持有第二套消息 state。
-  const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(
-    () => (sessionId != null ? manager.snapshot(sessionId) : null),
+  const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(() =>
+    sessionId != null ? manager.snapshot(sessionId) : null,
   );
   const [messagesView, setMessagesView] = useState<
     ReturnType<typeof manager.readMessagesSnapshot>
@@ -267,13 +267,17 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
   const hasUnit = unitView != null;
 
-  // 流式投影（spec C12）：有单元走单元投影；单元出表后映射交接在 idle 视图，
-  // 两条来源任一命中都保留 db→streamId，避免已接管行回退 DB id 触发 remount。
+  // 流式投影（spec C12）：有单元走单元投影；单元出表后映射交接在 idle 视图。
+  // 单元刚建立时 streamRowIds 是空 Map（不是 null），`??` 会把它当成有效来源
+  // 遮住 idle 里上一轮交接的映射——所以按**非空优先**取（P1-3），避免已接管
+  // 行回退 DB id 触发 remount。
   // 引用稳定性由 `buildStreamingRows` 自己的输入缓存保证（spec P1-5），不再套 useMemo。
   const streamingRows = buildStreamingRows(unitView);
   const unitRowIds = unitView?.streamRowIds;
   const viewRowIds = messagesView?.streamRowIds;
-  const streamRowIds = unitRowIds ?? viewRowIds ?? EMPTY_STREAM_ROW_IDS;
+  const hasUnitRowIds = unitRowIds != null && unitRowIds.size > 0;
+  const fallbackRowIds = viewRowIds ?? EMPTY_STREAM_ROW_IDS;
+  const streamRowIds = hasUnitRowIds ? unitRowIds : fallbackRowIds;
 
   // 消息面 tail 水合：会话切换或单元出现时取 tail（非 force——缓存命中即
   // 采纳的会话切换语义；运行中单元的后续刷新由 step/settle 边界自驱）。
@@ -317,13 +321,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     return () => {
       manager.detachWebview(sid, handle.handleId);
     };
-  }, [
-    manager,
-    sessionId,
-    scope.chatSubview,
-    transcriptReadyEpoch,
-    hasUnit,
-  ]);
+  }, [manager, sessionId, scope.chatSubview, transcriptReadyEpoch, hasUnit]);
 
   // ===== 消息面（单一来源 manager，Step 7 收口） =====
   // readMessagesSnapshot：有单元（含宽限中的 settled / 水合的 interrupted）
@@ -463,8 +461,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       loadingMoreMessages,
       onMessagesChanged: handleMessagesChanged,
       canResumeWithoutInput: composerSendState.canResumeWithoutInput,
-      lastMessageIsPlainUserText:
-        composerSendState.lastMessageIsPlainUserText,
+      lastMessageIsPlainUserText: composerSendState.lastMessageIsPlainUserText,
       draftRestoreToken: messages.draftRestoreToken,
       sessionVfs: scope.sessionVfs,
       sessionWorktree: scope.sessionWorktree,

@@ -74,14 +74,14 @@ import {prependOlderMessages} from './message-paging';
 /** 单元侧日志 scope（detail 只放 id/status/err，正文永不进日志）。 */
 const log = createLogger('chat.stream-unit');
 
-/** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；测试可经构造参数覆盖。 */
-export const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
+/** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；构造参数可覆盖。 */
+const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
 
 /** ingress 合并窗口（毫秒）：高频 delta 先入队，32ms 内合并后再进 apply 缓冲。 */
-export const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
+const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
 
 /** apply 缓冲的节流间隔（毫秒）：合并段按此节拍下发（对齐蓝本渲染节奏）。 */
-export const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
+const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
 
 /** 消息管线分页大小（对齐蓝本 useChatTabMessages 的 CHAT_PAGE_SIZE）。 */
 export const SESSION_STREAM_MESSAGES_PAGE_SIZE = 40;
@@ -342,8 +342,8 @@ let streamUnitEpoch = 0;
 /** streamRows 里 finished-未接管记录的最大保留条数（旧→新，投影时截取最近 N）。 */
 const FINISHED_STREAM_ROWS_LIMIT = 32;
 
-/** streamRowIds 映射的条数上限（超出丢最旧的 DB id）。 */
-const STREAM_ROW_IDS_LIMIT = 200;
+/** streamRowIds 映射的条数上限（超出丢最旧的 DB id；manager 出表合并同口径）。 */
+export const STREAM_ROW_IDS_LIMIT = 200;
 
 /**
  * 会话流式单元本体。
@@ -423,11 +423,12 @@ export class SessionStreamUnit {
    * 流式 step 记录（chat-streaming-projection §2.1.2）：
    * - `currentStream`：当前 assistant step 的 streaming 记录（begin 即建，
    *   assistant STEP_COMMITTED 冻结并开下一条）；
-   * - `finishedStreams`：已冻结记录（旧→新；DB 接管后仍保留，投影时按
-   *   messageId == null 过滤）；
+   * - `finishedStreams`：尚未被 DB 接管的冻结记录（旧→新；接管当拍即移除，
+   *   投影只取 messageId == null 的非空记录）；
    * - `interruptedStream`：水合中断现场的 finished 投影（与 current 互斥）；
-   * - `pendingAdoptions`：等待 DB reload 配对 messageId 的冻结记录，配对时
-   *   记录当时的消息面 id 快照（`baseMessageIds`）用于识别新增 assistant。
+   * - `pendingAdoptions`：冻结时没有落库行 id、等待 force reload 配对
+   *   messageId 的记录，配对时记录当时的消息面 id 快照（`baseMessageIds`）
+   *   用于识别新增 assistant。
    */
   private readonly streamEpoch: number;
   private streamOrdinal = 0;
@@ -605,6 +606,9 @@ export class SessionStreamUnit {
       this.graceTimer = null;
       this.onGraceExpired?.(this);
     }, this.settledGraceMs);
+    // Node（jest）里宽限定时器不应把进程钉住；浏览器/RN 的 timer 没有
+    // unref，守卫后跳过。
+    (this.graceTimer as unknown as {unref?: () => void}).unref?.();
     return true;
   }
 
@@ -900,16 +904,20 @@ export class SessionStreamUnit {
    * step 边界（STEP_COMMITTED，manager 按 sessionId 路由）。
    *
    * 先冲刷两段缓冲（蓝本：step commit 前 flush，防被后续 reload/clear 丢弃）。
-   * `assistant` phase：把当前记录冻结为 finished（文本/思考保留）并压入
-   * 待接管队列，再 resetPartial 并开下一条空 streaming 记录；`tool_results`
-   * phase：只 flush + 清 partial，不轮转 stream（否则 tool 执行期凭空多一条
-   * assistant 行）。指标是 run 级累计，不在 step 边界清。返回是否生效。
+   * `assistant` phase：把当前记录冻结为 finished（文本/思考保留）；事件携带
+   * 本 step 落库行 id 时**直接接管**（写 messageId + streamRowIds，不再等
+   * reload 配对），缺 id 时压入待接管队列；然后 resetPartial 并开下一条空
+   * streaming 记录。`tool_results` phase：只 flush + 清 partial，不轮转
+   * stream（否则 tool 执行期凭空多一条 assistant 行）。指标是 run 级累计，
+   * 不在 step 边界清。返回是否生效。
    *
    * nm-style: keep-public — manager 的 STEP_COMMITTED 路由唯一生产入口，且
    * session-stream-unit-accum-perf / -stream-projection / -persist 三个测试
    * 套件直接驱动这套 step 边界状态机（内联会让跨层状态迁移无直测面）。
    */
-  handleStepCommitted(runId: string, phase: AgentStepCommittedPhase): boolean {
+  // nm style 要求签名单行；三参类型签名超过 prettier 默认宽度，用忽略标记保留单行。
+  // prettier-ignore
+  handleStepCommitted(runId: string, phase: AgentStepCommittedPhase, messageId?: string): boolean {
     if (
       this.destroyed ||
       this.status !== 'running' ||
@@ -919,7 +927,7 @@ export class SessionStreamUnit {
     }
     this.flushStreamBuffers();
     if (phase === 'assistant') {
-      this.freezeCurrentStream();
+      this.freezeCurrentStream(messageId);
       this.resetPartial();
       this.startStream();
     } else {
@@ -977,22 +985,15 @@ export class SessionStreamUnit {
    * currentStream/finishedStreams/pendingAdoptions/interrupted、复位 partial、
    * 标记 interrupted partial 已 dismissed。**已接管的 streamRowIds 保留**
    * （DB 行仍可按映射保持行身份）。返回被清掉的 streamId 列表（宿主据此
-   * 广播 streamReset）。
+   * 广播 streamReset）：只含**当前投影可见**的行 id——已接管（DB-backed）
+   * 的 finished 记录由 DB 行 + 映射继续呈现，不在 reset 列表里，避免
+   * rollback/fork 把整段真实历史从 Web 删掉再重建（P1-4）。
    *
    * nm-style: keep-public — manager rollback/fork 的唯一入口；清理 unit 私有
    * currentStream/finishedStreams/pendingAdoptions/interrupted 状态机。
    */
   clearStreamProjection(): readonly string[] {
-    const removed: string[] = [];
-    if (this.currentStream != null) {
-      removed.push(this.currentStream.streamId);
-    }
-    for (const record of this.finishedStreams) {
-      removed.push(record.streamId);
-    }
-    if (this.interruptedStream != null) {
-      removed.push(this.interruptedStream.streamId);
-    }
+    const removed = this.buildStreamRowsProjection().map(row => row.streamId);
     this.currentStream = null;
     this.finishedStreams = [];
     this.pendingAdoptions = [];
@@ -1005,6 +1006,17 @@ export class SessionStreamUnit {
   /** 已接管的 DB id → streamId 映射（只读内部引用；内容变化才换新 Map）。 */
   getStreamRowIds(): StreamRowIds {
     return this.streamRowIdsValue;
+  }
+
+  /**
+   * 仍留在内存里的 finished 记录数（P2-11 有界性观测面：已接管的记录在
+   * 接管当拍就退出 finishedStreams，长 run 的 step 数不再线性占用正文）。
+   * 生产代码零调用。
+   *
+   * nm-style: keep-public — spec P2-11 的测试访问器。
+   */
+  finishedStreamCount(): number {
+    return this.finishedStreams.length;
   }
 
   /**
@@ -1216,7 +1228,9 @@ export class SessionStreamUnit {
           // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
           const cold = this.messagesValue.length === 0;
           const adopted = cold ? hydrateWindowFromCache(cached) : cached;
-          this.applyMessages(adopted);
+          // 非 force 结果不消费待接管队列（缓存/普通 reload 可能是插入前的
+          // 旧面，配对会把历史 assistant 错认成本 step 的落库行）。
+          this.applyMessages(adopted, false);
           return [...adopted.messages];
         }
       }
@@ -1232,7 +1246,8 @@ export class SessionStreamUnit {
       // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
       // 守卫点）；键是本会话自己的，天然不串会话。
       setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
-      this.applyMessages({messages: list, hasMoreMessages: hasMore});
+      // 只有 force（step/settle 边界的权威回源）才消费待接管队列。
+      this.applyMessages({messages: list, hasMoreMessages: hasMore}, force);
       return [...list];
     })();
     if (!force) {
@@ -1312,9 +1327,14 @@ export class SessionStreamUnit {
    * 引用稳定守卫：内容未变（长度一致且元素逐一同一引用）时保持原数组
    * 引用——messages 引用稳定是消费方 webview memo 比较成立的必要条件，
    * 事件到达但内容未变的重建（如缓存命中的重复采纳）会打穿 memo 使隐藏
-   * webview 被记脏。hasMore 标志仍照常收口；两者均未变时不再触发通知。
+   * webview 被记脏。hasMore 标志仍照常收口；三者均未变时不再触发通知。
+   *
+   * `adopt`：只有 force（step/settle 边界的权威回源）结果才消费待接管
+   * 队列；缓存命中/普通 reload 可能是插入前的旧面，配对会把历史 assistant
+   * 错认成本 step 的落库行（P1-2）。adoption 写入即使消息面引用未变也必须
+   * 通知（否则宿主收不到终态 messageId）。
    */
-  private applyMessages(view: SessionViewCache): void {
+  private applyMessages(view: SessionViewCache, adopt: boolean): void {
     if (this.destroyed) {
       return;
     }
@@ -1330,8 +1350,12 @@ export class SessionStreamUnit {
     // assistant 一一配对，回填 messageId 与 streamRowIds（行身份保持
     // streamId，不换 id、不新增行）。未配对记录保持 null，继续以 streamId
     // 呈现（下一次快照仍完整）。
-    this.adoptPendingStreams(this.messagesValue);
-    if (unchanged && this.hasMoreMessagesValue === view.hasMoreMessages) {
+    const adopted = adopt && this.adoptPendingStreams(this.messagesValue);
+    if (
+      unchanged &&
+      !adopted &&
+      this.hasMoreMessagesValue === view.hasMoreMessages
+    ) {
       return;
     }
     this.hasMoreMessagesValue = view.hasMoreMessages;
@@ -1344,18 +1368,23 @@ export class SessionStreamUnit {
    * 每个 pending 记录带冻结时的消息面 id 快照：本轮 reload 中「不在该快照
    * 里、且未被前面的记录配走」的 assistant（seq 升序）就是它的落库行。
    * 新增多于 pending 时多余行不配对（失败路径的 [生成失败] 行）；少于
-   * pending 时剩余记录保持 messageId=null 并清空队列。
+   * pending 时剩余记录保持 messageId=null 并清空队列（spec §2.1.3 规则 5
+   * 要求宿主记 warn）。
+   *
+   * 只在 force 回源路径调用（由 applyMessages 的 `adopt` 门控）。返回是否
+   * 有记录被接管：接管会换 streamRowIds 引用，消息面引用未变时也必须通知。
    *
    * nm-style: keep-local — 共享 pendingAdoptions 队列与 streamRowIds copy-on-write
    * 映射的接管状态机，内联会拆散配对与写映射的同一步。
    */
-  private adoptPendingStreams(messages: readonly ChatMessageData[]): void {
+  private adoptPendingStreams(messages: readonly ChatMessageData[]): boolean {
     if (this.pendingAdoptions.length === 0) {
-      return;
+      return false;
     }
     const pending = this.pendingAdoptions;
     this.pendingAdoptions = [];
     const adoptedIds = new Set<string>();
+    let adopted = false;
     for (const entry of pending) {
       let candidate: ChatMessageData | null = null;
       for (const message of messages) {
@@ -1366,14 +1395,37 @@ export class SessionStreamUnit {
           candidate = message;
         }
       }
-      if (candidate == null) continue;
+      if (candidate == null) {
+        log.warn('stream adoption unmatched', {
+          streamId: entry.record.streamId,
+          baseSize: entry.baseMessageIds.size,
+          messageCount: messages.length,
+        });
+        continue;
+      }
       entry.record.messageId = candidate.id;
       adoptedIds.add(candidate.id);
-      // 写入一条 DB 接管映射（copy-on-write + 有界 200，超出丢最旧）。
-      const next = new Map(this.streamRowIdsValue);
-      next.set(candidate.id, entry.record.streamId);
-      this.streamRowIdsValue = trimStreamRowIds(next);
+      this.recordStreamRowId(candidate.id, entry.record.streamId);
+      adopted = true;
     }
+    if (adopted) {
+      // 已接管记录退出投影与内存：DB 行 + 映射继续呈现同一行身份
+      // （P1-2 投影侧防御 / P2-11 无界状态）。
+      this.finishedStreams = this.finishedStreams.filter(
+        record => record.messageId == null,
+      );
+    }
+    return adopted;
+  }
+
+  /** 写入一条 DB 接管映射（copy-on-write + 有界，超出丢最旧）。 */
+  private recordStreamRowId(messageId: string, streamId: string): void {
+    if (this.streamRowIdsValue.get(messageId) === streamId) {
+      return;
+    }
+    const next = new Map(this.streamRowIdsValue);
+    next.set(messageId, streamId);
+    this.streamRowIdsValue = trimStreamRowIds(next);
   }
 
   /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。返回是否生效。 */
@@ -1523,10 +1575,16 @@ export class SessionStreamUnit {
 
   /**
    * 冻结当前 streaming 记录：把物化后的完整正文/思考抄进记录（之后只读
-   * 冻结值，resetPartial 不会清空），压入 finishedStreams 与待接管队列。
-   * 空记录（text/thinking/tools 全空）直接丢弃。
+   * 冻结值，resetPartial 不会清空）。空记录（text/thinking/tools 全空）
+   * 直接丢弃。
+   *
+   * `messageId`：STEP_COMMITTED 带来的本 step 落库行 id（P1-2 根修）。有
+   * id 即**直接接管**——写 messageId + streamRowIds，记录不进 finishedStreams
+   * （已接管的行由 DB 行 + 映射呈现，也避免长 run 把每步正文都留在内存，
+   * P2-11）；无 id（settle 收尾/旧事件形态）才压入待接管队列，等 force
+   * reload 配对。
    */
-  private freezeCurrentStream(): void {
+  private freezeCurrentStream(messageId?: string): void {
     const record = this.currentStream;
     this.currentStream = null;
     if (record == null) {
@@ -1546,7 +1604,12 @@ export class SessionStreamUnit {
       status: 'finished',
       text,
       thinking,
+      messageId: messageId ?? record.messageId,
     };
+    if (frozen.messageId != null) {
+      this.recordStreamRowId(frozen.messageId, frozen.streamId);
+      return;
+    }
     this.finishedStreams = [...this.finishedStreams, frozen];
     this.pendingAdoptions = [
       ...this.pendingAdoptions,

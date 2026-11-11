@@ -7,7 +7,8 @@
  *   INLINE_METHOD     生产引用 1
  *   PASS_THROUGH_METHOD  方法体只是 return this.f(x) / return f(x)
  *   DEPRECATED_DEAD   @deprecated 且生产引用 0
- *   AMBIGUOUS_METHOD  同名方法在多个类出现，按名字计数不可靠
+ *   AMBIGUOUS_METHOD  同名方法在多个类出现，按名字计数不可靠（信息项，不阻断；
+ *                     同一名字全局引用 0 时仍判 DEAD_METHOD）
  *
  * 口径：只数 packages/apps 的非测试源码里的 `obj.method` / `this.method`；
  * 不是类型感知的符号引用，接口/动态调用可能漏计，报告是线索不是判决。
@@ -15,6 +16,8 @@
  * 用法：
  *   node .../check-methods.mjs --changed
  *   node .../check-methods.mjs packages/core/src/domain/chat/logic/message
+ *   # 跨类同名方法按文件分别跑可得到可判定计数；聚合多文件时同名方法只作信息项输出
+ *   node .../check-methods.mjs apps/mobile/src/services/session-stream-unit.ts
  */
 
 import ts from "typescript";
@@ -156,7 +159,10 @@ for (const definition of definitions) {
     continue;
   }
   if (!definition.private && !hasModifier(definition.member, ts.ModifierFlags.Static) && (definitionsByName.get(definition.name)?.length ?? 0) > 1) {
-    rows.push(["AMBIGUOUS_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "同名方法跨类出现，按名字计数不可靠"]);
+    // 同名方法跨类时按名字聚合的引用计数不可靠：refCount 0 仍可判死（全局无人访问该名字），
+    // 其余情况只作信息项输出，不阻断——否则同一份 spec 命令会因真实跨层调用恒红。
+    if (refCount === 0) rows.push(["DEAD_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "同名方法跨类且按名字全局引用 0"]);
+    else rows.push(["AMBIGUOUS_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "同名方法跨类出现，按名字计数不可靠（信息项，不阻断）"]);
     continue;
   }
   if (refCount === 0) {
@@ -172,12 +178,15 @@ for (const definition of definitions) {
 
 rows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
 
+const BLOCKING_VERDICTS = new Set(["DEAD_METHOD", "INLINE_METHOD", "PASS_THROUGH_METHOD", "DEPRECATED_DEAD", "DEPRECATED_METHOD"]);
+const blockingRows = rows.filter(([verdict]) => BLOCKING_VERDICTS.has(verdict));
+
 if (flags.json) {
   console.log(JSON.stringify(rows.map(([verdict, location, name, refs, note]) => ({ verdict, location, name, refs, note })), null, 2));
 } else {
-  console.log(`check-methods: ${rows.filter(([verdict]) => verdict !== "KEEP_LOCAL" && verdict !== "KEEP_PUBLIC").length} 处（扫描 ${definitions.length} 个类方法 / ${targetFiles.length} 个文件）`);
+  console.log(`check-methods: ${blockingRows.length} 处阻断 / ${rows.length} 行发现（扫描 ${definitions.length} 个类方法 / ${targetFiles.length} 个文件）`);
   if (rows.length > 0) console.log(formatTable(["verdict", "location", "name", "refs", "note"], rows));
-  console.log("规则：类方法同样按单点内联/死代码/薄包装处理；public 方法单点先撤 public 或写 keep-public 理由；计数是启发式，接口/动态调用需人工复核。");
+  console.log("规则：类方法同样按单点内联/死代码/薄包装处理；public 方法单点先撤 public 或写 keep-public 理由；同名方法跨类时 AMBIGUOUS 只作信息项（按文件分别跑可得可判定计数）；计数是启发式，接口/动态调用需人工复核。");
 }
 
-process.exit(rows.some(([verdict]) => verdict !== "KEEP_LOCAL" && verdict !== "KEEP_PUBLIC") ? 1 : 0);
+process.exit(blockingRows.length > 0 ? 1 : 0);

@@ -21,6 +21,18 @@ import {readWebViewDistFile} from './helpers/read-webview-dist';
 const webSrc = (rel: string) =>
   readFileSync(join(__dirname, '../src/web', rel), 'utf8');
 
+/**
+ * 截取函数源码切片（G-1：脆断言改按函数切片，避免整源误报/漏报）。
+ * 函数名找不到时 fail-fast：静默返回空串会让 not.toContain 恒真。
+ */
+const fnSlice = (src: string, name: string): string => {
+  const slice = src.split(`function ${name}(`)[1]?.split('\nfunction ')[0];
+  if (slice == null) {
+    throw new Error(`fnSlice: 源码里找不到函数 ${name}（锚点契约失效）`);
+  }
+  return slice;
+};
+
 describe('mermaid shared core (T-MV2 纯逻辑)', () => {
   it('parseColorToRgb 支持 hex 缩写/全写与 rgb()', () => {
     expect(parseColorToRgb('#abc')).toEqual([170, 187, 204]);
@@ -192,8 +204,22 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
   });
 
   it('T-MT2: 流式 delta/batch 路径不触发 mermaid 渲染；流式尾子树跳过', () => {
-    expect(stream()).not.toContain('mermaid');
-    expect(stream()).not.toContain('Mermaid');
+    // G-1：整源 not.toContain('mermaid') 属脆断言（P2-10 收尾补扫会命中），
+    // 改按函数切片——只钉流式增量 / 块提交入口不触发图表扫描；收尾补扫由
+    // chat-transcript-stream-projection 的 P2-10 直测覆盖。
+    const src = stream();
+    for (const name of [
+      'applyStreamDelta',
+      'appendStreamDeltaIncremental',
+      'applyStreamBlockCommit',
+    ]) {
+      const slice = fnSlice(src, name);
+      expect(slice).not.toContain('mermaid');
+      expect(slice).not.toContain('Mermaid');
+      expect(slice).not.toContain('scheduleMermaidScan');
+    }
+    // 收尾路径补扫（P2-10）：delta/batch 不碰，finished 才触发。
+    expect(fnSlice(src, 'applyStreamStatus')).toContain('scheduleMermaidScan');
 
     const bridgeSrc = bridge();
     expect(bridgeSrc).not.toContain('scheduleMermaidScan');

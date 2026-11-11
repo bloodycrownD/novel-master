@@ -15,9 +15,9 @@ import {
   type StreamKind,
 } from './stream';
 
-export const STREAM_RICH_UPGRADE_MS = 350;
+const STREAM_RICH_UPGRADE_MS = 350;
 
-export type StreamRichUpgradeState = {
+type StreamRichUpgradeState = {
   timer: ReturnType<typeof setTimeout> | null;
   kinds: {text: boolean; thinking: boolean};
   plainMode: {text: boolean; thinking: boolean};
@@ -129,10 +129,25 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
   bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(row);
 }
 
-export function flushStreamRichUpgrade(): void {
+/**
+ * nm-style: keep-local — 350ms setTimeout 具名回调：持有 streamRichUpgrade 的
+ * timer/kinds/plainMode 状态机复位时序（清 timer → 尾节点归属校验 → 逐 kind
+ * 升级），作为定时器回调不能内联进调度函数。
+ */
+function flushStreamRichUpgrade(): void {
   streamRichUpgrade.timer = null;
   const tail = document.getElementById('stream-tail');
   if (!tail) return;
+  // 350ms 定时器可能在行已切换后才烧到：尾节点必须仍是当前 checkpoint
+  // 的流式行，否则把富文本写进上一条行的旧尾巴。
+  const tailId = state.streamCheckpoint?.id;
+  if (
+    tailId == null ||
+    (tail.getAttribute('data-id') !== tailId &&
+      tail.getAttribute('data-stream-id') !== tailId)
+  ) {
+    return;
+  }
   if (streamRichUpgrade.kinds.text) {
     paintStreamRichKind(tail, 'text');
     streamRichUpgrade.kinds.text = false;

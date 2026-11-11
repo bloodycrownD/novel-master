@@ -41,16 +41,8 @@ import {
   isMobileAgentActive,
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
-import {
-  SessionStreamUnitManager,
-  SESSION_STREAM_MAX_MESSAGE_VIEWS,
-} from '@/services/session-stream-unit-manager.service';
-import type {SessionStreamRunStateStore} from '@/services/session-stream-unit-manager.service';
-import {
-  SESSION_STREAM_APPLY_INTERVAL_MS,
-  SESSION_STREAM_INGRESS_COALESCE_MS,
-  SESSION_STREAM_MESSAGES_PAGE_SIZE,
-} from '@/services/session-stream-unit';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
+import {SESSION_STREAM_MESSAGES_PAGE_SIZE} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {
   clearAllSessionViewCaches,
@@ -62,6 +54,26 @@ import {
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 import * as finishedNotification from '@/services/agent-finished-notification';
 import type {ChatMessageData} from '@novel-master/core/chat';
+import type {
+  SessionRunState,
+  SessionRunStateSettleInput,
+  SessionRunStatus,
+} from '@novel-master/core/session-run-state';
+
+/** 与单元实现同值的 ingress 合并窗口（32ms）。 */
+const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
+
+/** 与单元实现同值的 apply 节拍（64ms）。 */
+const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
+
+/** 与 manager 构造参数同形的 run 状态服务窄口（实现类型模块私有）。 */
+interface TestRunStateStore {
+  upsert(state: SessionRunState): Promise<void>;
+  settle(input: SessionRunStateSettleInput): Promise<void>;
+  listByStatuses(
+    statuses: readonly SessionRunStatus[],
+  ): Promise<SessionRunState[]>;
+}
 
 /** 时钟起点（fake timers 的 Date.now 从此起算）。 */
 const CLOCK_START_MS = 1_000_000;
@@ -127,7 +139,7 @@ function makeMessageStore(db: Map<string, ChatMessageData[]>) {
 
 function createHarness(options?: {
   readonly settledGraceMs?: number;
-  readonly runStateService?: SessionStreamRunStateStore;
+  readonly runStateService?: TestRunStateStore;
 }) {
   const eventBus = new SimpleEventBus();
   const abortRegistry = {
@@ -701,7 +713,7 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
  * 病灶（apps/P2-1）：`loadIdleOlderMessages` 的「读 LRU → 置
  * `loadingMoreMessages` → await 回源 → 读 LRU 合并写回」是跨 await 的
  * 读-改-写。标记与数据同在 500 LRU 表内时，await 窗口期只要别的路径灌进
- * `SESSION_STREAM_MAX_MESSAGE_VIEWS + 1` 个 sessionId，本会话条目即被淘汰，
+ * `500 + 1` 个 sessionId，本会话条目即被淘汰，
  * await 落地读到 null ⇒ 本次「上翻更早消息」被静默丢弃（不崩溃、不报错，
  * 用户往上翻就是空，而且再也翻不出来）。
  *
@@ -712,7 +724,8 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
  * 不是「map 里有没有这个 key」这种能被实现换形态绕开的弱观测。
  */
 describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
-  const CAP = SESSION_STREAM_MAX_MESSAGE_VIEWS;
+  /** 与 manager 两张常驻表的 500 LRU 上限同值。 */
+  const CAP = 500;
 
   /** 页面大小 40 + 10：tail 取 seq 11..50，上翻一页补 seq 1..10。 */
   function seedPagedSession(

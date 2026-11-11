@@ -137,6 +137,7 @@ import {
   SessionStreamUnit,
   isSessionStreamUnitSettled,
   SESSION_STREAM_MESSAGES_PAGE_SIZE,
+  STREAM_ROW_IDS_LIMIT,
 } from '@/services/session-stream-unit';
 import type {
   SessionStreamRunSettledStatus,
@@ -183,7 +184,7 @@ type RunOutcome = {
 const log = createLogger('chat.stream-manager');
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
-export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
+const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
 
 /**
  * 两张「按 sessionId 键、无项目维度」的常驻表（settled 投影 / 无单元消息面）的
@@ -195,7 +196,7 @@ export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
  * run 一定在 `units` 里（有独立的 SESSION_STREAM_MAX_SETTLED_UNITS 保护），
  * 不受此上限影响。
  */
-export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
+const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
 
 /** 空接管映射共享实例（idle 视图缺省值；避免每次新建空 Map 打穿引用比较）。 */
 const EMPTY_STREAM_ROW_IDS: ReadonlyMap<string, string> = new Map();
@@ -235,7 +236,7 @@ interface IdleOlderLoadInFlight {
 }
 
 /** Manager 实际依赖的 runtime 子集（测试可传 mock）。messages 为 Step 4 消息管线所需。 */
-export type SessionStreamManagerRuntime = Pick<
+type SessionStreamManagerRuntime = Pick<
   MobileNovelMasterRuntime,
   'eventBus' | 'abortRegistry' | 'sessions' | 'projects' | 'messages'
 > & {
@@ -255,7 +256,7 @@ type RunAgentTurnFn = (
 ) => Promise<unknown>;
 
 /** startRun 的 options 契约（供 ChatComposer.executeRun 等 UI 侧消费）。 */
-export interface SessionStreamStartOptions {
+interface SessionStreamStartOptions {
   /** 原样透传给 runAgentTurn。 */
   readonly stream?: boolean;
   readonly annotateDrafts?: readonly SendAnnotateDraft[];
@@ -281,12 +282,12 @@ export interface SessionStreamStartOptions {
 }
 
 /** startRun 同步返回的受理/拒绝结果（拒绝时带明确错误信息）。 */
-export type SessionStreamStartResult =
+type SessionStreamStartResult =
   | {readonly ok: true}
   | {readonly ok: false; readonly error: string};
 
 /** 失败 toast 上浮桥（Manager 在 React 外，经 Provider 注入）。 */
-export interface SessionStreamUiBridge {
+interface SessionStreamUiBridge {
   onError(message: string): void;
 }
 
@@ -297,7 +298,7 @@ export interface SessionStreamPrefBridge {
 }
 
 /** scope 同步桥：通知点按后切换会话（React 外）；读取当前会话用于去重切换。 */
-export interface SessionStreamScopeBridge {
+interface SessionStreamScopeBridge {
   /** 当前会话 id（无会话/未就绪为 null）。 */
   getCurrentSessionId(): string | null;
   setCurrentSession(sessionId: string): Promise<void>;
@@ -308,7 +309,7 @@ export interface SessionStreamScopeBridge {
  * `createSessionRunStateService(conn)`，测试注入 mock）。不注入时
  * manager 无持久化行为（纯内存，Step 2-4 的既有语义）。
  */
-export interface SessionStreamRunStateStore {
+interface SessionStreamRunStateStore {
   upsert(state: SessionRunState): Promise<void>;
   settle(input: SessionRunStateSettleInput): Promise<void>;
   listByStatuses(
@@ -323,7 +324,7 @@ export interface SessionStreamRunStateStore {
  * LRU 淘汰清除（否则单元淘汰后「上次生成」断源），仅被同会话新 run 收尾
  * 覆盖、随 forgetSession（会话删除链路）清理，或重启后由 settled 行回填。
  */
-export interface SessionStreamSettledProjection {
+interface SessionStreamSettledProjection {
   readonly sessionId: string;
   /** 冻结的最终指标（「上次生成」的数据源）。 */
   readonly metrics: SessionStreamUnitMetrics;
@@ -340,7 +341,7 @@ export interface SessionStreamSettledProjection {
   readonly rateTokensPerSecond: number | null;
 }
 
-export interface SessionStreamUnitManagerParams {
+interface SessionStreamUnitManagerParams {
   readonly runtime: SessionStreamManagerRuntime;
   /** 测试注入用；默认走 services/agent-run.service 的包装。 */
   readonly runAgentTurn?: RunAgentTurnFn;
@@ -626,9 +627,10 @@ export class SessionStreamUnitManager {
         EVENT_AGENT_STEP_COMMITTED,
         (payload: AgentStepCommittedPayload) => {
           const unit = this.units.get(payload.sessionId);
+          const {runId, phase, messageId} = payload;
           if (
             unit == null ||
-            !unit.handleStepCommitted(payload.runId, payload.phase)
+            !unit.handleStepCommitted(runId, phase, messageId)
           ) {
             return;
           }
@@ -1064,8 +1066,12 @@ export class SessionStreamUnitManager {
     if (unit == null) {
       return;
     }
+    // 只清投影可见的行 id（已接管的 DB-backed 行不在列表里，P1-4）；无可见
+    // 行时跳过广播，只补一次 force snapshot（少一次 generation 作废）。
     const removed = unit.clearStreamProjection();
-    unit.broadcastControlMessage({type: 'reset-stream', streamIds: removed});
+    if (removed.length > 0) {
+      unit.broadcastControlMessage({type: 'reset-stream', streamIds: removed});
+    }
     this.notifyChanged();
     setTimeout(() => this.forceSnapshotSoon({sessionId, unit}), 0);
     if (unit.getStatus() === 'interrupted') {
@@ -1366,7 +1372,10 @@ export class SessionStreamUnitManager {
     // （不触发屏幕侧 attach effect 重挂）——不迁移的话新 run 的流式推送
     // 全程无句柄（HANDLE-NULL：会话内不渲染、退出重进注入才可见）。
     let inheritedHandles: SessionStreamWebviewHandle[] = [];
-    let inheritedIds: ReadonlyMap<string, string> = EMPTY_STREAM_ROW_IDS;
+    // 出表单元的映射交接给 idle；无单元时从 idle 承接（单元宽限销毁/LRU
+    // 出表后新 run 必须继承，否则已接管的 assistant 行回退 DB id → remount，
+    // I5/R5）。
+    let inheritedIds = this.idleStreamRowIds(sessionId);
     if (existing != null) {
       inheritedHandles = existing.takeWebviewHandles();
       inheritedIds = existing.getStreamRowIds();
@@ -1620,6 +1629,9 @@ export class SessionStreamUnitManager {
       onProjectionChanged: () => this.notifyChanged(),
     });
     unit.begin();
+    // 首次 lazy 建单元（此前无单元、只有 idle 交接）同样承接接管映射：
+    // 否则单元空 Map 会遮蔽 idle 的映射，已接管行回退 DB id（P1-3）。
+    unit.inheritStreamRowIds(this.idleStreamRowIds(sessionId));
     this.consumptiveSessions.add(sessionId);
     this.units.set(sessionId, unit);
     return unit;
@@ -1833,7 +1845,12 @@ export class SessionStreamUnitManager {
         for (const [messageId, streamId] of incoming) {
           merged.set(messageId, streamId);
         }
-        streamRowIds = merged;
+        // 与单元侧同口径有界化：合并两代映射后不能突破 200 条（P1-3）。
+        if (merged.size > STREAM_ROW_IDS_LIMIT) {
+          streamRowIds = new Map([...merged].slice(-STREAM_ROW_IDS_LIMIT));
+        } else {
+          streamRowIds = merged;
+        }
       }
       this.idleMessageViews.set(sessionId, {
         messages: [...handover.messages],
