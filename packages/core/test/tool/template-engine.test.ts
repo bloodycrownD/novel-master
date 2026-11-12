@@ -27,8 +27,7 @@ function jsonOk(payload: unknown): Response {
   return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
 }
 
-/** 文本错误 Response 快捷构造（HTTP 非 2xx 路径）。 */
-/** 模板工厂：只写与用例相关的字段，其余取最小合法值。 */
+/** 模板工厂：只写与用例相关的字段，其余取最小合法值（name 缺省「测试引擎」= 错误文案断言用的显示名）。 */
 function template(patch: Partial<SearchEngineTemplate> & { readonly url: string }): SearchEngineTemplate {
   return { name: "测试引擎", method: "GET", headers: {}, resultPath: "", fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] }, paramHint: "", ...patch };
 }
@@ -62,10 +61,10 @@ describe("模板执行器：占位符替换与 params 合并（T-E1）", () => {
 
   it("占位符缺值（baseUrl / apiKey）→ 抛可读错误（防御兜底）", async () => {
     const baseTpl = template({ url: "{{baseUrl}}/search?q={{query}}" });
-    await assert.rejects(runTemplateEngine(baseTpl, resolved("searxng"), "q", {}, {}, makeFetch([jsonOk([])])), /searxng template requires \{\{baseUrl\}\} but no base URL is configured/);
+    await assert.rejects(runTemplateEngine(baseTpl, resolved("searxng"), "q", {}, {}, makeFetch([jsonOk([])])), /测试引擎 template requires \{\{baseUrl\}\} but no base URL is configured/);
 
     const keyTpl = template({ url: "https://api.example.com/search", headers: { "X-Key": "{{apiKey}}" } });
-    await assert.rejects(runTemplateEngine(keyTpl, resolved("bocha"), "q", {}, {}, makeFetch([jsonOk([])])), /bocha template requires \{\{apiKey\}\} but no key is configured/);
+    await assert.rejects(runTemplateEngine(keyTpl, resolved("bocha"), "q", {}, {}, makeFetch([jsonOk([])])), /测试引擎 template requires \{\{apiKey\}\} but no key is configured/);
   });
 
   it("GET params 合并：追加/覆盖同名 query 参数，非字符串值 JSON 序列化，undefined 跳过", async () => {
@@ -148,11 +147,11 @@ describe("模板执行器：envelope 与 answerPath（T-E4）", () => {
     }
   });
 
-  it("业务码不通过 → 抛错，msg 回显的 key 明文先脱敏", async () => {
-    const tpl = template({ url: "https://api.example.com/search", resultPath: "data.items", envelope: { codePath: "code", msgPath: "msg" } });
+  it("业务码不通过 → 抛错（文案用 template.name 显示名），msg 回显的 key 明文先脱敏", async () => {
+    const tpl = template({ name: "博查搜索", url: "https://api.example.com/search", resultPath: "data.items", envelope: { codePath: "code", msgPath: "msg" } });
     await assert.rejects(runTemplateEngine(tpl, resolved("bocha", { apiKey: KEY }), "q", {}, {}, makeFetch([jsonOk({ code: 4001, msg: `invalid token ${KEY} rejected` })])), (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      assert.match(message, /bocha API error 4001/);
+      assert.match(message, /博查搜索 API error 4001/);
       assert.ok(message.includes("***"));
       assert.equal(message.includes(KEY), false);
       return true;
@@ -163,7 +162,7 @@ describe("模板执行器：envelope 与 answerPath（T-E4）", () => {
     const tpl = template({ url: "https://api.example.com/search", resultPath: "results", envelope: { codePath: "status", okValues: ["ok", 0] } });
     const ok = await runTemplateEngine(tpl, resolved("custom:engine"), "q", {}, {}, makeFetch([jsonOk({ status: "ok", results: [] })]));
     assert.deepEqual(ok.results, []);
-    await assert.rejects(runTemplateEngine(tpl, resolved("custom:engine"), "q", {}, {}, makeFetch([jsonOk({ status: "bad", results: [] })])), /custom:engine API error bad: unknown error/);
+    await assert.rejects(runTemplateEngine(tpl, resolved("custom:engine"), "q", {}, {}, makeFetch([jsonOk({ status: "bad", results: [] })])), /测试引擎 API error bad: unknown error/);
   });
 
   it("answerPath：非空字符串 trim 后透传，缺失或空白省略字段", async () => {
@@ -183,23 +182,35 @@ describe("模板执行器：envelope 与 answerPath（T-E4）", () => {
 describe("模板执行器：错误通道与脱敏（T-E5）", () => {
   const KEY = "sk-http-secret-key";
 
-  it("非 2xx → 可读错误（含 status），body 回显 key 脱敏且截断 300 字符", async () => {
-    const tpl = template({ url: "https://api.example.com/search", resultPath: "results" });
+  it("非 2xx → 可读错误（文案用 template.name 显示名，含 status），body 回显 key 脱敏且截断 300 字符", async () => {
+    const tpl = template({ name: "博查搜索", url: "https://api.example.com/search", resultPath: "results" });
     const longBody = `token ${KEY} rejected ${"x".repeat(400)}`;
     await assert.rejects(runTemplateEngine(tpl, resolved("bocha", { apiKey: KEY }), "q", {}, {}, makeFetch([new Response(longBody, { status: 401 })])), (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED", "运行时错误走 engineFailed 通道供串行降级");
-      assert.match(message, /bocha API error 401: /);
+      assert.match(message, /博查搜索 API error 401: /);
       assert.equal(message.includes(KEY), false);
       assert.ok(message.includes("***"));
-      assert.equal(message.length, "bocha API error 401: ".length + 300, "回显 body 截断到 300 字符");
+      assert.equal(message.length, "博查搜索 API error 401: ".length + 300, "回显 body 截断到 300 字符");
       return true;
     });
   });
 
-  it("JSON parse 失败 → 可读错误", async () => {
+  it("JSON parse 失败 → 可读错误；e.message 内嵌 body 片段回显 key 时过 redactSecret 脱敏（FIX-6）", async () => {
     const tpl = template({ url: "https://api.example.com/search", resultPath: "results" });
-    await assert.rejects(runTemplateEngine(tpl, resolved("searxng"), "q", {}, {}, makeFetch([new Response("not-json", { status: 200 })])), /searxng API returned invalid JSON/);
+    await assert.rejects(runTemplateEngine(tpl, resolved("searxng"), "q", {}, {}, makeFetch([new Response("not-json", { status: 200 })])), /测试引擎 API returned invalid JSON/);
+
+    // V8 的 JSON.parse 错误只回显 body 前 ~10 字符：用短 key 才能完整落入片段，
+    // 验证 e.message 确实过了 redactSecret（长 key 只会泄漏前缀片段，无法整串命中）。
+    const shortKey = "k3y123";
+    const bochaTpl = template({ name: "博查搜索", url: "https://api.example.com/search", resultPath: "results" });
+    await assert.rejects(runTemplateEngine(bochaTpl, resolved("bocha", { apiKey: shortKey }), "q", {}, {}, makeFetch([new Response(`${shortKey} not-json`, { status: 200 })])), (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /博查搜索 API returned invalid JSON/);
+      assert.ok(message.includes("***"), "JSON.parse 错误内嵌的 body 片段已脱敏");
+      assert.equal(message.includes(shortKey), false);
+      return true;
+    });
   });
 
   it("resultPath 找不到或非数组 → 可读错误；空数组 = 合法空结果", async () => {
@@ -233,7 +244,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
     const error = await pending;
     const message = error instanceof Error ? error.message : String(error);
     assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED");
-    assert.match(message, /bocha search timed out after 30000ms/);
+    assert.match(message, /测试引擎 search timed out after 30000ms/);
   });
 });
 

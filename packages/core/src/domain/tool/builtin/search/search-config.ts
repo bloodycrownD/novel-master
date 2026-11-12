@@ -28,6 +28,7 @@ import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { createLogger } from "@/infra/log/logger.js";
 import { searchWithDuckduckgo } from "./engines/duckduckgo.js";
 import { runTemplateEngine } from "./engines/template-engine.js";
+import { findPlaintextSecrets } from "./curl-import.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "./preset-templates.js";
 import { normalizeMaxResults, redactSecret, validateSearchEngineTemplate, type CustomEngineDef, type ResolvedEngineConfig, type SearchEngineTemplate, type SearchResult } from "./types.js";
 
@@ -261,12 +262,14 @@ async function readEngineState(kkv: KkvService): Promise<SearchEngineState> {
     }
   }
 
-  // engineBaseUrls：只保留非空字符串值。
+  // engineBaseUrls：逐值 normalizeEngineBaseUrl，非法值丢弃（canRun 与 resolveEngineChain 同源判定，脏数据不判可跑）。
   const parsedBaseUrls = parseJson(baseUrlsRaw);
   const baseUrls: Record<string, string> = {};
   if (isRecord(parsedBaseUrls)) {
     for (const [engineId, value] of Object.entries(parsedBaseUrls)) {
-      if (typeof value === "string" && value.trim().length > 0) baseUrls[engineId] = value.trim();
+      if (typeof value !== "string") continue;
+      const normalized = normalizeEngineBaseUrl(value);
+      if (normalized != null) baseUrls[engineId] = normalized;
     }
   }
 
@@ -331,7 +334,8 @@ export async function readSearchConfig(deps: SearchConfigDeps): Promise<SearchCo
  *
  * 显式 `inputEngine`：① 已知且通过过滤 → 钉为该引擎单发（失败不降级）；
  * ② 已知但未通过（关闭 / 未配置）→ 沿 order 从该 id 起截尾，取截尾后第一个
- * 通过过滤的引擎（保留顺位回落语义，链空则返回空数组）；③ 不在动态全集 →
+ * 通过过滤的引擎（保留顺位回落语义，链空则返回空数组；pinned 已试探过的引擎
+ * 记 `pinnedTried` 跳过，不重复读 SKSP）；③ 不在动态全集 →
  * throw `AppError`（key `error.tool.search_engine_not_found`，search-tool 边界
  * 照常映射为工具失败）。DDG 只有 enabled 才入链，不再恒在链尾。
  *
@@ -360,14 +364,17 @@ export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: s
   };
 
   if (inputEngine != null) {
-    if (!state.order.includes(inputEngine)) throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { key: "error.tool.search_engine_not_found", params: { engine: inputEngine } });
+    if (!state.order.includes(inputEngine)) throw engineNotFound(inputEngine);
+    let pinnedTried = false;
     if (state.enabled.includes(inputEngine)) {
+      pinnedTried = true;
       const pinned = await resolveOne(inputEngine);
       if (pinned != null) return [pinned];
     }
     const startIndex = state.order.indexOf(inputEngine);
     for (const engineId of state.order.slice(startIndex)) {
       if (!state.enabled.includes(engineId)) continue;
+      if (engineId === inputEngine && pinnedTried) continue;
       const resolved = await resolveOne(engineId);
       if (resolved != null) return [resolved];
     }
@@ -383,10 +390,15 @@ export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: s
   return chain;
 }
 
-/** 保存路径模板校验（明文密钥检测在 validateSearchEngineTemplate 内，全仓唯一实现；失败 throw）。 */
+/**
+ * 保存路径模板校验：结构 + 明文密钥检测复用 validateSearchEngineTemplate（create /
+ * updateCustomEngine / updatePresetOverride 三入口共用）；paramHint 流入 agent 可见
+ * 工具描述，另过 findPlaintextSecrets（拍板 4，name 不扫）；失败 throw。
+ */
 function validateTemplateForSave(raw: unknown): SearchEngineTemplate {
   const validated = validateSearchEngineTemplate(raw);
   if (!validated.ok) throw validated.error;
+  if (findPlaintextSecrets(validated.value.paramHint).length > 0) throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_secret_detected", params: { field: "paramHint" } });
   return validated.value;
 }
 
@@ -412,9 +424,9 @@ export interface SearchConfigStore {
   readConfig(): Promise<SearchConfigPublic>;
   /** 解析串行引擎链（语义同 {@link resolveEngineChain}）。 */
   resolveEngineChain(inputEngine?: string): Promise<ResolvedEngineConfig[]>;
-  /** 保存引擎 API key（预置与自定义统一通道；空串拒绝）。 */
+  /** 保存引擎 API key（预置与自定义统一通道；未知 engineId / 空串拒绝，防 dangling SKSP ref）。 */
   saveEngineKey(engineId: string, apiKey: string): Promise<void>;
-  /** 清除引擎 API key。 */
+  /** 清除引擎 API key（未知 engineId 拒绝）。 */
   clearEngineKey(engineId: string): Promise<void>;
   /** 保存引擎顺序：动态已知 id 的不重复序列（未知 id 拒绝、缺项容忍，读侧归一补齐）。 */
   setEngineOrder(order: readonly string[]): Promise<void>;
@@ -455,11 +467,15 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       return resolveEngineChain(deps, inputEngine);
     },
     async saveEngineKey(engineId, apiKey) {
+      const state = await readEngineState(kkv);
+      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
       const trimmed = apiKey.trim();
       if (trimmed.length === 0) throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { key: "error.tool.search_api_key_required" });
       await secretStore.set(searchApiKeyRef(engineId), trimmed);
     },
     async clearEngineKey(engineId) {
+      const state = await readEngineState(kkv);
+      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
       await secretStore.delete(searchApiKeyRef(engineId));
     },
     async setEngineOrder(order) {

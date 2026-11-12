@@ -157,7 +157,9 @@ export interface BuiltinToolAgentsContext {
  *   secretStore.has），按 engineOrderV2 序，回合内改配置下回合生效。
  *
  * 未注入时（CLI 无 kkv、旧测试 mock）search 的 run 抛 ToolError（FAILED），
- * 工具对 LLM 仍可见；description 退化为通用段（无逐引擎段）。
+ * 工具对 LLM 仍可见；description 走中性「未装配搜索能力」文案（不承诺
+ * 「返回配置指引」）。已注入但快照为空时 description 渲染链空配置指引
+ *（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。
  */
 export interface BuiltinToolSearchContext {
   /**
@@ -249,7 +251,8 @@ export type BuiltinToolContext = {
   readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule" | "listDirRules">;
   /**
    * 可选：仅 `search` 工具读取。未注入时（CLI 无 kkv、旧测试 mock）
-   * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见。
+   * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见，
+   * description 走中性「未装配搜索能力」文案（不承诺「返回配置指引」）。
    *
    * 是否对 LLM 可用由 `resolveAgentToolRegistry` 的 tools.allow/deny 控制
    * （search 不在任何摘除分支内，主/子/孙 agent 全深度可用，照 curl）。

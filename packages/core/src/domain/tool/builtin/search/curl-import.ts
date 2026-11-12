@@ -229,7 +229,6 @@ export function parseCurlCommand(text: string): Result<CurlCommandDraft, CurlPar
   collectSecrets(findPlaintextSecrets(url));
   for (const header of headerPairs) {
     collectSecrets(findPlaintextSecrets(`${header.name}: ${header.value}`));
-    collectSecrets(findPlaintextSecrets(header.value));
   }
   if (data != null) collectSecrets(findPlaintextSecrets(data));
   if (secrets.length > 1) return fail("multiple distinct plaintext secrets detected; import them one at a time");

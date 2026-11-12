@@ -178,7 +178,8 @@ export function SearchEnginesScreen() {
   // 删除确认文案提前拼好：模板串含 CJK 长文案，内联进 JSX 会被 prettier 拆行。
   let deleteNotice = '';
   if (pendingDelete != null) {
-    const label = engineTitle(pendingDelete, deleteRow?.name ?? pendingDelete);
+    // FIX-23：读模型 name 优先（拍板 5），静态表仅未知 id 兜底。
+    const label = engineTitle(pendingDelete, deleteRow?.name);
     deleteNotice = `「${label}」的模板配置与已存密钥会一并清除，此操作不可撤销。`;
   }
 
@@ -372,7 +373,10 @@ export function SearchEnginesScreen() {
         <HelpSection
           tokens={tokens}
           title="模板与自定义引擎"
-          body="预置引擎的请求模板可在详情页高级区编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。"
+          // FIX-26：count 措辞与 desktop 帮助弹窗逐字一致（整数字段带引号定稿）。
+          body={
+            '预置引擎的请求模板可在详情页高级区编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。'
+          }
         />
         <HelpSection
           tokens={tokens}

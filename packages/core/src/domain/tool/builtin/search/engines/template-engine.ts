@@ -14,8 +14,10 @@
  *
  * 错误通道（SPEC §4）：沿用四适配器先例 throw `engineFailed`
  * （TOOL_SEARCH_FAILED）/ `engineTimeoutError`，不引入 Result——search-tool 的
- * run 循环是唯一 throw 边界（catch 收 failureLines 进串行降级）。模板校验错误码
- * TOOL_SEARCH_TEMPLATE_INVALID 属于保存路径，与本执行器无关。
+ * run 循环是唯一 throw 边界（catch 收 failureLines 进串行降级）。错误文案里的
+ * 引擎标识统一用 `template.name` 显示名（不用裸 engine id；响应负载 `engine`
+ * 字段仍是 engine id）。模板校验错误码 TOOL_SEARCH_TEMPLATE_INVALID 属于保存
+ * 路径，与本执行器无关。
  *
  * @module domain/tool/builtin/search/engines/template-engine
  */
@@ -34,8 +36,8 @@ interface TemplatePlaceholderValues {
 /** 模板引擎统一超时（毫秒）：全部模板共用 30s（AbortController + setTimeout，RN/Hermes 兼容）。 */
 const TEMPLATE_ENGINE_TIMEOUT_MS = 30_000;
 
-/** 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/body 原样；引用缺值或未知占位符抛可读错误。 */
-function substitutePlaceholders(text: string, values: TemplatePlaceholderValues, engine: string, encodeQuery: boolean): string {
+/** 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/body 原样；displayName（template.name）进错误文案，引用缺值或未知占位符抛可读错误。 */
+function substitutePlaceholders(text: string, values: TemplatePlaceholderValues, displayName: string, encodeQuery: boolean): string {
   return text.replace(SEARCH_TEMPLATE_PLACEHOLDER_PATTERN, (_token, placeholder: string) => {
     switch (placeholder) {
       case "query":
@@ -43,13 +45,13 @@ function substitutePlaceholders(text: string, values: TemplatePlaceholderValues,
       case "count":
         return String(values.count);
       case "apiKey":
-        if (values.apiKey == null || values.apiKey.length === 0) throw engineFailed(`${engine} template requires {{apiKey}} but no key is configured`);
+        if (values.apiKey == null || values.apiKey.length === 0) throw engineFailed(`${displayName} template requires {{apiKey}} but no key is configured`);
         return values.apiKey;
       case "baseUrl":
-        if (values.baseUrl == null || values.baseUrl.length === 0) throw engineFailed(`${engine} template requires {{baseUrl}} but no base URL is configured`);
+        if (values.baseUrl == null || values.baseUrl.length === 0) throw engineFailed(`${displayName} template requires {{baseUrl}} but no base URL is configured`);
         return values.baseUrl;
       default:
-        throw engineFailed(`${engine} template contains unknown placeholder {{${placeholder}}}`);
+        throw engineFailed(`${displayName} template contains unknown placeholder {{${placeholder}}}`);
     }
   });
 }
@@ -86,7 +88,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
   const numResults = normalizeMaxResults(options.maxResults);
   const values: TemplatePlaceholderValues = { query, count: numResults, apiKey: resolved.apiKey, baseUrl: resolved.baseUrl };
 
-  let requestUrl = substitutePlaceholders(template.url, values, engine, true);
+  let requestUrl = substitutePlaceholders(template.url, values, template.name, true);
   if (template.method === "GET") {
     try {
       const parsedUrl = new URL(requestUrl);
@@ -96,37 +98,37 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       }
       requestUrl = parsedUrl.toString();
     } catch (e) {
-      throw engineFailed(`${engine} template URL is invalid: ${e instanceof Error ? e.message : String(e)}`);
+      throw engineFailed(`${template.name} template URL is invalid: ${redactSecret(e instanceof Error ? e.message : String(e), resolved.apiKey)}`);
     }
   }
 
   const headers: Record<string, string> = {};
-  for (const [headerName, headerValue] of Object.entries(template.headers)) headers[headerName] = substitutePlaceholders(headerValue, values, engine, false);
+  for (const [headerName, headerValue] of Object.entries(template.headers)) headers[headerName] = substitutePlaceholders(headerValue, values, template.name, false);
 
   let bodyText: string | undefined;
   if (template.method === "POST") {
-    if (template.bodyTemplate == null) throw engineFailed(`${engine} template is missing bodyTemplate for POST`);
+    if (template.bodyTemplate == null) throw engineFailed(`${template.name} template is missing bodyTemplate for POST`);
     let parsedBody: unknown;
     try {
       parsedBody = JSON.parse(template.bodyTemplate);
     } catch {
-      throw engineFailed(`${engine} template bodyTemplate is not valid JSON`);
+      throw engineFailed(`${template.name} template bodyTemplate is not valid JSON`);
     }
-    if (!isRecord(parsedBody)) throw engineFailed(`${engine} template bodyTemplate must be a JSON object`);
+    if (!isRecord(parsedBody)) throw engineFailed(`${template.name} template bodyTemplate must be a JSON object`);
     const pending: unknown[] = [parsedBody];
     while (pending.length > 0) {
       const node = pending.pop();
       if (Array.isArray(node)) {
         for (let index = 0; index < node.length; index += 1) {
           const value: unknown = node[index];
-          if (typeof value === "string") node[index] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, engine, false);
+          if (typeof value === "string") node[index] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
           else pending.push(value);
         }
         continue;
       }
       if (!isRecord(node)) continue;
       for (const [key, value] of Object.entries(node)) {
-        if (typeof value === "string") node[key] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, engine, false);
+        if (typeof value === "string") node[key] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
         else pending.push(value);
       }
     }
@@ -141,16 +143,16 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       const init: RequestInit = { method: template.method, headers, signal: controller.signal, ...(bodyText == null ? {} : { body: bodyText }) };
       response = await fetchFn(requestUrl, init);
     } catch (e) {
-      throw engineTimeoutError(e, controller.signal.aborted, engine, TEMPLATE_ENGINE_TIMEOUT_MS);
+      throw engineTimeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS);
     }
 
-    if (!response.ok) throw engineFailed(engineApiErrorMessage(engine, response.status, await response.text(), resolved.apiKey));
+    if (!response.ok) throw engineFailed(engineApiErrorMessage(template.name, response.status, await response.text(), resolved.apiKey));
 
     let raw: unknown;
     try {
       raw = await response.json();
     } catch (e) {
-      throw engineFailed(`${engine} API returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+      throw engineFailed(`${template.name} API returned invalid JSON: ${redactSecret(e instanceof Error ? e.message : String(e), resolved.apiKey)}`);
     }
 
     if (template.envelope != null) {
@@ -159,12 +161,12 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       if (code !== undefined && !(okValues ?? [200, "200"]).some((ok) => ok === code || String(ok) === String(code))) {
         const detail = msgPath == null ? undefined : readPointPath(raw, msgPath);
         const message = typeof detail === "string" && detail.trim().length > 0 ? detail.trim() : "unknown error";
-        throw engineFailed(`${engine} API error ${String(code)}: ${redactSecret(message, resolved.apiKey)}`);
+        throw engineFailed(`${template.name} API error ${String(code)}: ${redactSecret(message, resolved.apiKey)}`);
       }
     }
 
     const items = readPointPath(raw, template.resultPath);
-    if (!Array.isArray(items)) throw engineFailed(`${engine} API returned invalid response: missing ${template.resultPath.length === 0 ? "root" : template.resultPath} results array`);
+    if (!Array.isArray(items)) throw engineFailed(`${template.name} API returned invalid response: missing ${template.resultPath.length === 0 ? "root" : template.resultPath} results array`);
 
     const results: SearchResult[] = [];
     for (const item of items) {

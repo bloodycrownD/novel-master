@@ -29,7 +29,7 @@ import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxRe
 export const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
 
 /** 超时（毫秒）：30s（轻量 HTML 端点，照参考实现）。 */
-export const DUCKDUCKGO_TIMEOUT_MS = 30_000;
+const DUCKDUCKGO_TIMEOUT_MS = 30_000;
 
 /** 自报轻客户端 UA（照参考实现格式，novel-master 风格；不伪装浏览器）。 */
 export const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";

@@ -150,11 +150,20 @@ const SEARCH_TEMPLATE_PLACEHOLDERS: readonly string[] = ["query", "count", "apiK
  */
 export const SEARCH_TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([^{}]*)\}\}/g;
 
+/** 占位符存在性判定（上式的非全局变体：g 版正则只给 replace / matchAll 共享，不能直接 `test`）。 */
+const TEMPLATE_PLACEHOLDER_PROBE = /\{\{[^{}]*\}\}/;
+
 /**
  * 模板点路径语法：点分标识符段，不支持数组索引。resultPath / answerPath /
  * envelope.codePath / envelope.msgPath 共用同一规则，执行器侧共用同一遍历实现。
  */
 const POINT_PATH_PATTERN = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
+
+/**
+ * 头名字符集（RFC 7230 token：可见 ASCII 去掉空格与冒号，`+` 同时拒绝空名）。
+ * 含换行 / 空格的头名会让执行期 fetch 抛原生 TypeError 绕开 engineFailed 通道，保存路径先拦。
+ */
+const HEADER_NAME_PATTERN = /^[!-9;-~]+$/;
 
 /** 结果字段候选名列表：按序取第一个非空字符串（各引擎响应字段容错）。 */
 export interface SearchEngineFieldMap {
@@ -167,7 +176,7 @@ export interface SearchEngineFieldMap {
 export interface SearchEngineEnvelope {
   /** 业务码点路径（如 "code"）。 */
   readonly codePath: string;
-  /** 视为成功的业务码；缺省 `[200, "200"]`。 */
+  /** 视为成功的业务码；缺省 `[200, "200"]`（显式给出时必须非空，空集会使执行器「code 有值即失败」全废）。 */
   readonly okValues?: readonly (string | number)[];
   /** 失败消息点路径（脱敏后拼进错误文案）。 */
   readonly msgPath?: string;
@@ -185,7 +194,7 @@ export interface SearchEngineTemplate {
   readonly method: "GET" | "POST";
   /** 可含 `{{query}}` / `{{count}}` / `{{apiKey}}` / `{{baseUrl}}`。 */
   readonly url: string;
-  /** 头值可内插占位符（如 `Bearer {{apiKey}}`，apiKey 不编码）。 */
+  /** 头值可内插占位符（如 `Bearer {{apiKey}}`，apiKey 不编码）；头名须为非空 HTTP token。 */
   readonly headers: Readonly<Record<string, string>>;
   /** POST 必填：合法 JSON 对象文本，占位符只出现在字符串值内。 */
   readonly bodyTemplate?: string;
@@ -239,14 +248,17 @@ function readFieldCandidates(value: unknown): readonly string[] | null {
  * 校验并归一化模板输入（保存路径统一入口；入参按不可信处理，返回新对象、不回填未知键）。
  *
  * 规则（SPEC §2）：method ∈ {GET, POST}；url 为非空 http(s)（先用示例值替换占位符再
- * `new URL()`，searxng 的 `{{baseUrl}}/search?...` 形态因此可过）；resultPath 为空串
- * （根）或合法点路径，answerPath / envelope.codePath / envelope.msgPath 同规则；
- * fieldMap 三键各至少一个非空候选；POST 必填 bodyTemplate 且为合法 JSON 对象文本，
- * 占位符只允许白名单四个，`{{count}}` 在 body 字符串值内只允许整值出现（执行器替换为
- * number）；paramHint ≤500 字符；url / headers / bodyTemplate 不含明文密钥特征（与
- * curl 导入共用 `findPlaintextSecrets`，全仓唯一检测实现）。错误码统一
- * `TOOL_SEARCH_TEMPLATE_INVALID`，messageKey 取 `error.tool.search_template_invalid`
- * （params 带字段原因）或 `error.tool.search_secret_detected`（params 带字段名）。
+ * `new URL()`，searxng 的 `{{baseUrl}}/search?...` 形态因此可过）；headers 头名为非空
+ * RFC 7230 token（非法头名会让执行期 fetch 抛原生 TypeError 绕过 engineFailed 通道）；
+ * resultPath 为空串（根）或合法点路径，answerPath / envelope.codePath / envelope.msgPath
+ * 同规则；fieldMap 三键各至少一个非空候选；GET 不允许携带 bodyTemplate、POST 必填且为
+ * 合法 JSON 对象文本，占位符只允许白名单四个且 JSON 键一律不含占位符（执行器只替换值，
+ * 键里的占位符会原样进请求），`{{count}}` 在 body 字符串值内只允许整值出现（执行器替换为
+ * number）；envelope.okValues 显式给出时必须为非空数组；paramHint ≤500 字符；url /
+ * headers / bodyTemplate 不含明文密钥特征（与 curl 导入共用 `findPlaintextSecrets`，
+ * 全仓唯一检测实现）。错误码统一 `TOOL_SEARCH_TEMPLATE_INVALID`，messageKey 取
+ * `error.tool.search_template_invalid`（params 带字段原因）或
+ * `error.tool.search_secret_detected`（params 带字段名）。
  */
 export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineTemplate, SearchTemplateValidationError> {
   const invalid = (reason: string): Result<SearchEngineTemplate, SearchTemplateValidationError> => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_template_invalid", params: { reason } }));
@@ -272,6 +284,8 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
   if (!isRecord(raw.headers)) return invalid("headers must be an object of string values");
   const headers: Record<string, string> = {};
   for (const [headerName, headerValue] of Object.entries(raw.headers)) {
+    if (headerName.length === 0) return invalid("header name must not be empty");
+    if (!HEADER_NAME_PATTERN.test(headerName)) return invalid(`header ${headerName} must be a valid HTTP token`);
     if (typeof headerValue !== "string") return invalid(`header ${headerName} must be a string`);
     const unknownHeaderPlaceholder = unknownPlaceholderIn(headerValue);
     if (unknownHeaderPlaceholder != null) return invalid(`header ${headerName} contains unknown placeholder {{${unknownHeaderPlaceholder}}}`);
@@ -306,11 +320,17 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
           if (node.includes("{{count}}") && node !== "{{count}}") return invalid("{{count}} must be a whole-string value in bodyTemplate");
           continue;
         }
-        if (isRecord(node)) pending.push(...Object.values(node));
+        if (isRecord(node)) {
+          for (const key of Object.keys(node)) {
+            if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalid(`bodyTemplate key ${key} must not contain a placeholder`);
+          }
+          pending.push(...Object.values(node));
+        }
       }
       bodyTemplate = text;
     }
   }
+  if (method === "GET" && bodyTemplate != null) return invalid("bodyTemplate is not allowed for GET");
   if (method === "POST" && bodyTemplate == null) return invalid("bodyTemplate is required for POST");
 
   const rawFieldMap = raw.fieldMap;
@@ -344,6 +364,7 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
     let okValues: readonly (string | number)[] | undefined;
     if (rawEnvelope.okValues != null) {
       if (!Array.isArray(rawEnvelope.okValues)) return invalid("envelope.okValues must be an array of strings or numbers");
+      if (rawEnvelope.okValues.length === 0) return invalid("envelope.okValues must not be empty");
       const values: (string | number)[] = [];
       for (const value of rawEnvelope.okValues) {
         if (typeof value !== "string" && typeof value !== "number") return invalid("envelope.okValues must be an array of strings or numbers");

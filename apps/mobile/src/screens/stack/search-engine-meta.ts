@@ -32,8 +32,8 @@ export const ENGINE_HINTS: Readonly<Record<string, string>> = {
   tavily: '按量计费 · 国际',
   brave: '按量计费 · 国际',
   searxng: '自托管 · 免费',
-  deepseek: '按量计费 · 中文',
-  zhipu: '按量计费 · 中文',
+  deepseek: '按量计费 · 中文检索',
+  zhipu: '按量计费 · 中文检索',
   duckduckgo: '内置 · 免费',
 };
 
@@ -46,7 +46,14 @@ type PresetTemplateTable = Readonly<Record<string, SearchEngineTemplate>>;
 /** 出厂模板查表（预置 id 命中；自定义实例 / DDG 返回 undefined）。 */
 export const PRESET_TEMPLATES: PresetTemplateTable = PRESET_ENGINE_TEMPLATES;
 
-/** 展示名：预置用出厂 label，自定义实例回落到配置读模型里的 name。 */
-export function engineTitle(engineId: string, fallbackName: string): string {
-  return ENGINE_LABELS[engineId] ?? fallbackName;
+/**
+ * 展示名：读模型 name 优先（拍板 5，双端同口径——desktop 同款）；静态表
+ * {@link ENGINE_LABELS} 仅未知 id / 读模型缺名时兜底，未收录的 id 返回 id 本身。
+ */
+export function engineTitle(engineId: string, modelName?: string): string {
+  const name = modelName?.trim();
+  if (name != null && name.length > 0) {
+    return name;
+  }
+  return ENGINE_LABELS[engineId] ?? engineId;
 }

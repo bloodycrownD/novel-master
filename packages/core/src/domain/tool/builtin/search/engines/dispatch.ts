@@ -27,11 +27,12 @@ export const SEARCH_NOT_CONFIGURED_MESSAGE = "当前没有可用的已启用搜�
  * 耗尽时聚合为一条 `toolFailed("search", …)` 返回。
  *
  * `params` 是工具层自由 JSON（Step 4 接线透传），原样交给模板执行器；
- * DDG 无模板、忽略 params。
+ * DDG 无模板、忽略 params。函数标 `async`：template 缺失分支同样以
+ * rejected promise 回流（不走同步 throw，与 fetch 路径同时序）。
  *
  * nm-style: keep-public — spec §4 引擎分发唯一入口（search 工具 run 消费）。
  */
-export function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: Readonly<Record<string, unknown>> = {}, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
+export async function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: Readonly<Record<string, unknown>> = {}, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   if (resolved.engine === "duckduckgo") return searchWithDuckduckgo(resolved, query, options, fetchFn);
   const template = resolved.template;
   if (template == null) throw engineFailed(`unknown search engine: ${resolved.engine} (no template resolved)`);

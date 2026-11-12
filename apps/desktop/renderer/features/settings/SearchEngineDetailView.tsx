@@ -10,8 +10,10 @@
  * - create 模式（`editingEngineId === NEW_ENGINE_SENTINEL`，复用本 viewId）：
  *   curl 导入粘贴域 + 全量表单 + 测试，保存走 `createCustomEngine` 后回列表。
  *
- * 测试一律走**草稿直测**：当前表单 + 本次输入的 key/baseUrl 组成 draft，不落库；
- * 表单里没填 key 时由 core 回退已存 SKSP 值。保存前模板统一过
+ * 测试默认走**草稿直测**：当前表单 + 本次输入的 key/baseUrl 组成 draft，不落库；
+ * 表单里没填 key 时由 core 回退已存 SKSP 值。例外（拍板 1）：预置引擎已有覆盖
+ * 且表单与出厂模板逐字段相等（key/baseUrl 草稿也为空）时省略 draft 只传
+ * engineId，由 core 走「覆盖合并 + SKSP 现读」测生效配置。保存前模板统一过
  * `validateSearchEngineTemplate`（Result 失败直接展示原因，不发 IPC）。
  * 保存 / 清除 / 测试互斥（在途期间按钮禁用 + 交错点击直接忽略）。
  */
@@ -280,9 +282,20 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           return;
         }
       } else if (presetDefault != null) {
+        // 拍板 7：需 key 模板且既无已存 key、key 草稿也为空 → 保存拦截（文案与 mobile 现行为一致）
+        if (engine?.needsKey === true && engine?.hasKey !== true && key.length === 0) {
+          setError("请输入 API Key（留空不会修改已保存的密钥）");
+          return;
+        }
         // 预置：只提交与出厂模板不同的字段，未改字段保留既有覆盖（patch 浅合并）
         const patch: Record<string, unknown> = {};
         for (const field of TEMPLATE_FIELDS) if (JSON.stringify(presetDefault[field]) !== JSON.stringify(template[field])) patch[field] = template[field];
+        // baseUrl 仅在草稿与已存值不同时提交（空串 = 清除；相同 = 无写操作）
+        const baseUrlChanged = usesBaseUrl && url !== (engine?.baseUrl ?? "");
+        if (Object.keys(patch).length === 0 && key.length === 0 && !baseUrlChanged) {
+          toastSettingsSuccess("无改动");
+          return;
+        }
         if (Object.keys(patch).length > 0) {
           const res = await ipcSearchUpdatePresetOverride({ engineId, patch: patch as Partial<SearchEngineTemplate> });
           if (!res.ok) {
@@ -297,7 +310,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
             return;
           }
         }
-        if (usesBaseUrl) {
+        if (baseUrlChanged) {
           const res = await ipcSearchSetEngineBaseUrl({ engineId, baseUrl: url });
           if (!res.ok) {
             setError(res.error.message);
@@ -335,8 +348,12 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       const key = apiKey.trim();
       const url = baseUrl.trim();
       const draft = { template, ...(key.length > 0 ? { apiKey: key } : {}), ...(usesBaseUrl && url.length > 0 ? { baseUrl: url } : {}) };
-      // 编辑已存引擎时同传 engineId：draft 优先，缺省 key/baseUrl 回退 SKSP / engineBaseUrls 既有值
-      const res = await ipcSearchTestEngine({ ...(isCreate ? {} : { engineId }), draft, query });
+      // 拍板 1：预置已有覆盖且表单与出厂逐字段相等（key/baseUrl 草稿也为空）→
+      // 省略 draft 只传 engineId，core 走「覆盖合并 + SKSP 现读」测生效配置；
+      // 其余仍草稿直测（draft 优先，缺省 key/baseUrl 回退 SKSP / engineBaseUrls）。
+      const sameAsFactory = presetDefault != null && TEMPLATE_FIELDS.every((field) => JSON.stringify(presetDefault[field]) === JSON.stringify(template[field]));
+      const testEffective = isPreset && config?.presetOverrides[engineId] === true && sameAsFactory && key.length === 0 && !(usesBaseUrl && url.length > 0);
+      const res = await ipcSearchTestEngine({ ...(isCreate || testEffective ? {} : { draft }), ...(isCreate ? {} : { engineId }), query });
       if (!res.ok) {
         setError(res.error.message);
         return;
@@ -401,6 +418,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       </SettingsField>
       <SettingsField label="请求体模板（POST 必填，合法 JSON 对象文本）">
         <textarea rows={4} value={form.bodyTemplate} onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })} placeholder={'{"query": "{{query}}", "count": "{{count}}"}'} />
+        {/* FIX-26：裸形态 "{{count}}" 易误读为可写整值，双端统一强调带引号（文案与 mobile 同步） */}
+        <span className="settings-hint">{'占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'}</span>
       </SettingsField>
       <SettingsField label="结果数组路径（点路径；空 = 根节点即数组）">
         <input type="text" value={form.resultPath} placeholder="results" onChange={(e) => setForm({ ...form, resultPath: e.target.value })} />

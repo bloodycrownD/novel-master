@@ -90,15 +90,20 @@ function buildChainErrorMessage(failureLines: readonly string[], untried: number
 /**
  * 静态 `search` 工具实例。
  *
- * description 是静态 lambda（引擎配置在 run 内解析，装配期不取数）；
- * 是否对 LLM 可见由 `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+ * description 是静态 lambda：通用段就地拼装，逐引擎段消费装配期
+ * `engineSnapshot`（`ctx.search` 注入，回合内改配置下回合生效）；
+ * 链解析与凭证明文读取仍在 run 内进行。是否对 LLM 可见由
+ * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
  */
 export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolContext> = {
   name: SEARCH_TOOL_NAME,
   description: (ctx) => {
-    // 逐引擎段来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
-    const engines = ctx.search?.engineSnapshot ?? [];
-    const engineSection = engines.length === 0 ? "当前没有可用的已启用引擎；调用会返回配置指引，请到 设置 → 搜索配置 开启或配置引擎。" : engines.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
+    // 空快照三路径语义：未注入闭包（CLI/旧 mock）→ 中性「未装配」文案
+    //（run 必抛，不承诺任何 run 行为）；已注入但快照为空 → 保留配置指引
+    //（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。逐引擎段
+    // 来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
+    const engineList = ctx.search?.engineSnapshot;
+    const engineSection = engineList == null ? "当前运行时未装配搜索能力，调用将不可用。" : engineList.length === 0 ? "当前没有可用的已启用引擎；如需联网检索，请到 设置 → 搜索配置 开启或配置引擎。" : engineList.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
     return `联网搜索：按当前配置的搜索引擎串行检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据。
 
 入参：

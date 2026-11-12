@@ -9,9 +9,12 @@
  * - create 模式（无 route 参数）：curl 导入粘贴域 + 凭据 + 全量模板表单。
  *
  * 模板表单照 FormField/FormTextInput 骨架，保存前统一走 core 的
- * `validateSearchEngineTemplate`；测试走 store 的 `testEngine` 草稿直测
- * （不落库），失败 descriptor 经 `coreT`（toast 通道同款翻译入口）译后展示。
- * 已知 id 判定查 `readConfig()` 动态清单（预置 ∪ DDG ∪ 自定义实例）。
+ * `validateSearchEngineTemplate`；测试默认走 store 的 `testEngine` 草稿直测
+ * （不落库），例外同 desktop 拍板 1：预置引擎已有覆盖且表单与出厂逐字段相等
+ * （key/baseUrl 草稿也为空）时省略 draft 只传 engineId，测生效配置。失败
+ * descriptor 经 `coreT`（toast 通道同款翻译入口）译后展示。保存/清除/恢复默认
+ * 的回读走静默分支（不闪全屏 loading）。已知 id 判定查 `readConfig()` 动态
+ * 清单（预置 ∪ DDG ∪ 自定义实例）。
  * 凭证安全口径同列表页：只显配置状态标签，不回显 key 明文。
  */
 import React, {useCallback, useEffect, useState} from 'react';
@@ -83,16 +86,24 @@ interface TemplateDraft {
   paramHint: string;
 }
 
+// FIX-25：create 模式预填基线与 desktop EMPTY_FORM 逐字段对齐（POST + JSON 请求
+// 头/体的常见形态 + 结果映射候选默认值），首次保存不再被「url/fieldMap 必填」
+// 校验整单拦下，只需补显示名与请求 URL。
+const PREFILL_HEADERS: Record<string, string> = {
+  'Content-Type': 'application/json',
+  Accept: 'application/json',
+};
+
 const EMPTY_DRAFT: TemplateDraft = {
   name: '',
-  method: 'GET',
+  method: 'POST',
   url: '',
-  headersText: '{}',
-  bodyText: '',
-  resultPath: '',
-  titleFields: '',
-  urlFields: '',
-  snippetFields: '',
+  headersText: JSON.stringify(PREFILL_HEADERS, null, 2),
+  bodyText: JSON.stringify({query: '{{query}}', count: '{{count}}'}, null, 2),
+  resultPath: 'results',
+  titleFields: 'title',
+  urlFields: 'url',
+  snippetFields: 'snippet',
   answerPath: '',
   envelopeCodePath: '',
   envelopeMsgPath: '',
@@ -136,8 +147,10 @@ const AUTH_MODES: ReadonlyArray<{
   },
   {
     mode: 'x-api-key',
-    header: 'X-API-KEY',
-    label: 'X-API-KEY',
+    // FIX-19：与 desktop 注入选项同字面 X-API-Key（旧数据可能是 X-API-KEY 等
+    // 大小写变体，识别 / 清除一律大小写不敏感，见 authHeaderKeyOf）。
+    header: 'X-API-Key',
+    label: 'X-API-Key',
     value: '{{apiKey}}',
   },
   {
@@ -168,14 +181,17 @@ function splitCandidates(text: string): string[] {
   return items.filter(item => item.length > 0);
 }
 
+/** headers 对象形状（readHeaders 出口 / 鉴权头匹配共用）。 */
+type HeaderMap = Record<string, string>;
+
 /** headers 文本 → 对象；非 JSON 对象或存在非字符串值返回 null（由调用方提示）。 */
-function readHeaders(raw: string): Record<string, string> | null {
+function readHeaders(raw: string): HeaderMap | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return null;
     }
-    const headers: Record<string, string> = {};
+    const headers: HeaderMap = {};
     for (const [headerName, headerValue] of Object.entries(parsed)) {
       if (typeof headerValue !== 'string') {
         return null;
@@ -186,6 +202,12 @@ function readHeaders(raw: string): Record<string, string> | null {
   } catch {
     return null;
   }
+}
+
+/** 已知鉴权头在 headers 里的实际键名（大小写不敏感）；不存在返回 undefined。 */
+function authHeaderKeyOf(headers: HeaderMap, key: string): string | undefined {
+  const lowered = key.toLowerCase();
+  return Object.keys(headers).find(name => name.toLowerCase() === lowered);
 }
 
 /** 模板表单字段（预置高级区 / 自定义全量 / create 模式共用同一套输入骨架）。 */
@@ -254,7 +276,8 @@ function TemplateFields({
       <FormField
         label="请求体 Body（POST，JSON）"
         tokens={tokens}
-        hint='占位符写在字符串值里；整数占位用整值 "{{count}}"（执行器替换为数字）'
+        // FIX-26：与 desktop 定稿逐字同步——裸形态易误读为可写整值，强调带引号。
+        hint='占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'
       >
         <FormTextInput
           tokens={tokens}
@@ -423,10 +446,12 @@ export function SearchEngineDetailScreen() {
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   /** baseUrl 草稿（非密钥字段直接回显编辑；空串保存即清除）。 */
   const [baseUrlDraft, setBaseUrlDraft] = useState('');
-  /** 测试搜索关键词与结果（结果只展示条数/前几条样例或失败文案）。 */
+  /** 测试搜索关键词与结果（ok=成功清单，否则失败文案；失败红色展示 FIX-27）。 */
   const [testQuery, setTestQuery] = useState('');
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | undefined>();
+  const [testResult, setTestResult] = useState<
+    {ok: boolean; text: string} | undefined
+  >();
   /** create 模式的 curl 粘贴域。 */
   const [curlText, setCurlText] = useState('');
 
@@ -435,7 +460,8 @@ export function SearchEngineDetailScreen() {
   const isCustom = entry?.isCustom === true;
   let title = '新建自定义引擎';
   if (engineId != null) {
-    title = engineTitle(engineId, entry?.name ?? '搜索引擎');
+    // FIX-23：读模型 name 优先（拍板 5），静态表仅未加载 / 未知 id 兜底。
+    title = engineTitle(engineId, entry?.name);
   }
   let configured = entry != null;
   if (entry?.needsKey === true) {
@@ -451,10 +477,12 @@ export function SearchEngineDetailScreen() {
   if (headersForAuth != null) {
     authMode = 'none';
     for (const option of AUTH_MODES) {
-      if (
-        option.header != null &&
-        headersForAuth[option.header]?.includes('{{apiKey}}') === true
-      ) {
+      // FIX-19：大小写不敏感识别（跨端编辑的 X-API-KEY 旧写法也能命中模式）。
+      if (option.header == null) {
+        continue;
+      }
+      const headerKey = authHeaderKeyOf(headersForAuth, option.header);
+      if (headersForAuth[headerKey ?? '']?.includes('{{apiKey}}') === true) {
         authMode = option.mode;
         break;
       }
@@ -468,52 +496,65 @@ export function SearchEngineDetailScreen() {
   }, [setStackOverride, title]);
   useFocusEffect(syncHeader);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const nextConfig = await searchStore.readConfig();
-      setConfig(nextConfig);
-      const {engines, customEngines} = nextConfig;
-      const engine = engines.find(item => item.id === engineId);
-      if (engineId != null && engine == null) {
-        return;
+  /**
+   * FIX-24：首屏加载置 loading（全屏骨架），写操作回读走 `silent`（不闪屏、
+   * 不抢焦点；失败只静默放弃回读——写操作自身已 toast 过失败原因），照列表屏
+   * `reload({silent})` 先例。
+   */
+  const load = useCallback(
+    async (options?: {silent?: boolean}) => {
+      const silent = options?.silent === true;
+      if (!silent) {
+        setLoading(true);
       }
-      const custom = customEngines.find(def => def.id === engineId);
-      let template: SearchEngineTemplate | undefined;
-      if (engine?.isCustom === true) {
-        template = custom?.template;
-      } else if (engine != null && engineId != null) {
-        template = PRESET_TEMPLATES[engineId];
+      try {
+        const nextConfig = await searchStore.readConfig();
+        setConfig(nextConfig);
+        const {engines, customEngines} = nextConfig;
+        const engine = engines.find(item => item.id === engineId);
+        if (engineId != null && engine == null) {
+          return;
+        }
+        const custom = customEngines.find(def => def.id === engineId);
+        let template: SearchEngineTemplate | undefined;
+        if (engine?.isCustom === true) {
+          template = custom?.template;
+        } else if (engine != null && engineId != null) {
+          template = PRESET_TEMPLATES[engineId];
+        }
+        if (template == null) {
+          setDraft(EMPTY_DRAFT);
+        } else {
+          setDraft({
+            name: template.name,
+            method: template.method,
+            url: template.url,
+            headersText: JSON.stringify(template.headers, null, 2),
+            bodyText: template.bodyTemplate ?? '',
+            resultPath: template.resultPath,
+            titleFields: template.fieldMap.title.join(', '),
+            urlFields: template.fieldMap.url.join(', '),
+            snippetFields: template.fieldMap.snippet.join(', '),
+            answerPath: template.answerPath ?? '',
+            envelopeCodePath: template.envelope?.codePath ?? '',
+            envelopeMsgPath: template.envelope?.msgPath ?? '',
+            envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
+            paramHint: template.paramHint,
+          });
+        }
+        setBaseUrlDraft(engine?.baseUrl ?? '');
+        setApiKeyDraft('');
+        setTestResult(undefined);
+      } catch (cause) {
+        if (!silent) {
+          showToast(toastMessage('加载搜索配置失败', cause));
+        }
+      } finally {
+        setLoading(false);
       }
-      if (template == null) {
-        setDraft(EMPTY_DRAFT);
-      } else {
-        setDraft({
-          name: template.name,
-          method: template.method,
-          url: template.url,
-          headersText: JSON.stringify(template.headers, null, 2),
-          bodyText: template.bodyTemplate ?? '',
-          resultPath: template.resultPath,
-          titleFields: template.fieldMap.title.join(', '),
-          urlFields: template.fieldMap.url.join(', '),
-          snippetFields: template.fieldMap.snippet.join(', '),
-          answerPath: template.answerPath ?? '',
-          envelopeCodePath: template.envelope?.codePath ?? '',
-          envelopeMsgPath: template.envelope?.msgPath ?? '',
-          envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
-          paramHint: template.paramHint,
-        });
-      }
-      setBaseUrlDraft(engine?.baseUrl ?? '');
-      setApiKeyDraft('');
-      setTestResult(undefined);
-    } catch (cause) {
-      showToast(toastMessage('加载搜索配置失败', cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [engineId, searchStore, showToast]);
+    },
+    [engineId, searchStore, showToast],
+  );
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -654,11 +695,12 @@ export function SearchEngineDetailScreen() {
         }
       }
       showToast('配置已保存');
-      await load();
+      await load({silent: true});
     } catch (cause) {
       showToast(toastMessage('保存失败', cause));
-      // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）。
-      await load();
+      // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）；静默回读
+      // 不闪全屏 loading（FIX-24），失败时保存失败的 toast 已在，不再叠加。
+      await load({silent: true});
     } finally {
       setWriteOp(null);
     }
@@ -689,8 +731,36 @@ export function SearchEngineDetailScreen() {
         ...(key.length > 0 ? {apiKey: key} : {}),
         ...(url.length > 0 ? {baseUrl: url} : {}),
       };
-      const enginePart = engineId == null ? {} : {engineId};
-      const req = {...enginePart, draft: testDraft, query};
+      // 拍板 1（FIX-1）：预置引擎已有覆盖且表单与出厂模板逐字段相等（key/baseUrl
+      // 草稿也为空）→ 省略 draft 只传 engineId，core 走「覆盖合并 + SKSP 现读」
+      // 测生效配置；表单有改动或凭据草稿非空仍草稿直测。判定与 desktop 同规则。
+      const preset = engineId != null ? PRESET_TEMPLATES[engineId] : undefined;
+      // 表单模板与出厂逐字段 JSON 等价（undefined 字段两侧同为 undefined）；
+      // 判定链拆成单行中间变量（save 的差异提交同款比较口径）。
+      let sameAs = false;
+      if (preset != null) {
+        sameAs = true;
+        for (const field of TEMPLATE_FIELDS) {
+          if (
+            JSON.stringify(preset[field]) !== JSON.stringify(template[field])
+          ) {
+            sameAs = false;
+            break;
+          }
+        }
+      }
+      const overrides = config?.presetOverrides;
+      const overrideOn = engineId != null && overrides?.[engineId] === true;
+      const isPreset = entry != null && entry.isCustom !== true;
+      const noKey = key.length === 0;
+      const noUrlDraft = !draftNeedsBaseUrl || url.length === 0;
+      const noDrafts = noKey && noUrlDraft;
+      const testEffective = isPreset && overrideOn && sameAs && noDrafts;
+      const req = {
+        ...(engineId == null ? {} : {engineId}),
+        ...(testEffective ? {} : {draft: testDraft}),
+        query,
+      };
       const outcome = await searchStore.testEngine(req);
       if (outcome.ok) {
         const top = outcome.value.sample.slice(0, 3);
@@ -698,9 +768,12 @@ export function SearchEngineDetailScreen() {
           (item, index) => `${index + 1}. ${item.title} — ${item.url}`,
         );
         const lines = [`返回 ${outcome.value.resultCount} 条结果`, ...samples];
-        setTestResult(lines.join('\n'));
+        setTestResult({ok: true, text: lines.join('\n')});
       } else {
-        setTestResult(`测试失败：${coreT(outcome.error.message)}`);
+        setTestResult({
+          ok: false,
+          text: `测试失败：${coreT(outcome.error.message)}`,
+        });
       }
     } catch (cause) {
       showToast(toastMessage('测试失败', cause));
@@ -817,8 +890,14 @@ export function SearchEngineDetailScreen() {
               return;
             }
             for (const option of AUTH_MODES) {
-              if (option.header != null) {
-                delete headers[option.header];
+              // FIX-19：切换注入方式先按大小写不敏感清掉全部已知鉴权头旧键
+              // （X-API-KEY 等历史变体一并清除），再写入选中头，避免双头残留。
+              if (option.header == null) {
+                continue;
+              }
+              const existing = authHeaderKeyOf(headers, option.header);
+              if (existing != null) {
+                delete headers[existing];
               }
             }
             const chosen = AUTH_MODES.find(item => item.mode === mode);
@@ -866,8 +945,14 @@ export function SearchEngineDetailScreen() {
         disabled={writeOp != null || testing}
       />
       {testResult == null ? null : (
-        <Text style={[styles.testResult, {color: tokens.textSecondary}]}>
-          {testResult}
+        <Text
+          style={[
+            styles.testResult,
+            // FIX-27：失败文案用错误红（列表屏 error 同款 token），与成功说明区分。
+            {color: testResult.ok ? tokens.textSecondary : tokens.danger},
+          ]}
+        >
+          {testResult.text}
         </Text>
       )}
     </FormSectionCard>
@@ -961,7 +1046,7 @@ export function SearchEngineDetailScreen() {
               void runWrite('clear', async id => {
                 await searchStore.clearEngineKey(id);
                 showToast(`已清除 ${title} API Key`);
-                await load();
+                await load({silent: true});
               });
             }}
             disabled={writeOp != null || testing}
@@ -1007,7 +1092,7 @@ export function SearchEngineDetailScreen() {
                 void runWrite('reset', async id => {
                   await searchStore.resetPresetOverride(id);
                   showToast('已恢复默认模板');
-                  await load();
+                  await load({silent: true});
                 });
               }}
               disabled={writeOp != null || testing}

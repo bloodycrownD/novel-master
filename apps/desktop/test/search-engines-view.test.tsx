@@ -11,6 +11,11 @@
  *   测试按钮在途互斥（第二次点击不重复发 IPC）与结果展示；create 模式的
  *   curl 导入预填（识别密钥）与解析失败整体拒绝（toast，表单不变）。
  *
+ * CR 第 1 轮回归锁（cr-fix-spec 拍板 1/7）：预置已有覆盖且表单未改时测试请求
+ * 不带 draft（表单改动仍带 draft）；预置零改动保存不发写 IPC 且 toast「无改动」、
+ * needsKey 无 key 保存拦截；列表帮助弹窗五段与 mobile 真源同步（含密钥安全、
+ * FIX-26 count 措辞）；测试失败错误经 SettingsStatus 错误红展示（FIX-27）。
+ *
  * 行为范式同 fetch-models-modal.test.tsx：react-alias-hook 统一 react 副本，
  * react-test-renderer 真渲组件，IPC 拦在 window.novelMasterDesktop.invoke；
  * ContextMenu 由 search-engines-ui-hook 换成去 portal 替身（node 无 DOM）。
@@ -491,6 +496,32 @@ describe("T-U1 搜索配置列表页", () => {
     assert.deepEqual(nav.pushes, ["searchEngineDetail"]);
     assert.equal(nav.state.editingEngineId, NEW_ENGINE_SENTINEL);
   });
+
+  it("帮助弹窗五段与 mobile 真源同步（含密钥安全与 FIX-26 count 措辞）", async () => {
+    const { renderer } = await mountWith(makeConfig(), (nav) => (
+      <SearchEnginesView nav={nav.handle} />
+    ));
+    const helpButton = renderer.root
+      .findAll(
+        (node) =>
+          node.type === "button" && node.props["aria-label"] === "使用说明",
+      )
+      .at(0);
+    assert.ok(helpButton != null, "缺少帮助按钮");
+    await act(async () => {
+      invokeProp(helpButton as TestInstance, "onClick");
+    });
+    const modal = findByClass(renderer.root, "text-prompt-modal");
+    assert.ok(modal != null, "帮助弹窗未打开");
+    const modalText = textOf(modal as TestInstance);
+    for (const section of ["启用开关", "引擎优先级", "模板与自定义引擎", "测试消耗配额", "密钥安全"]) {
+      assert.ok(modalText.includes(section), `帮助弹窗缺少「${section}」段`);
+    }
+    assert.ok(
+      modalText.includes('整数字段写 "{{count}}"（带引号）'),
+      `count 措辞应为 FIX-26 定稿：${modalText}`,
+    );
+  });
 });
 
 describe("T-U2 搜索引擎详情页", () => {
@@ -580,6 +611,60 @@ describe("T-U2 搜索引擎详情页", () => {
     });
     // 模板未改动 → 不写覆盖
     assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE).length, 0);
+  });
+
+  it("拍板 7：预置零改动保存不发写 IPC 且 toast「无改动」", async () => {
+    const toasts: string[] = [];
+    const unsubscribe = subscribeToast((state) => {
+      if (state != null) toasts.push(state.message);
+    });
+    try {
+      // bocha 已存 key（hasKey=true，不触发拦截）；表单未改 + key 草稿空 → 零写操作
+      const { renderer, calls } = await mountWith(
+        makeConfig(),
+        (nav) => <SearchEngineDetailView nav={nav.handle} />,
+        { editingEngineId: "bocha" },
+      );
+      const save = findButtonByText(renderer.root, "保存");
+      assert.ok(save != null, "缺少保存按钮");
+      await act(async () => {
+        invokeProp(save as TestInstance, "onClick");
+      });
+      await settle();
+      const writes = calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG);
+      assert.equal(writes.length, 0, `零改动不应发写 IPC：${JSON.stringify(writes)}`);
+      assert.ok(toasts.includes("无改动"), `应 toast「无改动」：${toasts.join(" / ")}`);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("拍板 7：预置需 key 且无已存 key、key 草稿空时保存拦截", async () => {
+    // bocha needsKey 且未存 key（engines 只读，重建首行变体而非原地改）
+    const base = makeConfig();
+    const config: SearchConfigDto = {
+      ...base,
+      engines: base.engines.map((engine, index) =>
+        index === 0 ? { ...engine, hasKey: false } : engine,
+      ),
+    };
+    const { renderer, calls } = await mountWith(
+      config,
+      (nav) => <SearchEngineDetailView nav={nav.handle} />,
+      { editingEngineId: "bocha" },
+    );
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY).length, 0);
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE).length, 0);
+    const status = findByClass(renderer.root, "settings-status");
+    assert.ok(status != null, "缺少拦截提示");
+    const message = textOf(status as TestInstance);
+    assert.ok(message.includes("请输入 API Key"), `拦截文案应与 mobile 一致：${message}`);
   });
 
   it("自定义引擎：headers JSON 非法时拒绝保存并页内展示原因", async () => {
@@ -754,6 +839,115 @@ describe("T-U2 搜索引擎详情页", () => {
     assert.equal(payload.engineId, CUSTOM_ENGINE.id);
     assert.equal(payload.query, "人工智能");
     assert.equal(payload.draft?.template?.url, CUSTOM_ENGINE.template.url);
+  });
+
+  it("拍板 1：预置已有覆盖且表单未改时测试只传 engineId（不带 draft）", async () => {
+    // bocha 有覆盖（presetOverrides.bocha = true），表单加载出厂模板原样 →
+    // 测试应交给 core 走覆盖合并 + SKSP 现读，而非测出厂模板
+    const { renderer, calls } = await mountWith(
+      makeConfig(),
+      (nav) => <SearchEngineDetailView nav={nav.handle} />,
+      { editingEngineId: "bocha" },
+    );
+    const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
+    assert.ok(queryInput != null, "缺少测试查询输入");
+    await act(async () => {
+      invokeProp(queryInput as TestInstance, "onChange", {
+        target: { value: "人工智能" },
+      });
+    });
+    const testButton = findButtonByText(renderer.root, "测试");
+    assert.ok(testButton != null, "缺少测试按钮");
+    await act(async () => {
+      invokeProp(testButton as TestInstance, "onClick");
+    });
+    await settle();
+    const payloads = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE);
+    assert.equal(payloads.length, 1);
+    const payload = payloads[0]?.payload as { engineId?: string; draft?: unknown };
+    assert.equal(payload.engineId, "bocha");
+    assert.equal(payload.draft, undefined, `表单未改不应带 draft：${JSON.stringify(payload)}`);
+  });
+
+  it("拍板 1：预置表单有改动时测试仍带 draft（草稿直测不变）", async () => {
+    const { renderer, calls } = await mountWith(
+      makeConfig(),
+      (nav) => <SearchEngineDetailView nav={nav.handle} />,
+      { editingEngineId: "bocha" },
+    );
+    const toggle = findButtonByText(renderer.root, "高级编辑");
+    assert.ok(toggle != null, "缺少高级编辑入口");
+    await act(async () => {
+      invokeProp(toggle as TestInstance, "onClick");
+    });
+    const urlInput = findByPlaceholder(
+      renderer.root,
+      "https://api.example.com/search?q={{query}}",
+    );
+    assert.ok(urlInput != null, "缺少 URL 表单");
+    await act(async () => {
+      invokeProp(urlInput as TestInstance, "onChange", {
+        target: { value: "https://api.bochaai.com/v1/web-search-v2" },
+      });
+    });
+    const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
+    await act(async () => {
+      invokeProp(queryInput as TestInstance, "onChange", {
+        target: { value: "人工智能" },
+      });
+    });
+    const testButton = findButtonByText(renderer.root, "测试");
+    await act(async () => {
+      invokeProp(testButton as TestInstance, "onClick");
+    });
+    await settle();
+    const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]
+      ?.payload as {
+      engineId?: string;
+      draft?: { template?: { url?: string } };
+    };
+    assert.equal(payload.engineId, "bocha");
+    assert.equal(
+      payload.draft?.template?.url,
+      "https://api.bochaai.com/v1/web-search-v2",
+      `表单有改动应带 draft：${JSON.stringify(payload)}`,
+    );
+  });
+
+  it("测试失败：错误经 SettingsStatus 错误红展示（FIX-27）", async () => {
+    const { renderer } = await mountWith(
+      makeConfig(),
+      (nav) => <SearchEngineDetailView nav={nav.handle} />,
+      {
+        editingEngineId: CUSTOM_ENGINE.id,
+        testResponse: () =>
+          Promise.resolve({
+            ok: false,
+            error: { code: "TOOL_SEARCH_ENGINE_FAILED", message: "引擎不可用（测试桩）" },
+          }),
+      },
+    );
+    const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
+    await act(async () => {
+      invokeProp(queryInput as TestInstance, "onChange", {
+        target: { value: "人工智能" },
+      });
+    });
+    const testButton = findButtonByText(renderer.root, "测试");
+    await act(async () => {
+      invokeProp(testButton as TestInstance, "onClick");
+    });
+    await settle();
+    const status = findByClass(renderer.root, "settings-status");
+    assert.ok(status != null, "缺少错误展示");
+    assert.ok(textOf(status as TestInstance).includes("引擎不可用"));
+    const style = (status as TestInstance).props.style as
+      | { color?: string }
+      | undefined;
+    assert.ok(
+      typeof style?.color === "string" && style.color.includes("--danger"),
+      `测试失败错误应为错误红（var(--danger)）：${String(style?.color)}`,
+    );
   });
 
   it("create 模式：curl 导入预填（识别密钥），解析失败整体拒绝且表单不变", async () => {

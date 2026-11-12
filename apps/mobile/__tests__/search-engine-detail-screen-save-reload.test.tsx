@@ -1,17 +1,21 @@
 /**
- * SearchEngineDetailScreen 保存语义（web-search-curl T-U3/T-U4，动态清单版）：
- * 详情页经 `getSearchConfigStore(runtime)` 直接消费 core store 方法，本套件
- * 锁 key 分支的既有语义（与 desktop 同口径）：
+ * SearchEngineDetailScreen 保存/测试语义（web-search-curl T-U3/T-U4，动态清单版）：
+ * 详情页经 `getSearchConfigStore(runtime)` 直接消费 core store 方法，本套件锁：
  *
- * - 标题 override 用配置读模型里的引擎名；
+ * - 标题 override 用配置读模型里的引擎名（FIX-23：读模型 name 优先）；
  * - 保存失败 toast 后立即回读（catch 内补 `await load()`），状态标签反映已生效
  *   configured；
  * - 保存成功 toast 且标签同步 set；
- * - 需 key 的预置引擎留空保存：拦截提示，不触碰密钥库、不回读。
+ * - 需 key 的预置引擎留空保存：拦截提示，不触碰密钥库、不回读；
+ * - create 保存发 createCustomEngine（key / baseUrl 按草稿拆分传参，FIX-25 预填
+ *   基线 + 差异提交语义）；
+ * - 测试请求分流（FIX-1 拍板 1 回归锁）：预置有覆盖且表单未改（key/baseUrl 草稿
+ *   空）→ 只传 engineId 不带 draft（core 合并覆盖 + SKSP 现读）；表单改动 /
+ *   key 草稿非空 / 无覆盖 → 带 draft 草稿直测。
  *
  * 照 search-engines-screen-reorder.test.tsx 的 TestRenderer 直测风格：输入框 /
- * 保存按钮 / 状态标签 mock 成带标记的可交互节点，树文本断言；store mock 扩到
- * core `SearchConfigStore` 全方法（本套件只驱动 key 分支）。
+ * 保存 / 测试按钮 / 状态标签 mock 成带标记的可交互节点，树文本与调用参数断言；
+ * store mock 扩到 core `SearchConfigStore` 全方法。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -39,7 +43,9 @@ const mockShowToast = jest.fn();
 const mockGoBack = jest.fn();
 const mockSetStackOverride = jest.fn();
 
-// 路由参数：bocha（需 key 的预置引擎表单分支）。
+// 路由参数可变：默认 bocha（需 key 的预置引擎），create 用例置 undefined。
+let mockRouteParams: {engineId?: string} | undefined = {engineId: 'bocha'};
+
 jest.mock('@react-navigation/native', () => {
   const mockReact = require('react');
   return {
@@ -47,7 +53,7 @@ jest.mock('@react-navigation/native', () => {
     useFocusEffect: (cb: () => void | (() => void)) => {
       mockReact.useEffect(cb, [cb]);
     },
-    useRoute: () => ({params: {engineId: 'bocha'}}),
+    useRoute: () => ({params: mockRouteParams}),
     useNavigation: () => ({goBack: mockGoBack}),
   };
 });
@@ -130,13 +136,23 @@ jest.mock('@/components/form/StickyFormFooter', () => {
   };
 });
 
-jest.mock('@/components/ui/Buttons', () => ({
-  PrimaryButton: () => null,
-  SecondaryButton: () => null,
-}));
+// 次按钮（测试搜索 / curl 解析 / 清除密钥等）：可点节点，testLabel 标记定位。
+jest.mock('@/components/ui/Buttons', () => {
+  const mockReact = require('react');
+  const {Pressable, Text} = require('react-native');
+  return {
+    PrimaryButton: () => null,
+    SecondaryButton: (props: {onPress?: () => void; label: string}) =>
+      mockReact.createElement(
+        Pressable,
+        {onPress: props.onPress, testLabel: props.label},
+        mockReact.createElement(Text, null, props.label),
+      ),
+  };
+});
 
-// 输入框：onChangeText 挂到 props 上供测试直接触发；key 输入
-// （secureTextEntry）标记可辨。
+// 输入框：onChangeText / placeholder / secureTextEntry 挂 props 供测试定位与
+// 直接触发（key 输入 secureTextEntry 可辨，其余按 placeholder 精确匹配）。
 jest.mock('@/components/form/FormTextInput', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
@@ -144,16 +160,28 @@ jest.mock('@/components/form/FormTextInput', () => {
     FormTextInput: (props: {
       onChangeText: (text: string) => void;
       secureTextEntry?: boolean;
-    }) => mockReact.createElement(Text, {onChangeText: props.onChangeText}, ''),
+      placeholder?: string;
+    }) =>
+      mockReact.createElement(
+        Text,
+        {
+          onChangeText: props.onChangeText,
+          secureTextEntry: props.secureTextEntry,
+          placeholder: props.placeholder,
+        },
+        '',
+      ),
   };
 });
 
 // searchConfig store（core `SearchConfigStore` 形状）：readConfig 的 bocha
-// hasKey 随 saveEngineKey 调用次数动态变化，模拟「key 已落库生效」状态；
-// 其余写方法只需存在（本套件不驱动）。
+// hasKey 随 saveEngineKey 调用次数动态变化，模拟「key 已落库生效」状态。
 const mockReadConfig = jest.fn();
 const mockSaveEngineKey = jest.fn();
 const mockClearEngineKey = jest.fn();
+const mockCreateCustomEngine = jest.fn();
+const mockSetEngineBaseUrl = jest.fn();
+const mockTestEngine = jest.fn();
 
 const mockRuntime = {
   searchConfig: {
@@ -162,13 +190,13 @@ const mockRuntime = {
     clearEngineKey: (...args: unknown[]) => mockClearEngineKey(...args),
     setEnabled: jest.fn(),
     setEngineOrder: jest.fn(),
-    setEngineBaseUrl: jest.fn(),
-    createCustomEngine: jest.fn(),
+    setEngineBaseUrl: (...args: unknown[]) => mockSetEngineBaseUrl(...args),
+    createCustomEngine: (...args: unknown[]) => mockCreateCustomEngine(...args),
     updateCustomEngine: jest.fn(),
     deleteCustomEngine: jest.fn(),
     updatePresetOverride: jest.fn(),
     resetPresetOverride: jest.fn(),
-    testEngine: jest.fn(),
+    testEngine: (...args: unknown[]) => mockTestEngine(...args),
   },
 };
 
@@ -181,9 +209,12 @@ import {SearchEngineDetailScreen} from '@/screens/stack/SearchEngineDetailScreen
 // 自定义 props 复制到内部嵌套节点，按 props findAll 会重复匹配）。
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {SecondaryButton} from '@/components/ui/Buttons';
 
-/** 动态读模型 fixture：bocha 的 hasKey 跟随 saveEngineKey 调用次数。 */
-function makeConfig(): SearchConfigPublic {
+/** 动态读模型 fixture：bocha 的 hasKey 跟随 saveEngineKey 调用次数；patch 可覆写 presetOverrides 等顶层字段。 */
+function makeConfig(
+  patch: Partial<SearchConfigPublic> = {},
+): SearchConfigPublic {
   return {
     engines: [
       {
@@ -200,6 +231,7 @@ function makeConfig(): SearchConfigPublic {
     customEngines: [],
     presetOverrides: {},
     canRun: [],
+    ...patch,
   };
 }
 
@@ -220,7 +252,7 @@ function treeText(
   return out;
 }
 
-/** 取 key 输入框（bocha 详情表单仅一个 secureTextEntry 输入框）。 */
+/** 取 key 输入框（secureTextEntry 标记；create/预置表单各只有密钥框一个）。 */
 function keyInput(root: TestRenderer.ReactTestInstance) {
   const nodes = root
     .findAllByType(FormTextInput)
@@ -229,8 +261,29 @@ function keyInput(root: TestRenderer.ReactTestInstance) {
   return nodes[0];
 }
 
+/** 按 placeholder 精确匹配定位输入框（FormTextInput mock 把 placeholder 挂 props）。 */
+function inputByPlaceholder(
+  root: TestRenderer.ReactTestInstance,
+  placeholder: string,
+) {
+  const nodes = root
+    .findAllByType(FormTextInput)
+    .filter(n => n.props.placeholder === placeholder);
+  expect(nodes.length).toBe(1);
+  return nodes[0];
+}
+
 function saveFooter(root: TestRenderer.ReactTestInstance) {
   return root.findByType(StickyFormFooter);
+}
+
+/** 测试搜索按钮（SecondaryButton 复合节点的 label prop 定位）。 */
+function testButton(root: TestRenderer.ReactTestInstance) {
+  const nodes = root
+    .findAllByType(SecondaryButton)
+    .filter(n => n.props.label === '测试搜索');
+  expect(nodes.length).toBe(1);
+  return nodes[0];
 }
 
 async function renderScreen() {
@@ -252,31 +305,74 @@ async function typeKey(root: TestRenderer.ReactTestInstance, text: string) {
   });
 }
 
+async function typeInto(
+  node: TestRenderer.ReactTestInstance,
+  text: string,
+): Promise<void> {
+  await act(async () => {
+    node.props.onChangeText(text);
+  });
+}
+
+/** 展开预置引擎的高级模板编辑折叠区（真实 Pressable，沿 Text 向上找 onPress）。 */
+async function openAdvanced(root: TestRenderer.ReactTestInstance) {
+  const label = root.findAll(node => node.props.children === '展开模板编辑')[0];
+  expect(label).toBeDefined();
+  let node = label!.parent;
+  while (node != null && node.props.onPress == null) {
+    node = node.parent;
+  }
+  expect(node).toBeDefined();
+  await act(async () => {
+    node!.props.onPress();
+  });
+}
+
+/** flush 整条 async 链（写操作 → toast/回读/导航的多级 await）。 */
+async function flush() {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 /** 点保存并 flush 整条 async 链（含 catch 内回读的 load）。 */
 async function tapSave(root: TestRenderer.ReactTestInstance) {
   await act(async () => {
     saveFooter(root).props.onPress();
     // saveEngineKey →（catch）load 内 readConfig 的 promise 链逐级
     // await，多轮 microtask 全部落定。
-    for (let i = 0; i < 10; i++) {
-      await Promise.resolve();
-    }
+    await flush();
+  });
+}
+
+/** 点「测试搜索」并 flush 草稿直测的 async 链。 */
+async function tapTest(root: TestRenderer.ReactTestInstance) {
+  await act(async () => {
+    testButton(root).props.onPress();
+    await flush();
   });
 }
 
 describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单）', () => {
   beforeEach(() => {
+    mockRouteParams = {engineId: 'bocha'};
     mockShowToast.mockReset();
     mockGoBack.mockReset();
     mockSetStackOverride.mockReset();
     mockSaveEngineKey.mockReset().mockResolvedValue(undefined);
     mockClearEngineKey.mockReset().mockResolvedValue(undefined);
+    mockCreateCustomEngine.mockReset().mockResolvedValue(undefined);
+    mockSetEngineBaseUrl.mockReset().mockResolvedValue(undefined);
+    mockTestEngine.mockReset().mockResolvedValue({
+      ok: true,
+      value: {resultCount: 2, sample: [{title: 'T', url: 'https://t'}]},
+    });
     mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
   });
 
-  it('详情页标题 override 用配置读模型里的引擎名', async () => {
+  it('详情页标题 override 用配置读模型里的引擎名（FIX-23：name 优先）', async () => {
     await renderScreen();
-    expect(mockSetStackOverride).toHaveBeenCalledWith({title: 'Bocha'});
+    expect(mockSetStackOverride).toHaveBeenCalledWith({title: '博查搜索'});
   });
 
   it('保存失败后回读，toast 失败且 readConfig 被再次调用', async () => {
@@ -316,5 +412,156 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     );
     // 拦截早退：无成功链路的回读（readConfig 调用数不变）。
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+  });
+
+  describe('create 模式（FIX-25 预填 + 差异拆分提交）', () => {
+    beforeEach(() => {
+      mockRouteParams = undefined;
+    });
+
+    it('create 保存发 createCustomEngine：key 单独拆分、无 baseUrl 时该键缺省', async () => {
+      const {renderer} = await renderScreen();
+
+      // FIX-25：预填基线（POST + headers/body/fieldMap 默认），只补显示名/URL/key。
+      await typeInto(
+        inputByPlaceholder(renderer.root, '如 我的搜索'),
+        '我的搜索',
+      );
+      await typeInto(
+        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
+        'https://api.example.com/search',
+      );
+      await typeKey(renderer.root, 'sk-create-1');
+      await tapSave(renderer.root);
+
+      expect(mockCreateCustomEngine).toHaveBeenCalledTimes(1);
+      const payload = mockCreateCustomEngine.mock.calls[0]![0] as {
+        def: {id: string; name: string; template: Record<string, unknown>};
+        apiKey?: string;
+        baseUrl?: string;
+      };
+      expect(payload.def.id).toMatch(/^custom:[0-9a-z]{8}$/);
+      expect(payload.def.name).toBe('我的搜索');
+      // 预填基线进了模板（POST + JSON 头 + body 示例 + fieldMap 候选默认）。
+      expect(payload.def.template).toMatchObject({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        resultPath: 'results',
+        fieldMap: {title: ['title'], url: ['url'], snippet: ['snippet']},
+      });
+      // key / baseUrl 拆分：key 草稿进 apiKey；模板未引用 {{baseUrl}} 时无 baseUrl 键。
+      expect(payload.apiKey).toBe('sk-create-1');
+      expect('baseUrl' in payload).toBe(false);
+      expect(mockShowToast).toHaveBeenCalledWith('已创建自定义引擎');
+      expect(mockGoBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('create 保存 baseUrl 拆分：模板引用 {{baseUrl}} 时实例地址单独传参', async () => {
+      const {renderer} = await renderScreen();
+      await typeInto(
+        inputByPlaceholder(renderer.root, '如 我的搜索'),
+        '我的搜索',
+      );
+      await typeInto(
+        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
+        '{{baseUrl}}/search?q={{query}}',
+      );
+      await typeInto(
+        inputByPlaceholder(renderer.root, 'https://search.example.com'),
+        'https://search.example.com',
+      );
+      await tapSave(renderer.root);
+
+      expect(mockCreateCustomEngine).toHaveBeenCalledTimes(1);
+      const payload = mockCreateCustomEngine.mock.calls[0]![0] as {
+        def: {template: {url: string}};
+        apiKey?: string;
+        baseUrl?: string;
+      };
+      expect(payload.def.template.url).toBe('{{baseUrl}}/search?q={{query}}');
+      expect(payload.baseUrl).toBe('https://search.example.com');
+      expect('apiKey' in payload).toBe(false);
+    });
+  });
+
+  describe('测试请求分流（FIX-1 拍板 1 回归锁）', () => {
+    async function typeAndTest(renderer: TestRenderer.ReactTestRenderer) {
+      await typeInto(
+        inputByPlaceholder(renderer.root, '如 人工智能'),
+        '人工智能',
+      );
+      await tapTest(renderer.root);
+    }
+
+    it('预置有覆盖且表单未改：测试请求只传 engineId，不带 draft', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({presetOverrides: {bocha: true}}),
+      );
+      const {renderer} = await renderScreen();
+      await typeAndTest(renderer);
+
+      expect(mockTestEngine).toHaveBeenCalledTimes(1);
+      // toEqual 严格形状：恰为 engineId + query，draft 键必须缺省。
+      expect(mockTestEngine).toHaveBeenCalledWith({
+        engineId: 'bocha',
+        query: '人工智能',
+      });
+    });
+
+    it('预置有覆盖但表单改动：测试请求带 draft（草稿直测语义不变）', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({presetOverrides: {bocha: true}}),
+      );
+      const {renderer} = await renderScreen();
+      await openAdvanced(renderer.root);
+      await typeInto(
+        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
+        'https://api.example.com/v2',
+      );
+      await typeAndTest(renderer);
+
+      expect(mockTestEngine).toHaveBeenCalledTimes(1);
+      const req = mockTestEngine.mock.calls[0]![0] as {
+        engineId: string;
+        draft?: {template: {url: string}};
+        query: string;
+      };
+      expect(req.engineId).toBe('bocha');
+      expect(req.query).toBe('人工智能');
+      expect(req.draft).toBeDefined();
+      expect(req.draft!.template.url).toBe('https://api.example.com/v2');
+    });
+
+    it('预置有覆盖但 key 草稿非空：测试请求带 draft（凭据草稿直测）', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({presetOverrides: {bocha: true}}),
+      );
+      const {renderer} = await renderScreen();
+      await typeKey(renderer.root, 'sk-draft-1');
+      await typeAndTest(renderer);
+
+      const req = mockTestEngine.mock.calls[0]![0] as {
+        draft?: {apiKey?: string};
+      };
+      expect(req.draft).toBeDefined();
+      expect(req.draft!.apiKey).toBe('sk-draft-1');
+    });
+
+    it('预置无覆盖：即使表单与出厂相等也带 draft（覆盖开关是省略前提）', async () => {
+      const {renderer} = await renderScreen();
+      await typeAndTest(renderer);
+
+      const req = mockTestEngine.mock.calls[0]![0] as {
+        engineId: string;
+        draft?: {template: {name: string}};
+      };
+      expect(req.engineId).toBe('bocha');
+      expect(req.draft).toBeDefined();
+      // 出厂模板经表单往返无损（草稿直测的模板与出厂逐字段一致）。
+      expect(req.draft!.template.name).toBe('博查搜索');
+    });
   });
 });

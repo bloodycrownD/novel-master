@@ -248,12 +248,26 @@ describe("search-config：key 通道（保存 / 清除 / 空串拒绝）", () =>
     assert.equal(config.engines.find((engine) => engine.id === "bocha")!.hasKey, false);
   });
 
-  it("saveEngineKey 空串拒绝；自定义实例 id 同样走统一 key 通道", async () => {
+  it("saveEngineKey 空串拒绝；自定义实例建后同走统一 key 通道", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await assert.rejects(store.saveEngineKey("bocha", "  "), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_api_key_required"));
+    await store.createCustomEngine({ def: { id: "custom:abc12345", name: "我的引擎", template: validTemplate(), createdAt: "2026-01-01T00:00:00.000Z" } });
     await store.saveEngineKey("custom:abc12345", "sk-custom");
     assert.equal(deps.secretStore.map.get("search/custom:abc12345/apiKey"), "sk-custom");
+  });
+
+  it("saveEngineKey / clearEngineKey 未知 engineId 拒绝（dangling SKSP ref 防护，点名 FIX-12）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await assert.rejects(store.saveEngineKey("google", "sk-plain-google"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
+    await assert.rejects(store.clearEngineKey("google"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
+    await assert.rejects(store.clearEngineKey("custom:nope"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "custom:nope" }));
+    assert.equal(deps.secretStore.map.size, 0, "未知 id 不得落 SKSP ref");
+    // 已知 id 行为不变。
+    await store.saveEngineKey("bocha", "sk-bocha");
+    await store.clearEngineKey("bocha");
+    assert.equal(deps.secretStore.map.has("search/bocha/apiKey"), false);
   });
 });
 
@@ -302,6 +316,23 @@ describe("search-config：T-C2 容错归一与放宽后的 setEngineOrder", () =
     // 合法全量序列存取回读（DDG 无队尾特权）。
     await store.setEngineOrder(["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]);
     assert.deepEqual((await readSearchConfig(deps)).engines.map((engine) => engine.id), ["duckduckgo", "searxng", "tavily", "brave", "bocha", "zhipu", "deepseek"]);
+  });
+
+  it("engineBaseUrls 读路径逐值 normalize：非法值丢弃，canRun 与串行链同源（点名 FIX-13）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    // 绕过保存校验直写脏数据（模拟旧版本 / 外部落库）；bocha 槽位验证合法值归一，与模板是否引用无关。
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_BASE_URLS, JSON.stringify({ searxng: "not a url", bocha: "https://dirty.example.com///" }));
+    await store.setEnabled("searxng", true);
+
+    const config = await readSearchConfig(deps);
+    assert.equal(config.engines.find((engine) => engine.id === "searxng")!.baseUrl, undefined, "非法 baseUrl 读路径丢弃");
+    assert.equal(config.engines.find((engine) => engine.id === "bocha")!.baseUrl, "https://dirty.example.com", "合法值归一保留");
+    assert.equal(config.canRun.includes("searxng"), false, "baseUrl 非法的引擎不得判可跑");
+
+    const chainIds = (await resolveEngineChain(deps)).map((entry) => entry.engine);
+    assert.equal(chainIds.includes("searxng"), false, "串行链同样不入（与 canRun 同源）");
+    assert.deepEqual(chainIds, config.canRun, "canRun 与串行链逐项一致");
   });
 });
 
@@ -363,6 +394,21 @@ describe("search-config：T-C3 resolveEngineChain 双过滤 + 显式三分支", 
 
     // ③ 不在动态全集 → AppError + i18n key（params 带引擎 id）。
     await assert.rejects(resolveEngineChain(deps, "google"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "google" }));
+  });
+
+  it("显式 engine 分支：pinned 引擎只 resolveOne 一次（enabled 且未就绪不在回落循环里重复读 SKSP，点名 FIX-14）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.setEnabled("duckduckgo", false);
+    await store.setEnabled("bocha", true); // enabled 但无 key → pinned 试探失败，进入截尾回落
+
+    assert.deepEqual(await resolveEngineChain(deps, "bocha"), [], "截尾后无其他可用引擎 → 空链");
+    assert.deepEqual(deps.secretStore.getCalls, ["search/bocha/apiKey"], "pinned 已试探过的引擎恰一次 SKSP 读，回落循环跳过");
+
+    // pinned 就绪路径同样只读一次。
+    await store.saveEngineKey("bocha", "sk-bocha");
+    assert.deepEqual((await resolveEngineChain(deps, "bocha")).map((entry) => entry.engine), ["bocha"]);
+    assert.deepEqual(deps.secretStore.getCalls, ["search/bocha/apiKey", "search/bocha/apiKey"], "两次显式解析各恰一次 SKSP 读");
   });
 });
 
@@ -497,6 +543,37 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     await store.setEngineBaseUrl("searxng", "");
     assert.equal(readKkvJson(deps, KEY_ENGINE_BASE_URLS), undefined);
   });
+
+  it("createCustomEngine 错误分支：id 形态 / 重复 id / name 空串全拒绝且零写入（点名 FIX-16）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    const defWith = (id: string): { id: string; name: string; template: SearchEngineTemplate; createdAt: string } => ({ id, name: "我的引擎", template: validTemplate(), createdAt: "2026-01-01T00:00:00.000Z" });
+
+    // id 不符 ^custom:[A-Za-z0-9_-]{1,64}$：缺前缀 / 空后缀 / 含斜杠 / 超长。
+    await assert.rejects(store.createCustomEngine({ def: defWith("myengine") }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: "invalid custom engine id: myengine" }));
+    await assert.rejects(store.createCustomEngine({ def: defWith("custom:") }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: "invalid custom engine id: custom:" }));
+    await assert.rejects(store.createCustomEngine({ def: defWith("custom:a/b") }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: "invalid custom engine id: custom:a/b" }));
+    await assert.rejects(store.createCustomEngine({ def: defWith(`custom:${"a".repeat(65)}`) }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: `invalid custom engine id: custom:${"a".repeat(65)}` }));
+    assert.equal(deps.kkv.map.size, 0, "id 拒绝路径零写入");
+
+    // 重复 id。
+    await store.createCustomEngine({ def: defWith("custom:abc12345") });
+    await assert.rejects(store.createCustomEngine({ def: defWith("custom:abc12345") }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: "duplicate custom engine id: custom:abc12345" }));
+
+    // name 空串（trim 后为空即拒）。
+    await assert.rejects(store.createCustomEngine({ def: { id: "custom:def67890", name: "   ", template: validTemplate(), createdAt: "" } }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_template_invalid", { reason: "custom engine name is required" }));
+  });
+
+  it("updateCustomEngine / deleteCustomEngine 未知 id 拒绝（点名 FIX-16）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await assert.rejects(store.updateCustomEngine("custom:nope", { name: "改名" }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "custom:nope" }));
+    await assert.rejects(store.deleteCustomEngine("custom:nope"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "custom:nope" }));
+    // 预置 id 不是自定义实例，同样拒绝。
+    await assert.rejects(store.updateCustomEngine("bocha", { name: "改名" }), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "bocha" }));
+    await assert.rejects(store.deleteCustomEngine("bocha"), (e: unknown) => assertErrorDescriptor(e, "error.tool.search_engine_not_found", { engine: "bocha" }));
+    assert.equal(deps.kkv.map.size, 0, "拒绝路径零写入");
+  });
 });
 
 describe("search-config：T-C5 testEngine（草稿直测 / baseUrl 优先级 / engineId 分支）", () => {
@@ -614,6 +691,48 @@ describe("search-config：T-C5 testEngine（草稿直测 / baseUrl 优先级 / e
     assert.equal(reason.key, "error.tool.search_template_invalid");
     assert.match(String(reason.params?.reason), /method must be GET or POST/);
   });
+
+  it("draft + engineId 同传：draftKey 缺省回落 SKSP 现读、draft 优先、无 engineId 回落 custom:draft 槽位（点名 FIX-16）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+    await store.saveEngineKey("bocha", "sk-stored-bocha");
+    const keyDraftTemplate = (): SearchEngineTemplate => ({ ...validTemplate(), headers: { Authorization: "Bearer {{apiKey}}" } });
+    const authorizations: string[] = [];
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+        authorizations.push(new Headers(init?.headers).get("Authorization") ?? "");
+        return new Response(JSON.stringify({ results: [{ title: "t", url: "https://r.example.com", snippet: "s" }] }), { status: 200, headers: { "content-type": "application/json" } });
+      }) as typeof globalThis.fetch;
+
+      // ① draft 不带 key → 回落 engineId 槽位的 SKSP 现读。
+      const fallback = await store.testEngine({ engineId: "bocha", draft: { template: keyDraftTemplate() }, query: "q" });
+      assert.equal(fallback.ok, true);
+      assert.equal(authorizations[0], "Bearer sk-stored-bocha");
+      assert.ok(deps.secretStore.getCalls.includes("search/bocha/apiKey"), "回落应现读 engineId 槽位");
+
+      // ② draft.apiKey 空串同回落语义。
+      const blankDraftKey = await store.testEngine({ engineId: "bocha", draft: { template: keyDraftTemplate(), apiKey: "   " }, query: "q" });
+      assert.equal(blankDraftKey.ok, true);
+      assert.equal(authorizations[1], "Bearer sk-stored-bocha");
+
+      // ③ draft key 非空 → 优先于已存 key，不触发 SKSP 读。
+      const callsBefore = deps.secretStore.getCalls.length;
+      const draftWins = await store.testEngine({ engineId: "bocha", draft: { template: keyDraftTemplate(), apiKey: "sk-draft-key" }, query: "q" });
+      assert.equal(draftWins.ok, true);
+      assert.equal(authorizations[2], "Bearer sk-draft-key");
+      assert.equal(deps.secretStore.getCalls.length, callsBefore, "draft key 优先时不得再读 SKSP");
+
+      // ④ 无 engineId 的 draft：回落槽位 custom:draft（无存储 → 模板缺 key 失败，descriptor 可读）。
+      const draftOnly = await store.testEngine({ draft: { template: keyDraftTemplate() }, query: "q" });
+      assert.equal(draftOnly.ok, false);
+      if (draftOnly.ok) throw new Error("无 key 草稿应失败");
+      assert.match(String(draftOnly.error.message.params?.reason), /requires \{\{apiKey\}\}/);
+      assert.ok(deps.secretStore.getCalls.includes("search/custom:draft/apiKey"), "无 engineId 时回落 custom:draft 槽位");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存路径密钥拒绝", () => {
@@ -691,5 +810,48 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
       (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "bodyTemplate" })
     );
     assert.equal(deps.kkv.map.size, 0);
+  });
+
+  it("paramHint 明文密钥扩扫：create / update / updatePresetOverride 保存入口命中即拒绝且零写入（点名 FIX-15）", async () => {
+    const deps = makeDeps();
+    const store = createSearchConfigStore(deps);
+
+    await assert.rejects(
+      store.createCustomEngine({ def: { id: "custom:abc12345", name: "我的引擎", template: { ...validTemplate(), paramHint: "鉴权请携带 sk-plain-custom-secret-01" }, createdAt: "2026-01-01T00:00:00.000Z" } }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "paramHint" })
+    );
+    await assert.rejects(
+      store.updatePresetOverride("bocha", { paramHint: "api_key=sk-plain-override-secret-0001" }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "paramHint" })
+    );
+    await store.createCustomEngine({ def: { id: "custom:abc12345", name: "我的引擎", template: validTemplate(), createdAt: "2026-01-01T00:00:00.000Z" } });
+    await assert.rejects(
+      store.updateCustomEngine("custom:abc12345", { template: { ...validTemplate(), paramHint: "密钥 sk-plain-update-secret-0001" } }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "paramHint" })
+    );
+    assert.equal(deps.kkv.map.size, 2, "仅首次合法 create 落库（customEngines + engineOrderV2），拒绝路径零写入");
+
+    // 合法 paramHint 不受影响，覆盖照常落库。
+    await store.updatePresetOverride("bocha", { paramHint: "query 拼在 url 上，count 控制条数" });
+    const overrides = readKkvJson(deps, KEY_PRESET_OVERRIDES) as Record<string, { paramHint: string }>;
+    assert.equal(overrides.bocha.paramHint, "query 拼在 url 上，count 控制条数");
+  });
+
+  it("W1 回归锁（FIX-2..5）：okValues 空数组 / 非法头名 / GET 带 bodyTemplate / JSON 键含占位符全拒绝", () => {
+    // FIX-2：envelope.okValues 空数组会让执行器「code 有值即失败」全废。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "code", okValues: [] } }).messageParams?.reason), /okValues must not be empty/);
+
+    // FIX-3：头名非空 + RFC 7230 token（换行 / 空格头名会让执行期 fetch 抛原生 TypeError）。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "": "x" } }).messageParams?.reason), /header name must not be empty/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "Bad Name": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "X-Bad\nName": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    const tokenOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { "X-API-Key": "{{apiKey}}", Accept: "application/json" } });
+    assert.equal(tokenOk.ok, true, "合法 token 头名不受影响");
+
+    // FIX-4：GET 携带 bodyTemplate 校验层拒绝（静默丢弃会假成功）。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), bodyTemplate: '{"q":"{{query}}"}' }).messageParams?.reason), /bodyTemplate is not allowed for GET/);
+
+    // FIX-5：JSON 键含占位符拒绝（执行器只替换值，键里的占位符会原样进请求）。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"{{query}}x":1,"q":"{{query}}"}' }).messageParams?.reason), /must not contain a placeholder/);
   });
 });

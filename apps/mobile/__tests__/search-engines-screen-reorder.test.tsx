@@ -357,8 +357,9 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
 
   it('按 readConfig().engines 顺序动态渲染预置 / 自定义 / DDG 行', async () => {
     const {renderer} = await renderScreen();
+    // FIX-23：预置行标题读模型 name 优先（静态表仅未知 id 兜底）。
     expect(rowTitles(renderer.root)).toEqual([
-      'Bocha',
+      '博查搜索',
       '我的搜索',
       'DuckDuckGo',
       'SearXNG',
@@ -366,7 +367,7 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     ]);
     // 顺序跟随 fixture，不按静态出厂表重排。
     const text = treeText(renderer.root);
-    expect(text.indexOf('Bocha')).toBeLessThan(text.indexOf('我的搜索'));
+    expect(text.indexOf('博查搜索')).toBeLessThan(text.indexOf('我的搜索'));
     expect(text.indexOf('我的搜索')).toBeLessThan(text.indexOf('DuckDuckGo'));
     expect(text.indexOf('DuckDuckGo')).toBeLessThan(text.indexOf('SearXNG'));
   });
@@ -375,7 +376,7 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     const {renderer} = await renderScreen();
 
     // 预置且已存 key：set 标签，无缺失提示。
-    const bocha = treeText(rowByTitle(renderer.root, 'Bocha'));
+    const bocha = treeText(rowByTitle(renderer.root, '博查搜索'));
     expect(bocha).toContain('tag:set');
     expect(bocha).not.toContain('未配置密钥');
     expect(bocha).not.toContain('已关闭');
@@ -444,7 +445,7 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     const {renderer} = await renderScreen();
 
     // 首位上移禁用、下移可用。
-    await openMenu(renderer.root, 'Bocha');
+    await openMenu(renderer.root, '博查搜索');
     expect(menuItemDisabled(renderer.root, 'up')).toBe(true);
     expect(menuItemDisabled(renderer.root, 'down')).toBe(false);
 

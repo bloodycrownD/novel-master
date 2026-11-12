@@ -487,6 +487,13 @@ describe("search 工具：描述快照（T-D1）", () => {
     assert.equal(searchTool.description(ctx).includes("x".repeat(501)), false);
   });
 
+  it("未注入 search 闭包（makeCtx()）：描述走中性「未装配」文案，不承诺「调用会返回配置指引」", () => {
+    const description = searchTool.description(makeCtx());
+    assert.match(description, /当前运行时未装配搜索能力/);
+    assert.equal(description.includes("调用会返回配置指引"), false, "未注入闭包时 run 必抛，描述不得承诺返回配置指引");
+    assert.equal(description.includes("开启或配置引擎"), false, "未注入闭包时不含空快照指引段（通用尾段的「搜索配置中管理」不算）");
+  });
+
   it("装配 readConfig 失败 → 空快照降级不击穿装配（链解析仍在 run 内自会报错）", async () => {
     const failingStore: SearchConfigStore = {
       ...createSearchConfigStore(fakeStores()),
@@ -498,6 +505,9 @@ describe("search 工具：描述快照（T-D1）", () => {
     assert.deepEqual(search.engineSnapshot, []);
     const description = searchTool.description(makeCtx({ search }));
     assert.match(description, /当前没有可用的已启用引擎/);
+    // 空快照描述中性化：保留指引但不承诺 run 行为（快照是装配期取数，链以 run 内解析为准）。
+    assert.equal(description.includes("调用会返回配置指引"), false);
+    assert.match(description, /设置 → 搜索配置/);
   });
 
   it("回合内配置变更不刷新描述（下回合生效，照 skills 快照语义）", async () => {
@@ -813,8 +823,8 @@ describe("dispatch：引擎分发与链空文案", () => {
     assert.ok(urls[1]!.startsWith("https://html.duckduckgo.com/html/"));
   });
 
-  it("dispatchSearch 未知 id / 无模板：抛 engineFailed 可读错误（含引擎 id）", () => {
+  it("dispatchSearch 未知 id / 无模板：rejected promise 抛 engineFailed 可读错误（含引擎 id，W3 async 化后同时序）", async () => {
     const fetchFn = (async () => bochaResponse()) as typeof globalThis.fetch;
-    assert.throws(() => dispatchSearch({ engine: "custom:missing" }, "q", {}, {}, fetchFn), /unknown search engine: custom:missing/);
+    await assert.rejects(dispatchSearch({ engine: "custom:missing" }, "q", {}, {}, fetchFn), /unknown search engine: custom:missing/);
   });
 });
