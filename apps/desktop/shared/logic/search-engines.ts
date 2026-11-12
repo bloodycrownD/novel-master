@@ -8,15 +8,6 @@
  * `readConfig()` 的同构形状），不再从本模块取常量。
  */
 
-export type {
-  CurlCommandDraft,
-  CurlParseError,
-  CustomEngineDef,
-  SearchEngineTemplate,
-} from "@novel-master/core";
+export type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
 
-export {
-  PRESET_ENGINE_TEMPLATES,
-  parseCurlCommand,
-  validateSearchEngineTemplate,
-} from "@novel-master/core";
+export { PRESET_ENGINE_TEMPLATES, parseCurlCommand, validateSearchEngineTemplate } from "@novel-master/core";

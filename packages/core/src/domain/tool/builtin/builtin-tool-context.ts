@@ -18,7 +18,7 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
-export interface ResolveChildModelIdResult {
+interface ResolveChildModelIdResult {
   readonly savedModelId: string;
   readonly workspaceModelId: string;
 }
@@ -172,7 +172,11 @@ export interface BuiltinToolSearchContext {
    * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 装配期防御性截断
    * 500 字符——保存路径已硬校验，此为第二道）。空数组 = 当前没有可跑引擎。
    */
-  readonly engineSnapshot: readonly { readonly id: string; readonly name: string; readonly paramHint: string }[];
+  readonly engineSnapshot: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly paramHint: string;
+  }[];
 }
 
 /** 注入到内置工具 `run()` 的运行时上下文。 */
@@ -266,7 +270,16 @@ export type BuiltinToolContext = {
    * 测试经此注入 mock（先例：llm-sse-transport.test.ts 的 mock FetchFn）。
    */
   readonly fetchFn?: typeof globalThis.fetch;
+  /**
+   * 回合级取消信号：用户点停止 / 回合中断时 abort。
+   *
+   * 长耗时工具（search / curl）必须监听它把在途 fetch 一起 abort——否则
+   * 「waiting」中的回合线程被网络请求占住，停止按钮点不动。
+   * 未注入（旧装配点 / 测试 mock）时工具按不取消处理，向后兼容。
+   */
+  readonly signal?: AbortSignal;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */
+// nm-style: keep-public — `index.ts` 与 `vfs-tools.ts` 的公开别名（三端 barrel 已转出）；撤导出需同步改本片之外的 barrel，本轮只登记不删。
 export type VfsToolContext = BuiltinToolContext;

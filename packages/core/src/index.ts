@@ -6,57 +6,19 @@ export const PACKAGE_NAME = "@novel-master/core";
  * @remarks
  * `${name}` 会以原始字符串内联到 SQL，调用方必须自行做白名单或校验，避免注入风险。
  */
-export {
-  SqlTemplateParser,
-  SqlTemplateError,
-  parseTemplateToAst,
-  normalizeExpression,
-  bindExpressionToContext,
-  evaluateTest,
-} from "./infra/sql-template/index.js";
-export type {
-  EvaluateTestOptions,
-  SqlParseResult,
-  ParseOptions,
-  SqlTemplateErrorCode,
-  AstNode,
-} from "./infra/sql-template/index.js";
+export { SqlTemplateParser, SqlTemplateError, parseTemplateToAst, normalizeExpression, bindExpressionToContext, evaluateTest } from "./infra/sql-template/index.js";
+export type { EvaluateTestOptions, SqlParseResult, ParseOptions, SqlTemplateErrorCode, AstNode } from "./infra/sql-template/index.js";
 
 /**
  * TDBC：异步 SQLite 连接协议（驱动由调用方独立注册）。
  */
-export {
-  TdbcError,
-  open,
-  parseUrl,
-  registerDriver,
-  getDriver,
-  listDrivers,
-  resolveDriver,
-  normalizeBindings,
-  executeTemplate,
-  queryTemplate,
-} from "./infra/tdbc/index.js";
-export type {
-  TdbcConnection,
-  TdbcDriver,
-  TdbcErrorCode,
-  SqlValue,
-  Row,
-  ExecuteResult,
-  BatchResult,
-  OpenOptions,
-  ParsedTdbcUrl,
-} from "./infra/tdbc/index.js";
+export { TdbcError, open, parseUrl, registerDriver, getDriver, listDrivers, resolveDriver, normalizeBindings, executeTemplate, queryTemplate } from "./infra/tdbc/index.js";
+export type { TdbcConnection, TdbcDriver, TdbcErrorCode, SqlValue, Row, ExecuteResult, BatchResult, OpenOptions, ParsedTdbcUrl } from "./infra/tdbc/index.js";
 
 /**
  * 启动与迁移：Novel Master 运行时基础建表。
  */
-export {
-  bootstrapNovelMaster,
-  NOVEL_MASTER_SCHEMA_STATEMENTS,
-  SCHEMA_BOOT_VERSION,
-} from "./bootstrap/novel-master-bootstrap.js";
+export { bootstrapNovelMaster, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "./bootstrap/novel-master-bootstrap.js";
 
 /**
  * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
@@ -66,9 +28,7 @@ export {
  * 生命周期动作，导出它等于给应用侧一条生产可达的「关掉加速器」入口。
  * 需要它的测试直接经源文件相对路径导入（`test/vfs/zlib-accelerator.test.ts`）。
  */
-export {
-  registerZlibCodecAccelerator,
-} from "./domain/vfs/content-store/logic/zlib-accelerator.js";
+export { registerZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 export type { ZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 
 /**
@@ -89,11 +49,7 @@ export {
   ProviderTableSnapshotError,
   validateProviderTableSnapshot,
 } from "./infra/db-backup/index.js";
-export type {
-  ProviderBackupTableName,
-  ProviderTableSnapshot,
-  ProviderTableSnapshotErrorCode,
-} from "./infra/db-backup/index.js";
+export type { ProviderBackupTableName, ProviderTableSnapshot, ProviderTableSnapshotErrorCode } from "./infra/db-backup/index.js";
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
@@ -104,15 +60,8 @@ export type {
  * ——真实库前置确认门均已过）。pack 两表与 `pack-codec` 读路径是现行数据
  * 形态，继续由 content store 消费。
  */
-export {
-  createDbMaintenanceService,
-  runStartupMaintenanceOnce,
-} from "./infra/db-maintenance/index.js";
-export type {
-  DatabaseMaintenanceResult,
-  DbMaintenanceService,
-  StorageStats,
-} from "./infra/db-maintenance/index.js";
+export { createDbMaintenanceService, runStartupMaintenanceOnce } from "./infra/db-maintenance/index.js";
+export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "./infra/db-maintenance/index.js";
 
 /**
  * 跨端云同步：协调器、租约锁与 status schema。
@@ -178,14 +127,8 @@ export { ToolError } from "./errors/tool-errors.js";
 export type { ToolErrorCode } from "./errors/tool-errors.js";
 export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
 export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
-export type {
-  ToolCall,
-  ParallelToolOutcome,
-} from "./domain/tool/logic/tool-runner.js";
-export {
-  buildToolResultBlock,
-  resolveToolResultOk,
-} from "./domain/tool/logic/build-tool-result-block.js";
+export type { ToolCall, ParallelToolOutcome } from "./domain/tool/logic/tool-runner.js";
+export { buildToolResultBlock, resolveToolResultOk } from "./domain/tool/logic/build-tool-result-block.js";
 export type { BuildToolResultBlockMeta } from "./domain/tool/logic/build-tool-result-block.js";
 export {
   createVfsTools,
@@ -196,26 +139,12 @@ export {
   MUTATING_VFS_TOOL_NAMES,
   isMutatingVfsToolName,
 } from "./domain/tool/builtin/vfs-tools.js";
-export {
-  registerBuiltinTools,
-  registerVfsTools,
-} from "./domain/tool/builtin/register-builtin-tools.js";
+export { registerBuiltinTools, registerVfsTools } from "./domain/tool/builtin/register-builtin-tools.js";
 export { isMutatingFsCommand } from "./domain/tool/logic/fs-command.js";
-export {
-  toolUseMutatesWorkspace,
-  anyToolUseMutatesWorkspace,
-} from "./domain/tool/logic/tool-use-mutates-workspace.js";
-export {
-  TOOL_OUTPUT_MAX_LINES,
-  TOOL_OUTPUT_MAX_LINE_LENGTH,
-  TOOL_OUTPUT_MAX_BYTES,
-  TOOL_OUTPUT_MAX_MATCHES,
-} from "./domain/tool/logic/tool-output-limits.js";
+export { toolUseMutatesWorkspace, anyToolUseMutatesWorkspace } from "./domain/tool/logic/tool-use-mutates-workspace.js";
+export { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_LINE_LENGTH, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_MATCHES } from "./domain/tool/logic/tool-output-limits.js";
 export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
-export type {
-  BuiltinToolContext,
-  VfsToolContext,
-} from "./domain/tool/builtin/builtin-tool-context.js";
+export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/builtin-tool-context.js";
 /**
  * `search` 工具与搜索引擎配置（SKSP ref + KKV `nm-search` 模块）。
  *
@@ -229,49 +158,23 @@ export type {
  * 出厂模板常量 `PRESET_ENGINE_TEMPLATES` 供预置模板编辑表单预填与恢复默认。
  * v2 透传改造：响应映射类型（SearchEngineFieldMap / SearchEngineEnvelope）
  * 与模板映射字段一并废除，模板引擎结果以 JSON 文本回流。
+ *
+ * 只放行双端生产代码真正具名引用的两个 store 类型；其入参 / 载荷类型
+ * （SearchConfigDeps、Create/UpdateCustomEngineInput、TestEngine*）主入口
+ * 零消费者，需要时直接从源模块导入，不占公开面。
  */
-export type {
-  SearchResponse,
-  SearchResult,
-  SearchToolOptions,
-  SearchOversizeOutput,
-  ResolvedEngineConfig,
-  SearchEngineTemplate,
-  CustomEngineDef,
-} from "./domain/tool/builtin/search/types.js";
+export type { SearchResponse, SearchResult, SearchToolOptions, SearchOversizeOutput, ResolvedEngineConfig, SearchEngineTemplate, CustomEngineDef } from "./domain/tool/builtin/search/types.js";
 export { validateSearchEngineTemplate } from "./domain/tool/builtin/search/types.js";
-export type {
-  SearchConfigPublic,
-  SearchConfigStore,
-  SearchConfigDeps,
-  CreateCustomEngineInput,
-  UpdateCustomEngineInput,
-  TestEngineDraft,
-  TestEngineInput,
-  TestEngineSuccess,
-  TestEngineFailure,
-} from "./domain/tool/builtin/search/search-config.js";
-export {
-  SEARCH_KKV_MODULE,
-  searchApiKeyRef,
-  createSearchConfigStore,
-  readSearchConfig,
-  resolveEngineChain,
-} from "./domain/tool/builtin/search/search-config.js";
+export type { SearchConfigPublic, SearchConfigStore } from "./domain/tool/builtin/search/search-config.js";
+export { SEARCH_KKV_MODULE, searchApiKeyRef, createSearchConfigStore, readSearchConfig, resolveEngineChain } from "./domain/tool/builtin/search/search-config.js";
 export { PRESET_ENGINE_TEMPLATES } from "./domain/tool/builtin/search/preset-templates.js";
 export { parseCurlCommand } from "./domain/tool/builtin/search/curl-import.js";
-export type {
-  CurlCommandDraft,
-  CurlParseError,
-} from "./domain/tool/builtin/search/curl-import.js";
+export type { CurlCommandDraft, CurlParseError } from "./domain/tool/builtin/search/curl-import.js";
 
 /**
  * 基础序列化能力：供跨端配置读写共用。
  */
-export {
-  parseText,
-  type TextFormat,
-} from "./infra/serialization/parse-text.js";
+export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
 export { stringifyText } from "./infra/serialization/stringify-text.js";
 export { decode } from "./infra/serialization/decode.js";
 export { encode, type EncodableSchema } from "./infra/serialization/encode.js";

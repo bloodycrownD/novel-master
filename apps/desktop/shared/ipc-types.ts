@@ -6,211 +6,210 @@
  * 是 core 的同一份定义——DTO 只做类型引用（type-only，运行期纯 JSON 形状），
  * 不另抄一份以免与 core 校验口径漂移。
  */
-import type { CustomEngineDef, SearchEngineTemplate } from '@novel-master/core';
+import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
 
 export const IPC_CHANNELS = {
-  BOOTSTRAP_STATUS: 'nm:bootstrap/status',
-  BOOTSTRAP_REBOOTSTRAP: 'nm:bootstrap/rebootstrap',
-  AGENT_STREAM: 'nm:agent-stream',
+  BOOTSTRAP_STATUS: "nm:bootstrap/status",
+  BOOTSTRAP_REBOOTSTRAP: "nm:bootstrap/rebootstrap",
+  AGENT_STREAM: "nm:agent-stream",
   /** Main → renderer：agentActive refcount 变化（工具卡「执行中」等） */
-  AGENT_ACTIVITY: 'nm:agent/activity',
-  AGENT_ACTIVITY_GET: 'nm:agent/activity/get',
+  AGENT_ACTIVITY: "nm:agent/activity",
+  AGENT_ACTIVITY_GET: "nm:agent/activity/get",
   /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
-  WORKSPACE_MUTATED: 'nm:workspace/mutated',
+  WORKSPACE_MUTATED: "nm:workspace/mutated",
   /** Main → renderer：规则差集 → Composer workplace 附件建议（不含 workspaceMutated） */
-  COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
+  COMPOSER_ATTACHMENTS_SUGGEST: "nm:composer/attachmentsSuggest",
   /** Main → renderer：用户消息已 append（清 annotate；勿与 started/RUN_* 混用） */
-  AGENT_USER_MESSAGE_APPENDED: 'nm:agent/userMessageAppended',
+  AGENT_USER_MESSAGE_APPENDED: "nm:agent/userMessageAppended",
 
-  SCOPE_GET: 'nm:scope/get',
-  SCOPE_SET_PROJECT: 'nm:scope/setProject',
-  SCOPE_SET_SESSION: 'nm:scope/setSession',
+  SCOPE_GET: "nm:scope/get",
+  SCOPE_SET_PROJECT: "nm:scope/setProject",
+  SCOPE_SET_SESSION: "nm:scope/setSession",
 
-  PROJECTS_LIST: 'nm:projects/list',
-  PROJECTS_CREATE: 'nm:projects/create',
-  PROJECTS_RENAME: 'nm:projects/rename',
-  PROJECTS_DELETE: 'nm:projects/delete',
+  PROJECTS_LIST: "nm:projects/list",
+  PROJECTS_CREATE: "nm:projects/create",
+  PROJECTS_RENAME: "nm:projects/rename",
+  PROJECTS_DELETE: "nm:projects/delete",
 
-  SESSIONS_LIST_BY_PROJECT: 'nm:sessions/listByProject',
-  SESSIONS_CREATE: 'nm:sessions/create',
-  SESSIONS_RENAME: 'nm:sessions/rename',
-  SESSIONS_DELETE: 'nm:sessions/delete',
-  SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
-  SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
-  SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
+  SESSIONS_LIST_BY_PROJECT: "nm:sessions/listByProject",
+  SESSIONS_CREATE: "nm:sessions/create",
+  SESSIONS_RENAME: "nm:sessions/rename",
+  SESSIONS_DELETE: "nm:sessions/delete",
+  SESSIONS_GET_COMPOSER_DRAFT: "nm:sessions/getComposerDraft",
+  SESSIONS_SET_COMPOSER_DRAFT: "nm:sessions/setComposerDraft",
+  SESSIONS_PROJECT_COMPOSER_STATUS: "nm:sessions/projectComposerStatus",
   /** 会话级：绑定 agent 到会话（agentId=null 解绑回 follow）。 */
-  SESSIONS_SET_AGENT_BINDING: 'nm:sessions/setAgentBinding',
+  SESSIONS_SET_AGENT_BINDING: "nm:sessions/setAgentBinding",
   /** 会话级：覆盖模型（modelId=null 清除覆盖，mode/agentId 保持现状）。 */
-  SESSIONS_SET_MODEL_OVERRIDE: 'nm:sessions/setModelOverride',
+  SESSIONS_SET_MODEL_OVERRIDE: "nm:sessions/setModelOverride",
 
-  APP_UI_GET: 'nm:app-ui/get',
-  APP_UI_SET: 'nm:app-ui/set',
+  APP_UI_GET: "nm:app-ui/get",
+  APP_UI_SET: "nm:app-ui/set",
 
-  VFS_READ: 'nm:vfs/read',
+  VFS_READ: "nm:vfs/read",
   /** 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道） */
-  PHYSICAL_LIST: 'nm:physical/list',
-  PHYSICAL_READ: 'nm:physical/read',
-  VFS_WRITE: 'nm:vfs/write',
-  VFS_MKDIR: 'nm:vfs/mkdir',
-  VFS_DELETE: 'nm:vfs/delete',
-  VFS_RENAME: 'nm:vfs/rename',
-  VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
-  VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
+  PHYSICAL_LIST: "nm:physical/list",
+  PHYSICAL_READ: "nm:physical/read",
+  VFS_WRITE: "nm:vfs/write",
+  VFS_MKDIR: "nm:vfs/mkdir",
+  VFS_DELETE: "nm:vfs/delete",
+  VFS_RENAME: "nm:vfs/rename",
+  VFS_ZIP_EXPORT: "nm:vfs/zipExport",
+  VFS_ZIP_IMPORT: "nm:vfs/zipImport",
   /** 弹框选 zip 读字节（技能导入预检用，预检在 Renderer） */
-  VFS_ZIP_PICK: 'nm:vfs/zipPick',
+  VFS_ZIP_PICK: "nm:vfs/zipPick",
   /** 字节直写导入（不弹框；技能新建弹窗创建时整包落盘用） */
-  VFS_ZIP_IMPORT_BYTES: 'nm:vfs/zipImportBytes',
+  VFS_ZIP_IMPORT_BYTES: "nm:vfs/zipImportBytes",
   /** 角色卡导入（PNG/JSON → 子树替换） */
-  VFS_CHARACTER_CARD_IMPORT: 'nm:vfs/characterCardImport',
+  VFS_CHARACTER_CARD_IMPORT: "nm:vfs/characterCardImport",
   /** 弹框选单个本机文件（只回路径，不读字节；导入编排在 Renderer 走既有批量通道） */
-  VFS_FILE_PICK: 'nm:vfs/filePick',
+  VFS_FILE_PICK: "nm:vfs/filePick",
   /** 单文件另存导出（plan 单条目 → 保存框 → writeFile） */
-  VFS_FILE_EXPORT: 'nm:vfs/fileExport',
+  VFS_FILE_EXPORT: "nm:vfs/fileExport",
   /** 本机路径批量 ingest（plan + 可选 apply） */
-  VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
+  VFS_BATCH_INGEST_FROM_PATHS: "nm:vfs/batchIngestFromPaths",
   /** 导出物化到临时目录（供 startDrag） */
-  VFS_BATCH_EXPORT_STAGE: 'nm:vfs/batchExportStage',
+  VFS_BATCH_EXPORT_STAGE: "nm:vfs/batchExportStage",
   /** 清理 export staging 临时目录（dragEnd / 取消 / 失败） */
-  VFS_BATCH_CLEAR_STAGING: 'nm:vfs/batchClearStaging',
+  VFS_BATCH_CLEAR_STAGING: "nm:vfs/batchClearStaging",
   /** Main：webContents.startDrag（preload send，非 invoke） */
-  VFS_START_DRAG: 'nm:vfs/startDrag',
+  VFS_START_DRAG: "nm:vfs/startDrag",
   /** Main → renderer：startDrag 失败（send 无回传，经事件 toast） */
-  VFS_START_DRAG_FAILED: 'nm:vfs/startDragFailed',
+  VFS_START_DRAG_FAILED: "nm:vfs/startDragFailed",
 
-  WORKPLACE_BUILD_LIST_ROWS: 'nm:workplace/buildListRows',
-  WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
-  WORKPLACE_SET_FILE_RULE: 'nm:workplace/setFileRule',
-  WORKPLACE_GET_DIR_RULE: 'nm:workplace/getDirRule',
+  WORKPLACE_BUILD_LIST_ROWS: "nm:workplace/buildListRows",
+  WORKPLACE_SET_DIR_RULE: "nm:workplace/setDirRule",
+  WORKPLACE_SET_FILE_RULE: "nm:workplace/setFileRule",
+  WORKPLACE_GET_DIR_RULE: "nm:workplace/getDirRule",
 
-  SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
-  SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
+  SESSIONS_PULL_TEMPLATE: "nm:sessions/pullTemplate",
+  SESSIONS_PUSH_TEMPLATE: "nm:sessions/pushTemplate",
 
-  MESSAGES_LIST: 'nm:messages/list',
-  MESSAGES_APPEND: 'nm:messages/append',
-  MESSAGES_EDIT: 'nm:messages/edit',
-  MESSAGES_HIDE: 'nm:messages/hide',
-  MESSAGES_SHOW: 'nm:messages/show',
-  MESSAGES_HIDE_RANGE: 'nm:messages/hideRange',
-  MESSAGES_SHOW_RANGE: 'nm:messages/showRange',
-  MESSAGES_TRUNCATE_AFTER: 'nm:messages/truncateAfter',
-  MESSAGES_DELETE: 'nm:messages/delete',
-  MESSAGES_FORK: 'nm:messages/fork',
-  MESSAGES_ROLLBACK: 'nm:messages/rollback',
-  MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
+  MESSAGES_LIST: "nm:messages/list",
+  MESSAGES_APPEND: "nm:messages/append",
+  MESSAGES_EDIT: "nm:messages/edit",
+  MESSAGES_HIDE: "nm:messages/hide",
+  MESSAGES_SHOW: "nm:messages/show",
+  MESSAGES_HIDE_RANGE: "nm:messages/hideRange",
+  MESSAGES_SHOW_RANGE: "nm:messages/showRange",
+  MESSAGES_TRUNCATE_AFTER: "nm:messages/truncateAfter",
+  MESSAGES_DELETE: "nm:messages/delete",
+  MESSAGES_FORK: "nm:messages/fork",
+  MESSAGES_ROLLBACK: "nm:messages/rollback",
+  MESSAGES_SET_FLOOR: "nm:messages/setFloor",
 
-  AGENT_RUN: 'nm:agent/run',
-  AGENT_ABORT: 'nm:agent/abort',
-  AGENT_RUN_IS_ACTIVE: 'nm:agent/runIsActive',
-  AGENT_RESOLVE_CURRENT: 'nm:agent/resolveCurrent',
-  AGENT_LIST_PICKER: 'nm:agent/listPicker',
-  AGENT_SET_CURRENT: 'nm:agent/setCurrent',
+  AGENT_RUN: "nm:agent/run",
+  AGENT_ABORT: "nm:agent/abort",
+  AGENT_RUN_IS_ACTIVE: "nm:agent/runIsActive",
+  AGENT_RESOLVE_CURRENT: "nm:agent/resolveCurrent",
+  AGENT_LIST_PICKER: "nm:agent/listPicker",
+  AGENT_SET_CURRENT: "nm:agent/setCurrent",
 
-  MODEL_LIST_PICKER: 'nm:model/listPicker',
-  MODEL_SET_CURRENT: 'nm:model/setCurrent',
+  MODEL_LIST_PICKER: "nm:model/listPicker",
+  MODEL_SET_CURRENT: "nm:model/setCurrent",
 
-  PROMPT_REAL_PREVIEW: 'nm:prompt/realPreview',
-  PROMPT_CHAT_TOKEN_LABEL: 'nm:prompt/chatTokenLabel',
-  PROMPT_CHAT_TOKEN_UPDATED: 'nm:prompt/chatTokenUpdated',
-  PROMPT_AGENT_META: 'nm:prompt/agentMeta',
+  PROMPT_REAL_PREVIEW: "nm:prompt/realPreview",
+  PROMPT_CHAT_TOKEN_LABEL: "nm:prompt/chatTokenLabel",
+  PROMPT_CHAT_TOKEN_UPDATED: "nm:prompt/chatTokenUpdated",
+  PROMPT_AGENT_META: "nm:prompt/agentMeta",
 
-  COMPACTION_MANUAL: 'nm:compaction/manual',
+  COMPACTION_MANUAL: "nm:compaction/manual",
 
-  PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
-  PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
-  PREFERENCES_GET_SUBAGENT_STREAM: 'nm:preferences/getSubagentStream',
-  PREFERENCES_SET_SUBAGENT_STREAM: 'nm:preferences/setSubagentStream',
-  PREFERENCES_GET_THINKING_CONTEXT: 'nm:preferences/getThinkingContext',
-  PREFERENCES_SET_THINKING_CONTEXT: 'nm:preferences/setThinkingContext',
+  PREFERENCES_GET_LLM_STREAM: "nm:preferences/getLlmStream",
+  PREFERENCES_SET_LLM_STREAM: "nm:preferences/setLlmStream",
+  PREFERENCES_GET_SUBAGENT_STREAM: "nm:preferences/getSubagentStream",
+  PREFERENCES_SET_SUBAGENT_STREAM: "nm:preferences/setSubagentStream",
+  PREFERENCES_GET_THINKING_CONTEXT: "nm:preferences/getThinkingContext",
+  PREFERENCES_SET_THINKING_CONTEXT: "nm:preferences/setThinkingContext",
 
-  PROVIDERS_LIST: 'nm:providers/list',
-  PROVIDERS_GET: 'nm:providers/get',
-  PROVIDERS_CREATE: 'nm:providers/create',
-  PROVIDERS_EDIT: 'nm:providers/edit',
-  PROVIDERS_DELETE: 'nm:providers/delete',
+  PROVIDERS_LIST: "nm:providers/list",
+  PROVIDERS_GET: "nm:providers/get",
+  PROVIDERS_CREATE: "nm:providers/create",
+  PROVIDERS_EDIT: "nm:providers/edit",
+  PROVIDERS_DELETE: "nm:providers/delete",
 
-  PROVIDER_MODELS_SAVED_LIST: 'nm:providerModels/savedList',
-  PROVIDER_MODELS_FETCH: 'nm:providerModels/fetch',
-  PROVIDER_MODELS_SUGGEST_LIST: 'nm:providerModels/suggestList',
-  PROVIDER_MODELS_SAVE: 'nm:providerModels/save',
-  PROVIDER_MODELS_DELETE_SAVED: 'nm:providerModels/deleteSaved',
-  PROVIDER_MODELS_GET_SAVED: 'nm:providerModels/getSaved',
-  PROVIDER_MODELS_UPDATE_SETTINGS: 'nm:providerModels/updateSettings',
-  PROVIDER_MODELS_RESET_CONTEXT_WINDOW: 'nm:providerModels/resetContextWindow',
-  PROVIDER_MODELS_EDIT_SAVED: 'nm:providerModels/editSaved',
+  PROVIDER_MODELS_SAVED_LIST: "nm:providerModels/savedList",
+  PROVIDER_MODELS_FETCH: "nm:providerModels/fetch",
+  PROVIDER_MODELS_SUGGEST_LIST: "nm:providerModels/suggestList",
+  PROVIDER_MODELS_SAVE: "nm:providerModels/save",
+  PROVIDER_MODELS_DELETE_SAVED: "nm:providerModels/deleteSaved",
+  PROVIDER_MODELS_GET_SAVED: "nm:providerModels/getSaved",
+  PROVIDER_MODELS_UPDATE_SETTINGS: "nm:providerModels/updateSettings",
+  PROVIDER_MODELS_RESET_CONTEXT_WINDOW: "nm:providerModels/resetContextWindow",
+  PROVIDER_MODELS_EDIT_SAVED: "nm:providerModels/editSaved",
 
-  AGENT_REGISTRY_LIST: 'nm:agentRegistry/list',
-  AGENT_REGISTRY_GET: 'nm:agentRegistry/get',
-  AGENT_REGISTRY_UPSERT: 'nm:agentRegistry/upsert',
-  AGENT_REGISTRY_UPDATE: 'nm:agentRegistry/update',
-  AGENT_REGISTRY_DELETE: 'nm:agentRegistry/delete',
-  AGENT_REGISTRY_CREATE_BLANK: 'nm:agentRegistry/createBlank',
+  AGENT_REGISTRY_LIST: "nm:agentRegistry/list",
+  AGENT_REGISTRY_GET: "nm:agentRegistry/get",
+  AGENT_REGISTRY_UPSERT: "nm:agentRegistry/upsert",
+  AGENT_REGISTRY_UPDATE: "nm:agentRegistry/update",
+  AGENT_REGISTRY_DELETE: "nm:agentRegistry/delete",
+  AGENT_REGISTRY_CREATE_BLANK: "nm:agentRegistry/createBlank",
 
-  AGENT_YAML_EXPORT: 'nm:agentYaml/export',
-  AGENT_YAML_IMPORT: 'nm:agentYaml/import',
+  AGENT_YAML_EXPORT: "nm:agentYaml/export",
+  AGENT_YAML_IMPORT: "nm:agentYaml/import",
 
-
-  SMART_SORT_RULE_LIST: 'nm:sort-rule/list',
-  SMART_SORT_RULE_CREATE: 'nm:sort-rule/create',
-  SMART_SORT_RULE_UPDATE: 'nm:sort-rule/update',
-  SMART_SORT_RULE_DELETE: 'nm:sort-rule/delete',
-  SMART_SORT_RULE_DELETE_BATCH: 'nm:sort-rule/deleteBatch',
-  SMART_SORT_RULE_SET_ENABLED: 'nm:sort-rule/setEnabled',
-  SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
-  SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
-  SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
-  SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
-  SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
+  SMART_SORT_RULE_LIST: "nm:sort-rule/list",
+  SMART_SORT_RULE_CREATE: "nm:sort-rule/create",
+  SMART_SORT_RULE_UPDATE: "nm:sort-rule/update",
+  SMART_SORT_RULE_DELETE: "nm:sort-rule/delete",
+  SMART_SORT_RULE_DELETE_BATCH: "nm:sort-rule/deleteBatch",
+  SMART_SORT_RULE_SET_ENABLED: "nm:sort-rule/setEnabled",
+  SMART_SORT_RULE_SET_ENABLED_BATCH: "nm:sort-rule/setEnabledBatch",
+  SMART_SORT_RULE_MOVE: "nm:sort-rule/move",
+  SMART_SORT_RULE_REORDER: "nm:sort-rule/reorder",
+  SMART_SORT_RULE_RESET_DEFAULTS: "nm:sort-rule/resetDefaults",
+  SMART_SORT_RULE_MATCH: "nm:sort-rule/match",
   /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
-  SMART_SORT_RULE_YAML_EXPORT: 'nm:sort-rule/yamlExport',
-  SMART_SORT_RULE_YAML_IMPORT: 'nm:sort-rule/yamlImport',
+  SMART_SORT_RULE_YAML_EXPORT: "nm:sort-rule/yamlExport",
+  SMART_SORT_RULE_YAML_IMPORT: "nm:sort-rule/yamlImport",
 
-  SKILLS_LIST: 'nm:skills/list',
-  SKILLS_EFFECTIVE: 'nm:skills/effective',
-  SKILLS_READ: 'nm:skills/read',
-  SKILLS_WRITE: 'nm:skills/write',
-  SKILLS_TOGGLE: 'nm:skills/toggle',
-  SKILLS_DELETE: 'nm:skills/delete',
-  SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
-  SKILLS_UPDATE_INFO: 'nm:skills/update-info',
+  SKILLS_LIST: "nm:skills/list",
+  SKILLS_EFFECTIVE: "nm:skills/effective",
+  SKILLS_READ: "nm:skills/read",
+  SKILLS_WRITE: "nm:skills/write",
+  SKILLS_TOGGLE: "nm:skills/toggle",
+  SKILLS_DELETE: "nm:skills/delete",
+  SKILLS_ASSERT_CREATE_NAME: "nm:skills/assert-create-name",
+  SKILLS_UPDATE_INFO: "nm:skills/update-info",
 
-  COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
-  COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
+  COMPACTION_CONDITIONS_GET: "nm:compactionConditions/get",
+  COMPACTION_CONDITIONS_SET: "nm:compactionConditions/set",
 
-  BACKUP_EXPORT: 'nm:backup/export',
-  BACKUP_IMPORT: 'nm:backup/import',
+  BACKUP_EXPORT: "nm:backup/export",
+  BACKUP_IMPORT: "nm:backup/import",
 
-  DB_STATS: 'nm:db/stats',
-  DB_MAINTENANCE: 'nm:db/maintenance',
+  DB_STATS: "nm:db/stats",
+  DB_MAINTENANCE: "nm:db/maintenance",
 
-  CLOUD_SYNC_GET_CONFIG: 'nm:cloud-sync/getConfig',
-  CLOUD_SYNC_SET_CONFIG: 'nm:cloud-sync/setConfig',
-  CLOUD_SYNC_SET_ENABLED: 'nm:cloud-sync/setEnabled',
-  CLOUD_SYNC_TEST_CONNECTION: 'nm:cloud-sync/testConnection',
-  CLOUD_SYNC_GET_LOCAL_STATUS: 'nm:cloud-sync/getLocalStatus',
-  CLOUD_SYNC_PULL: 'nm:cloud-sync/pull',
-  CLOUD_SYNC_PUSH: 'nm:cloud-sync/push',
+  CLOUD_SYNC_GET_CONFIG: "nm:cloud-sync/getConfig",
+  CLOUD_SYNC_SET_CONFIG: "nm:cloud-sync/setConfig",
+  CLOUD_SYNC_SET_ENABLED: "nm:cloud-sync/setEnabled",
+  CLOUD_SYNC_TEST_CONNECTION: "nm:cloud-sync/testConnection",
+  CLOUD_SYNC_GET_LOCAL_STATUS: "nm:cloud-sync/getLocalStatus",
+  CLOUD_SYNC_PULL: "nm:cloud-sync/pull",
+  CLOUD_SYNC_PUSH: "nm:cloud-sync/push",
 
-  SEARCH_GET_CONFIG: 'nm:search/getConfig',
-  SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
-  SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
-  SEARCH_SET_ENGINE_ORDER: 'nm:search/setEngineOrder',
-  SEARCH_SET_ENABLED: 'nm:search/setEnabled',
-  SEARCH_SET_ENGINE_BASE_URL: 'nm:search/setEngineBaseUrl',
-  SEARCH_CREATE_CUSTOM_ENGINE: 'nm:search/createCustomEngine',
-  SEARCH_UPDATE_CUSTOM_ENGINE: 'nm:search/updateCustomEngine',
-  SEARCH_DELETE_CUSTOM_ENGINE: 'nm:search/deleteCustomEngine',
-  SEARCH_UPDATE_PRESET_OVERRIDE: 'nm:search/updatePresetOverride',
-  SEARCH_RESET_PRESET_OVERRIDE: 'nm:search/resetPresetOverride',
-  SEARCH_TEST_ENGINE: 'nm:search/testEngine',
+  SEARCH_GET_CONFIG: "nm:search/getConfig",
+  SEARCH_SAVE_ENGINE_KEY: "nm:search/saveEngineKey",
+  SEARCH_CLEAR_ENGINE_KEY: "nm:search/clearEngineKey",
+  SEARCH_SET_ENGINE_ORDER: "nm:search/setEngineOrder",
+  SEARCH_SET_ENABLED: "nm:search/setEnabled",
+  SEARCH_SET_ENGINE_BASE_URL: "nm:search/setEngineBaseUrl",
+  SEARCH_CREATE_CUSTOM_ENGINE: "nm:search/createCustomEngine",
+  SEARCH_UPDATE_CUSTOM_ENGINE: "nm:search/updateCustomEngine",
+  SEARCH_DELETE_CUSTOM_ENGINE: "nm:search/deleteCustomEngine",
+  SEARCH_UPDATE_PRESET_OVERRIDE: "nm:search/updatePresetOverride",
+  SEARCH_RESET_PRESET_OVERRIDE: "nm:search/resetPresetOverride",
+  SEARCH_TEST_ENGINE: "nm:search/testEngine",
 
-  SHELL_MENU_POPUP: 'nm:shell/menuPopup',
-  SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
-  SHELL_OPEN_EXTERNAL: 'nm:shell/openExternal',
+  SHELL_MENU_POPUP: "nm:shell/menuPopup",
+  SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
+  SHELL_OPEN_EXTERNAL: "nm:shell/openExternal",
 
-  USAGE_STATS_QUERY: 'nm:usageStats/query',
+  USAGE_STATS_QUERY: "nm:usageStats/query",
 
-  APP_GET_INFO: 'nm:app/getInfo',
-  APP_CHECK_FOR_UPDATES: 'nm:app/checkForUpdates',
+  APP_GET_INFO: "nm:app/getInfo",
+  APP_CHECK_FOR_UPDATES: "nm:app/checkForUpdates",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -222,13 +221,11 @@ export type IpcErrorPayload = {
   readonly missingLogicalPaths?: readonly string[];
 };
 
-export type IpcResult<T> =
-  | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly error: IpcErrorPayload };
+export type IpcResult<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: IpcErrorPayload };
 
 export type BootstrapStatusReady = {
   readonly ok: true;
-  readonly status: 'ready';
+  readonly status: "ready";
   readonly dbPath: string;
 };
 
@@ -237,9 +234,7 @@ export type BootstrapStatusFailed = {
   readonly error: IpcErrorPayload;
 };
 
-export type BootstrapStatusResponse =
-  | BootstrapStatusReady
-  | BootstrapStatusFailed;
+export type BootstrapStatusResponse = BootstrapStatusReady | BootstrapStatusFailed;
 
 export type BootstrapRebootstrapResponse = BootstrapStatusResponse;
 
@@ -289,9 +284,6 @@ export type ProjectDeleteRequest = {
   readonly id: string;
 };
 
-/** 项目智能体策略模式。 */
-export type ProjectAgentModeDto = 'follow' | 'custom';
-
 /**
  * IPC 可序列化的 Agent 定义（与领域 AgentDefinition 同构的 plain object）。
  * 禁 class / Map / 函数 / 不可克隆句柄。
@@ -308,25 +300,6 @@ export type AgentDefinitionPlain = {
   readonly tools?: {
     readonly allow?: readonly string[];
     readonly deny?: readonly string[];
-  };
-};
-
-/** 项目智能体配置（IPC 传输；definition 为已评估 health）。 */
-export type ProjectAgentConfigDto = {
-  readonly mode: ProjectAgentModeDto;
-  /** 有存储 definition 时附 assessed health；无草稿时省略。 */
-  readonly definition?: StoredConfigHealthDto<AgentDefinitionPlain>;
-};
-
-export type ProjectGetAgentConfigRequest = {
-  readonly projectId: string;
-};
-
-export type ProjectUpdateAgentConfigRequest = {
-  readonly projectId: string;
-  readonly patch: {
-    readonly mode?: ProjectAgentModeDto;
-    readonly definition?: unknown;
   };
 };
 
@@ -373,10 +346,6 @@ export type SessionAgentConfigDto = {
   readonly modelId?: string;
 };
 
-export type SessionGetAgentBindingRequest = {
-  readonly sessionId: string;
-};
-
 export type SessionSetAgentBindingRequest = {
   readonly sessionId: string;
   /**
@@ -412,7 +381,7 @@ export type AppGetInfoData = {
 
 export type AppGetInfoResponse = IpcResult<AppGetInfoData>;
 
-export type UpdateCheckStatus = 'up-to-date' | 'update-available';
+export type UpdateCheckStatus = "up-to-date" | "update-available";
 
 export type UpdateCheckData = {
   readonly localVersion: string;
@@ -431,23 +400,18 @@ export type AppOpenExternalRequest = {
 
 /** Workspace panel scope for VFS IPC (maps chat nav → VFS domain). */
 export type WorkspacePanelScope =
-  | 'global'
-  | 'session'
-  | 'chat'
-  | 'global-meta'
-  | 'project-meta'
+  | "global"
+  | "session"
+  | "chat"
+  | "global-meta"
+  | "project-meta"
   /** 只读物理树浏览域（跨域拼接视图，不落单 scope；仅 list/read） */
-  | 'physical';
+  | "physical";
 
 export type VfsScopeRequest = {
   readonly workspaceScope: WorkspacePanelScope;
   readonly projectId?: string;
   readonly sessionId?: string;
-};
-
-export type VfsListRequest = VfsScopeRequest & {
-  readonly path: string;
-  readonly recursive?: boolean;
 };
 
 export type VfsReadRequest = VfsScopeRequest & {
@@ -483,8 +447,8 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly fileName?: string;
 };
 
-export type VfsZipExportResult = 'saved' | 'cancelled';
-export type VfsZipImportResult = 'imported' | 'cancelled';
+export type VfsZipExportResult = "saved" | "cancelled";
+export type VfsZipImportResult = "imported" | "cancelled";
 
 /** zipPick 结果：所选文件字节；null = 用户取消。 */
 export type VfsZipPickResult = Uint8Array | null;
@@ -504,7 +468,7 @@ export type VfsCharacterCardImportRequest = VfsScopeRequest & {
   readonly directoryPath?: string;
 };
 
-export type VfsCharacterCardImportResult = 'imported' | 'cancelled';
+export type VfsCharacterCardImportResult = "imported" | "cancelled";
 
 /**
  * filePick 结果：用户所选的本机绝对路径；null = 取消选择。
@@ -526,11 +490,11 @@ export type VfsFileExportRequest = VfsScopeRequest & {
 };
 
 /** 与 {@link VfsZipExportResult} 同构，便于 Renderer 共用 toast 分支。 */
-export type VfsFileExportResult = 'saved' | 'cancelled';
+export type VfsFileExportResult = "saved" | "cancelled";
 
 export type VfsBatchConflictDto = {
   readonly logicalPath: string;
-  readonly reason: 'exists';
+  readonly reason: "exists";
 };
 
 export type VfsBatchApplyReportDto = {
@@ -550,12 +514,12 @@ export type VfsBatchIngestFromPathsRequest = VfsScopeRequest & {
 
 export type VfsBatchIngestFromPathsResult =
   | {
-      readonly status: 'needs_confirm';
+      readonly status: "needs_confirm";
       readonly conflicts: readonly VfsBatchConflictDto[];
       readonly skippedBinary: readonly string[];
     }
   | {
-      readonly status: 'applied';
+      readonly status: "applied";
       readonly report: VfsBatchApplyReportDto;
       readonly skippedBinary: readonly string[];
     };
@@ -609,35 +573,28 @@ export type VfsStartDragFailedPayload = {
   readonly message: string;
 };
 
-export type VfsListEntryDto = {
-  readonly path: string;
-  readonly kind: 'file' | 'directory';
-  readonly version?: number;
-  readonly mtimeMs?: number;
-};
-
 export type VfsReadResultDto = {
   readonly content: string;
   readonly version: number;
   readonly mtimeMs: number;
 };
 
-export type WorkplaceRuleState = 'rule_on' | 'rule_off';
+export type WorkplaceRuleState = "rule_on" | "rule_off";
 
-export type WorkplaceInclusionMode = 'auto' | 'show' | 'hide';
+export type WorkplaceInclusionMode = "auto" | "show" | "hide";
 
-export type WorkplaceDisplayState = 'hidden' | 'full' | 'header' | 'filename';
+export type WorkplaceDisplayState = "hidden" | "full" | "header" | "filename";
 
 export type WorkplaceListRowDto =
   | {
-      readonly kind: 'dir';
+      readonly kind: "dir";
       readonly path: string;
       readonly ruleState: WorkplaceRuleState;
       /** 展示名（物理树合成目录行的项目名/会话名）；未填充时用路径末段。 */
       readonly label?: string;
     }
   | {
-      readonly kind: 'file';
+      readonly kind: "file";
       readonly path: string;
       readonly inclusionMode: WorkplaceInclusionMode;
       readonly displayState: WorkplaceDisplayState;
@@ -662,26 +619,20 @@ export type PhysicalReadRequest = {
 export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
-  readonly sortField?: 'name' | 'created' | 'updated' | 'smart';
-  readonly sortOrder?: 'asc' | 'desc';
+  readonly sortField?: "name" | "created" | "updated" | "smart";
+  readonly sortOrder?: "asc" | "desc";
   readonly headCount?: number;
   readonly tailCount?: number;
-  readonly fillPolicy?: 'hidden' | 'filename' | 'header';
+  readonly fillPolicy?: "hidden" | "filename" | "header";
 };
 
 export type WorkplaceSetFileRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
-  readonly inclusionMode: 'auto' | 'show' | 'hide';
+  readonly inclusionMode: "auto" | "show" | "hide";
 };
 
 export type WorkplaceGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
-};
-
-/** 手动重置常驻工作区缓存（清空 session kkv，下次拼装重建）。 */
-export type WorkplaceCaptureSessionBlockRequest = {
-  readonly projectId: string;
-  readonly sessionId: string;
 };
 
 export type SessionFsRollbackRequest = {
@@ -708,16 +659,16 @@ export type MessagesListRequest = {
 };
 
 export type ContentBlockDto =
-  | { readonly type: 'text'; readonly text: string }
-  | { readonly type: 'thinking'; readonly text: string }
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "thinking"; readonly text: string }
   | {
-      readonly type: 'tool_use';
+      readonly type: "tool_use";
       readonly id: string;
       readonly name: string;
       readonly input: Record<string, unknown>;
     }
   | {
-      readonly type: 'tool_result';
+      readonly type: "tool_result";
       readonly toolUseId: string;
       readonly content: string;
       readonly ok?: boolean;
@@ -729,7 +680,7 @@ export type ContentBlockDto =
       readonly meta?: {
         readonly subagentSessionId?: string;
         readonly skillRef?: {
-          readonly domain: 'global' | 'project';
+          readonly domain: "global" | "project";
           readonly projectId?: string;
           readonly name: string;
         };
@@ -738,8 +689,8 @@ export type ContentBlockDto =
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
 export type MessageMetadataDto = {
-  readonly source?: 'user';
-  readonly actor?: 'user';
+  readonly source?: "user";
+  readonly actor?: "user";
   readonly synthetic?: boolean;
   readonly kind?: string;
   readonly toolInputCompressed?: boolean;
@@ -762,7 +713,7 @@ export type ChatMessageDto = {
 
 export type MessagesAppendRequest = {
   readonly sessionId: string;
-  readonly role: 'user' | 'assistant' | 'system';
+  readonly role: "user" | "assistant" | "system";
   readonly text: string;
 };
 
@@ -863,7 +814,6 @@ export type AgentSetCurrentRequest = {
   readonly agentId: string;
 };
 
-
 export type ModelPickerRowDto = {
   readonly savedModelId: string;
   readonly label: string;
@@ -889,7 +839,7 @@ export type PromptScopeRequest = {
  *
  * 形状与 core 的 `PromptToolGroupStatus` 逐值一致。
  */
-export type PromptToolGroupStatusDto = 'ok' | 'error' | 'lost';
+export type PromptToolGroupStatusDto = "ok" | "error" | "lost";
 
 /**
  * 工具组卡的 result 格；`null` 表示悬挂 use（丢失占位，槽位保留）。
@@ -916,7 +866,7 @@ export type PromptToolGroupResultDto = {
  * 形状与 core 的 `PromptToolGroupCardData` 逐字段一致。
  */
 export type PromptToolGroupDto = {
-  readonly type: 'toolGroup';
+  readonly type: "toolGroup";
   /** `group-${toolUseId}`，轮内唯一，React key 直接用它。 */
   readonly id: string;
   readonly toolName: string;
@@ -939,7 +889,7 @@ export type PromptToolGroupDto = {
  * 形状与 core 的 `PromptTextCardData` 逐字段一致。
  */
 export type PromptTextCardDto = {
-  readonly type: 'text' | 'thinking';
+  readonly type: "text" | "thinking";
   /** 独立命名空间 `card-${message.id}-${blockIndex}`（template 轮卡用段 id）；仅要求轮内唯一。 */
   readonly id: string;
   /** 展示标签用：user / assistant / template 段名。 */
@@ -966,7 +916,7 @@ export type PromptWorkplaceFileDto = {
    */
   readonly body: string;
   /** 展示档：full / filename / header（快照原值，非推断）。 */
-  readonly display: 'full' | 'filename' | 'header';
+  readonly display: "full" | "filename" | "header";
 };
 
 /**
@@ -974,17 +924,14 @@ export type PromptWorkplaceFileDto = {
  * 源头直通，不从展示串反解）。
  */
 export type PromptWorkplaceDto = {
-  readonly type: 'workplace';
+  readonly type: "workplace";
   /** 段 id（`prompt-workplace`）。 */
   readonly id: string;
   readonly files: readonly PromptWorkplaceFileDto[];
 };
 
 /** 轮内有序卡片流（判别联合，discriminator = `type`）。 */
-export type PromptTurnCardDto =
-  | PromptTextCardDto
-  | PromptToolGroupDto
-  | PromptWorkplaceDto;
+export type PromptTurnCardDto = PromptTextCardDto | PromptToolGroupDto | PromptWorkplaceDto;
 
 /**
  * 提示词预览「轮」（prompt-rounds）：模板段各占一轮、真用户输入开新轮、
@@ -1013,7 +960,7 @@ export type PromptTurnCardDto =
 export type PromptPreviewTurnDto = {
   readonly id: string;
   /** 轮的消息 role（用户拍板：合成段按真实消息 role 归轮，无 template 特殊分类）。 */
-  readonly kind: 'system' | 'user' | 'assistant';
+  readonly kind: "system" | "user" | "assistant";
   /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
   readonly summaryText: string;
   /** 计数行：字数 / 工具调用次数 / 失败丢失计数 / 附件计数。 */
@@ -1023,7 +970,7 @@ export type PromptPreviewTurnDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: 'session' | 'none';
+  readonly source: "session" | "none";
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
@@ -1034,7 +981,7 @@ export type PromptAgentMetaResponse = {
    * - `session`：会话级 modelId（agent 无 pin 时生效）。
    * `source: 'none'` 时省略。
    */
-  readonly modelSource?: 'agent-pin' | 'session';
+  readonly modelSource?: "agent-pin" | "session";
 };
 
 /** Structured chat context usage for workspace footer (prototype token bar). */
@@ -1051,7 +998,7 @@ export type PromptChatTokenStatsResponse = {
    * - `local`：本地 tokenizer 计数（记号按 counterKind/estimated 落家族名 = 或 gpt ≈）。
    * 与 `counterKind`（分词器维度）分开：api 命中时 counterKind 固定 `api`。
    */
-  readonly source: 'api' | 'local';
+  readonly source: "api" | "local";
   /**
    * main 拼好的完整占用标签（core `formatContextUsageLabel` 单源产出）：
    * 有窗口 `{mark} {connector} {cur} / {cw} ({pct}%)`（如 `远程 = 24k / 128k (19%)`），
@@ -1187,13 +1134,7 @@ export type SessionUsageDetailDto = {
 };
 
 /** `nm:usageStats/query` 响应体：一次调用按 kind 分发（避免多个 channel）。 */
-export type UsageStatsQueryResponse =
-  | UsageStatsSummaryDto
-  | UsageStatsBucketDto[]
-  | UsageStatsModelRowDto[]
-  | UsageStatsRequestPageDto
-  | SessionUsageDetailDto
-  | string[];
+export type UsageStatsQueryResponse = UsageStatsSummaryDto | UsageStatsBucketDto[] | UsageStatsModelRowDto[] | UsageStatsRequestPageDto | SessionUsageDetailDto | string[];
 
 /**
  * `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly'，offset/limit 仅
@@ -1202,14 +1143,7 @@ export type UsageStatsQueryResponse =
  * `filter: {}` 空对象占位（handler 的该 case 不读 req.filter）。
  */
 export type UsageStatsQueryRequest = {
-  readonly kind:
-    | 'summary'
-    | 'daily'
-    | 'hourly'
-    | 'models'
-    | 'modelBreakdown'
-    | 'requests'
-    | 'sessionDetail';
+  readonly kind: "summary" | "daily" | "hourly" | "models" | "modelBreakdown" | "requests" | "sessionDetail";
   readonly filter: UsageStatsFilterDto;
   readonly dayLocalDate?: string;
   readonly offset?: number;
@@ -1238,23 +1172,13 @@ export type WorkspaceMutatedPayload = {
 };
 
 /** 与 Core `MessageAttachmentAction` 对齐。 */
-export type MessageAttachmentActionDto =
-  | 'delete'
-  | 'write'
-  | 'edit'
-  | 'mkdir'
-  | 'rename'
-  | 'move'
-  | 'workplaceChange'
-  | 'userAttach'
-  | 'annotate'
-  | 'skillAttach';
+export type MessageAttachmentActionDto = "delete" | "write" | "edit" | "mkdir" | "rename" | "move" | "workplaceChange" | "userAttach" | "annotate" | "skillAttach";
 
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
   readonly name: string;
-  readonly source: 'workplace' | 'attach' | 'user_ops';
-  readonly type: 'text' | 'image' | 'dir';
+  readonly source: "workplace" | "attach" | "user_ops";
+  readonly type: "text" | "image" | "dir";
   readonly content: string | null;
   readonly path?: string;
   /** skillAttach 专用：技能名（无 path，chip 文案以此为准）。 */
@@ -1340,7 +1264,7 @@ export type ProviderListItemDto = {
   readonly protocol: string;
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
-  readonly apiKeyStatus: 'set' | 'not set';
+  readonly apiKeyStatus: "set" | "not set";
   readonly savedCount: number;
 };
 
@@ -1353,11 +1277,11 @@ export type ProviderDetailDto = {
   readonly headers: Record<string, string>;
   /** 自定义参数：原样合并进请求体顶层，值任意 JSON。 */
   readonly bodyParams: Record<string, unknown>;
-  readonly apiKeyStatus: 'set' | 'not set';
+  readonly apiKeyStatus: "set" | "not set";
 };
 
 export type ProviderCreateRequest = {
-  readonly protocol: 'openai' | 'anthropic' | 'gemini';
+  readonly protocol: "openai" | "anthropic" | "gemini";
   readonly baseUrl: string;
   /** 必填：服务商对人名称。 */
   readonly displayName: string;
@@ -1368,7 +1292,7 @@ export type ProviderCreateRequest = {
 
 export type ProviderEditRequest = {
   readonly providerId: string;
-  readonly protocol?: 'openai' | 'anthropic' | 'gemini';
+  readonly protocol?: "openai" | "anthropic" | "gemini";
   readonly baseUrl?: string;
   /** 若出现则 trim 后必须非空。 */
   readonly displayName?: string;
@@ -1435,7 +1359,7 @@ export type ProviderModelsUpdateSettingsRequest = {
   readonly contextWindowTokens?: number;
   readonly tokenCounterMode?: string;
   readonly sampling?: unknown;
-  readonly thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
+  readonly thinkingLevel?: "off" | "low" | "medium" | "high";
 };
 
 export type ProviderModelsResetContextWindowRequest = {
@@ -1444,7 +1368,7 @@ export type ProviderModelsResetContextWindowRequest = {
 
 /** 存储配置失效摘要（列表/编辑 assess 结果）。 */
 export type StoredConfigInvalidDto = {
-  readonly code: 'outdated_version' | 'broken_wire' | 'removed_feature';
+  readonly code: "outdated_version" | "broken_wire" | "removed_feature";
   readonly message: string;
   readonly storedSchemaVersion?: number;
 };
@@ -1453,9 +1377,7 @@ export type StoredConfigInvalidDto = {
  * 与 core `StoredConfigHealth<T>` 同构的 IPC discriminated union。
  * `value` 须为可结构化克隆的 plain object。
  */
-export type StoredConfigHealthDto<TValue extends object> =
-  | { readonly status: 'valid'; readonly value: TValue }
-  | ({ readonly status: 'invalid' } & StoredConfigInvalidDto);
+export type StoredConfigHealthDto<TValue extends object> = { readonly status: "valid"; readonly value: TValue } | ({ readonly status: "invalid" } & StoredConfigInvalidDto);
 
 export type AgentRegistryListItemDto = {
   readonly agentId: string;
@@ -1516,7 +1438,7 @@ export type AgentYamlImportRequest = {
  * 智能排序规则（与 core `SmartSortRule` 同构的 IPC DTO；renderer 不直接依赖 core）。
  */
 /** 捕获数字三档（D13，与 core SmartSortCaptureKind 同构；renderer 经 shared 消费）。 */
-export type SmartSortCaptureKindDto = 'smart' | 'fixed_min' | 'fixed_max';
+export type SmartSortCaptureKindDto = "smart" | "fixed_min" | "fixed_max";
 export type SmartSortRuleDto = {
   readonly ruleId: string;
   readonly name: string;
@@ -1572,33 +1494,11 @@ export type SmartSortRuleDeleteBatchRequest = {
 
 export type SmartSortRuleMoveRequest = {
   readonly ruleId: string;
-  readonly to: 'top' | 'bottom' | 'up' | 'down' | { readonly index: number };
+  readonly to: "top" | "bottom" | "up" | "down" | { readonly index: number };
 };
 
 export type SmartSortRuleReorderRequest = {
   readonly orderedIds: readonly string[];
-};
-
-/** bundle 文档单条规则（与 core `SmartSortRuleBundleRule` 同构，D10）。 */
-export type SmartSortRuleBundleRuleDto = {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly captureKind?: SmartSortCaptureKindDto;
-  readonly description?: string | null;
-  readonly enabled: boolean;
-  readonly sortOrder: number;
-};
-
-/** bundle 文档（替换式导入导出，D10）。 */
-export type SmartSortRuleBundleDto = {
-  readonly schemaVersion: number;
-  readonly rules: readonly SmartSortRuleBundleRuleDto[];
-};
-
-export type SmartSortRuleImportRulesRequest = {
-  readonly bundle: SmartSortRuleBundleDto;
 };
 
 /** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
@@ -1621,15 +1521,13 @@ export type SmartSortRuleMatchRequest = {
 };
 
 /** 正则匹配测试结果：非法正则是合法测试结局（ok 分支内联错误文案，非 IPC 错误）。 */
-export type SmartSortRuleMatchResultDto =
-  | { readonly ok: true; readonly matches: readonly SmartSortRuleMatchDto[] }
-  | { readonly ok: false; readonly error: string };
+export type SmartSortRuleMatchResultDto = { readonly ok: true; readonly matches: readonly SmartSortRuleMatchDto[] } | { readonly ok: false; readonly error: string };
 
-export type SmartSortRuleYamlExportResult = 'saved' | 'cancelled';
-export type SmartSortRuleYamlImportResult = 'imported' | 'cancelled';
+export type SmartSortRuleYamlExportResult = "saved" | "cancelled";
+export type SmartSortRuleYamlImportResult = "imported" | "cancelled";
 
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
-export type SkillDomainDto = 'global' | 'project';
+export type SkillDomainDto = "global" | "project";
 
 /** 技能定位引用（跳详情 / 卡片透传 / copy-delete 入参）。 */
 export type SkillRefDto = {
@@ -1707,17 +1605,6 @@ export type SkillsWriteRequest = {
   readonly projectId?: string;
 };
 
-/** 局部修改（同 edit 工具的 normalize-for-match 语义）；须显式域。 */
-export type SkillsEditRequest = {
-  readonly domain?: SkillDomainDto;
-  readonly name: string;
-  readonly path?: string;
-  readonly projectId?: string;
-  readonly oldString: string;
-  readonly newString: string;
-  readonly replaceAll?: boolean;
-};
-
 /** 负清单读写：只写当前项目的禁用记录。 */
 export type SkillsToggleRequest = {
   readonly projectId: string;
@@ -1762,8 +1649,8 @@ export type CompactionConditionsSetRequest = {
   readonly conditions: CompactionConditionsDto;
 };
 
-export type BackupExportResult = 'saved' | 'cancelled';
-export type BackupImportResult = 'imported' | 'cancelled';
+export type BackupExportResult = "saved" | "cancelled";
+export type BackupImportResult = "imported" | "cancelled";
 
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
@@ -1787,10 +1674,6 @@ export type CloudSyncConfigDto = {
   readonly deviceId: string;
   readonly deviceLabel: string;
   readonly hasSecretKey: boolean;
-  readonly enabled: boolean;
-};
-
-export type CloudSyncSetEnabledRequest = {
   readonly enabled: boolean;
 };
 
@@ -1947,7 +1830,7 @@ export type SearchResetPresetOverrideRequest = {
   readonly engineId: string;
 };
 
-export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';
+export type ShellMenuId = "file" | "edit" | "view" | "window" | "help";
 
 export type ShellMenuPopupRequest = {
   readonly menuId: ShellMenuId;

@@ -1,12 +1,4 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SkillRefDto } from "@shared/ipc-types";
 import {
   getSettingsNavHighlightId,
@@ -38,10 +30,7 @@ import { SkillDetailView } from "../features/settings/SkillDetailView";
 import { SearchEnginesView } from "../features/settings/SearchEnginesView";
 import { SearchEngineDetailView } from "../features/settings/SearchEngineDetailView";
 import { engineLabel, NEW_ENGINE_SENTINEL } from "../features/settings/search-engine-meta";
-import {
-  OPEN_SETTINGS_VIEW_EVENT,
-  type OpenSettingsViewDetail,
-} from "../features/skills/skill-ui";
+import { OPEN_SETTINGS_VIEW_EVENT, type OpenSettingsViewDetail } from "../features/skills/skill-ui";
 
 interface SettingsOverlayProps {
   open: boolean;
@@ -59,36 +48,7 @@ export interface SettingsOverlayHandle {
   requestClose: () => void;
 }
 
-function getSettingsMainTitle(
-  viewId: SettingsViewId,
-  navState: SettingsNavState,
-  agentEditorTitle?: string,
-): string {
-  if (viewId === "agentEditor") {
-    return agentEditorTitle ?? navState.editingAgentDisplayName ?? "智能体配置";
-  }
-  if (viewId === "providerDetail") return "模型管理";
-  if (viewId === "providerCreate") return "新建服务商";
-  if (viewId === "modelSampling") return "采样配置";
-  if (viewId === "smartSortRuleEditor") {
-    return navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
-  }
-  if (viewId === "searchEngineDetail") {
-    // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
-    if (navState.editingEngineId === NEW_ENGINE_SENTINEL) return "新建自定义引擎";
-    const label = engineLabel(navState.editingEngineId);
-    return label ? `搜索引擎 · ${label}` : "搜索引擎";
-  }
-  if (viewId === "skillDetail") {
-    return navState.viewingSkillRef != null
-      ? `技能 · ${navState.viewingSkillRef.name}`
-      : "技能详情";
-  }
-  return SETTINGS_TOP_LEVEL[viewId] ?? "设置";
-}
-
-export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlayProps>(
-  function SettingsOverlay({ open, onClose }, ref) {
+export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlayProps>(function SettingsOverlay({ open, onClose }, ref) {
   const [viewId, setViewId] = useState<SettingsViewId>("workspace");
   const [pageStack, setPageStack] = useState<SettingsViewId[]>([]);
   const [agentEditorTitle, setAgentEditorTitle] = useState<string | undefined>();
@@ -109,14 +69,13 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
     }
   }, [viewId]);
 
-  const showView = useCallback((next: SettingsViewId) => {
-    setViewId(next);
-  }, []);
-
-  const pushView = useCallback((next: SettingsViewId) => {
-    setPageStack((stack) => [...stack, viewId]);
-    setViewId(next);
-  }, [viewId]);
+  const pushView = useCallback(
+    (next: SettingsViewId) => {
+      setPageStack((stack) => [...stack, viewId]);
+      setViewId(next);
+    },
+    [viewId]
+  );
 
   const popView = useCallback(() => {
     setPageStack((stack) => {
@@ -142,7 +101,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
     }),
     // dirtyViews 为 useRef 持有的稳定引用，不随 navState 重建分叉；
     // navState 快照沿用既有 deps（pushView 随 viewId 变化自然刷新）。
-    [pushView, popView],
+    [pushView, popView]
   );
 
   /**
@@ -155,10 +114,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
    * 连弹两次。守卫只覆盖 Overlay 层的 UI 分发点（侧导航 / 返回 / 关闭 / 事件）。
    */
   const guardedNav = useCallback(
-    (
-      guard: { nextViewId: SettingsViewId; incomingSkillRef?: SkillRefDto },
-      action: () => void,
-    ) => {
+    (guard: { nextViewId: SettingsViewId; incomingSkillRef?: SkillRefDto }, action: () => void) => {
       if (
         shouldGuardSettingsNav({
           currentViewId: viewId,
@@ -173,12 +129,11 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
       }
       action();
     },
-    [viewId],
+    [viewId]
   );
 
   const highlightId = getSettingsNavHighlightId(viewId);
   const showBack = !isSettingsTopLevelView(viewId);
-
   // 会话技能面板 / 工具卡片 → 设置栈跨组件跳转（App 监听同名事件打开设置页）。
   // hidden 态可见性契约：守卫挂起（pending）期间设置页必须可见——App 侧监听
   // 同一事件、detail 非空即 setSettingsOpen(true)，与本 handler 同事件同步
@@ -192,68 +147,23 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
       }
       if (detail.view === "skillsManage") {
         // 「整理」跳转：整页切换会卸载当前 view，过守卫
-        guardedNav({ nextViewId: "skillsManage" }, () =>
-          navigateTopLevel("skillsManage"),
-        );
+        guardedNav({ nextViewId: "skillsManage" }, () => navigateTopLevel("skillsManage"));
         return;
       }
       // 技能详情跳转：viewingSkillRef 覆写与条件入栈全部包进 pending 动作、
       // 确认后才落地（覆写若先行会绕过守卫，dirty 编辑静默丢失）；取消则
       // navState 不动。同 skillRef 三元组重入由守卫纯函数放行（无 reload、
       // 无数据丢失，不弹窗）。
-      guardedNav(
-        { nextViewId: "skillDetail", incomingSkillRef: detail.skillRef },
-        () => {
-          navStateRef.current.viewingSkillRef = detail.skillRef;
-          if (viewId !== "skillDetail") {
-            pushView("skillDetail");
-          }
-        },
-      );
+      guardedNav({ nextViewId: "skillDetail", incomingSkillRef: detail.skillRef }, () => {
+        navStateRef.current.viewingSkillRef = detail.skillRef;
+        if (viewId !== "skillDetail") {
+          pushView("skillDetail");
+        }
+      });
     };
     window.addEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
     return () => window.removeEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
   }, [guardedNav, navigateTopLevel, pushView, viewId]);
-
-  const renderContent = () => {
-    switch (viewId) {
-      case "workspace":
-        return <WorkspaceSettingsView />;
-      case "about":
-        return <AboutView />;
-      case "dataManagement":
-        return <DataManagementView />;
-      case "tokenUsageStats":
-        return <TokenUsageStatsView />;
-      case "agentsSettings":
-        return <AgentsSettingsView nav={nav} />;
-      case "agentEditor":
-        return <AgentEditorView nav={nav} />;
-      case "searchEngines":
-        return <SearchEnginesView nav={nav} />;
-      case "searchEngineDetail":
-        return <SearchEngineDetailView nav={nav} />;
-
-      case "providers":
-        return <ProvidersView nav={nav} />;
-      case "providerCreate":
-        return <ProviderFormView nav={nav} mode="create" />;
-      case "providerDetail":
-        return <ProviderDetailView nav={nav} />;
-      case "modelSampling":
-        return <ModelSamplingView nav={nav} />;
-      case "smartSortRules":
-        return <SmartSortRulesView nav={nav} />;
-      case "smartSortRuleEditor":
-        return <SmartSortRuleEditorView nav={nav} />;
-      case "skillsManage":
-        return <SkillsManageView nav={nav} />;
-      case "skillDetail":
-        return <SkillDetailView nav={nav} />;
-      default:
-        return null;
-    }
-  };
 
   const handleClose = useCallback(() => {
     // 关闭会重置回 workspace：dirty 的子页（如 skillDetail）被卸载，须过守卫；
@@ -271,13 +181,76 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
   // ⚙ 按钮与 × 按钮共用这一条关闭路径（守卫单点仍在 Overlay 内）。
   useImperativeHandle(ref, () => ({ requestClose: handleClose }), [handleClose]);
 
+  let mainTitle = SETTINGS_TOP_LEVEL[viewId] ?? "设置";
+  if (viewId === "agentEditor") mainTitle = agentEditorTitle ?? navState.editingAgentDisplayName ?? "智能体配置";
+  else if (viewId === "providerDetail") mainTitle = "模型管理";
+  else if (viewId === "providerCreate") mainTitle = "新建服务商";
+  else if (viewId === "modelSampling") mainTitle = "采样配置";
+  else if (viewId === "smartSortRuleEditor") mainTitle = navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
+  else if (viewId === "searchEngineDetail") {
+    // 详情页复用同一 viewId：哨兵值 = 新建自定义引擎（create 模式）
+    const label = engineLabel(navState.editingEngineId);
+    mainTitle = navState.editingEngineId === NEW_ENGINE_SENTINEL ? "新建自定义引擎" : label ? `搜索引擎 · ${label}` : "搜索引擎";
+  } else if (viewId === "skillDetail") {
+    mainTitle = navState.viewingSkillRef != null ? `技能 · ${navState.viewingSkillRef.name}` : "技能详情";
+  }
+
+  let content: ReactNode = null;
+  switch (viewId) {
+    case "workspace":
+      content = <WorkspaceSettingsView />;
+      break;
+    case "about":
+      content = <AboutView />;
+      break;
+    case "dataManagement":
+      content = <DataManagementView />;
+      break;
+    case "tokenUsageStats":
+      content = <TokenUsageStatsView />;
+      break;
+    case "agentsSettings":
+      content = <AgentsSettingsView nav={nav} />;
+      break;
+    case "agentEditor":
+      content = <AgentEditorView nav={nav} />;
+      break;
+    case "searchEngines":
+      content = <SearchEnginesView nav={nav} />;
+      break;
+    case "searchEngineDetail":
+      content = <SearchEngineDetailView nav={nav} />;
+      break;
+    case "providers":
+      content = <ProvidersView nav={nav} />;
+      break;
+    case "providerCreate":
+      content = <ProviderFormView nav={nav} mode="create" />;
+      break;
+    case "providerDetail":
+      content = <ProviderDetailView nav={nav} />;
+      break;
+    case "modelSampling":
+      content = <ModelSamplingView nav={nav} />;
+      break;
+    case "smartSortRules":
+      content = <SmartSortRulesView nav={nav} />;
+      break;
+    case "smartSortRuleEditor":
+      content = <SmartSortRuleEditorView nav={nav} />;
+      break;
+    case "skillsManage":
+      content = <SkillsManageView nav={nav} />;
+      break;
+    case "skillDetail":
+      content = <SkillDetailView nav={nav} />;
+      break;
+    default:
+      break;
+  }
+
   return (
-    <div
-      id="settings-page"
-      className={`settings-page${open ? "" : " hidden"}`}
-      hidden={!open}
-      aria-hidden={!open}
-    >
+    <div id="settings-page" className={`settings-page${open ? "" : " hidden"}`} hidden={!open} aria-hidden={!open}>
       <div className="settings-page__body">
         <nav className="settings-nav" id="settings-nav" aria-label="设置分类">
           <div className="settings-nav__brand">设置</div>
@@ -290,11 +263,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
                   type="button"
                   className={`settings-nav__item${item.id === highlightId ? " is-active" : ""}`}
                   data-settings-nav={item.id}
-                  onClick={() =>
-                    guardedNav({ nextViewId: item.id }, () =>
-                      navigateTopLevel(item.id),
-                    )
-                  }
+                  onClick={() => guardedNav({ nextViewId: item.id }, () => navigateTopLevel(item.id))}
                 >
                   <span className="settings-nav__icon" aria-hidden="true">
                     {item.icon}
@@ -327,7 +296,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
               ‹
             </button>
             <h2 className="settings-main__title" id="settings-main-title">
-              {getSettingsMainTitle(viewId, navState, agentEditorTitle)}
+              {mainTitle}
             </h2>
             <button type="button" className="settings-main__close" onClick={handleClose} aria-label="关闭设置">
               ×
@@ -335,7 +304,7 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
           </header>
           <div className="settings-page__content" id="settings-page-root">
             <div key={viewId} className="settings-view">
-              {renderContent()}
+              {content}
             </div>
           </div>
         </div>
@@ -356,5 +325,4 @@ export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlay
       />
     </div>
   );
-  },
-);
+});

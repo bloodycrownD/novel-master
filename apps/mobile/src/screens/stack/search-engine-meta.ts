@@ -10,10 +10,7 @@
  * @module screens/stack/search-engine-meta
  */
 
-import {
-  PRESET_ENGINE_TEMPLATES,
-  type SearchEngineTemplate,
-} from '@novel-master/core';
+import {PRESET_ENGINE_TEMPLATES, type SearchEngineTemplate} from '@novel-master/core';
 
 /** 预置引擎显示名（列表行标题 / 详情页标题共用）。 */
 export const ENGINE_LABELS: Readonly<Record<string, string>> = {
@@ -40,11 +37,9 @@ export const ENGINE_HINTS: Readonly<Record<string, string>> = {
 /** 自定义实例行副标题（无出厂文案）。 */
 export const CUSTOM_ENGINE_HINT = '自定义模板';
 
-/** 出厂模板只读索引视图。 */
-type PresetTemplateTable = Readonly<Record<string, SearchEngineTemplate>>;
-
-/** 出厂模板查表（预置 id 命中；自定义实例 / DDG 返回 undefined）。 */
-export const PRESET_TEMPLATES: PresetTemplateTable = PRESET_ENGINE_TEMPLATES;
+/** 出厂模板查表（按动态 id 索引的只读视图；预置 id 命中，自定义实例 / DDG 返回 undefined）。 */
+// prettier-ignore
+export const PRESET_TEMPLATES: Readonly<Record<string, SearchEngineTemplate>> = PRESET_ENGINE_TEMPLATES;
 
 /**
  * 展示名：读模型 name 优先（拍板 5，双端同口径——desktop 同款）；静态表

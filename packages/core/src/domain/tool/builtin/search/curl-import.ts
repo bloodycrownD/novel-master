@@ -17,6 +17,7 @@ import type { MessageDescriptor } from "@/common/i18n.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageKey } from "@/i18n/keys.js";
 
+// nm-style: keep-public — parseCurlCommand 的公开 DTO：desktop shared 层（apps/desktop/shared/logic/search-engines.ts）按此类型再导出给 renderer。
 /** curl 解析成功后的表单草稿（method/url/headers/defaultBody 预填；响应映射配置已废除，无需补填）。 */
 export interface CurlCommandDraft {
   readonly method: "GET" | "POST";
@@ -30,6 +31,7 @@ export interface CurlCommandDraft {
   readonly apiKey?: string;
 }
 
+// nm-style: keep-public — parseCurlCommand 返回值的错误侧 DTO：desktop shared 层按此类型再导出给 renderer。
 /** curl 解析失败载荷（key `error.tool.search_curl_parse_failed`，params 带原因）。 */
 export interface CurlParseError {
   readonly message: MessageDescriptor<CoreMessageKey>;
@@ -86,7 +88,13 @@ function readOptionValue(tokens: readonly string[], index: number): string | und
  * nm-style: keep-public — spec §8 双端共用的 curl 解析入口（desktop / mobile 新建页直接消费）。
  */
 export function parseCurlCommand(text: string): Result<CurlCommandDraft, CurlParseError> {
-  const fail = (reason: string): Result<CurlCommandDraft, CurlParseError> => Result.err({ message: { key: "error.tool.search_curl_parse_failed", params: { reason } } });
+  const fail = (reason: string): Result<CurlCommandDraft, CurlParseError> =>
+    Result.err({
+      message: {
+        key: "error.tool.search_curl_parse_failed",
+        params: { reason },
+      },
+    });
   const tokens: string[] = [];
   let current = "";
   let quote: "'" | '"' | null = null;
@@ -179,7 +187,10 @@ export function parseCurlCommand(text: string): Result<CurlCommandDraft, CurlPar
         if (value == null) return fail(`missing value for ${token}`);
         const separator = value.indexOf(":");
         if (separator <= 0) return fail(`invalid header (expected "Name: Value"): ${value}`);
-        headerPairs.push({ name: value.slice(0, separator).trim(), value: value.slice(separator + 1).trim() });
+        headerPairs.push({
+          name: value.slice(0, separator).trim(),
+          value: value.slice(separator + 1).trim(),
+        });
         index += 1;
         break;
       }
@@ -237,5 +248,11 @@ export function parseCurlCommand(text: string): Result<CurlCommandDraft, CurlPar
   for (const header of headerPairs) headers[header.name] = replaceSecrets(header.value, secrets);
   const replacedUrl = replaceSecrets(url, secrets);
   const replacedBody = data == null ? undefined : replaceSecrets(data, secrets);
-  return Result.ok({ method: normalizedMethod, url: replacedUrl, headers, ...(replacedBody == null ? {} : { defaultBody: replacedBody }), ...(secrets.length === 0 ? {} : { apiKey: secrets[0] }) });
+  return Result.ok({
+    method: normalizedMethod,
+    url: replacedUrl,
+    headers,
+    ...(replacedBody == null ? {} : { defaultBody: replacedBody }),
+    ...(secrets.length === 0 ? {} : { apiKey: secrets[0] }),
+  });
 }

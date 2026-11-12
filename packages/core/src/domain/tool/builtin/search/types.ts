@@ -63,13 +63,16 @@ export type SearchChainOutput = SearchResponse & {
   readonly attempts?: string;
 };
 
-/** paramHint 长度上限：保存路径硬校验，装配期描述快照再做防御性截断（双道，SPEC §2）。 */
-export const SEARCH_PARAM_HINT_MAX_LENGTH = 500;
-
 /** 引擎执行入参选项（query / engine / params 在 search-tool 层消费）。 */
 export interface SearchToolOptions {
   readonly maxResults?: number;
 }
+
+/** HTTP fetch 函数形态（引擎执行器注入点；本域自持别名，不反向依赖 infra）。 */
+export type FetchFn = typeof globalThis.fetch;
+
+/** search 工具入参 params：工具层自由 JSON（模板执行器原样透传引擎方言字段）。 */
+export type ToolParams = Readonly<Record<string, unknown>>;
 
 /**
  * 引擎解析结果：凭据与模板随参数注入适配器 / 模板执行器（明文 key 只在
@@ -89,11 +92,11 @@ export interface ResolvedEngineConfig {
   readonly template?: SearchEngineTemplate;
 }
 
-/** 默认结果条数（maxResults 缺省 / 非法 / 小于 1 时回落此值）。 */
-export const DEFAULT_MAX_RESULTS = 5;
+/** 默认结果条数（maxResults 缺省 / 非法 / 小于 1 时回落此值；仅本模块 normalizeMaxResults 消费）。 */
+const DEFAULT_MAX_RESULTS = 5;
 
-/** 结果条数上限（超过时收敛到该值，不报错）。 */
-export const MAX_RESULTS_LIMIT = 20;
+/** 结果条数上限（超过时收敛到该值，不报错；仅本模块 normalizeMaxResults 消费）。 */
+const MAX_RESULTS_LIMIT = 20;
 
 /**
  * 归一化结果条数：缺省 / 非有限数 / 小于 1 → 5；其余向下取整并 clamp 到
@@ -178,7 +181,7 @@ export interface SearchEngineTemplate {
   readonly headers: Readonly<Record<string, string>>;
   /** 可选：POST 默认 body（合法 JSON 对象文本，占位符只出现在字符串值内）；留空则依赖 agent 调用时传 params。 */
   readonly defaultBody?: string;
-  /** 参数说明（≤500 字符，装配期拼进工具描述）。 */
+  /** 参数说明（装配期原样拼进工具描述）。 */
   readonly paramHint: string;
 }
 
@@ -196,7 +199,12 @@ export interface CustomEngineDef {
 type SearchTemplateValidationError = AppError<"TOOL_SEARCH_TEMPLATE_INVALID">;
 
 /** URL 校验用占位符示例值：替换后才能对 `{{baseUrl}}/search?...` 这类模板串做 `new URL()`。 */
-const TEMPLATE_PLACEHOLDER_EXAMPLES: Readonly<Record<string, string>> = { query: "example", count: "5", apiKey: "example-api-key", baseUrl: "https://example.invalid" };
+const TEMPLATE_PLACEHOLDER_EXAMPLES: Readonly<Record<string, string>> = {
+  query: "example",
+  count: "5",
+  apiKey: "example-api-key",
+  baseUrl: "https://example.invalid",
+};
 
 /** 返回文本里第一个不在白名单内的占位符名字（无则 null）。 */
 function unknownPlaceholderIn(text: string): string | null {
@@ -216,14 +224,14 @@ function unknownPlaceholderIn(text: string): string | null {
  * defaultBody 可选（POST 不再强制必填——留空则依赖 agent 调用时传 params），配了则须为
  * 合法 JSON 对象文本，占位符只允许白名单四个且 JSON 键一律不含占位符（执行器只替换值，
  * 键里的占位符会原样进请求），`{{count}}` 在 body 字符串值内只允许整值出现（执行器替换为
- * number）、GET 携带 defaultBody 拒绝；paramHint ≤500 字符；url / headers / defaultBody
+ * number）、GET 携带 defaultBody 拒绝；paramHint 不限长（原样拼进工具描述）；url / headers / defaultBody
  * 不含明文密钥特征（与 curl 导入共用 `findPlaintextSecrets`，全仓唯一检测实现）。
  * 错误码统一 `TOOL_SEARCH_TEMPLATE_INVALID`，messageKey 取
  * `error.tool.search_template_invalid`（params 带字段原因）或
  * `error.tool.search_secret_detected`（params 带字段名）。
  */
 export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineTemplate, SearchTemplateValidationError> {
-  const invalid = (reason: string): Result<SearchEngineTemplate, SearchTemplateValidationError> => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_template_invalid", params: { reason } }));
+  const invalid = (reason: string) => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_template_invalid", params: { reason } }));
   if (!isRecord(raw)) return invalid("expected an object");
 
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
@@ -293,12 +301,25 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
 
   if (typeof raw.paramHint !== "string") return invalid("paramHint must be a string");
   const paramHint = raw.paramHint.trim();
-  if (paramHint.length > SEARCH_PARAM_HINT_MAX_LENGTH) return invalid(`paramHint must be at most ${SEARCH_PARAM_HINT_MAX_LENGTH} characters`);
 
-  const secretFields = [{ field: "url", text: url }, { field: "defaultBody", text: defaultBody ?? "" }, ...Object.entries(headers).map(([headerName, headerValue]) => ({ field: `headers.${headerName}`, text: `${headerName}: ${headerValue}` }))];
+  const secretFields = [
+    { field: "url", text: url },
+    { field: "defaultBody", text: defaultBody ?? "" },
+    ...Object.entries(headers).map(([headerName, headerValue]) => ({
+      field: `headers.${headerName}`,
+      text: `${headerName}: ${headerValue}`,
+    })),
+  ];
   for (const { field, text } of secretFields) {
     if (findPlaintextSecrets(text).length > 0) return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_secret_detected", params: { field } }));
   }
 
-  return Result.ok({ name, method, url, headers, ...(defaultBody == null ? {} : { defaultBody }), paramHint });
+  return Result.ok({
+    name,
+    method,
+    url,
+    headers,
+    ...(defaultBody == null ? {} : { defaultBody }),
+    paramHint,
+  });
 }

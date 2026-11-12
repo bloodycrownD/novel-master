@@ -14,9 +14,8 @@
  *   key 草稿非空 / 无覆盖 → 带 draft 草稿直测。
  *
  * ui/P2-8 / P2-10 回归锁（CR 第 2 轮）：预置零改动保存不发任何写调用且 toast
- * 「无改动」、baseUrl 同值不发 setEngineBaseUrl；测试失败文案错误红（FIX-27）；
- * create 模式 curl 导入预填（parseCurlCommand 真函数：method/URL/headers/
- * defaultBody 回填，明文密钥替换 {{apiKey}} 并回填 key 草稿）。
+ * 「无改动」、baseUrl 同值不发 setEngineBaseUrl；测试失败文案错误红（FIX-27）。
+ * （create 模式 curl 导入已随本迭代从 mobile 删除，本套件不再覆盖该路径。）
  *
  * 照 search-engines-screen-reorder.test.tsx 的 TestRenderer 直测风格：输入框 /
  * 保存 / 测试按钮 / 状态标签 mock 成带标记的可交互节点，树文本与调用参数断言；
@@ -76,8 +75,7 @@ jest.mock('@/components/provider/ApiKeyStatusTag', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    ApiKeyStatusTag: (props: {status: 'set' | 'not set'}) =>
-      mockReact.createElement(Text, {tag: props.status}, `tag:${props.status}`),
+    ApiKeyStatusTag: (props: {status: 'set' | 'not set'}) => mockReact.createElement(Text, {tag: props.status}, `tag:${props.status}`),
   };
 });
 
@@ -86,10 +84,7 @@ jest.mock('@/components/ui/ModalShell', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    ModalShell: (props: {visible: boolean; children?: React.ReactNode}) =>
-      props.visible
-        ? mockReact.createElement(Text, null, props.children ?? null)
-        : null,
+    ModalShell: (props: {visible: boolean; children?: React.ReactNode}) => (props.visible ? mockReact.createElement(Text, null, props.children ?? null) : null),
   };
 });
 
@@ -98,11 +93,7 @@ jest.mock('@/components/form/FormSectionCard', () => {
   const mockReact = require('react');
   const {View} = require('react-native');
   return {
-    FormSectionCard: (props: {
-      children?: React.ReactNode;
-      rightAction?: React.ReactNode;
-    }) =>
-      mockReact.createElement(View, null, props.rightAction, props.children),
+    FormSectionCard: (props: {children?: React.ReactNode; rightAction?: React.ReactNode}) => mockReact.createElement(View, null, props.rightAction, props.children),
   };
 });
 
@@ -110,8 +101,7 @@ jest.mock('@/components/form/FormField', () => {
   const mockReact = require('react');
   const {View} = require('react-native');
   return {
-    FormField: (props: {children?: React.ReactNode}) =>
-      mockReact.createElement(View, null, props.children),
+    FormField: (props: {children?: React.ReactNode}) => mockReact.createElement(View, null, props.children),
   };
 });
 
@@ -120,10 +110,7 @@ jest.mock('@/components/form/ScreenFormLayout', () => {
   const {View} = require('react-native');
   return {
     // children 与 footer（保存按钮所在）都透传进树。
-    ScreenFormLayout: (props: {
-      children?: React.ReactNode;
-      footer?: React.ReactNode;
-    }) => mockReact.createElement(View, null, props.children, props.footer),
+    ScreenFormLayout: (props: {children?: React.ReactNode; footer?: React.ReactNode}) => mockReact.createElement(View, null, props.children, props.footer),
   };
 });
 
@@ -132,43 +119,29 @@ jest.mock('@/components/form/StickyFormFooter', () => {
   const mockReact = require('react');
   const {Pressable, Text} = require('react-native');
   return {
-    StickyFormFooter: (props: {onPress: () => void; label: string}) =>
-      mockReact.createElement(
-        Pressable,
-        {onPress: props.onPress},
-        mockReact.createElement(Text, null, props.label),
-      ),
+    StickyFormFooter: (props: {onPress: () => void; label: string}) => mockReact.createElement(Pressable, {onPress: props.onPress}, mockReact.createElement(Text, null, props.label)),
   };
 });
 
-// 次按钮（测试搜索 / curl 解析 / 清除密钥等）：可点节点，testLabel 标记定位。
+// 次按钮（添加请求头 / 清除密钥 / 恢复默认等）：可点节点，testLabel 标记定位。
 jest.mock('@/components/ui/Buttons', () => {
   const mockReact = require('react');
   const {Pressable, Text} = require('react-native');
   return {
     PrimaryButton: () => null,
     SecondaryButton: (props: {onPress?: () => void; label: string}) =>
-      mockReact.createElement(
-        Pressable,
-        {onPress: props.onPress, testLabel: props.label},
-        mockReact.createElement(Text, null, props.label),
-      ),
+      mockReact.createElement(Pressable, {onPress: props.onPress, testLabel: props.label}, mockReact.createElement(Text, null, props.label)),
   };
 });
 
-// 输入框：onChangeText / value / placeholder / secureTextEntry 挂 props 供测试
-// 定位、直接触发与预填断言（key 输入 secureTextEntry 可辨，其余按 placeholder
-// 精确匹配；curl 导入用例靠 value 断言表单回填）。
+// 输入框：onChangeText / value / placeholder / secureTextEntry / disabled 挂
+// props 供测试定位、直接触发与只读断言（key 输入 secureTextEntry 可辨，
+// 其余按 placeholder 精确匹配）。
 jest.mock('@/components/form/FormTextInput', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    FormTextInput: (props: {
-      value?: string;
-      onChangeText: (text: string) => void;
-      secureTextEntry?: boolean;
-      placeholder?: string;
-    }) =>
+    FormTextInput: (props: {value?: string; onChangeText: (text: string) => void; secureTextEntry?: boolean; placeholder?: string; disabled?: boolean}) =>
       mockReact.createElement(
         Text,
         {
@@ -176,6 +149,25 @@ jest.mock('@/components/form/FormTextInput', () => {
           value: props.value,
           secureTextEntry: props.secureTextEntry,
           placeholder: props.placeholder,
+          disabled: props.disabled,
+        },
+        '',
+      ),
+  };
+});
+
+// 下拉（认证方式）：onChange/value/disabled 挂 props 供测试触发与只读断言。
+jest.mock('@/components/form/FormSelectField', () => {
+  const mockReact = require('react');
+  const {Text} = require('react-native');
+  return {
+    FormSelectField: (props: {value: string; onChange: (value: string) => void; disabled?: boolean}) =>
+      mockReact.createElement(
+        Text,
+        {
+          onChange: props.onChange,
+          value: props.value,
+          disabled: props.disabled,
         },
         '',
       ),
@@ -205,8 +197,7 @@ const mockRuntime = {
     createCustomEngine: (...args: unknown[]) => mockCreateCustomEngine(...args),
     updateCustomEngine: (...args: unknown[]) => mockUpdateCustomEngine(...args),
     deleteCustomEngine: jest.fn(),
-    updatePresetOverride: (...args: unknown[]) =>
-      mockUpdatePresetOverride(...args),
+    updatePresetOverride: (...args: unknown[]) => mockUpdatePresetOverride(...args),
     resetPresetOverride: jest.fn(),
     testEngine: (...args: unknown[]) => mockTestEngine(...args),
   },
@@ -221,13 +212,12 @@ import {SearchEngineDetailScreen} from '@/screens/stack/SearchEngineDetailScreen
 // 自定义 props 复制到内部嵌套节点，按 props findAll 会重复匹配）。
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {FormChipGroup} from '@/components/form/FormChipGroup';
+import {FormSelectField} from '@/components/form/FormSelectField';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
 
 /** 动态读模型 fixture：bocha 的 hasKey 跟随 saveEngineKey 调用次数；patch 可覆写 presetOverrides 等顶层字段。 */
-function makeConfig(
-  patch: Partial<SearchConfigPublic> = {},
-): SearchConfigPublic {
+function makeConfig(patch: Partial<SearchConfigPublic> = {}): SearchConfigPublic {
   return {
     engines: [
       {
@@ -249,9 +239,7 @@ function makeConfig(
 }
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
-function treeText(
-  node: TestRenderer.ReactTestInstance | string | number,
-): string {
+function treeText(node: TestRenderer.ReactTestInstance | string | number): string {
   if (node == null) {
     return '';
   }
@@ -267,36 +255,27 @@ function treeText(
 
 /** 取 key 输入框（secureTextEntry 标记；create/预置表单各只有密钥框一个）。 */
 function keyInput(root: TestRenderer.ReactTestInstance) {
-  const nodes = root
-    .findAllByType(FormTextInput)
-    .filter(n => n.props.secureTextEntry);
+  const nodes = root.findAllByType(FormTextInput).filter(n => n.props.secureTextEntry);
   expect(nodes.length).toBe(1);
   return nodes[0];
 }
 
 /** 按 placeholder 精确匹配定位输入框（FormTextInput mock 把 placeholder 挂 props）。 */
-function inputByPlaceholder(
-  root: TestRenderer.ReactTestInstance,
-  placeholder: string,
-) {
-  const nodes = root
-    .findAllByType(FormTextInput)
-    .filter(n => n.props.placeholder === placeholder);
+function inputByPlaceholder(root: TestRenderer.ReactTestInstance, placeholder: string) {
+  const nodes = root.findAllByType(FormTextInput).filter(n => n.props.placeholder === placeholder);
+  expect(nodes.length).toBe(1);
+  return nodes[0];
+}
+
+/** 按 value 内容片段定位输入框（参数说明等预填字段无 placeholder 稳定值）。 */
+function inputContaining(root: TestRenderer.ReactTestInstance, fragment: string) {
+  const nodes = root.findAllByType(FormTextInput).filter(n => String(n.props.value ?? '').includes(fragment));
   expect(nodes.length).toBe(1);
   return nodes[0];
 }
 
 function saveFooter(root: TestRenderer.ReactTestInstance) {
   return root.findByType(StickyFormFooter);
-}
-
-/** 测试搜索按钮（SecondaryButton 复合节点的 label prop 定位）。 */
-function testButton(root: TestRenderer.ReactTestInstance) {
-  const nodes = root
-    .findAllByType(SecondaryButton)
-    .filter(n => n.props.label === '测试搜索');
-  expect(nodes.length).toBe(1);
-  return nodes[0];
 }
 
 async function renderScreen() {
@@ -318,10 +297,7 @@ async function typeKey(root: TestRenderer.ReactTestInstance, text: string) {
   });
 }
 
-async function typeInto(
-  node: TestRenderer.ReactTestInstance,
-  text: string,
-): Promise<void> {
+async function typeInto(node: TestRenderer.ReactTestInstance, text: string): Promise<void> {
   await act(async () => {
     node.props.onChangeText(text);
   });
@@ -340,14 +316,6 @@ async function tapSave(root: TestRenderer.ReactTestInstance) {
     saveFooter(root).props.onPress();
     // saveEngineKey →（catch）load 内 readConfig 的 promise 链逐级
     // await，多轮 microtask 全部落定。
-    await flush();
-  });
-}
-
-/** 点「测试搜索」并 flush 草稿直测的 async 链。 */
-async function tapTest(root: TestRenderer.ReactTestInstance) {
-  await act(async () => {
-    testButton(root).props.onPress();
     await flush();
   });
 }
@@ -376,29 +344,33 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     expect(mockSetStackOverride).toHaveBeenCalledWith({title: '博查搜索'});
   });
 
+  it('参数说明（内置引擎）：只读展示，不渲染全屏编辑入口', async () => {
+    const {renderer} = await renderScreen();
+    const hintInput = inputContaining(renderer.root, '博查（POST）');
+    expect(hintInput.props.disabled).toBe(true);
+    expect(treeText(renderer.root)).not.toContain('⛶');
+  });
+
   it('保存失败后回读，toast 失败且 readConfig 被再次调用', async () => {
     mockSaveEngineKey.mockRejectedValueOnce(new Error('盘炸了'));
     const {renderer} = await renderScreen();
-    expect(treeText(renderer.root)).toContain('tag:not set');
     const readsBefore = mockReadConfig.mock.calls.length;
 
     await typeKey(renderer.root, 'sk-bocha-1');
     await tapSave(renderer.root);
 
-    // toast 失败 + catch 内回读（状态标签刷新链路被触发）。
     expect(mockSaveEngineKey).toHaveBeenCalledWith('bocha', 'sk-bocha-1');
     expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
     expect(mockReadConfig.mock.calls.length).toBeGreaterThan(readsBefore);
   });
 
-  it('保存成功：toast 成功且标签同步为 set（成功路径回归）', async () => {
+  it('保存成功：toast 成功（成功路径回归）', async () => {
     const {renderer} = await renderScreen();
     await typeKey(renderer.root, 'sk-bocha-1');
     await tapSave(renderer.root);
 
     expect(mockShowToast).toHaveBeenCalledTimes(1);
     expect(mockShowToast).toHaveBeenCalledWith('配置已保存');
-    expect(treeText(renderer.root)).toContain('tag:set');
   });
 
   it('留空保存：拦截并提示，不触碰密钥库、不回读', async () => {
@@ -408,9 +380,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
 
     expect(mockSaveEngineKey).not.toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).toHaveBeenCalledWith(
-      '请输入 API Key（留空不会修改已保存的密钥）',
-    );
+    expect(mockShowToast).toHaveBeenCalledWith('请输入 API Key（留空不会修改已保存的密钥）');
     // 拦截早退：无成功链路的回读（readConfig 调用数不变）。
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
   });
@@ -489,14 +459,8 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       const {renderer} = await renderScreen();
 
       // FIX-25：预填基线（POST + headers/defaultBody 出厂示例），只补显示名/URL/key。
-      await typeInto(
-        inputByPlaceholder(renderer.root, '如 我的搜索'),
-        '我的搜索',
-      );
-      await typeInto(
-        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
-        'https://api.example.com/search',
-      );
+      await typeInto(inputByPlaceholder(renderer.root, '如 我的搜索'), '我的搜索');
+      await typeInto(inputByPlaceholder(renderer.root, 'https://api.example.com/search'), 'https://api.example.com/search');
       await typeKey(renderer.root, 'sk-create-1');
       await tapSave(renderer.root);
 
@@ -508,19 +472,16 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       };
       expect(payload.def.id).toMatch(/^custom:[0-9a-z]{8}$/);
       expect(payload.def.name).toBe('我的搜索');
-      // 预填基线进了模板（POST + JSON 头 + defaultBody 示例；v2 无映射字段）。
+      // 预填基线进了模板（POST + JSON 内容头；v3 起无请求体字段、无映射字段）。
       expect(payload.def.template).toMatchObject({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
+          Authorization: 'Bearer {{apiKey}}',
         },
-        defaultBody: JSON.stringify(
-          {query: '{{query}}', count: '{{count}}'},
-          null,
-          2,
-        ),
       });
+      expect('defaultBody' in payload.def.template).toBe(false);
       // key / baseUrl 拆分：key 草稿进 apiKey；模板未引用 {{baseUrl}} 时无 baseUrl 键。
       expect(payload.apiKey).toBe('sk-create-1');
       expect('baseUrl' in payload).toBe(false);
@@ -530,18 +491,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
 
     it('create 保存 baseUrl 拆分：模板引用 {{baseUrl}} 时实例地址单独传参', async () => {
       const {renderer} = await renderScreen();
-      await typeInto(
-        inputByPlaceholder(renderer.root, '如 我的搜索'),
-        '我的搜索',
-      );
-      await typeInto(
-        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
-        '{{baseUrl}}/search?q={{query}}',
-      );
-      await typeInto(
-        inputByPlaceholder(renderer.root, 'https://search.example.com'),
-        'https://search.example.com',
-      );
+      await typeInto(inputByPlaceholder(renderer.root, '如 我的搜索'), '我的搜索');
+      await typeInto(inputByPlaceholder(renderer.root, 'https://api.example.com/search'), '{{baseUrl}}/search?q={{query}}');
+      await typeInto(inputByPlaceholder(renderer.root, 'https://search.example.com'), 'https://search.example.com');
       await tapSave(renderer.root);
 
       expect(mockCreateCustomEngine).toHaveBeenCalledTimes(1);
@@ -555,186 +507,34 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       expect('apiKey' in payload).toBe(false);
     });
 
-    it('curl 导入：预填 method/URL/headers/defaultBody，密钥替换 {{apiKey}} 并回填 key 草稿', async () => {
+    it('认证方式下拉：切到自定义请求头并填头名，保存的 headers 带该头且无 Bearer', async () => {
       const {renderer} = await renderScreen();
-      const curlInput = inputByPlaceholder(
-        renderer.root,
-        "curl -X POST https://api.example.com/search -H 'Authorization: Bearer ...' -d '{...}'",
-      );
-      await typeInto(
-        curlInput,
-        'curl -X POST https://api.example.com/search -H "Authorization: Bearer sk-abcdef123456789012" -d \'{"query":"{{query}}"}\'',
-      );
+      await typeInto(inputByPlaceholder(renderer.root, '如 我的搜索'), '我的搜索');
+      await typeInto(inputByPlaceholder(renderer.root, 'https://api.example.com/search'), 'https://api.example.com/search');
       await act(async () => {
-        renderer.root
-          .findAllByType(SecondaryButton)
-          .filter(node => node.props.label === '解析并预填')[0]
-          .props.onPress();
+        renderer.root.findByType(FormSelectField).props.onChange('header');
         await flush();
       });
+      await typeInto(inputByPlaceholder(renderer.root, 'X-API-Key'), 'X-API-Key');
+      await tapSave(renderer.root);
 
-      expect(mockShowToast).toHaveBeenCalledWith(
-        '已解析 curl 命令，请补全显示名后保存',
-      );
-      // method 预填 POST（options 含 GET 的那组 chip 是请求方法组）。
-      const methodChip = renderer.root
-        .findAllByType(FormChipGroup)
-        .filter(node =>
-          node.props.options.some(
-            (option: {value: string}) => option.value === 'GET',
-          ),
-        );
-      expect(methodChip.length).toBe(1);
-      expect(methodChip[0].props.value).toBe('POST');
-      // URL / headers / defaultBody 预填；明文密钥替换为 {{apiKey}} 占位符。
-      expect(
-        inputByPlaceholder(renderer.root, 'https://api.example.com/search')
-          .props.value,
-      ).toBe('https://api.example.com/search');
-      const headers = inputByPlaceholder(
-        renderer.root,
-        '{"Accept": "application/json"}',
-      );
-      expect(headers.props.value).toContain('Bearer {{apiKey}}');
-      expect(headers.props.value).not.toContain('sk-abcdef');
-      const body = inputByPlaceholder(
-        renderer.root,
-        '{"query": "{{query}}", "count": "{{count}}"}',
-      );
-      expect(body.props.value).toBe('{"query":"{{query}}"}');
-      // 识别出的密钥原文回填 key 草稿（保存时落密钥库，不留在模板里）。
-      expect(keyInput(renderer.root).props.value).toBe('sk-abcdef123456789012');
+      expect(mockCreateCustomEngine).toHaveBeenCalledTimes(1);
+      const payload = mockCreateCustomEngine.mock.calls[0]![0] as {
+        def: {template: {headers: Record<string, string>}};
+      };
+      expect(payload.def.template.headers['X-API-Key']).toBe('{{apiKey}}');
+      expect(payload.def.template.headers.Authorization).toBeUndefined();
     });
   });
 
-  it('测试成功渲染 v2 预览：共 N 条 + JSON 预览 + 截断标记（TestEngineSuccess 新形状）', async () => {
-    mockTestEngine.mockResolvedValue({
-      ok: true,
-      value: {
-        preview: '[{"title":"第一条"},{"title":"第二条"}]',
-        resultCount: 12,
-        truncated: true,
-      },
-    });
+  it('内置引擎（bocha）名称与方法只读：显示名禁用、方法 chip 组禁用（v3 锁内置元数据）', async () => {
     const {renderer} = await renderScreen();
-    await typeInto(
-      inputByPlaceholder(renderer.root, '如 人工智能'),
-      '人工智能',
-    );
-    await tapTest(renderer.root);
-
-    // spec v2 §5：preview 文本块 + resultCount（「共 N 条」）+ truncated 标记，
-    // 不再渲染 title/url 人类列表。
-    const text = treeText(renderer.root);
-    expect(text).toContain('共 12 条');
-    expect(text).toContain('[{"title":"第一条"},{"title":"第二条"}]');
-    expect(text).toContain('（预览已截断）');
-    expect(text).not.toContain('返回 12 条结果');
-  });
-
-  it('测试失败文案红色展示（tokens.danger，FIX-27 回归锁）', async () => {
-    mockTestEngine.mockResolvedValue({
-      ok: false,
-      error: {message: '引擎不可用（测试桩）'},
-    });
-    const {renderer} = await renderScreen();
-    await typeInto(
-      inputByPlaceholder(renderer.root, '如 人工智能'),
-      '人工智能',
-    );
-    await tapTest(renderer.root);
-
-    const text = treeText(renderer.root);
-    expect(text).toContain('测试失败：引擎不可用（测试桩）');
-    const failNode = renderer.root
-      .findAll(
-        node =>
-          typeof node.props.children === 'string' &&
-          node.props.children.includes('测试失败'),
-      )
-      .at(0);
-    expect(failNode).toBeDefined();
-    // 失败文案用错误红（mock tokens.danger = '#f00'），与成功说明的次级灰区分。
-    expect(failNode!.props.style).toEqual(
-      expect.arrayContaining([expect.objectContaining({color: '#f00'})]),
-    );
-  });
-
-  describe('测试请求分流（FIX-1 拍板 1 回归锁）', () => {
-    async function typeAndTest(renderer: TestRenderer.ReactTestRenderer) {
-      await typeInto(
-        inputByPlaceholder(renderer.root, '如 人工智能'),
-        '人工智能',
-      );
-      await tapTest(renderer.root);
-    }
-
-    it('预置有覆盖且表单未改：测试请求只传 engineId，不带 draft', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({presetOverrides: {bocha: true}}),
-      );
-      const {renderer} = await renderScreen();
-      await typeAndTest(renderer);
-
-      expect(mockTestEngine).toHaveBeenCalledTimes(1);
-      // toEqual 严格形状：恰为 engineId + query，draft 键必须缺省。
-      expect(mockTestEngine).toHaveBeenCalledWith({
-        engineId: 'bocha',
-        query: '人工智能',
-      });
-    });
-
-    it('预置有覆盖但表单改动：测试请求带 draft（草稿直测语义不变）', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({presetOverrides: {bocha: true}}),
-      );
-      const {renderer} = await renderScreen();
-      // v2 全平铺：模板字段不再藏折叠区，URL 输入框直接定位。
-      await typeInto(
-        inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
-        'https://api.example.com/v2',
-      );
-      await typeAndTest(renderer);
-
-      expect(mockTestEngine).toHaveBeenCalledTimes(1);
-      const req = mockTestEngine.mock.calls[0]![0] as {
-        engineId: string;
-        draft?: {template: {url: string}};
-        query: string;
-      };
-      expect(req.engineId).toBe('bocha');
-      expect(req.query).toBe('人工智能');
-      expect(req.draft).toBeDefined();
-      expect(req.draft!.template.url).toBe('https://api.example.com/v2');
-    });
-
-    it('预置有覆盖但 key 草稿非空：测试请求带 draft（凭据草稿直测）', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({presetOverrides: {bocha: true}}),
-      );
-      const {renderer} = await renderScreen();
-      await typeKey(renderer.root, 'sk-draft-1');
-      await typeAndTest(renderer);
-
-      const req = mockTestEngine.mock.calls[0]![0] as {
-        draft?: {apiKey?: string};
-      };
-      expect(req.draft).toBeDefined();
-      expect(req.draft!.apiKey).toBe('sk-draft-1');
-    });
-
-    it('预置无覆盖：即使表单与出厂相等也带 draft（覆盖开关是省略前提）', async () => {
-      const {renderer} = await renderScreen();
-      await typeAndTest(renderer);
-
-      const req = mockTestEngine.mock.calls[0]![0] as {
-        engineId: string;
-        draft?: {template: {name: string}};
-      };
-      expect(req.engineId).toBe('bocha');
-      expect(req.draft).toBeDefined();
-      // 出厂模板经表单往返无损（草稿直测的模板与出厂逐字段一致）。
-      expect(req.draft!.template.name).toBe('博查搜索');
-    });
+    const nameInput = inputByPlaceholder(renderer.root, '如 我的搜索');
+    expect(nameInput.props.disabled).toBe(true);
+    const methodGroup = renderer.root.findAllByType(FormChipGroup).filter(node => node.props.options.some((option: {value: string}) => option.value === 'GET'));
+    expect(methodGroup.length).toBe(1);
+    expect(methodGroup[0]!.props.disabled).toBe(true);
+    // 认证方式下拉同样锁死（内置认证头出厂固定）。
+    expect(renderer.root.findByType(FormSelectField).props.disabled).toBe(true);
   });
 });

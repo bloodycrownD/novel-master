@@ -8,17 +8,8 @@
  * 开关语义 / 串行降级 / 模板说明 / 测试消耗配额 / 密钥安全收进标题栏
  * 「?」帮助弹窗。
  */
-import React, {useCallback, useState} from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import React, {useCallback, useRef, useState} from 'react';
+import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {SearchConfigPublic} from '@novel-master/core';
@@ -39,33 +30,17 @@ import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 import {getSearchConfigStore} from '@/services/search-config.store';
-import {
-  CUSTOM_ENGINE_HINT,
-  ENGINE_HINTS,
-  engineTitle,
-} from './search-engine-meta';
+import {CUSTOM_ENGINE_HINT, ENGINE_HINTS, engineTitle} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SearchEngineEntry = SearchConfigPublic['engines'][number];
 
 /** 帮助弹窗一段说明：小标题 + 一句话。 */
-function HelpSection({
-  title,
-  body,
-  tokens,
-}: {
-  title: string;
-  body: string;
-  tokens: {text: string; textSecondary: string};
-}) {
+function HelpSection({title, body, tokens}: {title: string; body: string; tokens: {text: string; textSecondary: string}}) {
   return (
     <View style={styles.helpSection}>
-      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>
-        {title}
-      </Text>
-      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>
-        {body}
-      </Text>
+      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
+      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>{body}</Text>
     </View>
   );
 }
@@ -84,8 +59,8 @@ export function SearchEnginesScreen() {
   const [menuEngineId, setMenuEngineId] = useState<string | undefined>();
   /** 排序写库进行中（互斥连点）。 */
   const [moving, setMoving] = useState(false);
-  /** 开关写库进行中的引擎 id（互斥连点）。 */
-  const [togglingId, setTogglingId] = useState<string | undefined>();
+  /** 开关写库进行中的引擎 id（互斥连点；用 ref 避免整表 disabled 态闪烁）。 */
+  const togglingRef = useRef<string | undefined>(undefined);
   /** 待确认删除的自定义实例（undefined = 弹窗收起）。 */
   const [pendingDelete, setPendingDelete] = useState<string | undefined>();
   /** 删除写库进行中。 */
@@ -117,34 +92,25 @@ export function SearchEnginesScreen() {
   useFocusEffect(syncHeaderOverride);
 
   const {rows, loading, error, reload, setRows} = useFocusListReload({
-    fetcher: useCallback(
-      async () => (await searchStore.readConfig()).engines,
-      [searchStore],
-    ),
+    fetcher: useCallback(async () => (await searchStore.readConfig()).engines, [searchStore]),
     fallbackValue: EMPTY_ROWS,
   });
 
-  // nm-style: keep-local — 行开关乐观翻转 + 失败回滚同一行数据，togglingId
+  // nm-style: keep-local — 行开关乐观翻转 + 失败回滚同一行数据，togglingRef
   // 互斥在途；内联进 renderItem 会拆散回滚不变量
   const setEnabled = async (engineId: string, on: boolean) => {
-    if (togglingId != null) {
+    if (togglingRef.current != null) {
       return;
     }
-    setTogglingId(engineId);
-    setRows(current =>
-      current.map(row => (row.id === engineId ? {...row, enabled: on} : row)),
-    );
+    togglingRef.current = engineId;
+    setRows(current => current.map(row => (row.id === engineId ? {...row, enabled: on} : row)));
     try {
       await searchStore.setEnabled(engineId, on);
     } catch (cause) {
-      setRows(current =>
-        current.map(row =>
-          row.id === engineId ? {...row, enabled: !on} : row,
-        ),
-      );
+      setRows(current => current.map(row => (row.id === engineId ? {...row, enabled: !on} : row)));
       showToast(toastMessage('切换启用状态失败', cause));
     } finally {
-      setTogglingId(undefined);
+      togglingRef.current = undefined;
     }
   };
 
@@ -199,51 +165,40 @@ export function SearchEnginesScreen() {
           data={rows}
           keyExtractor={item => item.id}
           contentContainerStyle={listScreenStyles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={reload} />
-          }
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
           renderItem={({item}) => {
             const hint = ENGINE_HINTS[item.id] ?? CUSTOM_ENGINE_HINT;
-            const issues = [
-              ...(item.enabled ? [] : ['已关闭']),
-              ...(item.needsKey && !item.hasKey ? ['未配置密钥'] : []),
-              ...(item.needsBaseUrl && item.baseUrl == null
-                ? ['未配置实例地址']
-                : []),
-            ];
+            // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
+            const issues = [...(item.needsKey && !item.hasKey ? ['未配置密钥'] : []), ...(item.needsBaseUrl ? ['未配置实例地址'] : [])];
             return (
               <ConfigListCard
                 tokens={tokens}
-                onPress={() =>
+                // DDG 是内置兜底引擎（无模板、无凭据、参数说明出厂固定），没有详情页：点击无反应。
+                onPress={() => {
+                  if (item.id === 'duckduckgo') {
+                    return;
+                  }
                   navigation.navigate('SearchEngineDetail', {
                     engineId: item.id,
-                  })
-                }
+                  });
+                }}
                 title={engineTitle(item.id, item.name)}
-                subtitle={
-                  issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`
-                }
+                subtitle={issues.length === 0 ? hint : `${hint} · ${issues.join(' · ')}`}
                 trailingMeta={
                   <View style={styles.rowMeta}>
                     {item.id === 'duckduckgo' ? (
                       <BuiltinTag tokens={tokens} />
                     ) : item.needsKey ? (
-                      <ApiKeyStatusTag
-                        status={item.hasKey ? 'set' : 'not set'}
-                        tokens={tokens}
-                      />
+                      <ApiKeyStatusTag status={item.hasKey ? 'set' : 'not set'} tokens={tokens} />
                     ) : item.needsBaseUrl ? (
-                      <ApiKeyStatusTag
-                        status={item.baseUrl == null ? 'not set' : 'set'}
-                        tokens={tokens}
-                      />
+                      <ApiKeyStatusTag status={item.baseUrl == null ? 'not set' : 'set'} tokens={tokens} />
                     ) : null}
                     <Switch
                       value={item.enabled}
                       onValueChange={next => {
                         setEnabled(item.id, next).catch(() => undefined);
                       }}
-                      disabled={togglingId != null || deleting}
+                      disabled={deleting}
                       trackColor={{false: tokens.border, true: tokens.primary}}
                     />
                   </View>
@@ -255,13 +210,7 @@ export function SearchEnginesScreen() {
         />
       )}
       <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
-        <SecondaryButton
-          tokens={tokens}
-          fullWidth
-          label="新建自定义引擎"
-          onPress={() => navigation.navigate('SearchEngineDetail')}
-          disabled={deleting}
-        />
+        <SecondaryButton tokens={tokens} fullWidth label="新建自定义引擎" onPress={() => navigation.navigate('SearchEngineDetail')} disabled={deleting} />
       </View>
       <BottomSheetMenu
         visible={menuEngineId != null}
@@ -301,28 +250,12 @@ export function SearchEnginesScreen() {
         }}
       />
       {/* 删除确认：自定义实例的模板 / 密钥 / 排序项一并清除，不可撤销。 */}
-      <ModalShell
-        visible={pendingDelete != null}
-        onClose={() => setPendingDelete(undefined)}
-        variant="center"
-        animationType="fade"
-        panelStyle={styles.helpPanel}
-      >
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>
-          删除自定义引擎
-        </Text>
-        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>
-          {deleteNotice}
-        </Text>
+      <ModalShell visible={pendingDelete != null} onClose={() => setPendingDelete(undefined)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>删除自定义引擎</Text>
+        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{deleteNotice}</Text>
         <View style={styles.confirmActions}>
           <View style={styles.confirmAction}>
-            <SecondaryButton
-              tokens={tokens}
-              fullWidth
-              label="取消"
-              onPress={() => setPendingDelete(undefined)}
-              disabled={deleting}
-            />
+            <SecondaryButton tokens={tokens} fullWidth label="取消" onPress={() => setPendingDelete(undefined)} disabled={deleting} />
           </View>
           <View style={styles.confirmAction}>
             <SecondaryButton
@@ -352,46 +285,19 @@ export function SearchEnginesScreen() {
         </View>
       </ModalShell>
       {/* 使用说明弹窗：开关 / 优先级 / 模板 / 测试配额 / 密钥安全，无输入不避键盘。 */}
-      <ModalShell
-        visible={helpVisible}
-        onClose={() => setHelpVisible(false)}
-        variant="center"
-        animationType="fade"
-        panelStyle={styles.helpPanel}
-      >
+      <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
         <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
-        <HelpSection
-          tokens={tokens}
-          title="启用开关"
-          body="只有打开开关的引擎参与搜索；默认仅内置 DuckDuckGo 启用。关闭全部引擎后搜索会返回提示，不会偷偷兜底。"
-        />
-        <HelpSection
-          tokens={tokens}
-          title="引擎优先级"
-          body="列表顺序即搜索时尝试引擎的顺序；请求失败（如密钥失效、超时）自动尝试下一个已启用且配置完整的引擎。"
-        />
+        <HelpSection tokens={tokens} title="启用开关" body="只有打开开关的引擎参与搜索；默认仅内置 DuckDuckGo 启用。关闭全部引擎后搜索会返回提示，不会偷偷兜底。" />
+        <HelpSection tokens={tokens} title="引擎优先级" body="列表顺序即搜索时尝试引擎的顺序；请求失败（如密钥失效、超时）自动尝试下一个已启用且配置完整的引擎。" />
         <HelpSection
           tokens={tokens}
           title="模板与自定义引擎"
-          // FIX-26：count 措辞与 desktop 帮助弹窗逐字一致（整数字段带引号定稿）。
           body={
-            '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，粘贴 curl 命令导入，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。请求体 defaultBody 可选，留空则由 agent 调用时传参；占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。'
+            '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API。请求参数由 agent 调用时自行传（GET 自动拼查询串 / POST 并入请求体）；API Key 只在发送瞬间从本机密钥库注入，配置里只出现 {{apiKey}} 占位符。'
           }
         />
-        <HelpSection
-          tokens={tokens}
-          title="测试消耗配额"
-          body="详情页的「测试搜索」会真实请求引擎接口，可能消耗引擎配额或产生计费。"
-        />
-        <HelpSection
-          tokens={tokens}
-          title="密钥安全"
-          body="API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。"
-        />
-        <Pressable
-          onPress={() => setHelpVisible(false)}
-          style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}
-        >
+        <HelpSection tokens={tokens} title="密钥安全" body="API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。" />
+        <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
           <Text style={{color: tokens.primary, fontWeight: '600'}}>知道了</Text>
         </Pressable>
       </ModalShell>

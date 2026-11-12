@@ -44,16 +44,16 @@ const log = createLogger("tool.curl");
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
 
 /** 默认超时（秒）：入参 timeout 缺省值，到期 abort 返回可读 ToolError。 */
-export const CURL_DEFAULT_TIMEOUT_SECONDS = 30;
+const CURL_DEFAULT_TIMEOUT_SECONDS = 30;
 
 /** 超时上限（秒）：入参 timeout 的 schema 层硬顶。 */
-export const CURL_MAX_TIMEOUT_SECONDS = 120;
+const CURL_MAX_TIMEOUT_SECONDS = 120;
 
 /** content-length 预检上限：响应头声明超过此值时不读 body。 */
-export const CURL_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const CURL_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 
 /** 自定义请求头条数上限。 */
-export const CURL_MAX_HEADERS = 16;
+const CURL_MAX_HEADERS = 16;
 
 /**
  * header 名合法字符集：字母 / 数字 / 连字符 / 下划线，长度 1-64。
@@ -63,13 +63,13 @@ export const CURL_MAX_HEADERS = 16;
 const HEADER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** 单条 header 值的字节上限。 */
-export const CURL_MAX_HEADER_VALUE_BYTES = 8 * 1024;
+const CURL_MAX_HEADER_VALUE_BYTES = 8 * 1024;
 
 /** 请求体入参的字节上限（schema 层拒绝，超限不发请求）。 */
-export const CURL_MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+const CURL_MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 
 /** `curl` 工具输入。 */
-export interface CurlToolInput {
+interface CurlToolInput {
   /** 目标 URL，仅支持 http/https 协议（schema 层白名单校验）。 */
   readonly url: string;
   /** HTTP 方法，默认 GET。 */
@@ -83,7 +83,7 @@ export interface CurlToolInput {
 }
 
 /** `curl` 工具输出。 */
-export interface CurlToolOutput {
+interface CurlToolOutput {
   /** 规范化后的请求 URL。 */
   readonly url: string;
   /** 重定向后的最终 URL（response.url）；与请求 URL 相同时仍回填。 */
@@ -115,30 +115,13 @@ export interface CurlToolOutput {
 const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", "urlencoded"];
 
 /**
- * fetch / text() 两个阶段的错误统一映射：超时 abort 给可读超时文案
- * （含 URL 与实际超时毫秒数），其余错误原样透传——formatToolErrorForLlm
- * 会解 cause 给模型可读文案。
- */
-function curlPhaseError(e: unknown, aborted: boolean, url: string, timeoutMs: number): unknown {
-  if (aborted) {
-    return new Error(`Request timed out after ${timeoutMs}ms: ${url}`);
-  }
-  return e;
-}
-
-/**
- * 按块增量累计字符串的 UTF-8 字节数：每块临时字节数组即奔，避免对
- * 全量字符串再 encode 一份完整数组。请求体入参校验与正文 originalBytes
- * 共用（后者是解码后口径而非线上压缩传输字节数）。
- */
-/**
  * 按字节预算返回正文前缀：TextEncoder 增量编码并累计字节数，
  * 找到预算内能容纳的最大字符切点后在该处截断。
  *
  * 不能按字符数切：含多字节字符时等量字符可膨胀到远超预算
  * （如中文 3 字节/字符）。代理对成对推进，避免切在半个字符上。
  */
-// nm-style: keep-local — 字节预算截断是独立的 26 行两段扫描（整块累加 + 块内码位推进），内联会拆散代理对成对推进的不变量。
+// nm-style: keep-local — 外层块扫描与块内码位扫描共享 `used` 游标，切点必须落在完整码位边界；内联到 run 会把这条推进不变量拆进 fetch 分支。
 function truncateToByteBudget(text: string, maxBytes: number): string {
   const encoder = new TextEncoder();
   const CHUNK = 8192;
@@ -173,6 +156,81 @@ function truncateToByteBudget(text: string, maxBytes: number): string {
  * `resolveAgentToolRegistry` 的 tools.allow/deny 控制（curl 不在任何
  * 摘除分支内，主/子/孙 agent 全深度可用）。
  */
+/** url 入参 schema：协议白名单校验在工具实例处的 superRefine（issue 文案贴使用点）。 */
+const CURL_URL_SCHEMA = z.string().min(1).describe("目标 URL，仅支持 http/https 协议");
+/** headers 入参 schema：数量 / 命名 / CR-LF / 字节预算校验在工具实例处的 superRefine。 */
+const CURL_HEADERS_SCHEMA = z.record(z.string(), z.string()).describe("可选自定义请求头（最多 16 条，单条值上限 8KB）");
+/** body 入参 schema：1MB 字节预算校验在工具实例处的 superRefine。 */
+const CURL_BODY_SCHEMA = z.string().describe("可选请求体（上限 1MB；GET/HEAD 不携带请求体）");
+/** 入参 schema 对象：逐字段校验见各 superRefine；跨字段校验（GET/HEAD 不携带 body）在工具实例处补 superRefine。 */
+const CURL_INPUT_SCHEMA = z.object({
+  url: CURL_URL_SCHEMA.superRefine((value, ctx) => {
+    // 协议白名单：不用 z.string().url()（它放行任意协议），
+    // file://、ftp://、data: 等要在 schema 层即拒绝，
+    // 经 ToolRunner 转成 INVALID_ARGUMENT 让模型收到可读 issue 文案。
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `无效的 URL: ${value}`,
+      });
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `仅支持 http/https 协议，收到: ${parsed.protocol}`,
+      });
+    }
+  }),
+  method: z.enum(HTTP_METHODS).default("GET").describe("HTTP 方法，默认 GET"),
+  headers: CURL_HEADERS_SCHEMA.superRefine((value, ctx) => {
+    const entries = Object.entries(value);
+    if (entries.length > CURL_MAX_HEADERS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `请求头最多 ${CURL_MAX_HEADERS} 条，收到 ${entries.length} 条`,
+      });
+      return;
+    }
+    for (const [name, headerValue] of entries) {
+      // header 名正则白名单：混入空格/冒号/CR/LF 等字符时，底层
+      // 可能按行切割出新 header（CRLF 注入），schema 层直接拒绝。
+      if (!HEADER_NAME_PATTERN.test(name)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `请求头名称不合法（仅限字母/数字/连字符/下划线，长度 1-64）: ${JSON.stringify(name)}`,
+        });
+        continue;
+      }
+      if (headerValue.includes("\r") || headerValue.includes("\n")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `请求头 ${name} 的值不允许包含换行符（CR/LF）`,
+        });
+        continue;
+      }
+      if (utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `请求头 ${name} 的值超过 ${CURL_MAX_HEADER_VALUE_BYTES} 字节上限`,
+        });
+      }
+    }
+  }).optional(),
+  body: CURL_BODY_SCHEMA.superRefine((value, ctx) => {
+    if (utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `请求体超过 ${CURL_MAX_REQUEST_BODY_BYTES} 字节上限`,
+      });
+    }
+  }).optional(),
+  timeout: z.number().int().min(1).max(CURL_MAX_TIMEOUT_SECONDS).default(CURL_DEFAULT_TIMEOUT_SECONDS).describe("超时秒数，默认 30，上限 120"),
+});
+
 export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> = {
   name: "curl",
   description: () => `对 http/https URL 发起 HTTP 请求（对齐 curl 定位），支持自定义方法、请求头与请求体，返回状态码、内容类型与响应正文。适用于获取或提交网页、接口文档与 API 内容。
@@ -190,85 +248,16 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 - finalUrl：重定向后的最终 URL。
 
 注意：无鉴权管理（需要时经 headers 自行携带 token）；网络错误或超时会返回可读错误。`,
-  inputSchema: z.object({
-      url: z.string().min(1).describe("目标 URL，仅支持 http/https 协议").superRefine((value, ctx) => {
-          // 协议白名单：不用 z.string().url()（它放行任意协议），
-          // file://、ftp://、data: 等要在 schema 层即拒绝，
-          // 经 ToolRunner 转成 INVALID_ARGUMENT 让模型收到可读 issue 文案。
-          let parsed: URL;
-          try {
-            parsed = new URL(value);
-          } catch {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `无效的 URL: ${value}`,
-            });
-            return;
-          }
-          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `仅支持 http/https 协议，收到: ${parsed.protocol}`,
-            });
-          }
-        }),
-      method: z.enum(HTTP_METHODS).default("GET").describe("HTTP 方法，默认 GET"),
-      headers: z.record(z.string(), z.string()).describe("可选自定义请求头（最多 16 条，单条值上限 8KB）").superRefine((value, ctx) => {
-          const entries = Object.entries(value);
-          if (entries.length > CURL_MAX_HEADERS) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `请求头最多 ${CURL_MAX_HEADERS} 条，收到 ${entries.length} 条`,
-            });
-            return;
-          }
-          for (const [name, headerValue] of entries) {
-            // header 名正则白名单：混入空格/冒号/CR/LF 等字符时，底层
-            // 可能按行切割出新 header（CRLF 注入），schema 层直接拒绝。
-            if (!HEADER_NAME_PATTERN.test(name)) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: `请求头名称不合法（仅限字母/数字/连字符/下划线，长度 1-64）: ${JSON.stringify(name)}`,
-              });
-              continue;
-            }
-            if (headerValue.includes("\r") || headerValue.includes("\n")) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: `请求头 ${name} 的值不允许包含换行符（CR/LF）`,
-              });
-              continue;
-            }
-            if (utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
-              ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: `请求头 ${name} 的值超过 ${CURL_MAX_HEADER_VALUE_BYTES} 字节上限`,
-              });
-            }
-          }
-        })
-        .optional(),
-      body: z.string().describe("可选请求体（上限 1MB；GET/HEAD 不携带请求体）").superRefine((value, ctx) => {
-          if (utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `请求体超过 ${CURL_MAX_REQUEST_BODY_BYTES} 字节上限`,
-            });
-          }
-        })
-        .optional(),
-      timeout: z.number().int().min(1).max(CURL_MAX_TIMEOUT_SECONDS).default(CURL_DEFAULT_TIMEOUT_SECONDS).describe("超时秒数，默认 30，上限 120"),
-    })
-    .superRefine((value, ctx) => {
-      // GET/HEAD 按 HTTP 语义不携带请求体：有 body 且 method 为 GET/HEAD
-      // 时在 schema 层报错（模型应换 POST/PUT 等或去掉 body）。
-      if (value.body != null && (value.method === "GET" || value.method === "HEAD")) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `method 为 ${value.method} 时不允许携带 body`,
-        });
-      }
-    }),
+  inputSchema: CURL_INPUT_SCHEMA.superRefine((value, ctx) => {
+    // GET/HEAD 按 HTTP 语义不携带请求体：有 body 且 method 为 GET/HEAD
+    // 时在 schema 层报错（模型应换 POST/PUT 等或去掉 body）。
+    if (value.body != null && (value.method === "GET" || value.method === "HEAD")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `method 为 ${value.method} 时不允许携带 body`,
+      });
+    }
+  }),
   outputSchema: z.object({
     url: z.string().describe("规范化后的请求 URL"),
     finalUrl: z.string().describe("重定向后最终 URL（与请求 URL 相同时仍回填）"),
@@ -306,6 +295,19 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
     // `text()` 下载正文阶段同样受 abort 约束，慢滴流不会无限挂起回合。
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // 父级取消（用户点停止 / 回合中断）立即 aborts 在途请求，不必等到超时。
+    const parentSignal = ctx.signal;
+    const onParentAbort = () => {
+      controller.abort(parentSignal?.reason);
+    };
+    parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+    // fetch / text() 两阶段的错误统一映射：父级取消与超时分开报（两者都让
+    // controller.signal 为 aborted），其余错误原样透传——formatToolErrorForLlm
+    // 会解 cause 给模型可读文案。
+    const phaseError = (e: unknown): unknown => {
+      if (!controller.signal.aborted) return e;
+      return new Error(parentSignal?.aborted === true ? `请求已取消：${normalizedUrl}` : `Request timed out after ${timeoutMs}ms: ${normalizedUrl}`);
+    };
     let response: Response;
     let text: string;
     try {
@@ -319,7 +321,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         };
         response = await doFetch(normalizedUrl, requestInit);
       } catch (e) {
-        throw toolFailed("curl", curlPhaseError(e, controller.signal.aborted, normalizedUrl, timeoutMs));
+        throw toolFailed("curl", phaseError(e));
       }
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -327,9 +329,8 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 
       // content-length 预检：声明的正文超过上限时不读 body（防巨响应内存峰值），
       // 直接返回占位 + 截断标注；originalBytes 回填 content-length 头数值。
-      const declaredLengthHeader = response.headers.get("content-length");
-      const declaredLengthValue = declaredLengthHeader == null ? null : Number(declaredLengthHeader);
-      const declaredLength = declaredLengthValue != null && Number.isFinite(declaredLengthValue) && declaredLengthValue >= 0 ? declaredLengthValue : null;
+      const declaredValue = Number(response.headers.get("content-length") ?? NaN);
+      const declaredLength = Number.isFinite(declaredValue) && declaredValue >= 0 ? declaredValue : null;
       if (declaredLength != null && declaredLength > CURL_MAX_RESPONSE_BYTES) {
         return {
           url: normalizedUrl,
@@ -365,9 +366,9 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       try {
         text = await response.text();
       } catch (e) {
-        // 超时 abort 后 text() 会 reject（undici 对 body 读取同样响应 signal），
-        // 这里给出与 fetch 阶段一致的可读超时文案。
-        throw toolFailed("curl", curlPhaseError(e, controller.signal.aborted, normalizedUrl, timeoutMs));
+        // 超时 / 取消 abort 后 text() 会 reject（undici 对 body 读取同样响应 signal），
+        // phaseError 给出与 fetch 阶段一致的文案。
+        throw toolFailed("curl", phaseError(e));
       }
 
       const originalBytes = utf8ByteLength(text);
@@ -379,8 +380,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       if (originalBytes > TOOL_OUTPUT_MAX_BYTES) {
         let sink: OversizedSinkResult | undefined;
         try {
-          const sinkOptions = { tool: "curl", content: text, contentType };
-          sink = await sinkOversizedOutput(ctx, sinkOptions);
+          sink = await sinkOversizedOutput(ctx, { tool: "curl", content: text, contentType });
         } catch (error) {
           log.debug("超预算落盘失败，降级字节截断", { error });
         }
@@ -424,6 +424,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
     } finally {
       // 请求整体结束（成功、失败或提前 return）后清计时器，防悬挂。
       clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onParentAbort);
     }
   },
 };

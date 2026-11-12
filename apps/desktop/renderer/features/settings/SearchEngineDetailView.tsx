@@ -24,13 +24,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { IpcResult, SearchConfigDto } from "@shared/ipc-types";
 import { coreT } from "@shared/logic/core-i18n";
-import {
-  PRESET_ENGINE_TEMPLATES,
-  parseCurlCommand,
-  validateSearchEngineTemplate,
-  type CustomEngineDef,
-  type SearchEngineTemplate,
-} from "@shared/logic/search-engines";
+import { PRESET_ENGINE_TEMPLATES, parseCurlCommand, validateSearchEngineTemplate, type CustomEngineDef, type SearchEngineTemplate } from "@shared/logic/search-engines";
 import {
   ipcSearchClearEngineKey,
   ipcSearchCreateCustomEngine,
@@ -74,10 +68,22 @@ const EMPTY_FORM: TemplateFormState = {
 };
 
 /** 密钥注入方式快捷选择（只写 header，模板里留 `{{apiKey}}` 占位符）。 */
-const INJECTION_OPTIONS: ReadonlyArray<{ readonly label: string; readonly header: string; readonly value: string }> = [
-  { label: "Authorization: Bearer {{apiKey}}", header: "Authorization", value: "Bearer {{apiKey}}" },
+const INJECTION_OPTIONS: ReadonlyArray<{
+  readonly label: string;
+  readonly header: string;
+  readonly value: string;
+}> = [
+  {
+    label: "Authorization: Bearer {{apiKey}}",
+    header: "Authorization",
+    value: "Bearer {{apiKey}}",
+  },
   { label: "X-API-Key: {{apiKey}}", header: "X-API-Key", value: "{{apiKey}}" },
-  { label: "X-Subscription-Token: {{apiKey}}", header: "X-Subscription-Token", value: "{{apiKey}}" },
+  {
+    label: "X-Subscription-Token: {{apiKey}}",
+    header: "X-Subscription-Token",
+    value: "{{apiKey}}",
+  },
 ];
 
 /** 预置覆盖按差异提交时比较的模板字段（与 SearchEngineTemplate 字段一一对应）。 */
@@ -181,9 +187,13 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const customDef: CustomEngineDef | undefined = engine?.isCustom === true ? config?.customEngines.find((def) => def.id === engineId) : undefined;
   const isPreset = engine != null && !engine.isCustom;
   const busy = saving || clearing || testing;
-  const usesApiKey = form.url.includes("{{apiKey}}") || form.headersJson.includes("{{apiKey}}") || form.defaultBody.includes("{{apiKey}}");
-  const usesBaseUrl = form.url.includes("{{baseUrl}}") || form.headersJson.includes("{{baseUrl}}") || form.defaultBody.includes("{{baseUrl}}");
-  const title = isCreate ? "新建自定义引擎" : (engine?.name ?? (engineLabel(engineId) || "搜索引擎"));
+  /** 模板里是否引用了对应宏：url / headers / body 任一出现即视为需要。 */
+  const uses = (macro: string) => [form.url, form.headersJson, form.defaultBody].some((text) => text.includes(macro));
+  const usesApiKey = uses("{{apiKey}}");
+  const usesBaseUrl = uses("{{baseUrl}}");
+  const title = isCreate ? "新建自定义引擎" : engine?.name ?? (engineLabel(engineId) || "搜索引擎");
+  /** 模板校验失败文案（reason 为字段原因）。 */
+  const templateErrorText = (reason: string) => coreT({ key: "error.tool.search_template_invalid", params: { reason } });
 
   /** Headers JSON 文本 → 对象（非法文本 / 非对象给中文原因；合法返回 undefined 以外的值）。 */
   const parseHeaders = (text: string): Record<string, unknown> | string => {
@@ -200,15 +210,22 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const readTemplate = (): SearchEngineTemplate | undefined => {
     const headers = parseHeaders(form.headersJson);
     if (typeof headers === "string") {
-      setError(coreT({ key: "error.tool.search_template_invalid", params: { reason: headers } }));
+      setError(templateErrorText(headers));
       return undefined;
     }
     const bodyText = form.defaultBody.trim();
-    const raw: Record<string, unknown> = { name: form.name, method: form.method, url: form.url, headers, paramHint: form.paramHint };
+    const raw: Record<string, unknown> = {
+      name: form.name,
+      method: form.method,
+      url: form.url,
+      headers,
+      paramHint: form.paramHint,
+    };
     if (bodyText.length > 0) raw.defaultBody = bodyText;
     const validated = validateSearchEngineTemplate(raw);
     if (!validated.ok) {
-      setError(coreT(validated.error.messageKey == null ? { key: "error.tool.search_template_invalid", params: { reason: validated.error.message } } : { key: validated.error.messageKey, params: validated.error.messageParams }));
+      const { messageKey, message, messageParams } = validated.error;
+      setError(messageKey == null ? templateErrorText(message) : coreT({ key: messageKey, params: messageParams }));
       return undefined;
     }
     return validated.value;
@@ -227,8 +244,18 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       const url = baseUrl.trim();
       if (isCreate) {
         const id = `custom:${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
-        const def: CustomEngineDef = { id, name: template.name, template, createdAt: new Date().toISOString() };
-        const res = await ipcSearchCreateCustomEngine({ def, ...(key.length > 0 ? { apiKey: key } : {}), ...(url.length > 0 ? { baseUrl: url } : {}) });
+        const def: CustomEngineDef = {
+          id,
+          name: template.name,
+          template,
+          createdAt: new Date().toISOString(),
+        };
+        const input = {
+          def,
+          ...(key.length > 0 ? { apiKey: key } : {}),
+          ...(url.length > 0 ? { baseUrl: url } : {}),
+        };
+        const res = await ipcSearchCreateCustomEngine(input);
         if (!res.ok) {
           setError(res.error.message);
           return;
@@ -239,7 +266,14 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       }
       if (engine?.isCustom === true) {
         // 自定义：模板整体替换（key 留空不动；baseUrl 仅模板引用时提交，空串清除）
-        const res = await ipcSearchUpdateCustomEngine({ engineId, name: template.name, template, ...(key.length > 0 ? { apiKey: key } : {}), ...(usesBaseUrl ? { baseUrl: url } : {}) });
+        const input = {
+          engineId,
+          name: template.name,
+          template,
+          ...(key.length > 0 ? { apiKey: key } : {}),
+          ...(usesBaseUrl ? { baseUrl: url } : {}),
+        };
+        const res = await ipcSearchUpdateCustomEngine(input);
         if (!res.ok) {
           setError(res.error.message);
           return;
@@ -253,7 +287,9 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         }
         // 预置：只提交与出厂模板不同的字段，未改字段保留既有覆盖（patch 浅合并）
         const patch: Record<string, unknown> = {};
-        for (const field of TEMPLATE_FIELDS) if (JSON.stringify(presetDefault[field]) !== JSON.stringify(template[field])) patch[field] = template[field];
+        for (const field of TEMPLATE_FIELDS) {
+          if (JSON.stringify(presetDefault[field]) !== JSON.stringify(template[field])) patch[field] = template[field];
+        }
         // baseUrl 仅在草稿与已存值不同时提交（空串 = 清除；相同 = 无写操作）
         const baseUrlChanged = usesBaseUrl && url !== (engine?.baseUrl ?? "");
         if (Object.keys(patch).length === 0 && key.length === 0 && !baseUrlChanged) {
@@ -309,7 +345,11 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     try {
       const key = apiKey.trim();
       const url = baseUrl.trim();
-      const draft = { template, ...(key.length > 0 ? { apiKey: key } : {}), ...(usesBaseUrl && url.length > 0 ? { baseUrl: url } : {}) };
+      const draft = {
+        template,
+        ...(key.length > 0 ? { apiKey: key } : {}),
+        ...(usesBaseUrl && url.length > 0 ? { baseUrl: url } : {}),
+      };
       // 拍板 1：预置已有覆盖且表单与出厂逐字段相等（key/baseUrl 草稿也为空）→
       // 省略 draft 只传 engineId，core 走「覆盖合并 + SKSP 现读」测生效配置；
       // 其余仍草稿直测（draft 优先，缺省 key/baseUrl 回退 SKSP / engineBaseUrls）。
@@ -320,7 +360,11 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         setError(res.error.message);
         return;
       }
-      setTestResult({ preview: res.data.preview, resultCount: res.data.resultCount, truncated: res.data.truncated });
+      setTestResult({
+        preview: res.data.preview,
+        resultCount: res.data.resultCount,
+        truncated: res.data.truncated,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -367,13 +411,28 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const templateFields = (
     <>
       <SettingsField label="Method">
-        <select value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value === "GET" ? "GET" : "POST" })}>
+        <select
+          value={form.method}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              method: e.target.value === "GET" ? "GET" : "POST",
+            })
+          }
+        >
           <option value="GET">GET</option>
           <option value="POST">POST</option>
         </select>
       </SettingsField>
-      <SettingsField label="URL（可含 {{query}} / {{count}} / {{apiKey}} / {{baseUrl}}）">
-        <input type="text" value={form.url} placeholder="https://api.example.com/search?q={{query}}" onChange={(e) => setForm({ ...form, url: e.target.value })} />
+      <SettingsField label="URL（固定端点；参数由 agent 调用时传）">
+        <input
+          type="text"
+          value={form.url}
+          placeholder="https://api.example.com/search"
+          // 内置引擎端点出厂固定（SearXNG 例外：URL 就是实例地址，需用户改）。
+          disabled={isPreset && engineId !== "searxng"}
+          onChange={(e) => setForm({ ...form, url: e.target.value })}
+        />
       </SettingsField>
       <SettingsField label="Headers（JSON 对象）">
         <textarea rows={4} value={form.headersJson} onChange={(e) => setForm({ ...form, headersJson: e.target.value })} placeholder={'{"Authorization": "Bearer {{apiKey}}"}'} />
@@ -383,8 +442,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         {/* FIX-26：裸形态 "{{count}}" 易误读为可写整值，双端统一强调带引号（文案与 mobile 同步） */}
         <span className="settings-hint">{'占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'}</span>
       </SettingsField>
-      <SettingsField label="参数说明（拼进工具描述，≤500 字符）">
-        <textarea rows={3} value={form.paramHint} onChange={(e) => setForm({ ...form, paramHint: e.target.value })} placeholder="可经 params 透传……" />
+      <SettingsField label="参数说明（拼进工具描述；内置引擎出厂固定）">
+        <textarea rows={3} value={form.paramHint} onChange={(e) => setForm({ ...form, paramHint: e.target.value })} placeholder="可经 params 透传……" disabled={isPreset} />
       </SettingsField>
     </>
   );
@@ -393,7 +452,13 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     <SettingsPanel>
       <SettingsFormSection
         title={title}
-        desc={isCreate ? "从 curl 导入或直接填写请求模板；API Key 经本机安全密钥库存储。" : customDef != null ? "自定义引擎；API Key 经本机安全密钥库存储。" : `${ENGINE_META[engineId]?.desc ?? ""} · 预置引擎`}
+        desc={
+          isCreate
+            ? "从 curl 导入或直接填写请求模板；API Key 经本机安全密钥库存储。"
+            : customDef != null
+            ? "自定义引擎；API Key 经本机安全密钥库存储。"
+            : `${ENGINE_META[engineId]?.desc ?? ""} · 预置引擎`
+        }
         footer={
           <Button variant="primary" disabled={saving || clearing || testing} onClick={() => void save()}>
             {saving ? "保存中…" : isCreate ? "创建" : "保存"}
@@ -403,7 +468,12 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         {isCreate ? (
           <SettingsSection title="从 curl 导入" desc="粘贴一条 curl 命令（支持 -X / -H / -d / --data-raw / -G）；识别到的明文密钥会替换为 {{apiKey}} 并在保存时写入安全密钥库。">
             <SettingsField label="curl 命令">
-              <textarea rows={5} value={curlText} onChange={(e) => setCurlText(e.target.value)} placeholder={"curl -X POST https://api.example.com/search -H 'Authorization: Bearer sk-xxx' -d '{\"query\":\"{{query}}\"}'"} />
+              <textarea
+                rows={5}
+                value={curlText}
+                onChange={(e) => setCurlText(e.target.value)}
+                placeholder={"curl -X POST https://api.example.com/search -H 'Authorization: Bearer sk-xxx' -d '{\"query\":\"{{query}}\"}'"}
+              />
             </SettingsField>
             <Button
               variant="secondary"
@@ -415,7 +485,13 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                   return;
                 }
                 const draft = parsed.value;
-                setForm({ ...form, method: draft.method, url: draft.url, headersJson: JSON.stringify(draft.headers, null, 2), defaultBody: draft.defaultBody ?? form.defaultBody });
+                setForm({
+                  ...form,
+                  method: draft.method,
+                  url: draft.url,
+                  headersJson: JSON.stringify(draft.headers, null, 2),
+                  defaultBody: draft.defaultBody ?? form.defaultBody,
+                });
                 if (draft.apiKey != null) setApiKey(draft.apiKey);
                 setImportedKey(draft.apiKey != null);
                 toastSettingsSuccess("已导入 curl 配置");
@@ -456,7 +532,10 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                     toastSettingsError(headers);
                     return;
                   }
-                  setForm({ ...form, headersJson: JSON.stringify({ ...headers, [option.header]: option.value }, null, 2) });
+                  setForm({
+                    ...form,
+                    headersJson: JSON.stringify({ ...headers, [option.header]: option.value }, null, 2),
+                  });
                 }}
               >
                 <option value="">选择注入方式…</option>
@@ -469,11 +548,19 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
             </SettingsField>
           ) : null}
           {engine?.hasKey === true && !isCreate ? (
-            <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setClearing, (id) => ipcSearchClearEngineKey({ engineId: id }), "已清除"); }}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                void runWrite(setClearing, (id) => ipcSearchClearEngineKey({ engineId: id }), "已清除");
+              }}
+            >
               {clearing ? "清除中…" : "清除密钥"}
             </Button>
           ) : null}
-          {isCreate || engine?.needsBaseUrl === true || usesBaseUrl ? (
+          {/* 实例地址只服务模板里的 {{baseUrl}} 宏；searxng 出厂 URL 已是完整端点（示例地址），
+              用户在 URL 字段里直接改成自己的实例即可。 */}
+          {isCreate || usesBaseUrl ? (
             <SettingsField label="实例 Base URL（服务模板中的 {{baseUrl}}；留空 = 清除）">
               <input type="text" value={baseUrl} placeholder="https://searxng.example.com" onChange={(e) => setBaseUrl(e.target.value)} />
             </SettingsField>
@@ -484,7 +571,13 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           {isPreset && config?.presetOverrides[engineId] === true ? (
             <>
               <div className="settings-form-actions">
-                <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认"); }}>
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认");
+                  }}
+                >
                   恢复默认
                 </Button>
               </div>
@@ -504,7 +597,14 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           {testResult != null ? (
             <>
               {/* SPEC v2 §5：提取数组前 2 条的 JSON 预览（等宽 + 换行），不再渲染 title/url/snippet 人类列表 */}
-              <pre className="settings-hint" style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", margin: "0 0 8px" }}>
+              <pre
+                className="settings-hint"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "monospace",
+                  margin: "0 0 8px",
+                }}
+              >
                 {testResult.preview}
               </pre>
               <p className="settings-hint">

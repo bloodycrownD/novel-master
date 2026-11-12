@@ -1,5 +1,5 @@
-import type { AgentDefinition, AgentToolPolicy } from "@novel-master/core/agent";
-import type { ToolsMode } from "./agent-editor-state";
+import type {AgentDefinition, AgentToolPolicy} from '@novel-master/core/agent';
+import type {ToolsMode} from './agent-editor-state';
 
 /** Catalog of V2 builtin tools for Agent policy UI（与 registerBuiltinTools 同步）。 */
 export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
@@ -8,57 +8,56 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   readonly description: string;
 }> = [
   {
-    name: "task",
-    label: "task",
-    description: "委派子智能体执行子任务（仅主智能体可用）",
+    name: 'task',
+    label: 'task',
+    description: '委派子智能体执行子任务（仅主智能体可用）',
   },
-  { name: "read", label: "read", description: "读取工作区文件（支持分页）" },
-  { name: "write", label: "write", description: "写入或整文件覆盖" },
-  { name: "edit", label: "edit", description: "精确查找替换（含尾追）" },
+  {name: 'read', label: 'read', description: '读取工作区文件（支持分页）'},
+  {name: 'write', label: 'write', description: '写入或整文件覆盖'},
+  {name: 'edit', label: 'edit', description: '精确查找替换（含尾追）'},
   {
-    name: "fs",
-    label: "fs",
-    description: "文件系统命令（ls/rm/mv/cp/mkdir/rmdir）",
+    name: 'fs',
+    label: 'fs',
+    description: '文件系统命令（ls/rm/mv/cp/mkdir/rmdir）',
   },
-  { name: "glob", label: "glob", description: "按 glob 模式查找路径" },
+  {name: 'glob', label: 'glob', description: '按 glob 模式查找路径'},
   {
-    name: "grep",
-    label: "grep",
-    description: "在工作区文件内容中搜索（支持正则/反选/上下文）",
-  },
-  {
-    name: "skill",
-    label: "skill",
-    description: "使用与管理技能（load/read/write/edit/list）",
+    name: 'grep',
+    label: 'grep',
+    description: '在工作区文件内容中搜索（支持正则/反选/上下文）',
   },
   {
-    name: "agent",
-    label: "agent",
-    description: "管理 agent 定义（list/get/create/update，仅主智能体可用）",
+    name: 'skill',
+    label: 'skill',
+    description: '使用与管理技能（load/read/write/edit/list）',
   },
   {
-    name: "curl",
-    label: "curl",
-    description:
-      "发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）",
+    name: 'agent',
+    label: 'agent',
+    description: '管理 agent 定义（list/get/create/update，仅主智能体可用）',
   },
   {
-    name: "search",
-    label: "search",
-    description:
-      "联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）",
+    name: 'curl',
+    label: 'curl',
+    description: '发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）',
+  },
+  {
+    name: 'search',
+    label: 'search',
+    description: '联网搜索：按当前启用的搜索引擎串行检索网页，返回引擎原始结果数据（JSON 文本）；引擎的启用与配置在「设置 → 搜索配置」管理（缺省仅启用内置的 DuckDuckGo 免费搜索，无需配置）',
   },
 ] as const;
 
+// prettier-ignore
 export function buildToolsPolicyFromSelection(mode: ToolsMode, selected: readonly string[]): AgentToolPolicy | undefined {
-  if (mode === "default") {
+  if (mode === 'default') {
     return undefined;
   }
   const names = [...selected];
-  if (mode === "allow") {
-    return { allow: names };
+  if (mode === 'allow') {
+    return {allow: names};
   }
-  return { deny: names };
+  return {deny: names};
 }
 
 export function toolsSelectionFromDefinition(def: AgentDefinition): {
@@ -66,10 +65,10 @@ export function toolsSelectionFromDefinition(def: AgentDefinition): {
   selected: readonly string[];
 } {
   if (def.tools?.allow != null) {
-    return { mode: "allow", selected: [...def.tools.allow] };
+    return {mode: 'allow', selected: [...def.tools.allow]};
   }
   if (def.tools?.deny != null) {
-    return { mode: "deny", selected: [...def.tools.deny] };
+    return {mode: 'deny', selected: [...def.tools.deny]};
   }
-  return { mode: "default", selected: [] };
+  return {mode: 'default', selected: []};
 }

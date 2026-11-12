@@ -55,8 +55,7 @@ jest.mock('@/components/provider/ApiKeyStatusTag', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    ApiKeyStatusTag: (props: {status: 'set' | 'not set'}) =>
-      mockReact.createElement(Text, {tag: props.status}, `tag:${props.status}`),
+    ApiKeyStatusTag: (props: {status: 'set' | 'not set'}) => mockReact.createElement(Text, {tag: props.status}, `tag:${props.status}`),
   };
 });
 
@@ -67,28 +66,14 @@ jest.mock('@/components/ui/ConfigListCard', () => {
   const mockReact = require('react');
   const {Pressable, Text} = require('react-native');
   return {
-    ConfigListCard: (props: {
-      title: string;
-      subtitle?: string;
-      onPress: () => void;
-      onMenuPress?: () => void;
-      trailingMeta?: React.ReactNode;
-    }) =>
+    ConfigListCard: (props: {title: string; subtitle?: string; onPress: () => void; onMenuPress?: () => void; trailingMeta?: React.ReactNode}) =>
       mockReact.createElement(
         Pressable,
         {rowTitle: props.title, onPress: props.onPress},
         mockReact.createElement(Text, null, props.title),
-        props.subtitle != null
-          ? mockReact.createElement(Text, null, props.subtitle)
-          : null,
+        props.subtitle != null ? mockReact.createElement(Text, null, props.subtitle) : null,
         props.trailingMeta ?? null,
-        props.onMenuPress != null
-          ? mockReact.createElement(
-              Pressable,
-              {onPress: props.onMenuPress, testMenu: props.title},
-              mockReact.createElement(Text, null, `menu:${props.title}`),
-            )
-          : null,
+        props.onMenuPress != null ? mockReact.createElement(Pressable, {onPress: props.onMenuPress, testMenu: props.title}, mockReact.createElement(Text, null, `menu:${props.title}`)) : null,
       ),
   };
 });
@@ -98,22 +83,12 @@ jest.mock('@/components/sheet/BottomSheetMenu', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    BottomSheetMenu: (props: {
-      visible: boolean;
-      items: Array<{label: string; action: string; disabled?: boolean}>;
-      onSelect: (action: string) => void;
-    }) =>
+    BottomSheetMenu: (props: {visible: boolean; items: Array<{label: string; action: string; disabled?: boolean}>; onSelect: (action: string) => void}) =>
       props.visible
         ? mockReact.createElement(
             Text,
             {onSelect: props.onSelect},
-            ...props.items.map(item =>
-              mockReact.createElement(
-                Text,
-                {key: item.action, tag: item.action, disabled: item.disabled},
-                `${item.label}:${item.disabled ? '禁用' : '可用'}`,
-              ),
-            ),
+            ...props.items.map(item => mockReact.createElement(Text, {key: item.action, tag: item.action, disabled: item.disabled}, `${item.label}:${item.disabled ? '禁用' : '可用'}`)),
           )
         : null,
   };
@@ -141,14 +116,7 @@ jest.mock('@/components/ui/ModalShell', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
-    ModalShell: (props: {visible: boolean; children?: React.ReactNode}) =>
-      props.visible
-        ? mockReact.createElement(
-            Text,
-            {testModalShell: 'open'},
-            props.children ?? null,
-          )
-        : null,
+    ModalShell: (props: {visible: boolean; children?: React.ReactNode}) => (props.visible ? mockReact.createElement(Text, {testModalShell: 'open'}, props.children ?? null) : null),
   };
 });
 
@@ -252,9 +220,7 @@ function makeConfig(): SearchConfigPublic {
 }
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
-function treeText(
-  node: TestRenderer.ReactTestInstance | string | number,
-): string {
+function treeText(node: TestRenderer.ReactTestInstance | string | number): string {
   if (node == null) {
     return '';
   }
@@ -269,16 +235,11 @@ function treeText(
 }
 
 /** 行节点（rowTitle 只挂在 ConfigListCard mock 的宿主节点上）。 */
-function rowsOf(
-  root: TestRenderer.ReactTestInstance,
-): TestRenderer.ReactTestInstance[] {
+function rowsOf(root: TestRenderer.ReactTestInstance): TestRenderer.ReactTestInstance[] {
   return root.findAll(node => node.props.rowTitle != null);
 }
 
-function rowByTitle(
-  root: TestRenderer.ReactTestInstance,
-  title: string,
-): TestRenderer.ReactTestInstance {
+function rowByTitle(root: TestRenderer.ReactTestInstance, title: string): TestRenderer.ReactTestInstance {
   const row = rowsOf(root).find(node => node.props.rowTitle === title);
   expect(row).toBeDefined();
   return row!;
@@ -297,10 +258,7 @@ function rowTitles(root: TestRenderer.ReactTestInstance): string[] {
 }
 
 /** 打开指定引擎的行菜单（点行卡片菜单按钮）。 */
-async function openMenu(
-  root: TestRenderer.ReactTestInstance,
-  title: string,
-): Promise<void> {
+async function openMenu(root: TestRenderer.ReactTestInstance, title: string): Promise<void> {
   const menuBtn = root.findAll(node => node.props.testMenu === title)[0];
   expect(menuBtn).toBeDefined();
   await act(async () => {
@@ -309,20 +267,14 @@ async function openMenu(
 }
 
 /** 断言当前打开菜单里某 action 项的禁用态。 */
-function menuItemDisabled(
-  root: TestRenderer.ReactTestInstance,
-  action: string,
-): boolean {
+function menuItemDisabled(root: TestRenderer.ReactTestInstance, action: string): boolean {
   const item = root.findAll(node => node.props.tag === action)[0];
   expect(item).toBeDefined();
   return item.props.disabled === true;
 }
 
 /** 触发当前菜单的 action（菜单 mock 的 onSelect 挂在树节点上）。 */
-async function selectMenuAction(
-  root: TestRenderer.ReactTestInstance,
-  action: string,
-): Promise<void> {
+async function selectMenuAction(root: TestRenderer.ReactTestInstance, action: string): Promise<void> {
   await act(async () => {
     root.findAll(node => node.props.onSelect != null)[0].props.onSelect(action);
     for (let i = 0; i < 10; i++) {
@@ -356,13 +308,7 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
   it('按 readConfig().engines 顺序动态渲染预置 / 自定义 / DDG 行', async () => {
     const {renderer} = await renderScreen();
     // FIX-23：预置行标题读模型 name 优先（静态表仅未知 id 兜底）。
-    expect(rowTitles(renderer.root)).toEqual([
-      '博查搜索',
-      '我的搜索',
-      'DuckDuckGo',
-      'SearXNG',
-      'DeepSeek',
-    ]);
+    expect(rowTitles(renderer.root)).toEqual(['博查搜索', '我的搜索', 'DuckDuckGo', 'SearXNG', 'DeepSeek']);
     // 顺序跟随 fixture，不按静态出厂表重排。
     const text = treeText(renderer.root);
     expect(text.indexOf('博查搜索')).toBeLessThan(text.indexOf('我的搜索'));
@@ -370,20 +316,20 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     expect(text.indexOf('DuckDuckGo')).toBeLessThan(text.indexOf('SearXNG'));
   });
 
-  it('状态标签：hasKey / baseUrl / enabled 三类提示按引擎实时状态渲染', async () => {
+  it('状态标签：hasKey / 实例地址 / 开关三类状态按引擎实时状态渲染（开关态不进文案）', async () => {
     const {renderer} = await renderScreen();
 
-    // 预置且已存 key：set 标签，无缺失提示。
+    // 预置且已存 key：set 标签，无缺失提示；开关态由开关本身表达，文案不重复。
     const bocha = treeText(rowByTitle(renderer.root, '博查搜索'));
     expect(bocha).toContain('tag:set');
     expect(bocha).not.toContain('未配置密钥');
     expect(bocha).not.toContain('已关闭');
 
-    // 自定义实例关闭且无 key：not set + 关闭 + 未配置密钥。
+    // 自定义实例关闭且无 key：not set + 未配置密钥（「已关闭」不再进副标题）。
     const custom = treeText(rowByTitle(renderer.root, '我的搜索'));
     expect(custom).toContain('tag:not set');
     expect(custom).toContain('自定义模板');
-    expect(custom).toContain('已关闭');
+    expect(custom).not.toContain('已关闭');
     expect(custom).toContain('未配置密钥');
 
     // searxng 需实例地址且未配置：not set + 未配置实例地址。
@@ -428,13 +374,7 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     await selectMenuAction(renderer.root, 'up');
 
     expect(mockSetEngineOrder).toHaveBeenCalledTimes(1);
-    expect(mockSetEngineOrder).toHaveBeenCalledWith([
-      CUSTOM_ID,
-      'bocha',
-      'duckduckgo',
-      'searxng',
-      'deepseek',
-    ]);
+    expect(mockSetEngineOrder).toHaveBeenCalledWith([CUSTOM_ID, 'bocha', 'duckduckgo', 'searxng', 'deepseek']);
     // 上移后重读刷新（初始挂载一次 + 排序后一次）。
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore + 1);
   });
@@ -455,24 +395,17 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     // 自定义实例（下标 1）下移 → 与 DDG 交换。
     await openMenu(renderer.root, '我的搜索');
     await selectMenuAction(renderer.root, 'down');
-    expect(mockSetEngineOrder).toHaveBeenCalledWith([
-      'bocha',
-      'duckduckgo',
-      CUSTOM_ID,
-      'searxng',
-      'deepseek',
-    ]);
+    expect(mockSetEngineOrder).toHaveBeenCalledWith(['bocha', 'duckduckgo', CUSTOM_ID, 'searxng', 'deepseek']);
   });
 
-  it('点击行 navigate 详情页（DDG / 模拟自定义实例均携带动态 id）', async () => {
+  it('点击行 navigate 详情页（DDG 兜底无详情页：点击无反应；自定义实例携带动态 id）', async () => {
     const {renderer} = await renderScreen();
 
+    // DDG 是内置兜底（无模板 / 无凭据 / 参数说明出厂固定），点击不导航。
     await act(async () => {
       rowByTitle(renderer.root, 'DuckDuckGo').props.onPress();
     });
-    expect(mockNavigate).toHaveBeenLastCalledWith('SearchEngineDetail', {
-      engineId: 'duckduckgo',
-    });
+    expect(mockNavigate).not.toHaveBeenCalled();
 
     await act(async () => {
       rowByTitle(renderer.root, '我的搜索').props.onPress();
@@ -494,19 +427,14 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
       override.onMenu();
     });
     expect(treeText(renderer.root)).toContain('使用说明');
-    // ui/P2-10d：帮助内容五段齐全 + FIX-26 定稿句（mobile 现文案为真源，
-    // 与 desktop 帮助弹窗互为逐字同句，仅补内容断言防漂移）。
+    // ui/P2-10d：帮助内容按 v3 口径（测试搜索 / curl 导入已移除，仅剩四段）。
     const helpText = treeText(renderer.root);
-    for (const section of [
-      '启用开关',
-      '引擎优先级',
-      '模板与自定义引擎',
-      '测试消耗配额',
-      '密钥安全',
-    ]) {
+    for (const section of ['启用开关', '引擎优先级', '模板与自定义引擎', '密钥安全']) {
       expect(helpText).toContain(section);
     }
-    expect(helpText).toContain('整数字段写 "{{count}}"（带引号）');
+    expect(helpText).toContain('{{apiKey}}');
+    expect(helpText).not.toContain('测试消耗配额');
+    expect(helpText).not.toContain('curl');
   });
 
   it('排序写库失败：toast 报错，不静默吞掉', async () => {

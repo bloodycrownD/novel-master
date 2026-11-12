@@ -76,7 +76,6 @@ import {
   type SessionSetAgentBindingRequest,
   type SessionSetComposerDraftRequest,
   type SessionSetModelOverrideRequest,
-
   type UsageStatsQueryRequest,
   type UsageStatsQueryResponse,
   type VfsBatchClearStagingRequest,
@@ -131,522 +130,154 @@ import {
   type SearchTestEngineResultDto,
   type SearchUpdateCustomEngineRequest,
   type SearchUpdatePresetOverrideRequest,
-} from '@shared/ipc-types';
+} from "@shared/ipc-types";
 
-export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
+type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
 
 function noArg<T>(invoke: InvokeFn, channel: string): () => Promise<T> {
   return () => invoke<T>(channel);
 }
 
-function withReq<TReq, TRes>(
-  invoke: InvokeFn,
-  channel: string,
-): (req: TReq) => Promise<TRes> {
-  return req => invoke<TRes>(channel, req);
+function withReq<TReq, TRes>(invoke: InvokeFn, channel: string): (req: TReq) => Promise<TRes> {
+  return (req) => invoke<TRes>(channel, req);
 }
 
-/** 可选对象 payload：不传参时以 undefined 发送（handler 侧须容忍缺省）。 */
-function withOptionalReq<TReq extends object, TRes>(
-  invoke: InvokeFn,
-  channel: string,
-): (req?: TReq) => Promise<TRes> {
-  return req => invoke<TRes>(channel, req);
+function withBool<TRes>(invoke: InvokeFn, channel: string): (enabled: boolean) => Promise<TRes> {
+  return (enabled) => invoke<TRes>(channel, enabled);
 }
 
-function withBool<TRes>(
-  invoke: InvokeFn,
-  channel: string,
-): (enabled: boolean) => Promise<TRes> {
-  return enabled => invoke<TRes>(channel, enabled);
-}
-
+// nm-style: keep-public — 通道映射表与 bridge 注入分离：本模块隔离 window 桥这一不稳定依赖，client.ts 只负责注入 invoke
 /** 由 client.ts 注入 bridge().invoke，生成全部 ipc* 封装。 */
 export function createInvokeClient(invoke: InvokeFn) {
   return {
-    getBootstrapStatus: noArg<BootstrapStatusResponse>(
-      invoke,
-      IPC_CHANNELS.BOOTSTRAP_STATUS,
-    ),
-    rebootstrap: noArg<BootstrapStatusResponse>(
-      invoke,
-      IPC_CHANNELS.BOOTSTRAP_REBOOTSTRAP,
-    ),
-    ipcAgentActivityGet: noArg<AgentActivityPayload>(
-      invoke,
-      IPC_CHANNELS.AGENT_ACTIVITY_GET,
-    ),
-    ipcScopeGet: noArg<IpcResult<ScopeSnapshotDto>>(
-      invoke,
-      IPC_CHANNELS.SCOPE_GET,
-    ),
-    ipcScopeSetProject: withReq<
-      ScopeSetProjectRequest,
-      IpcResult<ScopeSnapshotDto>
-    >(invoke, IPC_CHANNELS.SCOPE_SET_PROJECT),
-    ipcScopeSetSession: withReq<
-      ScopeSetSessionRequest,
-      IpcResult<ScopeSnapshotDto>
-    >(invoke, IPC_CHANNELS.SCOPE_SET_SESSION),
-    ipcProjectsList: noArg<IpcResult<ProjectDto[]>>(
-      invoke,
-      IPC_CHANNELS.PROJECTS_LIST,
-    ),
-    ipcProjectsCreate: withReq<ProjectCreateRequest, IpcResult<ProjectDto>>(
-      invoke,
-      IPC_CHANNELS.PROJECTS_CREATE,
-    ),
-    ipcProjectsRename: withReq<ProjectRenameRequest, IpcResult<ProjectDto>>(
-      invoke,
-      IPC_CHANNELS.PROJECTS_RENAME,
-    ),
-    ipcProjectsDelete: withReq<ProjectDeleteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PROJECTS_DELETE,
-    ),
-    ipcSessionsListByProject: withReq<
-      SessionListByProjectRequest,
-      IpcResult<SessionDto[]>
-    >(invoke, IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT),
-    ipcSessionsCreate: withReq<SessionCreateRequest, IpcResult<SessionDto>>(
-      invoke,
-      IPC_CHANNELS.SESSIONS_CREATE,
-    ),
-    ipcSessionsRename: withReq<SessionRenameRequest, IpcResult<SessionDto>>(
-      invoke,
-      IPC_CHANNELS.SESSIONS_RENAME,
-    ),
-    ipcSessionsDelete: withReq<SessionDeleteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SESSIONS_DELETE,
-    ),
-    ipcSessionsGetComposerDraft: withReq<
-      SessionGetComposerDraftRequest,
-      IpcResult<string | null>
-    >(invoke, IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT),
-    ipcSessionsSetComposerDraft: withReq<
-      SessionSetComposerDraftRequest,
-      IpcResult<boolean>
-    >(invoke, IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT),
-    ipcSessionsProjectComposerStatus: withReq<
-      SessionProjectComposerStatusRequest,
-      IpcResult<MessageAttachmentDto[]>
-    >(invoke, IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS),
-    ipcSessionsSetAgentBinding: withReq<
-      SessionSetAgentBindingRequest,
-      IpcResult<SessionAgentConfigDto>
-    >(invoke, IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING),
-    ipcSessionsSetModelOverride: withReq<
-      SessionSetModelOverrideRequest,
-      IpcResult<SessionAgentConfigDto>
-    >(invoke, IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE),
-    ipcAppUiGet: (key: string) =>
-      invoke<AppUiGetResponse>(IPC_CHANNELS.APP_UI_GET, { key }),
-    ipcAppUiSet: (key: string, value: string) =>
-      invoke<IpcResult<void>>(IPC_CHANNELS.APP_UI_SET, { key, value }),
-    ipcWorkplaceBuildListRows: withReq<
-      WorkplaceBuildListRowsRequest,
-      IpcResult<WorkplaceListRowDto[]>
-    >(invoke, IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS),
-    ipcWorkplaceSetDirRule: withReq<WorkplaceSetDirRuleRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.WORKPLACE_SET_DIR_RULE,
-    ),
-    ipcWorkplaceSetFileRule: withReq<
-      WorkplaceSetFileRuleRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.WORKPLACE_SET_FILE_RULE),
-    ipcWorkplaceGetDirRule: withReq<
-      WorkplaceGetDirRuleRequest,
-      IpcResult<WorkplaceSetDirRuleRequest | null>
-    >(invoke, IPC_CHANNELS.WORKPLACE_GET_DIR_RULE),
-    ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(
-      invoke,
-      IPC_CHANNELS.VFS_READ,
-    ),
-    ipcPhysicalList: withReq<
-      PhysicalListRequest,
-      IpcResult<WorkplaceListRowDto[]>
-    >(invoke, IPC_CHANNELS.PHYSICAL_LIST),
-    ipcPhysicalRead: withReq<PhysicalReadRequest, IpcResult<VfsReadResultDto>>(
-      invoke,
-      IPC_CHANNELS.PHYSICAL_READ,
-    ),
-    ipcVfsWrite: withReq<VfsWriteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.VFS_WRITE,
-    ),
-    ipcVfsMkdir: withReq<VfsMkdirRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.VFS_MKDIR,
-    ),
-    ipcVfsDelete: withReq<VfsDeleteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.VFS_DELETE,
-    ),
-    ipcVfsRename: withReq<VfsRenameRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.VFS_RENAME,
-    ),
-    ipcVfsZipExport: withReq<VfsZipRequest, IpcResult<VfsZipExportResult>>(
-      invoke,
-      IPC_CHANNELS.VFS_ZIP_EXPORT,
-    ),
-    ipcVfsZipImport: withReq<VfsZipRequest, IpcResult<VfsZipImportResult>>(
-      invoke,
-      IPC_CHANNELS.VFS_ZIP_IMPORT,
-    ),
-    ipcVfsZipPick: noArg<IpcResult<VfsZipPickResult>>(
-      invoke,
-      IPC_CHANNELS.VFS_ZIP_PICK,
-    ),
-    ipcVfsZipImportBytes: withReq<
-      VfsZipBytesImportRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES),
-    ipcVfsCharacterCardImport: withReq<
-      VfsCharacterCardImportRequest,
-      IpcResult<VfsCharacterCardImportResult>
-    >(invoke, IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT),
-    ipcVfsFilePick: noArg<IpcResult<VfsFilePickResult>>(
-      invoke,
-      IPC_CHANNELS.VFS_FILE_PICK,
-    ),
-    ipcVfsFileExport: withReq<
-      VfsFileExportRequest,
-      IpcResult<VfsFileExportResult>
-    >(invoke, IPC_CHANNELS.VFS_FILE_EXPORT),
-    ipcVfsBatchIngestFromPaths: withReq<
-      VfsBatchIngestFromPathsRequest,
-      IpcResult<VfsBatchIngestFromPathsResult>
-    >(invoke, IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS),
-    ipcVfsBatchExportStage: withReq<
-      VfsBatchExportStageRequest,
-      IpcResult<VfsBatchExportStageResult>
-    >(invoke, IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE),
-    ipcVfsBatchClearStaging: withReq<
-      VfsBatchClearStagingRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
-    ipcSessionsPullTemplate: withReq<
-      SessionPullTemplateRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
-    ipcSessionsPushTemplate: withReq<
-      SessionPushTemplateRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE),
-    ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_LIST,
-    ),
-    ipcMessagesAppend: withReq<
-      MessagesAppendRequest,
-      IpcResult<ChatMessageDto>
-    >(invoke, IPC_CHANNELS.MESSAGES_APPEND),
-    ipcMessagesEdit: withReq<MessagesEditRequest, IpcResult<ChatMessageDto>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_EDIT,
-    ),
-    ipcMessagesHide: withReq<MessagesHideRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_HIDE,
-    ),
-    ipcMessagesShow: withReq<MessagesShowRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_SHOW,
-    ),
-    ipcMessagesHideRange: withReq<
-      MessagesHideRangeRequest,
-      IpcResult<{ count: number }>
-    >(invoke, IPC_CHANNELS.MESSAGES_HIDE_RANGE),
-    ipcMessagesShowRange: withReq<
-      MessagesShowRangeRequest,
-      IpcResult<{ count: number }>
-    >(invoke, IPC_CHANNELS.MESSAGES_SHOW_RANGE),
-    ipcMessagesTruncateAfter: withReq<
-      MessagesTruncateAfterRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER),
-    ipcMessagesDelete: withReq<MessagesDeleteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_DELETE,
-    ),
-    ipcMessagesFork: withReq<MessagesForkRequest, IpcResult<SessionDto>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_FORK,
-    ),
-    ipcMessagesRollback: withReq<SessionFsRollbackRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_ROLLBACK,
-    ),
-    ipcMessagesSetFloor: withReq<
-      MessagesSetFloorPayload,
-      IpcResult<MessagesSetFloorResult>
-    >(invoke, IPC_CHANNELS.MESSAGES_SET_FLOOR),
-    ipcAgentRun: withReq<AgentRunRequest, IpcResult<{ started: boolean }>>(
-      invoke,
-      IPC_CHANNELS.AGENT_RUN,
-    ),
-    ipcAgentAbort: withReq<AgentAbortRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.AGENT_ABORT,
-    ),
-    ipcAgentRunIsActive: withReq<AgentRunIsActiveRequest, IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.AGENT_RUN_IS_ACTIVE,
-    ),
-    ipcAgentResolveCurrent: noArg<IpcResult<AgentResolveCurrentResponse>>(
-      invoke,
-      IPC_CHANNELS.AGENT_RESOLVE_CURRENT,
-    ),
-    ipcAgentListPicker: noArg<IpcResult<AgentListPickerResponse>>(
-      invoke,
-      IPC_CHANNELS.AGENT_LIST_PICKER,
-    ),
-    ipcAgentSetCurrent: withReq<AgentSetCurrentRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.AGENT_SET_CURRENT,
-    ),
-    ipcModelListPicker: noArg<IpcResult<ModelListPickerResponse>>(
-      invoke,
-      IPC_CHANNELS.MODEL_LIST_PICKER,
-    ),
-    ipcModelSetCurrent: withReq<ModelSetCurrentRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MODEL_SET_CURRENT,
-    ),
-    ipcPromptRealPreview: withReq<
-      PromptScopeRequest,
-      IpcResult<PromptPreviewTurnDto[]>
-    >(invoke, IPC_CHANNELS.PROMPT_REAL_PREVIEW),
+    getBootstrapStatus: noArg<BootstrapStatusResponse>(invoke, IPC_CHANNELS.BOOTSTRAP_STATUS),
+    rebootstrap: noArg<BootstrapStatusResponse>(invoke, IPC_CHANNELS.BOOTSTRAP_REBOOTSTRAP),
+    ipcAgentActivityGet: noArg<AgentActivityPayload>(invoke, IPC_CHANNELS.AGENT_ACTIVITY_GET),
+    ipcScopeGet: noArg<IpcResult<ScopeSnapshotDto>>(invoke, IPC_CHANNELS.SCOPE_GET),
+    ipcScopeSetProject: withReq<ScopeSetProjectRequest, IpcResult<ScopeSnapshotDto>>(invoke, IPC_CHANNELS.SCOPE_SET_PROJECT),
+    ipcScopeSetSession: withReq<ScopeSetSessionRequest, IpcResult<ScopeSnapshotDto>>(invoke, IPC_CHANNELS.SCOPE_SET_SESSION),
+    ipcProjectsList: noArg<IpcResult<ProjectDto[]>>(invoke, IPC_CHANNELS.PROJECTS_LIST),
+    ipcProjectsCreate: withReq<ProjectCreateRequest, IpcResult<ProjectDto>>(invoke, IPC_CHANNELS.PROJECTS_CREATE),
+    ipcProjectsRename: withReq<ProjectRenameRequest, IpcResult<ProjectDto>>(invoke, IPC_CHANNELS.PROJECTS_RENAME),
+    ipcProjectsDelete: withReq<ProjectDeleteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.PROJECTS_DELETE),
+    ipcSessionsListByProject: withReq<SessionListByProjectRequest, IpcResult<SessionDto[]>>(invoke, IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT),
+    ipcSessionsCreate: withReq<SessionCreateRequest, IpcResult<SessionDto>>(invoke, IPC_CHANNELS.SESSIONS_CREATE),
+    ipcSessionsRename: withReq<SessionRenameRequest, IpcResult<SessionDto>>(invoke, IPC_CHANNELS.SESSIONS_RENAME),
+    ipcSessionsDelete: withReq<SessionDeleteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SESSIONS_DELETE),
+    ipcSessionsGetComposerDraft: withReq<SessionGetComposerDraftRequest, IpcResult<string | null>>(invoke, IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT),
+    ipcSessionsSetComposerDraft: withReq<SessionSetComposerDraftRequest, IpcResult<boolean>>(invoke, IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT),
+    ipcSessionsProjectComposerStatus: withReq<SessionProjectComposerStatusRequest, IpcResult<MessageAttachmentDto[]>>(invoke, IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS),
+    ipcSessionsSetAgentBinding: withReq<SessionSetAgentBindingRequest, IpcResult<SessionAgentConfigDto>>(invoke, IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING),
+    ipcSessionsSetModelOverride: withReq<SessionSetModelOverrideRequest, IpcResult<SessionAgentConfigDto>>(invoke, IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE),
+    ipcAppUiGet: (key: string) => invoke<AppUiGetResponse>(IPC_CHANNELS.APP_UI_GET, { key }),
+    ipcAppUiSet: (key: string, value: string) => invoke<IpcResult<void>>(IPC_CHANNELS.APP_UI_SET, { key, value }),
+    ipcWorkplaceBuildListRows: withReq<WorkplaceBuildListRowsRequest, IpcResult<WorkplaceListRowDto[]>>(invoke, IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS),
+    ipcWorkplaceSetDirRule: withReq<WorkplaceSetDirRuleRequest, IpcResult<void>>(invoke, IPC_CHANNELS.WORKPLACE_SET_DIR_RULE),
+    ipcWorkplaceSetFileRule: withReq<WorkplaceSetFileRuleRequest, IpcResult<void>>(invoke, IPC_CHANNELS.WORKPLACE_SET_FILE_RULE),
+    ipcWorkplaceGetDirRule: withReq<WorkplaceGetDirRuleRequest, IpcResult<WorkplaceSetDirRuleRequest | null>>(invoke, IPC_CHANNELS.WORKPLACE_GET_DIR_RULE),
+    ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(invoke, IPC_CHANNELS.VFS_READ),
+    ipcPhysicalList: withReq<PhysicalListRequest, IpcResult<WorkplaceListRowDto[]>>(invoke, IPC_CHANNELS.PHYSICAL_LIST),
+    ipcPhysicalRead: withReq<PhysicalReadRequest, IpcResult<VfsReadResultDto>>(invoke, IPC_CHANNELS.PHYSICAL_READ),
+    ipcVfsWrite: withReq<VfsWriteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_WRITE),
+    ipcVfsMkdir: withReq<VfsMkdirRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_MKDIR),
+    ipcVfsDelete: withReq<VfsDeleteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_DELETE),
+    ipcVfsRename: withReq<VfsRenameRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_RENAME),
+    ipcVfsZipExport: withReq<VfsZipRequest, IpcResult<VfsZipExportResult>>(invoke, IPC_CHANNELS.VFS_ZIP_EXPORT),
+    ipcVfsZipImport: withReq<VfsZipRequest, IpcResult<VfsZipImportResult>>(invoke, IPC_CHANNELS.VFS_ZIP_IMPORT),
+    ipcVfsZipPick: noArg<IpcResult<VfsZipPickResult>>(invoke, IPC_CHANNELS.VFS_ZIP_PICK),
+    ipcVfsZipImportBytes: withReq<VfsZipBytesImportRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES),
+    ipcVfsCharacterCardImport: withReq<VfsCharacterCardImportRequest, IpcResult<VfsCharacterCardImportResult>>(invoke, IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT),
+    ipcVfsFilePick: noArg<IpcResult<VfsFilePickResult>>(invoke, IPC_CHANNELS.VFS_FILE_PICK),
+    ipcVfsFileExport: withReq<VfsFileExportRequest, IpcResult<VfsFileExportResult>>(invoke, IPC_CHANNELS.VFS_FILE_EXPORT),
+    ipcVfsBatchIngestFromPaths: withReq<VfsBatchIngestFromPathsRequest, IpcResult<VfsBatchIngestFromPathsResult>>(invoke, IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS),
+    ipcVfsBatchExportStage: withReq<VfsBatchExportStageRequest, IpcResult<VfsBatchExportStageResult>>(invoke, IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE),
+    ipcVfsBatchClearStaging: withReq<VfsBatchClearStagingRequest, IpcResult<void>>(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
+    ipcSessionsPullTemplate: withReq<SessionPullTemplateRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
+    ipcSessionsPushTemplate: withReq<SessionPushTemplateRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE),
+    ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(invoke, IPC_CHANNELS.MESSAGES_LIST),
+    ipcMessagesAppend: withReq<MessagesAppendRequest, IpcResult<ChatMessageDto>>(invoke, IPC_CHANNELS.MESSAGES_APPEND),
+    ipcMessagesEdit: withReq<MessagesEditRequest, IpcResult<ChatMessageDto>>(invoke, IPC_CHANNELS.MESSAGES_EDIT),
+    ipcMessagesHide: withReq<MessagesHideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MESSAGES_HIDE),
+    ipcMessagesShow: withReq<MessagesShowRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MESSAGES_SHOW),
+    ipcMessagesHideRange: withReq<MessagesHideRangeRequest, IpcResult<{ count: number }>>(invoke, IPC_CHANNELS.MESSAGES_HIDE_RANGE),
+    ipcMessagesShowRange: withReq<MessagesShowRangeRequest, IpcResult<{ count: number }>>(invoke, IPC_CHANNELS.MESSAGES_SHOW_RANGE),
+    ipcMessagesTruncateAfter: withReq<MessagesTruncateAfterRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER),
+    ipcMessagesDelete: withReq<MessagesDeleteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MESSAGES_DELETE),
+    ipcMessagesFork: withReq<MessagesForkRequest, IpcResult<SessionDto>>(invoke, IPC_CHANNELS.MESSAGES_FORK),
+    ipcMessagesRollback: withReq<SessionFsRollbackRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MESSAGES_ROLLBACK),
+    ipcMessagesSetFloor: withReq<MessagesSetFloorPayload, IpcResult<MessagesSetFloorResult>>(invoke, IPC_CHANNELS.MESSAGES_SET_FLOOR),
+    ipcAgentRun: withReq<AgentRunRequest, IpcResult<{ started: boolean }>>(invoke, IPC_CHANNELS.AGENT_RUN),
+    ipcAgentAbort: withReq<AgentAbortRequest, IpcResult<void>>(invoke, IPC_CHANNELS.AGENT_ABORT),
+    ipcAgentRunIsActive: withReq<AgentRunIsActiveRequest, IpcResult<boolean>>(invoke, IPC_CHANNELS.AGENT_RUN_IS_ACTIVE),
+    ipcAgentResolveCurrent: noArg<IpcResult<AgentResolveCurrentResponse>>(invoke, IPC_CHANNELS.AGENT_RESOLVE_CURRENT),
+    ipcAgentListPicker: noArg<IpcResult<AgentListPickerResponse>>(invoke, IPC_CHANNELS.AGENT_LIST_PICKER),
+    ipcAgentSetCurrent: withReq<AgentSetCurrentRequest, IpcResult<void>>(invoke, IPC_CHANNELS.AGENT_SET_CURRENT),
+    ipcModelListPicker: noArg<IpcResult<ModelListPickerResponse>>(invoke, IPC_CHANNELS.MODEL_LIST_PICKER),
+    ipcModelSetCurrent: withReq<ModelSetCurrentRequest, IpcResult<void>>(invoke, IPC_CHANNELS.MODEL_SET_CURRENT),
+    ipcPromptRealPreview: withReq<PromptScopeRequest, IpcResult<PromptPreviewTurnDto[]>>(invoke, IPC_CHANNELS.PROMPT_REAL_PREVIEW),
     // data 可为 null：读口在 run 在途时被抑制 / 中途弃权时回 null，
     // 消费方按「保留旧标签」处理（r3-dt-align 第 2 层返回契约）。
-    ipcPromptChatTokenLabel: withReq<
-      PromptScopeRequest,
-      IpcResult<PromptChatTokenStatsResponse | null>
-    >(invoke, IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL),
-    ipcPromptAgentMeta: withReq<
-      PromptScopeRequest,
-      IpcResult<PromptAgentMetaResponse>
-    >(invoke, IPC_CHANNELS.PROMPT_AGENT_META),
-    ipcCompactionManual: withReq<
-      CompactionManualRequest,
-      IpcResult<{ ok: boolean }>
-    >(invoke, IPC_CHANNELS.COMPACTION_MANUAL),
-    ipcUsageStatsQuery: withReq<
-      UsageStatsQueryRequest,
-      IpcResult<UsageStatsQueryResponse>
-    >(invoke, IPC_CHANNELS.USAGE_STATS_QUERY),
-    ipcPreferencesGetLlmStream: noArg<IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
-    ),
-    ipcPreferencesSetLlmStream: withBool<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
-    ),
-    ipcPreferencesGetSubagentStream: noArg<IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM,
-    ),
-    ipcPreferencesSetSubagentStream: withBool<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM,
-    ),
-    ipcPreferencesGetThinkingContext: noArg<IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
-    ),
-    ipcPreferencesSetThinkingContext: withBool<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_SET_THINKING_CONTEXT,
-    ),
+    ipcPromptChatTokenLabel: withReq<PromptScopeRequest, IpcResult<PromptChatTokenStatsResponse | null>>(invoke, IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL),
+    ipcPromptAgentMeta: withReq<PromptScopeRequest, IpcResult<PromptAgentMetaResponse>>(invoke, IPC_CHANNELS.PROMPT_AGENT_META),
+    ipcCompactionManual: withReq<CompactionManualRequest, IpcResult<{ ok: boolean }>>(invoke, IPC_CHANNELS.COMPACTION_MANUAL),
+    ipcUsageStatsQuery: withReq<UsageStatsQueryRequest, IpcResult<UsageStatsQueryResponse>>(invoke, IPC_CHANNELS.USAGE_STATS_QUERY),
+    ipcPreferencesGetLlmStream: noArg<IpcResult<boolean>>(invoke, IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM),
+    ipcPreferencesSetLlmStream: withBool<IpcResult<void>>(invoke, IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM),
+    ipcPreferencesGetSubagentStream: noArg<IpcResult<boolean>>(invoke, IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM),
+    ipcPreferencesSetSubagentStream: withBool<IpcResult<void>>(invoke, IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM),
+    ipcPreferencesGetThinkingContext: noArg<IpcResult<boolean>>(invoke, IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT),
+    ipcPreferencesSetThinkingContext: withBool<IpcResult<void>>(invoke, IPC_CHANNELS.PREFERENCES_SET_THINKING_CONTEXT),
     ipcProvidersList: noArg(invoke, IPC_CHANNELS.PROVIDERS_LIST),
-    ipcProvidersGet: withReq<{ providerId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDERS_GET,
-    ),
-    ipcProvidersCreate: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDERS_CREATE,
-    ),
-    ipcProvidersEdit: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDERS_EDIT,
-    ),
-    ipcProvidersDelete: withReq<{ providerId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDERS_DELETE,
-    ),
-    ipcProviderModelsSavedList: withReq<{ providerId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST,
-    ),
-    ipcProviderModelsFetch: withReq<{ providerId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_FETCH,
-    ),
-    ipcProviderModelsSuggestList: withReq<{ providerId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST,
-    ),
-    ipcProviderModelsSave: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_SAVE,
-    ),
-    ipcProviderModelsDeleteSaved: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED,
-    ),
-    ipcProviderModelsGetSaved: withReq<{ savedModelId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED,
-    ),
-    ipcProviderModelsEditSaved: withReq<
-      { savedModelId: string; modelName?: string },
-      unknown
-    >(invoke, IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED),
-    ipcProviderModelsUpdateSettings: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS,
-    ),
-    ipcProviderModelsResetContextWindow: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW,
-    ),
+    ipcProvidersGet: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDERS_GET),
+    ipcProvidersCreate: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDERS_CREATE),
+    ipcProvidersEdit: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDERS_EDIT),
+    ipcProvidersDelete: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDERS_DELETE),
+    ipcProviderModelsSavedList: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST),
+    ipcProviderModelsFetch: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_FETCH),
+    ipcProviderModelsSuggestList: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST),
+    ipcProviderModelsSave: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SAVE),
+    ipcProviderModelsDeleteSaved: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED),
+    ipcProviderModelsGetSaved: withReq<{ savedModelId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED),
+    ipcProviderModelsEditSaved: withReq<{ savedModelId: string; modelName?: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED),
+    ipcProviderModelsUpdateSettings: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS),
+    ipcProviderModelsResetContextWindow: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW),
     ipcAgentRegistryList: noArg(invoke, IPC_CHANNELS.AGENT_REGISTRY_LIST),
-    ipcAgentRegistryGet: withReq<
-      { agentId: string },
-      IpcResult<AgentRegistryGetResponse>
-    >(invoke, IPC_CHANNELS.AGENT_REGISTRY_GET),
-    ipcAgentRegistryUpsert: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_REGISTRY_UPSERT,
-    ),
-    ipcAgentRegistryUpdate: withReq<AgentRegistryUpdateRequest, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_REGISTRY_UPDATE,
-    ),
-    ipcAgentRegistryDelete: withReq<{ agentId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_REGISTRY_DELETE,
-    ),
-    ipcAgentRegistryCreateBlank: withOptionalReq<
-      AgentRegistryCreateBlankRequest,
-      IpcResult<{ agentId: string }>
-    >(invoke, IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK),
-    ipcAgentYamlExport: withReq<{ agentId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_YAML_EXPORT,
-    ),
-    ipcAgentYamlImport: withReq<{ agentId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_YAML_IMPORT,
-    ),
+    ipcAgentRegistryGet: withReq<{ agentId: string }, IpcResult<AgentRegistryGetResponse>>(invoke, IPC_CHANNELS.AGENT_REGISTRY_GET),
+    ipcAgentRegistryUpsert: withReq<unknown, unknown>(invoke, IPC_CHANNELS.AGENT_REGISTRY_UPSERT),
+    ipcAgentRegistryUpdate: withReq<AgentRegistryUpdateRequest, unknown>(invoke, IPC_CHANNELS.AGENT_REGISTRY_UPDATE),
+    ipcAgentRegistryDelete: withReq<{ agentId: string }, unknown>(invoke, IPC_CHANNELS.AGENT_REGISTRY_DELETE),
+    // 可选对象 payload：不传参时以 undefined 发送（handler 侧须容忍缺省）。
+    ipcAgentRegistryCreateBlank: (req?: AgentRegistryCreateBlankRequest) => invoke<IpcResult<{ agentId: string }>>(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK, req),
+    ipcAgentYamlExport: withReq<{ agentId: string }, unknown>(invoke, IPC_CHANNELS.AGENT_YAML_EXPORT),
+    ipcAgentYamlImport: withReq<{ agentId: string }, unknown>(invoke, IPC_CHANNELS.AGENT_YAML_IMPORT),
 
-    ipcSmartSortRuleList: noArg<IpcResult<SmartSortRuleDto[]>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_LIST,
-    ),
-    ipcSmartSortRuleCreate: withReq<
-      SmartSortRuleCreateRequest,
-      IpcResult<SmartSortRuleDto>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_CREATE),
-    ipcSmartSortRuleUpdate: withReq<
-      SmartSortRuleUpdateRequest,
-      IpcResult<SmartSortRuleDto>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_UPDATE),
-    ipcSmartSortRuleDelete: withReq<SmartSortRuleIdRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_DELETE,
-    ),
-    ipcSmartSortRuleDeleteBatch: withReq<
-      SmartSortRuleDeleteBatchRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH),
-    ipcSmartSortRuleSetEnabled: withReq<
-      SmartSortRuleSetEnabledRequest,
-      IpcResult<SmartSortRuleDto>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED),
-    ipcSmartSortRuleSetEnabledBatch: withReq<
-      SmartSortRuleSetEnabledBatchRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH),
-    ipcSmartSortRuleMove: withReq<
-      SmartSortRuleMoveRequest,
-      IpcResult<SmartSortRuleDto[]>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_MOVE),
-    ipcSmartSortRuleReorder: withReq<
-      SmartSortRuleReorderRequest,
-      IpcResult<SmartSortRuleDto[]>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_REORDER),
-    ipcSmartSortRuleResetDefaults: noArg<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
-    ),
-    ipcSmartSortRuleMatch: withReq<
-      SmartSortRuleMatchRequest,
-      IpcResult<SmartSortRuleMatchResultDto>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_MATCH),
-    ipcSmartSortRuleYamlExport: noArg<IpcResult<SmartSortRuleYamlExportResult>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT,
-    ),
-    ipcSmartSortRuleYamlImport: noArg<IpcResult<SmartSortRuleYamlImportResult>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT,
-    ),
-    ipcSkillsList: withReq<
-      SkillsListRequest,
-      IpcResult<SkillListItemDto[]>
-    >(invoke, IPC_CHANNELS.SKILLS_LIST),
-    ipcSkillsEffective: withReq<
-      SkillsEffectiveRequest,
-      IpcResult<EffectiveSkillDto[]>
-    >(invoke, IPC_CHANNELS.SKILLS_EFFECTIVE),
-    ipcSkillsRead: withReq<
-      SkillsReadRequest,
-      IpcResult<SkillsReadResponse>
-    >(invoke, IPC_CHANNELS.SKILLS_READ),
-    ipcSkillsWrite: withReq<
-      SkillsWriteRequest,
-      IpcResult<{ version: number }>
-    >(invoke, IPC_CHANNELS.SKILLS_WRITE),
-    ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SKILLS_TOGGLE,
-    ),
-    ipcSkillsDelete: withReq<SkillsDeleteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SKILLS_DELETE,
-    ),
-    ipcSkillsAssertCreateName: withReq<
-      SkillsAssertCreateNameRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
-    ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SKILLS_UPDATE_INFO,
-    ),
-    ipcCompactionConditionsGet: noArg(
-      invoke,
-      IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
-    ),
-    ipcCompactionConditionsSet: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.COMPACTION_CONDITIONS_SET,
-    ),
+    ipcSmartSortRuleList: noArg<IpcResult<SmartSortRuleDto[]>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_LIST),
+    ipcSmartSortRuleCreate: withReq<SmartSortRuleCreateRequest, IpcResult<SmartSortRuleDto>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_CREATE),
+    ipcSmartSortRuleUpdate: withReq<SmartSortRuleUpdateRequest, IpcResult<SmartSortRuleDto>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_UPDATE),
+    ipcSmartSortRuleDelete: withReq<SmartSortRuleIdRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_DELETE),
+    ipcSmartSortRuleDeleteBatch: withReq<SmartSortRuleDeleteBatchRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH),
+    ipcSmartSortRuleSetEnabled: withReq<SmartSortRuleSetEnabledRequest, IpcResult<SmartSortRuleDto>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED),
+    ipcSmartSortRuleSetEnabledBatch: withReq<SmartSortRuleSetEnabledBatchRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH),
+    ipcSmartSortRuleMove: withReq<SmartSortRuleMoveRequest, IpcResult<SmartSortRuleDto[]>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_MOVE),
+    ipcSmartSortRuleReorder: withReq<SmartSortRuleReorderRequest, IpcResult<SmartSortRuleDto[]>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_REORDER),
+    ipcSmartSortRuleResetDefaults: noArg<IpcResult<void>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS),
+    ipcSmartSortRuleMatch: withReq<SmartSortRuleMatchRequest, IpcResult<SmartSortRuleMatchResultDto>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_MATCH),
+    ipcSmartSortRuleYamlExport: noArg<IpcResult<SmartSortRuleYamlExportResult>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT),
+    ipcSmartSortRuleYamlImport: noArg<IpcResult<SmartSortRuleYamlImportResult>>(invoke, IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT),
+    ipcSkillsList: withReq<SkillsListRequest, IpcResult<SkillListItemDto[]>>(invoke, IPC_CHANNELS.SKILLS_LIST),
+    ipcSkillsEffective: withReq<SkillsEffectiveRequest, IpcResult<EffectiveSkillDto[]>>(invoke, IPC_CHANNELS.SKILLS_EFFECTIVE),
+    ipcSkillsRead: withReq<SkillsReadRequest, IpcResult<SkillsReadResponse>>(invoke, IPC_CHANNELS.SKILLS_READ),
+    ipcSkillsWrite: withReq<SkillsWriteRequest, IpcResult<{ version: number }>>(invoke, IPC_CHANNELS.SKILLS_WRITE),
+    ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SKILLS_TOGGLE),
+    ipcSkillsDelete: withReq<SkillsDeleteRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SKILLS_DELETE),
+    ipcSkillsAssertCreateName: withReq<SkillsAssertCreateNameRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
+    ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SKILLS_UPDATE_INFO),
+    ipcCompactionConditionsGet: noArg(invoke, IPC_CHANNELS.COMPACTION_CONDITIONS_GET),
+    ipcCompactionConditionsSet: withReq<unknown, unknown>(invoke, IPC_CHANNELS.COMPACTION_CONDITIONS_SET),
     ipcBackupExport: noArg(invoke, IPC_CHANNELS.BACKUP_EXPORT),
     ipcBackupImport: noArg(invoke, IPC_CHANNELS.BACKUP_IMPORT),
-    ipcDbStats: noArg<IpcResult<DbStatsResult>>(
-      invoke,
-      IPC_CHANNELS.DB_STATS,
-    ),
-    ipcDbMaintenance: noArg<IpcResult<DbMaintenanceResult>>(
-      invoke,
-      IPC_CHANNELS.DB_MAINTENANCE,
-    ),
+    ipcDbStats: noArg<IpcResult<DbStatsResult>>(invoke, IPC_CHANNELS.DB_STATS),
+    ipcDbMaintenance: noArg<IpcResult<DbMaintenanceResult>>(invoke, IPC_CHANNELS.DB_MAINTENANCE),
     ipcCloudSyncGetConfig: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG),
     ipcCloudSyncSetConfig: withReq<
       {
@@ -661,37 +292,15 @@ export function createInvokeClient(invoke: InvokeFn) {
       },
       unknown
     >(invoke, IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG),
-    ipcCloudSyncSetEnabled: withBool<unknown>(
-      invoke,
-      IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED,
-    ),
-    ipcCloudSyncTestConnection: noArg(
-      invoke,
-      IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION,
-    ),
-    ipcCloudSyncGetLocalStatus: noArg(
-      invoke,
-      IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS,
-    ),
+    ipcCloudSyncSetEnabled: withBool<unknown>(invoke, IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED),
+    ipcCloudSyncTestConnection: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION),
+    ipcCloudSyncGetLocalStatus: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS),
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
-    ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) =>
-      invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
-    ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(
-      invoke,
-      IPC_CHANNELS.SEARCH_GET_CONFIG,
-    ),
-    ipcSearchSaveEngineKey: withReq<
-      SearchSaveEngineKeyRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
-    ipcSearchClearEngineKey: withReq<
-      SearchClearEngineKeyRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
-    ipcSearchSetEngineOrder: withReq<
-      SearchSetEngineOrderRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
+    ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) => invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
+    ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(invoke, IPC_CHANNELS.SEARCH_GET_CONFIG),
+    ipcSearchSaveEngineKey: withReq<SearchSaveEngineKeyRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
+    ipcSearchClearEngineKey: withReq<SearchClearEngineKeyRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
+    ipcSearchSetEngineOrder: withReq<SearchSetEngineOrderRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
     ipcSearchSetEnabled: withReq<SearchSetEnabledRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SET_ENABLED),
     ipcSearchSetEngineBaseUrl: withReq<SearchSetEngineBaseUrlRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL),
     ipcSearchCreateCustomEngine: withReq<SearchCreateCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE),
@@ -702,22 +311,18 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcSearchTestEngine: withReq<SearchTestEngineRequest, IpcResult<SearchTestEngineResultDto>>(invoke, IPC_CHANNELS.SEARCH_TEST_ENGINE),
     ipcShellMenuPopup: withReq<
       {
-        menuId: 'file' | 'edit' | 'view' | 'window' | 'help';
+        menuId: "file" | "edit" | "view" | "window" | "help";
         x: number;
         y: number;
       },
       IpcResult<null>
     >(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),
-    ipcShellSetTitleBarTheme: (theme: 'light' | 'dark') =>
-      invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme),
+    ipcShellSetTitleBarTheme: (theme: "light" | "dark") => invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme),
     ipcAppOpenExternal: (url: string) => {
       const req: AppOpenExternalRequest = { url };
       return invoke<IpcResult<void>>(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, req);
     },
     ipcAppGetInfo: noArg<AppGetInfoResponse>(invoke, IPC_CHANNELS.APP_GET_INFO),
-    ipcAppCheckForUpdates: noArg<AppCheckForUpdatesResponse>(
-      invoke,
-      IPC_CHANNELS.APP_CHECK_FOR_UPDATES,
-    ),
+    ipcAppCheckForUpdates: noArg<AppCheckForUpdatesResponse>(invoke, IPC_CHANNELS.APP_CHECK_FOR_UPDATES),
   } as const;
 }

@@ -3,19 +3,28 @@ import { describe, it } from "node:test";
 
 import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { SEARCH_PARAM_HINT_MAX_LENGTH, validateSearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
+import { validateSearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
 
 const QUERY = "测试 查询";
 
 /** 跑一份出厂模板并回传请求与响应（mock fetch 记录调用参数，回放单个 JSON Response）。 */
-async function runPreset(id: keyof typeof PRESET_ENGINE_TEMPLATES, response: unknown, extra: { readonly apiKey?: string; readonly baseUrl?: string } = {}, options: SearchToolOptions = {}) {
+async function runPreset(
+  id: keyof typeof PRESET_ENGINE_TEMPLATES,
+  response: unknown,
+  extra: { readonly apiKey?: string; readonly baseUrl?: string } = {},
+  options: SearchToolOptions = {},
+  params: Record<string, unknown> = {}
+) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init: init ?? {} });
-    return new Response(JSON.stringify(response), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }) as typeof globalThis.fetch;
   const template = PRESET_ENGINE_TEMPLATES[id];
-  const out = await runTemplateEngine(template, { engine: id, template, ...extra }, QUERY, options, {}, fetchFn);
+  const out = await runTemplateEngine(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn);
   return { call: calls[0]!, out };
 }
 
@@ -39,7 +48,11 @@ describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
     assert.equal(headers.get("Accept"), "application/json");
-    assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, count: 5, summary: true });
+    assert.deepEqual(JSON.parse(call.init.body as string), {
+      query: QUERY,
+      count: 5,
+      summary: true,
+    });
     assert.deepEqual(parseResults(out), items, "data.webPages.value 数组原样透传");
   });
 
@@ -53,14 +66,20 @@ describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
-    assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, search_depth: "basic", max_results: 5, include_answer: "basic", include_raw_content: false });
+    assert.deepEqual(JSON.parse(call.init.body as string), {
+      query: QUERY,
+      search_depth: "basic",
+      max_results: 5,
+      include_answer: "basic",
+      include_raw_content: false,
+    });
     assert.deepEqual(parseResults(out), items);
   });
 
-  it("T-P3 brave：GET 端点 / X-Subscription-Token / q 与 count 查询参数 / Accept", async () => {
+  it("T-P3 brave：GET 端点 / X-Subscription-Token / params 拼查询串 / Accept", async () => {
     const key = "sk-brave-preset-key";
     const items = [{ title: "B", url: "https://b.example.com/1", description: "描述" }];
-    const { call, out } = await runPreset("brave", { web: { results: items } }, { apiKey: key });
+    const { call, out } = await runPreset("brave", { web: { results: items } }, { apiKey: key }, {}, { q: QUERY, count: 5 });
 
     assert.ok(call.url.startsWith("https://api.search.brave.com/res/v1/web/search?"), `brave 端点：${call.url}`);
     assert.equal(call.init.method, "GET");
@@ -74,12 +93,12 @@ describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6
     assert.deepEqual(parseResults(out), items);
   });
 
-  it("T-P4 searxng：GET {{baseUrl}} 端点 / 无鉴权头 / URL 不含 count 与 language", async () => {
+  it("T-P4 searxng：GET 完整端点（无宏）/ 无鉴权头 / 查询串只带 agent params", async () => {
     const items = [{ title: "S", url: "https://s.example.com/1", content: "内容" }];
-    const { call, out } = await runPreset("searxng", { results: items }, { baseUrl: "http://192.168.1.5:8080" });
+    const { call, out } = await runPreset("searxng", { results: items }, {}, {}, { q: QUERY });
 
     const url = new URL(call.url);
-    assert.equal(url.origin, "http://192.168.1.5:8080");
+    assert.equal(url.origin, "https://searx.example.com");
     assert.equal(url.pathname, "/search");
     assert.equal(url.searchParams.get("q"), QUERY);
     assert.equal(url.searchParams.get("format"), "json");
@@ -103,13 +122,22 @@ describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
-    assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, count: 5 });
+    assert.deepEqual(JSON.parse(call.init.body as string), {
+      query: QUERY,
+      count: 5,
+    });
     assert.deepEqual(parseResults(out), items);
   });
 
   it("T-P6 zhipu：POST 端点 / search_query 字段 / search_engine 固化 search_std / search_result 数组透传", async () => {
     const key = "sk-zhipu-preset-key";
-    const items = [{ title: "智谱标题", link: "https://z.example.com/1", content: "智谱摘要" }];
+    const items = [
+      {
+        title: "智谱标题",
+        link: "https://z.example.com/1",
+        content: "智谱摘要",
+      },
+    ];
     const { call, out } = await runPreset("zhipu", { search_result: items }, { apiKey: key });
 
     assert.equal(call.url, "https://open.bigmodel.cn/api/paas/v4/web_search");
@@ -117,21 +145,25 @@ describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
-    assert.deepEqual(JSON.parse(call.init.body as string), { search_query: QUERY, search_engine: "search_std", search_intent: false, count: 5 });
+    assert.deepEqual(JSON.parse(call.init.body as string), {
+      search_query: QUERY,
+      search_engine: "search_std",
+      search_intent: false,
+      count: 5,
+    });
     assert.deepEqual(parseResults(out), items);
   });
 });
 
 describe("出厂模板：常量数据锁（T-P 附带）", () => {
-  it("六份模板按出厂序声明且 paramHint 均非空、≤500 字符", () => {
+  it("六份模板按出厂序声明且 paramHint 均非空", () => {
     assert.deepEqual(Object.keys(PRESET_ENGINE_TEMPLATES), ["bocha", "tavily", "brave", "searxng", "deepseek", "zhipu"]);
     for (const [id, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
       assert.ok(template.paramHint.length > 0, `${id} paramHint 非空`);
-      assert.ok(template.paramHint.length <= SEARCH_PARAM_HINT_MAX_LENGTH, `${id} paramHint ≤ ${SEARCH_PARAM_HINT_MAX_LENGTH}`);
     }
   });
 
-  it("POST 模板统一 Content-Type / Accept 且带默认 body，GET 模板带 Accept；searxng URL 用 {{baseUrl}} 且不含 count / language", () => {
+  it("POST 模板统一 Content-Type / Accept 且带默认 body，GET 模板带 Accept；searxng URL 为完整端点且不含 count / language", () => {
     for (const [id, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
       const headers = template.headers as Readonly<Record<string, string>>;
       assert.equal(headers.Accept, "application/json", `${id} Accept`);
@@ -140,7 +172,7 @@ describe("出厂模板：常量数据锁（T-P 附带）", () => {
         assert.ok(template.defaultBody != null, `${id} defaultBody 应有出厂默认值`);
       }
     }
-    assert.ok(PRESET_ENGINE_TEMPLATES.searxng.url.includes("{{baseUrl}}"));
+    assert.equal(PRESET_ENGINE_TEMPLATES.searxng.url.includes("{{"), false);
     assert.equal(PRESET_ENGINE_TEMPLATES.searxng.url.includes("count"), false);
     assert.equal(PRESET_ENGINE_TEMPLATES.searxng.url.includes("language"), false);
     assert.ok(PRESET_ENGINE_TEMPLATES.zhipu.defaultBody?.includes('"search_engine":"search_std"'));
@@ -157,7 +189,6 @@ describe("出厂模板：常量数据锁（T-P 附带）", () => {
   it("DDG 展示常量：name / paramHint 齐备（快照与设置页共用）", () => {
     assert.equal(DUCKDUCKGO_ENGINE_META.name, "DuckDuckGo");
     assert.ok(DUCKDUCKGO_ENGINE_META.paramHint.length > 0);
-    assert.ok(DUCKDUCKGO_ENGINE_META.paramHint.length <= SEARCH_PARAM_HINT_MAX_LENGTH);
   });
 
   it("六份出厂模板全部通过保存路径校验（含明文密钥启发式检测，占位符不误报）", () => {

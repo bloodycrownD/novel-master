@@ -36,34 +36,40 @@ import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
 import { sinkOversizedOutput } from "../overflow-sink.js";
-import { DEFAULT_MAX_RESULTS, MAX_RESULTS_LIMIT, normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
+import { normalizeMaxResults, redactSecret, type ResolvedEngineConfig, type SearchChainOutput, type SearchOversizeOutput } from "./types.js";
 import { dispatchSearch, SEARCH_NOT_CONFIGURED_MESSAGE } from "./engines/dispatch.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("tool.search");
 
-/** 工具名（注册表 / catalog / policy 共用）。 */
+/** 工具名（注册表 / catalog / policy 共用；测试直引）。 */
 export const SEARCH_TOOL_NAME = "search";
 
 /** 串行链总预算（毫秒）：多引擎依次降级的全链时间上限（引擎自身超时另算）。 */
-export const SEARCH_CHAIN_BUDGET_MS = 120_000;
+const SEARCH_CHAIN_BUDGET_MS = 120_000;
 
 /** 聚合错误 / attempts 轨迹里单引擎错误摘要的截断长度。 */
 const ENGINE_ERROR_SUMMARY_LIMIT = 300;
 
-/** `search` 工具输入（schema 开放 query / maxResults / engine / params）。 */
-export interface SearchToolInput {
-  /** 搜索关键词。 */
-  readonly query: string;
-  /** 结果条数：缺省 5；小于 1 回落 5、超过 20 收敛到 20（不报错）。 */
-  readonly maxResults?: number;
+/** 入参 params 字段描述·用法半句（整句宽度超打印宽，拆两段常量拼接）。 */
+const SEARCH_PARAMS_HINT_USAGE = "引擎参数对象（自由 JSON）：搜索词 + 引擎方言参数（时间范围 / 结果深度 / 域名过滤 / count 等）都放这里；";
+/** 入参 params 字段描述·字段约定半句。 */
+const SEARCH_PARAMS_HINT_FIELDS = "搜索词字段名随引擎（q / query / search_query），见描述里的逐引擎参数说明；同名参数覆盖模板默认值，引擎忽略未知字段";
+/** 入参 params 字段描述（schema describe 用单标识符，保链单行）。 */
+const SEARCH_PARAMS_HINT = SEARCH_PARAMS_HINT_USAGE + SEARCH_PARAMS_HINT_FIELDS;
+
+/** `search` 工具输入（schema 只有 engine / params：搜索词与引擎方言参数全在 params）。 */
+interface SearchToolInput {
   /**
    * 可选：指定引擎 id（动态全集，见描述里的可用引擎清单）；缺省按
    * engineOrderV2 优先级串行尝试，前一个失败自动降级到下一个；显式指定
    * 时钉死该引擎（不可用则沿序顺位回落），失败不降级直接报错。
    */
   readonly engine?: string;
-  /** 可选：自由 JSON，原样透传引擎方言参数（模板引擎忽略未知字段；DDG 忽略）。 */
+  /**
+   * 可选：自由 JSON，原样透传引擎方言参数；搜索词也在这里（字段名随引擎，
+   * 如 Brave 用 q、博查用 query、智谱用 search_query），见描述里的逐引擎说明。
+   */
   readonly params?: Readonly<Record<string, unknown>>;
 }
 
@@ -74,7 +80,7 @@ export interface SearchToolInput {
  * - `SearchOversizeOutput`：超 50KB 落盘形态；
  * - `string`：链空（无可用已启用引擎）时的配置指引提示。
  */
-export type SearchToolOutput = SearchChainOutput | SearchOversizeOutput | string;
+type SearchToolOutput = SearchChainOutput | SearchOversizeOutput | string;
 
 /**
  * 聚合链错误消息：每引擎一行摘要 + 预算耗尽说明（如有）。
@@ -82,9 +88,7 @@ export type SearchToolOutput = SearchChainOutput | SearchOversizeOutput | string
  */
 function buildChainErrorMessage(failureLines: readonly string[], untried: number): string {
   const parts = ["串行搜索链全部尝试失败：", ...failureLines];
-  if (untried > 0) {
-    parts.push(`链总预算 ${SEARCH_CHAIN_BUDGET_MS / 1000}s 已耗尽，剩余 ${untried} 个引擎未尝试。`);
-  }
+  if (untried > 0) parts.push(`链总预算 ${SEARCH_CHAIN_BUDGET_MS / 1000}s 已耗尽，剩余 ${untried} 个引擎未尝试。`);
   return parts.join("\n");
 }
 
@@ -104,14 +108,15 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
     //（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。逐引擎段
     // 来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
     const engineList = ctx.search?.engineSnapshot;
-    const engineSection = engineList == null ? "当前运行时未装配搜索能力，调用将不可用。" : engineList.length === 0 ? "当前没有可用的已启用引擎；如需联网检索，请到 设置 → 搜索配置 开启或配置引擎。" : engineList.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
+    let engineSection: string;
+    if (engineList == null) engineSection = "当前运行时未装配搜索能力，调用将不可用。";
+    else if (engineList.length === 0) engineSection = "当前没有可用的已启用引擎；如需联网检索，请到 设置 → 搜索配置 开启或配置引擎。";
+    else engineSection = engineList.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
     return `联网搜索：按当前配置的搜索引擎串行检索网页，结果以 JSON 文本返回（提取引擎响应中的结果数组，字段原样保留），适用于写作资料查找、事实核验与背景考据。
 
 入参：
-- query：搜索关键词（必填）
 - engine：可选，指定搜索引擎 id（见下方可用引擎清单）；缺省按配置顺序串行尝试，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
-- maxResults：期望条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（作为引擎 count 参数，超出范围自动收敛，不报错）
-- params：可选，自由 JSON 对象，原样透传给引擎方言参数（如时间范围、结果深度、域名过滤等）；同名参数覆盖模板默认值，引擎忽略未知字段
+- params：引擎参数对象（自由 JSON）。搜索词也放在这里，字段名随引擎不同（如 Brave 用 q、博查用 query、智谱用 search_query），具体见下方逐引擎说明；同名参数覆盖模板默认值，引擎忽略未知字段
 
 可用引擎（按串行链顺序）：
 ${engineSection}
@@ -121,24 +126,15 @@ ${engineSection}
 串行链总预算 ${SEARCH_CHAIN_BUDGET_MS / 1000}s；全链失败返回逐引擎聚合错误。引擎配置在 设置 → 搜索配置 中管理，当回合内改配置下回合生效。`;
   },
   inputSchema: z.object({
-    query: z.string().min(1).describe("搜索关键词"),
-    maxResults: z.number().int().min(0).optional().describe(`结果条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（超出范围自动收敛，不报错）`),
     engine: z.string().min(1).optional().describe("可选：指定搜索引擎 id（当前启用且配置完整的引擎，见描述「可用引擎」）；缺省按配置顺序串行尝试（失败自动降级），显式指定时钉死该引擎、失败不降级"),
-    params: z.record(z.string(), z.unknown()).optional().describe("可选：自由 JSON 对象，原样透传引擎方言参数（时间范围 / 结果深度 / 域名过滤等）；同名参数覆盖模板默认值，引擎忽略未知字段"),
+    params: z.record(z.string(), z.unknown()).optional().describe(SEARCH_PARAMS_HINT),
   }),
   outputSchema: z.union([
     z.string(),
     z.object({
       engine: z.string(),
       attempts: z.string().optional(),
-      results: z.union([
-        z.array(z.object({
-            title: z.string(),
-            url: z.string(),
-            snippet: z.string(),
-          })),
-        z.string(),
-      ]),
+      results: z.union([z.array(z.object({ title: z.string(), url: z.string(), snippet: z.string() })), z.string()]),
     }),
     z.object({
       engine: z.string(),
@@ -157,14 +153,30 @@ ${engineSection}
     // 不可用则沿序顺位回落）；链空是合法常态（全关）→ 中性配置指引提示
     //（成功输出、非错误）。
     const chain = await search.resolveEngineChain(input.engine);
-    if (chain.length === 0) {
-      return SEARCH_NOT_CONFIGURED_MESSAGE;
+    if (chain.length === 0) return SEARCH_NOT_CONFIGURED_MESSAGE;
+
+    // 搜索词在 params 里（各家字段名不同：q / query / search_query）；模板占位符
+    // 替换与 DuckDuckGo 兜底共用该值。条数同理：count / max_results 归一后只喂
+    // DuckDuckGo（模板引擎的条数随 params 原样透传，不再收敛）。
+    const params = input.params ?? {};
+    let query = "";
+    for (const termKey of ["q", "query", "search_query"]) {
+      const termValue = params[termKey];
+      if (typeof termValue === "string" && termValue.trim().length > 0) {
+        query = termValue;
+        break;
+      }
     }
+    if (query.length === 0) throw toolFailed(SEARCH_TOOL_NAME, new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"));
+    const rawCount = params.count ?? params.max_results ?? params.maxResults;
+    const maxResults = normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
 
     // 显式 engine 钉死：只尝试链首（含顺位回落后的链首），失败不降级
     // 直接报错；缺省调用才沿链降级。
     const candidates: readonly ResolvedEngineConfig[] = input.engine != null ? chain.slice(0, 1) : chain;
     const fetchFn = ctx.fetchFn ?? globalThis.fetch;
+    // 回合取消信号：传给模板执行器 / DDG 适配器，让在途 fetch 同步 abort。
+    const signal = ctx.signal;
     const startedAt = Date.now();
     // 每引擎一行聚合摘要（全链失败 / 预算耗尽时随错误返回）。
     const failureLines: string[] = [];
@@ -172,20 +184,22 @@ ${engineSection}
     const attemptParts: string[] = [];
     let success: SearchChainOutput | null = null;
 
-    for (let i = 0; i < candidates.length; i++) {
-      const entry = candidates[i];
+    for (const [i, entry] of candidates.entries()) {
+      // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
+      // 拦一道，避免取消后仍去尝试链上剩余引擎。
+      if (signal?.aborted === true) throw toolFailed(SEARCH_TOOL_NAME, new Error("搜索已取消"));
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
-      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) {
-        throw toolFailed(SEARCH_TOOL_NAME, new Error(buildChainErrorMessage(failureLines, candidates.length - i)));
-      }
+      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw toolFailed(SEARCH_TOOL_NAME, new Error(buildChainErrorMessage(failureLines, candidates.length - i)));
       try {
-        const response = await dispatchSearch(entry, input.query, { maxResults: normalizeMaxResults(input.maxResults) }, input.params ?? {}, fetchFn);
+        const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
         // 降级后成功：输出携带 attempts 轨迹；链首首发成功省略该字段。
         const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.engine} 成功`;
         success = attempts == null ? response : { ...response, attempts };
         break;
       } catch (e) {
+        // 用户取消：不是引擎失败，立即终止、不走降级链（重读 ctx.signal：局部 signal 已被上面的检查收窄）。
+        if (ctx.signal?.aborted === true) throw toolFailed(SEARCH_TOOL_NAME, new Error("搜索已取消"));
         const msg = e instanceof Error ? e.message : String(e);
         const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
         const code = msg.match(/error (\d{3})/i)?.[1];
@@ -210,8 +224,7 @@ ${engineSection}
     const serialized = JSON.stringify(success);
     if (utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
       try {
-        const sinkOptions = { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" };
-        const sink = await sinkOversizedOutput(ctx, sinkOptions);
+        const sink = await sinkOversizedOutput(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
         return {
           engine: success.engine,
           savedPath: sink.savedPath,

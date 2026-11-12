@@ -29,30 +29,18 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import TestRenderer, {
-  type ReactTestRenderer,
-  type TestInstance,
-} from "react-test-renderer";
+import TestRenderer, { type ReactTestRenderer, type TestInstance } from "react-test-renderer";
 import type { ReactElement } from "react";
 import { IPC_CHANNELS, type SearchConfigDto } from "@shared/ipc-types";
 import type { CustomEngineDef } from "@shared/logic/search-engines";
-import type {
-  SettingsNavHandle,
-  SettingsViewId,
-} from "@/features/settings/settings-nav";
+import type { SettingsNavHandle, SettingsViewId } from "@/features/settings/settings-nav";
 
 register(new URL("./react-alias-hook.mjs", import.meta.url));
 register(new URL("./search-engines-ui-hook.mjs", import.meta.url));
 const { act } = await import("react");
-const { SearchEnginesView } = await import(
-  "@/features/settings/SearchEnginesView"
-);
-const { SearchEngineDetailView } = await import(
-  "@/features/settings/SearchEngineDetailView"
-);
-const { NEW_ENGINE_SENTINEL } = await import(
-  "@/features/settings/search-engine-meta"
-);
+const { SearchEnginesView } = await import("@/features/settings/SearchEnginesView");
+const { SearchEngineDetailView } = await import("@/features/settings/SearchEngineDetailView");
+const { NEW_ENGINE_SENTINEL } = await import("@/features/settings/search-engine-meta");
 const { subscribeToast } = await import("@/components/ui/show-toast");
 
 /** 自定义实例 fixture（id 形态照 core：`custom:{nanoid8}`；模板为 v2 透传形状，无映射字段）。 */
@@ -142,11 +130,7 @@ const ALLOWED_CHANNELS = new Set<string>([
 ]);
 
 /** 按 channel 路由的 IPC 假实现；testEngine 可注入挂起 promise 观察 busy 态。 */
-function makeInvoke(
-  config: SearchConfigDto,
-  calls: InvokeCall[],
-  testResponse?: () => Promise<unknown>,
-): Invoke {
+function makeInvoke(config: SearchConfigDto, calls: InvokeCall[], testResponse?: () => Promise<unknown>): Invoke {
   return (channel, payload) => {
     calls.push({ channel, payload });
     if (!ALLOWED_CHANNELS.has(channel)) {
@@ -158,7 +142,11 @@ function makeInvoke(
     if (channel === IPC_CHANNELS.SEARCH_TEST_ENGINE) {
       return (
         testResponse ??
-        (() => Promise.resolve({ ok: true, data: { preview: "[]", resultCount: 0, truncated: false } }))
+        (() =>
+          Promise.resolve({
+            ok: true,
+            data: { preview: "[]", resultCount: 0, truncated: false },
+          }))
       )();
     }
     return Promise.resolve({ ok: true, data: undefined });
@@ -199,27 +187,16 @@ function hasClass(node: TestInstance, className: string): boolean {
   return classNameOf(node).split(/\s+/).includes(className);
 }
 
-function findAllByClass(
-  root: TestInstance,
-  className: string,
-): TestInstance[] {
+function findAllByClass(root: TestInstance, className: string): TestInstance[] {
   return root.findAll((node) => hasClass(node, className));
 }
 
-function findByClass(
-  root: TestInstance,
-  className: string,
-): TestInstance | undefined {
+function findByClass(root: TestInstance, className: string): TestInstance | undefined {
   return findAllByClass(root, className).at(0);
 }
 
-function findButtonByText(
-  root: TestInstance,
-  text: string,
-): TestInstance | undefined {
-  return root
-    .findAll((node) => node.type === "button" && textOf(node).trim() === text)
-    .at(0);
+function findButtonByText(root: TestInstance, text: string): TestInstance | undefined {
+  return root.findAll((node) => node.type === "button" && textOf(node).trim() === text).at(0);
 }
 
 function propString(node: TestInstance, name: string): string {
@@ -231,30 +208,13 @@ function propIsTrue(node: TestInstance, name: string): boolean {
   return node.props[name] === true;
 }
 
-function findByPlaceholder(
-  root: TestInstance,
-  placeholder: string,
-): TestInstance | undefined {
+function findByPlaceholder(root: TestInstance, placeholder: string): TestInstance | undefined {
   return root.findAll((node) => node.props.placeholder === placeholder).at(0);
 }
 
 /** 按 option 文案定位 select（method / 注入方式两个下拉各只有一个匹配项）。 */
-function findSelectWithOption(
-  root: TestInstance,
-  optionText: string,
-): TestInstance | undefined {
-  return root
-    .findAll(
-      (node) =>
-        node.type === "select" &&
-        node
-          .findAll(
-            (child) =>
-              child.type === "option" && textOf(child).includes(optionText),
-          )
-          .length > 0,
-    )
-    .at(0);
+function findSelectWithOption(root: TestInstance, optionText: string): TestInstance | undefined {
+  return root.findAll((node) => node.type === "select" && node.findAll((child) => child.type === "option" && textOf(child).includes(optionText)).length > 0).at(0);
 }
 
 /** 调节点上的事件处理器（受控输入传 `{target:{value}}` / `{target:{checked}}`）。 */
@@ -340,8 +300,12 @@ async function mountWith(
     readonly editingEngineId?: string;
     readonly calls?: InvokeCall[];
     readonly testResponse?: () => Promise<unknown>;
-  } = {},
-): Promise<{ renderer: ReactTestRenderer; nav: NavFixture; calls: InvokeCall[] }> {
+  } = {}
+): Promise<{
+  renderer: ReactTestRenderer;
+  nav: NavFixture;
+  calls: InvokeCall[];
+}> {
   const calls = options.calls ?? [];
   restoreWindow = mockWindow(makeInvoke(config, calls, options.testResponse));
   const nav = makeNav(options.editingEngineId);
@@ -352,9 +316,7 @@ async function mountWith(
 
 describe("T-U1 搜索配置列表页", () => {
   it("按 DTO engines 顺序动态渲染预置 / 自定义 / DDG 混排行与分类标签", async () => {
-    const { renderer } = await mountWith(makeConfig(), (nav) => (
-      <SearchEnginesView nav={nav.handle} />
-    ));
+    const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
     const rows = findAllByClass(renderer.root, "settings-list-item-row");
     assert.equal(rows.length, 4);
     const labels = rows.map((row) => {
@@ -372,18 +334,13 @@ describe("T-U1 搜索配置列表页", () => {
   });
 
   it("每行开关发 setEnabled（与行点击解耦；自定义 id 原样透传）", async () => {
-    const { renderer, calls } = await mountWith(makeConfig(), (nav) => (
-      <SearchEnginesView nav={nav.handle} />
-    ));
-    const toggle = renderer.root
-      .findAll(
-        (node) =>
-          node.type === "input" && node.props["aria-label"] === "启用 我的搜索",
-      )
-      .at(0);
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const toggle = renderer.root.findAll((node) => node.type === "input" && node.props["aria-label"] === "启用 我的搜索").at(0);
     assert.ok(toggle != null, "自定义行缺少启用开关");
     await act(async () => {
-      invokeProp(toggle as TestInstance, "onChange", { target: { checked: true } });
+      invokeProp(toggle as TestInstance, "onChange", {
+        target: { checked: true },
+      });
     });
     await settle();
     const writes = callsOf(calls, IPC_CHANNELS.SEARCH_SET_ENABLED);
@@ -395,16 +352,9 @@ describe("T-U1 搜索配置列表页", () => {
   });
 
   it("⋮ 菜单上移 / 下移提交含自定义 id 的动态顺序", async () => {
-    const { renderer, calls } = await mountWith(makeConfig(), (nav) => (
-      <SearchEnginesView nav={nav.handle} />
-    ));
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
     const openMenu = async (label: string): Promise<void> => {
-      const button = renderer.root
-        .findAll(
-          (node) =>
-            node.type === "button" && node.props["aria-label"] === label,
-        )
-        .at(0);
+      const button = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === label).at(0);
       assert.ok(button != null, `缺少菜单按钮：${label}`);
       await act(async () => {
         invokeProp(button as TestInstance, "onClick", {
@@ -444,16 +394,9 @@ describe("T-U1 搜索配置列表页", () => {
   });
 
   it("删除项只出现在自定义行，确认后发 deleteCustomEngine", async () => {
-    const { renderer, calls } = await mountWith(makeConfig(), (nav) => (
-      <SearchEnginesView nav={nav.handle} />
-    ));
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
     const openMenu = async (label: string): Promise<void> => {
-      const button = renderer.root
-        .findAll(
-          (node) =>
-            node.type === "button" && node.props["aria-label"] === label,
-        )
-        .at(0);
+      const button = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === label).at(0);
       assert.ok(button != null, `缺少菜单按钮：${label}`);
       await act(async () => {
         invokeProp(button as TestInstance, "onClick", {
@@ -489,9 +432,7 @@ describe("T-U1 搜索配置列表页", () => {
   });
 
   it("新建入口写哨兵并推 searchEngineDetail（复用 viewId 的 create 模式）", async () => {
-    const { renderer, nav } = await mountWith(makeConfig(), (fixture) => (
-      <SearchEnginesView nav={fixture.handle} />
-    ));
+    const { renderer, nav } = await mountWith(makeConfig(), (fixture) => <SearchEnginesView nav={fixture.handle} />);
     const createButton = findButtonByText(renderer.root, "新建自定义引擎");
     assert.ok(createButton != null, "缺少新建入口");
     await act(async () => {
@@ -502,15 +443,8 @@ describe("T-U1 搜索配置列表页", () => {
   });
 
   it("帮助弹窗五段与 mobile 真源同步（含密钥安全与 FIX-26 count 措辞）", async () => {
-    const { renderer } = await mountWith(makeConfig(), (nav) => (
-      <SearchEnginesView nav={nav.handle} />
-    ));
-    const helpButton = renderer.root
-      .findAll(
-        (node) =>
-          node.type === "button" && node.props["aria-label"] === "使用说明",
-      )
-      .at(0);
+    const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const helpButton = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === "使用说明").at(0);
     assert.ok(helpButton != null, "缺少帮助按钮");
     await act(async () => {
       invokeProp(helpButton as TestInstance, "onClick");
@@ -521,86 +455,47 @@ describe("T-U1 搜索配置列表页", () => {
     for (const section of ["启用开关", "引擎优先级", "模板与自定义引擎", "测试消耗配额", "密钥安全"]) {
       assert.ok(modalText.includes(section), `帮助弹窗缺少「${section}」段`);
     }
-    assert.ok(
-      modalText.includes('整数字段写 "{{count}}"（带引号）'),
-      `count 措辞应为 FIX-26 定稿：${modalText}`,
-    );
+    assert.ok(modalText.includes('整数字段写 "{{count}}"（带引号）'), `count 措辞应为 FIX-26 定稿：${modalText}`);
     // SPEC v2：响应映射措辞删除，curl 导入 / defaultBody 可选口径保留
     assert.ok(!modalText.includes("结果映射") && !modalText.includes("高级区"), `响应映射措辞应已删除：${modalText}`);
-    assert.ok(
-      modalText.includes("粘贴 curl 命令导入，用模板描述任意搜索 API"),
-      `curl 导入句应与 mobile 真源逐字同句（CR2 标点定稿）：${modalText}`,
-    );
+    assert.ok(modalText.includes("粘贴 curl 命令导入，用模板描述任意搜索 API"), `curl 导入句应与 mobile 真源逐字同句（CR2 标点定稿）：${modalText}`);
     assert.ok(modalText.includes("请求体 defaultBody 可选"), `应保留 defaultBody 可选口径：${modalText}`);
   });
 });
 
 describe("T-U2 搜索引擎详情页", () => {
-  it("预置 searxng：baseUrl 回显 + 无 key 表单 + 模板表单平铺（高级编辑折叠已废除）", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "searxng" },
-    );
-    const baseUrlInput = findByPlaceholder(
-      renderer.root,
-      "https://searxng.example.com",
-    );
-    assert.ok(baseUrlInput != null, "缺少实例地址表单");
-    assert.equal(propString(baseUrlInput as TestInstance, "value"), "https://searx.example.com");
-    assert.equal(
-      renderer.root.findAll(
-        (node) => node.type === "input" && node.props.type === "password",
-      ).length,
-      0,
-    );
+  it("预置 searxng：无实例地址表单 + 无 key 表单 + 模板表单平铺（URL 即完整端点）", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "searxng" });
+    // v3：searxng 模板 URL 是完整端点（无 {{baseUrl}} 宏），实例地址表单不再出现。
+    assert.equal(findByPlaceholder(renderer.root, "https://searxng.example.com"), undefined, "searxng 不应再有实例地址表单");
+    assert.equal(renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").length, 0);
     // 无覆盖（presetOverrides 只有 bocha）→ 不显示恢复默认
     assert.equal(findButtonByText(renderer.root, "恢复默认"), undefined);
     // 高级编辑折叠容器已废除：模板表单直接平铺（method 下拉 + URL 输入无需展开）
     assert.equal(findButtonByText(renderer.root, "高级编辑"), undefined);
     const methodSelect = findSelectWithOption(renderer.root, "POST");
     assert.ok(methodSelect != null, "模板表单应平铺出 method 下拉");
-    const urlInput = findByPlaceholder(
-      renderer.root,
-      "https://api.example.com/search?q={{query}}",
-    );
+    const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
     assert.ok(urlInput != null, "缺少 URL 表单");
-    assert.ok(
-      propString(urlInput as TestInstance, "value").includes("{{baseUrl}}"),
-      "searxng 模板 URL 应引用 {{baseUrl}}",
-    );
+    assert.equal(propString(urlInput as TestInstance, "value"), "https://searx.example.com/search?format=json", "searxng 的 URL 是完整端点");
+    assert.equal(propString(urlInput as TestInstance, "value").includes("{{baseUrl}}"), false, "URL 不应再引用 {{baseUrl}}");
     // 响应映射区已废除：无结果数组路径 / 字段候选控件
     assert.equal(findByPlaceholder(renderer.root, "results"), undefined);
     // 未有写操作
-    assert.equal(
-      calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG)
-        .length,
-      0,
-    );
+    assert.equal(calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG).length, 0);
   });
 
   it("预置 bocha：有覆盖时显示恢复默认，key 表单保存走 saveEngineKey", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "bocha" },
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
     const reset = findButtonByText(renderer.root, "恢复默认");
     assert.ok(reset != null, "已有覆盖时缺少恢复默认");
     await act(async () => {
       invokeProp(reset as TestInstance, "onClick");
     });
     await settle();
-    assert.deepEqual(
-      callsOf(calls, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE)[0]?.payload,
-      { engineId: "bocha" },
-    );
+    assert.deepEqual(callsOf(calls, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE)[0]?.payload, { engineId: "bocha" });
 
-    const keyInput = renderer.root
-      .findAll(
-        (node) => node.type === "input" && node.props.type === "password",
-      )
-      .at(0);
+    const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
     assert.ok(keyInput != null, "需 key 模板缺少 key 表单");
     await act(async () => {
       invokeProp(keyInput as TestInstance, "onChange", {
@@ -628,11 +523,7 @@ describe("T-U2 搜索引擎详情页", () => {
     });
     try {
       // bocha 已存 key（hasKey=true，不触发拦截）；表单未改 + key 草稿空 → 零写操作
-      const { renderer, calls } = await mountWith(
-        makeConfig(),
-        (nav) => <SearchEngineDetailView nav={nav.handle} />,
-        { editingEngineId: "bocha" },
-      );
+      const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
       const save = findButtonByText(renderer.root, "保存");
       assert.ok(save != null, "缺少保存按钮");
       await act(async () => {
@@ -652,15 +543,9 @@ describe("T-U2 搜索引擎详情页", () => {
     const base = makeConfig();
     const config: SearchConfigDto = {
       ...base,
-      engines: base.engines.map((engine, index) =>
-        index === 0 ? { ...engine, hasKey: false } : engine,
-      ),
+      engines: base.engines.map((engine, index) => (index === 0 ? { ...engine, hasKey: false } : engine)),
     };
-    const { renderer, calls } = await mountWith(
-      config,
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "bocha" },
-    );
+    const { renderer, calls } = await mountWith(config, (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
     const save = findButtonByText(renderer.root, "保存");
     assert.ok(save != null, "缺少保存按钮");
     await act(async () => {
@@ -682,19 +567,10 @@ describe("T-U2 搜索引擎详情页", () => {
     const base = makeConfig();
     const config: SearchConfigDto = {
       ...base,
-      engines: base.engines.map((engine, index) =>
-        index === 0 ? { ...engine, hasKey: false } : engine,
-      ),
+      engines: base.engines.map((engine, index) => (index === 0 ? { ...engine, hasKey: false } : engine)),
     };
-    const { renderer, calls } = await mountWith(
-      config,
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "bocha" },
-    );
-    const headers = findByPlaceholder(
-      renderer.root,
-      '{"Authorization": "Bearer {{apiKey}}"}',
-    );
+    const { renderer, calls } = await mountWith(config, (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
+    const headers = findByPlaceholder(renderer.root, '{"Authorization": "Bearer {{apiKey}}"}');
     assert.ok(headers != null, "缺少 Headers 文本域");
     await act(async () => {
       invokeProp(headers as TestInstance, "onChange", {
@@ -708,11 +584,7 @@ describe("T-U2 搜索引擎详情页", () => {
     });
     await settle();
     const updates = callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE);
-    assert.equal(
-      updates.length,
-      1,
-      `草稿已无 key 引用应放行保存：${JSON.stringify(calls)}`,
-    );
+    assert.equal(updates.length, 1, `草稿已无 key 引用应放行保存：${JSON.stringify(calls)}`);
     const payload = updates[0]?.payload as {
       engineId: string;
       patch: { headers: Record<string, string> };
@@ -723,22 +595,12 @@ describe("T-U2 搜索引擎详情页", () => {
     });
     const status = findByClass(renderer.root, "settings-status");
     const message = status == null ? "" : textOf(status as TestInstance);
-    assert.ok(
-      !message.includes("请输入 API Key"),
-      `草稿无 key 引用不应拦截：${message}`,
-    );
+    assert.ok(!message.includes("请输入 API Key"), `草稿无 key 引用不应拦截：${message}`);
   });
 
   it("自定义引擎：headers JSON 非法时拒绝保存并页内展示原因", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: CUSTOM_ENGINE.id },
-    );
-    const headers = findByPlaceholder(
-      renderer.root,
-      '{"Authorization": "Bearer {{apiKey}}"}',
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: CUSTOM_ENGINE.id });
+    const headers = findByPlaceholder(renderer.root, '{"Authorization": "Bearer {{apiKey}}"}');
     assert.ok(headers != null, "缺少 Headers 文本域");
     await act(async () => {
       invokeProp(headers as TestInstance, "onChange", {
@@ -760,16 +622,9 @@ describe("T-U2 搜索引擎详情页", () => {
   });
 
   it("自定义引擎：core 模板校验失败（defaultBody 非法 JSON）经 catalog 展示原因、不发保存 IPC", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: CUSTOM_ENGINE.id },
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: CUSTOM_ENGINE.id });
     // fixture 的 defaultBody 为合法 JSON：改坏后 validate 失败（v2 唯一的 JSON 体校验入口）。
-    const defaultBody = findByPlaceholder(
-      renderer.root,
-      '{"query": "{{query}}", "count": "{{count}}"}',
-    );
+    const defaultBody = findByPlaceholder(renderer.root, '{"query": "{{query}}", "count": "{{count}}"}');
     assert.ok(defaultBody != null, "缺少请求体模板文本域");
     await act(async () => {
       invokeProp(defaultBody as TestInstance, "onChange", {
@@ -792,11 +647,7 @@ describe("T-U2 搜索引擎详情页", () => {
   });
 
   it("自定义引擎：注入方式快捷选择写 {{apiKey}} 头，保存提交模板与 key", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: CUSTOM_ENGINE.id },
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: CUSTOM_ENGINE.id });
     const injection = findSelectWithOption(renderer.root, "X-API-Key: {{apiKey}}");
     assert.ok(injection != null, "缺少注入方式下拉");
     await act(async () => {
@@ -804,22 +655,12 @@ describe("T-U2 搜索引擎详情页", () => {
         target: { value: "X-API-Key: {{apiKey}}" },
       });
     });
-    const headers = findByPlaceholder(
-      renderer.root,
-      '{"Authorization": "Bearer {{apiKey}}"}',
-    );
+    const headers = findByPlaceholder(renderer.root, '{"Authorization": "Bearer {{apiKey}}"}');
     assert.ok(headers != null, "缺少 Headers 文本域");
     const headersText = propString(headers as TestInstance, "value");
-    assert.ok(
-      headersText.includes('"X-API-Key": "{{apiKey}}"'),
-      `注入方式未写入 Headers：${headersText}`,
-    );
+    assert.ok(headersText.includes('"X-API-Key": "{{apiKey}}"'), `注入方式未写入 Headers：${headersText}`);
 
-    const keyInput = renderer.root
-      .findAll(
-        (node) => node.type === "input" && node.props.type === "password",
-      )
-      .at(0);
+    const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
     assert.ok(keyInput != null, "缺少 key 表单");
     await act(async () => {
       invokeProp(keyInput as TestInstance, "onChange", {
@@ -850,14 +691,10 @@ describe("T-U2 搜索引擎详情页", () => {
     const pending = new Promise<unknown>((resolve) => {
       resolveTest = resolve;
     });
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      {
-        editingEngineId: CUSTOM_ENGINE.id,
-        testResponse: () => pending,
-      },
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, {
+      editingEngineId: CUSTOM_ENGINE.id,
+      testResponse: () => pending,
+    });
     const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
     assert.ok(queryInput != null, "缺少测试查询输入");
     await act(async () => {
@@ -888,16 +725,13 @@ describe("T-U2 搜索引擎详情页", () => {
       },
     });
     await settle();
-    const status = findAllByClass(renderer.root, "settings-hint")
-      .map(textOf)
-      .join("\n");
+    const status = findAllByClass(renderer.root, "settings-hint").map(textOf).join("\n");
     // SPEC v2 §5：测试结果渲染 JSON 预览文本 + 「共 N 条」+ 截断标记，不再渲染标题列表
     assert.ok(status.includes('[{"title":"结果甲"'), `缺少 JSON 预览文本：${status}`);
     assert.ok(status.includes("共 7 条"), `缺少结果计数：${status}`);
     assert.ok(status.includes("已截断"), `缺少截断标记：${status}`);
 
-    const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]
-      ?.payload as {
+    const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]?.payload as {
       engineId?: string;
       query: string;
       draft?: { template?: { url?: string } };
@@ -910,11 +744,7 @@ describe("T-U2 搜索引擎详情页", () => {
   it("拍板 1：预置已有覆盖且表单未改时测试只传 engineId（不带 draft）", async () => {
     // bocha 有覆盖（presetOverrides.bocha = true），表单加载出厂模板原样 →
     // 测试应交给 core 走覆盖合并 + SKSP 现读，而非测出厂模板
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "bocha" },
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
     const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
     assert.ok(queryInput != null, "缺少测试查询输入");
     await act(async () => {
@@ -930,22 +760,18 @@ describe("T-U2 搜索引擎详情页", () => {
     await settle();
     const payloads = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE);
     assert.equal(payloads.length, 1);
-    const payload = payloads[0]?.payload as { engineId?: string; draft?: unknown };
+    const payload = payloads[0]?.payload as {
+      engineId?: string;
+      draft?: unknown;
+    };
     assert.equal(payload.engineId, "bocha");
     assert.equal(payload.draft, undefined, `表单未改不应带 draft：${JSON.stringify(payload)}`);
   });
 
   it("拍板 1：预置表单有改动时测试仍带 draft（草稿直测不变）", async () => {
-    const { renderer, calls } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      { editingEngineId: "bocha" },
-    );
-    // 模板表单已平铺：直接改 URL 即构成表单改动
-    const urlInput = findByPlaceholder(
-      renderer.root,
-      "https://api.example.com/search?q={{query}}",
-    );
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
+    // 模板表单已平铺：改 URL 即构成表单改动（URL 对预置只读，这里直调 onChange 走草稿链路）。
+    const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
     assert.ok(urlInput != null, "缺少 URL 表单");
     await act(async () => {
       invokeProp(urlInput as TestInstance, "onChange", {
@@ -963,32 +789,26 @@ describe("T-U2 搜索引擎详情页", () => {
       invokeProp(testButton as TestInstance, "onClick");
     });
     await settle();
-    const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]
-      ?.payload as {
+    const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]?.payload as {
       engineId?: string;
       draft?: { template?: { url?: string } };
     };
     assert.equal(payload.engineId, "bocha");
-    assert.equal(
-      payload.draft?.template?.url,
-      "https://api.bochaai.com/v1/web-search-v2",
-      `表单有改动应带 draft：${JSON.stringify(payload)}`,
-    );
+    assert.equal(payload.draft?.template?.url, "https://api.bochaai.com/v1/web-search-v2", `表单有改动应带 draft：${JSON.stringify(payload)}`);
   });
 
   it("测试失败：错误经 SettingsStatus 错误红展示（FIX-27）", async () => {
-    const { renderer } = await mountWith(
-      makeConfig(),
-      (nav) => <SearchEngineDetailView nav={nav.handle} />,
-      {
-        editingEngineId: CUSTOM_ENGINE.id,
-        testResponse: () =>
-          Promise.resolve({
-            ok: false,
-            error: { code: "TOOL_SEARCH_ENGINE_FAILED", message: "引擎不可用（测试桩）" },
-          }),
-      },
-    );
+    const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, {
+      editingEngineId: CUSTOM_ENGINE.id,
+      testResponse: () =>
+        Promise.resolve({
+          ok: false,
+          error: {
+            code: "TOOL_SEARCH_ENGINE_FAILED",
+            message: "引擎不可用（测试桩）",
+          },
+        }),
+    });
     const queryInput = findByPlaceholder(renderer.root, "例如：人工智能");
     await act(async () => {
       invokeProp(queryInput as TestInstance, "onChange", {
@@ -1003,13 +823,8 @@ describe("T-U2 搜索引擎详情页", () => {
     const status = findByClass(renderer.root, "settings-status");
     assert.ok(status != null, "缺少错误展示");
     assert.ok(textOf(status as TestInstance).includes("引擎不可用"));
-    const style = (status as TestInstance).props.style as
-      | { color?: string }
-      | undefined;
-    assert.ok(
-      typeof style?.color === "string" && style.color.includes("--danger"),
-      `测试失败错误应为错误红（var(--danger)）：${String(style?.color)}`,
-    );
+    const style = (status as TestInstance).props.style as { color?: string } | undefined;
+    assert.ok(typeof style?.color === "string" && style.color.includes("--danger"), `测试失败错误应为错误红（var(--danger)）：${String(style?.color)}`);
   });
 
   it("create 模式：curl 导入预填（识别密钥），解析失败整体拒绝且表单不变", async () => {
@@ -1018,22 +833,14 @@ describe("T-U2 搜索引擎详情页", () => {
       if (state != null) toasts.push(state.message);
     });
     try {
-      const { renderer } = await mountWith(
-        makeConfig(),
-        (nav) => <SearchEngineDetailView nav={nav.handle} />,
-        { editingEngineId: NEW_ENGINE_SENTINEL },
-      );
+      const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: NEW_ENGINE_SENTINEL });
       // create 模式不读库：只出现 curl 导入 + 表单
-      const curlInput = findByPlaceholder(
-        renderer.root,
-        'curl -X POST https://api.example.com/search -H \'Authorization: Bearer sk-xxx\' -d \'{"query":"{{query}}"}\'',
-      );
+      const curlInput = findByPlaceholder(renderer.root, "curl -X POST https://api.example.com/search -H 'Authorization: Bearer sk-xxx' -d '{\"query\":\"{{query}}\"}'");
       assert.ok(curlInput != null, "create 模式缺少 curl 粘贴域");
       await act(async () => {
         invokeProp(curlInput as TestInstance, "onChange", {
           target: {
-            value:
-              'curl -X POST https://api.example.com/search -H "Authorization: Bearer sk-abcdef123456789012" -d \'{"query":"{{query}}"}\'',
+            value: 'curl -X POST https://api.example.com/search -H "Authorization: Bearer sk-abcdef123456789012" -d \'{"query":"{{query}}"}\'',
           },
         });
       });
@@ -1043,56 +850,21 @@ describe("T-U2 搜索引擎详情页", () => {
         invokeProp(parseButton as TestInstance, "onClick");
       });
 
-      const urlInput = findByPlaceholder(
-        renderer.root,
-        "https://api.example.com/search?q={{query}}",
-      );
+      const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
       assert.ok(urlInput != null, "缺少 URL 表单");
-      assert.equal(
-        propString(urlInput as TestInstance, "value"),
-        "https://api.example.com/search",
-      );
+      assert.equal(propString(urlInput as TestInstance, "value"), "https://api.example.com/search");
       const methodSelect = findSelectWithOption(renderer.root, "POST");
       assert.equal(propString(methodSelect as TestInstance, "value"), "POST");
-      const headers = findByPlaceholder(
-        renderer.root,
-        '{"Authorization": "Bearer {{apiKey}}"}',
-      );
+      const headers = findByPlaceholder(renderer.root, '{"Authorization": "Bearer {{apiKey}}"}');
       assert.ok(headers != null, "缺少 Headers 文本域");
-      assert.ok(
-        propString(headers as TestInstance, "value").includes(
-          "Bearer {{apiKey}}",
-        ),
-        "curl 中的明文密钥应替换为 {{apiKey}}",
-      );
+      assert.ok(propString(headers as TestInstance, "value").includes("Bearer {{apiKey}}"), "curl 中的明文密钥应替换为 {{apiKey}}");
       // SPEC v2：-d 原文预填 defaultBody（不再预填任何响应映射字段）
-      const defaultBody = findByPlaceholder(
-        renderer.root,
-        '{"query": "{{query}}", "count": "{{count}}"}',
-      );
+      const defaultBody = findByPlaceholder(renderer.root, '{"query": "{{query}}", "count": "{{count}}"}');
       assert.ok(defaultBody != null, "缺少请求体模板文本域");
-      assert.equal(
-        propString(defaultBody as TestInstance, "value"),
-        '{"query":"{{query}}"}',
-        "curl -d 应预填请求体模板 defaultBody",
-      );
-      const keyInput = renderer.root
-        .findAll(
-          (node) => node.type === "input" && node.props.type === "password",
-        )
-        .at(0);
-      assert.equal(
-        propString(keyInput as TestInstance, "value"),
-        "sk-abcdef123456789012",
-      );
-      assert.ok(
-        renderer.root.findAll(
-          (node) =>
-            hasClass(node, "settings-hint") &&
-            textOf(node).includes("已识别到密钥"),
-        ).length > 0,
-        "缺少密钥识别提示",
-      );
+      assert.equal(propString(defaultBody as TestInstance, "value"), '{"query":"{{query}}"}', "curl -d 应预填请求体模板 defaultBody");
+      const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
+      assert.equal(propString(keyInput as TestInstance, "value"), "sk-abcdef123456789012");
+      assert.ok(renderer.root.findAll((node) => hasClass(node, "settings-hint") && textOf(node).includes("已识别到密钥")).length > 0, "缺少密钥识别提示");
 
       // 解析失败：整体拒绝（toast 原因），表单保持上次成功导入的值
       await act(async () => {
@@ -1105,12 +877,9 @@ describe("T-U2 搜索引擎详情页", () => {
       });
       assert.ok(
         toasts.some((message) => message.includes("curl 命令解析失败")),
-        `解析失败应整条拒绝并 toast 原因：${toasts.join(" / ")}`,
+        `解析失败应整条拒绝并 toast 原因：${toasts.join(" / ")}`
       );
-      assert.equal(
-        propString(urlInput as TestInstance, "value"),
-        "https://api.example.com/search",
-      );
+      assert.equal(propString(urlInput as TestInstance, "value"), "https://api.example.com/search");
     } finally {
       unsubscribe();
     }

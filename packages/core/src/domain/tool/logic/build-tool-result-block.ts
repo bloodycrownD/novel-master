@@ -17,6 +17,7 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 
+// nm-style: keep-public — `packages/core/src/index.ts` 公开类型（barrel 在本片之外），且是 buildToolResultBlock 的入参契约。
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
   readonly vfsScope?: VfsScope;
@@ -56,7 +57,7 @@ function formatByteSize(bytes: number): string {
   return `${trimFraction(kb / 1024)}MB`;
 }
 
-// nm-style: keep-local — 144 行的 per-tool 摘要分派（read/edit/write/fs/skill/agent/search/curl + 泛化兜底）是独立展示口径，内联会吞掉整个成功分支。
+// nm-style: keep-local — summary 与 format-tool-output 抬头同词（响应文本 / 已落盘 / N 条结果），且整段必须整体先于泛化 matches/paths 兜底求值；这条跨工具一致口径是单点契约，拆进 assembler 会与持久化装配混层。
 function summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
   if (!isRecord(output)) {
     return undefined;
@@ -210,6 +211,7 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
 /**
  * Maps one parallel tool outcome to a block ready for session persistence.
  */
+// nm-style: keep-public — `index.ts` 公开导出（barrel 与 29 处测试在本片之外），生产侧唯一装配点 agent-runner 依赖其持久化契约。
 export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOutcome, meta?: BuildToolResultBlockMeta): ToolResultBlock {
   if (outcome.ok) {
     const content = formatToolOutputForLlm(outcome.output);

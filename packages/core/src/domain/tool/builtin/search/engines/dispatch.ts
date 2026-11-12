@@ -9,7 +9,7 @@
  * @module domain/tool/builtin/search/engines/dispatch
  */
 
-import { engineFailed, type ResolvedEngineConfig, type SearchResponse, type SearchToolOptions } from "../types.js";
+import { engineFailed, type FetchFn, type ResolvedEngineConfig, type SearchResponse, type SearchToolOptions, type ToolParams } from "../types.js";
 import { searchWithDuckduckgo } from "./duckduckgo.js";
 import { runTemplateEngine } from "./template-engine.js";
 
@@ -32,9 +32,9 @@ export const SEARCH_NOT_CONFIGURED_MESSAGE = "当前没有可用的已启用搜�
  *
  * nm-style: keep-public — spec §4 引擎分发唯一入口（search 工具 run 消费）。
  */
-export async function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: Readonly<Record<string, unknown>> = {}, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
-  if (resolved.engine === "duckduckgo") return searchWithDuckduckgo(resolved, query, options, fetchFn);
+export async function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<SearchResponse> {
+  if (resolved.engine === "duckduckgo") return searchWithDuckduckgo(resolved, query, options, fetch, signal);
   const template = resolved.template;
   if (template == null) throw engineFailed(`unknown search engine: ${resolved.engine} (no template resolved)`);
-  return runTemplateEngine(template, resolved, query, options, params, fetchFn);
+  return runTemplateEngine(template, resolved, query, options, params, fetch, signal);
 }

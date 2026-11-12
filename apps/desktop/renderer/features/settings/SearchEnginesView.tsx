@@ -9,12 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { IpcResult, SearchConfigDto, SearchEngineStatusDto } from "@shared/ipc-types";
-import {
-  ipcSearchDeleteCustomEngine,
-  ipcSearchGetConfig,
-  ipcSearchSetEnabled,
-  ipcSearchSetEngineOrder,
-} from "@/ipc/client";
+import { ipcSearchDeleteCustomEngine, ipcSearchGetConfig, ipcSearchSetEnabled, ipcSearchSetEngineOrder } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
@@ -22,12 +17,7 @@ import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import type { SettingsNavHandle } from "./settings-nav";
 import { ENGINE_META, NEW_ENGINE_SENTINEL } from "./search-engine-meta";
-import {
-  BuiltinEngineTag,
-  SettingsListSection,
-  SettingsPanel,
-  SettingsStatus,
-} from "./settings-ui";
+import { BuiltinEngineTag, SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
 
 /**
  * 帮助弹窗分段口径：以 mobile `SearchEnginesScreen.tsx` 帮助弹窗为真源逐字
@@ -46,7 +36,7 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: "模板与自定义引擎",
-    body: "预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，粘贴 curl 命令导入，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。请求体 defaultBody 可选，留空则由 agent 调用时传参；占位符写在字符串值里；整数字段写 \"{{count}}\"（带引号），执行时自动转为数字。",
+    body: '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，粘贴 curl 命令导入，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。请求体 defaultBody 可选，留空则由 agent 调用时传参；占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。',
   },
   {
     title: "测试消耗配额",
@@ -57,31 +47,6 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
     body: "API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。",
   },
 ];
-
-// nm-style: keep-local — 单点展示组件承载帮助弹窗的 overlay/dialog 边界与
-// aria 语义；内联进列表 JSX 会拆散弹窗结构（20+ 行纯展示 markup）
-function SearchHelpModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="text-prompt-overlay" onClick={onClose}>
-      <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="search-help-title" onClick={(e) => e.stopPropagation()}>
-        <h3 id="search-help-title" className="text-prompt-modal__title">
-          使用说明
-        </h3>
-        {HELP_SECTIONS.map((section) => (
-          <p key={section.title} className="settings-hint">
-            <strong>{section.title}：</strong>
-            {section.body}
-          </p>
-        ))}
-        <div className="confirm-modal__actions">
-          <Button variant="primary" onClick={onClose}>
-            知道了
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
   const [config, setConfig] = useState<SearchConfigDto | null>(null);
@@ -166,7 +131,14 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
       <SettingsListSection
         header={
           <div className="settings-toolbar settings-toolbar--end">
-            <Button variant="secondary" disabled={busy} onClick={() => { nav.navState.editingEngineId = NEW_ENGINE_SENTINEL; nav.push("searchEngineDetail"); }}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                nav.navState.editingEngineId = NEW_ENGINE_SENTINEL;
+                nav.push("searchEngineDetail");
+              }}
+            >
               新建自定义引擎
             </Button>
             <button type="button" className="icon-btn" aria-label="使用说明" onClick={() => setHelpOpen(true)}>
@@ -195,14 +167,21 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
                 {engine.isCustom ? <span className="settings-tag settings-tag--muted">自定义</span> : null}
                 {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">未设密钥</span> : null}
                 {engine.needsBaseUrl && engine.baseUrl == null ? <span className="settings-tag settings-tag--warn">未设实例地址</span> : null}
-                {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? <span className="settings-tag settings-tag--ok">已配置</span> : null}
+                {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? (
+                  <span className="settings-tag settings-tag--ok">已配置</span>
+                ) : null}
               </span>
               <span className="settings-list-item__chevron" aria-hidden="true">
                 ›
               </span>
             </button>
             <span className="settings-list-item__switch">
-              <Switch checked={engine.enabled} disabled={busy} onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))} aria-label={`启用 ${engine.name}`} />
+              <Switch
+                checked={engine.enabled}
+                disabled={busy}
+                onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))}
+                aria-label={`启用 ${engine.name}`}
+              />
             </span>
             <button
               type="button"
@@ -211,7 +190,11 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
               onClick={(e) => {
                 if (busy) return;
                 const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({ engineId: engine.id, x: Math.max(8, rect.left), y: Math.max(8, rect.bottom + 4) });
+                setMenu({
+                  engineId: engine.id,
+                  x: Math.max(8, rect.left),
+                  y: Math.max(8, rect.bottom + 4),
+                });
               }}
             >
               ⋮
@@ -228,8 +211,16 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
           menu == null
             ? []
             : [
-                { label: "上移", action: "up", disabled: order.indexOf(menu.engineId) === 0 || busy },
-                { label: "下移", action: "down", disabled: order.indexOf(menu.engineId) === order.length - 1 || busy },
+                {
+                  label: "上移",
+                  action: "up",
+                  disabled: order.indexOf(menu.engineId) === 0 || busy,
+                },
+                {
+                  label: "下移",
+                  action: "down",
+                  disabled: order.indexOf(menu.engineId) === order.length - 1 || busy,
+                },
                 ...(config?.engines.find((engine) => engine.id === menu.engineId)?.isCustom === true ? [{ label: "删除", action: "delete", danger: true }] : []),
               ]
         }
@@ -252,7 +243,26 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
         onConfirm={() => void removeEngine()}
         onCancel={() => setDeleteTarget(null)}
       />
-      {helpOpen ? <SearchHelpModal onClose={() => setHelpOpen(false)} /> : null}
+      {helpOpen ? (
+        <div className="text-prompt-overlay" onClick={() => setHelpOpen(false)}>
+          <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="search-help-title" onClick={(e) => e.stopPropagation()}>
+            <h3 id="search-help-title" className="text-prompt-modal__title">
+              使用说明
+            </h3>
+            {HELP_SECTIONS.map((section) => (
+              <p key={section.title} className="settings-hint">
+                <strong>{section.title}：</strong>
+                {section.body}
+              </p>
+            ))}
+            <div className="confirm-modal__actions">
+              <Button variant="primary" onClick={() => setHelpOpen(false)}>
+                知道了
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </SettingsPanel>
   );
 }
