@@ -17,15 +17,15 @@ import type { MessageDescriptor } from "@/common/i18n.js";
 import { Result } from "@/errors/either.js";
 import type { CoreMessageKey } from "@/i18n/keys.js";
 
-/** curl 解析成功后的表单草稿（不含模板的响应映射部分，由用户补填）。 */
+/** curl 解析成功后的表单草稿（method/url/headers/defaultBody 预填；响应映射配置已废除，无需补填）。 */
 export interface CurlCommandDraft {
   readonly method: "GET" | "POST";
   /** 请求 URL（含 `-G` 时已并入 data 查询串）。 */
   readonly url: string;
   /** 请求头；疑似密钥值已替换为 `{{apiKey}}`。 */
   readonly headers: Readonly<Record<string, string>>;
-  /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`）。 */
-  readonly bodyTemplate?: string;
+  /** 请求体原文（`-d` / `--data-raw`；疑似密钥值已替换为 `{{apiKey}}`；预填模板 defaultBody）。 */
+  readonly defaultBody?: string;
   /** 识别出的明文密钥值（保存时落 SKSP；模板里只有 `{{apiKey}}` 占位符）。 */
   readonly apiKey?: string;
 }
@@ -237,5 +237,5 @@ export function parseCurlCommand(text: string): Result<CurlCommandDraft, CurlPar
   for (const header of headerPairs) headers[header.name] = replaceSecrets(header.value, secrets);
   const replacedUrl = replaceSecrets(url, secrets);
   const replacedBody = data == null ? undefined : replaceSecrets(data, secrets);
-  return Result.ok({ method: normalizedMethod, url: replacedUrl, headers, ...(replacedBody == null ? {} : { bodyTemplate: replacedBody }), ...(secrets.length === 0 ? {} : { apiKey: secrets[0] }) });
+  return Result.ok({ method: normalizedMethod, url: replacedUrl, headers, ...(replacedBody == null ? {} : { defaultBody: replacedBody }), ...(secrets.length === 0 ? {} : { apiKey: secrets[0] }) });
 }

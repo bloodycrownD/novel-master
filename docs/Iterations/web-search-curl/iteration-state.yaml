@@ -35,12 +35,17 @@ node_status:
   impl-step9-docs: { status: done }   # 文档收尾（catalog 双端文案 / PRD 口径 / 偏离补登）随本节点完成
 open_must_fix: []
 spec_deviations:
-  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: 预置引擎保存强制要求 API Key（draftNeedsKey 且无 key 早退），desktop 不强制——双端行为不一致，采 mobile 严口径"
+  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: 预置引擎保存强制要求 API Key（draftNeedsKey 且无 key 早退）——CR 第 1 轮 FIX-22 已拉齐双端统一严口径（needsKey 无 key 拦截 + 零改动提示）"
   - "packages/core/src/domain/tool/builtin/search/search-config.ts: SearchConfigPublic.engines 与 DTO 增加 paramHint 字段（spec §5 未列，§7 快照需要，良性扩展）"
   - "packages/core/src/domain/tool/builtin/search/search-config.ts: presetOverrides 落库为完整校验生效模板而非 spec §5 的 Partial patch 形态（读路径语义等价）"
   - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: isKnownEngineId 未改查动态清单而是整体删除（详情屏改从 nextConfig.engines 查找，行为等价）"
   - "packages/core/src/domain/tool/builtin/search/search-config.ts: 自定义实例 id 存储层校验放宽为 custom:[A-Za-z0-9_-]{1,64}（UI 仍生成 8 位）"
-  - "docs/Iterations/web-search-curl/prd.md: PRD R2 的「复制」功能未实现，本次已从 PRD 移除该口径"
+  - "apps/desktop/test/search-engines-ui-hook.mjs、apps/mobile/src/components/provider/BuiltinTag.tsx: spec Δ 结构清单外新增文件（良性补登）；apps/mobile jest.config.js 列于 Δ 但无需改动（transformIgnorePatterns 不需变更，豁免）"
+  - "v2 透传改造（spec-v2-passthrough.md，用户 CR 中途方向指令）: 模板类型删 resultPath/fieldMap/answerPath/envelope、bodyTemplate→defaultBody 可选；响应改最长对象数组提取+50KB 截断直出 JSON 文本；链降级第三判据=响应无对象数组（涵盖 bocha 业务码失败）；TestEngineSuccess 改 {preview,resultCount?,truncated}；工具 schema 不变。CR 第 1 轮 FIX-2（envelope okValues）随字段消亡自然作废"
+cr_round_1:
+  fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
+  commit: 436b924c5
+  outcome: 1 P1 + ~27 P2 全数修复（FIX-1..28；FIX-2 随 v2 透传改造字段消亡；FIX-29 偏离补登并入上方 spec_deviations）
 notes: >
   gate 命令一律 npm run --prefix D:/worktree/web-search-curl/<pkg> <script>（world.run cwd 固定主仓）；
   check-style.mjs 必须 cd 到 worktree 跑（基于 cwd 的 git 检测）；qa 口径见 spec「详细实现步骤」头注

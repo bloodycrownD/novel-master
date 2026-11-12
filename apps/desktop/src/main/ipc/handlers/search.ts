@@ -146,7 +146,7 @@ export async function handleSearchTestEngine(req: SearchTestEngineRequest): Prom
     const rt = await getDesktopRuntime();
     const result = await rt.searchConfig.testEngine(req);
     if (!result.ok) return { ok: false, error: { code: result.error.message.key, message: coreT(result.error.message) } };
-    return { ok: true, data: { resultCount: result.value.resultCount, sample: result.value.sample } };
+    return { ok: true, data: { preview: result.value.preview, resultCount: result.value.resultCount, truncated: result.value.truncated } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

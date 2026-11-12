@@ -1,16 +1,20 @@
 /**
- * 模板搜索执行器（SPEC web-search-curl Step 1，全仓唯一的模板求值实现）。
+ * 模板搜索执行器（SPEC web-search-curl v2 透传改造，全仓唯一的模板求值实现）。
  *
- * 流程：占位符替换（URL 仅 `{{query}}` 百分号编码；headers 原样内插；body 先
+ * 流程：占位符替换（URL 仅 `{{query}}` 百分号编码；headers 原样内插；defaultBody 先
  * JSON.parse 再结构化遍历字符串值，整值 `"{{count}}"` 替换为 number，不做文本级
  * 替换——query 含引号/反斜杠天然安全）→ GET 用 URLSearchParams 合并 params
- * （追加/覆盖同名 query 参数）、POST 浅合并 params（同名以 params 为准）→
- * fetch（统一 30s AbortController 超时）→ 非 2xx 走 engineApiErrorMessage
- * （body 前 300 字符 + redactSecret 脱敏）→ JSON parse → envelope 业务码校验
- * （codePath 取值缺失/undefined = 通过，收编 bocha 现语义；msg 脱敏）→
- * resultPath 取数组（空数组 = 合法空结果）→ 逐条候选字段映射（跳过判据 =
- * url 候选全空；title 缺省回填 url、snippet 缺省空串）→ answerPath 非空透传 →
- * 客户端截断到 maxResults（searxng 等无 count 参数的模板统一靠这一步）。
+ * （追加/覆盖同名 query 参数）、POST 浅合并 `{ ...替换后 defaultBody, ...params }`
+ * （同名以 params 为准；两者均空 → POST `{}`）→ fetch（统一 30s AbortController
+ * 超时）→ 非 2xx 走 engineApiErrorMessage（body 前 300 字符 + redactSecret 脱敏）
+ * → JSON parse → 递归提取**最长的对象数组**（全部元素为 object 的数组，平局取
+ * 先出现；空数组 = 成功空结果）→ 50KB 预算内 JSON.stringify 截断为文本回流。
+ *
+ * 链降级判据（v2 §2 坍缩三条）：HTTP 非 2xx / 超时与网络错 / **响应无对象数组**。
+ * 最后一条天然涵盖 bocha「HTTP 200 + body code 401」类业务码失败——失败响应里没有
+ * 结果数组；抛错时错误文案附带整响应 JSON 的脱敏摘录（截断口径与 HTTP 错误一致），
+ * 供 agent / 用户诊断引擎侧失败原因。2xx 且提取到数组 = 成功（数组短 / 空不降级，
+ * agent 自己面对）。
  *
  * 错误通道（SPEC §4）：沿用四适配器先例 throw `engineFailed`
  * （TOOL_SEARCH_FAILED）/ `engineTimeoutError`，不引入 Result——search-tool 的
@@ -22,8 +26,10 @@
  * @module domain/tool/builtin/search/engines/template-engine
  */
 
+import { utf8ByteLength } from "@/common/encoding.js";
 import { isRecord } from "@/common/guards.js";
-import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxResults, redactSecret, SEARCH_TEMPLATE_PLACEHOLDER_PATTERN, type ResolvedEngineConfig, type SearchEngineTemplate, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
+import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxResults, redactSecret, SEARCH_TEMPLATE_PLACEHOLDER_PATTERN, type ResolvedEngineConfig, type SearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../types.js";
 
 /** 占位符运行期取值：只有模板真的引用时才要求有值（未引用的可缺省）。 */
 interface TemplatePlaceholderValues {
@@ -36,7 +42,10 @@ interface TemplatePlaceholderValues {
 /** 模板引擎统一超时（毫秒）：全部模板共用 30s（AbortController + setTimeout，RN/Hermes 兼容）。 */
 const TEMPLATE_ENGINE_TIMEOUT_MS = 30_000;
 
-/** 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/body 原样；displayName（template.name）进错误文案，引用缺值或未知占位符抛可读错误。 */
+/** 提取文本超预算时追加的截断标注（文本不再保证是合法 JSON，标注让 agent 知情）。 */
+const TRUNCATION_MARKER = `\n…[结果超 ${TOOL_OUTPUT_MAX_BYTES} 字节预算已截断]`;
+
+/** 占位符内插：URL 传 encodeQuery（仅 `{{query}}` 百分号编码），headers/defaultBody 原样；displayName（template.name）进错误文案，引用缺值或未知占位符抛可读错误。 */
 function substitutePlaceholders(text: string, values: TemplatePlaceholderValues, displayName: string, encodeQuery: boolean): string {
   return text.replace(SEARCH_TEMPLATE_PLACEHOLDER_PATTERN, (_token, placeholder: string) => {
     switch (placeholder) {
@@ -56,32 +65,13 @@ function substitutePlaceholders(text: string, values: TemplatePlaceholderValues,
   });
 }
 
-/** 点路径取值（""=根；resultPath / answerPath / envelope.codePath / msgPath 共用；不支持数组索引，取不到返回 undefined）。 */
-function readPointPath(root: unknown, path: string): unknown {
-  let node = root;
-  if (path.length === 0) return node;
-  for (const segment of path.split(".")) {
-    if (!isRecord(node)) return undefined;
-    node = node[segment];
-  }
-  return node;
-}
-
-/** 候选字段按序取第一个非空字符串（trim 后），全空返回 null。 */
-function firstField(item: Record<string, unknown>, candidates: readonly string[]): string | null {
-  for (const key of candidates) {
-    const value = item[key];
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return null;
-}
-
 /**
  * 按模板发起一次搜索（单引擎请求；串行降级 / 120s 预算 / 50KB 落盘在 search-tool）。
  *
  * `template` 恒等 `resolved.template`（模板由 resolveEngineChain 携带，链解析是全仓
  * 唯一查模板点），分开传只为调用点可读。params 是工具层自由 JSON，原样透传引擎方言
- * 字段，同名覆盖模板默认值。
+ * 字段（GET 并入 query string、POST 浅合并覆盖 defaultBody 同名键）。成功返回
+ * `results` 为提取结果的 JSON 文本（最长对象数组；50KB 预算内截断）。
  */
 export async function runTemplateEngine(template: SearchEngineTemplate, resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: Readonly<Record<string, unknown>> = {}, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const engine = resolved.engine;
@@ -107,32 +97,35 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
 
   let bodyText: string | undefined;
   if (template.method === "POST") {
-    if (template.bodyTemplate == null) throw engineFailed(`${template.name} template is missing bodyTemplate for POST`);
-    let parsedBody: unknown;
-    try {
-      parsedBody = JSON.parse(template.bodyTemplate);
-    } catch {
-      throw engineFailed(`${template.name} template bodyTemplate is not valid JSON`);
-    }
-    if (!isRecord(parsedBody)) throw engineFailed(`${template.name} template bodyTemplate must be a JSON object`);
-    const pending: unknown[] = [parsedBody];
-    while (pending.length > 0) {
-      const node = pending.pop();
-      if (Array.isArray(node)) {
-        for (let index = 0; index < node.length; index += 1) {
-          const value: unknown = node[index];
-          if (typeof value === "string") node[index] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
+    let parsedDefaultBody: Record<string, unknown> = {};
+    if (template.defaultBody != null) {
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(template.defaultBody);
+      } catch {
+        throw engineFailed(`${template.name} template defaultBody is not valid JSON`);
+      }
+      if (!isRecord(parsedBody)) throw engineFailed(`${template.name} template defaultBody must be a JSON object`);
+      const pending: unknown[] = [parsedBody];
+      while (pending.length > 0) {
+        const node = pending.pop();
+        if (Array.isArray(node)) {
+          for (let index = 0; index < node.length; index += 1) {
+            const value: unknown = node[index];
+            if (typeof value === "string") node[index] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
+            else pending.push(value);
+          }
+          continue;
+        }
+        if (!isRecord(node)) continue;
+        for (const [key, value] of Object.entries(node)) {
+          if (typeof value === "string") node[key] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
           else pending.push(value);
         }
-        continue;
       }
-      if (!isRecord(node)) continue;
-      for (const [key, value] of Object.entries(node)) {
-        if (typeof value === "string") node[key] = value === "{{count}}" ? numResults : substitutePlaceholders(value, values, template.name, false);
-        else pending.push(value);
-      }
+      parsedDefaultBody = parsedBody;
     }
-    bodyText = JSON.stringify({ ...parsedBody, ...params });
+    bodyText = JSON.stringify({ ...parsedDefaultBody, ...params });
   }
 
   const controller = new AbortController();
@@ -148,38 +141,49 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
 
     if (!response.ok) throw engineFailed(engineApiErrorMessage(template.name, response.status, await response.text(), resolved.apiKey));
 
+    const responseText = await response.text();
     let raw: unknown;
     try {
-      raw = await response.json();
+      raw = JSON.parse(responseText);
     } catch (e) {
       throw engineFailed(`${template.name} API returned invalid JSON: ${redactSecret(e instanceof Error ? e.message : String(e), resolved.apiKey)}`);
     }
 
-    if (template.envelope != null) {
-      const { codePath, okValues, msgPath } = template.envelope;
-      const code = readPointPath(raw, codePath);
-      if (code !== undefined && !(okValues ?? [200, "200"]).some((ok) => ok === code || String(ok) === String(code))) {
-        const detail = msgPath == null ? undefined : readPointPath(raw, msgPath);
-        const message = typeof detail === "string" && detail.trim().length > 0 ? detail.trim() : "unknown error";
-        throw engineFailed(`${template.name} API error ${String(code)}: ${redactSecret(message, resolved.apiKey)}`);
+    // 递归提取最长的「对象数组」（全部元素为 object 才算候选；空数组也算命中 =
+    // 成功空结果）：显式栈做深度先序遍历（子节点倒序入栈，数组按元素序、对象按
+    // 键插入序），长度严格更长才替换，平局保留先出现；string[] 等非对象数组不算。
+    let items: readonly unknown[] | undefined;
+    const pending: unknown[] = [raw];
+    while (pending.length > 0) {
+      const node: unknown = pending.pop();
+      if (Array.isArray(node)) {
+        if (node.every((item) => isRecord(item)) && (items == null || node.length > items.length)) items = node;
+        for (let index = node.length - 1; index >= 0; index -= 1) pending.push(node[index]);
+        continue;
+      }
+      if (isRecord(node)) {
+        const values = Object.values(node);
+        for (let index = values.length - 1; index >= 0; index -= 1) pending.push(values[index]);
       }
     }
-
-    const items = readPointPath(raw, template.resultPath);
-    if (!Array.isArray(items)) throw engineFailed(`${template.name} API returned invalid response: missing ${template.resultPath.length === 0 ? "root" : template.resultPath} results array`);
-
-    const results: SearchResult[] = [];
-    for (const item of items) {
-      if (!isRecord(item)) continue;
-      const resultUrl = firstField(item, template.fieldMap.url);
-      if (resultUrl == null) continue;
-      results.push({ title: firstField(item, template.fieldMap.title) ?? resultUrl, url: resultUrl, snippet: firstField(item, template.fieldMap.snippet) ?? "" });
-      if (results.length >= numResults) break;
+    if (items == null) {
+      // 响应无对象数组：链降级失败（涵盖 bocha 业务码失败——失败响应里没有结果数组）。
+      // 摘录整响应 JSON（脱敏后截 300 字符，口径同 HTTP 错误）供诊断引擎侧失败原因。
+      throw engineFailed(`${template.name} API returned no results array: ${redactSecret(responseText, resolved.apiKey).slice(0, 300)}`);
     }
-
-    const rawAnswer = template.answerPath == null ? undefined : readPointPath(raw, template.answerPath);
-    const answer = typeof rawAnswer === "string" && rawAnswer.trim().length > 0 ? rawAnswer.trim() : undefined;
-    return { engine, ...(answer == null ? {} : { answer }), results };
+    // 提取文本按工具输出既有 50KB 字节预算截断：预算内原样透传；超预算逐码点累计
+    //（不劈开多字节字符）切片，尾部追加截断标注（文本不再保证是合法 JSON，标注让 agent 知情）。
+    const fullText = JSON.stringify(items);
+    if (utf8ByteLength(fullText) <= TOOL_OUTPUT_MAX_BYTES) return { engine, results: fullText };
+    let used = 0;
+    let end = 0;
+    for (const char of fullText) {
+      const size = utf8ByteLength(char);
+      if (used + size > TOOL_OUTPUT_MAX_BYTES) break;
+      used += size;
+      end += char.length;
+    }
+    return { engine, results: fullText.slice(0, end) + TRUNCATION_MARKER };
   } finally {
     clearTimeout(timer);
   }

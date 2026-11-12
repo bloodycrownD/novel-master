@@ -3,12 +3,13 @@
  *
  * - duckduckgo：内置代码引擎，只读说明卡（无凭据可配）；
  * - 预置引擎：key（模板需 `{{apiKey}}` 时）/ baseUrl（模板需 `{{baseUrl}}`
- *   时）表单 + 测试搜索 + 模板高级编辑折叠区（可恢复默认）；
+ *   时）表单 + 测试搜索 + 模板表单（全平铺，可恢复默认）；
  * - 自定义实例：key（含「密钥注入方式」快捷写入 Headers）/ baseUrl +
  *   测试搜索 + 全量模板表单 + 删除；
  * - create 模式（无 route 参数）：curl 导入粘贴域 + 凭据 + 全量模板表单。
  *
- * 模板表单照 FormField/FormTextInput 骨架，保存前统一走 core 的
+ * 模板表单照 FormField/FormTextInput 骨架（v2 透传口径：响应侧零映射配置，
+ * 字段止于 defaultBody/paramHint），保存前统一走 core 的
  * `validateSearchEngineTemplate`；测试默认走 store 的 `testEngine` 草稿直测
  * （不落库），例外同 desktop 拍板 1：预置引擎已有覆盖且表单与出厂逐字段相等
  * （key/baseUrl 草稿也为空）时省略 draft 只传 engineId，测生效配置。失败
@@ -18,13 +19,7 @@
  * 凭证安全口径同列表页：只显配置状态标签，不回显 key 明文。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -74,40 +69,27 @@ interface TemplateDraft {
   method: 'GET' | 'POST';
   url: string;
   headersText: string;
-  bodyText: string;
-  resultPath: string;
-  titleFields: string;
-  urlFields: string;
-  snippetFields: string;
-  answerPath: string;
-  envelopeCodePath: string;
-  envelopeMsgPath: string;
-  envelopeOkValues: string;
+  defaultBodyText: string;
   paramHint: string;
 }
 
 // FIX-25：create 模式预填基线与 desktop EMPTY_FORM 逐字段对齐（POST + JSON 请求
-// 头/体的常见形态 + 结果映射候选默认值），首次保存不再被「url/fieldMap 必填」
-// 校验整单拦下，只需补显示名与请求 URL。
+// 头/体的常见形态 + defaultBody 出厂示例），首次保存不再被「url 必填」校验整单
+// 拦下，只需补显示名与请求 URL。
 const PREFILL_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
   Accept: 'application/json',
 };
+
+/** create 模式预填的 defaultBody 出厂示例（占位符整值字符串，执行时转数字）。 */
+const PREFILL_BODY = {query: '{{query}}', count: '{{count}}'};
 
 const EMPTY_DRAFT: TemplateDraft = {
   name: '',
   method: 'POST',
   url: '',
   headersText: JSON.stringify(PREFILL_HEADERS, null, 2),
-  bodyText: JSON.stringify({query: '{{query}}', count: '{{count}}'}, null, 2),
-  resultPath: 'results',
-  titleFields: 'title',
-  urlFields: 'url',
-  snippetFields: 'snippet',
-  answerPath: '',
-  envelopeCodePath: '',
-  envelopeMsgPath: '',
-  envelopeOkValues: '',
+  defaultBodyText: JSON.stringify(PREFILL_BODY, null, 2),
   paramHint: '',
 };
 
@@ -122,11 +104,7 @@ const TEMPLATE_FIELDS: readonly (keyof SearchEngineTemplate)[] = [
   'method',
   'url',
   'headers',
-  'bodyTemplate',
-  'resultPath',
-  'fieldMap',
-  'answerPath',
-  'envelope',
+  'defaultBody',
   'paramHint',
 ];
 
@@ -175,12 +153,6 @@ const WRITE_FAIL_MESSAGES: Record<WriteOp, string> = {
   delete: '删除失败',
 };
 
-/** 候选字段列表：逗号分隔（title/url/snippet 与 envelope.okValues 共用）。 */
-function splitCandidates(text: string): string[] {
-  const items = text.split(',').map(item => item.trim());
-  return items.filter(item => item.length > 0);
-}
-
 /** headers 对象形状（readHeaders 出口 / 鉴权头匹配共用）。 */
 type HeaderMap = Record<string, string>;
 
@@ -210,7 +182,7 @@ function authHeaderKeyOf(headers: HeaderMap, key: string): string | undefined {
   return Object.keys(headers).find(name => name.toLowerCase() === lowered);
 }
 
-/** 模板表单字段（预置高级区 / 自定义全量 / create 模式共用同一套输入骨架）。 */
+/** 模板表单字段（预置 / 自定义 / create 模式共用同一套输入骨架，全平铺）。 */
 function TemplateFields({
   draft,
   onPatch,
@@ -274,129 +246,17 @@ function TemplateFields({
         />
       </FormField>
       <FormField
-        label="请求体 Body（POST，JSON）"
+        label="请求体 defaultBody（POST，可选）"
         tokens={tokens}
         // FIX-26：与 desktop 定稿逐字同步——裸形态易误读为可写整值，强调带引号。
-        hint='占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'
+        hint='可选：留空则由 agent 调用时传参；占位符写在字符串值里，整数字段写 "{{count}}"（带引号），执行时自动转为数字'
       >
         <FormTextInput
           tokens={tokens}
-          value={draft.bodyText}
-          onChangeText={text => onPatch({bodyText: text})}
+          value={draft.defaultBodyText}
+          onChangeText={text => onPatch({defaultBodyText: text})}
           placeholder='{"query": "{{query}}", "count": "{{count}}"}'
           multiline
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="结果数组路径 resultPath"
-        tokens={tokens}
-        hint="点路径（不支持数组下标），如 data.webPages.value；留空 = 根节点即数组"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.resultPath}
-          onChangeText={text => onPatch({resultPath: text})}
-          placeholder="data.webPages.value"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="标题字段候选"
-        tokens={tokens}
-        hint="逗号分隔，按序取第一个非空字段；全空时回填链接"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.titleFields}
-          onChangeText={text => onPatch({titleFields: text})}
-          placeholder="title, name"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="链接字段候选"
-        tokens={tokens}
-        hint="逗号分隔，按序取第一个非空字段"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.urlFields}
-          onChangeText={text => onPatch({urlFields: text})}
-          placeholder="url, link, href"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="摘要字段候选"
-        tokens={tokens}
-        hint="逗号分隔，按序取第一个非空字段；全空按空串展示"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.snippetFields}
-          onChangeText={text => onPatch({snippetFields: text})}
-          placeholder="snippet, content"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="answer 路径（可选）"
-        tokens={tokens}
-        hint="点路径，取到非空字符串时透传 answer；留空不透传"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.answerPath}
-          onChangeText={text => onPatch({answerPath: text})}
-          placeholder="answer"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="业务码路径（可选）"
-        tokens={tokens}
-        hint="如 code；留空不校验业务信封（取不到业务码时也视为通过）"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.envelopeCodePath}
-          onChangeText={text => onPatch({envelopeCodePath: text})}
-          placeholder="code"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="业务消息路径（可选）"
-        tokens={tokens}
-        hint="失败时取该路径消息（脱敏后进错误文案）"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.envelopeMsgPath}
-          onChangeText={text => onPatch({envelopeMsgPath: text})}
-          placeholder="msg"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </FormField>
-      <FormField
-        label="成功业务码（可选）"
-        tokens={tokens}
-        hint="逗号分隔，默认 200；如 0, 200"
-      >
-        <FormTextInput
-          tokens={tokens}
-          value={draft.envelopeOkValues}
-          onChangeText={text => onPatch({envelopeOkValues: text})}
-          placeholder="200"
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -439,14 +299,12 @@ export function SearchEngineDetailScreen() {
   const [writeOp, setWriteOp] = useState<WriteOp | null>(null);
   /** 删除确认弹窗开关。 */
   const [confirmDelete, setConfirmDelete] = useState(false);
-  /** 模板高级编辑折叠区（仅预置引擎）。 */
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [draft, setDraft] = useState<TemplateDraft>(EMPTY_DRAFT);
   /** key 草稿（留空 = 不改已存密钥；回读后清空）。 */
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   /** baseUrl 草稿（非密钥字段直接回显编辑；空串保存即清除）。 */
   const [baseUrlDraft, setBaseUrlDraft] = useState('');
-  /** 测试搜索关键词与结果（ok=成功清单，否则失败文案；失败红色展示 FIX-27）。 */
+  /** 测试搜索关键词与结果（ok=成功预览，否则失败文案；失败红色展示 FIX-27）。 */
   const [testQuery, setTestQuery] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<
@@ -469,7 +327,7 @@ export function SearchEngineDetailScreen() {
   } else if (entry?.needsBaseUrl === true) {
     configured = entry.baseUrl != null;
   }
-  const draftText = `${draft.url}\n${draft.headersText}\n${draft.bodyText}`;
+  const draftText = `${draft.url}\n${draft.headersText}\n${draft.defaultBodyText}`;
   const draftNeedsKey = draftText.includes('{{apiKey}}');
   const draftNeedsBaseUrl = draftText.includes('{{baseUrl}}');
   const headersForAuth = readHeaders(draft.headersText);
@@ -530,15 +388,7 @@ export function SearchEngineDetailScreen() {
             method: template.method,
             url: template.url,
             headersText: JSON.stringify(template.headers, null, 2),
-            bodyText: template.bodyTemplate ?? '',
-            resultPath: template.resultPath,
-            titleFields: template.fieldMap.title.join(', '),
-            urlFields: template.fieldMap.url.join(', '),
-            snippetFields: template.fieldMap.snippet.join(', '),
-            answerPath: template.answerPath ?? '',
-            envelopeCodePath: template.envelope?.codePath ?? '',
-            envelopeMsgPath: template.envelope?.msgPath ?? '',
-            envelopeOkValues: template.envelope?.okValues?.join(', ') ?? '',
+            defaultBodyText: template.defaultBody ?? '',
             paramHint: template.paramHint,
           });
         }
@@ -580,40 +430,13 @@ export function SearchEngineDetailScreen() {
       showToast(HEADERS_INVALID_HINT);
       return undefined;
     }
-    const okValues = splitCandidates(draft.envelopeOkValues);
     const validated = validateSearchEngineTemplate({
       name: draft.name,
       method: draft.method,
       url: draft.url,
       headers,
-      ...(draft.bodyText.trim().length > 0
-        ? {bodyTemplate: draft.bodyText.trim()}
-        : {}),
-      resultPath: draft.resultPath,
-      fieldMap: {
-        title: splitCandidates(draft.titleFields),
-        url: splitCandidates(draft.urlFields),
-        snippet: splitCandidates(draft.snippetFields),
-      },
-      ...(draft.answerPath.trim().length > 0
-        ? {answerPath: draft.answerPath.trim()}
-        : {}),
-      ...(draft.envelopeCodePath.trim().length > 0
-        ? {
-            envelope: {
-              codePath: draft.envelopeCodePath.trim(),
-              ...(draft.envelopeMsgPath.trim().length > 0
-                ? {msgPath: draft.envelopeMsgPath.trim()}
-                : {}),
-              ...(okValues.length > 0
-                ? {
-                    okValues: okValues.map(value =>
-                      /^-?\d+$/.test(value) ? Number(value) : value,
-                    ),
-                  }
-                : {}),
-            },
-          }
+      ...(draft.defaultBodyText.trim().length > 0
+        ? {defaultBody: draft.defaultBodyText.trim()}
         : {}),
       paramHint: draft.paramHint,
     });
@@ -707,7 +530,7 @@ export function SearchEngineDetailScreen() {
   };
 
   // nm-style: keep-local — 草稿直测共享 testing 互斥态与 testResult 回填
-  // （成功拼样本行/失败译文案双分支），内联进按钮会拆散测试状态机
+  // （成功拼预览块/失败译文案双分支），内联进按钮会拆散测试状态机
   const handleTest = async () => {
     if (writeOp != null || testing) {
       return;
@@ -763,11 +586,15 @@ export function SearchEngineDetailScreen() {
       };
       const outcome = await searchStore.testEngine(req);
       if (outcome.ok) {
-        const top = outcome.value.sample.slice(0, 3);
-        const samples = top.map(
-          (item, index) => `${index + 1}. ${item.title} — ${item.url}`,
-        );
-        const lines = [`返回 ${outcome.value.resultCount} 条结果`, ...samples];
+        // TestEngineSuccess v2 形状（spec v2 §5）：共 N 条（数组可解析时）+
+        // 前 2 条 JSON 预览 + 截断标记；不再渲染 title/url 人类列表。
+        const lines = [
+          ...(outcome.value.resultCount == null
+            ? []
+            : [`共 ${outcome.value.resultCount} 条`]),
+          outcome.value.preview,
+          ...(outcome.value.truncated ? ['（预览已截断）'] : []),
+        ];
         setTestResult({ok: true, text: lines.join('\n')});
       } else {
         setTestResult({
@@ -914,7 +741,7 @@ export function SearchEngineDetailScreen() {
     <FormSectionCard
       tokens={tokens}
       title="引擎模板"
-      hint="模板决定请求形状与结果字段映射；保存前会校验合法性并拦截明文密钥"
+      hint="模板决定请求形状；保存前会校验合法性并拦截明文密钥"
     >
       <TemplateFields draft={draft} onPatch={patchDraft} tokens={tokens} />
     </FormSectionCard>
@@ -977,7 +804,7 @@ export function SearchEngineDetailScreen() {
         <FormSectionCard
           tokens={tokens}
           title="从 curl 导入"
-          hint="粘贴 curl 命令自动预填请求方法 / URL / Headers / Body；疑似密钥替换为 {{apiKey}} 占位符，保存时写入密钥库"
+          hint="粘贴 curl 命令自动预填请求方法 / URL / Headers / defaultBody；疑似密钥替换为 {{apiKey}} 占位符，保存时写入密钥库"
         >
           <FormTextInput
             tokens={tokens}
@@ -1004,14 +831,14 @@ export function SearchEngineDetailScreen() {
                 method: imported.method,
                 url: imported.url,
                 headersText: JSON.stringify(imported.headers, null, 2),
-                ...(imported.bodyTemplate == null
+                ...(imported.defaultBody == null
                   ? {}
-                  : {bodyText: imported.bodyTemplate}),
+                  : {defaultBodyText: imported.defaultBody}),
               });
               if (imported.apiKey != null) {
                 setApiKeyDraft(imported.apiKey);
               }
-              showToast('已解析 curl 命令，请补全结果映射后再保存');
+              showToast('已解析 curl 命令，请补全显示名后保存');
             }}
             disabled={curlText.trim().length === 0 || writeOp != null}
           />
@@ -1059,30 +886,16 @@ export function SearchEngineDetailScreen() {
       ) : (
         <FormSectionCard
           tokens={tokens}
-          title="模板（高级）"
-          hint="修改请求形状与结果映射；保存后作为本机覆盖，可随时恢复默认"
+          title="引擎模板"
+          hint="修改请求形状；保存后作为本机覆盖，可随时恢复默认"
         >
           {config?.presetOverrides[engineId] === true ? (
             <Text style={[styles.hintText, {color: tokens.textSecondary}]}>
-              该引擎已有自定义覆盖；高级编辑显示出厂模板，保存时只提交你修改过的字段，
+              该引擎已有自定义覆盖；表单显示出厂模板，保存时只提交你修改过的字段，
               未改字段保留既有覆盖。
             </Text>
           ) : null}
-          <Pressable
-            onPress={() => setAdvancedOpen(current => !current)}
-            style={[styles.advancedToggle, {borderColor: tokens.borderLight}]}
-          >
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>
-              {advancedOpen ? '收起模板编辑' : '展开模板编辑'}
-            </Text>
-          </Pressable>
-          {advancedOpen ? (
-            <TemplateFields
-              draft={draft}
-              onPatch={patchDraft}
-              tokens={tokens}
-            />
-          ) : null}
+          <TemplateFields draft={draft} onPatch={patchDraft} tokens={tokens} />
           {engineId != null && config?.presetOverrides[engineId] === true ? (
             <SecondaryButton
               tokens={tokens}
@@ -1165,12 +978,6 @@ const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
   hintText: {fontSize: 14, lineHeight: 21},
   testResult: {fontSize: 13, lineHeight: 19},
-  advancedToggle: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
   confirmPanel: {
     borderRadius: 16,
     width: '100%',

@@ -227,6 +227,8 @@ export type {
  * 收窄类型已退役，id 与顺序一律读 `readConfig()`。模板校验走
  * `validateSearchEngineTemplate`，curl 导入走 `parseCurlCommand`（双端共用），
  * 出厂模板常量 `PRESET_ENGINE_TEMPLATES` 供预置模板编辑表单预填与恢复默认。
+ * v2 透传改造：响应映射类型（SearchEngineFieldMap / SearchEngineEnvelope）
+ * 与模板映射字段一并废除，模板引擎结果以 JSON 文本回流。
  */
 export type {
   SearchResponse,
@@ -234,8 +236,6 @@ export type {
   SearchToolOptions,
   SearchOversizeOutput,
   ResolvedEngineConfig,
-  SearchEngineFieldMap,
-  SearchEngineEnvelope,
   SearchEngineTemplate,
   CustomEngineDef,
 } from "./domain/tool/builtin/search/types.js";

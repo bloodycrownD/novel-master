@@ -6,10 +6,13 @@
  *   引擎出现（确认后发 deleteCustomEngine）、「新建自定义引擎」进 Detail create
  *   模式（哨兵写入 navState）。
  * - T-U2 详情：预置分支的 baseUrl 回显（DTO engines 值）+ 恢复默认 + key 表单；
- *   自定义分支的 headers JSON 非法 → 不发保存 IPC、页内展示 validate 原因；
- *   密钥注入方式快捷选择写入 `{{apiKey}}` 头；key 表单随保存提交；
- *   测试按钮在途互斥（第二次点击不重复发 IPC）与结果展示；create 模式的
- *   curl 导入预填（识别密钥）与解析失败整体拒绝（toast，表单不变）。
+ *   模板表单平铺（SPEC v2 透传改造：高级编辑折叠与响应映射区已废除）；
+ *   自定义分支的 headers JSON 非法 / defaultBody 非法 JSON → 不发保存 IPC、
+ *   页内展示 validate 原因；密钥注入方式快捷选择写入 `{{apiKey}}` 头；
+ *   key 表单随保存提交；测试按钮在途互斥（第二次点击不重复发 IPC）与
+ *   preview 形态结果展示（JSON 预览 + 共 N 条 + 已截断）；create 模式的
+ *   curl 导入预填（识别密钥、-d 预填 defaultBody）与解析失败整体拒绝
+ *   （toast，表单不变）。
  *
  * CR 第 1 轮回归锁（cr-fix-spec 拍板 1/7）：预置已有覆盖且表单未改时测试请求
  * 不带 draft（表单改动仍带 draft）；预置零改动保存不发写 IPC 且 toast「无改动」、
@@ -49,7 +52,7 @@ const { NEW_ENGINE_SENTINEL } = await import(
 );
 const { subscribeToast } = await import("@/components/ui/show-toast");
 
-/** 自定义实例 fixture（id 形态照 core：`custom:{nanoid8}`）。 */
+/** 自定义实例 fixture（id 形态照 core：`custom:{nanoid8}`；模板为 v2 透传形状，无映射字段）。 */
 const CUSTOM_ENGINE: CustomEngineDef = {
   id: "custom:abc12345",
   name: "我的搜索",
@@ -59,9 +62,7 @@ const CUSTOM_ENGINE: CustomEngineDef = {
     method: "POST",
     url: "https://api.example.com/search",
     headers: { Authorization: "Bearer {{apiKey}}" },
-    bodyTemplate: '{"query":"{{query}}"}',
-    resultPath: "data.items",
-    fieldMap: { title: ["title"], url: ["url"], snippet: ["summary"] },
+    defaultBody: '{"query":"{{query}}"}',
     paramHint: "自定义实例",
   },
 };
@@ -154,7 +155,7 @@ function makeInvoke(
     if (channel === IPC_CHANNELS.SEARCH_TEST_ENGINE) {
       return (
         testResponse ??
-        (() => Promise.resolve({ ok: true, data: { resultCount: 0, sample: [] } }))
+        (() => Promise.resolve({ ok: true, data: { preview: "[]", resultCount: 0, truncated: false } }))
       )();
     }
     return Promise.resolve({ ok: true, data: undefined });
@@ -521,11 +522,15 @@ describe("T-U1 搜索配置列表页", () => {
       modalText.includes('整数字段写 "{{count}}"（带引号）'),
       `count 措辞应为 FIX-26 定稿：${modalText}`,
     );
+    // SPEC v2：响应映射措辞删除，curl 导入 / defaultBody 可选口径保留
+    assert.ok(!modalText.includes("结果映射") && !modalText.includes("高级区"), `响应映射措辞应已删除：${modalText}`);
+    assert.ok(modalText.includes("粘贴 curl 命令导入"), `应保留 curl 导入口径：${modalText}`);
+    assert.ok(modalText.includes("请求体 defaultBody 可选"), `应保留 defaultBody 可选口径：${modalText}`);
   });
 });
 
 describe("T-U2 搜索引擎详情页", () => {
-  it("预置 searxng：baseUrl 回显 + 无 key 表单 + 高级编辑展开出厂模板", async () => {
+  it("预置 searxng：baseUrl 回显 + 无 key 表单 + 模板表单平铺（高级编辑折叠已废除）", async () => {
     const { renderer, calls } = await mountWith(
       makeConfig(),
       (nav) => <SearchEngineDetailView nav={nav.handle} />,
@@ -545,24 +550,21 @@ describe("T-U2 搜索引擎详情页", () => {
     );
     // 无覆盖（presetOverrides 只有 bocha）→ 不显示恢复默认
     assert.equal(findButtonByText(renderer.root, "恢复默认"), undefined);
-    // 高级编辑展开后才出现模板表单（method 下拉 + URL 输入）
-    assert.equal(findSelectWithOption(renderer.root, "POST"), undefined);
-    const toggle = findButtonByText(renderer.root, "高级编辑");
-    assert.ok(toggle != null, "缺少高级编辑入口");
-    await act(async () => {
-      invokeProp(toggle as TestInstance, "onClick");
-    });
+    // 高级编辑折叠容器已废除：模板表单直接平铺（method 下拉 + URL 输入无需展开）
+    assert.equal(findButtonByText(renderer.root, "高级编辑"), undefined);
     const methodSelect = findSelectWithOption(renderer.root, "POST");
-    assert.ok(methodSelect != null, "展开后缺少 method 下拉");
+    assert.ok(methodSelect != null, "模板表单应平铺出 method 下拉");
     const urlInput = findByPlaceholder(
       renderer.root,
       "https://api.example.com/search?q={{query}}",
     );
-    assert.ok(urlInput != null, "展开后缺少 URL 表单");
+    assert.ok(urlInput != null, "缺少 URL 表单");
     assert.ok(
       propString(urlInput as TestInstance, "value").includes("{{baseUrl}}"),
       "searxng 模板 URL 应引用 {{baseUrl}}",
     );
+    // 响应映射区已废除：无结果数组路径 / 字段候选控件
+    assert.equal(findByPlaceholder(renderer.root, "results"), undefined);
     // 未有写操作
     assert.equal(
       calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG)
@@ -697,20 +699,21 @@ describe("T-U2 搜索引擎详情页", () => {
     assert.ok(message.includes("Headers 必须是合法 JSON"), `原因应可读：${message}`);
   });
 
-  it("自定义引擎：core 模板校验失败（fieldMap 空）经 catalog 展示原因、不发保存 IPC", async () => {
+  it("自定义引擎：core 模板校验失败（defaultBody 非法 JSON）经 catalog 展示原因、不发保存 IPC", async () => {
     const { renderer, calls } = await mountWith(
       makeConfig(),
       (nav) => <SearchEngineDetailView nav={nav.handle} />,
       { editingEngineId: CUSTOM_ENGINE.id },
     );
-    // fixture 的标题候选为 ["title"]：清空后 fieldMap.title 为空 → validate 失败。
-    const titleCandidate = renderer.root
-      .findAll((node) => node.type === "input" && node.props.value === "title")
-      .at(0);
-    assert.ok(titleCandidate != null, "缺少标题候选字段输入");
+    // fixture 的 defaultBody 为合法 JSON：改坏后 validate 失败（v2 唯一的 JSON 体校验入口）。
+    const defaultBody = findByPlaceholder(
+      renderer.root,
+      '{"query": "{{query}}", "count": "{{count}}"}',
+    );
+    assert.ok(defaultBody != null, "缺少请求体模板文本域");
     await act(async () => {
-      invokeProp(titleCandidate as TestInstance, "onChange", {
-        target: { value: "" },
+      invokeProp(defaultBody as TestInstance, "onChange", {
+        target: { value: "{ not json" },
       });
     });
     const save = findButtonByText(renderer.root, "保存");
@@ -725,7 +728,7 @@ describe("T-U2 搜索引擎详情页", () => {
     const message = textOf(status as TestInstance);
     // 错误 descriptor 由 core 携带 messageKey/params，UI 经 coreT 译出原因。
     assert.ok(message.includes("搜索模板无效"), `错误文案应走 catalog：${message}`);
-    assert.ok(message.includes("fieldMap.title"), `原因应可读：${message}`);
+    assert.ok(message.includes("defaultBody"), `原因应可读：${message}`);
   });
 
   it("自定义引擎：注入方式快捷选择写 {{apiKey}} 头，保存提交模板与 key", async () => {
@@ -782,7 +785,7 @@ describe("T-U2 搜索引擎详情页", () => {
     assert.equal(payload.template.url, CUSTOM_ENGINE.template.url);
   });
 
-  it("测试按钮在途互斥（不重复发 IPC）并展示命中结果", async () => {
+  it("测试按钮在途互斥（不重复发 IPC）并展示 preview 预览结果", async () => {
     let resolveTest: ((value: unknown) => void) | undefined;
     const pending = new Promise<unknown>((resolve) => {
       resolveTest = resolve;
@@ -819,16 +822,19 @@ describe("T-U2 搜索引擎详情页", () => {
     resolveTest?.({
       ok: true,
       data: {
+        preview: '[{"title":"结果甲","url":"https://a.example.com"}]',
         resultCount: 7,
-        sample: [{ title: "结果甲", url: "https://a.example.com", snippet: "" }],
+        truncated: true,
       },
     });
     await settle();
     const status = findAllByClass(renderer.root, "settings-hint")
       .map(textOf)
       .join("\n");
-    assert.ok(status.includes("命中 7 条"), `缺少结果计数：${status}`);
-    assert.ok(status.includes("结果甲"), `缺少样例标题：${status}`);
+    // SPEC v2 §5：测试结果渲染 JSON 预览文本 + 「共 N 条」+ 截断标记，不再渲染标题列表
+    assert.ok(status.includes('[{"title":"结果甲"'), `缺少 JSON 预览文本：${status}`);
+    assert.ok(status.includes("共 7 条"), `缺少结果计数：${status}`);
+    assert.ok(status.includes("已截断"), `缺少截断标记：${status}`);
 
     const payload = callsOf(calls, IPC_CHANNELS.SEARCH_TEST_ENGINE)[0]
       ?.payload as {
@@ -875,11 +881,7 @@ describe("T-U2 搜索引擎详情页", () => {
       (nav) => <SearchEngineDetailView nav={nav.handle} />,
       { editingEngineId: "bocha" },
     );
-    const toggle = findButtonByText(renderer.root, "高级编辑");
-    assert.ok(toggle != null, "缺少高级编辑入口");
-    await act(async () => {
-      invokeProp(toggle as TestInstance, "onClick");
-    });
+    // 模板表单已平铺：直接改 URL 即构成表单改动
     const urlInput = findByPlaceholder(
       renderer.root,
       "https://api.example.com/search?q={{query}}",
@@ -1002,6 +1004,17 @@ describe("T-U2 搜索引擎详情页", () => {
           "Bearer {{apiKey}}",
         ),
         "curl 中的明文密钥应替换为 {{apiKey}}",
+      );
+      // SPEC v2：-d 原文预填 defaultBody（不再预填任何响应映射字段）
+      const defaultBody = findByPlaceholder(
+        renderer.root,
+        '{"query": "{{query}}", "count": "{{count}}"}',
+      );
+      assert.ok(defaultBody != null, "缺少请求体模板文本域");
+      assert.equal(
+        propString(defaultBody as TestInstance, "value"),
+        '{"query":"{{query}}"}',
+        "curl -d 应预填请求体模板 defaultBody",
       );
       const keyInput = renderer.root
         .findAll(

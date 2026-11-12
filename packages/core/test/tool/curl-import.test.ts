@@ -27,7 +27,7 @@ describe("curl 导入：合法命令解析预填 + 密钥识别替换（T-C6）"
     assert.equal(draft.url, "https://api.example.com/v1/search");
     assert.equal(draft.headers.Authorization, "Bearer {{apiKey}}");
     assert.equal(draft.headers["Content-Type"], "application/json");
-    assert.equal(draft.bodyTemplate, '{"query":"{{query}}","count":"{{count}}"}');
+    assert.equal(draft.defaultBody, '{"query":"{{query}}","count":"{{count}}"}');
     assert.equal(draft.apiKey, SECRET, "明文密钥随草稿携带，保存时落 SKSP");
   });
 
@@ -35,11 +35,11 @@ describe("curl 导入：合法命令解析预填 + 密钥识别替换（T-C6）"
     const getForm = expectOk(parseCurlCommand("curl -G -d 'q=hello&lang=zh' https://search.example.com/search"));
     assert.equal(getForm.method, "GET");
     assert.equal(getForm.url, "https://search.example.com/search?q=hello&lang=zh");
-    assert.equal("bodyTemplate" in getForm, false);
+    assert.equal("defaultBody" in getForm, false);
 
     const defaultPost = expectOk(parseCurlCommand("curl https://api.example.com/search -d '{\"a\":1}'"));
     assert.equal(defaultPost.method, "POST");
-    assert.equal(defaultPost.bodyTemplate, '{"a":1}');
+    assert.equal(defaultPost.defaultBody, '{"a":1}');
 
     const defaultGet = expectOk(parseCurlCommand("curl https://example.com/search?q=x"));
     assert.equal(defaultGet.method, "GET");
@@ -48,7 +48,7 @@ describe("curl 导入：合法命令解析预填 + 密钥识别替换（T-C6）"
 
   it("多个 -d 以 & 拼接；curl.exe 可执行名可识别", () => {
     const multiple = expectOk(parseCurlCommand("curl -X POST https://api.example.com/search -d 'a=1' -d 'b=2'"));
-    assert.equal(multiple.bodyTemplate, "a=1&b=2");
+    assert.equal(multiple.defaultBody, "a=1&b=2");
 
     const windowsExe = expectOk(parseCurlCommand("curl.exe -X GET https://example.com/search"));
     assert.equal(windowsExe.method, "GET");

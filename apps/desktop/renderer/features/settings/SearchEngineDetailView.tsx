@@ -3,12 +3,16 @@
  * 三分支 + create 模式：
  * - duckduckgo：内置代码引擎，只读说明（无表单无保存）；
  * - 预置（六出厂 id）：key 表单（模板引用 `{{apiKey}}` 时）+ baseUrl 表单（模板
- *   引用 `{{baseUrl}}` 时）+「高级编辑」折叠区（全量模板表单，出厂模板预填，
- *   保存只提交与出厂不同的字段以保留既有覆盖）+ 恢复默认 + 测试；
+ *   引用 `{{baseUrl}}` 时）+ 全量模板表单平铺（出厂模板预填，保存只提交与出厂
+ *   不同的字段以保留既有覆盖）+ 恢复默认 + 测试；
  * - 自定义：key 表单（含 `{{apiKey}}` 注入方式快捷选择）+ baseUrl 表单（模板引用
  *   `{{baseUrl}}` 时）+ 全量模板表单 + 测试 + 删除；
  * - create 模式（`editingEngineId === NEW_ENGINE_SENTINEL`，复用本 viewId）：
  *   curl 导入粘贴域 + 全量表单 + 测试，保存走 `createCustomEngine` 后回列表。
+ *
+ * 模板字段（SPEC v2 透传改造）：name / method / url / headers / defaultBody（可选，
+ * 留空则由 agent 调用时传参）/ paramHint；响应侧无任何映射配置（v1 的
+ * resultPath/fieldMap/answerPath/envelope 已废除，执行器自动提取最长对象数组）。
  *
  * 测试默认走**草稿直测**：当前表单 + 本次输入的 key/baseUrl 组成 draft，不落库；
  * 表单里没填 key 时由 core 回退已存 SKSP 值。例外（拍板 1）：预置引擎已有覆盖
@@ -55,15 +59,7 @@ type TemplateFormState = {
   method: "GET" | "POST";
   url: string;
   headersJson: string;
-  bodyTemplate: string;
-  resultPath: string;
-  fieldMapTitle: string;
-  fieldMapUrl: string;
-  fieldMapSnippet: string;
-  answerPath: string;
-  envelopeCodePath: string;
-  envelopeOkValues: string;
-  envelopeMsgPath: string;
+  defaultBody: string;
   paramHint: string;
 };
 
@@ -73,15 +69,7 @@ const EMPTY_FORM: TemplateFormState = {
   method: "POST",
   url: "",
   headersJson: JSON.stringify({ "Content-Type": "application/json", Accept: "application/json" }, null, 2),
-  bodyTemplate: JSON.stringify({ query: "{{query}}", count: "{{count}}" }, null, 2),
-  resultPath: "results",
-  fieldMapTitle: "title",
-  fieldMapUrl: "url",
-  fieldMapSnippet: "snippet",
-  answerPath: "",
-  envelopeCodePath: "",
-  envelopeOkValues: "",
-  envelopeMsgPath: "",
+  defaultBody: JSON.stringify({ query: "{{query}}", count: "{{count}}" }, null, 2),
   paramHint: "",
 };
 
@@ -93,7 +81,7 @@ const INJECTION_OPTIONS: ReadonlyArray<{ readonly label: string; readonly header
 ];
 
 /** 预置覆盖按差异提交时比较的模板字段（与 SearchEngineTemplate 字段一一对应）。 */
-const TEMPLATE_FIELDS = ["name", "method", "url", "headers", "bodyTemplate", "resultPath", "fieldMap", "answerPath", "envelope", "paramHint"] as const;
+const TEMPLATE_FIELDS = ["name", "method", "url", "headers", "defaultBody", "paramHint"] as const;
 
 export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const engineId = nav.navState.editingEngineId;
@@ -110,9 +98,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const [clearing, setClearing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [templateOpen, setTemplateOpen] = useState(false);
   const [testQuery, setTestQuery] = useState("");
-  const [testResult, setTestResult] = useState<{ count: number; titles: readonly string[] } | undefined>();
+  const [testResult, setTestResult] = useState<{ preview: string; resultCount?: number; truncated: boolean } | undefined>();
   const [curlText, setCurlText] = useState("");
   const [importedKey, setImportedKey] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -139,15 +126,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           method: template.method,
           url: template.url,
           headersJson: Object.keys(template.headers).length > 0 ? JSON.stringify(template.headers, null, 2) : "",
-          bodyTemplate: template.bodyTemplate ?? "",
-          resultPath: template.resultPath,
-          fieldMapTitle: template.fieldMap.title.join(", "),
-          fieldMapUrl: template.fieldMap.url.join(", "),
-          fieldMapSnippet: template.fieldMap.snippet.join(", "),
-          answerPath: template.answerPath ?? "",
-          envelopeCodePath: template.envelope?.codePath ?? "",
-          envelopeOkValues: template.envelope?.okValues?.join(", ") ?? "",
-          envelopeMsgPath: template.envelope?.msgPath ?? "",
+          defaultBody: template.defaultBody ?? "",
           paramHint: template.paramHint,
         });
       }
@@ -202,8 +181,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const customDef: CustomEngineDef | undefined = engine?.isCustom === true ? config?.customEngines.find((def) => def.id === engineId) : undefined;
   const isPreset = engine != null && !engine.isCustom;
   const busy = saving || clearing || testing;
-  const usesApiKey = form.url.includes("{{apiKey}}") || form.headersJson.includes("{{apiKey}}") || form.bodyTemplate.includes("{{apiKey}}");
-  const usesBaseUrl = form.url.includes("{{baseUrl}}") || form.headersJson.includes("{{baseUrl}}") || form.bodyTemplate.includes("{{baseUrl}}");
+  const usesApiKey = form.url.includes("{{apiKey}}") || form.headersJson.includes("{{apiKey}}") || form.defaultBody.includes("{{apiKey}}");
+  const usesBaseUrl = form.url.includes("{{baseUrl}}") || form.headersJson.includes("{{baseUrl}}") || form.defaultBody.includes("{{baseUrl}}");
   const title = isCreate ? "新建自定义引擎" : (engine?.name ?? (engineLabel(engineId) || "搜索引擎"));
 
   /** Headers JSON 文本 → 对象（非法文本 / 非对象给中文原因；合法返回 undefined 以外的值）。 */
@@ -219,30 +198,14 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
 
   /** 表单 → 校验后的模板；保存与测试共用（headers/body 的 JSON 文本先解析再校验）。 */
   const readTemplate = (): SearchEngineTemplate | undefined => {
-    const candidates = (text: string): readonly string[] => text.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
     const headers = parseHeaders(form.headersJson);
     if (typeof headers === "string") {
       setError(coreT({ key: "error.tool.search_template_invalid", params: { reason: headers } }));
       return undefined;
     }
-    const raw: Record<string, unknown> = {
-      name: form.name,
-      method: form.method,
-      url: form.url,
-      headers,
-      resultPath: form.resultPath,
-      fieldMap: { title: candidates(form.fieldMapTitle), url: candidates(form.fieldMapUrl), snippet: candidates(form.fieldMapSnippet) },
-      paramHint: form.paramHint,
-    };
-    if (form.bodyTemplate.trim().length > 0) raw.bodyTemplate = form.bodyTemplate;
-    if (form.answerPath.trim().length > 0) raw.answerPath = form.answerPath;
-    if (form.envelopeCodePath.trim().length > 0 || form.envelopeMsgPath.trim().length > 0 || form.envelopeOkValues.trim().length > 0) {
-      raw.envelope = {
-        codePath: form.envelopeCodePath,
-        ...(form.envelopeMsgPath.trim().length > 0 ? { msgPath: form.envelopeMsgPath } : {}),
-        ...(form.envelopeOkValues.trim().length > 0 ? { okValues: candidates(form.envelopeOkValues).map((item) => (/^-?\d+(\.\d+)?$/.test(item) ? Number(item) : item)) } : {}),
-      };
-    }
+    const bodyText = form.defaultBody.trim();
+    const raw: Record<string, unknown> = { name: form.name, method: form.method, url: form.url, headers, paramHint: form.paramHint };
+    if (bodyText.length > 0) raw.defaultBody = bodyText;
     const validated = validateSearchEngineTemplate(raw);
     if (!validated.ok) {
       setError(coreT(validated.error.messageKey == null ? { key: "error.tool.search_template_invalid", params: { reason: validated.error.message } } : { key: validated.error.messageKey, params: validated.error.messageParams }));
@@ -319,8 +282,6 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         }
       }
       setApiKey(""); // 保存成功后密码框回落空白（不留明文残影）
-      // 覆盖内容不回显进 DTO：保存后收起高级编辑，重开时按「出厂模板 + 差异提交」继续编辑
-      setTemplateOpen(false);
       await reload();
       toastSettingsSuccess("已保存");
     } catch (e) {
@@ -358,7 +319,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         setError(res.error.message);
         return;
       }
-      setTestResult({ count: res.data.resultCount, titles: res.data.sample.map((item) => item.title) });
+      setTestResult({ preview: res.data.preview, resultCount: res.data.resultCount, truncated: res.data.truncated });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -416,34 +377,10 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       <SettingsField label="Headers（JSON 对象）">
         <textarea rows={4} value={form.headersJson} onChange={(e) => setForm({ ...form, headersJson: e.target.value })} placeholder={'{"Authorization": "Bearer {{apiKey}}"}'} />
       </SettingsField>
-      <SettingsField label="请求体模板（POST 必填，合法 JSON 对象文本）">
-        <textarea rows={4} value={form.bodyTemplate} onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })} placeholder={'{"query": "{{query}}", "count": "{{count}}"}'} />
+      <SettingsField label="请求体模板（可选，合法 JSON 对象文本；留空则由 agent 调用时传参）">
+        <textarea rows={4} value={form.defaultBody} onChange={(e) => setForm({ ...form, defaultBody: e.target.value })} placeholder={'{"query": "{{query}}", "count": "{{count}}"}'} />
         {/* FIX-26：裸形态 "{{count}}" 易误读为可写整值，双端统一强调带引号（文案与 mobile 同步） */}
         <span className="settings-hint">{'占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'}</span>
-      </SettingsField>
-      <SettingsField label="结果数组路径（点路径；空 = 根节点即数组）">
-        <input type="text" value={form.resultPath} placeholder="results" onChange={(e) => setForm({ ...form, resultPath: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="标题候选字段（逗号分隔，按序取首个非空）">
-        <input type="text" value={form.fieldMapTitle} onChange={(e) => setForm({ ...form, fieldMapTitle: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="链接候选字段（逗号分隔）">
-        <input type="text" value={form.fieldMapUrl} onChange={(e) => setForm({ ...form, fieldMapUrl: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="摘要候选字段（逗号分隔）">
-        <input type="text" value={form.fieldMapSnippet} onChange={(e) => setForm({ ...form, fieldMapSnippet: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="answer 点路径（可选；命中非空字符串时透传）">
-        <input type="text" value={form.answerPath} onChange={(e) => setForm({ ...form, answerPath: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="业务码路径（可选；如 code，取到值且不在成功码内视为失败）">
-        <input type="text" value={form.envelopeCodePath} placeholder="code" onChange={(e) => setForm({ ...form, envelopeCodePath: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="业务码成功值（逗号分隔；留空默认 200）">
-        <input type="text" value={form.envelopeOkValues} placeholder="200" onChange={(e) => setForm({ ...form, envelopeOkValues: e.target.value })} />
-      </SettingsField>
-      <SettingsField label="业务码错误消息路径（可选；脱敏后进错误文案）">
-        <input type="text" value={form.envelopeMsgPath} placeholder="msg" onChange={(e) => setForm({ ...form, envelopeMsgPath: e.target.value })} />
       </SettingsField>
       <SettingsField label="参数说明（拼进工具描述，≤500 字符）">
         <textarea rows={3} value={form.paramHint} onChange={(e) => setForm({ ...form, paramHint: e.target.value })} placeholder="可经 params 透传……" />
@@ -477,10 +414,10 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                   return;
                 }
                 const draft = parsed.value;
-                setForm({ ...form, method: draft.method, url: draft.url, headersJson: JSON.stringify(draft.headers, null, 2), bodyTemplate: draft.bodyTemplate ?? form.bodyTemplate });
+                setForm({ ...form, method: draft.method, url: draft.url, headersJson: JSON.stringify(draft.headers, null, 2), defaultBody: draft.defaultBody ?? form.defaultBody });
                 if (draft.apiKey != null) setApiKey(draft.apiKey);
                 setImportedKey(draft.apiKey != null);
-                toastSettingsSuccess("已导入 curl 配置，请补全结果映射");
+                toastSettingsSuccess("已导入 curl 配置");
               }}
             >
               解析并预填
@@ -543,24 +480,17 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         </SettingsSection>
 
         <SettingsSection title="请求模板">
-          {isPreset ? (
+          {isPreset && config?.presetOverrides[engineId] === true ? (
             <>
               <div className="settings-form-actions">
-                <Button variant="secondary" onClick={() => setTemplateOpen((open) => !open)}>
-                  {templateOpen ? "收起高级编辑" : "高级编辑"}
+                <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认"); }}>
+                  恢复默认
                 </Button>
-                {config?.presetOverrides[engineId] === true ? (
-                  <Button variant="secondary" disabled={busy} onClick={() => { void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认"); }}>
-                    恢复默认
-                  </Button>
-                ) : null}
               </div>
-              {config?.presetOverrides[engineId] === true ? <p className="settings-hint">该引擎已有自定义覆盖；高级编辑显示出厂模板，保存时只提交你修改过的字段，未改字段保留既有覆盖。</p> : null}
-              {templateOpen ? templateFields : <p className="settings-hint">{config?.presetOverrides[engineId] === true ? "当前使用已保存的自定义覆盖" : "当前使用出厂模板"}；展开「高级编辑」可修改 method / URL / headers / 请求体 / 结果映射。</p>}
+              <p className="settings-hint">该引擎已有自定义覆盖；保存时只提交你修改过的字段，未改字段保留既有覆盖。</p>
             </>
-          ) : (
-            templateFields
-          )}
+          ) : null}
+          {templateFields}
         </SettingsSection>
 
         <SettingsSection title="测试" desc="草稿直测：用当前表单内容真实发起一次搜索（不保存），会消耗该引擎的调用配额。">
@@ -570,7 +500,18 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           <Button variant="secondary" disabled={busy} onClick={() => void runTest()}>
             {testing ? "测试中…" : "测试"}
           </Button>
-          {testResult != null ? <p className="settings-hint">命中 {testResult.count} 条{testResult.titles.length > 0 ? `：${testResult.titles.join(" / ")}` : "（无结果标题）"}</p> : null}
+          {testResult != null ? (
+            <>
+              {/* SPEC v2 §5：提取数组前 2 条的 JSON 预览（等宽 + 换行），不再渲染 title/url/snippet 人类列表 */}
+              <pre className="settings-hint" style={{ whiteSpace: "pre-wrap", fontFamily: "monospace", margin: "0 0 8px" }}>
+                {testResult.preview}
+              </pre>
+              <p className="settings-hint">
+                {testResult.resultCount != null ? `共 ${testResult.resultCount} 条` : ""}
+                {testResult.truncated ? `${testResult.resultCount != null ? " · " : ""}已截断` : ""}
+              </p>
+            </>
+          ) : null}
         </SettingsSection>
 
         {customDef != null ? (

@@ -55,11 +55,13 @@ v1.5.15 上线的 AI 搜索（web-search-tool 迭代）内置五引擎硬编码�
 
 ### R1 模板引擎执行器与出厂预置模板（全收编）
 
-core 新增模板执行器：输入「引擎模板定义 + query + maxResults + params + apiKey 明文（请求瞬间现读）」，输出统一 `SearchResponse`。
+core 新增模板执行器：输入「引擎模板定义 + query + maxResults + params + apiKey 明文（请求瞬间现读）」，输出 `SearchResponse`。
 
-- 模板定义字段：显示名称、HTTP method（GET/POST）、URL 模板、headers 键值对模板、body JSON 模板（POST 时）、响应映射（结果列表点路径 + title/url/snippet 字段名 + 可选 answer 路径）、参数说明文本。
+> **v2 透传改造**（CR 中途用户方向指令，详见 spec-v2-passthrough.md）：引擎唯一职责是**构造请求 + 隐藏 AK**——响应不做字段映射，agent 自行读取 JSON；模板不再要求 body（agent 可调用时传参）。
+
+- 模板定义字段（v2 终态）：显示名称、HTTP method（GET/POST）、URL 模板、headers 键值对模板（`{{apiKey}}` 唯一特殊处理）、**defaultBody（可选**，出厂预置开箱即用，留空则 agent 调用时经 params 传）、参数说明文本。
 - 占位符四个：`{{query}}`（URL 与 body 内均可）、`{{count}}`（maxResults 归一后值）、`{{apiKey}}`（URL/headers/body 均可）、`{{baseUrl}}`（URL 内引用实例地址）。body 内替换在 JSON 结构层面进行（先 parse 模板再遍历字符串值替换注入，防 query 含引号/反斜杠打坏 JSON；整值 `"{{count}}"` 替换为数字，保持整数字段类型）；URL 内仅 `{{query}}` 做百分号编码，`{{apiKey}}`/`{{baseUrl}}` 原样替换（apiKey 落在 URL query 时遇 `&`/`=` 可能打坏参数，建议放 header）。
-- 响应映射：点路径（如 `data.webPages.value`）定位结果数组，逐条按字段名取 title/url/snippet；answer 路径选填、取到非空才透传。
+- 响应处理（v2）：提取响应中**最长的对象数组**（无配置、无字段映射），50KB 预算内 JSON 文本直出 agent 自行读取；POST body = `{...替换后 defaultBody, ...params}` 浅合并三级降级；链降级判据三条 = HTTP 非 2xx / 超时网络错 / 响应无对象数组（天然涵盖 bocha 业务码失败）。
 - 出厂预置模板六份：bocha/tavily/brave/searxng（现有适配器行为收编为模板数据，适配器源文件与 dispatch switch 退役）+ DeepSeek + 智谱（按官方文档预置）。预置模板用户可编辑（存覆盖副本）、可恢复默认。
 - 统一行为口径：超时 30s（原 bocha/tavily 60s 收敛统一）、非 2xx 与解析失败错误统一脱敏（错误消息对 apiKey 明文 redact）、0 结果视为合法空结果（DDG 除外，其改版感知语义保留在代码适配器内）。
 - 串行降级链、显式 engine 钉死不降级、120s 链总预算、attempts 轨迹四个行为口径**原样保留**（现测试锁 T-S3 ①②③④ 语义不变）。

@@ -30,7 +30,7 @@ import { searchWithDuckduckgo } from "./engines/duckduckgo.js";
 import { runTemplateEngine } from "./engines/template-engine.js";
 import { findPlaintextSecrets } from "./curl-import.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "./preset-templates.js";
-import { normalizeMaxResults, redactSecret, validateSearchEngineTemplate, type CustomEngineDef, type ResolvedEngineConfig, type SearchEngineTemplate, type SearchResult } from "./types.js";
+import { normalizeMaxResults, redactSecret, validateSearchEngineTemplate, type CustomEngineDef, type ResolvedEngineConfig, type SearchEngineTemplate } from "./types.js";
 
 /** KKV 模块名（照 nm-cloud-sync 命名先例）。 */
 export const SEARCH_KKV_MODULE = "nm-search";
@@ -138,10 +138,41 @@ export interface TestEngineInput {
   readonly maxResults?: number;
 }
 
-/** 测试搜索成功载荷（前 5 条样例，供配置页展示）。 */
+/**
+ * 测试搜索成功载荷（v2 §5）：提取结果数组前 2 条的 JSON 预览 + 截断说明，
+ * 配置页测试按钮展示（不再渲染 title/url/snippet 人类列表）。
+ */
 export interface TestEngineSuccess {
-  readonly resultCount: number;
-  readonly sample: readonly SearchResult[];
+  /** 预览文本：提取数组前 2 条的 JSON；引擎侧 50KB 截断导致数组文本不可解析时，为该文本的截断摘录。 */
+  readonly preview: string;
+  /** 提取到的结果数组总条数（数组文本不可解析时缺省）。 */
+  readonly resultCount?: number;
+  /** 预览是否截断（数组超过 2 条 / 预览文本超长度预算）。 */
+  readonly truncated: boolean;
+}
+
+/** 预览文本长度预算（UI 测试按钮展示用；单条结果可能很大，不设上限会撑爆弹窗）。 */
+const SEARCH_TEST_PREVIEW_MAX_LENGTH = 2000;
+
+/**
+ * 结果数组预览（testEngine 成功载荷统一构造）：输入为结果数组的 JSON 文本，
+ * 解析出前 2 条重新序列化为预览；引擎侧 50KB 截断标注使文本不可解析时，退化为
+ * 文本本身的截断摘录（truncated=true、resultCount 缺省）。
+ */
+function buildArrayPreview(arrayText: string): TestEngineSuccess {
+  let items: readonly unknown[] | undefined;
+  try {
+    const parsed: unknown = JSON.parse(arrayText);
+    if (Array.isArray(parsed)) items = parsed;
+  } catch {
+    // 引擎侧截断标注破坏了 JSON 完整性：走摘录退化分支。
+  }
+  if (items == null) {
+    return { preview: arrayText.slice(0, SEARCH_TEST_PREVIEW_MAX_LENGTH), truncated: true };
+  }
+  const preview = JSON.stringify(items.slice(0, 2));
+  const clipped = preview.length > SEARCH_TEST_PREVIEW_MAX_LENGTH;
+  return { preview: preview.slice(0, SEARCH_TEST_PREVIEW_MAX_LENGTH), resultCount: items.length, truncated: items.length > 2 || clipped };
 }
 
 /** 测试搜索失败载荷（descriptor 由宿主 translator 译后展示）。 */
@@ -288,12 +319,12 @@ function effectiveTemplate(state: SearchEngineState, engineId: string): SearchEn
   return state.customEngines.find((def) => def.id === engineId)?.template;
 }
 
-/** 模板是否引用某占位符（url / headers 值 / bodyTemplate 任一命中即需要该取值）。 */
+/** 模板是否引用某占位符（url / headers 值 / defaultBody 任一命中即需要该取值）。 */
 function templateReferences(template: SearchEngineTemplate, placeholder: "apiKey" | "baseUrl"): boolean {
   const token = `{{${placeholder}}}`;
   if (template.url.includes(token)) return true;
   if (Object.values(template.headers).some((value) => value.includes(token))) return true;
-  return template.bodyTemplate?.includes(token) === true;
+  return template.defaultBody?.includes(token) === true;
 }
 
 /**
@@ -590,7 +621,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       if (template == null) {
         try {
           const response = await searchWithDuckduckgo({ engine: engineId }, input.query, { maxResults: normalizeMaxResults(input.maxResults) }, globalThis.fetch);
-          return Result.ok({ resultCount: response.results.length, sample: response.results.slice(0, 5) });
+          return Result.ok(buildArrayPreview(JSON.stringify(response.results)));
         } catch (error) {
           return testFailure(redactSecret(error instanceof Error ? error.message : String(error), undefined).slice(0, 300));
         }
@@ -613,7 +644,9 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       }
       try {
         const response = await runTemplateEngine(template, { engine: engineId, ...(apiKey == null ? {} : { apiKey }), ...(baseUrl == null ? {} : { baseUrl }), template }, input.query, { maxResults: normalizeMaxResults(input.maxResults) }, {}, globalThis.fetch);
-        return Result.ok({ resultCount: response.results.length, sample: response.results.slice(0, 5) });
+        // 成功路径 results 恒为提取数组的 JSON 文本（无对象数组在执行器内已按降级失败抛出）。
+        const arrayText = typeof response.results === "string" ? response.results : JSON.stringify(response.results);
+        return Result.ok(buildArrayPreview(arrayText));
       } catch (error) {
         return testFailure(redactSecret(error instanceof Error ? error.message : String(error), apiKey).slice(0, 300));
       }

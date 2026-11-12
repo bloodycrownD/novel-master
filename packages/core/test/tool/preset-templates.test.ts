@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { SEARCH_PARAM_HINT_MAX_LENGTH, validateSearchEngineTemplate, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
+import { SEARCH_PARAM_HINT_MAX_LENGTH, validateSearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
 
 const QUERY = "测试 查询";
 
@@ -19,10 +19,19 @@ async function runPreset(id: keyof typeof PRESET_ENGINE_TEMPLATES, response: unk
   return { call: calls[0]!, out };
 }
 
-describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6）", () => {
-  it("T-P1 bocha：POST 端点 / Bearer 鉴权 / JSON body（count 为 number、不默认带 freshness）/ envelope + 候选映射", async () => {
+/** v2 透传：模板引擎成功结果恒为提取数组的 JSON 文本，断言并解析出来。 */
+function parseResults(out: SearchResponse): unknown[] {
+  assert.equal(typeof out.results, "string", "模板引擎成功结果应为 JSON 文本");
+  const parsed: unknown = JSON.parse(out.results);
+  assert.ok(Array.isArray(parsed), "提取结果应为数组");
+  return parsed;
+}
+
+describe("出厂模板：六份请求形状与透传响应快照锁（T-P1..T-P6）", () => {
+  it("T-P1 bocha：POST 端点 / Bearer 鉴权 / JSON body（count 为 number、不默认带 freshness）/ 数组透传", async () => {
     const key = "sk-bocha-preset-key";
-    const { call, out } = await runPreset("bocha", { code: 200, data: { webPages: { value: [{ url: "https://r1.example.com/1", title: "标题甲", summary: "摘要甲" }] } } }, { apiKey: key });
+    const items = [{ url: "https://r1.example.com/1", title: "标题甲", summary: "摘要甲" }];
+    const { call, out } = await runPreset("bocha", { code: 200, data: { webPages: { value: items } } }, { apiKey: key });
 
     assert.equal(call.url, "https://api.bochaai.com/v1/web-search");
     assert.equal(call.init.method, "POST");
@@ -31,13 +40,13 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     assert.equal(headers.get("Content-Type"), "application/json");
     assert.equal(headers.get("Accept"), "application/json");
     assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, count: 5, summary: true });
-    assert.equal("answer" in out, false);
-    assert.deepEqual(out.results, [{ title: "标题甲", url: "https://r1.example.com/1", snippet: "摘要甲" }]);
+    assert.deepEqual(parseResults(out), items, "data.webPages.value 数组原样透传");
   });
 
-  it("T-P2 tavily：POST 端点 / Bearer / body 字段与 answerPath 透传", async () => {
+  it("T-P2 tavily：POST 端点 / Bearer / body 字段 / results 数组透传（answer 字符串不参与提取）", async () => {
     const key = "sk-tavily-preset-key";
-    const { call, out } = await runPreset("tavily", { answer: "答案文本", results: [{ title: "T", url: "https://t.example.com/1", content: "内容" }] }, { apiKey: key });
+    const items = [{ title: "T", url: "https://t.example.com/1", content: "内容" }];
+    const { call, out } = await runPreset("tavily", { answer: "答案文本", results: items }, { apiKey: key });
 
     assert.equal(call.url, "https://api.tavily.com/search");
     assert.equal(call.init.method, "POST");
@@ -45,13 +54,13 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
     assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, search_depth: "basic", max_results: 5, include_answer: "basic", include_raw_content: false });
-    assert.equal(out.answer, "答案文本");
-    assert.deepEqual(out.results, [{ title: "T", url: "https://t.example.com/1", snippet: "内容" }]);
+    assert.deepEqual(parseResults(out), items);
   });
 
   it("T-P3 brave：GET 端点 / X-Subscription-Token / q 与 count 查询参数 / Accept", async () => {
     const key = "sk-brave-preset-key";
-    const { call, out } = await runPreset("brave", { web: { results: [{ title: "B", url: "https://b.example.com/1", description: "描述" }] } }, { apiKey: key });
+    const items = [{ title: "B", url: "https://b.example.com/1", description: "描述" }];
+    const { call, out } = await runPreset("brave", { web: { results: items } }, { apiKey: key });
 
     assert.ok(call.url.startsWith("https://api.search.brave.com/res/v1/web/search?"), `brave 端点：${call.url}`);
     assert.equal(call.init.method, "GET");
@@ -62,11 +71,12 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     const params = new URL(call.url).searchParams;
     assert.equal(params.get("q"), QUERY);
     assert.equal(params.get("count"), "5");
-    assert.deepEqual(out.results, [{ title: "B", url: "https://b.example.com/1", snippet: "描述" }]);
+    assert.deepEqual(parseResults(out), items);
   });
 
   it("T-P4 searxng：GET {{baseUrl}} 端点 / 无鉴权头 / URL 不含 count 与 language", async () => {
-    const { call, out } = await runPreset("searxng", { results: [{ title: "S", url: "https://s.example.com/1", content: "内容" }] }, { baseUrl: "http://192.168.1.5:8080" });
+    const items = [{ title: "S", url: "https://s.example.com/1", content: "内容" }];
+    const { call, out } = await runPreset("searxng", { results: items }, { baseUrl: "http://192.168.1.5:8080" });
 
     const url = new URL(call.url);
     assert.equal(url.origin, "http://192.168.1.5:8080");
@@ -80,12 +90,13 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     assert.equal(headers.get("Authorization"), null);
     assert.equal(headers.get("X-Subscription-Token"), null);
     assert.equal(headers.get("Accept"), "application/json");
-    assert.deepEqual(out.results, [{ title: "S", url: "https://s.example.com/1", snippet: "内容" }]);
+    assert.deepEqual(parseResults(out), items);
   });
 
-  it("T-P5 deepseek：POST 端点 / Bearer / body 字段 / snippet 映射", async () => {
+  it("T-P5 deepseek：POST 端点 / Bearer / body 字段 / results 数组透传", async () => {
     const key = "sk-deepseek-preset-key";
-    const { call, out } = await runPreset("deepseek", { results: [{ title: "D", url: "https://d.example.com/1", snippet: "摘要" }] }, { apiKey: key });
+    const items = [{ title: "D", url: "https://d.example.com/1", snippet: "摘要" }];
+    const { call, out } = await runPreset("deepseek", { results: items }, { apiKey: key });
 
     assert.equal(call.url, "https://api.deepseek.com/v1/tools/search");
     assert.equal(call.init.method, "POST");
@@ -93,12 +104,13 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
     assert.deepEqual(JSON.parse(call.init.body as string), { query: QUERY, count: 5 });
-    assert.deepEqual(out.results, [{ title: "D", url: "https://d.example.com/1", snippet: "摘要" }]);
+    assert.deepEqual(parseResults(out), items);
   });
 
-  it("T-P6 zhipu：POST 端点 / search_query 字段 / search_engine 固化 search_std / link 映射 url", async () => {
+  it("T-P6 zhipu：POST 端点 / search_query 字段 / search_engine 固化 search_std / search_result 数组透传", async () => {
     const key = "sk-zhipu-preset-key";
-    const { call, out } = await runPreset("zhipu", { search_result: [{ title: "智谱标题", link: "https://z.example.com/1", content: "智谱摘要" }] }, { apiKey: key });
+    const items = [{ title: "智谱标题", link: "https://z.example.com/1", content: "智谱摘要" }];
+    const { call, out } = await runPreset("zhipu", { search_result: items }, { apiKey: key });
 
     assert.equal(call.url, "https://open.bigmodel.cn/api/paas/v4/web_search");
     assert.equal(call.init.method, "POST");
@@ -106,7 +118,7 @@ describe("出厂模板：六份请求形状与响应映射快照锁（T-P1..T-P6
     assert.equal(headers.get("Authorization"), `Bearer ${key}`);
     assert.equal(headers.get("Content-Type"), "application/json");
     assert.deepEqual(JSON.parse(call.init.body as string), { search_query: QUERY, search_engine: "search_std", search_intent: false, count: 5 });
-    assert.deepEqual(out.results, [{ title: "智谱标题", url: "https://z.example.com/1", snippet: "智谱摘要" }]);
+    assert.deepEqual(parseResults(out), items);
   });
 });
 
@@ -119,19 +131,27 @@ describe("出厂模板：常量数据锁（T-P 附带）", () => {
     }
   });
 
-  it("POST 模板统一 Content-Type / Accept，GET 模板带 Accept；searxng URL 用 {{baseUrl}} 且不含 count / language", () => {
+  it("POST 模板统一 Content-Type / Accept 且带默认 body，GET 模板带 Accept；searxng URL 用 {{baseUrl}} 且不含 count / language", () => {
     for (const [id, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
       const headers = template.headers as Readonly<Record<string, string>>;
       assert.equal(headers.Accept, "application/json", `${id} Accept`);
       if (template.method === "POST") {
         assert.equal(headers["Content-Type"], "application/json", `${id} Content-Type`);
-        assert.ok(template.bodyTemplate != null, `${id} bodyTemplate 必填`);
+        assert.ok(template.defaultBody != null, `${id} defaultBody 应有出厂默认值`);
       }
     }
     assert.ok(PRESET_ENGINE_TEMPLATES.searxng.url.includes("{{baseUrl}}"));
     assert.equal(PRESET_ENGINE_TEMPLATES.searxng.url.includes("count"), false);
     assert.equal(PRESET_ENGINE_TEMPLATES.searxng.url.includes("language"), false);
-    assert.equal(PRESET_ENGINE_TEMPLATES.zhipu.bodyTemplate?.includes('"search_engine":"search_std"'), true);
+    assert.ok(PRESET_ENGINE_TEMPLATES.zhipu.defaultBody?.includes('"search_engine":"search_std"'));
+  });
+
+  it("v2 形状锁：六模板零映射字段（resultPath/fieldMap/answerPath/envelope 不存在），bocha 无信封", () => {
+    for (const [id, template] of Object.entries(PRESET_ENGINE_TEMPLATES)) {
+      for (const field of ["resultPath", "fieldMap", "answerPath", "envelope"] as const) {
+        assert.equal(field in template, false, `${id} 不应携带 ${field}`);
+      }
+    }
   });
 
   it("DDG 展示常量：name / paramHint 齐备（快照与设置页共用）", () => {

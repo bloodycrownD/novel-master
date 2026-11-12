@@ -163,9 +163,11 @@ function formatEntriesListOutput(rec: Record<string, unknown>): string {
  * Detects search tool output（正常 results 形态 / 超预算落盘 savedPath 形态）。
  *
  * 正常形态：`engine` 字符串 + `results` 数组（空结果集也是正常形态；
- * 非空时首元素须具备 title/url/snippet 三字段）；落盘形态（overflow-sink
- * Step 6 接线后出现）：`savedPath` + `message` + `engine`。未配置提示
- * 是纯字符串输出，不经过本守卫（formatToolOutputForLlm 对 string 直通）。
+ * 非空时首元素须具备 title/url/snippet 三字段）或 `results` 字符串
+ * （模板引擎透传形态：提取结果的 JSON 文本，attempts 仍可叠加）；
+ * 落盘形态（overflow-sink Step 6 接线后出现）：`savedPath` + `message` +
+ * `engine`。未配置提示是纯字符串输出，不经过本守卫
+ * （formatToolOutputForLlm 对 string 直通）。
  */
 export function isSearchOutput(rec: Record<string, unknown>): boolean {
   if (typeof rec.engine !== "string") {
@@ -173,6 +175,10 @@ export function isSearchOutput(rec: Record<string, unknown>): boolean {
   }
   // 落盘形态：正文已存 /tmp/，回 {savedPath, message}。
   if (typeof rec.savedPath === "string" && typeof rec.message === "string") {
+    return true;
+  }
+  // 模板引擎透传形态：results 为提取结果的 JSON 文本。
+  if (typeof rec.results === "string") {
     return true;
   }
   if (!Array.isArray(rec.results)) {
@@ -193,7 +199,10 @@ export function isSearchOutput(rec: Record<string, unknown>): boolean {
  * Formats search output：引擎名 + 条数抬头，串行降级时下一行展示
  * 尝试轨迹（attempts，如「bocha 失败(401) → tavily 成功」），tavily
  * 原生回答（如有）紧随，其后为「- 标题 — 链接 — 摘要」紧凑列表；
- * 落盘形态显示「已落盘路径」（不落 JSON fallback）
+ * results 为字符串（模板引擎透传的 JSON 文本）时抬头「响应文本」+
+ * 原样文本块（截断由上游预算负责：模板侧 50KB 内截断 + 工具层整体
+ * 序列化落盘保险丝，此处不重复截断）；落盘形态显示「已落盘路径」
+ * （不落 JSON fallback）
  */
 export function formatSearchOutput(rec: Record<string, unknown>): string {
   if (typeof rec.savedPath === "string") {
@@ -201,6 +210,14 @@ export function formatSearchOutput(rec: Record<string, unknown>): string {
     return `已落盘 ${rec.savedPath}${message}`;
   }
   const engine = rec.engine as string;
+  if (typeof rec.results === "string") {
+    const parts: string[] = [`search ${engine} · 响应文本`];
+    if (typeof rec.attempts === "string" && rec.attempts.length > 0) {
+      parts.push(`尝试轨迹: ${rec.attempts}`);
+    }
+    parts.push(rec.results);
+    return parts.join("\n");
+  }
   const results = rec.results as ReadonlyArray<SearchResultShape>;
   const parts: string[] = [`search ${engine} · ${results.length} 条结果`];
   if (typeof rec.attempts === "string" && rec.attempts.length > 0) {

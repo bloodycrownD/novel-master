@@ -1,7 +1,8 @@
 /**
  * `search` 工具实现：经当前配置的搜索引擎（模板引擎 / DuckDuckGo 内置
- * 适配器，id 动态）检索网页，回流统一形状的结果列表（title / url /
- * snippet），让 agent 具备联网检索能力（写作考据、事实核验、资料收集）。
+ * 适配器，id 动态）检索网页，结果以 JSON 文本回流（模板引擎提取引擎响应
+ * 中最长的对象数组，字段原样保留；DDG 仍为结构化列表），让 agent 具备
+ * 联网检索能力（写作考据、事实核验、资料收集）。
  *
  * 设计口径（SPEC web-search-curl §6/§7）：
  * - 引擎链经 `ctx.search` 闭包解析（engineOrderV2 顺序，只含 enabled ∩
@@ -68,8 +69,8 @@ export interface SearchToolInput {
 
 /**
  * `search` 工具输出三形态：
- * - `SearchChainOutput`：正常结果（engine + 可选 answer + results +
- *   可选 attempts 轨迹）；
+ * - `SearchChainOutput`：正常结果（engine + results + 可选 attempts 轨迹；
+ *   results 为模板引擎的 JSON 文本或 DDG 的结构化列表）；
  * - `SearchOversizeOutput`：超 50KB 落盘形态；
  * - `string`：链空（无可用已启用引擎）时的配置指引提示。
  */
@@ -104,18 +105,18 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
     // 来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
     const engineList = ctx.search?.engineSnapshot;
     const engineSection = engineList == null ? "当前运行时未装配搜索能力，调用将不可用。" : engineList.length === 0 ? "当前没有可用的已启用引擎；如需联网检索，请到 设置 → 搜索配置 开启或配置引擎。" : engineList.map((engine) => `- ${engine.id}（${engine.name}）：${engine.paramHint}`).join("\n");
-    return `联网搜索：按当前配置的搜索引擎串行检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据。
+    return `联网搜索：按当前配置的搜索引擎串行检索网页，结果以 JSON 文本返回（提取引擎响应中的结果数组，字段原样保留），适用于写作资料查找、事实核验与背景考据。
 
 入参：
 - query：搜索关键词（必填）
 - engine：可选，指定搜索引擎 id（见下方可用引擎清单）；缺省按配置顺序串行尝试，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
-- maxResults：结果条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（超出范围自动收敛，不报错）
+- maxResults：期望条数，默认 ${DEFAULT_MAX_RESULTS}，范围 1..${MAX_RESULTS_LIMIT}（作为引擎 count 参数，超出范围自动收敛，不报错）
 - params：可选，自由 JSON 对象，原样透传给引擎方言参数（如时间范围、结果深度、域名过滤等）；同名参数覆盖模板默认值，引擎忽略未知字段
 
 可用引擎（按串行链顺序）：
 ${engineSection}
 
-结果格式：可读文本，非 JSON——首行为「search 引擎 · N 条结果」，发生过降级时下一行展示尝试轨迹（「引擎 失败(原因) → 引擎 成功」），引擎返回的原生回答（如有）紧随其后，其后为「- 标题 — 链接 — 摘要」紧凑列表；结果超过 50KB 时全文自动保存到会话工作区 /tmp/（可用 read 读取）并显示落盘路径。
+结果格式：结果以 JSON 文本返回——模板引擎提取引擎响应中最长的对象数组（引擎原始字段原样保留，自行读取所需字段；超 50KB 预算截断并标注），DuckDuckGo 为「标题 — 链接 — 摘要」紧凑列表；发生过降级时附尝试轨迹；全文序列化超 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）并返回落盘路径。
 
 串行链总预算 ${SEARCH_CHAIN_BUDGET_MS / 1000}s；全链失败返回逐引擎聚合错误。引擎配置在 设置 → 搜索配置 中管理，当回合内改配置下回合生效。`;
   },
@@ -129,13 +130,15 @@ ${engineSection}
     z.string(),
     z.object({
       engine: z.string(),
-      answer: z.string().optional(),
       attempts: z.string().optional(),
-      results: z.array(z.object({
-          title: z.string(),
-          url: z.string(),
-          snippet: z.string(),
-        })),
+      results: z.union([
+        z.array(z.object({
+            title: z.string(),
+            url: z.string(),
+            snippet: z.string(),
+          })),
+        z.string(),
+      ]),
     }),
     z.object({
       engine: z.string(),

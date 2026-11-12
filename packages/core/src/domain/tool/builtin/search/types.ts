@@ -2,21 +2,21 @@
  * `search` 工具统一内部接口：模板执行器 / DuckDuckGo 适配器与工具本体共用的
  * 类型和小型纯函数。
  *
- * 设计口径（SPEC web-search-curl）：
+ * 设计口径（SPEC web-search-curl v2 透传改造）：
  * - bocha / tavily / brave / searxng 四适配器已退役为出厂模板，deepseek / zhipu
- *   与自定义实例同为模板；模板执行器把响应映射到本模块的 `SearchResponse`
- *   统一形状，answer 只有模板 answerPath 命中才透传。
+ *   与自定义实例同为模板；模板执行器透传响应——递归提取最长对象数组后以
+ *   JSON 文本回流（agent 自行读取字段），不再做 title/url/snippet 标准化映射
+ *   （v1 的 resultPath/fieldMap/answerPath/envelope 已整体废除）。
  * - 默认条数 5、clamp 1..20（0 或非法值回落 5——「未给有效值」与「缺省」同义，
- *   大于 20 收敛到 20）。
+ *   大于 20 收敛到 20）；模板侧只喂 `{{count}}` 占位符，不再客户端截断。
  * - 适配器 / 执行器不持有任何配置读取逻辑：凭据经 `ResolvedEngineConfig` 参数注入
  *   （明文 key 只在 resolveEngineChain 内现读、不驻留），HTTP 超时统一
  *   `AbortController + setTimeout`（RN/Hermes 兼容，不用 AbortSignal.timeout/any），
  *   无 SSRF 拦截层（照 curl 工具拍板：简单搞）。
  *
- * 模板模型（SPEC web-search-curl Step 1）：`SearchEngineTemplate` 描述一次可执行的
- * 引擎请求（占位符 URL/headers/body + 结果点路径 + 候选字段映射 + 可选业务信封），
- * `validateSearchEngineTemplate` 是保存路径的唯一校验入口（返回 Result，不 throw）；
- * 执行器在 `engines/template-engine.ts`。
+ * 模板模型：`SearchEngineTemplate` 描述一次可执行的引擎请求（占位符
+ * URL/headers/defaultBody），`validateSearchEngineTemplate` 是保存路径的唯一校验
+ * 入口（返回 Result，不 throw）；执行器在 `engines/template-engine.ts`。
  *
  * @module domain/tool/builtin/search/types
  */
@@ -26,7 +26,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { findPlaintextSecrets } from "./curl-import.js";
 
-/** 单条搜索结果（模板引擎与 DuckDuckGo 统一形状）。 */
+/** 单条搜索结果（DuckDuckGo 适配器形态；模板引擎不产生该结构）。 */
 export interface SearchResult {
   readonly title: string;
   readonly url: string;
@@ -34,13 +34,14 @@ export interface SearchResult {
 }
 
 /**
- * 搜索响应：`engine` 回填实际使用的引擎实例 id（动态全集，模型可见），
- * `answer` 仅模板 answerPath 命中的引擎透传（其余省略，不从 results 拼装）。
+ * 搜索响应：`engine` 回填实际使用的引擎实例 id（动态全集，模型可见）。
+ * 模板引擎 `results` 为提取结果的 JSON 文本（最长对象数组，50KB 预算内截断；
+ * 响应无对象数组按链降级失败处理，不会以此形态回流）；DuckDuckGo 适配器
+ * `results` 仍为结构化列表（HTML 解析的本仓唯一消费者）。
  */
 export interface SearchResponse {
   readonly engine: string;
-  readonly answer?: string;
-  readonly results: readonly SearchResult[];
+  readonly results: readonly SearchResult[] | string;
 }
 
 /**
@@ -141,7 +142,7 @@ export function engineTimeoutError(e: unknown, aborted: boolean, engine: string,
   return e;
 }
 
-/** 模板占位符白名单（url / headers / bodyTemplate 共用；不在表内即判未知占位符）。 */
+/** 模板占位符白名单（url / headers / defaultBody 共用；不在表内即判未知占位符）。 */
 const SEARCH_TEMPLATE_PLACEHOLDERS: readonly string[] = ["query", "count", "apiKey", "baseUrl"];
 
 /**
@@ -154,39 +155,17 @@ export const SEARCH_TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([^{}]*)\}\}/g;
 const TEMPLATE_PLACEHOLDER_PROBE = /\{\{[^{}]*\}\}/;
 
 /**
- * 模板点路径语法：点分标识符段，不支持数组索引。resultPath / answerPath /
- * envelope.codePath / envelope.msgPath 共用同一规则，执行器侧共用同一遍历实现。
- */
-const POINT_PATH_PATTERN = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
-
-/**
  * 头名字符集（RFC 7230 token：可见 ASCII 去掉空格与冒号，`+` 同时拒绝空名）。
  * 含换行 / 空格的头名会让执行期 fetch 抛原生 TypeError 绕开 engineFailed 通道，保存路径先拦。
  */
 const HEADER_NAME_PATTERN = /^[!-9;-~]+$/;
 
-/** 结果字段候选名列表：按序取第一个非空字符串（各引擎响应字段容错）。 */
-export interface SearchEngineFieldMap {
-  readonly title: readonly string[];
-  readonly url: readonly string[];
-  readonly snippet: readonly string[];
-}
-
-/** 业务信封校验（bocha 形态）：codePath 取到值且不在 okValues 时视为业务失败。 */
-export interface SearchEngineEnvelope {
-  /** 业务码点路径（如 "code"）。 */
-  readonly codePath: string;
-  /** 视为成功的业务码；缺省 `[200, "200"]`（显式给出时必须非空，空集会使执行器「code 有值即失败」全废）。 */
-  readonly okValues?: readonly (string | number)[];
-  /** 失败消息点路径（脱敏后拼进错误文案）。 */
-  readonly msgPath?: string;
-}
-
 /**
  * 搜索模板：一份可执行、可编辑的引擎请求描述（出厂预置与自定义实例共用）。
  *
  * 占位符语义见 template-engine：URL 内仅 `{{query}}` 百分号编码，其余原样替换；
- * body 先 JSON.parse 再结构化遍历字符串值（整值 `"{{count}}"` 替换为 number）。
+ * defaultBody 先 JSON.parse 再结构化遍历字符串值（整值 `"{{count}}"` 替换为 number）。
+ * v2 透传口径：响应侧不做任何映射配置——执行器递归提取最长对象数组，JSON 文本回流。
  */
 export interface SearchEngineTemplate {
   /** 显示名（工具描述 / 设置页 / 错误文案共用）。 */
@@ -196,14 +175,8 @@ export interface SearchEngineTemplate {
   readonly url: string;
   /** 头值可内插占位符（如 `Bearer {{apiKey}}`，apiKey 不编码）；头名须为非空 HTTP token。 */
   readonly headers: Readonly<Record<string, string>>;
-  /** POST 必填：合法 JSON 对象文本，占位符只出现在字符串值内。 */
-  readonly bodyTemplate?: string;
-  /** 点路径定位结果数组（空串 = 根节点即数组，如 "data.webPages.value"）。 */
-  readonly resultPath: string;
-  readonly fieldMap: SearchEngineFieldMap;
-  /** 顶层点路径，取到非空字符串则透传 answer。 */
-  readonly answerPath?: string;
-  readonly envelope?: SearchEngineEnvelope;
+  /** 可选：POST 默认 body（合法 JSON 对象文本，占位符只出现在字符串值内）；留空则依赖 agent 调用时传 params。 */
+  readonly defaultBody?: string;
   /** 参数说明（≤500 字符，装配期拼进工具描述）。 */
   readonly paramHint: string;
 }
@@ -233,30 +206,18 @@ function unknownPlaceholderIn(text: string): string | null {
   return null;
 }
 
-/** 字段候选列表：非空数组且每项为非空字符串（trim 后）才返回，否则 null。 */
-function readFieldCandidates(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  const candidates: string[] = [];
-  for (const item of value) {
-    if (typeof item !== "string" || item.trim().length === 0) return null;
-    candidates.push(item.trim());
-  }
-  return candidates;
-}
-
 /**
  * 校验并归一化模板输入（保存路径统一入口；入参按不可信处理，返回新对象、不回填未知键）。
  *
- * 规则（SPEC §2）：method ∈ {GET, POST}；url 为非空 http(s)（先用示例值替换占位符再
+ * 规则（SPEC v2 §3）：method ∈ {GET, POST}；url 为非空 http(s)（先用示例值替换占位符再
  * `new URL()`，searxng 的 `{{baseUrl}}/search?...` 形态因此可过）；headers 头名为非空
  * RFC 7230 token（非法头名会让执行期 fetch 抛原生 TypeError 绕过 engineFailed 通道）；
- * resultPath 为空串（根）或合法点路径，answerPath / envelope.codePath / envelope.msgPath
- * 同规则；fieldMap 三键各至少一个非空候选；GET 不允许携带 bodyTemplate、POST 必填且为
+ * defaultBody 可选（POST 不再强制必填——留空则依赖 agent 调用时传 params），配了则须为
  * 合法 JSON 对象文本，占位符只允许白名单四个且 JSON 键一律不含占位符（执行器只替换值，
  * 键里的占位符会原样进请求），`{{count}}` 在 body 字符串值内只允许整值出现（执行器替换为
- * number）；envelope.okValues 显式给出时必须为非空数组；paramHint ≤500 字符；url /
- * headers / bodyTemplate 不含明文密钥特征（与 curl 导入共用 `findPlaintextSecrets`，
- * 全仓唯一检测实现）。错误码统一 `TOOL_SEARCH_TEMPLATE_INVALID`，messageKey 取
+ * number）、GET 携带 defaultBody 拒绝；paramHint ≤500 字符；url / headers / defaultBody
+ * 不含明文密钥特征（与 curl 导入共用 `findPlaintextSecrets`，全仓唯一检测实现）。
+ * 错误码统一 `TOOL_SEARCH_TEMPLATE_INVALID`，messageKey 取
  * `error.tool.search_template_invalid`（params 带字段原因）或
  * `error.tool.search_secret_detected`（params 带字段名）。
  */
@@ -292,23 +253,20 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
     headers[headerName] = headerValue;
   }
 
-  const resultPath = typeof raw.resultPath === "string" ? raw.resultPath.trim() : null;
-  if (resultPath == null || (resultPath.length > 0 && !POINT_PATH_PATTERN.test(resultPath))) return invalid("resultPath must be a dotted path or empty for the root array");
-
-  let bodyTemplate: string | undefined;
-  if (raw.bodyTemplate != null) {
-    if (typeof raw.bodyTemplate !== "string") return invalid("bodyTemplate must be JSON text");
-    const text = raw.bodyTemplate.trim();
+  let defaultBody: string | undefined;
+  if (raw.defaultBody != null) {
+    if (typeof raw.defaultBody !== "string") return invalid("defaultBody must be JSON text");
+    const text = raw.defaultBody.trim();
     if (text.length > 0) {
       const unknownBodyPlaceholder = unknownPlaceholderIn(text);
-      if (unknownBodyPlaceholder != null) return invalid(`bodyTemplate contains unknown placeholder {{${unknownBodyPlaceholder}}}`);
+      if (unknownBodyPlaceholder != null) return invalid(`defaultBody contains unknown placeholder {{${unknownBodyPlaceholder}}}`);
       let parsedBody: unknown;
       try {
         parsedBody = JSON.parse(text);
       } catch {
-        return invalid("bodyTemplate must be valid JSON");
+        return invalid("defaultBody must be valid JSON");
       }
-      if (!isRecord(parsedBody)) return invalid("bodyTemplate must be a JSON object");
+      if (!isRecord(parsedBody)) return invalid("defaultBody must be a JSON object");
       const pending: unknown[] = [parsedBody];
       while (pending.length > 0) {
         const node = pending.pop();
@@ -317,72 +275,29 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
           continue;
         }
         if (typeof node === "string") {
-          if (node.includes("{{count}}") && node !== "{{count}}") return invalid("{{count}} must be a whole-string value in bodyTemplate");
+          if (node.includes("{{count}}") && node !== "{{count}}") return invalid("{{count}} must be a whole-string value in defaultBody");
           continue;
         }
         if (isRecord(node)) {
           for (const key of Object.keys(node)) {
-            if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalid(`bodyTemplate key ${key} must not contain a placeholder`);
+            if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalid(`defaultBody key ${key} must not contain a placeholder`);
           }
           pending.push(...Object.values(node));
         }
       }
-      bodyTemplate = text;
+      defaultBody = text;
     }
   }
-  if (method === "GET" && bodyTemplate != null) return invalid("bodyTemplate is not allowed for GET");
-  if (method === "POST" && bodyTemplate == null) return invalid("bodyTemplate is required for POST");
-
-  const rawFieldMap = raw.fieldMap;
-  if (!isRecord(rawFieldMap)) return invalid("fieldMap must be an object with title/url/snippet candidates");
-  const titleCandidates = readFieldCandidates(rawFieldMap.title);
-  const urlCandidates = readFieldCandidates(rawFieldMap.url);
-  const snippetCandidates = readFieldCandidates(rawFieldMap.snippet);
-  if (titleCandidates == null || urlCandidates == null || snippetCandidates == null) return invalid("fieldMap.title/url/snippet each need at least one non-empty string candidate");
-
-  let answerPath: string | undefined;
-  if (raw.answerPath != null) {
-    const trimmed = typeof raw.answerPath === "string" ? raw.answerPath.trim() : "";
-    if (trimmed.length > 0) {
-      if (!POINT_PATH_PATTERN.test(trimmed)) return invalid("answerPath must be a dotted path");
-      answerPath = trimmed;
-    }
-  }
-
-  let envelope: SearchEngineEnvelope | undefined;
-  const rawEnvelope = raw.envelope;
-  if (rawEnvelope != null) {
-    if (!isRecord(rawEnvelope)) return invalid("envelope must be an object");
-    const codePath = typeof rawEnvelope.codePath === "string" ? rawEnvelope.codePath.trim() : "";
-    if (!POINT_PATH_PATTERN.test(codePath)) return invalid("envelope.codePath must be a dotted path");
-    let msgPath: string | undefined;
-    if (rawEnvelope.msgPath != null) {
-      const trimmed = typeof rawEnvelope.msgPath === "string" ? rawEnvelope.msgPath.trim() : "";
-      if (!POINT_PATH_PATTERN.test(trimmed)) return invalid("envelope.msgPath must be a dotted path");
-      msgPath = trimmed;
-    }
-    let okValues: readonly (string | number)[] | undefined;
-    if (rawEnvelope.okValues != null) {
-      if (!Array.isArray(rawEnvelope.okValues)) return invalid("envelope.okValues must be an array of strings or numbers");
-      if (rawEnvelope.okValues.length === 0) return invalid("envelope.okValues must not be empty");
-      const values: (string | number)[] = [];
-      for (const value of rawEnvelope.okValues) {
-        if (typeof value !== "string" && typeof value !== "number") return invalid("envelope.okValues must be an array of strings or numbers");
-        values.push(value);
-      }
-      okValues = values;
-    }
-    envelope = { codePath, ...(msgPath == null ? {} : { msgPath }), ...(okValues == null ? {} : { okValues }) };
-  }
+  if (method === "GET" && defaultBody != null) return invalid("defaultBody is not allowed for GET");
 
   if (typeof raw.paramHint !== "string") return invalid("paramHint must be a string");
   const paramHint = raw.paramHint.trim();
   if (paramHint.length > SEARCH_PARAM_HINT_MAX_LENGTH) return invalid(`paramHint must be at most ${SEARCH_PARAM_HINT_MAX_LENGTH} characters`);
 
-  const secretFields = [{ field: "url", text: url }, { field: "bodyTemplate", text: bodyTemplate ?? "" }, ...Object.entries(headers).map(([headerName, headerValue]) => ({ field: `headers.${headerName}`, text: `${headerName}: ${headerValue}` }))];
+  const secretFields = [{ field: "url", text: url }, { field: "defaultBody", text: defaultBody ?? "" }, ...Object.entries(headers).map(([headerName, headerValue]) => ({ field: `headers.${headerName}`, text: `${headerName}: ${headerValue}` }))];
   for (const { field, text } of secretFields) {
     if (findPlaintextSecrets(text).length > 0) return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_secret_detected", params: { field } }));
   }
 
-  return Result.ok({ name, method, url, headers, ...(bodyTemplate == null ? {} : { bodyTemplate }), resultPath, fieldMap: { title: titleCandidates, url: urlCandidates, snippet: snippetCandidates }, ...(answerPath == null ? {} : { answerPath }), ...(envelope == null ? {} : { envelope }), paramHint });
+  return Result.ok({ name, method, url, headers, ...(defaultBody == null ? {} : { defaultBody }), paramHint });
 }

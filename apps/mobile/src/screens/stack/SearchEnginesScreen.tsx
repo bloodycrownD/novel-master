@@ -375,7 +375,7 @@ export function SearchEnginesScreen() {
           title="模板与自定义引擎"
           // FIX-26：count 措辞与 desktop 帮助弹窗逐字一致（整数字段带引号定稿）。
           body={
-            '预置引擎的请求模板可在详情页高级区编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。'
+            '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，粘贴 curl 命令导入，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。请求体 defaultBody 可选，留空则由 agent 调用时传参；占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。'
           }
         />
         <HelpSection

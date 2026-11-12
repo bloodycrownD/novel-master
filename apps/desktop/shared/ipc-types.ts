@@ -2,11 +2,11 @@
  * IPC channel names and serializable DTOs shared by main, preload, and renderer.
  * Single source of truth — handlers must not invent ad-hoc channel strings.
  *
- * 搜索配置的模板族（`SearchEngineTemplate` / `CustomEngineDef` / `SearchResult`）
+ * 搜索配置的模板族（`SearchEngineTemplate` / `CustomEngineDef`）
  * 是 core 的同一份定义——DTO 只做类型引用（type-only，运行期纯 JSON 形状），
  * 不另抄一份以免与 core 校验口径漂移。
  */
-import type { CustomEngineDef, SearchEngineTemplate, SearchResult } from '@novel-master/core';
+import type { CustomEngineDef, SearchEngineTemplate } from '@novel-master/core';
 
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: 'nm:bootstrap/status',
@@ -1910,10 +1910,11 @@ export type SearchTestEngineRequest = {
   readonly maxResults?: number;
 };
 
-/** 测试搜索成功载荷（前 5 条样例）。 */
+/** 测试搜索成功载荷（提取数组前 2 条的 JSON 预览 + 截断说明；SPEC v2 §5）。 */
 export type SearchTestEngineResultDto = {
-  readonly resultCount: number;
-  readonly sample: readonly SearchResult[];
+  readonly preview: string;
+  readonly resultCount?: number;
+  readonly truncated: boolean;
 };
 
 /** 新建自定义引擎（id 由 renderer 生成 `custom:{8 位}`；key/baseUrl 拆分落库）。 */

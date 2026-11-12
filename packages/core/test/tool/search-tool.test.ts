@@ -223,15 +223,19 @@ describe("search 工具：run 基础行为", () => {
     assert.equal(calls[0], "https://api.bochaai.com/v1/web-search");
   });
 
-  it("T-S1：inputSchema 放宽（engine 任意 string / params object 通过，query 仍必填）；outputSchema 接受自定义 id", () => {
+  it("T-S1：inputSchema 放宽（engine 任意 string / params object 通过，query 仍必填）；outputSchema 接受自定义 id 与 JSON 文本 / 结构列表双形态", () => {
     const parsed = searchTool.inputSchema.safeParse({ query: "q", engine: "custom:abc12345", params: { need_content: true, locale: "zh" } });
     assert.equal(parsed.success, true);
 
     assert.equal(searchTool.inputSchema.safeParse({ query: "" }).success, false);
     assert.equal(searchTool.inputSchema.safeParse({ engine: "bocha" }).success, false);
 
-    const output = searchTool.outputSchema!.safeParse({ engine: "custom:abc12345", results: [{ title: "t", url: "https://x", snippet: "s" }] });
-    assert.equal(output.success, true);
+    // DDG 结构化列表形态。
+    const arrayOutput = searchTool.outputSchema!.safeParse({ engine: "custom:abc12345", results: [{ title: "t", url: "https://x", snippet: "s" }] });
+    assert.equal(arrayOutput.success, true);
+    // 模板引擎 JSON 文本形态。
+    const textOutput = searchTool.outputSchema!.safeParse({ engine: "bocha", attempts: "a 失败(401) → bocha 成功", results: '[{"id":1},{"id":2}]' });
+    assert.equal(textOutput.success, true);
   });
 
   it("T-S2（e2e）：params 透传——模板引擎合并进 POST 请求体（同名覆盖），DDG 忽略 params", async () => {
@@ -344,9 +348,11 @@ describe("search 工具：run 基础行为", () => {
     // 落盘内容 = 截断前的序列化全文，后续 read 可读回。
     const saved = files.get(rec.savedPath!);
     assert.ok(saved != null);
-    const parsed = JSON.parse(saved!) as { engine: string; results: unknown[] };
+    const parsed = JSON.parse(saved!) as { engine: string; results: unknown };
     assert.equal(parsed.engine, "bocha");
-    assert.equal(parsed.results.length, 20);
+    // 模板引擎 results 为提取数组 JSON 文本；bocha 20 条 ~61KB 超引擎 50KB 预算已截断并标注。
+    assert.equal(typeof parsed.results, "string");
+    assert.ok((parsed.results as string).endsWith("已截断]"), `引擎侧截断标注：${(parsed.results as string).slice(-60)}`);
     const readBack = (await (vfs as never as {
       read: (p: string) => Promise<{ content: string }>;
     }).read(rec.savedPath!)) as { content: string };
@@ -395,16 +401,17 @@ describe("search 工具：run 基础行为", () => {
         vfs,
       })
     );
-    // 降级：完整 SearchResponse 原样回流（engine + 20 条 results），
+    // 降级：完整 SearchResponse 原样回流（engine + 提取数组 JSON 文本），
     // 无 savedPath / message 字段。
     const rec = out as {
       engine: string;
-      results: unknown[];
+      results: unknown;
       savedPath?: string;
       message?: string;
     };
     assert.equal(rec.engine, "bocha");
-    assert.equal(rec.results.length, 20);
+    assert.equal(typeof rec.results, "string");
+    assert.ok((rec.results as string).length > 0);
     assert.equal("savedPath" in rec, false);
     assert.equal("message" in rec, false);
   });
@@ -549,15 +556,15 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
       { query: "q" },
       makeCtx({ search: await assembleSearchToolContext(store), fetchFn })
     );
-    const rec = out as { engine: string; attempts?: string; results: unknown[] };
+    const rec = out as { engine: string; attempts?: string; results: unknown };
     assert.equal(rec.engine, "tavily");
     assert.equal(rec.attempts, "bocha 失败(401) → tavily 成功");
-    assert.equal(rec.results.length, 1);
+    // 模板引擎透传：results 为提取数组的 JSON 文本（tavily 响应里的 answer 字符串不参与提取）。
+    assert.deepEqual(JSON.parse(rec.results as string), [{ title: "t", url: "https://t.example.com", content: "c" }]);
     assert.deepEqual(urls, ["https://api.bochaai.com/v1/web-search", "https://api.tavily.com/search"]);
-    // formatter：引擎抬头下一行展示尝试轨迹。
-    const lines = formatToolOutputForLlm(rec).split("\n");
-    assert.equal(lines[0], "search tavily · 1 条结果");
-    assert.equal(lines[1], "尝试轨迹: bocha 失败(401) → tavily 成功");
+    // formatter：模板引擎 JSON 文本形态暂走通用 JSON 回落（attempts 轨迹可读）。
+    const text = formatToolOutputForLlm(rec);
+    assert.ok(text.includes("bocha 失败(401) → tavily 成功"), `attempts 应可见：${text.slice(0, 200)}`);
   });
 
   it("② 全链失败（含 DDG 兜底也失败）：聚合错误每引擎一行摘要、无 key 明文", async () => {
@@ -731,6 +738,19 @@ describe("search 工具：formatter 与 summary", () => {
     assert.equal(text.split("\n")[0], "search tavily · 2 条结果");
     assert.ok(text.includes("原生回答"));
     assert.ok(text.includes("- 甲 — https://a.example.com — 摘要甲"));
+  });
+
+  it("文本形态（模板引擎透传）：isSearchOutput 命中且格式化为「响应文本」抬头 + 尝试轨迹 + 原样文本块", () => {
+    const rec = {
+      engine: "bocha",
+      attempts: "duckduckgo 失败(403) → bocha 成功",
+      results: '[{"name":"结果甲","link":"https://a.example.com"}]',
+    };
+    assert.equal(isSearchOutput(rec), true);
+    const text = formatToolOutputForLlm(rec);
+    assert.equal(text.split("\n")[0], "search bocha · 响应文本");
+    assert.ok(text.includes("尝试轨迹: duckduckgo 失败(403) → bocha 成功"));
+    assert.ok(text.includes('{"name":"结果甲","link":"https://a.example.com"}'));
   });
 
   it("空结果集与无 answer 均为正常形态；不误撞 curl 形状", () => {

@@ -314,20 +314,6 @@ async function typeInto(
   });
 }
 
-/** 展开预置引擎的高级模板编辑折叠区（真实 Pressable，沿 Text 向上找 onPress）。 */
-async function openAdvanced(root: TestRenderer.ReactTestInstance) {
-  const label = root.findAll(node => node.props.children === '展开模板编辑')[0];
-  expect(label).toBeDefined();
-  let node = label!.parent;
-  while (node != null && node.props.onPress == null) {
-    node = node.parent;
-  }
-  expect(node).toBeDefined();
-  await act(async () => {
-    node!.props.onPress();
-  });
-}
-
 /** flush 整条 async 链（写操作 → toast/回读/导航的多级 await）。 */
 async function flush() {
   for (let i = 0; i < 10; i++) {
@@ -365,7 +351,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     mockSetEngineBaseUrl.mockReset().mockResolvedValue(undefined);
     mockTestEngine.mockReset().mockResolvedValue({
       ok: true,
-      value: {resultCount: 2, sample: [{title: 'T', url: 'https://t'}]},
+      value: {preview: '[{"title":"T"}]', resultCount: 2, truncated: false},
     });
     mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
   });
@@ -422,7 +408,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     it('create 保存发 createCustomEngine：key 单独拆分、无 baseUrl 时该键缺省', async () => {
       const {renderer} = await renderScreen();
 
-      // FIX-25：预填基线（POST + headers/body/fieldMap 默认），只补显示名/URL/key。
+      // FIX-25：预填基线（POST + headers/defaultBody 出厂示例），只补显示名/URL/key。
       await typeInto(
         inputByPlaceholder(renderer.root, '如 我的搜索'),
         '我的搜索',
@@ -442,15 +428,18 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       };
       expect(payload.def.id).toMatch(/^custom:[0-9a-z]{8}$/);
       expect(payload.def.name).toBe('我的搜索');
-      // 预填基线进了模板（POST + JSON 头 + body 示例 + fieldMap 候选默认）。
+      // 预填基线进了模板（POST + JSON 头 + defaultBody 示例；v2 无映射字段）。
       expect(payload.def.template).toMatchObject({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        resultPath: 'results',
-        fieldMap: {title: ['title'], url: ['url'], snippet: ['snippet']},
+        defaultBody: JSON.stringify(
+          {query: '{{query}}', count: '{{count}}'},
+          null,
+          2,
+        ),
       });
       // key / baseUrl 拆分：key 草稿进 apiKey；模板未引用 {{baseUrl}} 时无 baseUrl 键。
       expect(payload.apiKey).toBe('sk-create-1');
@@ -487,6 +476,31 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     });
   });
 
+  it('测试成功渲染 v2 预览：共 N 条 + JSON 预览 + 截断标记（TestEngineSuccess 新形状）', async () => {
+    mockTestEngine.mockResolvedValue({
+      ok: true,
+      value: {
+        preview: '[{"title":"第一条"},{"title":"第二条"}]',
+        resultCount: 12,
+        truncated: true,
+      },
+    });
+    const {renderer} = await renderScreen();
+    await typeInto(
+      inputByPlaceholder(renderer.root, '如 人工智能'),
+      '人工智能',
+    );
+    await tapTest(renderer.root);
+
+    // spec v2 §5：preview 文本块 + resultCount（「共 N 条」）+ truncated 标记，
+    // 不再渲染 title/url 人类列表。
+    const text = treeText(renderer.root);
+    expect(text).toContain('共 12 条');
+    expect(text).toContain('[{"title":"第一条"},{"title":"第二条"}]');
+    expect(text).toContain('（预览已截断）');
+    expect(text).not.toContain('返回 12 条结果');
+  });
+
   describe('测试请求分流（FIX-1 拍板 1 回归锁）', () => {
     async function typeAndTest(renderer: TestRenderer.ReactTestRenderer) {
       await typeInto(
@@ -516,7 +530,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
         makeConfig({presetOverrides: {bocha: true}}),
       );
       const {renderer} = await renderScreen();
-      await openAdvanced(renderer.root);
+      // v2 全平铺：模板字段不再藏折叠区，URL 输入框直接定位。
       await typeInto(
         inputByPlaceholder(renderer.root, 'https://api.example.com/search'),
         'https://api.example.com/v2',

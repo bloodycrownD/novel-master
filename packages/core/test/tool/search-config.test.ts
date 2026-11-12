@@ -120,8 +120,6 @@ function validTemplate(): SearchEngineTemplate {
     method: "GET",
     url: "https://api.example.com/search?q={{query}}",
     headers: { Accept: "application/json" },
-    resultPath: "results",
-    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
     paramHint: "测试参数说明",
   };
 }
@@ -133,8 +131,6 @@ function customTemplate(): SearchEngineTemplate {
     method: "GET",
     url: "{{baseUrl}}/api/search?q={{query}}",
     headers: { "X-API-Key": "{{apiKey}}" },
-    resultPath: "results",
-    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
     paramHint: "自定义实例参数说明",
   };
 }
@@ -146,8 +142,6 @@ function baseUrlTemplate(): SearchEngineTemplate {
     method: "GET",
     url: "{{baseUrl}}/search?q={{query}}",
     headers: { Accept: "application/json" },
-    resultPath: "results",
-    fieldMap: { title: ["title"], url: ["url"], snippet: ["snippet"] },
     paramHint: "草稿直测参数说明",
   };
 }
@@ -498,7 +492,7 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     await store.setEnabled("bocha", true);
 
     await store.updatePresetOverride("bocha", {
-      fieldMap: { title: ["headline"], url: ["link"], snippet: ["desc"] },
+      headers: { Authorization: "Bearer {{apiKey}}", "Content-Type": "application/json", Accept: "application/json", "X-Extra": "1" },
       paramHint: "覆盖说明",
     });
     let config = await readSearchConfig(deps);
@@ -506,9 +500,10 @@ describe("search-config：T-C4 自定义实例 CRUD 与预置覆盖", () => {
     assert.ok(deps.kkv.map.has(`${SEARCH_KKV_MODULE}/${KEY_PRESET_OVERRIDES}`), "覆盖副本应落 presetOverrides 键");
     let chain = await resolveEngineChain(deps);
     let template = chain.find((entry) => entry.engine === "bocha")!.template!;
-    assert.deepEqual(template.fieldMap, { title: ["headline"], url: ["link"], snippet: ["desc"] }, "嵌套对象整体替换");
+    assert.equal(template.headers["X-Extra"], "1", "嵌套对象整体替换（headers 全量覆盖）");
+    assert.equal(template.headers.Authorization, "Bearer {{apiKey}}");
     assert.equal(template.url, PRESET_ENGINE_TEMPLATES.bocha.url, "未覆盖字段保留出厂值");
-    assert.equal(template.envelope?.codePath, "code", "未覆盖的嵌套对象保留出厂值");
+    assert.equal(template.defaultBody, PRESET_ENGINE_TEMPLATES.bocha.defaultBody, "未覆盖字段保留出厂值");
     assert.equal(template.paramHint, "覆盖说明");
 
     // setEnabled 独立性：开关只动 enabledEngines，不动 key。
@@ -592,7 +587,8 @@ describe("search-config：T-C5 testEngine（草稿直测 / baseUrl 优先级 / e
       assert.equal(direct.ok, true);
       if (!direct.ok) throw new Error("草稿直测应成功");
       assert.equal(direct.value.resultCount, 1);
-      assert.equal(direct.value.sample.length, 1);
+      assert.equal(direct.value.truncated, false);
+      assert.deepEqual(JSON.parse(direct.value.preview), [{ title: "t", url: "https://r.example.com", snippet: "s" }], "预览为提取数组前 2 条 JSON");
       assert.equal(urls[0], "http://draft.local:8080/search?q=abc");
       // 零写入：草稿校验 / 请求不落 KKV / SKSP。
       assert.equal(deps.kkv.map.size, 0);
@@ -743,11 +739,16 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     }
   });
 
-  it("结构规则：method / URL / bodyTemplate / 占位符 / paramHint / fieldMap / 点路径", () => {
+  it("结构规则：method / URL / defaultBody 可选 / 占位符 / paramHint", () => {
     // 合法基线 + trim 归一。
     const okTemplate = validateSearchEngineTemplate({ ...validTemplate(), name: "  测试引擎  " });
     assert.equal(okTemplate.ok, true);
     if (okTemplate.ok) assert.equal(okTemplate.value.name, "测试引擎");
+
+    // v2：POST 不再强制 defaultBody（留空则依赖 agent 调用时传 params）。
+    const postNoBody = validateSearchEngineTemplate({ ...validTemplate(), method: "POST", url: "https://api.example.com/search" });
+    assert.equal(postNoBody.ok, true);
+    if (postNoBody.ok) assert.equal("defaultBody" in postNoBody.value, false);
 
     // 结构性错误统一 TOOL_SEARCH_TEMPLATE_INVALID + search_template_invalid（params 带原因）。
     const methodError = invalidTemplateError({ ...validTemplate(), method: "PUT" });
@@ -758,20 +759,14 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.match(String(invalidTemplateError({ ...validTemplate(), url: "ftp://x" }).messageParams?.reason), /http or https/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), url: "" }).messageParams?.reason), /url is required/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), url: "https://x.com/?q={{limit}}" }).messageParams?.reason), /unknown placeholder/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST" }).messageParams?.reason), /bodyTemplate is required/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: "{oops" }).messageParams?.reason), /valid JSON/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '"text"' }).messageParams?.reason), /JSON object/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"n":"x{{count}}"}' }).messageParams?.reason), /whole-string/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), fieldMap: { title: [], url: ["url"], snippet: ["snippet"] } }).messageParams?.reason), /fieldMap/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), resultPath: "a..b" }).messageParams?.reason), /resultPath/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), answerPath: "a[0]" }).messageParams?.reason), /answerPath/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "" } }).messageParams?.reason), /codePath/);
-    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "code", okValues: [true] } }).messageParams?.reason), /okValues/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", defaultBody: "{oops" }).messageParams?.reason), /valid JSON/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", defaultBody: '"text"' }).messageParams?.reason), /JSON object/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", defaultBody: '{"n":"x{{count}}"}' }).messageParams?.reason), /whole-string/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), paramHint: "x".repeat(501) }).messageParams?.reason), /at most 500/);
     assert.match(String(invalidTemplateError(null).messageParams?.reason), /expected an object/);
   });
 
-  it("明文密钥检测：url / headers / bodyTemplate 命中拒绝（{{apiKey}} 占位符自身不命中）", () => {
+  it("明文密钥检测：url / headers / defaultBody 命中拒绝（{{apiKey}} 占位符自身不命中）", () => {
     const headerSecret = invalidTemplateError({ ...validTemplate(), headers: { Authorization: "Bearer sk-live-abcdef" } });
     assert.equal(headerSecret.messageKey, "error.tool.search_secret_detected");
     assert.equal(headerSecret.messageParams?.field, "headers.Authorization");
@@ -780,9 +775,9 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(urlSecret.messageKey, "error.tool.search_secret_detected");
     assert.equal(urlSecret.messageParams?.field, "url");
 
-    const bodySecret = invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"q":"{{query}}","api_key":"sk-secret123"}' });
+    const bodySecret = invalidTemplateError({ ...validTemplate(), method: "POST", defaultBody: '{"q":"{{query}}","api_key":"sk-secret123"}' });
     assert.equal(bodySecret.messageKey, "error.tool.search_secret_detected");
-    assert.equal(bodySecret.messageParams?.field, "bodyTemplate");
+    assert.equal(bodySecret.messageParams?.field, "defaultBody");
 
     // 占位符自身 / 短 token 不是命中项。
     const placeholderOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { Authorization: "Bearer {{apiKey}}", "X-API-KEY": "{{apiKey}}" } });
@@ -806,8 +801,8 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(deps.secretStore.map.size, 0, "拒绝保存时不得写 SKSP");
 
     await assert.rejects(
-      store.updatePresetOverride("bocha", { bodyTemplate: '{"query":"{{query}}","count":"{{count}}","api_key":"sk-secret123"}' }),
-      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "bodyTemplate" })
+      store.updatePresetOverride("bocha", { defaultBody: '{"query":"{{query}}","count":"{{count}}","api_key":"sk-secret123"}' }),
+      (e: unknown) => assertErrorDescriptor(e, "error.tool.search_secret_detected", { field: "defaultBody" })
     );
     assert.equal(deps.kkv.map.size, 0);
   });
@@ -837,10 +832,7 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.equal(overrides.bocha.paramHint, "query 拼在 url 上，count 控制条数");
   });
 
-  it("W1 回归锁（FIX-2..5）：okValues 空数组 / 非法头名 / GET 带 bodyTemplate / JSON 键含占位符全拒绝", () => {
-    // FIX-2：envelope.okValues 空数组会让执行器「code 有值即失败」全废。
-    assert.match(String(invalidTemplateError({ ...validTemplate(), envelope: { codePath: "code", okValues: [] } }).messageParams?.reason), /okValues must not be empty/);
-
+  it("W1 回归锁（FIX-3/4/5）：非法头名 / GET 带 defaultBody / JSON 键含占位符全拒绝（FIX-2 随 envelope 字段消亡）", () => {
     // FIX-3：头名非空 + RFC 7230 token（换行 / 空格头名会让执行期 fetch 抛原生 TypeError）。
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "": "x" } }).messageParams?.reason), /header name must not be empty/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "Bad Name": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
@@ -848,10 +840,10 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     const tokenOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { "X-API-Key": "{{apiKey}}", Accept: "application/json" } });
     assert.equal(tokenOk.ok, true, "合法 token 头名不受影响");
 
-    // FIX-4：GET 携带 bodyTemplate 校验层拒绝（静默丢弃会假成功）。
-    assert.match(String(invalidTemplateError({ ...validTemplate(), bodyTemplate: '{"q":"{{query}}"}' }).messageParams?.reason), /bodyTemplate is not allowed for GET/);
+    // FIX-4：GET 携带 defaultBody 校验层拒绝（静默丢弃会假成功）。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), defaultBody: '{"q":"{{query}}"}' }).messageParams?.reason), /defaultBody is not allowed for GET/);
 
     // FIX-5：JSON 键含占位符拒绝（执行器只替换值，键里的占位符会原样进请求）。
-    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", bodyTemplate: '{"{{query}}x":1,"q":"{{query}}"}' }).messageParams?.reason), /must not contain a placeholder/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), method: "POST", defaultBody: '{"{{query}}x":1,"q":"{{query}}"}' }).messageParams?.reason), /must not contain a placeholder/);
   });
 });
