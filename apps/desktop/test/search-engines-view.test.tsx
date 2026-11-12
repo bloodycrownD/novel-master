@@ -19,6 +19,9 @@
  * needsKey 无 key 保存拦截；列表帮助弹窗五段与 mobile 真源同步（含密钥安全、
  * FIX-26 count 措辞）；测试失败错误经 SettingsStatus 错误红展示（FIX-27）。
  *
+ * CR 第 2 轮回归锁：帮助弹窗 curl 导入句与 mobile 逐字同句（「，」标点定稿）；
+ * 预置保存拦截改草稿判定（usesApiKey）——删掉 {{apiKey}} 引用且无已存 key 放行。
+ *
  * 行为范式同 fetch-models-modal.test.tsx：react-alias-hook 统一 react 副本，
  * react-test-renderer 真渲组件，IPC 拦在 window.novelMasterDesktop.invoke；
  * ContextMenu 由 search-engines-ui-hook 换成去 portal 替身（node 无 DOM）。
@@ -524,7 +527,10 @@ describe("T-U1 搜索配置列表页", () => {
     );
     // SPEC v2：响应映射措辞删除，curl 导入 / defaultBody 可选口径保留
     assert.ok(!modalText.includes("结果映射") && !modalText.includes("高级区"), `响应映射措辞应已删除：${modalText}`);
-    assert.ok(modalText.includes("粘贴 curl 命令导入"), `应保留 curl 导入口径：${modalText}`);
+    assert.ok(
+      modalText.includes("粘贴 curl 命令导入，用模板描述任意搜索 API"),
+      `curl 导入句应与 mobile 真源逐字同句（CR2 标点定稿）：${modalText}`,
+    );
     assert.ok(modalText.includes("请求体 defaultBody 可选"), `应保留 defaultBody 可选口径：${modalText}`);
   });
 });
@@ -667,6 +673,60 @@ describe("T-U2 搜索引擎详情页", () => {
     assert.ok(status != null, "缺少拦截提示");
     const message = textOf(status as TestInstance);
     assert.ok(message.includes("请输入 API Key"), `拦截文案应与 mobile 一致：${message}`);
+  });
+
+  it("CR2 P2-9：预置改模板删掉 {{apiKey}} 引用且无已存 key → 保存放行（拦截按草稿判定）", async () => {
+    // bocha needsKey 且未存 key；草稿把 Authorization 头删掉后模板不再引用
+    // {{apiKey}}（url/defaultBody 本就不含）——拦截若仍按已存 engine.needsKey
+    // 判定会误拦，按草稿 usesApiKey 判定则放行并提交 headers 覆盖。
+    const base = makeConfig();
+    const config: SearchConfigDto = {
+      ...base,
+      engines: base.engines.map((engine, index) =>
+        index === 0 ? { ...engine, hasKey: false } : engine,
+      ),
+    };
+    const { renderer, calls } = await mountWith(
+      config,
+      (nav) => <SearchEngineDetailView nav={nav.handle} />,
+      { editingEngineId: "bocha" },
+    );
+    const headers = findByPlaceholder(
+      renderer.root,
+      '{"Authorization": "Bearer {{apiKey}}"}',
+    );
+    assert.ok(headers != null, "缺少 Headers 文本域");
+    await act(async () => {
+      invokeProp(headers as TestInstance, "onChange", {
+        target: { value: '{"Content-Type": "application/json"}' },
+      });
+    });
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    const updates = callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE);
+    assert.equal(
+      updates.length,
+      1,
+      `草稿已无 key 引用应放行保存：${JSON.stringify(calls)}`,
+    );
+    const payload = updates[0]?.payload as {
+      engineId: string;
+      patch: { headers: Record<string, string> };
+    };
+    assert.equal(payload.engineId, "bocha");
+    assert.deepEqual(payload.patch.headers, {
+      "Content-Type": "application/json",
+    });
+    const status = findByClass(renderer.root, "settings-status");
+    const message = status == null ? "" : textOf(status as TestInstance);
+    assert.ok(
+      !message.includes("请输入 API Key"),
+      `草稿无 key 引用不应拦截：${message}`,
+    );
   });
 
   it("自定义引擎：headers JSON 非法时拒绝保存并页内展示原因", async () => {

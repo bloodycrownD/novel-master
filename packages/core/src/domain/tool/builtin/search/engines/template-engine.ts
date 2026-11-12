@@ -162,8 +162,8 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
         continue;
       }
       if (isRecord(node)) {
-        const values = Object.values(node);
-        for (let index = values.length - 1; index >= 0; index -= 1) pending.push(values[index]);
+        const children = Object.values(node);
+        for (let index = children.length - 1; index >= 0; index -= 1) pending.push(children[index]);
       }
     }
     if (items == null) {

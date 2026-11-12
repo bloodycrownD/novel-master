@@ -130,7 +130,7 @@ export interface TestEngineDraft {
   readonly baseUrl?: string;
 }
 
-/** 测试搜索入参：draft 优先于 engineId；DDG 仅支持 engineId 模式。 */
+/** 测试搜索入参：draft 优先于 engineId；DDG 建议仅用 engineId 模式（draft + engineId=duckduckgo 组合会走模板分支——draft 模板优先生效，不路由 DDG 适配器）。 */
 export interface TestEngineInput {
   readonly engineId?: string;
   readonly draft?: TestEngineDraft;

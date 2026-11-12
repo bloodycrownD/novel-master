@@ -26,7 +26,7 @@ v1.5.15 上线的 AI 搜索（web-search-tool 迭代）内置五引擎硬编码�
 
 | 用户 | 场景 | 旅程 |
 |---|---|---|
-| 配置者 | 想接入文档里看到的任意搜索 API（如 DeepSeek、聚合站、自部署服务） | 搜索配置页新建自定义引擎 → 粘贴 curl 命令自动填表单（或手填）→ 补响应字段映射 → 测试搜索通过 → 打开开关挂上串行链 |
+| 配置者 | 想接入文档里看到的任意搜索 API（如 DeepSeek、聚合站、自部署服务） | 搜索配置页新建自定义引擎 → 粘贴 curl 命令自动填表单（或手填）→ 补参数说明（可选）→ 测试搜索通过 → 打开开关挂上串行链（**v2**：响应映射步骤已废除） |
 | 写作者 | 写作中让 AI 检索资料 | agent 调 search，按工具描述中的引擎说明组装 params 方言参数（时间范围、域名过滤、正文开关等） |
 | 管控者 | 只想用免费兜底或某一家付费引擎 | 其余引擎开关全关，agent 视野里只剩启用的引擎 |
 
@@ -34,9 +34,9 @@ v1.5.15 上线的 AI 搜索（web-search-tool 迭代）内置五引擎硬编码�
 
 ### 包含范围
 
-1. **core 模板执行器**：占位符（`{{query}}`/`{{count}}`/`{{apiKey}}`/`{{baseUrl}}`）结构化替换 + 响应点路径字段映射（title/url/snippet/可选 answer），统一超时/错误脱敏/降级错误语义。
+1. **core 模板执行器**：占位符（`{{query}}`/`{{count}}`/`{{apiKey}}`/`{{baseUrl}}`）结构化替换 + 响应最长对象数组提取、50KB 内 JSON 文本直出 agent（**v2**：作废 v1 的点路径字段映射，见 spec-v2-passthrough.md），统一超时/错误脱敏/降级错误语义。
 2. **六份出厂预置模板**：bocha/tavily/brave/searxng（适配器收编）+ DeepSeek（api.deepseek.com/v1/tools/search）+ 智谱（open.bigmodel.cn/api/paas/v4/web_search）；DDG 保留 HTML 解析代码适配器。
-3. **自定义引擎**：多实例新建/编辑/删除，模板含 method/URL/headers/body JSON 模板/响应映射/参数说明；curl 命令粘贴导入；测试搜索按钮。
+3. **自定义引擎**：多实例新建/编辑/删除，模板含 method/URL/headers/可选 defaultBody（请求体默认值）/参数说明（**v2**：作废 v1 的响应映射段）；curl 命令粘贴导入；测试搜索按钮。
 4. **引擎开关**：每引擎独立启用/停用（含 DDG 可关），默认全关仅 DDG 开；关 = 不进串行链 + 说明不透传 + agent 不可见。
 5. **search 工具参数面**：query + engine（值域放宽为已启用引擎 id）+ maxResults + params（自由 JSON，原样透传合并进请求体，引擎自行忽略未知字段）；砍除 recencyFilter/domainFilter 统一面及适配器内映射实现。
 6. **per-engine 参数说明**：出厂模板内置说明文案，自定义引擎由用户填写；经装配期快照拼进工具描述（关闭引擎的说明不拼入）。
@@ -69,9 +69,9 @@ core 新增模板执行器：输入「引擎模板定义 + query + maxResults + 
 ### R2 搜索配置页模板化改造（双端）
 
 - 列表页：动态引擎集合（出厂模板行 + 自定义实例行 + DDG 行）平级混排；上移/下移调优先级（顺序即串行链）；每行增加启用开关控件；「+ 新建自定义引擎」入口。
-- 模板编辑表单（自定义引擎 + 预置模板的覆盖编辑共用）：基础（名称/method/URL）+ 认证（key 密码框 + {{apiKey}} 注入方式快捷选择）+ headers 键值对 + body JSON 模板（带占位符插入按钮与基本校验）+ 响应映射（列表路径 + 三字段名 + answer 可选）+ 参数说明文本框。
+- 模板编辑表单（自定义引擎 + 预置模板的覆盖编辑共用）：基础（名称/method/URL）+ 认证（key 密码框 + {{apiKey}} 注入方式快捷选择）+ headers 键值对 + defaultBody JSON 模板（可选，带占位符插入按钮与基本校验）+ 参数说明文本框（**v2**：删除响应映射段，body 段改 defaultBody 可选）。
 - curl 命令粘贴导入：解析 `-X`/`-H`/`-d`/`--data-raw`/`-G` 基本形态自动预填表单；疑似密钥值识别后替换为 `{{apiKey}}` 占位符（密钥明文随表单草稿携带，保存时才存入 SKSP）；解析失败整体拒绝并提示原因，不半填。
-- 测试搜索按钮：草稿直测——照云同步配置页「填完即测、坏配置不先落库」先例，输入一个测试词发起真实请求，展示映射后的前 5 条结果（title/url/snippet）或错误摘要；未保存的草稿模板、实例地址与密钥即可直测（测试不写 KKV/SKSP）；消耗引擎配额需界面提示。
+- 测试搜索按钮：草稿直测——照云同步配置页「填完即测、坏配置不先落库」先例，输入一个测试词发起真实请求，展示提取数组的前 2 条 JSON 预览 + 截断说明，或错误摘要（**v2**：不再渲染映射后的人类可读列表）；未保存的草稿模板、实例地址与密钥即可直测（测试不写 KKV/SKSP）；消耗引擎配额需界面提示。
 - 状态展示：开关（启用/停用）与配置完整度（key 已设/未设）两维独立呈现。
 - 详情页路由守卫放宽：引擎 id 从固定枚举变动态集合（自定义 id 形如 `custom:xxx`）。
 
@@ -106,10 +106,10 @@ core 新增模板执行器：输入「引擎模板定义 + query + maxResults + 
 ### 模板执行器与出厂模板
 
 - Given 全新安装，When 打开搜索配置页，Then 引擎列表含六份出厂模板 + DDG，仅 DDG 开关为开，其余全关。
-- Given 用户在 DeepSeek 预置模板行填入 key 并打开开关，When 对话中让 AI 搜索，Then 请求发往 api.deepseek.com/v1/tools/search 且 Authorization 为 Bearer + key，结果按 results[].title/url/snippet 映射展示。
+- Given 用户在 DeepSeek 预置模板行填入 key 并打开开关，When 对话中让 AI 搜索，Then 请求发往 api.deepseek.com/v1/tools/search 且 Authorization 为 Bearer + key，结果以 results 数组 JSON 文本透传 agent（**v2**：无字段映射）。
 - Given 模板 body 为 `{"q":"{{query}}","n":"{{count}}"}`，When query 含英文双引号与反斜杠，Then 实际请求体为合法 JSON、query 值与输入语义一致且 n 以数字类型发出（结构化替换生效）。
-- Given 自定义引擎响应映射列表路径填 `data.webPages.value`，When 引擎返回嵌套结构，Then 正确抽出该数组并逐条映射 title/url/snippet。
-- Given answer 路径未填，When 引擎响应含可-answer 字段，Then 输出不含 answer；填了路径且取到非空则透传。
+- Given 自定义引擎响应为嵌套结构（如 `data.webPages.value` 处的对象数组），When 引擎返回该结构，Then 递归提取最长对象数组并以 JSON 文本直出（**v2**：无列表路径配置）。
+- Given 引擎响应含 answer 类字段，When 提取结果数组，Then 数组内字段原样保留于 JSON 文本透传 agent（**v2**：answerPath 已删除，无 answer 特殊处理）。
 - Given 串行链上首位引擎 401，When 未显式指定 engine，Then 自动降级尝试下一个启用引擎，attempts 轨迹如实记录；显式指定 engine 时失败直接报错不降级；链总预算 120s 行为不变。
 - Given 引擎返回非 2xx 且响应体回显 key，When 错误透出，Then 错误消息中 key 已脱敏。
 
@@ -117,7 +117,7 @@ core 新增模板执行器：输入「引擎模板定义 + query + maxResults + 
 
 - Given 用户粘贴合法 curl 命令（-X POST + -H Authorization + -d JSON），When 点导入，Then 表单自动填好 method/URL/headers/body，疑似密钥值已替换为 {{apiKey}}（保存时才存入 SKSP）。
 - Given 粘贴内容不是合法 curl 命令，When 点导入，Then 整体拒绝并提示原因，表单保持原状。
-- Given 用户在自定义引擎表单填好配置（未保存亦可），When 输入测试词点「测试搜索」，Then 直接以草稿发起请求并展示映射后前 5 条结果或错误摘要（草稿直测，无需先保存，测试不落库）。
+- Given 用户在自定义引擎表单填好配置（未保存亦可），When 输入测试词点「测试搜索」，Then 直接以草稿发起请求并展示提取数组前 2 条 JSON 预览或错误摘要（草稿直测，无需先保存，测试不落库；**v2** 口径）。
 - Given 用户关闭某已配 key 的引擎，When 查看列表行，Then 开关呈关、key 状态仍为已设，重开后无需重填 key。
 - Given 自定义引擎与出厂模板并存，When 上移/下移，Then 全部引擎实例平级重排且串行链顺序随之生效。
 - Given 用户编辑出厂模板后改坏，When 点「恢复默认」，Then 模板回到出厂定义（key 不动）。
@@ -153,4 +153,4 @@ core 新增模板执行器：输入「引擎模板定义 + query + maxResults + 
 - **明文密钥检测为启发式**：不能保证拦截全部内嵌 key 形态，属已知让渡（文档提示用户使用占位符）。
 - **出厂模板随厂商 API 漂移**：引擎改版时模板可编辑、用户可自行修正或等版本携带修正——不再依赖发版正是本改造的目标，风险敞口反而小于硬编码适配器。
 - **桌面端无搜索设置专项测试**：本次 UI 改动大（模板表单/导入/测试按钮/开关），spec 阶段评估补关键路径测试。
-- 待确认（不阻塞 PRD，spec 前可改）：迭代目录名 `web-search-curl`；说明限长 500 字符的具体值；测试搜索结果展示条数（5）。
+- 待确认（不阻塞 PRD，spec 前可改）：迭代目录名 `web-search-curl`；说明限长 500 字符的具体值；测试搜索结果展示条数（5；**v2** 改为提取数组前 2 条 JSON 预览）。

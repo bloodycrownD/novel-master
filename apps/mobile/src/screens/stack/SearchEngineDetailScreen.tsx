@@ -497,8 +497,8 @@ export function SearchEngineDetailScreen() {
         // 预置覆盖按差异提交：只写入与出厂模板不同的字段，未改字段保留既有覆盖
         // （高级编辑显示出厂模板，见卡片提示；与 desktop 同一语义）。
         const preset = PRESET_TEMPLATES[engineId];
+        const patch: Partial<SearchEngineTemplate> = {};
         if (preset != null) {
-          const patch: Partial<SearchEngineTemplate> = {};
           for (const field of TEMPLATE_FIELDS) {
             if (
               JSON.stringify(preset[field]) !== JSON.stringify(template[field])
@@ -506,14 +506,27 @@ export function SearchEngineDetailScreen() {
               Object.assign(patch, {[field]: template[field]});
             }
           }
-          if (Object.keys(patch).length > 0) {
-            await searchStore.updatePresetOverride(engineId, patch);
-          }
+        }
+        // ui/P2-8 对齐 desktop：baseUrl 仅在草稿与已存值不同时提交（空串 =
+        // 清除，同值不写）；零写操作（patch 空 + key 草稿空 + baseUrl 同值）→
+        // toast「无改动」早退，不发任何写调用也不回读（desktop 同款判定）。
+        const storedBaseUrl = entry?.baseUrl ?? '';
+        const baseUrlChanged = draftNeedsBaseUrl && baseUrl !== storedBaseUrl;
+        if (
+          Object.keys(patch).length === 0 &&
+          keyDraft.length === 0 &&
+          !baseUrlChanged
+        ) {
+          showToast('无改动');
+          return;
+        }
+        if (Object.keys(patch).length > 0) {
+          await searchStore.updatePresetOverride(engineId, patch);
         }
         if (keyDraft.length > 0) {
           await searchStore.saveEngineKey(engineId, keyDraft);
         }
-        if (draftNeedsBaseUrl) {
+        if (baseUrlChanged) {
           await searchStore.setEngineBaseUrl(engineId, baseUrl);
         }
       }

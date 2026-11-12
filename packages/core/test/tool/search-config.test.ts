@@ -729,6 +729,57 @@ describe("search-config：T-C5 testEngine（草稿直测 / baseUrl 优先级 / e
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("testEngine 预览三分支①：3+ 条结果 truncated=true、preview 仅前 2 条、resultCount 为总数（buildArrayPreview 数组分支）", async () => {
+    const store = createSearchConfigStore(makeDeps());
+    const items = Array.from({ length: 3 }, (_, i) => ({ title: `t${i}`, url: `https://r${i}.example.com`, snippet: `s${i}` }));
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response(JSON.stringify({ results: items }), { status: 200, headers: { "content-type": "application/json" } })) as typeof globalThis.fetch;
+      const result = await store.testEngine({ draft: { template: baseUrlTemplate(), baseUrl: "http://draft.local:8080/" }, query: "q" });
+      assert.equal(result.ok, true);
+      if (!result.ok) throw new Error("3 条结果应成功");
+      assert.equal(result.value.resultCount, 3, "resultCount 为提取数组总条数");
+      assert.equal(result.value.truncated, true);
+      assert.deepEqual(JSON.parse(result.value.preview), items.slice(0, 2), "preview 仅前 2 条");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("testEngine 预览三分支②：引擎侧 50KB 截断标注破坏 JSON → truncated=true、resultCount 缺省、preview 退化为文本摘录", async () => {
+    const store = createSearchConfigStore(makeDeps());
+    const bigItems = Array.from({ length: 2000 }, (_, i) => ({ id: i, note: "n".repeat(16) }));
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response(JSON.stringify({ results: bigItems }), { status: 200, headers: { "content-type": "application/json" } })) as typeof globalThis.fetch;
+      const result = await store.testEngine({ draft: { template: baseUrlTemplate(), baseUrl: "http://draft.local:8080/" }, query: "q" });
+      assert.equal(result.ok, true);
+      if (!result.ok) throw new Error("截断响应应走摘录退化分支而非失败");
+      assert.equal(result.value.truncated, true);
+      assert.equal(result.value.resultCount, undefined, "数组文本不可解析 → resultCount 缺省");
+      assert.ok(result.value.preview.length <= 2000, "摘录受预览长度预算约束");
+      assert.ok(result.value.preview.startsWith('[{"id":0'), "摘录保留数组头部原样字节");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("testEngine 预览三分支③：空数组成功 resultCount=0、truncated=false、preview 为 []", async () => {
+    const store = createSearchConfigStore(makeDeps());
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async () => new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "content-type": "application/json" } })) as typeof globalThis.fetch;
+      const result = await store.testEngine({ draft: { template: baseUrlTemplate(), baseUrl: "http://draft.local:8080/" }, query: "q" });
+      assert.equal(result.ok, true);
+      if (!result.ok) throw new Error("空数组应成功");
+      assert.equal(result.value.resultCount, 0);
+      assert.equal(result.value.truncated, false);
+      assert.equal(result.value.preview, "[]");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存路径密钥拒绝", () => {
@@ -837,8 +888,13 @@ describe("search-config：T-C7 validateSearchEngineTemplate 全规则 + 保存�
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "": "x" } }).messageParams?.reason), /header name must not be empty/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "Bad Name": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
     assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "X-Bad\nName": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
-    const tokenOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { "X-API-Key": "{{apiKey}}", Accept: "application/json" } });
-    assert.equal(tokenOk.ok, true, "合法 token 头名不受影响");
+    // CR r2 收紧为完整 RFC 7230 tchar 集：括号 / 引号 / 逗号 / 反斜杠等分隔符拒绝（宽口径 [!-9;-~] 会误放行）。
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "X-Key[v2]": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { 'a"b': "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "a,b": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    assert.match(String(invalidTemplateError({ ...validTemplate(), headers: { "a\\b": "x" } }).messageParams?.reason), /must be a valid HTTP token/);
+    const tokenOk = validateSearchEngineTemplate({ ...validTemplate(), headers: { "X-API-Key": "{{apiKey}}", Accept: "application/json", "a|b": "x", "a~b": "x", "a_b": "x" } });
+    assert.equal(tokenOk.ok, true, "合法 tchar 头名（含 | ~ _）不受影响");
 
     // FIX-4：GET 携带 defaultBody 校验层拒绝（静默丢弃会假成功）。
     assert.match(String(invalidTemplateError({ ...validTemplate(), defaultBody: '{"q":"{{query}}"}' }).messageParams?.reason), /defaultBody is not allowed for GET/);

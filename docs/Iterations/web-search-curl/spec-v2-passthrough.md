@@ -55,6 +55,7 @@ schema 不变：`search(query, engine?, maxResults?, params?)`。description 通
 - 改写：响应侧统一改「数组提取 + 截断 + 找不到数组降级」断言；body 浅合并三级语义（全覆盖/部分/纯默认/defaultBody+params 均空 → POST {}）；bocha 业务码失败用例改走「无数组降级」。
 - 新增：多数组取最长、平局取先、非对象数组（string[]）不算、空数组 vs 无数组（空数组=成功空结果，无数组=降级）。
 - UI 测试：详情页断言随字段坍缩适配；测试按钮预览形态断言更新。
+- 作废声明：spec.md T-E6「maxResults 客户端截断」以本文件为准作废——v2 只把归一后的 maxResults 喂给 `{{count}}` 占位符（由模板 URL/body 自行消费），执行器对响应不做客户端截断。
 
 ## 8. 明确不变
 

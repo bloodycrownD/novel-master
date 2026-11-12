@@ -99,3 +99,32 @@
 
 W1–W4 并行；W5/W6 并行（W5/W6 依赖 W1 的 types 校验改动可先行无依赖，实际可同波全并行——W1..W6 六 agent 同波发出）；W7 收尾。
 验收门（每 agent 自跑）：触达文件 typecheck + 相关测试文件绿；主代理终检三端 typecheck + 三端全量测试 + check-style 触达路径 + commit。
+
+---
+
+# 第 2 轮
+
+> 来源：v2 透传改造（HEAD=5f9438d0e）后的第 2 轮复审。共 13 条 = 1 P1 + 12 P2，修复随本轮 commit 落盘。
+
+## 拍板记录（可被用户推翻）
+
+1. **摘要纯文本抬头**：search summary 对 results 为 JSON 文本形态（模板引擎透传）显示「引擎 · 响应文本」，与 format-tool-output 抬头同词，不解析条数；数组形态维持「引擎 · N 条结果」。
+2. **PRD 补丁式**：PRD 的 v1 残留照 R1 先例做补丁式 v2 标注同步（逐处括注「**v2**」），不大改 PRD 结构；背景段引用旧口径属历史记录保留。
+3. **帮助真源 mobile**：双端帮助弹窗以 mobile 为真源逐字同步（「，」标点定稿），desktop 不再自行措辞。
+4. **custom id 不统一**：UI 生成 8 位 id 与存储校验 `custom:[A-Za-z0-9_-]{1,64}` 宽度不统一——容忍不修（id 为内部标识不展示，存储校验为生成值的等价超集，无行为冲突），记录在案。
+
+## must-fix 总表
+
+| id | 文件 | 问题 | 改法 | 来源 |
+|---|---|---|---|---|
+| CR2-1 | core `search/types.ts`（HEADER_NAME_PATTERN） | 头名正则宽口径 `[!-9;-~]` 放行括号/逗号/分号/引号等分隔符，执行期 `new Headers` 抛原生 TypeError 绕开 engineFailed 通道 | 收紧为 RFC 7230 tchar 字符集（字母数字与 `!#$%&'*+-.^_` 等安全符号，分隔符全拒） | core/P1-1 |
+| CR2-2 | core `logic/build-tool-result-block.ts`（search summary） | 模板引擎透传形态 results 为 JSON 字符串，走通用 JSON 回落，summary 失真 | 新增文本分支「引擎 · 响应文本」（拍板 1）+ search-tool.test 回归断言 | tool/P2-3 |
+| CR2-3 | core `search/search-config.ts`（normalizeEngineBaseUrl） | 额外拒绝 userinfo（username/password 非空判非法），spec §5 仅约定 http(s) 校验+尾斜杠 | 良性安全收紧维持，偏离补登 iteration-state.yaml spec_deviations | store/P2-5 |
+| CR2-4 | desktop `SearchEnginesView.tsx`（帮助弹窗） | curl 导入句与 mobile 标点漂移（非逐字同句） | 按 mobile 真源逐字同步（拍板 3）+ 回归锁改逐字断言 | ui/P2-7 |
+| CR2-5 | 双端 agent 工具 catalog | search 描述 v1 残留「返回标题/链接/摘要结果列表」 | 改「返回引擎原始结果数据（JSON 文本）」双端同句（desktop 已落，mobile 随 ui 域） | ui/P2-8 |
+| CR2-6 | desktop `SearchEngineDetailView.tsx`（预置保存） | needsKey 拦截按已存 engine.needsKey 判定，误拦「草稿已删 {{apiKey}} 引用」的清 key 草稿 | 拦截改按草稿 usesApiKey 判定（与 mobile draftNeedsKey 同源） | ui/P2-9 |
+| CR2-7 | 双端 custom 引擎 id | UI 生成 8 位 vs 存储校验 ≤64 宽松字符集不统一 | 拍板 4：容忍不修，记录在案 | ui/P2-10 |
+| CR2-8 | `CHANGELOG.md` Unreleased search 条目 | v1 残留「请求体模板与响应字段映射」「前 5 条结果」 | 改 v2 口径：请求模板（URL/headers/可选请求体默认值）+ 响应透传 AI + 预览前 2 条 JSON | glob/R2-2 |
+| CR2-9 | `spec-v2-passthrough.md` | 未显式作废 spec.md T-E6「maxResults 客户端截断」 | §7 补作废声明：v2 只喂 {{count}} 占位符，不做客户端截断 | glob/R2-3 |
+| CR2-10 | `prd.md` 多处 | v1 残留：范围 1/3、配置者旅程、R2 表单段、测试按钮、验收 4 处、待确认项展示条数 | 照 R1 先例补丁式 v2 标注逐处同步（拍板 2） | glob/R2-4 |
+| CR2-11..13 | core/双端散点 | 过时/失真注释订正 ×3（随上述各域修复顺带落地） | 见本轮各域 commit | 注释类 |

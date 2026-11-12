@@ -245,8 +245,9 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           return;
         }
       } else if (presetDefault != null) {
-        // 拍板 7：需 key 模板且既无已存 key、key 草稿也为空 → 保存拦截（文案与 mobile 现行为一致）
-        if (engine?.needsKey === true && engine?.hasKey !== true && key.length === 0) {
+        // 拍板 7 + CR2 P2-9：拦截按草稿判定（usesApiKey，与 mobile draftNeedsKey 同源）——
+        // 草稿已删 {{apiKey}} 引用则放行，避免「已存生效模板 needsKey」误拦清 key 的草稿
+        if (usesApiKey && engine?.hasKey !== true && key.length === 0) {
           setError("请输入 API Key（留空不会修改已保存的密钥）");
           return;
         }

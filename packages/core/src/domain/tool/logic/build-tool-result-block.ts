@@ -156,11 +156,16 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
     }
   }
 
-  // search：引擎 · N 条结果；超预算落盘形态（Step 6 后出现）显示已落盘路径。
+  // search：引擎 · N 条结果；模板引擎透传形态 results 为 JSON 文本 →
+  // 「引擎 · 响应文本」（与 format-tool-output 抬头同词，不解析条数）；
+  // 超预算落盘形态（Step 6 后出现）显示已落盘路径。
   // 未配置提示是纯字符串输出（非 record），在上方 isRecord 门处已返回 undefined。
   if (name === "search") {
     if (typeof output.engine === "string" && Array.isArray(output.results)) {
       return `${output.engine} · ${output.results.length} 条结果`;
+    }
+    if (typeof output.engine === "string" && typeof output.results === "string") {
+      return `${output.engine} · 响应文本`;
     }
     if (typeof output.savedPath === "string") {
       return `已落盘 ${output.savedPath}`;

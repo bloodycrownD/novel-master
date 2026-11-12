@@ -8,8 +8,8 @@
  *
  * 请求：GET `https://html.duckduckgo.com/html/?q=...`、无 key 无 baseUrl
  * （DDG 无模板，凭据面为空）；headers 只有 `Accept: text/html` 与自报
- * 轻客户端 UA（不伪装浏览器）。HTML 端点无条数参数：maxResults 客户端
- * 截断（模板执行器同口径）。
+ * 轻客户端 UA（不伪装浏览器）。HTML 端点无条数参数：maxResults 由适配器
+ * 客户端截断（模板执行器 v2 透传改造后已不客户端截断，口径不再相同）。
  *
  * 解析（正则模拟 DOM 查询，class 一律 token 精确匹配——`result__url`
  * 等近形类名不得误伤）：按 `.result` 块分块（`result--ad` 广告块跳过）
@@ -18,7 +18,8 @@
  * ?uddg=<encoded>` 重定向时解码 uddg 取真实 URL（仅接受 http/https）。
  * 解析 0 个可解析结果（有块但全无有效 title/url，或无块——页面改版 /
  * 反爬拦截页）抛 invalid response 错误，供串行链感知降级。
- * answer 省略（只有模板 answerPath 命中才透传）。
+ * 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；
+ * DDG 保留解析数组的结构化回流，是 HTML 解析的本仓唯一消费者）。
  *
  * @module domain/tool/builtin/search/engines/duckduckgo
  */
@@ -26,13 +27,13 @@
 import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxResults, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
 
 /** DuckDuckGo HTML 端点（硬编码，内置引擎无自定义 baseUrl）。 */
-export const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
+const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
 
 /** 超时（毫秒）：30s（轻量 HTML 端点，照参考实现）。 */
 const DUCKDUCKGO_TIMEOUT_MS = 30_000;
 
 /** 自报轻客户端 UA（照参考实现格式，novel-master 风格；不伪装浏览器）。 */
-export const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
+const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
 
 /**
  * HTML 实体解码：只处理标题/摘要/href 中常见的五个命名实体

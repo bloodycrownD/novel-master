@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  DUCKDUCKGO_SEARCH_URL,
-  DUCKDUCKGO_USER_AGENT,
-  searchWithDuckduckgo,
-} from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
+import { searchWithDuckduckgo } from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
+
+/** 与实现内联字面量保持同步的请求形状断言基线（实现侧常量已撤 export）。 */
+const DDG_SEARCH_URL = "https://html.duckduckgo.com/html/";
+const DDG_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
 
 /** 构造记录调用参数的 mock fetchFn：回放单个 Response。 */
 function makeFetch(
@@ -82,13 +82,13 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     assert.equal(fetchFn.calls.length, 1);
     const call = fetchFn.calls[0]!;
     const url = new URL(call.url);
-    assert.equal(url.origin + url.pathname, DUCKDUCKGO_SEARCH_URL);
+    assert.equal(url.origin + url.pathname, DDG_SEARCH_URL);
     assert.equal(url.searchParams.get("q"), "唐代科举");
     assert.equal(call.init.method, "GET");
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Accept"), "text/html");
-    assert.equal(headers.get("User-Agent"), DUCKDUCKGO_USER_AGENT);
-    assert.match(DUCKDUCKGO_USER_AGENT, /^Mozilla\/5\.0 \(compatible; novel-master\//);
+    assert.equal(headers.get("User-Agent"), DDG_USER_AGENT);
+    assert.match(headers.get("User-Agent") ?? "", /^Mozilla\/5\.0 \(compatible; novel-master\//);
     assert.equal(headers.get("Authorization"), null);
     assert.equal(headers.get("X-Subscription-Token"), null);
   });
@@ -98,7 +98,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     const out = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
 
     assert.equal(out.engine, "duckduckgo");
-    // answer 省略（仅模板 answerPath 命中才透传的统一口径）。
+    // 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；DDG 保留解析数组）。
     assert.equal("answer" in out, false);
     assert.deepEqual(out.results, [
       {

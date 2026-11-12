@@ -47,7 +47,7 @@ function parseResults(out: { readonly results: readonly unknown[] | string }): u
   return parsed;
 }
 
-/** fetch 永不 resolve、只监听 AbortSignal（超时用例）。 */
+// 超时用例启用了 mock.timers，这里统一重置，避免计时器状态泄漏到后续用例。
 afterEach(() => {
   mock.timers.reset();
 });
@@ -255,6 +255,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
   it("30s 超时 → timed out after 文案（AbortController 路径）", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const tpl = template({ url: "https://api.example.com/search" });
+    // fetch 永不 resolve、只监听 AbortSignal（abort 时才 reject）。
     const hangingFetch = ((_input: unknown, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));

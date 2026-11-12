@@ -155,10 +155,11 @@ export const SEARCH_TEMPLATE_PLACEHOLDER_PATTERN = /\{\{([^{}]*)\}\}/g;
 const TEMPLATE_PLACEHOLDER_PROBE = /\{\{[^{}]*\}\}/;
 
 /**
- * 头名字符集（RFC 7230 token：可见 ASCII 去掉空格与冒号，`+` 同时拒绝空名）。
- * 含换行 / 空格的头名会让执行期 fetch 抛原生 TypeError 绕开 engineFailed 通道，保存路径先拦。
+ * 头名字符集（RFC 7230 tchar：字母数字与 `!#$%&'*+-.^_`|~`，`+` 同时拒绝空名）。
+ * 括号 / 逗号 / 分号 / 引号等分隔符（宽口径 `[!-9;-~]` 会误放行）让执行期
+ * `new Headers` 抛原生 TypeError 绕开 engineFailed 通道，保存路径先拦。
  */
-const HEADER_NAME_PATTERN = /^[!-9;-~]+$/;
+const HEADER_NAME_PATTERN = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
 
 /**
  * 搜索模板：一份可执行、可编辑的引擎请求描述（出厂预置与自定义实例共用）。

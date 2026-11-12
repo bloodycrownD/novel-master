@@ -562,8 +562,9 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     // 模板引擎透传：results 为提取数组的 JSON 文本（tavily 响应里的 answer 字符串不参与提取）。
     assert.deepEqual(JSON.parse(rec.results as string), [{ title: "t", url: "https://t.example.com", content: "c" }]);
     assert.deepEqual(urls, ["https://api.bochaai.com/v1/web-search", "https://api.tavily.com/search"]);
-    // formatter：模板引擎 JSON 文本形态暂走通用 JSON 回落（attempts 轨迹可读）。
+    // formatter：模板引擎 JSON 文本形态走「响应文本」抬头 + 尝试轨迹 + 原样文本块。
     const text = formatToolOutputForLlm(rec);
+    assert.equal(text.split("\n")[0], "search tavily · 响应文本");
     assert.ok(text.includes("bocha 失败(401) → tavily 成功"), `attempts 应可见：${text.slice(0, 200)}`);
   });
 
@@ -782,7 +783,7 @@ describe("search 工具：formatter 与 summary", () => {
     );
   });
 
-  it("summary：bocha · N 条结果；落盘形态显示已落盘路径；字符串提示无 summary", () => {
+  it("summary：bocha · N 条结果；文本形态「引擎 · 响应文本」；落盘形态显示已落盘路径；字符串提示无 summary", () => {
     const block = buildToolResultBlock("tu-1", {
       ok: true,
       output: {
@@ -795,6 +796,13 @@ describe("search 工具：formatter 与 summary", () => {
       },
     } as ParallelToolOutcome, { toolName: "search" });
     assert.equal(block.summary, "bocha · 5 条结果");
+
+    // 文本形态（模板引擎透传）：results 为 JSON 字符串 → summary「引擎 · 响应文本」。
+    const textForm = buildToolResultBlock("tu-1b", {
+      ok: true,
+      output: { engine: "bocha", results: '[{"name":"结果甲","link":"https://a.example.com"}]' },
+    } as ParallelToolOutcome, { toolName: "search" });
+    assert.equal(textForm.summary, "bocha · 响应文本");
 
     const saved = buildToolResultBlock("tu-2", {
       ok: true,

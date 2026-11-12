@@ -13,6 +13,11 @@
  *   空）→ 只传 engineId 不带 draft（core 合并覆盖 + SKSP 现读）；表单改动 /
  *   key 草稿非空 / 无覆盖 → 带 draft 草稿直测。
  *
+ * ui/P2-8 / P2-10 回归锁（CR 第 2 轮）：预置零改动保存不发任何写调用且 toast
+ * 「无改动」、baseUrl 同值不发 setEngineBaseUrl；测试失败文案错误红（FIX-27）；
+ * create 模式 curl 导入预填（parseCurlCommand 真函数：method/URL/headers/
+ * defaultBody 回填，明文密钥替换 {{apiKey}} 并回填 key 草稿）。
+ *
  * 照 search-engines-screen-reorder.test.tsx 的 TestRenderer 直测风格：输入框 /
  * 保存 / 测试按钮 / 状态标签 mock 成带标记的可交互节点，树文本与调用参数断言；
  * store mock 扩到 core `SearchConfigStore` 全方法。
@@ -151,13 +156,15 @@ jest.mock('@/components/ui/Buttons', () => {
   };
 });
 
-// 输入框：onChangeText / placeholder / secureTextEntry 挂 props 供测试定位与
-// 直接触发（key 输入 secureTextEntry 可辨，其余按 placeholder 精确匹配）。
+// 输入框：onChangeText / value / placeholder / secureTextEntry 挂 props 供测试
+// 定位、直接触发与预填断言（key 输入 secureTextEntry 可辨，其余按 placeholder
+// 精确匹配；curl 导入用例靠 value 断言表单回填）。
 jest.mock('@/components/form/FormTextInput', () => {
   const mockReact = require('react');
   const {Text} = require('react-native');
   return {
     FormTextInput: (props: {
+      value?: string;
       onChangeText: (text: string) => void;
       secureTextEntry?: boolean;
       placeholder?: string;
@@ -166,6 +173,7 @@ jest.mock('@/components/form/FormTextInput', () => {
         Text,
         {
           onChangeText: props.onChangeText,
+          value: props.value,
           secureTextEntry: props.secureTextEntry,
           placeholder: props.placeholder,
         },
@@ -175,13 +183,16 @@ jest.mock('@/components/form/FormTextInput', () => {
 });
 
 // searchConfig store（core `SearchConfigStore` 形状）：readConfig 的 bocha
-// hasKey 随 saveEngineKey 调用次数动态变化，模拟「key 已落库生效」状态。
+// hasKey 随 saveEngineKey 调用次数动态变化，模拟「key 已落库生效」状态；
+// 预置/自定义写方法提具名 mock，供零改动保存「不发任何写调用」断言。
 const mockReadConfig = jest.fn();
 const mockSaveEngineKey = jest.fn();
 const mockClearEngineKey = jest.fn();
 const mockCreateCustomEngine = jest.fn();
 const mockSetEngineBaseUrl = jest.fn();
 const mockTestEngine = jest.fn();
+const mockUpdateCustomEngine = jest.fn();
+const mockUpdatePresetOverride = jest.fn();
 
 const mockRuntime = {
   searchConfig: {
@@ -192,9 +203,10 @@ const mockRuntime = {
     setEngineOrder: jest.fn(),
     setEngineBaseUrl: (...args: unknown[]) => mockSetEngineBaseUrl(...args),
     createCustomEngine: (...args: unknown[]) => mockCreateCustomEngine(...args),
-    updateCustomEngine: jest.fn(),
+    updateCustomEngine: (...args: unknown[]) => mockUpdateCustomEngine(...args),
     deleteCustomEngine: jest.fn(),
-    updatePresetOverride: jest.fn(),
+    updatePresetOverride: (...args: unknown[]) =>
+      mockUpdatePresetOverride(...args),
     resetPresetOverride: jest.fn(),
     testEngine: (...args: unknown[]) => mockTestEngine(...args),
   },
@@ -208,6 +220,7 @@ import {SearchEngineDetailScreen} from '@/screens/stack/SearchEngineDetailScreen
 // 被替换后的 mock 组件引用：用 findAllByType 精确定位（RN 宿主组件会把
 // 自定义 props 复制到内部嵌套节点，按 props findAll 会重复匹配）。
 import {FormTextInput} from '@/components/form/FormTextInput';
+import {FormChipGroup} from '@/components/form/FormChipGroup';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
 
@@ -349,6 +362,8 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     mockClearEngineKey.mockReset().mockResolvedValue(undefined);
     mockCreateCustomEngine.mockReset().mockResolvedValue(undefined);
     mockSetEngineBaseUrl.mockReset().mockResolvedValue(undefined);
+    mockUpdateCustomEngine.mockReset().mockResolvedValue(undefined);
+    mockUpdatePresetOverride.mockReset().mockResolvedValue(undefined);
     mockTestEngine.mockReset().mockResolvedValue({
       ok: true,
       value: {preview: '[{"title":"T"}]', resultCount: 2, truncated: false},
@@ -397,6 +412,71 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       '请输入 API Key（留空不会修改已保存的密钥）',
     );
     // 拦截早退：无成功链路的回读（readConfig 调用数不变）。
+    expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+  });
+
+  it('零改动保存：不发任何写调用且 toast「无改动」（ui/P2-8 对齐 desktop）', async () => {
+    // bocha 已存 key（不触发拦截）+ 表单未改 + key/baseUrl 草稿空 → 零写操作。
+    mockReadConfig.mockImplementation(async () =>
+      makeConfig({
+        engines: [
+          {
+            id: 'bocha',
+            name: '博查搜索',
+            enabled: true,
+            needsKey: true,
+            hasKey: true,
+            needsBaseUrl: false,
+            isCustom: false,
+            paramHint: '博查参数',
+          },
+        ],
+      }),
+    );
+    const {renderer} = await renderScreen();
+    const readsBefore = mockReadConfig.mock.calls.length;
+    await tapSave(renderer.root);
+
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).toHaveBeenCalledWith('无改动');
+    expect(mockUpdatePresetOverride).not.toHaveBeenCalled();
+    expect(mockSaveEngineKey).not.toHaveBeenCalled();
+    expect(mockSetEngineBaseUrl).not.toHaveBeenCalled();
+    expect(mockUpdateCustomEngine).not.toHaveBeenCalled();
+    // 零改动早退：无成功链路的回读（readConfig 调用数不变）。
+    expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+  });
+
+  it('baseUrl 同值保存：不发 setEngineBaseUrl（ui/P2-8 同值不写）', async () => {
+    // searxng 出厂模板引用 {{baseUrl}}：已存实例地址与草稿相同 → 无写操作早退，
+    // 锁「仅 baseUrlChanged 才发 setEngineBaseUrl」的 desktop 同款判定。
+    mockRouteParams = {engineId: 'searxng'};
+    mockReadConfig.mockImplementation(async () =>
+      makeConfig({
+        engines: [
+          {
+            id: 'searxng',
+            name: 'SearXNG',
+            enabled: true,
+            needsKey: false,
+            hasKey: false,
+            needsBaseUrl: true,
+            baseUrl: 'https://searx.example.com',
+            isCustom: false,
+            paramHint: '',
+          },
+        ],
+      }),
+    );
+    const {renderer} = await renderScreen();
+    const readsBefore = mockReadConfig.mock.calls.length;
+    await tapSave(renderer.root);
+
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).toHaveBeenCalledWith('无改动');
+    expect(mockSetEngineBaseUrl).not.toHaveBeenCalled();
+    expect(mockUpdatePresetOverride).not.toHaveBeenCalled();
+    expect(mockSaveEngineKey).not.toHaveBeenCalled();
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
   });
 
@@ -474,6 +554,57 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
       expect(payload.baseUrl).toBe('https://search.example.com');
       expect('apiKey' in payload).toBe(false);
     });
+
+    it('curl 导入：预填 method/URL/headers/defaultBody，密钥替换 {{apiKey}} 并回填 key 草稿', async () => {
+      const {renderer} = await renderScreen();
+      const curlInput = inputByPlaceholder(
+        renderer.root,
+        "curl -X POST https://api.example.com/search -H 'Authorization: Bearer ...' -d '{...}'",
+      );
+      await typeInto(
+        curlInput,
+        'curl -X POST https://api.example.com/search -H "Authorization: Bearer sk-abcdef123456789012" -d \'{"query":"{{query}}"}\'',
+      );
+      await act(async () => {
+        renderer.root
+          .findAllByType(SecondaryButton)
+          .filter(node => node.props.label === '解析并预填')[0]
+          .props.onPress();
+        await flush();
+      });
+
+      expect(mockShowToast).toHaveBeenCalledWith(
+        '已解析 curl 命令，请补全显示名后保存',
+      );
+      // method 预填 POST（options 含 GET 的那组 chip 是请求方法组）。
+      const methodChip = renderer.root
+        .findAllByType(FormChipGroup)
+        .filter(node =>
+          node.props.options.some(
+            (option: {value: string}) => option.value === 'GET',
+          ),
+        );
+      expect(methodChip.length).toBe(1);
+      expect(methodChip[0].props.value).toBe('POST');
+      // URL / headers / defaultBody 预填；明文密钥替换为 {{apiKey}} 占位符。
+      expect(
+        inputByPlaceholder(renderer.root, 'https://api.example.com/search')
+          .props.value,
+      ).toBe('https://api.example.com/search');
+      const headers = inputByPlaceholder(
+        renderer.root,
+        '{"Accept": "application/json"}',
+      );
+      expect(headers.props.value).toContain('Bearer {{apiKey}}');
+      expect(headers.props.value).not.toContain('sk-abcdef');
+      const body = inputByPlaceholder(
+        renderer.root,
+        '{"query": "{{query}}", "count": "{{count}}"}',
+      );
+      expect(body.props.value).toBe('{"query":"{{query}}"}');
+      // 识别出的密钥原文回填 key 草稿（保存时落密钥库，不留在模板里）。
+      expect(keyInput(renderer.root).props.value).toBe('sk-abcdef123456789012');
+    });
   });
 
   it('测试成功渲染 v2 预览：共 N 条 + JSON 预览 + 截断标记（TestEngineSuccess 新形状）', async () => {
@@ -499,6 +630,34 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     expect(text).toContain('[{"title":"第一条"},{"title":"第二条"}]');
     expect(text).toContain('（预览已截断）');
     expect(text).not.toContain('返回 12 条结果');
+  });
+
+  it('测试失败文案红色展示（tokens.danger，FIX-27 回归锁）', async () => {
+    mockTestEngine.mockResolvedValue({
+      ok: false,
+      error: {message: '引擎不可用（测试桩）'},
+    });
+    const {renderer} = await renderScreen();
+    await typeInto(
+      inputByPlaceholder(renderer.root, '如 人工智能'),
+      '人工智能',
+    );
+    await tapTest(renderer.root);
+
+    const text = treeText(renderer.root);
+    expect(text).toContain('测试失败：引擎不可用（测试桩）');
+    const failNode = renderer.root
+      .findAll(
+        node =>
+          typeof node.props.children === 'string' &&
+          node.props.children.includes('测试失败'),
+      )
+      .at(0);
+    expect(failNode).toBeDefined();
+    // 失败文案用错误红（mock tokens.danger = '#f00'），与成功说明的次级灰区分。
+    expect(failNode!.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({color: '#f00'})]),
+    );
   });
 
   describe('测试请求分流（FIX-1 拍板 1 回归锁）', () => {

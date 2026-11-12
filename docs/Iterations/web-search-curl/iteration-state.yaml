@@ -42,10 +42,14 @@ spec_deviations:
   - "packages/core/src/domain/tool/builtin/search/search-config.ts: 自定义实例 id 存储层校验放宽为 custom:[A-Za-z0-9_-]{1,64}（UI 仍生成 8 位）"
   - "apps/desktop/test/search-engines-ui-hook.mjs、apps/mobile/src/components/provider/BuiltinTag.tsx: spec Δ 结构清单外新增文件（良性补登）；apps/mobile jest.config.js 列于 Δ 但无需改动（transformIgnorePatterns 不需变更，豁免）"
   - "v2 透传改造（spec-v2-passthrough.md，用户 CR 中途方向指令）: 模板类型删 resultPath/fieldMap/answerPath/envelope、bodyTemplate→defaultBody 可选；响应改最长对象数组提取+50KB 截断直出 JSON 文本；链降级第三判据=响应无对象数组（涵盖 bocha 业务码失败）；TestEngineSuccess 改 {preview,resultCount?,truncated}；工具 schema 不变。CR 第 1 轮 FIX-2（envelope okValues）随字段消亡自然作废"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: normalizeEngineBaseUrl 额外拒绝 userinfo（username/password 非空判非法）——良性安全收紧（spec §5 仅约定 http(s) 校验+尾斜杠）"
 cr_round_1:
   fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
   commit: 436b924c5
   outcome: 1 P1 + ~27 P2 全数修复（FIX-1..28；FIX-2 随 v2 透传改造字段消亡；FIX-29 偏离补登并入上方 spec_deviations）
+cr_round_2:
+  fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
+  outcome: 1 P1 头名正则 + 摘要文本分支等 12 项 P2 修复，随本轮 commit
 notes: >
   gate 命令一律 npm run --prefix D:/worktree/web-search-curl/<pkg> <script>（world.run cwd 固定主仓）；
   check-style.mjs 必须 cd 到 worktree 跑（基于 cwd 的 git 检测）；qa 口径见 spec「详细实现步骤」头注

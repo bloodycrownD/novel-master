@@ -494,6 +494,19 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
       override.onMenu();
     });
     expect(treeText(renderer.root)).toContain('使用说明');
+    // ui/P2-10d：帮助内容五段齐全 + FIX-26 定稿句（mobile 现文案为真源，
+    // 与 desktop 帮助弹窗互为逐字同句，仅补内容断言防漂移）。
+    const helpText = treeText(renderer.root);
+    for (const section of [
+      '启用开关',
+      '引擎优先级',
+      '模板与自定义引擎',
+      '测试消耗配额',
+      '密钥安全',
+    ]) {
+      expect(helpText).toContain(section);
+    }
+    expect(helpText).toContain('整数字段写 "{{count}}"（带引号）');
   });
 
   it('排序写库失败：toast 报错，不静默吞掉', async () => {
