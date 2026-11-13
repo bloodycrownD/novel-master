@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  DUCKDUCKGO_SEARCH_URL,
-  DUCKDUCKGO_USER_AGENT,
-  searchWithDuckduckgo,
-} from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
-import type {
-  ResolvedEngineConfig,
-  SearchToolOptions,
-} from "../../src/domain/tool/builtin/search/types.js";
+import { searchWithDuckduckgo } from "../../src/domain/tool/builtin/search/engines/duckduckgo.js";
+import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
+
+/** 与实现内联字面量保持同步的请求形状断言基线（实现侧常量已撤 export）。 */
+const DDG_SEARCH_URL = "https://html.duckduckgo.com/html/";
+const DDG_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
 
 /** 构造记录调用参数的 mock fetchFn：回放单个 Response。 */
 function makeFetch(
@@ -66,8 +63,8 @@ function ddgResultsHtml(): string {
   <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Ftarget.example.org%2Fdocs">重定向摘要 &#x27;乙&#x27; 与 &amp;</a>
 </div>
 <div class="result results_links results_links_deep web-result">
-  <a rel="nofollow" class="result__a" href="https://blocked.example.net/spam">应被域名过滤排除</a>
-  <a class="result__snippet">垃圾摘要</a>
+  <a rel="nofollow" class="result__a" href="https://blocked.example.net/spam">第三块标题</a>
+  <a class="result__snippet">第三块摘要</a>
 </div>
 </div>
 </body></html>`;
@@ -85,28 +82,23 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     assert.equal(fetchFn.calls.length, 1);
     const call = fetchFn.calls[0]!;
     const url = new URL(call.url);
-    assert.equal(url.origin + url.pathname, DUCKDUCKGO_SEARCH_URL);
+    assert.equal(url.origin + url.pathname, DDG_SEARCH_URL);
     assert.equal(url.searchParams.get("q"), "唐代科举");
     assert.equal(call.init.method, "GET");
     const headers = new Headers(call.init.headers);
     assert.equal(headers.get("Accept"), "text/html");
-    assert.equal(headers.get("User-Agent"), DUCKDUCKGO_USER_AGENT);
-    assert.match(DUCKDUCKGO_USER_AGENT, /^Mozilla\/5\.0 \(compatible; novel-master\//);
+    assert.equal(headers.get("User-Agent"), DDG_USER_AGENT);
+    assert.match(headers.get("User-Agent") ?? "", /^Mozilla\/5\.0 \(compatible; novel-master\//);
     assert.equal(headers.get("Authorization"), null);
     assert.equal(headers.get("X-Subscription-Token"), null);
   });
 
   it("解析：标题/直链 href 实体解码/uddg 重定向解码（嵌套 %26）/snippet 实体解码/广告块跳过/近形类名不误伤", async () => {
     const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-    const out = await searchWithDuckduckgo(
-      ddgResolved(),
-      "q",
-      { domainFilter: ["-blocked.example.net"] },
-      fetchFn
-    );
+    const out = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
 
     assert.equal(out.engine, "duckduckgo");
-    // answer 省略（仅 tavily 透传原生 answer 的统一口径）。
+    // 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；DDG 保留解析数组）。
     assert.equal("answer" in out, false);
     assert.deepEqual(out.results, [
       {
@@ -122,10 +114,16 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
         url: "https://target.example.org/docs?q=1&lang=zh",
         snippet: "重定向摘要 '乙' 与 &",
       },
+      {
+        // 过滤参数已随改造退役：第三块照常入结果，适配器不做域名过滤。
+        title: "第三块标题",
+        url: "https://blocked.example.net/spam",
+        snippet: "第三块摘要",
+      },
     ]);
   });
 
-  it("maxResults 客户端截断（HTML 端点无条数参数，照 searxng 模式）：0→默认 5、2→截 2", async () => {
+  it("maxResults 客户端截断（HTML 端点无条数参数，照模板执行器模式）：0→默认 5、2→截 2", async () => {
     const blocks = Array.from(
       { length: 6 },
       (_, i) => `
@@ -158,20 +156,6 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     assert.equal(out5.results.length, 5);
   });
 
-  it("domainFilter include 白名单：非白名单域全滤后为正常空结果（非 invalid）", async () => {
-    const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-    const out = await searchWithDuckduckgo(
-      ddgResolved(),
-      "q",
-      { domainFilter: ["target.example.org"] },
-      fetchFn
-    );
-    assert.deepEqual(
-      out.results.map((r) => r.url),
-      ["https://target.example.org/docs?q=1&lang=zh"]
-    );
-  });
-
   it("解析 0 个可解析结果抛 invalid（无块——反爬/改版页，供串行链感知降级）", async () => {
     const fetchFn = makeFetch(
       () => htmlOk("<html><body>no results here</body></html>")
@@ -202,18 +186,6 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     await assert.rejects(
       searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn),
       /DuckDuckGo API error 403: anomaly detected/
-    );
-  });
-
-  it("recencyFilter 忽略：请求不携带任何时间范围参数", async () => {
-    const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
-    const options: SearchToolOptions = { recencyFilter: "day" };
-    await searchWithDuckduckgo(ddgResolved(), "q", options, fetchFn);
-    const url = new URL(fetchFn.calls[0]!.url);
-    assert.equal(
-      [...url.searchParams.keys()].sort().toString(),
-      "q",
-      "HTML 端点只应有 q 参数"
     );
   });
 });

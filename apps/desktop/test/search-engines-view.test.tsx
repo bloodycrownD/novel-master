@@ -1,0 +1,695 @@
+/**
+ * 搜索配置列表页 / 详情页（SPEC web-search-curl Step 6，T-U1/T-U2）：
+ *
+ * - T-U1 列表：动态行（六预置 + 自定义实例 + DDG，顺序 = DTO engines 顺序）、
+ *   每行开关发 setEnabled、⋮ 菜单上移/下移提交**动态 id** 顺序、删除只对自定义
+ *   引擎出现（确认后发 deleteCustomEngine）、「新建自定义引擎」进 Detail create
+ *   模式（哨兵写入 navState）；帮助弹窗四段（测试配额段随测试搜索按钮退役删除，
+ *   v3 拍板 A4）。
+ * - T-U2 详情（v3 拍板 A4：desktop 与 mobile 同构——无请求体 defaultBody 编辑、
+ *   无 `{{apiKey}}` 注入快捷选择、无测试搜索按钮，testEngine 已整链退役）：
+ *   预置分支模板字段内置只读（method / 认证方式 / 参数说明禁用，searxng URL
+ *   例外可改；B-1：模板键 UI 改写不到 → 既有覆盖不被整键替换丢失）+ 恢复默认 +
+ *   key 表单；自定义分支认证三态（bearer / 自定义头名 / none）在保存时重建
+ *   认证头、key 表单随保存提交、core 模板校验失败不发保存 IPC；create 模式
+ *   curl 导入预填（识别密钥）与解析失败整体拒绝（toast，表单不变）。
+ *
+ * 行为范式同 fetch-models-modal.test.tsx：react-alias-hook 统一 react 副本，
+ * react-test-renderer 真渲组件，IPC 拦在 window.novelMasterDesktop.invoke；
+ * ContextMenu 由 search-engines-ui-hook 换成去 portal 替身（node 无 DOM）。
+ */
+import assert from "node:assert/strict";
+import { register } from "node:module";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import TestRenderer, { type ReactTestRenderer, type TestInstance } from "react-test-renderer";
+import type { ReactElement } from "react";
+import { IPC_CHANNELS, type SearchConfigDto } from "@shared/ipc-types";
+import type { CustomEngineDef } from "@shared/logic/search-engines";
+import type { SettingsNavHandle, SettingsViewId } from "@/features/settings/settings-nav";
+
+register(new URL("./react-alias-hook.mjs", import.meta.url));
+register(new URL("./search-engines-ui-hook.mjs", import.meta.url));
+const { act } = await import("react");
+const { SearchEnginesView } = await import("@/features/settings/SearchEnginesView");
+const { SearchEngineDetailView } = await import("@/features/settings/SearchEngineDetailView");
+const { NEW_ENGINE_SENTINEL } = await import("@/features/settings/search-engine-meta");
+const { subscribeToast } = await import("@/components/ui/show-toast");
+
+/** 自定义实例 fixture（id 形态照 core：`custom:{nanoid8}`；模板为 v2 透传形状，无映射字段）。 */
+const CUSTOM_ENGINE: CustomEngineDef = {
+  id: "custom:abc12345",
+  name: "我的搜索",
+  createdAt: "2026-11-01T00:00:00.000Z",
+  template: {
+    name: "我的搜索",
+    method: "POST",
+    url: "https://api.example.com/search",
+    headers: { Authorization: "Bearer {{apiKey}}" },
+    defaultBody: '{"query":"{{query}}"}',
+    paramHint: "自定义实例",
+  },
+};
+
+/** 配置读模型 fixture：四行覆盖 DDG / 预置 / 自定义混排与 baseUrl 回显。 */
+function makeConfig(): SearchConfigDto {
+  return {
+    engines: [
+      {
+        id: "bocha",
+        name: "博查搜索",
+        enabled: true,
+        needsKey: true,
+        hasKey: true,
+        needsBaseUrl: false,
+        isCustom: false,
+        paramHint: "",
+      },
+      {
+        id: CUSTOM_ENGINE.id,
+        name: CUSTOM_ENGINE.name,
+        enabled: false,
+        needsKey: true,
+        hasKey: false,
+        needsBaseUrl: false,
+        isCustom: true,
+        paramHint: "自定义实例",
+      },
+      {
+        id: "duckduckgo",
+        name: "DuckDuckGo",
+        enabled: true,
+        needsKey: false,
+        hasKey: false,
+        needsBaseUrl: false,
+        isCustom: false,
+        paramHint: "",
+      },
+      {
+        id: "searxng",
+        name: "SearXNG",
+        enabled: false,
+        needsKey: false,
+        hasKey: false,
+        needsBaseUrl: true,
+        baseUrl: "https://searx.example.com",
+        isCustom: false,
+        paramHint: "",
+      },
+    ],
+    customEngines: [CUSTOM_ENGINE],
+    presetOverrides: { bocha: true },
+    canRun: ["bocha", "duckduckgo"],
+  };
+}
+
+type InvokeCall = { readonly channel: string; readonly payload: unknown };
+type Invoke = (channel: string, payload: unknown) => Promise<unknown>;
+
+/** 允许的 IPC 面：未知 channel 直接失败（防止 UI 打错通道被静默放过；testEngine 已退役不在面内）。 */
+const ALLOWED_CHANNELS = new Set<string>([
+  IPC_CHANNELS.SEARCH_GET_CONFIG,
+  IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY,
+  IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY,
+  IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER,
+  IPC_CHANNELS.SEARCH_SET_ENABLED,
+  IPC_CHANNELS.SEARCH_SET_ENGINE_BASE_URL,
+  IPC_CHANNELS.SEARCH_CREATE_CUSTOM_ENGINE,
+  IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE,
+  IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE,
+  IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE,
+  IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE,
+]);
+
+/** 按 channel 路由的 IPC 假实现。 */
+function makeInvoke(config: SearchConfigDto, calls: InvokeCall[]): Invoke {
+  return (channel, payload) => {
+    calls.push({ channel, payload });
+    if (!ALLOWED_CHANNELS.has(channel)) {
+      return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
+    }
+    if (channel === IPC_CHANNELS.SEARCH_GET_CONFIG) {
+      return Promise.resolve({ ok: true, data: config });
+    }
+    return Promise.resolve({ ok: true, data: undefined });
+  };
+}
+
+/** 挂全局 window.novelMasterDesktop，返回还原函数。 */
+function mockWindow(invoke: Invoke): () => void {
+  const g = globalThis as unknown as {
+    window?: unknown;
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  };
+  const prevWindow = g.window;
+  const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
+  g.window = { novelMasterDesktop: { invoke } };
+  g.IS_REACT_ACT_ENVIRONMENT = true;
+  return () => {
+    g.window = prevWindow;
+    g.IS_REACT_ACT_ENVIRONMENT = prevActEnv;
+  };
+}
+
+/** 递归收集节点文本（host 节点 children 为字符串或嵌套节点）。 */
+function textOf(node: TestInstance): string {
+  let out = "";
+  for (const child of node.children ?? []) {
+    out += typeof child === "string" ? child : textOf(child);
+  }
+  return out;
+}
+
+function classNameOf(node: TestInstance): string {
+  const value = node.props.className;
+  return typeof value === "string" ? value : "";
+}
+
+function hasClass(node: TestInstance, className: string): boolean {
+  return classNameOf(node).split(/\s+/).includes(className);
+}
+
+function findAllByClass(root: TestInstance, className: string): TestInstance[] {
+  return root.findAll((node) => hasClass(node, className));
+}
+
+function findByClass(root: TestInstance, className: string): TestInstance | undefined {
+  return findAllByClass(root, className).at(0);
+}
+
+function findButtonByText(root: TestInstance, text: string): TestInstance | undefined {
+  return root.findAll((node) => node.type === "button" && textOf(node).trim() === text).at(0);
+}
+
+function propString(node: TestInstance, name: string): string {
+  const value = node.props[name];
+  return typeof value === "string" ? value : "";
+}
+
+function propIsTrue(node: TestInstance, name: string): boolean {
+  return node.props[name] === true;
+}
+
+function findByPlaceholder(root: TestInstance, placeholder: string): TestInstance | undefined {
+  return root.findAll((node) => node.props.placeholder === placeholder).at(0);
+}
+
+/** 按 option 文案定位 select（method / 认证方式两个下拉各只有一个匹配项）。 */
+function findSelectWithOption(root: TestInstance, optionText: string): TestInstance | undefined {
+  return root.findAll((node) => node.type === "select" && node.findAll((child) => child.type === "option" && textOf(child).includes(optionText)).length > 0).at(0);
+}
+
+/** 调节点上的事件处理器（受控输入传 `{target:{value}}` / `{target:{checked}}`）。 */
+function invokeProp(node: TestInstance, name: string, ...args: unknown[]): void {
+  const handler = node.props[name];
+  assert.equal(typeof handler, "function", `节点缺少 ${name} 处理器`);
+  (handler as (...rest: unknown[]) => void)(...args);
+}
+
+/** 等一轮宏任务，让 act 内的 IPC promise 链与 setState 全部落定。 */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+/** 挂载并等首轮读配置（effect → getConfig）落定。 */
+async function mount(element: ReactElement): Promise<ReactTestRenderer> {
+  let renderer: ReactTestRenderer | undefined;
+  await act(async () => {
+    renderer = TestRenderer.create(element);
+  });
+  await settle();
+  if (renderer == null) throw new Error("渲染失败");
+  return renderer;
+}
+
+type NavFixture = {
+  readonly handle: SettingsNavHandle;
+  readonly pushes: SettingsViewId[];
+  readonly pops: string[];
+  readonly state: { editingEngineId?: string };
+};
+
+/** nav fixture：navState 为可变普通对象（Detail 页据此定位引擎 / 写哨兵）。 */
+function makeNav(editingEngineId?: string): NavFixture {
+  const pushes: SettingsViewId[] = [];
+  const pops: string[] = [];
+  const state: { editingEngineId?: string } = {
+    ...(editingEngineId == null ? {} : { editingEngineId }),
+  };
+  return {
+    handle: {
+      push: (viewId) => {
+        pushes.push(viewId);
+      },
+      pop: () => {
+        pops.push("pop");
+      },
+      navState: state,
+      dirtyViews: new Set(),
+    },
+    pushes,
+    pops,
+    state,
+  };
+}
+
+function callsOf(calls: readonly InvokeCall[], channel: string): InvokeCall[] {
+  return calls.filter((call) => call.channel === channel);
+}
+
+let restoreWindow: (() => void) | undefined;
+let mounted: ReactTestRenderer[] = [];
+
+beforeEach(() => {
+  mounted = [];
+});
+
+afterEach(async () => {
+  // 卸载也会触发 effect 清理与 setState，放进 act 内避免 act 警告
+  await act(async () => {
+    for (const renderer of mounted) renderer.unmount();
+  });
+  restoreWindow?.();
+  restoreWindow = undefined;
+});
+
+async function mountWith(
+  config: SearchConfigDto,
+  element: (nav: NavFixture) => ReactElement,
+  options: {
+    readonly editingEngineId?: string;
+    readonly calls?: InvokeCall[];
+  } = {}
+): Promise<{
+  renderer: ReactTestRenderer;
+  nav: NavFixture;
+  calls: InvokeCall[];
+}> {
+  const calls = options.calls ?? [];
+  restoreWindow = mockWindow(makeInvoke(config, calls));
+  const nav = makeNav(options.editingEngineId);
+  const renderer = await mount(element(nav));
+  mounted.push(renderer);
+  return { renderer, nav, calls };
+}
+
+describe("T-U1 搜索配置列表页", () => {
+  it("按 DTO engines 顺序动态渲染预置 / 自定义 / DDG 混排行与分类标签", async () => {
+    const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const rows = findAllByClass(renderer.root, "settings-list-item-row");
+    assert.equal(rows.length, 4);
+    const labels = rows.map((row) => {
+      const label = findByClass(row, "settings-list-item__label");
+      return label == null ? "" : textOf(label);
+    });
+    assert.ok(labels[0]?.includes("博查搜索"), `第 1 行应为预置 bocha：${labels[0]}`);
+    assert.ok(labels[1]?.includes("我的搜索"), `第 2 行应为自定义实例：${labels[1]}`);
+    assert.ok(labels[2]?.includes("DuckDuckGo"), `第 3 行应为 DDG：${labels[2]}`);
+    assert.ok(labels[3]?.includes("SearXNG"), `第 4 行应为 searxng：${labels[3]}`);
+    // 分类标签：自定义行有「自定义」，DDG 行有「内置」，预置行两者皆无
+    assert.ok(textOf(rows[1] as TestInstance).includes("自定义"));
+    assert.ok(textOf(rows[2] as TestInstance).includes("内置"));
+    assert.ok(!textOf(rows[0] as TestInstance).includes("自定义"));
+  });
+
+  it("每行开关发 setEnabled（与行点击解耦；自定义 id 原样透传）", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const toggle = renderer.root.findAll((node) => node.type === "input" && node.props["aria-label"] === "启用 我的搜索").at(0);
+    assert.ok(toggle != null, "自定义行缺少启用开关");
+    await act(async () => {
+      invokeProp(toggle as TestInstance, "onChange", {
+        target: { checked: true },
+      });
+    });
+    await settle();
+    const writes = callsOf(calls, IPC_CHANNELS.SEARCH_SET_ENABLED);
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0]?.payload, {
+      engineId: CUSTOM_ENGINE.id,
+      enabled: true,
+    });
+  });
+
+  it("⋮ 菜单上移 / 下移提交含自定义 id 的动态顺序", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const openMenu = async (label: string): Promise<void> => {
+      const button = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === label).at(0);
+      assert.ok(button != null, `缺少菜单按钮：${label}`);
+      await act(async () => {
+        invokeProp(button as TestInstance, "onClick", {
+          currentTarget: {
+            getBoundingClientRect: () => ({ left: 0, bottom: 0 }),
+          },
+        });
+      });
+    };
+
+    // DDG 上移一格：与自定义实例交换 → 提交序列里必须带 custom: id
+    await openMenu("更多 DuckDuckGo");
+    const up = findButtonByText(renderer.root, "上移");
+    assert.ok(up != null, "菜单缺少上移项");
+    await act(async () => {
+      invokeProp(up as TestInstance, "onClick");
+    });
+    await settle();
+    let writes = callsOf(calls, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER);
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0]?.payload, {
+      engineOrder: ["bocha", "duckduckgo", CUSTOM_ENGINE.id, "searxng"],
+    });
+
+    // 自定义实例下移一格：同样按动态 id 提交
+    await openMenu("更多 我的搜索");
+    const down = findButtonByText(renderer.root, "下移");
+    assert.ok(down != null, "菜单缺少下移项");
+    await act(async () => {
+      invokeProp(down as TestInstance, "onClick");
+    });
+    await settle();
+    writes = callsOf(calls, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER);
+    assert.deepEqual(writes[1]?.payload, {
+      engineOrder: ["bocha", "duckduckgo", CUSTOM_ENGINE.id, "searxng"],
+    });
+  });
+
+  it("删除项只出现在自定义行，确认后发 deleteCustomEngine", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const openMenu = async (label: string): Promise<void> => {
+      const button = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === label).at(0);
+      assert.ok(button != null, `缺少菜单按钮：${label}`);
+      await act(async () => {
+        invokeProp(button as TestInstance, "onClick", {
+          currentTarget: {
+            getBoundingClientRect: () => ({ left: 0, bottom: 0 }),
+          },
+        });
+      });
+    };
+
+    // 预置行：菜单无删除项（此时菜单只有上移/下移）
+    await openMenu("更多 博查搜索");
+    assert.equal(findButtonByText(renderer.root, "删除"), undefined);
+
+    // 自定义行：删除 → 确认弹窗 → 发 IPC（菜单单例，重开即替换）
+    await openMenu("更多 我的搜索");
+    const remove = findButtonByText(renderer.root, "删除");
+    assert.ok(remove != null, "自定义行菜单缺少删除项");
+    await act(async () => {
+      invokeProp(remove as TestInstance, "onClick");
+    });
+    const confirm = findByClass(renderer.root, "confirm-modal");
+    assert.ok(confirm != null, "删除未弹确认框");
+    const confirmButton = findButtonByText(confirm as TestInstance, "删除");
+    assert.ok(confirmButton != null, "确认框缺少删除按钮");
+    await act(async () => {
+      invokeProp(confirmButton as TestInstance, "onClick");
+    });
+    await settle();
+    const deletes = callsOf(calls, IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE);
+    assert.equal(deletes.length, 1);
+    assert.deepEqual(deletes[0]?.payload, { engineId: CUSTOM_ENGINE.id });
+  });
+
+  it("新建入口写哨兵并推 searchEngineDetail（复用 viewId 的 create 模式）", async () => {
+    const { renderer, nav } = await mountWith(makeConfig(), (fixture) => <SearchEnginesView nav={fixture.handle} />);
+    const createButton = findButtonByText(renderer.root, "新建自定义引擎");
+    assert.ok(createButton != null, "缺少新建入口");
+    await act(async () => {
+      invokeProp(createButton as TestInstance, "onClick");
+    });
+    assert.deepEqual(nav.pushes, ["searchEngineDetail"]);
+    assert.equal(nav.state.editingEngineId, NEW_ENGINE_SENTINEL);
+  });
+
+  it("帮助弹窗四段（测试配额段随测试搜索按钮退役删除，v3 拍板 A4）", async () => {
+    const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEnginesView nav={nav.handle} />);
+    const helpButton = renderer.root.findAll((node) => node.type === "button" && node.props["aria-label"] === "使用说明").at(0);
+    assert.ok(helpButton != null, "缺少帮助按钮");
+    await act(async () => {
+      invokeProp(helpButton as TestInstance, "onClick");
+    });
+    const modal = findByClass(renderer.root, "text-prompt-modal");
+    assert.ok(modal != null, "帮助弹窗未打开");
+    const modalText = textOf(modal as TestInstance);
+    for (const section of ["启用开关", "引擎优先级", "模板与自定义引擎", "密钥安全"]) {
+      assert.ok(modalText.includes(section), `帮助弹窗缺少「${section}」段`);
+    }
+    // v3：测试搜索按钮已退役，配额说明段一并删除
+    assert.ok(!modalText.includes("测试消耗配额"), `测试配额段应已删除：${modalText}`);
+    assert.ok(!modalText.includes("结果映射"), `响应映射措辞不应出现：${modalText}`);
+    // curl 导入仍是 desktop create 能力，说明句保留
+    assert.ok(modalText.includes("粘贴 curl 命令导入，用模板描述任意搜索 API"), `curl 导入句应保留：${modalText}`);
+  });
+});
+
+describe("T-U2 搜索引擎详情页", () => {
+  it("预置 searxng：模板字段内置只读（method/认证方式禁用、URL 例外可改）且无实例地址表单", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "searxng" });
+    // v3：searxng 模板 URL 是完整端点（无 {{baseUrl}} 宏），实例地址表单不再出现。
+    assert.equal(findByPlaceholder(renderer.root, "https://searxng.example.com"), undefined, "searxng 不应再有实例地址表单");
+    // 认证三态出厂 none → 无 key 表单
+    assert.equal(renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").length, 0);
+    // 无覆盖（presetOverrides 只有 bocha）→ 不显示恢复默认
+    assert.equal(findButtonByText(renderer.root, "恢复默认"), undefined);
+    // J-1：预置 method 下拉禁用（双端对齐 mobile FormChipGroup disabled）
+    const methodSelect = findSelectWithOption(renderer.root, "POST");
+    assert.ok(methodSelect != null, "模板表单应平铺出 method 下拉");
+    assert.equal(propIsTrue(methodSelect as TestInstance, "disabled"), true, "预置 method 下拉应禁用");
+    // 认证方式三态下拉存在且预置只读
+    const authSelect = findSelectWithOption(renderer.root, "Authorization: Bearer");
+    assert.ok(authSelect != null, "应有认证方式三态下拉");
+    assert.equal(propIsTrue(authSelect as TestInstance, "disabled"), true, "预置认证方式应只读");
+    const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
+    assert.ok(urlInput != null, "缺少 URL 表单");
+    assert.equal(propString(urlInput as TestInstance, "value"), "https://searx.example.com/search?format=json", "searxng 的 URL 是完整端点");
+    assert.equal(propIsTrue(urlInput as TestInstance, "disabled"), false, "searxng URL 例外可改");
+    // 响应映射区已废除：无结果数组路径 / 字段候选控件
+    assert.equal(findByPlaceholder(renderer.root, "results"), undefined);
+    // 未有写操作
+    assert.equal(calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG).length, 0);
+  });
+
+  it("预置 bocha：有覆盖时显示恢复默认，模板字段只读（B-1：模板键 UI 改写不到），key 保存走 saveEngineKey", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
+    // B-1：预置模板字段（method / URL / 认证方式 / 参数说明）内置只读，既有覆盖不被整键替换
+    const methodSelect = findSelectWithOption(renderer.root, "POST");
+    assert.equal(propIsTrue(methodSelect as TestInstance, "disabled"), true, "预置 method 下拉应禁用");
+    const authSelect = findSelectWithOption(renderer.root, "Authorization: Bearer");
+    assert.equal(propIsTrue(authSelect as TestInstance, "disabled"), true, "预置认证方式应只读");
+    assert.equal(propString(authSelect as TestInstance, "value"), "bearer", "出厂模板 Authorization Bearer 应反推为 bearer");
+    const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
+    assert.equal(propIsTrue(urlInput as TestInstance, "disabled"), true, "预置 URL 应禁用");
+
+    const reset = findButtonByText(renderer.root, "恢复默认");
+    assert.ok(reset != null, "已有覆盖时缺少恢复默认");
+    await act(async () => {
+      invokeProp(reset as TestInstance, "onClick");
+    });
+    await settle();
+    assert.deepEqual(callsOf(calls, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE)[0]?.payload, { engineId: "bocha" });
+
+    const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
+    assert.ok(keyInput != null, "需 key 模板缺少 key 表单");
+    await act(async () => {
+      invokeProp(keyInput as TestInstance, "onChange", {
+        target: { value: "sk-bocha-123456" },
+      });
+    });
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    assert.deepEqual(callsOf(calls, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY)[0]?.payload, {
+      engineId: "bocha",
+      apiKey: "sk-bocha-123456",
+    });
+    // 模板未改动 → 不写覆盖
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE).length, 0);
+  });
+
+  it("拍板 7：预置零改动保存不发写 IPC 且 toast「无改动」", async () => {
+    const toasts: string[] = [];
+    const unsubscribe = subscribeToast((state) => {
+      if (state != null) toasts.push(state.message);
+    });
+    try {
+      // bocha 已存 key（hasKey=true，不触发拦截）；表单未改 + key 草稿空 → 零写操作
+      const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
+      const save = findButtonByText(renderer.root, "保存");
+      assert.ok(save != null, "缺少保存按钮");
+      await act(async () => {
+        invokeProp(save as TestInstance, "onClick");
+      });
+      await settle();
+      const writes = calls.filter((call) => call.channel !== IPC_CHANNELS.SEARCH_GET_CONFIG);
+      assert.equal(writes.length, 0, `零改动不应发写 IPC：${JSON.stringify(writes)}`);
+      assert.ok(toasts.includes("无改动"), `应 toast「无改动」：${toasts.join(" / ")}`);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("拍板 7：预置需 key 且无已存 key、key 草稿空时保存拦截", async () => {
+    // bocha needsKey 且未存 key（engines 只读，重建首行变体而非原地改）
+    const base = makeConfig();
+    const config: SearchConfigDto = {
+      ...base,
+      engines: base.engines.map((engine, index) => (index === 0 ? { ...engine, hasKey: false } : engine)),
+    };
+    const { renderer, calls } = await mountWith(config, (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: "bocha" });
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY).length, 0);
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE).length, 0);
+    const status = findByClass(renderer.root, "settings-status");
+    assert.ok(status != null, "缺少拦截提示");
+    const message = textOf(status as TestInstance);
+    assert.ok(message.includes("请输入 API Key"), `拦截文案应与 mobile 一致：${message}`);
+  });
+
+  it("自定义引擎：认证三态重建认证头（自定义头名 / none），保存提交模板与 key", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: CUSTOM_ENGINE.id });
+    // J-1：自定义引擎 method 可编辑（仅预置锁定）
+    const methodSelect = findSelectWithOption(renderer.root, "POST");
+    assert.ok(methodSelect != null, "自定义引擎应有 method 下拉");
+    assert.equal(propIsTrue(methodSelect as TestInstance, "disabled"), false, "自定义引擎 method 应可编辑");
+    // fixture 模板 Authorization Bearer → 加载时反推为 bearer 三态
+    let authSelect = findSelectWithOption(renderer.root, "Authorization: Bearer");
+    assert.ok(authSelect != null, "缺少认证方式三态下拉");
+    assert.equal(propString(authSelect as TestInstance, "value"), "bearer");
+
+    // 切到自定义请求头：头名输入出现，重建非 Authorization 的 Bearer 头
+    await act(async () => {
+      invokeProp(authSelect as TestInstance, "onChange", { target: { value: "header" } });
+    });
+    const headerName = findByPlaceholder(renderer.root, "X-API-Key");
+    assert.ok(headerName != null, "自定义头名输入应出现");
+    await act(async () => {
+      invokeProp(headerName as TestInstance, "onChange", { target: { value: "X-API-Key" } });
+    });
+    const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
+    assert.ok(keyInput != null, "缺少 key 表单");
+    await act(async () => {
+      invokeProp(keyInput as TestInstance, "onChange", { target: { value: "sk-custom-1234567890" } });
+    });
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    let updates = callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE);
+    assert.equal(updates.length, 1);
+    let payload = updates[0]?.payload as {
+      engineId: string;
+      apiKey?: string;
+      template: { headers: Record<string, string>; url: string };
+    };
+    assert.equal(payload.engineId, CUSTOM_ENGINE.id);
+    assert.equal(payload.apiKey, "sk-custom-1234567890");
+    assert.equal(payload.template.headers["X-API-Key"], "{{apiKey}}");
+    assert.equal(payload.template.headers.Authorization, undefined, "旧认证头应被清掉");
+    assert.equal(payload.template.url, CUSTOM_ENGINE.template.url);
+
+    // 再切无认证：头名输入消失，认证头清空（CR2 P2-9 v3 形态：草稿无 {{apiKey}} 引用放行保存）
+    authSelect = findSelectWithOption(renderer.root, "Authorization: Bearer");
+    await act(async () => {
+      invokeProp(authSelect as TestInstance, "onChange", { target: { value: "none" } });
+    });
+    assert.equal(findByPlaceholder(renderer.root, "X-API-Key"), undefined, "无认证时头名输入应消失");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    updates = callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE);
+    assert.equal(updates.length, 2);
+    payload = updates[1]?.payload as typeof payload;
+    assert.deepEqual(payload.template.headers, {}, "无认证保存应清掉认证头");
+    assert.equal(payload.apiKey, undefined, "key 草稿已回落空白，不应重复提交");
+  });
+
+  it("自定义引擎：core 模板校验失败（URL 缺失）经 catalog 展示原因、不发保存 IPC", async () => {
+    const { renderer, calls } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: CUSTOM_ENGINE.id });
+    const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
+    assert.ok(urlInput != null, "缺少 URL 表单");
+    await act(async () => {
+      invokeProp(urlInput as TestInstance, "onChange", { target: { value: "" } });
+    });
+    const save = findButtonByText(renderer.root, "保存");
+    assert.ok(save != null, "缺少保存按钮");
+    await act(async () => {
+      invokeProp(save as TestInstance, "onClick");
+    });
+    await settle();
+    assert.equal(callsOf(calls, IPC_CHANNELS.SEARCH_UPDATE_CUSTOM_ENGINE).length, 0);
+    const status = findByClass(renderer.root, "settings-status");
+    assert.ok(status != null, "缺少错误展示");
+    const message = textOf(status as TestInstance);
+    // 错误 descriptor 由 core 携带 messageKey/params，UI 经 coreT 译出原因。
+    assert.ok(message.includes("搜索模板无效"), `错误文案应走 catalog：${message}`);
+    assert.ok(message.includes("url"), `原因应可读：${message}`);
+  });
+
+  it("create 模式：curl 导入预填方法/端点/认证（识别密钥），解析失败整体拒绝且表单不变", async () => {
+    const toasts: string[] = [];
+    const unsubscribe = subscribeToast((state) => {
+      if (state != null) toasts.push(state.message);
+    });
+    try {
+      const { renderer } = await mountWith(makeConfig(), (nav) => <SearchEngineDetailView nav={nav.handle} />, { editingEngineId: NEW_ENGINE_SENTINEL });
+      // create 模式不读库：只出现 curl 导入 + 表单
+      const curlInput = findByPlaceholder(renderer.root, "curl -X POST https://api.example.com/search -H 'Authorization: Bearer sk-xxx' -d '{\"query\":\"{{query}}\"}'");
+      assert.ok(curlInput != null, "create 模式缺少 curl 粘贴域");
+      await act(async () => {
+        invokeProp(curlInput as TestInstance, "onChange", {
+          target: {
+            value: 'curl -X POST https://api.example.com/search -H "Authorization: Bearer sk-abcdef123456789012" -d \'{"query":"{{query}}"}\'',
+          },
+        });
+      });
+      const parseButton = findButtonByText(renderer.root, "解析并预填");
+      assert.ok(parseButton != null, "缺少解析按钮");
+      await act(async () => {
+        invokeProp(parseButton as TestInstance, "onClick");
+      });
+
+      const urlInput = findByPlaceholder(renderer.root, "https://api.example.com/search");
+      assert.ok(urlInput != null, "缺少 URL 表单");
+      assert.equal(propString(urlInput as TestInstance, "value"), "https://api.example.com/search");
+      const methodSelect = findSelectWithOption(renderer.root, "POST");
+      assert.equal(propString(methodSelect as TestInstance, "value"), "POST");
+      // v3：curl 的 Authorization 头反推为 bearer 三态，密钥替换为 {{apiKey}} 后进 key 草稿
+      const authSelect = findSelectWithOption(renderer.root, "Authorization: Bearer");
+      assert.equal(propString(authSelect as TestInstance, "value"), "bearer", "curl 认证头应反推为 bearer");
+      const keyInput = renderer.root.findAll((node) => node.type === "input" && node.props.type === "password").at(0);
+      assert.equal(propString(keyInput as TestInstance, "value"), "sk-abcdef123456789012");
+      // v3 无请求体字段：defaultBody 文本域不再出现（-d 原文不再预填）
+      assert.equal(findByPlaceholder(renderer.root, '{"query": "{{query}}", "count": "{{count}}"}'), undefined, "v3 表单不应有请求体文本域");
+      assert.ok(renderer.root.findAll((node) => hasClass(node, "settings-hint") && textOf(node).includes("已识别到密钥")).length > 0, "缺少密钥识别提示");
+
+      // 解析失败：整体拒绝（toast 原因），表单保持上次成功导入的值
+      await act(async () => {
+        invokeProp(curlInput as TestInstance, "onChange", {
+          target: { value: "wget https://api.example.com/search" },
+        });
+      });
+      await act(async () => {
+        invokeProp(parseButton as TestInstance, "onClick");
+      });
+      assert.ok(
+        toasts.some((message) => message.includes("curl 命令解析失败")),
+        `解析失败应整条拒绝并 toast 原因：${toasts.join(" / ")}`
+      );
+      assert.equal(propString(urlInput as TestInstance, "value"), "https://api.example.com/search");
+    } finally {
+      unsubscribe();
+    }
+  });
+});

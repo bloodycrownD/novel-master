@@ -163,10 +163,14 @@ error:
     import_yaml_invalid: 智能排序规则 YAML 无效：{reason}
   # —— tool：搜索配置 ——
   tool:
-    search_not_configured: 未配置任何搜索引擎。请先完成配置后重试：桌面端「设置 → AI → 搜索配置」、移动端「我的 → 配置 → 搜索配置」；可为 bocha / tavily / brave 填写 API key，或为自托管的 searxng 填写 baseUrl。
     search_api_key_required: API key 不能为空
-    search_searxng_base_url_invalid: searxng baseUrl 无效：仅支持 http/https，且不允许携带用户名密码
-    search_engine_order_invalid: "engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: {order}"
+    search_searxng_base_url_invalid: 实例地址无效：仅支持 http/https
+    search_engine_order_invalid: "引擎顺序必须是已知引擎 id 的序列（不重复、不接受未知 id），收到: {order}"
+    search_template_invalid: 搜索模板无效：{reason}
+    search_secret_detected: "检测到明文密钥（{field}），请改用 {{apiKey}} 占位符后保存"
+    search_engine_not_found: "未找到搜索引擎：{engine}"
+    search_test_failed: 引擎测试失败：{reason}
+    search_curl_parse_failed: curl 命令解析失败：{reason}
   # —— usage：统计入参校验（{field} 是入参标签原文，如 dayLocalDate / range.fromDay）——
   usage:
     invalid_day_format: "{field} 须为 YYYY-MM-DD 格式，收到：{value}"

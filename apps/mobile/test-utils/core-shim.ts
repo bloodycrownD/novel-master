@@ -10,10 +10,7 @@
  * Mobile unit tests only need error classes, so we re-export just those.
  */
 
-export {
-  VfsError,
-  isVfsError,
-} from '../../../packages/core/dist/errors/vfs-errors.js';
+export {VfsError, isVfsError} from '../../../packages/core/dist/errors/vfs-errors.js';
 export {VfsZipError} from '../../../packages/core/dist/errors/vfs-zip-errors.js';
 export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js';
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
@@ -21,68 +18,31 @@ export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/cre
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 export {ProviderError} from '../../../packages/core/dist/errors/provider-errors.js';
 export {ToolError} from '../../../packages/core/dist/errors/tool-errors.js';
-export {
-  ENGINE_IDS,
-  KEY_ENGINE_IDS,
-} from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
-export {
-  CloudSyncError,
-  isCloudSyncError,
-  CloudSyncCoordinator,
-  normalizePrefix,
-  parseCloudSyncStatus,
-  statusKey,
-} from '../../../packages/core/dist/infra/cloud-sync/index.js';
+export {CloudSyncError, isCloudSyncError, CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
 export type {KkvService} from '../../../packages/core/dist/service/kkv/kkv.port.js';
-export {
-  matchDepth,
-  validateDepthSlice,
-} from '../../../packages/core/dist/domain/depth/logic/depth-slice.js';
-export {
-  sortDirPaths,
-  sortFilesForDir,
-} from '../../../packages/core/dist/domain/workplace/logic/workplace-eval.js';
+export {matchDepth, validateDepthSlice} from '../../../packages/core/dist/domain/depth/logic/depth-slice.js';
+export {sortDirPaths, sortFilesForDir} from '../../../packages/core/dist/domain/workplace/logic/workplace-eval.js';
 export {DEFAULT_WORKPLACE_DIR_RULE} from '../../../packages/core/dist/domain/workplace/logic/default-dir-rule.js';
-export type {
-  WorkplaceDirRule,
-  WorkplaceListRow,
-} from '../../../packages/core/dist/domain/workplace/model/workplace-types.js';
+export type {WorkplaceDirRule, WorkplaceListRow} from '../../../packages/core/dist/domain/workplace/model/workplace-types.js';
 export {textBlocks} from '../../../packages/core/dist/domain/chat/content/text-blocks.js';
 export {ToolRegistry} from '../../../packages/core/dist/domain/tool/logic/tool-registry.js';
-export {
-  buildToolResultBlock,
-  resolveToolResultOk,
-} from '../../../packages/core/dist/domain/tool/logic/build-tool-result-block.js';
+export {buildToolResultBlock, resolveToolResultOk} from '../../../packages/core/dist/domain/tool/logic/build-tool-result-block.js';
 export {registerBuiltinTools} from '../../../packages/core/dist/domain/tool/builtin/register-builtin-tools.js';
 export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tools.js';
 export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js';
 export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';
-export {
-  AgentRunResolveError,
-  resolveCurrentAgentId,
-  resolveCurrentAgentDefinition,
-  resolveApplicationModelIdForRun,
-} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
-export {
-  runAgentTurn,
-  AgentTurnError,
-} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';
+export {AgentRunResolveError, resolveCurrentAgentId, resolveCurrentAgentDefinition, resolveApplicationModelIdForRun} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
+export {runAgentTurn, AgentTurnError} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';
 export type {AgentDefinition} from '../../../packages/core/dist/domain/agent/model/agent-definition.js';
 export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/model/agent-run-result.js';
-export {
-  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
-  userVfsUnifiedToolTurnFlag,
-} from '../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js';
+// 搜索 curl 化（web-search-curl Step 7）：mobile 生产/测试实际引用的新导出
+// （生产走 metro 直连 dist barrel，本 shim 是 Jest 白名单——只补有引用的符号）。
+export {PRESET_ENGINE_TEMPLATES} from '../../../packages/core/dist/domain/tool/builtin/search/preset-templates.js';
+export {validateSearchEngineTemplate} from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
+export {DEFAULT_USER_VFS_UNIFIED_TOOL_TURN, userVfsUnifiedToolTurnFlag} from '../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js';
 export {userVfsTurns, USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
 export {formatUserVfsTurnPreviewBody} from '../../../packages/core/dist/presentation/chat/user-vfs-turn-preview.js';
-export {
-  USER_VFS_TURN_ACK_TEXT,
-  userVfsTurnStorage,
-} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
-export type {
-  ParsedUserVfsAction,
-  ParsedUserVfsEditHunk,
-  UserVfsTurnView,
-} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
+export {USER_VFS_TURN_ACK_TEXT, userVfsTurnStorage} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
+export type {ParsedUserVfsAction, ParsedUserVfsEditHunk, UserVfsTurnView} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';

@@ -1,31 +1,20 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import {
-  type ChatMessageData,
-  type ContentBlock,
-  type MessageAttachment,
-  type ToolResultBlock,
-  type ToolUseBlock,
-} from '@novel-master/core/chat';
+import {type ChatMessageData, type ContentBlock, type MessageAttachment, type ToolResultBlock, type ToolUseBlock} from '@novel-master/core/chat';
 import {resolveToolResultOk} from '@novel-master/core';
 import {summarizeToolInput} from '@novel-master/core/chat';
 
-import {
-  skillToolRefResolver,
-  resolveVfsToolFilePath,
-} from '@novel-master/core/chat';
+import {skillToolRefResolver, resolveVfsToolFilePath} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
-
-export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
 
 export interface ToolCallView {
   readonly toolUseId: string;
   readonly name: string;
   readonly input: Record<string, unknown>;
-  readonly status: ToolCallStatus;
+  readonly status: 'success' | 'error' | 'pending' | 'interrupted';
   readonly resultContent?: string;
   readonly summary?: string;
   /**
@@ -40,7 +29,8 @@ export interface ToolCallView {
   readonly skillRef?: SkillToolRef;
 }
 
-export interface MessageListItem {
+// nm-style: keep-public — 导出函数的返回类型（buildChatListItems / selectTailTranscriptRows），测试直接 import 命名；撤导出会让签名退回匿名类型并破坏测试编译。
+export interface ChatListItem {
   readonly kind: 'message';
   readonly message: ChatMessageData;
   readonly textParts: readonly string[];
@@ -50,8 +40,7 @@ export interface MessageListItem {
   readonly tools: readonly ToolCallView[];
 }
 
-export type ChatListItem = MessageListItem;
-
+// nm-style: keep-public — 四个导出函数的参数类型（buildChatListItems / selectTailTranscriptRows / buildTranscriptRows / buildTranscriptRowsWithContext），测试直接 import 命名。
 export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
   /** true 当 uiRunning=false（Composer 已停）；与 agentRunning 正交 */
@@ -71,6 +60,7 @@ function blocksForMessage(message: ChatMessageData): readonly ContentBlock[] {
  * user_ops 已拆除：遗留操作日志附件（非 annotate）不再兼容展示，直接丢弃；
  * 批注（annotate）与其它来源附件照常保留。列表与 transcript 共用此口径。
  */
+// nm-style: keep-public — 生产同文件两处回调过滤（buildChatListItemsWithContext 的 .some 与 transcriptRowFromItem 的 .filter，脚本不计数回调值引用）；导出仅供测试直接 import，本片禁改测试。
 export function isDisplayableAttachment(a: MessageAttachment): boolean {
   return !(a.source === 'user_ops' && a.action !== 'annotate');
 }
@@ -95,7 +85,7 @@ export function messageIsToolResultsOnly(message: ChatMessageData): boolean {
 }
 
 export function messageHasToolUse(message: ChatMessageData): boolean {
-  return toolUseIdsFromMessage(message).length > 0;
+  return blocksForMessage(message).some(block => block.type === 'tool_use');
 }
 
 /**
@@ -161,10 +151,10 @@ function turnToolResultsCompleteWith(assistant: ChatMessageData, results: Readon
  * 一次 O(n) 扫描产出全量 messages 的 toolUseId→result map
  * 与「最后一条结果不齐备的 assistant」，供逐消息循环内 O(1) 判定复用，
  * 取代旧实现里每条消息现场重建 map / 全量重扫的写法（语义严格等价）。
- * Step 6 起导出：快照分片构建（sendSessionSnapshotNow）复用同一份预扫，
- * 逐片行转换共享全量配对上下文。
+ * Step 6 起快照分片构建（sendSessionSnapshotNow）经 buildTranscriptRowsWithContext
+ * 复用同一份预扫，逐片行转换共享全量配对上下文。
  */
-export interface ToolPairingContext {
+interface ToolPairingContext {
   readonly results: ReadonlyMap<string, ToolResultBlock>;
   readonly lastIncompleteAssistant: ChatMessageData | undefined;
 }
@@ -204,6 +194,7 @@ function isTurnToolExecutingWith(assistant: ChatMessageData, context: ToolPairin
   return context.lastIncompleteAssistant?.id === assistant.id;
 }
 
+// nm-style: keep-public — 生产单点在本文件 buildChatListItemsWithContext 的 map 回调；导出仅供测试直接 import（5 处）锁契约，本片禁改测试，撤导出会破坏编译。
 // prettier-ignore
 export function toolCallViewFromUse(use: ToolUseBlock, results: ReadonlyMap<string, ToolResultBlock>, options?: BuildChatListItemsOptions): ToolCallView {
   const result = results.get(use.id);
@@ -279,7 +270,10 @@ export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolR
 
 export function toolCallSummary(tool: ToolCallView): string {
   if (tool.status === 'error' && tool.summary) {
-    return tool.summary;
+    // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
+    // 超长按与成功摘要同档截断，卡片不被整段报错撑开。
+    const firstLine = tool.summary.split('\n')[0]?.trim() ?? '';
+    return firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
   }
   const fromInput = summarizeToolInput(tool.name, tool.input);
   if (fromInput) {
@@ -393,16 +387,16 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
   const rawAttachments = item.message.role === 'user' ? item.message.attachments ?? [] : [];
   // prettier-ignore
   const rowAttachments = rawAttachments.filter(isDisplayableAttachment).map(a => ({
-      source: a.source,
-      type: a.type,
-      name: a.name,
-      path: a.path ?? a.name,
-      // skillAttach 的技能名真源（落库与 name 同值）：显式透传，
-      // 避免 path 兜底把技能名伪装成路径的形状错位
-      ...(a.skillName != null ? {skillName: a.skillName} : {}),
-      ...(a.action != null ? {action: a.action} : {}),
-      ...(a.content !== undefined ? {content: a.content} : {}),
-    }));
+    source: a.source,
+    type: a.type,
+    name: a.name,
+    path: a.path ?? a.name,
+    // skillAttach 的技能名真源（落库与 name 同值）：显式透传，
+    // 避免 path 兜底把技能名伪装成路径的形状错位
+    ...(a.skillName != null ? {skillName: a.skillName} : {}),
+    ...(a.action != null ? {action: a.action} : {}),
+    ...(a.content !== undefined ? {content: a.content} : {}),
+  }));
   return {
     kind: 'message',
     id: item.message.id,
@@ -420,9 +414,7 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
             status: t.status,
             resultContent: t.resultContent,
             ...(t.summary != null ? {summary: t.summary} : {}),
-            ...(t.subagentSessionId != null
-              ? {subagentSessionId: t.subagentSessionId}
-              : {}),
+            ...(t.subagentSessionId != null ? {subagentSessionId: t.subagentSessionId} : {}),
             ...(t.skillRef != null ? {skillRef: t.skillRef} : {}),
           })),
         }
@@ -437,6 +429,7 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
  * 逐消息转换不依赖跨消息状态，故与「全量构建后按 tail id 过滤」语义严格等价，
  * 且省掉了 tail 之前所有消息的整段构建（原实现为全量 build 再 filter）。
  */
+// nm-style: keep-public — 生产单点在 ChatConversationWebView（本片禁改），测试直接 import 锁 tail 行构建语义。
 // prettier-ignore
 export function selectTailTranscriptRows(messages: readonly ChatMessageData[], tail: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): TranscriptRow[] {
   if (tail.length === 0) {
@@ -453,6 +446,7 @@ export function selectTailTranscriptRows(messages: readonly ChatMessageData[], t
  * 流式正文不再是本函数的第二条数据面（spec C10）：流式行由宿主
  * `buildStreamingTranscriptRow` 生成、快照末片携带，本函数只产出 DB 历史行。
  */
+// nm-style: keep-public — 生产单点在 ChatConversationWebView（本片禁改），测试直接 import 锁全量行构建。
 // prettier-ignore
 export function buildTranscriptRows(messages: readonly ChatMessageData[], options: BuildChatListItemsOptions = {}): TranscriptRow[] {
   return buildChatListItems(messages, options).map(transcriptRowFromItem);

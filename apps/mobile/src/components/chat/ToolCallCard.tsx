@@ -4,12 +4,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
-import {
-  skillToolRef,
-  toolCallSummary,
-  vfsToolFilePath,
-  type ToolCallView,
-} from './message-blocks';
+import {skillToolRef, toolCallSummary, vfsToolFilePath, type ToolCallView} from './message-blocks';
 import type {SkillToolRef} from '@novel-master/core/chat';
 
 type Props = {
@@ -25,42 +20,15 @@ type Props = {
   onOpenSkillDetail?: (ref: SkillToolRef) => void;
 };
 
-function statusLabel(status: ToolCallView['status']): string {
-  switch (status) {
-    case 'success':
-      return '成功';
-    case 'error':
-      return '失败';
-    case 'pending':
-      return '执行中';
-    case 'interrupted':
-      return '已中断';
-    default:
-      return '';
-  }
-}
+/** 状态 → 文案与主题色键（单表驱动，卡片头部与配色同源）。 */
+const STATUS_META: Record<ToolCallView['status'], {label: string; tone: 'primary' | 'danger' | 'textSecondary'}> = {
+  success: {label: '成功', tone: 'primary'},
+  error: {label: '失败', tone: 'danger'},
+  pending: {label: '执行中', tone: 'textSecondary'},
+  interrupted: {label: '已中断', tone: 'textSecondary'},
+};
 
-function statusColor(
-  status: ToolCallView['status'],
-  tokens: {primary: string; danger: string; textSecondary: string},
-): string {
-  if (status === 'error') {
-    return tokens.danger;
-  }
-  if (status === 'pending' || status === 'interrupted') {
-    return tokens.textSecondary;
-  }
-  return tokens.primary;
-}
-
-export function ToolCallCard({
-  tool,
-  showFullParams,
-  groupItem = false,
-  onOpenFile,
-  onOpenSubagentSession,
-  onOpenSkillDetail,
-}: Props) {
+export function ToolCallCard({tool, showFullParams, groupItem = false, onOpenFile, onOpenSubagentSession, onOpenSkillDetail}: Props) {
   const {tokens} = useTheme();
   const filePath = vfsToolFilePath(tool);
   const subagentSessionId = tool.subagentSessionId;
@@ -68,18 +36,16 @@ export function ToolCallCard({
   // projectId 由最终导航方按会话上下文补齐，这里不传。
   const skillRef = onOpenSkillDetail != null ? skillToolRef(tool) : undefined;
   // canOpen 对称 vfs 文件路径：任一可跳转目标存在即视为可点。
-  const canOpen =
-    (filePath != null && onOpenFile != null) ||
-    (subagentSessionId != null && onOpenSubagentSession != null) ||
-    (skillRef != null && onOpenSkillDetail != null);
-  const summary = toolCallSummary(tool);
-  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
-  const openHint =
-    subagentSessionId != null
-      ? '点击查看 · 子会话'
-      : skillRef != null
-      ? '点击查看 · 技能'
-      : '点击查看 · 聊天工作区';
+  const canOpenFile = filePath != null && onOpenFile != null;
+  // prettier-ignore
+  const canOpenSubagent = subagentSessionId != null && onOpenSubagentSession != null;
+  const canOpenSkill = skillRef != null && onOpenSkillDetail != null;
+  const canOpen = canOpenFile || canOpenSubagent || canOpenSkill;
+  // prettier-ignore
+  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : toolCallSummary(tool);
+  const statusMeta = STATUS_META[tool.status];
+  // prettier-ignore
+  const openHint = canOpenSubagent ? '点击查看 · 子会话' : canOpenSkill ? '点击查看 · 技能' : '点击查看 · 聊天工作区';
 
   const card = (
     <>
@@ -87,22 +53,14 @@ export function ToolCallCard({
         <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
           {tool.name}
         </Text>
-        <Text
-          style={[styles.status, {color: statusColor(tool.status, tokens)}]}
-        >
-          {statusLabel(tool.status)}
-        </Text>
+        <Text style={[styles.status, {color: tokens[statusMeta.tone]}]}>{statusMeta.label}</Text>
       </View>
       {detail ? (
-        <Text style={[styles.summary, {color: tokens.textSecondary}]}>
+        <Text style={[styles.summary, {color: tokens.textSecondary}]} numberOfLines={3}>
           {detail}
         </Text>
       ) : null}
-      {canOpen ? (
-        <Text style={[styles.openHint, {color: tokens.primary}]}>
-          {openHint}
-        </Text>
-      ) : null}
+      {canOpen ? <Text style={[styles.openHint, {color: tokens.primary}]}>{openHint}</Text> : null}
     </>
   );
 
@@ -110,19 +68,14 @@ export function ToolCallCard({
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={
-          subagentSessionId != null
-            ? `打开子会话 ${subagentSessionId}`
-            : skillRef != null
-            ? `打开技能 ${skillRef.name}`
-            : `打开文件 ${filePath}`
-        }
+        // prettier-ignore
+        accessibilityLabel={canOpenSubagent ? `打开子会话 ${subagentSessionId}` : canOpenSkill ? `打开技能 ${skillRef.name}` : `打开文件 ${filePath}`}
         onPress={() => {
-          if (subagentSessionId != null && onOpenSubagentSession != null) {
+          if (canOpenSubagent) {
             onOpenSubagentSession(subagentSessionId);
-          } else if (skillRef != null && onOpenSkillDetail != null) {
+          } else if (canOpenSkill) {
             onOpenSkillDetail(skillRef);
-          } else if (filePath != null && onOpenFile != null) {
+          } else if (canOpenFile) {
             onOpenFile(filePath);
           }
         }}
@@ -130,7 +83,7 @@ export function ToolCallCard({
           groupItem ? styles.groupItem : styles.card,
           {
             backgroundColor: tokens.surface,
-            borderColor: canOpen ? tokens.primary : tokens.border,
+            borderColor: tokens.primary,
             opacity: pressed ? 0.85 : 1,
           },
         ]}
@@ -140,16 +93,7 @@ export function ToolCallCard({
     );
   }
 
-  return (
-    <View
-      style={[
-        groupItem ? styles.groupItem : styles.card,
-        {backgroundColor: tokens.surface, borderColor: tokens.border},
-      ]}
-    >
-      {card}
-    </View>
-  );
+  return <View style={[groupItem ? styles.groupItem : styles.card, {backgroundColor: tokens.surface, borderColor: tokens.border}]}>{card}</View>;
 }
 
 const styles = StyleSheet.create({

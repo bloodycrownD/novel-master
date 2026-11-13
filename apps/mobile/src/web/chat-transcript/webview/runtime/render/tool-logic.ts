@@ -6,13 +6,6 @@ import type {ToolCallRow} from '../state/state';
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
  */
 
-// 摘要单源已收敛到 core（`domain/chat/logic/message/tool-summary.ts`）。
-// ⚠️ 这里必须写成「import + export」两步，**不能**写成纯 re-export
-// `export { summarizeToolInput } from '@novel-master/core/presentation/chat/tool-summary.js';`——
-// 纯 re-export 不把该符号引入本模块作用域，而下方 `toolCallSummary` 正在本地调用它。
-// 该 `export` 的唯一作用是保住本地引用（`ToolGroup.tsx` 并不 import 它），不是对外新增 API。
-export {summarizeToolInput};
-
 /**
  * 解析工具卡片「结果阅读」的可读正文：resultContent 非空（trim 口径）
  * 用之，否则回落 summary（fs 空目录 / glob 0 paths 的 content 是空串、
@@ -22,14 +15,16 @@ export {summarizeToolInput};
  * 两处口径分叉会出现「渲染判可点、点击上抛空白串」（ucu P0 同族）。
  */
 export function readableToolResult(tool: ToolCallRow): string | undefined {
-  const pickReadable = (value: unknown): string | undefined =>
-    typeof value === 'string' && value.trim() !== '' ? value : undefined;
+  const pickReadable = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value : undefined);
   return pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
 }
 
 export function toolCallSummary(row: ToolCallRow): string {
   if (row.status === 'error' && row.summary) {
-    return row.summary;
+    // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
+    // 超长按与成功摘要同档截断。
+    const firstLine = String(row.summary).split('\n')[0]?.trim() ?? '';
+    return firstLine.length > 120 ? firstLine.slice(0, 117) + '…' : firstLine;
   }
   const fromInput = summarizeToolInput(row.name || '', row.input || {});
   if (fromInput) return fromInput;
@@ -40,6 +35,7 @@ export function toolCallSummary(row: ToolCallRow): string {
   return '';
 }
 
+// nm-style: keep-public — 状态→文案映射与 toolStatusClass 成对供 ToolGroup 单点调用（本片禁改），内联会在渲染组件里复制状态阶梯。
 export function toolStatusLabel(status: string | undefined): string {
   if (status === 'success') return '成功';
   if (status === 'error') return '失败';
@@ -49,6 +45,7 @@ export function toolStatusLabel(status: string | undefined): string {
 }
 
 /** 工具状态对应 CSS 修饰类名。 */
+// nm-style: keep-public — 与 toolStatusLabel 同一状态阶梯的类名映射，单点消费方在 ToolGroup（本片禁改）。
 export function toolStatusClass(status: string | undefined): string {
   if (status === 'error') return 'error';
   if (status === 'pending') return 'pending';

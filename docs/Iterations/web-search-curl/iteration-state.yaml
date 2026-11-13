@@ -1,0 +1,65 @@
+# web-search-curl 开发 DAG（code-dev-loop 编排状态，主代理维护）
+spec_path: docs/Iterations/web-search-curl/spec.md
+prd_path: docs/Iterations/web-search-curl/prd.md
+worktree: D:/worktree/web-search-curl
+branch: feat/web-search-curl
+base_sha: 9d912b6af
+dag_version: 1
+wave_plan:
+  - [impl-step1-template-core]
+  - [impl-step2-config-store]
+  - [impl-step3-dispatch]
+  - [impl-step4-tool-surface]
+  - [impl-step5-exports-shim]
+  - [cr-core, impl-step6-desktop-ui, impl-step7-mobile-ui]   # 读写集不相交：cr-core 只读 core，6/7 各写各端
+  - [impl-tests-new-core, impl-tests-rewrite-core, impl-tests-ui]
+  - [gate-all-tests, fix-loop]
+  - [style-pass]
+  - [cr-final, impl-step9-docs]
+node_status:
+  impl-step1-template-core: { status: done }
+  impl-step2-config-store: { status: done }
+  impl-step3-dispatch: { status: done }
+  impl-step4-tool-surface: { status: done }
+  impl-step5-exports-shim: { status: done }
+  cr-core: { status: done }
+  impl-step6-desktop-ui: { status: done }
+  impl-step7-mobile-ui: { status: done }
+  impl-tests-new-core: { status: done }
+  impl-tests-rewrite-core: { status: done }
+  impl-tests-ui: { status: done }
+  gate-all-tests: { status: done }
+  fix-loop: { status: done }
+  style-pass: { status: done }
+  cr-final: { status: done }
+  impl-step9-docs: { status: done }   # 文档收尾（catalog 双端文案 / PRD 口径 / 偏离补登）随本节点完成
+open_must_fix: []
+spec_deviations:
+  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: 预置引擎保存强制要求 API Key（draftNeedsKey 且无 key 早退）——CR 第 1 轮 FIX-22 已拉齐双端统一严口径（needsKey 无 key 拦截 + 零改动提示）"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: SearchConfigPublic.engines 与 DTO 增加 paramHint 字段（spec §5 未列，§7 快照需要，良性扩展）"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: presetOverrides 落库为完整校验生效模板而非 spec §5 的 Partial patch 形态（读路径语义等价）"
+  - "apps/mobile/src/screens/stack/SearchEngineDetailScreen.tsx: isKnownEngineId 未改查动态清单而是整体删除（详情屏改从 nextConfig.engines 查找，行为等价）"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: 自定义实例 id 存储层校验放宽为 custom:[A-Za-z0-9_-]{1,64}（UI 仍生成 8 位）"
+  - "apps/desktop/test/search-engines-ui-hook.mjs、apps/mobile/src/components/provider/BuiltinTag.tsx: spec Δ 结构清单外新增文件（良性补登）；apps/mobile jest.config.js 列于 Δ 但无需改动（transformIgnorePatterns 不需变更，豁免）"
+  - "v2 透传改造（spec-v2-passthrough.md，用户 CR 中途方向指令）: 模板类型删 resultPath/fieldMap/answerPath/envelope、bodyTemplate→defaultBody 可选；响应改最长对象数组提取+50KB 截断直出 JSON 文本；链降级第三判据=响应无对象数组（涵盖 bocha 业务码失败）；TestEngineSuccess 改 {preview,resultCount?,truncated}；工具 schema 不变（v3 勘误（CR 第 4 轮拍板 A3）：该表述已作废——schema 后收口为 search(engine?, params) 两参，搜索词/条数由 params 承载，见下条 v3 契约改形）。CR 第 1 轮 FIX-2（envelope okValues）随字段消亡自然作废"
+  - "packages/core/src/domain/tool/builtin/search/search-config.ts: normalizeEngineBaseUrl 额外拒绝 userinfo（username/password 非空判非法）——良性安全收紧（spec §5 仅约定 http(s) 校验+尾斜杠）"
+  - "v3 契约改形（CR 第 4 轮用户拍板追认为终态，真源见 spec-v2 §9）：① 工具 schema 收口为 search(engine?, params) 两参，搜索词按 q/query/search_query 三键探测、条数按 count/max_results/maxResults 回落（测试锁 T-S1 反锁，拍板 A3）；② paramHint 不限长——v1 的 ≤500 保存拒绝 + 装配期防御截断双道整体作废，仅 trim + 明文密钥检测（拍板 A2）；③ 出厂 GET 模板 URL 去占位符：brave 删 {{query}}/{{count}} 尾参、searxng 改完整端点 https://searx.example.com/search?format=json，「未配置实例」判据改 isUnconfiguredSearxng（URL=出厂示例值）驱动 needsBaseUrl/canRun，engineBaseUrls 仅剩自定义 {{baseUrl}} 模板可达；④ mobile 功能面收缩（实现事实）：删 curl 导入、测试搜索按钮、DDG 详情入口、create 预填 defaultBody，认证三态；⑤ desktop 收 v3 对齐（拍板 A4，fix 波落地）：详情页删 defaultBody 编辑/注入方式快捷选择/宏校验/测试按钮，只留连接+认证三态+paramHint；⑥ testEngine 整链退役（拍板 A4，fix 波落地）：core store 方法、desktop IPC 通道/DTO、UI 入口全撤，core-search/B-1 随之消解不再单独修"
+  - "settings 域 i18n 落地（spec §10「双端设置页 UI 文案硬编码中文」口径作废）：packages/core/src/domain/settings/i18n/keys.ts 153 key 双语真源 + locales settings.{zh-CN,en-US}.json + core package.json ./settings 子入口 + 双端 translator（apps/desktop/shared/logic/settings-i18n.ts、apps/desktop/renderer/i18n/settings.ts、apps/mobile/src/i18n/settings.ts）；spec Δ 清单已补登上述文件与 exports 行"
+  - "双端 settingsTranslator 均固定 zh-CN（OQ-B3 备案口径）：en-US catalog 运行时不可达，照 chat/core translator 先例留待设置层接线，属已知备案而非缺陷；另有一批 UI meta 常量在模块 import 期求值并冻结（ui-copy/i18n-1），接动态 locale 时需一并迁移到调用点求值"
+cr_round_1:
+  fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
+  commit: 436b924c5
+  outcome: 1 P1 + ~27 P2 全数修复（FIX-1..28；FIX-2 随 v2 透传改造字段消亡；FIX-29 偏离补登并入上方 spec_deviations）
+cr_round_2:
+  fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
+  outcome: 1 P1 头名正则 + 摘要文本分支等 12 项 P2 修复，随本轮 commit
+cr_round_4:
+  fix_spec: docs/Iterations/web-search-curl/cr-fix-spec.md
+  拍板: "用户拍板 4 条（2026-11-13，fix-spec 顶部「用户拍板」段为唯一口径）：A2 paramHint 追认不限长（不恢复 500 双道）；A3 schema 追认 params-only search(engine?, params)（不恢复四参）；A4 双端对齐收 v3——desktop 详情页砍 defaultBody 编辑/注入方式快捷选择/宏校验/测试按钮，testEngine 整链退役（core-search/B-1 随之消解不再单独修）；C5 SessionDetailScreen 删模型锁定小字为拍板简化、该未提交改动随本轮一起提交"
+  开放面: "r1 首审 38 findings + r2/r3 复审对账（HEAD 未推进、修复零落地）后开放 must-fix 29 条（P0=0 / P1=8 / P2=21，含 global/G-2 自 P3 升格 P2）+ K 节 P3 建议 4 条；fix 波按第 3 轮对账单派单"
+  outcome: "文档面（test-docs 域）已落盘：spec-v2 追加 §9 v3 契约改形节（六项改形 + settings i18n + translator zh-CN 备案）、prd.md 范围/R2/R3/R5/验收/待确认项补丁式 v3 标注（拍板 A2/A3/A4 口径）、spec.md 口径微调 6/§2 校验/§3 出厂模板表/§5 判据/§6 schema/§7 快照/§8 testEngine 与 IPC/mobile/§10 口径分层/Δ 清单/T-C5/T-S1/T-D1 的 v3 勘误、spec_deviations 补登 3 条（v3 契约改形/settings i18n/translator zh-CN）、CHANGELOG Unreleased search 条目改 v3 终态；代码面 fix 波未落地——拍板 A4 的 desktop 收缩与 testEngine 退役、core-exec 域取消面修复等随各自 impl 域实施"
+  status: docs-fixed（代码修复待 impl 域，r4 回归对账按 cr-fix-spec 第 3 轮对账单逐条闭合）
+notes: >
+  gate 命令一律 npm run --prefix D:/worktree/web-search-curl/<pkg> <script>（world.run cwd 固定主仓）；
+  check-style.mjs 必须 cd 到 worktree 跑（基于 cwd 的 git 检测）；qa 口径见 spec「详细实现步骤」头注
+  （Step 2-5 core 绿即可，双端红容忍至 Step 6/7，Step 8 全仓收口）。

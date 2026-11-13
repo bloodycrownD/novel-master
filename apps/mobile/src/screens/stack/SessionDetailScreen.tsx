@@ -14,37 +14,18 @@
  * - meta 还没加载出来时不渲染卡片（停在加载态），天然不会被误点。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  Alert,
-  DeviceEventEmitter,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Alert, DeviceEventEmitter, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {runManualCompaction} from '../../services/manual-compaction.service';
+import {runManualCompaction, type ManualCompactionHooks} from '../../services/manual-compaction.service';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
-import {
-  AGENT_LOCK_TOAST_STATEMENT,
-  AGENT_RESELECT_HINT,
-  isAgentDeleted,
-  isAgentLocked,
-  isModelLocked,
-  loadChatAgentMeta,
-  MODEL_LOCK_TOAST,
-  type ChatAgentMeta,
-} from '../../services/chat-agent-meta';
+import {AGENT_LOCK_TOAST_STATEMENT, AGENT_RESELECT_HINT, isAgentDeleted, isAgentLocked, isModelLocked, loadChatAgentMeta, MODEL_LOCK_TOAST, type ChatAgentMeta} from '../../services/chat-agent-meta';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
@@ -53,10 +34,7 @@ import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/projec
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
-type ScreenNavigation = NativeStackNavigationProp<
-  RootStackParamList,
-  'SessionDetail'
->;
+type ScreenNavigation = NativeStackNavigationProp<RootStackParamList, 'SessionDetail'>;
 
 export function SessionDetailScreen() {
   const {tokens} = useTheme();
@@ -163,34 +141,27 @@ export function SessionDetailScreen() {
           // 漂移五处），本处只留 UI 尾巴——三出口（成功 / 明确失败 / 抛错）
           // 一个不能少。token 读数不做显式预热（2026-10-07 拍板，与置位同
           // 路径）：toast 即回，聊天页自己收到转录变更后按常规两阶段刷 chip。
-          void runManualCompaction(
-            runtime,
-            {projectId, sessionId},
-            {
-              onFailed: error => {
-                showToast(
-                  error === undefined
-                    ? toastMessage('压缩失败')
-                    : toastMessage('压缩失败', error),
-                );
-              },
-              onSucceeded: async () => {
-                await refreshComposerStatusAfterFloorOrCompaction(runtime, {
-                  projectId,
-                  sessionId,
-                });
-                showToast('已压缩');
-                // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需
-                // reload 才能渲染降透明度；chip 顺带走常规两阶段刷新）。
-                DeviceEventEmitter.emit('session-transcript-changed', {
-                  sessionId,
-                });
-              },
-              onFinally: async () => {
-                await load();
-              },
+          const compactionHooks: ManualCompactionHooks = {
+            onFailed: error => {
+              showToast(error === undefined ? toastMessage('压缩失败') : toastMessage('压缩失败', error));
             },
-          );
+            onSucceeded: async () => {
+              await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+                projectId,
+                sessionId,
+              });
+              showToast('已压缩');
+              // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需
+              // reload 才能渲染降透明度；chip 顺带走常规两阶段刷新）。
+              DeviceEventEmitter.emit('session-transcript-changed', {
+                sessionId,
+              });
+            },
+            onFinally: async () => {
+              await load();
+            },
+          };
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks);
         },
       },
     ]);
@@ -244,10 +215,7 @@ export function SessionDetailScreen() {
         {editingTitle ? (
           <TextInput
             testID="session-title-input"
-            style={[
-              styles.titleInput,
-              {color: tokens.text, borderColor: tokens.border},
-            ]}
+            style={[styles.titleInput, {color: tokens.text, borderColor: tokens.border}]}
             value={titleDraft}
             autoFocus
             onChangeText={setTitleDraft}
@@ -258,21 +226,11 @@ export function SessionDetailScreen() {
             accessibilityLabel="会话名称输入框"
           />
         ) : (
-          <Pressable
-            testID="session-title"
-            onPress={startEditTitle}
-            accessibilityLabel="编辑会话名称"
-            style={styles.titleRow}
-          >
-            <Text
-              style={[styles.titleValue, {color: tokens.text}]}
-              numberOfLines={2}
-            >
+          <Pressable testID="session-title" onPress={startEditTitle} accessibilityLabel="编辑会话名称" style={styles.titleRow}>
+            <Text style={[styles.titleValue, {color: tokens.text}]} numberOfLines={2}>
               {sessionTitle || '（未命名）'}
             </Text>
-            <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>
-              ✎
-            </Text>
+            <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>✎</Text>
           </Pressable>
         )}
       </View>
@@ -292,30 +250,17 @@ export function SessionDetailScreen() {
           },
         ]}
       >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
           <Text style={styles.iconGlyph}>🤖</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            当前智能体
-          </Text>
-          <Text
-            style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>当前智能体</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]} numberOfLines={1}>
             {meta.agentName}
           </Text>
-          {isAgentDeleted(meta) ? (
-            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {AGENT_RESELECT_HINT}
-            </Text>
-          ) : null}
+          {isAgentDeleted(meta) ? <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>{AGENT_RESELECT_HINT}</Text> : null}
         </View>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {agentLocked ? '🔒' : '›'}
-        </Text>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>{agentLocked ? '🔒' : '›'}</Text>
       </Pressable>
 
       {/* 当前大模型：点击直接弹 ModelPickerModal，locked 时仅提示。 */}
@@ -333,30 +278,16 @@ export function SessionDetailScreen() {
           },
         ]}
       >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
           <Text style={styles.iconGlyph}>⚡</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            当前大模型
-          </Text>
-          <Text
-            style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>当前大模型</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]} numberOfLines={1}>
             {meta.modelLabel}
           </Text>
-          {modelLocked ? (
-            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {MODEL_LOCK_TOAST}
-            </Text>
-          ) : null}
         </View>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {modelLocked ? '🔒' : '›'}
-        </Text>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>{modelLocked ? '🔒' : '›'}</Text>
       </Pressable>
 
       {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
@@ -377,18 +308,12 @@ export function SessionDetailScreen() {
           },
         ]}
       >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
           <Text style={styles.iconGlyph}>📄</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            查看提示词
-          </Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>
-            预览提示词
-          </Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>查看提示词</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>预览提示词</Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
@@ -407,18 +332,12 @@ export function SessionDetailScreen() {
           },
         ]}
       >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
           <Text style={styles.iconGlyph}>🗜️</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            压缩上下文
-          </Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>
-            减少上下文占用
-          </Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>减少上下文占用</Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
@@ -437,18 +356,12 @@ export function SessionDetailScreen() {
           },
         ]}
       >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
           <Text style={styles.iconGlyph}>🧩</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            技能
-          </Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>
-            查看与管理
-          </Text>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>技能</Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>查看与管理</Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
@@ -462,23 +375,11 @@ export function SessionDetailScreen() {
           {scrollBody}
         </KeyboardAvoidingView>
       ) : (
-        <Animated.View style={[styles.scroll, clipStyle]}>
-          {scrollBody}
-        </Animated.View>
+        <Animated.View style={[styles.scroll, clipStyle]}>{scrollBody}</Animated.View>
       )}
 
-      <ModelPickerModal
-        visible={modelPickerOpen}
-        sessionId={sessionId}
-        onClose={() => setModelPickerOpen(false)}
-        onSelected={() => load().catch(() => undefined)}
-      />
-      <AgentPickerModal
-        visible={agentPickerOpen}
-        sessionId={sessionId}
-        onClose={() => setAgentPickerOpen(false)}
-        onSelected={() => load().catch(() => undefined)}
-      />
+      <ModelPickerModal visible={modelPickerOpen} sessionId={sessionId} onClose={() => setModelPickerOpen(false)} onSelected={() => load().catch(() => undefined)} />
+      <AgentPickerModal visible={agentPickerOpen} sessionId={sessionId} onClose={() => setAgentPickerOpen(false)} onSelected={() => load().catch(() => undefined)} />
     </View>
   );
 }

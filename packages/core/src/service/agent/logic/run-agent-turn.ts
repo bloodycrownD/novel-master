@@ -25,15 +25,7 @@ import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-def
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
-import type {
-  BuiltinToolContext,
-  RunChildAgentOptions,
-} from "@/domain/tool/builtin/builtin-tool-context.js";
-import type {
-  BuiltinToolAgentsContext,
-  BuiltinToolSearchContext,
-  BuiltinToolSkillsContext,
-} from "@/domain/tool/builtin/builtin-tool-context.js";
+import type { BuiltinToolAgentsContext, BuiltinToolContext, BuiltinToolSearchContext, BuiltinToolSkillsContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
 import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-config.js";
@@ -45,12 +37,9 @@ import type { MessageParams } from "@/common/i18n.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 import { ToolError } from "@/errors/tool-errors.js";
+import { Result } from "@/errors/either.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import {
-  EVENT_AGENT_RUN_FAILED,
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-} from "@/domain/events/model/event-types.js";
+import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_SUBAGENT_CHILD_SESSION_CREATED } from "@/domain/events/model/event-types.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -73,23 +62,19 @@ import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
-import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
-import type { AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
+import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
 import { assembleAgentRunnerDeps } from "./assemble-agent-runner-deps.js";
-import {
-  AgentRunResolveError,
-  resolveApplicationModelIdForRun,
-  type AgentRunRuntimePort,
-} from "./agent-run-shared.js";
+import { AgentRunResolveError, resolveApplicationModelIdForRun, type AgentRunRuntimePort } from "./agent-run-shared.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("agent.turn");
+const searchLog = createLogger("tool.search");
 
 export interface AgentTurnScope {
   readonly projectId: string;
@@ -175,10 +160,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * 声明为可选是为了不强制旧测试 mock 补字段——thinkingContext 未注入
    * 时等同默认关，subagentStream 未注入时等同默认开。
    */
-  readonly preferences?: Pick<
-    PersistentPreferences,
-    "getThinkingContextEnabled" | "getSubagentStreamEnabled"
-  >;
+  readonly preferences?: Pick<PersistentPreferences, "getThinkingContextEnabled" | "getSubagentStreamEnabled">;
   /**
    * 搜索配置存储（search 工具用）：desktop / mobile runtime 用 core 导出
    * 的 `createSearchConfigStore(kkv + secretStore)` 工厂装配。
@@ -228,16 +210,37 @@ export async function assembleSkillsToolContext(
 
 /**
  * 装配 `search` 工具闭包（主 / 子两个装配点共用）：绑定 runtime 的
- * SearchConfigStore；引擎解析与凭证明文读取全部延迟到工具 run 内，
- * 装配期零 IO（与 skills 的装配期预算模式不同，search 的 description
- * 是静态文案）。
+ * SearchConfigStore，并装配期预读一次 `readConfig()` 拼描述快照
+ * （照 `skills.effective` 先例——工具 description 是同步 lambda，逐引擎
+ * 参数说明只能在装配期预算）。
+ *
+ * 快照口径 = 串行链同款：`canRun`（enabled ∩ 配置完整，含 key / baseUrl
+ * 就绪）∩ 按 engineOrderV2 序；paramHint 不限长，装配期原样透传（v3 起已
+ * 废除「保存拒绝 + 装配期截断 500」双道限长，保存路径只扫密钥不扫长度）。
+ *
+ * 装配失败降级：`readConfig` 抛错 → 空快照 + 一条 warn，search 工具照旧
+ * 装配（引擎链解析在 run 内自会报错），不让搜索配置读取失败击穿整个
+ * agent turn。
  */
-export function assembleSearchToolContext(
-  store: SearchConfigStore
-): BuiltinToolSearchContext {
+// nm-style: keep-public — 19 处测试直接 import 锁装配期快照口径（本片禁改测试）；生产侧主 / 子两个装配点直接调用。
+export async function assembleSearchToolContext(store: SearchConfigStore): Promise<BuiltinToolSearchContext> {
+  let engineSnapshot: BuiltinToolSearchContext["engineSnapshot"] = [];
+  try {
+    const config = await store.readConfig();
+    const runnable = new Set(config.canRun);
+    engineSnapshot = config.engines
+      .filter((engine) => runnable.has(engine.id))
+      .map((engine) => ({
+        id: engine.id,
+        name: engine.name,
+        paramHint: engine.paramHint,
+      }));
+  } catch (error) {
+    searchLog.warn("读取搜索配置失败，search 工具描述快照降级为空", { error });
+  }
   return {
-    resolveEngineChain: (inputEngine) =>
-      store.resolveEngineChain(inputEngine),
+    resolveEngineChain: (inputEngine) => store.resolveEngineChain(inputEngine),
+    engineSnapshot,
   };
 }
 
@@ -321,16 +324,8 @@ interface RunAgentTurnOptions {
    */
   readonly annotateDrafts?: readonly SendAnnotateDraft[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
-  readonly onAfterResolveModel?: (
-    ctx: RunAgentTurnAfterResolveContext
-  ) => void | Promise<void>;
-  readonly onRunFailed?: (ctx: {
-    readonly stage: string;
-    readonly error: unknown;
-    readonly scope: AgentTurnScope;
-    readonly savedModelId?: string;
-    readonly stream: boolean;
-  }) => void;
+  readonly onAfterResolveModel?: (ctx: RunAgentTurnAfterResolveContext) => void | Promise<void>;
+  readonly onRunFailed?: (ctx: { readonly stage: string; readonly error: unknown; readonly scope: AgentTurnScope; readonly savedModelId?: string; readonly stream: boolean }) => void;
 }
 
 async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
@@ -342,6 +337,26 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
     }
     throw error;
   }
+}
+
+/** 子代理模型解析结果（与 `BuiltinToolSubagentContext.resolveChildModelId` 的返回形状一致）。 */
+type ChildModelIds = {
+  readonly savedModelId: string;
+  readonly workspaceModelId: string;
+};
+
+/**
+ * 子代理模型 pin 解析（域校验）：子 pin → 父级 savedModelId → 失败 Result。
+ *
+ * 不走 workspace fallback；主 / 子两个装配点共用同一条校验，error key 由调用点给。
+ * 闭包调用点按边界转 `throw`（`task` 工具的 run 是抛错边界）。
+ */
+function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, workspaceModelId: string, missingKey: CoreMessageKey): Result<ChildModelIds, AgentRunResolveError> {
+  const savedModelId = def.model ?? fallbackSavedModelId;
+  if (savedModelId == null || savedModelId === "") {
+    return Result.err(new AgentRunResolveError({ key: missingKey }));
+  }
+  return Result.ok({ savedModelId, workspaceModelId });
 }
 
 /**
@@ -363,12 +378,7 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
  * 覆盖「前奏抛错、内层 try 尚未进入」的路径——否则陈旧 controller 会让
  * `abortRegistry.has` 永久为真，卡死该会话后续的发送门禁。
  */
-export async function runAgentTurn(
-  runtime: AgentTurnRuntimePort,
-  scope: AgentTurnScope,
-  userContent: string,
-  options?: RunAgentTurnOptions
-): Promise<AgentRunResult> {
+export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTurnScope, userContent: string, options?: RunAgentTurnOptions): Promise<AgentRunResult> {
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
   // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
   // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
@@ -379,22 +389,522 @@ export async function runAgentTurn(
     if (callerSignal.aborted) {
       internalController.abort(callerSignal.reason);
     } else {
-      callerSignal.addEventListener(
-        "abort",
-        () => internalController.abort(callerSignal.reason),
-        { once: true }
-      );
+      callerSignal.addEventListener("abort", () => internalController.abort(callerSignal.reason), { once: true });
     }
   }
   runtime.abortRegistry?.register(scope.sessionId, internalController);
   try {
-    return await runAgentTurnWithController(
-      runtime,
-      scope,
-      userContent,
-      options,
-      internalController
-    );
+    let stage = "start";
+    /**
+     * runner 是否已起步（`await runner.run(...)` 紧前置真）。
+     *
+     * 用途：区分「前奏期失败」与「runner 期失败」——只有后者才调
+     * {@link RunAgentTurnOptions.onRunFailed}（它的语义是 runner 期失败的前奏
+     * 快照）。**不**用于判断要不要补发 FAILED，见下面的 `runnerEmittedTerminal`。
+     *
+     * 声明在收口 try **之外**——catch 与 finally 都要读它。
+     */
+    let runnerEntered = false;
+    /**
+     * 本次 run 期间 core 是否已发过**真实 runId** 的终态事件（FINISHED/FAILED）。
+     *
+     * 这是 catch 里「要不要补发 FAILED(runId:'')」的**唯一**判据，比 spec 的
+     * `!runnerEntered` 守卫更强一档：r3-run-2 把 STARTED 下移到 agent-runner 主 try
+     * 紧前后，`runnerEntered=true` 与「STARTED 真的发出去了」之间还夹着一小段
+     * runner 自身的前置 IO（`savedModels.findById` / preferences 读）。那段抛错时
+     * STARTED 与 FAILED 都还没发，若只看 `runnerEntered` 就会一个终态都不发
+     * ——正是 r3-run-2 要消灭的 refcount 永久泄漏换个位置复发。
+     *
+     * 判据用「有没有发过」而不是「有没有发 STARTED」：STARTED 与终态在
+     * agent-runner 内部是同生共死的（主 try 的 catch 必发 FAILED），而
+     * FINISHED 分支后半段（token 缓存落库）若抛错也属于「已发过 FINISHED，
+     * 不该再补 FAILED」。
+     *
+     * 订阅只在本 run 的 runner 调用窗口内存在，且按 sessionId 过滤（子 run 的
+     * 终态带 childSessionId，不会误判为父 run 的）；事件总线同步分发，读到的
+     * 永远是本 run 窗口内的事实。
+     */
+    let runnerEmittedTerminal = false;
+    /**
+     * 终态观测回调：命中本 session 的终态事件就把 `runnerEmittedTerminal` 置真。
+     *
+     * 按 sessionId 过滤是必要的——同一个 bus 上还跑着 task 工具派生的子 run，
+     * 它们的终态带 childSessionId，不能算作本 run 已经有终态。
+     */
+    const markRunnerTerminal = (payload: unknown): void => {
+      if ((payload as { sessionId?: string } | null)?.sessionId === scope.sessionId) {
+        runnerEmittedTerminal = true;
+      }
+    };
+    /**
+     * streamRegistry 所有权句柄：prelude 内 register、finally 回传。
+     * 声明在收口 try 之外（register 在 try 内、unregister 在 try 外）。
+     */
+    let streamHandle: AgentStreamRegistryHandle | undefined;
+    /**
+     * 已解析的 savedModelId 镜像（供 catch 的 onRunFailed 入参，见 resolve 处的注释）。
+     */
+    let failureSavedModelId: string | undefined;
+    const stream = options?.stream !== false;
+    const trimmed = userContent.trim();
+    const annotateDrafts = options?.annotateDrafts ?? [];
+    const hasAnnotateDrafts = annotateDrafts.length > 0;
+    // 有批注草稿时本轮禁止空续跑 re-append（prepare 不得删末条）
+    const allowResumeWithoutInput = options?.allowResumeWithoutInput === true && !hasAnnotateDrafts;
+
+    // 入参清洗：误传的 user_ops 预览一律丢弃，只保留 attach（workplace 为历史只读兼容，新数据不再产生）
+    const composerAttachOnly = (options?.attachments ?? []).filter((a) => a.source === "attach");
+
+    // 前奏停止检查点（2026-09-30 真机实锤，用户连点 15 次停止需等 11s 前奏跑完
+    // 才在 loop_start 兑现）：前奏各阶段之间检查 signal，命中即跳过剩余前奏、
+    // 返回合成 cancelled 结果。合成结果与 runner loop_start 取消路径同款；runner
+    // 从未起步，故不发 RUN_STARTED，但**发一条 FINISHED(runId:'') 收口**
+    // （r3-run-1：此前不补这条，desktop 前奏取消会让 refcount 永久泄漏、
+    // 转录冻结永久挂起；mobile 靠 .then 手工补丁——双端都在事件系统之外打补丁，
+    // 现在统一收敛到事件路线）。
+    //
+    // 检查点分布（r3-run-3/run-4 补全覆盖）：
+    //   ⓪ backfill 之前 —— 这次发送**根本没发生**（用户消息未落库），见下；
+    //   ① append+capture 之后 —— 消息已落库，停止不改变「本次发送已发生」；
+    //   ② agentRegistry.list() 之后 / skills 装配之后 / runner.run 之前。
+    const preludeAbortResult = (): AgentRunResult | undefined => (internalController.signal.aborted ? syntheticCancelledResult() : undefined);
+
+    // 收口 try（r3-run-1 步骤 2）：从 backfill 到 `runner.run` 全程包起来。
+    //
+    // 为什么必须包：这段前半（前奏）在改动前**没有**任何 try，是真实抛错出口。
+    // 抛错时双端只看到 reject——desktop main 的 refcount 无人收敛（后续全部
+    // AGENT_BUSY）、renderer 的 uiRunning 永久 true（停止按钮卡死、composer
+    // 锁住）。补一条 FAILED(runId:'') 后，双端走与真实 FAILED 完全相同的收口
+    // 链路，再原样 rethrow 保留错误对象。
+    //
+    // 为什么是「一个 try」而不是「前奏 try + 主 try」两段：两段各自的 catch 会
+    // 重复同一段 publish 逻辑，双发风险反而更高（两处都要写 runnerEntered 守卫，
+    // 漏一处就双发）。合到一个 catch 后，`!runnerEntered` 成为**唯一**的补发
+    // 判据——不变式「抛错 ⇒ 恰好一条 FAILED」在结构上就只剩一个出口。
+    // 行为与 spec 的两段式等价：前奏抛错不发 onRunFailed、runner 期抛错发
+    // onRunFailed 且不补发 FAILED('')。子 run 侧（runChildAgent）的同款包装
+    // 由 r3-run-3 落。
+    try {
+      // 检查点⓪（r3-run-4）：backfill **之前**的第一道。
+      //
+      // 命中它意味着「这次发送根本没发生」——用户消息尚未 append、没有
+      // checkpoint、没有任何落库痕迹。这与 ①② 的语义差一档：①② 停在一段已经
+      // 追加了用户消息的链上，停止不改变「本次发送已发生」的事实（undo_send 可
+      // 回收）；⓪ 命中时连消息都没有，所以面板上什么都不该出现。
+      //
+      // 与 r3-run-1 的联动（重要，勿改）：⓪ 命中同样要发 FINISHED(runId:'')
+      // 收口——双端（desktop refcount / composer 解锁、mobile 单元 settle）拿到的
+      // 是同一个「run 已结束」事实。settle 之后 desktop 走 reloadMessages，**它会
+      // 拿回旧的消息列表，这是正确行为而不是 bug**：⓪ 的定义就是「没发送过」，
+      // 库里本来就没有本轮消息，reload 自然看不到新的。①② 之所以需要
+      // 「runId==='' 强制 reload」是因为它们的用户消息已落库而面板未必已拿到；
+      // ⓪ 不需要那条规则，也绝不能借它凭空显示一条消息。
+      const entryCancelled = preludeAbortResult();
+      if (entryCancelled != null) {
+        publishPreludeRunFinished(runtime, scope);
+        return entryCancelled;
+      }
+
+      // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
+      // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
+      // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
+      stage = "backfill-baseline-checkpoints";
+      // 传 internalController.signal（r3-run-4）：这段扫描是大会话上秒级的第一站，
+      // 用户在这段窗口按停止时在扫描循环内提前退出，而不是被逼着等它跑完。
+      await runtime.messageCheckpoint.backfillMissingBaselines(scope.sessionId, scope.projectId, internalController.signal);
+
+      stage = "resolve-agent";
+      const definition = (await mapResolveError(() => resolveAgentForProject(runtime, scope.projectId, scope.sessionId))).definition;
+
+      const hasInput = trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
+
+      if (!hasInput && !allowResumeWithoutInput) {
+        throw new AgentTurnError({ key: "error.agent.message_empty" });
+      }
+      if (!hasInput && allowResumeWithoutInput) {
+        stage = "resume-check-last-message";
+        // 只判末条角色：tail(1) 单行读（含 hidden，与全量末条同义）。原先是全量
+        // listBySession——含 hidden 整表解压，压缩会话上秒级（2026-09-30 真机
+        // 实锤 ~4s：续跑/「继续」按钮每轮白付，且这段前奏无停止观察点，用户
+        // 连点停止无响应）。
+        const tail = await runtime.messages.listBySessionTail(scope.sessionId, { limit: 1 });
+        // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
+        if (tail[tail.length - 1]?.role !== "user") {
+          throw new AgentTurnError({ key: "error.agent.message_empty" });
+        }
+      }
+
+      stage = "resolve-agent";
+      const { savedModelId, workspaceModelId } = await mapResolveError(() => resolveApplicationModelIdForRun(runtime, definition, scope.sessionId));
+      // 镜像到 try 之外的变量：catch 块要把它当 onRunFailed 的入参，而它声明在
+      // try 内、与 catch 不同作用域。catch 只在 runnerEntered 为真时才读它，
+      // 那时该值必然已赋值（`` ?? "" `` 是纯类型兜底，不可达）。
+      failureSavedModelId = savedModelId;
+
+      await options?.onAfterResolveModel?.({
+        scope,
+        definition,
+        savedModelId,
+        workspaceModelId,
+        stream,
+      });
+
+      // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
+      // D9：确认胶囊区间先掩码成等长空白再全量扫描——区间内触发符（`$A$B` /
+      // `@path$技能`）不再污染/重复扫描；区间结果由发送侧预扫后经 attachments
+      // 传入（composerAttachOnly 在合并时位于 existing 位 = 区间结果优先）。
+      const excludedScanRanges = options?.excludedScanRanges ?? [];
+      const clampedScanRanges: ComposerDraftTokenRange[] = [];
+      for (const range of excludedScanRanges) {
+        if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
+          continue;
+        }
+        const start = Math.max(0, range.start);
+        const end = Math.min(trimmed.length, range.end);
+        if (start < end) {
+          clampedScanRanges.push({ start, end });
+        }
+      }
+      clampedScanRanges.sort((a, b) => a.start - b.start || a.end - b.end);
+      const disjointScanRanges: ComposerDraftTokenRange[] = [];
+      let coveredUntil = 0;
+      for (const range of clampedScanRanges) {
+        if (range.start >= coveredUntil) {
+          disjointScanRanges.push(range);
+          coveredUntil = range.end;
+        }
+      }
+      let scanText = trimmed;
+      if (disjointScanRanges.length > 0) {
+        let masked = "";
+        let cursor = 0;
+        for (const range of disjointScanRanges) {
+          masked += trimmed.slice(cursor, range.start);
+          masked += " ".repeat(range.end - range.start);
+          cursor = range.end;
+        }
+        scanText = masked + trimmed.slice(cursor);
+      }
+      const withAtPaths = attachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
+      const scannedComposer = attachmentScanner.mergeScannedSkills(scanText, withAtPaths);
+
+      let checkpointAnchorMessageId: string | undefined;
+
+      // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
+      // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
+      // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号
+      // 给模型读附件时多一个「第 N 行」的位置提示；匹配不到或读盘失败就静默跳过。
+      const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+      const annotatePending = annotateDrafts.map(async (draft) => {
+        if (draft.startLine != null && draft.endLine != null) {
+          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+        }
+        let sourceText: string | undefined;
+        try {
+          sourceText = (await annotateVfs.read(draft.path)).content;
+        } catch {
+          // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
+        }
+        if (typeof sourceText !== "string" || sourceText.length === 0) {
+          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+        }
+        const needle = draft.originalText.replace(/\u00a0/g, " ");
+        if (needle.length === 0) {
+          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+        }
+        let at = sourceText.indexOf(needle);
+        let matchLen = needle.length;
+        let haystack = sourceText;
+        if (at < 0) {
+          const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          at = normSource.indexOf(normNeedle);
+          if (at < 0) {
+            return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+          }
+          matchLen = normNeedle.length;
+          haystack = normSource;
+        }
+        const start = offsetToSourceLineCol(haystack, at);
+        const end = offsetToSourceLineCol(haystack, at + matchLen - 1);
+        const enriched: SendAnnotateDraft = {
+          ...draft,
+          startLine: start.line,
+          endLine: end.line,
+          startCol: start.col,
+          endCol: end.col,
+        };
+        return attachmentXmlCodec.encodeAnnotateAttachment(enriched);
+      });
+      const annotateAttachments = await Promise.all(annotatePending);
+
+      // 新 append：scannedComposer ∪ annotate 直 concat（禁 path 去重）
+      const mergedAttachments = [...scannedComposer, ...annotateAttachments];
+
+      const shouldAppendNewUser = trimmed !== "" || scannedComposer.length > 0 || hasAnnotateDrafts;
+
+      // S-1：append + capture 这条跨资源写链走 CoordinatedWrite，任一步失败按逆序补偿。
+      // append 的补偿是删掉刚写入的消息；capture 的补偿是 release 刚写的 checkpoint。
+      const coordinatedWrite = new CoordinatedWrite();
+      if (shouldAppendNewUser) {
+        stage = "append-user-message";
+        coordinatedWrite.register({
+          name: "append-user-message",
+          execute: async () => {
+            const appended = await runtime.messages.append(scope.sessionId, "user", textBlocks(trimmed), mergedAttachments.length > 0 ? { attachments: mergedAttachments } : undefined);
+            // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
+            // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
+            // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
+            // 这里把不变式上提到源头（所有 user append 统一走同一 capture）。
+            checkpointAnchorMessageId = appended.id;
+            await options?.onUserMessageAppended?.();
+          },
+          rollback: async () => {
+            const appendedId = checkpointAnchorMessageId;
+            if (appendedId != null) {
+              await runtime.messages.delete(appendedId);
+            }
+          },
+        });
+      }
+
+      // capture 步骤：anchor 来自上面的 append execute（execute 内取值，保证 append 成功后才读到）。
+      coordinatedWrite.register({
+        name: "capture-baseline-checkpoint",
+        execute: async () => {
+          const anchorId = checkpointAnchorMessageId;
+          if (anchorId == null) return;
+          stage = "capture-baseline-checkpoint";
+          await runtime.messageCheckpoint.capture(scope.sessionId, scope.projectId, anchorId);
+        },
+        rollback: async () => {
+          const anchorId = checkpointAnchorMessageId;
+          if (anchorId != null) {
+            // release 可选：runtime 未提供时按 best-effort no-op 处理。
+            await runtime.messageCheckpoint.release?.(scope.sessionId, anchorId);
+          }
+        },
+      });
+
+      await coordinatedWrite.run();
+
+      // 检查点①：append+capture 已完成（用户消息已落库）——此后的停止不再需要
+      // 跑完剩余前奏（校验 / 子代理名单 / 技能装配）才兑现。
+      const afterAppendCancelled = preludeAbortResult();
+      if (afterAppendCancelled != null) {
+        // 同检查点②：先发 FINISHED('') 再返回合成 cancelled（r3-run-1 步骤 1）。
+        // 此处用户消息已落库，但本次 run 没跑过任何 step，delta 一条都没有——
+        // desktop 侧靠「runId==='' 强制全量 reload」把这条消息捞回面板。
+        publishPreludeRunFinished(runtime, scope);
+        return afterAppendCancelled;
+      }
+
+      stage = "validate-agent-definition";
+      const toolProbe = new ToolRegistry<BuiltinToolContext>();
+      registerBuiltinTools(toolProbe);
+      const validation = await validateAgentDefinition(definition, { registeredToolNames: toolProbe.list() });
+      if (!validation.ok) throw validation.error;
+
+      // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
+      // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
+      // task 是静态内置工具，registerBuiltinTools 已注册（probe 也含 task）；
+      // 这里不单独注册 task，只把 callable 塞进下方 toolCtx.subagent.callableAgents 供 description lambda 读。
+      const allDefs = await runtime.agentRegistry.list();
+
+      // 检查点③（r3-run-4，:565 之后）：`agentRegistry.list()` 是前奏尾段的
+      // 第一件真 IO 活（拉全部 agent 定义），大会话上窗口不小。停在这里比跑完
+      // 后续的 registry resolve + 技能预算装配再兑现快一大截。
+      // 语义与①相同（用户消息早已 append 落库），终态同款 FINISHED('')。
+      const afterListCancelled = preludeAbortResult();
+      if (afterListCancelled != null) {
+        publishPreludeRunFinished(runtime, scope);
+        return afterListCancelled;
+      }
+
+      const callable = allDefs.filter((d) => d.mode !== "primary" && d.name !== definition.name).map((d) => ({ name: d.name, description: d.description }));
+
+      const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+      // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
+      const registry = resolveAgentToolRegistry(toolProbe, definition, {
+        depth: 0,
+      });
+      // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
+      // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
+      const skillsCtx = await assembleSkillsToolContext(runtime, scope.projectId, registry);
+
+      // 检查点④（r3-run-4，:577 之后）：`assembleSkillsToolContext` 里的
+      // `effectiveSkills` 是前奏尾段的另一件实打实的 IO（读 KKV + 解析技能目录），
+      // 与上面的 list() 之间是真实的秒级窗口——真机上「发送后立刻停止」的停止
+      // 意图多半就落在这两步里，必须在这里就被兑现，而不是等 runner 起步后由
+      // `loop_start` 拦下。语义与①相同，终态同款 FINISHED('')。
+      const afterSkillsCancelled = preludeAbortResult();
+      if (afterSkillsCancelled != null) {
+        publishPreludeRunFinished(runtime, scope);
+        return afterSkillsCancelled;
+      }
+      // agent 管理工具读取：快照复用上方 allDefs（零新增 IO）；probe 名单透传给
+      // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
+      const agentsCtx = assembleAgentsToolContext(runtime.agentRegistry, allDefs, toolProbe.list(), registry);
+      const session = new ChatAgentSession(runtime.messages, scope.sessionId);
+      // internalController 在本函数入口建好并**已注册**（见函数头注释：
+      // 前奏期间的停止不能被丢掉）。这里只取它的 signal：runner.run 用它，
+      // 同时作为 task 工具内子 agent run 的 parentSignal，让
+      // registry.abort(sessionId) 也能级联到子 run。
+      const parentSignal = internalController.signal;
+      const toolCtx: BuiltinToolContext = {
+        vfs,
+        projectId: scope.projectId,
+        sessionId: scope.sessionId,
+        // 回合取消信号：ToolRunner 用它做取消竞速（所有工具的兜底），
+        // curl / search 还把它透传给 fetch，让在途请求同步 abort。
+        signal: parentSignal,
+        sessionKkv: runtime.sessionKkv,
+        // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
+        workplace: runtime.workplace({
+          kind: "session",
+          projectId: scope.projectId,
+          sessionId: scope.sessionId,
+        }),
+        // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
+        ...(skillsCtx != null ? { skills: skillsCtx } : {}),
+        // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
+        ...(agentsCtx != null ? { agents: agentsCtx } : {}),
+        // search 工具读取：闭包绑定 runtime.searchConfig + 装配期 readConfig 拼
+        // 描述快照（readConfig 失败降级空快照，不击穿 turn）；CLI / 旧 mock 未
+        // 注入时不装配，工具 run 返回可读错误。
+        ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
+        // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
+        subagent: {
+          agentRegistry: runtime.agentRegistry,
+          messages: runtime.messages,
+          sessions: runtime.sessions,
+          createChildSession: async (title: string): Promise<string> => {
+            const child = await runtime.sessions.createSubSession(scope.sessionId, scope.projectId, title);
+            runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+              parentSessionId: scope.sessionId,
+              projectId: scope.projectId,
+              childSessionId: child.id,
+              title,
+            });
+            return child.id;
+          },
+          // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
+          parentSessionId: scope.sessionId,
+          // 并发软闸（spec D6）：绑 abortRegistry.has；**缺 registry 保守拒绝续用**
+          // （?? true）——宁可让模型新开，也不要在无并发信息时赌一把。
+          // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
+          isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
+          // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）；闭包边界把域校验的 Result 转 throw。
+          resolveChildModelId: (def: AgentDefinition): ChildModelIds => {
+            const resolved = resolveChildModel(def, savedModelId, workspaceModelId, "error.agent.subagent_model_missing");
+            if (!resolved.ok) throw resolved.error;
+            return resolved.value;
+          },
+          // 根父会话 id：子 agent 的 VFS / 工作区归属指向它（嵌套时孙 agent 也指向根父，不指向中间子会话）。
+          runChildAgent: async (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions): Promise<AgentRunResult> => {
+            return runChildAgent({
+              runtime,
+              parentProjectId: scope.projectId,
+              parentSessionId: scope.sessionId,
+              parentDepth: 0,
+              def,
+              childSessionId,
+              opts,
+            });
+          },
+          depth: 0,
+          parentSignal,
+          callableAgents: callable,
+        },
+        // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
+        // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
+        allowedPaths: undefined,
+      };
+      const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: true }));
+
+      // 检查点②：runner 起步前的最后一道——校验 / 名单 / 技能装配这段尾部也有
+      // 秒级窗口（大会话），命中即在此收尾、不注册 streamRegistry（零清理负担）。
+      const preRunnerCancelled = preludeAbortResult();
+      if (preRunnerCancelled != null) {
+        // 先发 FINISHED('') 再返回合成 cancelled——双端据此收口（r3-run-1
+        // 步骤 1）。顺序不能反：事件同步分发，返回前事件必须已落到订阅方。
+        publishPreludeRunFinished(runtime, scope);
+        return preRunnerCancelled;
+      }
+
+      // abortRegistry 的注册已在入口完成（见 {@link runAgentTurn}），这里不重复。
+      // streamRegistry.register 返回本次 run 的所有权句柄，finally 反注册时回传，
+      // 防止同一 sessionId 并发 run 时 A 的 finally 误删 B 的 partial（与 abortRegistry 对称）。
+      // 句柄声明在 try 之外：下面的 finally 要读它。
+      streamHandle = runtime.streamRegistry?.register(scope.sessionId);
+
+      stage = "runner.run";
+      const maxSteps = definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+      // 终态观测窗：只覆盖 runner.run 调用期间。装上之后 core 发出的任何本 session
+      // 真实终态事件都会把 runnerEmittedTerminal 置真，catch 据此决定补不补
+      // FAILED('')（细因见该变量的声明注释）。subscribe 本身也走空安全——CLI /
+      // 老 mock 的 runtime.eventBus 是占位对象，观测窗装不上只是「看不到终态」，
+      // 退化成「可能多补一条 FAILED('')」，绝不会把 run 本身带崩。
+      const offTerminalWatch = subscribeQuietly(runtime, EVENT_AGENT_RUN_FINISHED, markRunnerTerminal);
+      const offFailedWatch = subscribeQuietly(runtime, EVENT_AGENT_RUN_FAILED, markRunnerTerminal);
+      // 紧前置真：置真之后的失败才调 onRunFailed（见该变量声明）。
+      runnerEntered = true;
+      let result: AgentRunResult;
+      try {
+        const abortSignal = internalController.signal;
+        const runInput = { definition, sessionId: scope.sessionId, projectId: scope.projectId, savedModelId, workspaceModelId, maxSteps, stream, signal: abortSignal, onStream: options?.onStream };
+        result = await runner.run(runInput);
+      } finally {
+        // 同步分发下这里退订不会漏事件；退订后 runnerEmittedTerminal 冻结为本 run 的事实。
+        offTerminalWatch.unsubscribe();
+        offFailedWatch.unsubscribe();
+      }
+      return result;
+    } catch (error) {
+      // 收口分岔（r3-run-1 步骤 2）：本函数是「前奏期唯一终态事件出口」。
+      //
+      // 判据一（终态补发，看 `runnerEmittedTerminal`）：core 全程没发过真实 runId
+      // 的终态 —— 前奏抛错、或 runner 自身的前置 IO 在 STARTED 之前就炸了
+      // （r3-run-2 把 STARTED 下移后新开的那一小段窗口）——都补发 FAILED(runId:'')
+      // 让双端走既有收口链路（composer 解锁 / 错误提示 / refcount 收敛）。
+      // 反之 agent-runner 主 try 的 catch 已发过一条**真实 runId** 的 FAILED，
+      // 此处绝不补发——否则同一次失败出两条 FAILED、双端双弹 toast。
+      if (!runnerEmittedTerminal) {
+        // 前奏期「抛错」的唯一终态出口：发 FAILED(runId:'') 后由本函数 rethrow 保留原错误。
+        // 不发 = desktop main 侧 refcount 无人收敛、renderer 侧 uiRunning 永久 true
+        // （停止按钮卡死、composer 锁住）；发出后两侧走与真实 FAILED 相同的收口链路。
+        safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
+          sessionId: scope.sessionId,
+          projectId: scope.projectId,
+          runId: "",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      // 判据二（onRunFailed，看 `runnerEntered`）：只有已经踏进 runner.run 的失败
+      // 才回调。前奏失败时 savedModelId 等快照字段尚未解析完毕，语义不成立，
+      // 保持既有行为（不调）。注意这一条与判据一是**正交**的——runner 前置 IO
+      // 抛错属于「已进 runner 但无终态」，它要补 FAILED('') 且不调 onRunFailed。
+      if (runnerEntered) {
+        options?.onRunFailed?.({
+          stage,
+          error,
+          scope,
+          savedModelId: failureSavedModelId ?? "",
+          stream,
+        });
+      }
+      throw error;
+    } finally {
+      // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。
+      runtime.abortRegistry?.unregister(scope.sessionId, internalController);
+      // 句柄为 undefined = 前奏期就抛了、streamRegistry 从未 register。
+      // 此刻**不能**反注册：`unregister` 在 handle 省略时按「不带所有权比对直接删」
+      // 处理（见 AgentStreamRegistry 注释），会误删同 sessionId 上别的 run 的
+      // partial。abortRegistry 的反注册走本函数外层 finally，同样幂等。
+      if (streamHandle != null) {
+        runtime.streamRegistry?.unregister(scope.sessionId, streamHandle);
+      }
+    }
   } finally {
     // unregister 带所有权比对：内层已反注册时为 no-op（幂等兜底）。
     runtime.abortRegistry?.unregister(scope.sessionId, internalController);
@@ -410,11 +920,7 @@ export async function runAgentTurn(
  * 里 runtime.eventBus 是占位对象，publish 并不存在）。
  * SimpleEventBus 自己也会吞掉 handler 抛错，这层再兜一次 bus 本身的问题。
  */
-function safePublish(
-  runtime: AgentTurnRuntimePort,
-  type: string,
-  payload: Record<string, unknown>,
-): void {
+function safePublish(runtime: AgentTurnRuntimePort, type: string, payload: Record<string, unknown>): void {
   try {
     runtime.eventBus?.publish(type, payload);
   } catch (err) {
@@ -433,7 +939,12 @@ function safePublish(
  * 好处却多一处可变状态。
  */
 function syntheticCancelledResult(): AgentRunResult {
-  return { stepsExecuted: 0, finished: false, stopReason: "cancelled", rounds: [] };
+  return {
+    stepsExecuted: 0,
+    finished: false,
+    stopReason: "cancelled",
+    rounds: [],
+  };
 }
 
 /**
@@ -451,10 +962,7 @@ function syntheticCancelledResult(): AgentRunResult {
  *
  * 不变式：`runAgentTurn` 返回 cancelled ⇒ 恰好一条 FINISHED('')。
  */
-function publishPreludeRunFinished(
-  runtime: AgentTurnRuntimePort,
-  scope: AgentTurnScope
-): void {
+function publishPreludeRunFinished(runtime: AgentTurnRuntimePort, scope: AgentTurnScope): void {
   safePublish(runtime, EVENT_AGENT_RUN_FINISHED, {
     sessionId: scope.sessionId,
     projectId: scope.projectId,
@@ -470,19 +978,14 @@ function publishPreludeRunFinished(
  * 用途只有终态观测窗——它是**观测**，不是收口：装不上顶多让 catch 误以为
  * 「没发过终态」而多补一条 FAILED(runId:'')，绝不该反过来把 run 带崩。
  */
-function subscribeQuietly(
-  runtime: AgentTurnRuntimePort,
-  type: string,
-  handler: (payload: unknown) => void
-): { unsubscribe: () => void } {
+function subscribeQuietly(runtime: AgentTurnRuntimePort, type: string, handler: (payload: unknown) => void): { unsubscribe: () => void } {
   try {
     const sub = runtime.eventBus?.subscribe(type, handler);
     if (sub == null) {
       return { unsubscribe: () => {} };
     }
     // 老 mock 的 subscribe 返回裸退订函数，按 SimpleEventBus 契约取 unsubscribe。
-    const unsubscribe =
-      typeof sub === "function" ? (sub as () => void) : sub.unsubscribe;
+    const unsubscribe = typeof sub === "function" ? (sub as () => void) : sub.unsubscribe;
     return {
       unsubscribe: () => {
         try {
@@ -494,622 +997,6 @@ function subscribeQuietly(
     };
   } catch {
     return { unsubscribe: () => {} };
-  }
-}
-
-/**
- * 前奏期「抛错」的唯一终态出口：发 `EVENT_AGENT_RUN_FAILED`（`runId: ''`），
- * 由调用方 rethrow 保留原错误对象。
- *
- * 为什么必须发：前奏段在 runner 起步前抛错时，desktop/mobile 两侧都只看到
- * 一个 reject——main 侧 refcount 无人收敛、renderer 侧 uiRunning 永久 true
- * （停止按钮卡死、composer 锁住）。发事件后两侧走与真实 FAILED 完全相同的
- * 收口链路。
- *
- * 防双发（r3-run-1 步骤 2b）：`agent-runner.ts` 的主 try catch 已经发过一条
- * **真实 runId** 的 FAILED，那条路径绝不经过本函数——由调用点的
- * `runnerEmittedTerminal` 判据守卫（见 `runAgentTurnWithController`）。
- */
-function publishPreludeRunFailed(
-  runtime: AgentTurnRuntimePort,
-  scope: AgentTurnScope,
-  error: unknown
-): void {
-  safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
-    sessionId: scope.sessionId,
-    projectId: scope.projectId,
-    runId: "",
-    error: error instanceof Error ? error.message : String(error),
-  });
-}
-
-/**
- * {@link runAgentTurn} 的实现体：controller 由入口建好并注册后传入。
- */
-async function runAgentTurnWithController(
-  runtime: AgentTurnRuntimePort,
-  scope: AgentTurnScope,
-  userContent: string,
-  options: RunAgentTurnOptions | undefined,
-  internalController: AbortController
-): Promise<AgentRunResult> {
-  let stage = "start";
-  /**
-   * runner 是否已起步（`await runner.run(...)` 紧前置真）。
-   *
-   * 用途：区分「前奏期失败」与「runner 期失败」——只有后者才调
-   * {@link RunAgentTurnOptions.onRunFailed}（它的语义是 runner 期失败的前奏
-   * 快照）。**不**用于判断要不要补发 FAILED，见下面的 `runnerEmittedTerminal`。
-   *
-   * 声明在收口 try **之外**——catch 与 finally 都要读它。
-   */
-  let runnerEntered = false;
-  /**
-   * 本次 run 期间 core 是否已发过**真实 runId** 的终态事件（FINISHED/FAILED）。
-   *
-   * 这是 catch 里「要不要补发 FAILED(runId:'')」的**唯一**判据，比 spec 的
-   * `!runnerEntered` 守卫更强一档：r3-run-2 把 STARTED 下移到 agent-runner 主 try
-   * 紧前后，`runnerEntered=true` 与「STARTED 真的发出去了」之间还夹着一小段
-   * runner 自身的前置 IO（`savedModels.findById` / preferences 读）。那段抛错时
-   * STARTED 与 FAILED 都还没发，若只看 `runnerEntered` 就会一个终态都不发
-   * ——正是 r3-run-2 要消灭的 refcount 永久泄漏换个位置复发。
-   *
-   * 判据用「有没有发过」而不是「有没有发 STARTED」：STARTED 与终态在
-   * agent-runner 内部是同生共死的（主 try 的 catch 必发 FAILED），而
-   * FINISHED 分支后半段（token 缓存落库）若抛错也属于「已发过 FINISHED，
-   * 不该再补 FAILED」。
-   *
-   * 订阅只在本 run 的 runner 调用窗口内存在，且按 sessionId 过滤（子 run 的
-   * 终态带 childSessionId，不会误判为父 run 的）；事件总线同步分发，读到的
-   * 永远是本 run 窗口内的事实。
-   */
-  let runnerEmittedTerminal = false;
-  /**
-   * 生成 bus 回调：命中本 session 的终态事件就把 `runnerEmittedTerminal` 置真。
-   *
-   * 按 sessionId 过滤是必要的——同一个 bus 上还跑着 task 工具派生的子 run，
-   * 它们的终态带 childSessionId，不能算作本 run 已经有终态。
-   */
-  const markRunnerTerminal =
-    (): ((payload: unknown) => void) =>
-    (payload: unknown) => {
-      if ((payload as { sessionId?: string } | null)?.sessionId === scope.sessionId) {
-        runnerEmittedTerminal = true;
-      }
-    };
-  /**
-   * streamRegistry 所有权句柄：prelude 内 register、finally 回传。
-   * 声明在收口 try 之外（register 在 try 内、unregister 在 try 外）。
-   */
-  let streamHandle: AgentStreamRegistryHandle | undefined;
-  /**
-   * 已解析的 savedModelId 镜像（供 catch 的 onRunFailed 入参，见 resolve 处的注释）。
-   */
-  let failureSavedModelId: string | undefined;
-  const stream = options?.stream !== false;
-  const trimmed = userContent.trim();
-  const annotateDrafts = options?.annotateDrafts ?? [];
-  const hasAnnotateDrafts = annotateDrafts.length > 0;
-  // 有批注草稿时本轮禁止空续跑 re-append（prepare 不得删末条）
-  const allowResumeWithoutInput =
-    options?.allowResumeWithoutInput === true && !hasAnnotateDrafts;
-
-  // 入参清洗：误传的 user_ops 预览一律丢弃，只保留 attach（workplace 为历史只读兼容，新数据不再产生）
-  const composerAttachOnly = (options?.attachments ?? []).filter(
-    (a) => a.source === "attach"
-  );
-
-  // 前奏停止检查点（2026-09-30 真机实锤，用户连点 15 次停止需等 11s 前奏跑完
-  // 才在 loop_start 兑现）：前奏各阶段之间检查 signal，命中即跳过剩余前奏、
-  // 返回合成 cancelled 结果。合成结果与 runner loop_start 取消路径同款；runner
-  // 从未起步，故不发 RUN_STARTED，但**发一条 FINISHED(runId:'') 收口**
-  // （r3-run-1：此前不补这条，desktop 前奏取消会让 refcount 永久泄漏、
-  // 转录冻结永久挂起；mobile 靠 .then 手工补丁——双端都在事件系统之外打补丁，
-  // 现在统一收敛到事件路线）。
-  //
-  // 检查点分布（r3-run-3/run-4 补全覆盖）：
-  //   ⓪ backfill 之前 —— 这次发送**根本没发生**（用户消息未落库），见下；
-  //   ① append+capture 之后 —— 消息已落库，停止不改变「本次发送已发生」；
-  //   ② agentRegistry.list() 之后 / skills 装配之后 / runner.run 之前。
-  const preludeAbortResult = (): AgentRunResult | undefined =>
-    internalController.signal.aborted ? syntheticCancelledResult() : undefined;
-
-  // 收口 try（r3-run-1 步骤 2）：从 backfill 到 `runner.run` 全程包起来。
-  //
-  // 为什么必须包：这段前半（前奏）在改动前**没有**任何 try，是真实抛错出口。
-  // 抛错时双端只看到 reject——desktop main 的 refcount 无人收敛（后续全部
-  // AGENT_BUSY）、renderer 的 uiRunning 永久 true（停止按钮卡死、composer
-  // 锁住）。补一条 FAILED(runId:'') 后，双端走与真实 FAILED 完全相同的收口
-  // 链路，再原样 rethrow 保留错误对象。
-  //
-  // 为什么是「一个 try」而不是「前奏 try + 主 try」两段：两段各自的 catch 会
-  // 重复同一段 publish 逻辑，双发风险反而更高（两处都要写 runnerEntered 守卫，
-  // 漏一处就双发）。合到一个 catch 后，`!runnerEntered` 成为**唯一**的补发
-  // 判据——不变式「抛错 ⇒ 恰好一条 FAILED」在结构上就只剩一个出口。
-  // 行为与 spec 的两段式等价：前奏抛错不发 onRunFailed、runner 期抛错发
-  // onRunFailed 且不补发 FAILED('')。子 run 侧（runChildAgent）的同款包装
-  // 由 r3-run-3 落。
-  try {
-    // 检查点⓪（r3-run-4）：backfill **之前**的第一道。
-    //
-    // 命中它意味着「这次发送根本没发生」——用户消息尚未 append、没有
-    // checkpoint、没有任何落库痕迹。这与 ①② 的语义差一档：①② 停在一段已经
-    // 追加了用户消息的链上，停止不改变「本次发送已发生」的事实（undo_send 可
-    // 回收）；⓪ 命中时连消息都没有，所以面板上什么都不该出现。
-    //
-    // 与 r3-run-1 的联动（重要，勿改）：⓪ 命中同样要发 FINISHED(runId:'')
-    // 收口——双端（desktop refcount / composer 解锁、mobile 单元 settle）拿到的
-    // 是同一个「run 已结束」事实。settle 之后 desktop 走 reloadMessages，**它会
-    // 拿回旧的消息列表，这是正确行为而不是 bug**：⓪ 的定义就是「没发送过」，
-    // 库里本来就没有本轮消息，reload 自然看不到新的。①② 之所以需要
-    // 「runId==='' 强制 reload」是因为它们的用户消息已落库而面板未必已拿到；
-    // ⓪ 不需要那条规则，也绝不能借它凭空显示一条消息。
-    const entryCancelled = preludeAbortResult();
-    if (entryCancelled != null) {
-      publishPreludeRunFinished(runtime, scope);
-      return entryCancelled;
-    }
-
-    // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
-    // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
-    // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
-    stage = "backfill-baseline-checkpoints";
-    // 传 internalController.signal（r3-run-4）：这段扫描是大会话上秒级的第一站，
-    // 用户在这段窗口按停止时在扫描循环内提前退出，而不是被逼着等它跑完。
-    await runtime.messageCheckpoint.backfillMissingBaselines(
-      scope.sessionId,
-      scope.projectId,
-      internalController.signal
-    );
-
-    stage = "resolve-agent";
-    const definition = (
-      await mapResolveError(() =>
-        resolveAgentForProject(runtime, scope.projectId, scope.sessionId)
-      )
-    ).definition;
-
-    const hasInput =
-      trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
-
-    if (!hasInput && !allowResumeWithoutInput) {
-      throw new AgentTurnError({key: "error.agent.message_empty"});
-    }
-    if (!hasInput && allowResumeWithoutInput) {
-      stage = "resume-check-last-message";
-      // 只判末条角色：tail(1) 单行读（含 hidden，与全量末条同义）。原先是全量
-      // listBySession——含 hidden 整表解压，压缩会话上秒级（2026-09-30 真机
-      // 实锤 ~4s：续跑/「继续」按钮每轮白付，且这段前奏无停止观察点，用户
-      // 连点停止无响应）。
-      const tail = await runtime.messages.listBySessionTail(scope.sessionId, {
-        limit: 1,
-      });
-      // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
-      if (tail[tail.length - 1]?.role !== "user") {
-        throw new AgentTurnError({key: "error.agent.message_empty"});
-      }
-    }
-
-    stage = "resolve-agent";
-    const { savedModelId, workspaceModelId } = await mapResolveError(() =>
-      resolveApplicationModelIdForRun(runtime, definition, scope.sessionId)
-    );
-    // 镜像到 try 之外的变量：catch 块要把它当 onRunFailed 的入参，而它声明在
-    // try 内、与 catch 不同作用域。catch 只在 runnerEntered 为真时才读它，
-    // 那时该值必然已赋值（`` ?? "" `` 是纯类型兜底，不可达）。
-    failureSavedModelId = savedModelId;
-
-  await options?.onAfterResolveModel?.({
-    scope,
-    definition,
-    savedModelId,
-    workspaceModelId,
-    stream,
-  });
-
-  // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
-  // D9：确认胶囊区间先掩码成等长空白再全量扫描——区间内触发符（`$A$B` /
-  // `@path$技能`）不再污染/重复扫描；区间结果由发送侧预扫后经 attachments
-  // 传入（composerAttachOnly 在合并时位于 existing 位 = 区间结果优先）。
-  const excludedScanRanges = options?.excludedScanRanges ?? [];
-  const clampedScanRanges: ComposerDraftTokenRange[] = [];
-  for (const range of excludedScanRanges) {
-    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
-      continue;
-    }
-    const start = Math.max(0, range.start);
-    const end = Math.min(trimmed.length, range.end);
-    if (start < end) {
-      clampedScanRanges.push({ start, end });
-    }
-  }
-  clampedScanRanges.sort((a, b) => a.start - b.start || a.end - b.end);
-  const disjointScanRanges: ComposerDraftTokenRange[] = [];
-  let coveredUntil = 0;
-  for (const range of clampedScanRanges) {
-    if (range.start >= coveredUntil) {
-      disjointScanRanges.push(range);
-      coveredUntil = range.end;
-    }
-  }
-  let scanText = trimmed;
-  if (disjointScanRanges.length > 0) {
-    let masked = "";
-    let cursor = 0;
-    for (const range of disjointScanRanges) {
-      masked += trimmed.slice(cursor, range.start);
-      masked += " ".repeat(range.end - range.start);
-      cursor = range.end;
-    }
-    scanText = masked + trimmed.slice(cursor);
-  }
-  const withAtPaths = attachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
-  const scannedComposer = attachmentScanner.mergeScannedSkills(scanText, withAtPaths);
-
-  let checkpointAnchorMessageId: string | undefined;
-
-  // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
-  // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
-  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号
-  // 给模型读附件时多一个「第 N 行」的位置提示；匹配不到或读盘失败就静默跳过。
-  const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  const annotateAttachments = await Promise.all(
-    annotateDrafts.map(async (draft) => {
-      if (draft.startLine != null && draft.endLine != null) {
-        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
-      }
-      let sourceText: string | undefined;
-      try {
-        sourceText = (await annotateVfs.read(draft.path)).content;
-      } catch {
-        // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
-      }
-      if (typeof sourceText !== "string" || sourceText.length === 0) {
-        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
-      }
-      const needle = draft.originalText.replace(/\u00a0/g, " ");
-      if (needle.length === 0) {
-        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
-      }
-      let at = sourceText.indexOf(needle);
-      let matchLen = needle.length;
-      let haystack = sourceText;
-      if (at < 0) {
-        const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        at = normSource.indexOf(normNeedle);
-        if (at < 0) {
-          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
-        }
-        matchLen = normNeedle.length;
-        haystack = normSource;
-      }
-      const start = offsetToSourceLineCol(haystack, at);
-      const end = offsetToSourceLineCol(haystack, at + matchLen - 1);
-      const enriched: SendAnnotateDraft = { ...draft, startLine: start.line, endLine: end.line, startCol: start.col, endCol: end.col };
-      return attachmentXmlCodec.encodeAnnotateAttachment(enriched);
-    })
-  );
-
-  // 新 append：scannedComposer ∪ annotate 直 concat（禁 path 去重）
-  const mergedAttachments = [...scannedComposer, ...annotateAttachments];
-
-  const shouldAppendNewUser =
-    trimmed !== "" || scannedComposer.length > 0 || hasAnnotateDrafts;
-
-  // S-1：append + capture 这条跨资源写链走 CoordinatedWrite，任一步失败按逆序补偿。
-  // append 的补偿是删掉刚写入的消息；capture 的补偿是 release 刚写的 checkpoint。
-  const coordinatedWrite = new CoordinatedWrite();
-  if (shouldAppendNewUser) {
-    stage = "append-user-message";
-    coordinatedWrite.register({
-      name: "append-user-message",
-      execute: async () => {
-        const appended = await runtime.messages.append(
-          scope.sessionId,
-          "user",
-          textBlocks(trimmed),
-          mergedAttachments.length > 0
-            ? { attachments: mergedAttachments }
-            : undefined
-        );
-        // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
-        // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
-        // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
-        // 这里把不变式上提到源头（所有 user append 统一走同一 capture）。
-        checkpointAnchorMessageId = appended.id;
-        await options?.onUserMessageAppended?.();
-      },
-      rollback: async () => {
-        const appendedId = checkpointAnchorMessageId;
-        if (appendedId != null) {
-          await runtime.messages.delete(appendedId);
-        }
-      },
-    });
-  }
-
-  // capture 步骤：anchor 来自上面的 append execute（execute 内取值，保证 append 成功后才读到）。
-  coordinatedWrite.register({
-    name: "capture-baseline-checkpoint",
-    execute: async () => {
-      const anchorId = checkpointAnchorMessageId;
-      if (anchorId == null) return;
-      stage = "capture-baseline-checkpoint";
-      await runtime.messageCheckpoint.capture(
-        scope.sessionId,
-        scope.projectId,
-        anchorId
-      );
-    },
-    rollback: async () => {
-      const anchorId = checkpointAnchorMessageId;
-      if (anchorId != null) {
-        // release 可选：runtime 未提供时按 best-effort no-op 处理。
-        await runtime.messageCheckpoint.release?.(scope.sessionId, anchorId);
-      }
-    },
-  });
-
-  await coordinatedWrite.run();
-
-    // 检查点①：append+capture 已完成（用户消息已落库）——此后的停止不再需要
-    // 跑完剩余前奏（校验 / 子代理名单 / 技能装配）才兑现。
-    const afterAppendCancelled = preludeAbortResult();
-    if (afterAppendCancelled != null) {
-      // 同检查点②：先发 FINISHED('') 再返回合成 cancelled（r3-run-1 步骤 1）。
-      // 此处用户消息已落库，但本次 run 没跑过任何 step，delta 一条都没有——
-      // desktop 侧靠「runId==='' 强制全量 reload」把这条消息捞回面板。
-      publishPreludeRunFinished(runtime, scope);
-      return afterAppendCancelled;
-    }
-
-  stage = "validate-agent-definition";
-  const toolProbe = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(toolProbe);
-  const validation = await validateAgentDefinition(definition, {registeredToolNames: toolProbe.list()});
-  if (!validation.ok) throw validation.error;
-
-  // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
-  // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
-  // task 是静态内置工具，registerBuiltinTools 已注册（probe 也含 task）；
-  // 这里不单独注册 task，只把 callable 塞进下方 toolCtx.subagent.callableAgents 供 description lambda 读。
-  const allDefs = await runtime.agentRegistry.list();
-
-  // 检查点③（r3-run-4，:565 之后）：`agentRegistry.list()` 是前奏尾段的
-  // 第一件真 IO 活（拉全部 agent 定义），大会话上窗口不小。停在这里比跑完
-  // 后续的 registry resolve + 技能预算装配再兑现快一大截。
-  // 语义与①相同（用户消息早已 append 落库），终态同款 FINISHED('')。
-  const afterListCancelled = preludeAbortResult();
-  if (afterListCancelled != null) {
-    publishPreludeRunFinished(runtime, scope);
-    return afterListCancelled;
-  }
-
-  const callable = allDefs
-    .filter((d) => d.mode !== "primary" && d.name !== definition.name)
-    .map((d) => ({ name: d.name, description: d.description }));
-
-  const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
-  const registry = resolveAgentToolRegistry(toolProbe, definition, {
-    depth: 0,
-  });
-  // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
-  // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
-  const skillsCtx = await assembleSkillsToolContext(
-    runtime,
-    scope.projectId,
-    registry
-  );
-
-  // 检查点④（r3-run-4，:577 之后）：`assembleSkillsToolContext` 里的
-  // `effectiveSkills` 是前奏尾段的另一件实打实的 IO（读 KKV + 解析技能目录），
-  // 与上面的 list() 之间是真实的秒级窗口——真机上「发送后立刻停止」的停止
-  // 意图多半就落在这两步里，必须在这里就被兑现，而不是等 runner 起步后由
-  // `loop_start` 拦下。语义与①相同，终态同款 FINISHED('')。
-  const afterSkillsCancelled = preludeAbortResult();
-  if (afterSkillsCancelled != null) {
-    publishPreludeRunFinished(runtime, scope);
-    return afterSkillsCancelled;
-  }
-  // agent 管理工具读取：快照复用上方 allDefs（零新增 IO）；probe 名单透传给
-  // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
-  const agentsCtx = assembleAgentsToolContext(
-    runtime.agentRegistry,
-    allDefs,
-    toolProbe.list(),
-    registry
-  );
-  const session = new ChatAgentSession(runtime.messages, scope.sessionId);
-  // internalController 由入口 {@link runAgentTurn} 建好并**已注册**（见其注释：
-  // 前奏期间的停止不能被丢掉）。这里只取它的 signal：runner.run 用它，
-  // 同时作为 task 工具内子 agent run 的 parentSignal，让
-  // registry.abort(sessionId) 也能级联到子 run。
-  const parentSignal = internalController.signal;
-  const toolCtx: BuiltinToolContext = {
-    vfs,
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-    sessionKkv: runtime.sessionKkv,
-    // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
-    workplace: runtime.workplace({
-      kind: "session",
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    }),
-    // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
-    ...(skillsCtx != null ? { skills: skillsCtx } : {}),
-    // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
-    ...(agentsCtx != null ? { agents: agentsCtx } : {}),
-    // search 工具读取：闭包绑定 runtime.searchConfig（CLI / 旧 mock 未注入时不装配，
-    // 工具 run 返回可读错误；引擎解析延迟到 run 内，装配期零 IO）。
-    ...(runtime.searchConfig != null
-      ? { search: assembleSearchToolContext(runtime.searchConfig) }
-      : {}),
-    // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
-    subagent: {
-      agentRegistry: runtime.agentRegistry,
-      messages: runtime.messages,
-      sessions: runtime.sessions,
-      createChildSession: async (title: string): Promise<string> => {
-        const child = await runtime.sessions.createSubSession(
-          scope.sessionId,
-          scope.projectId,
-          title
-        );
-        runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
-          parentSessionId: scope.sessionId,
-          projectId: scope.projectId,
-          childSessionId: child.id,
-          title,
-        });
-        return child.id;
-      },
-      // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
-      parentSessionId: scope.sessionId,
-      // 并发软闸（spec D6）：绑 abortRegistry.has；**缺 registry 保守拒绝续用**
-      // （?? true）——宁可让模型新开，也不要在无并发信息时赌一把。
-      // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
-      isSessionRunActive: (id: string): boolean =>
-        runtime.abortRegistry?.has(id) ?? true,
-      resolveChildModelId: (
-        def: AgentDefinition
-      ): { savedModelId: string; workspaceModelId: string } => {
-        // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
-        const resolved = def.model ?? savedModelId;
-        if (resolved == null || resolved === "") {
-          throw new AgentRunResolveError(
-            {key: "error.agent.subagent_model_missing"}
-          );
-        }
-        return { savedModelId: resolved, workspaceModelId };
-      },
-      runChildAgent: async (
-        def: AgentDefinition,
-        childSessionId: string,
-        opts: RunChildAgentOptions
-      ): Promise<AgentRunResult> => {
-        return runChildAgent({
-          runtime,
-          parentProjectId: scope.projectId,
-          // 根父会话 id：子 agent 的 VFS / 工作区归属指向它（嵌套时孙 agent 也
-          // 指向根父，不指向中间子会话）。
-          parentSessionId: scope.sessionId,
-          parentDepth: 0,
-          def,
-          childSessionId,
-          opts,
-        });
-      },
-      depth: 0,
-      parentSignal,
-      callableAgents: callable,
-    },
-    // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
-    // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
-    allowedPaths: undefined,
-  };
-  const runner = createAgentRunner(
-    assembleAgentRunnerDeps({
-      session,
-      runtime,
-      registry,
-      toolCtx,
-      includeCompactionOrchestrator: true,
-    }),
-  );
-
-    // 检查点②：runner 起步前的最后一道——校验 / 名单 / 技能装配这段尾部也有
-    // 秒级窗口（大会话），命中即在此收尾、不注册 streamRegistry（零清理负担）。
-    const preRunnerCancelled = preludeAbortResult();
-    if (preRunnerCancelled != null) {
-      // 先发 FINISHED('') 再返回合成 cancelled——双端据此收口（r3-run-1
-      // 步骤 1）。顺序不能反：事件同步分发，返回前事件必须已落到订阅方。
-      publishPreludeRunFinished(runtime, scope);
-      return preRunnerCancelled;
-    }
-
-    // abortRegistry 的注册已在入口完成（见 {@link runAgentTurn}），这里不重复。
-    // streamRegistry.register 返回本次 run 的所有权句柄，finally 反注册时回传，
-    // 防止同一 sessionId 并发 run 时 A 的 finally 误删 B 的 partial（与 abortRegistry 对称）。
-    // 句柄声明在 try 之外：下面的 finally 要读它。
-    streamHandle = runtime.streamRegistry?.register(scope.sessionId);
-
-    stage = "runner.run";
-    const maxSteps = definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-    // 终态观测窗：只覆盖 runner.run 调用期间。装上之后 core 发出的任何本 session
-    // 真实终态事件都会把 runnerEmittedTerminal 置真，catch 据此决定补不补
-    // FAILED('')（细因见该变量的声明注释）。subscribe 本身也走空安全——CLI /
-    // 老 mock 的 runtime.eventBus 是占位对象，观测窗装不上只是「看不到终态」，
-    // 退化成「可能多补一条 FAILED('')」，绝不会把 run 本身带崩。
-    const offTerminalWatch = subscribeQuietly(
-      runtime,
-      EVENT_AGENT_RUN_FINISHED,
-      markRunnerTerminal(),
-    );
-    const offFailedWatch = subscribeQuietly(
-      runtime,
-      EVENT_AGENT_RUN_FAILED,
-      markRunnerTerminal(),
-    );
-    // 紧前置真：置真之后的失败才调 onRunFailed（见该变量声明）。
-    runnerEntered = true;
-    let result: AgentRunResult;
-    try {
-      result = await runner.run({
-        definition,
-        sessionId: scope.sessionId,
-        projectId: scope.projectId,
-        savedModelId,
-        workspaceModelId,
-        maxSteps,
-        stream,
-        signal: internalController.signal,
-        onStream: options?.onStream,
-      });
-    } finally {
-      // 同步分发下这里退订不会漏事件；退订后 runnerEmittedTerminal 冻结为本 run 的事实。
-      offTerminalWatch.unsubscribe();
-      offFailedWatch.unsubscribe();
-    }
-    return result;
-  } catch (error) {
-    // 收口分岔（r3-run-1 步骤 2）：本函数是「前奏期唯一终态事件出口」。
-    //
-    // 判据一（终态补发，看 `runnerEmittedTerminal`）：core 全程没发过真实 runId
-    // 的终态 —— 前奏抛错、或 runner 自身的前置 IO 在 STARTED 之前就炸了
-    // （r3-run-2 把 STARTED 下移后新开的那一小段窗口）——都补发 FAILED(runId:'')
-    // 让双端走既有收口链路（composer 解锁 / 错误提示 / refcount 收敛）。
-    // 反之 agent-runner 主 try 的 catch 已发过一条**真实 runId** 的 FAILED，
-    // 此处绝不补发——否则同一次失败出两条 FAILED、双端双弹 toast。
-    if (!runnerEmittedTerminal) {
-      publishPreludeRunFailed(runtime, scope, error);
-    }
-    // 判据二（onRunFailed，看 `runnerEntered`）：只有已经踏进 runner.run 的失败
-    // 才回调。前奏失败时 savedModelId 等快照字段尚未解析完毕，语义不成立，
-    // 保持既有行为（不调）。注意这一条与判据一是**正交**的——runner 前置 IO
-    // 抛错属于「已进 runner 但无终态」，它要补 FAILED('') 且不调 onRunFailed。
-    if (runnerEntered) {
-      options?.onRunFailed?.({
-        stage,
-        error,
-        scope,
-        savedModelId: failureSavedModelId ?? "",
-        stream,
-      });
-    }
-    throw error;
-  } finally {
-    // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。
-    runtime.abortRegistry?.unregister(scope.sessionId, internalController);
-    // 句柄为 undefined = 前奏期就抛了、streamRegistry 从未 register。
-    // 此刻**不能**反注册：`unregister` 在 handle 省略时按「不带所有权比对直接删」
-    // 处理（见 AgentStreamRegistry 注释），会误删同 sessionId 上别的 run 的
-    // partial。abortRegistry 的 unregister 走入口壳的 finally，同样幂等。
-    if (streamHandle != null) {
-      runtime.streamRegistry?.unregister(scope.sessionId, streamHandle);
-    }
   }
 }
 
@@ -1129,6 +1016,7 @@ async function runAgentTurnWithController(
  * - 装配期 vs run 期（P0-2）：`assembleAgentRunnerDeps({ ..., includeCompactionOrchestrator: false })`
  *   是装配期字段，不在 `AgentRunOptions`。
  */
+// nm-style: keep-local — 子 run 生命周期状态机：childController 的 tryRegister claim / 反注册、streamHandle 所有权、两道前奏检查点绑成一条链，且整段经 subagent 闭包递归到孙代理；内联进 toolCtx 对象字面量会把同一份 claim/清理状态拆进匿名递归闭包。
 async function runChildAgent(args: {
   readonly runtime: AgentTurnRuntimePort;
   readonly parentProjectId: string;
@@ -1139,15 +1027,7 @@ async function runChildAgent(args: {
   readonly childSessionId: string;
   readonly opts: RunChildAgentOptions;
 }): Promise<AgentRunResult> {
-  const {
-    runtime,
-    parentProjectId,
-    parentSessionId,
-    parentDepth,
-    def,
-    childSessionId,
-    opts,
-  } = args;
+  const { runtime, parentProjectId, parentSessionId, parentDepth, def, childSessionId, opts } = args;
   const childDepth = parentDepth + 1;
 
   // 子 run 的 scope（终态事件的 payload 归属用，r3-run-3）：
@@ -1172,13 +1052,9 @@ async function runChildAgent(args: {
   if (parentSignal.aborted) {
     childController.abort();
   } else {
-    parentSignal.addEventListener(
-      "abort",
-      () => {
-        childController.abort();
-      },
-      { once: true }
-    );
+    parentSignal.addEventListener("abort", () => childController.abort(), {
+      once: true,
+    });
   }
 
   /**
@@ -1189,8 +1065,7 @@ async function runChildAgent(args: {
    * 两道命中时子会话里连 task prompt 都还没写，语义比主 run ①②更接近主 run ⓪
    * （「这次派发根本没发生」）。这也正是它们必须**早于** append 的原因。
    */
-  const childPreludeAbortResult = (): AgentRunResult | undefined =>
-    childController.signal.aborted ? syntheticCancelledResult() : undefined;
+  const childPreludeAbortResult = (): AgentRunResult | undefined => (childController.signal.aborted ? syntheticCancelledResult() : undefined);
 
   // 子 run controller 挂进 registry，让外部（子会话页停止按钮）能按 childSessionId
   // 中断子 run。r3-run-3 前移：register 从「装配全部完成之后」提到所有前奏 IO
@@ -1210,11 +1085,7 @@ async function runChildAgent(args: {
     // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
     // 按旧行为；CLI 已补注入，见 D6）。
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
-      throw new ToolError(
-        "FAILED",
-        {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}},
-        { toolName: "task" }
-      );
+      throw new ToolError("FAILED", { key: "error.agent.child_session_busy", params: { child_session_id: childSessionId } }, { toolName: "task" });
     }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。
@@ -1240,20 +1111,14 @@ async function runChildAgent(args: {
     // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
     // task 是否对 LLM 可见由下方 resolveAgentToolRegistry 的 depth 判断控制（depth>=2 deny）。
     const childAllDefs = await runtime.agentRegistry.list();
-    const callable = childAllDefs
-      .filter((d) => d.mode !== "primary" && d.name !== def.name)
-      .map((d) => ({ name: d.name, description: d.description }));
+    const callable = childAllDefs.filter((d) => d.mode !== "primary" && d.name !== def.name).map((d) => ({ name: d.name, description: d.description }));
     const registry = resolveAgentToolRegistry(baseRegistry, def, {
       depth: childDepth,
     });
 
     // skill（D2）：子代理同样注入，清单按父会话 projectId 解析——
     // 与「子代理共享父工作区」语义一致。子 agent 自己的 policy 同样生效（deny 时不注入）。
-    const skillsCtx = await assembleSkillsToolContext(
-      runtime,
-      parentProjectId,
-      registry
-    );
+    const skillsCtx = await assembleSkillsToolContext(runtime, parentProjectId, registry);
 
     // 子检查点②（r3-run-3）：技能预算之后、`session.append(prompt)` 与
     // `runner.run` 之前。与①同款：命中即发 FINISHED('') 再返回合成 cancelled。
@@ -1267,12 +1132,7 @@ async function runChildAgent(args: {
 
     // agent 管理工具：快照复用上方 childAllDefs；probe 名单用 baseRegistry。
     // 子 agent（mode==="subagent"）与孙 agent（depth>=2）被 resolve 摘除，不注入。
-    const childAgentsCtx = assembleAgentsToolContext(
-      runtime.agentRegistry,
-      childAllDefs,
-      baseRegistry.list(),
-      registry
-    );
+    const childAgentsCtx = assembleAgentsToolContext(runtime.agentRegistry, childAllDefs, baseRegistry.list(), registry);
 
     // VFS（工作区共享）：子 agent 用父 session 的 VFS 视图——写入直接落在父工作区。
     const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
@@ -1280,11 +1140,7 @@ async function runChildAgent(args: {
     // ChatAgentSession 的消息落子 session（独立历史）；工作区归属指向父 session
     // （子 agent 在父 session 工作区工作，规则评估按父工作区）；KKV 归属走默认值
     // =自身（rule_snapshot / file_cache 存子 session 自己的 KKV，仅快照隔离）。
-    const session = new ChatAgentSession(
-      runtime.messages,
-      childSessionId,
-      parentSessionId
-    );
+    const session = new ChatAgentSession(runtime.messages, childSessionId, parentSessionId);
 
     // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
     // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
@@ -1293,23 +1149,20 @@ async function runChildAgent(args: {
     // 守卫是「prompt 非空白 **或** 附件非空」：schema 的 `z.string().min(1)` 放行
     // 纯空白串（" "），若只按 prompt 判空，这条 user 消息连同已物化的 fileAttachment
     // 会一起不落库——task 却照常「正常」返回，附件静默蒸发、模型毫不知情。
-    if (
-      (opts.prompt != null && opts.prompt.trim().length > 0) ||
-      (opts.attachments != null && opts.attachments.length > 0)
-    ) {
+    if ((opts.prompt != null && opts.prompt.trim().length > 0) || (opts.attachments != null && opts.attachments.length > 0)) {
       await session.append("user", textBlocks(opts.prompt ?? ""), {
         // fileAttachment 预算内物化的附件（spec G5）：与主会话附件同链路——
         // `content:null` 落库、view-time hydrate、alreadyReferenced 去重都复用既有
         // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
-        ...(opts.attachments != null && opts.attachments.length > 0
-          ? { attachments: opts.attachments }
-          : {}),
+        ...(opts.attachments != null && opts.attachments.length > 0 ? { attachments: opts.attachments } : {}),
       });
     }
     const toolCtx: BuiltinToolContext = {
       vfs,
       projectId: parentProjectId,
       sessionId: childSessionId,
+      // 子回合的取消信号（由父 signal 派生）：取消竞速 + 长请求 abort。
+      signal: childController.signal,
       sessionKkv: runtime.sessionKkv,
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
@@ -1322,21 +1175,16 @@ async function runChildAgent(args: {
       ...(skillsCtx != null ? { skills: skillsCtx } : {}),
       // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
-      // search：子代理同主代理注入（引擎配置全局共享，解析链与凭据读取在 run 内）。
-      ...(runtime.searchConfig != null
-        ? { search: assembleSearchToolContext(runtime.searchConfig) }
-        : {}),
+      // search：子代理同主代理注入（引擎配置全局共享；描述快照装配期预算，
+      // 链解析与凭据读取仍在 run 内）。
+      ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {
         agentRegistry: runtime.agentRegistry,
         messages: runtime.messages,
         sessions: runtime.sessions,
         createChildSession: async (title: string): Promise<string> => {
-          const grandchild = await runtime.sessions.createSubSession(
-            childSessionId,
-            parentProjectId,
-            title
-          );
+          const grandchild = await runtime.sessions.createSubSession(childSessionId, parentProjectId, title);
           runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
             parentSessionId: childSessionId,
             projectId: parentProjectId,
@@ -1349,32 +1197,18 @@ async function runChildAgent(args: {
         // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。
         parentSessionId: childSessionId,
         // 并发软闸与主装配点同款（缺 registry 保守拒绝）。
-        isSessionRunActive: (id: string): boolean =>
-          runtime.abortRegistry?.has(id) ?? true,
-        resolveChildModelId: (
-          grandchildDef: AgentDefinition
-        ): { savedModelId: string; workspaceModelId: string } => {
-          // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
-          const resolved = grandchildDef.model ?? opts.savedModelId;
-          if (resolved == null || resolved === "") {
-            throw new AgentRunResolveError(
-              {key: "error.agent.grandchild_model_missing"}
-            );
-          }
-          return {
-            savedModelId: resolved,
-            workspaceModelId: opts.workspaceModelId,
-          };
+        isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
+        // 孙 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）；闭包边界把域校验的 Result 转 throw。
+        resolveChildModelId: (grandchildDef: AgentDefinition): ChildModelIds => {
+          const resolved = resolveChildModel(grandchildDef, opts.savedModelId, opts.workspaceModelId, "error.agent.grandchild_model_missing");
+          if (!resolved.ok) throw resolved.error;
+          return resolved.value;
         },
-        runChildAgent: async (
-          grandchildDef: AgentDefinition,
-          grandchildSessionId: string,
-          grandchildOpts: RunChildAgentOptions
-        ): Promise<AgentRunResult> => {
+        // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
+        runChildAgent: async (grandchildDef: AgentDefinition, grandchildSessionId: string, grandchildOpts: RunChildAgentOptions): Promise<AgentRunResult> => {
           return runChildAgent({
             runtime,
             parentProjectId,
-            // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
             parentSessionId,
             parentDepth: childDepth,
             def: grandchildDef,
@@ -1390,16 +1224,8 @@ async function runChildAgent(args: {
       allowedPaths: undefined,
     };
 
-    const runner = createAgentRunner(
-      assembleAgentRunnerDeps({
-        session,
-        runtime,
-        registry,
-        toolCtx,
-        // 装配期 false：子 agent run 不走压缩编排（P0-2）。
-        includeCompactionOrchestrator: false,
-      })
-    );
+    // 装配期 false：子 agent run 不走压缩编排（P0-2）。
+    const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: false }));
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
     // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。
@@ -1407,15 +1233,13 @@ async function runChildAgent(args: {
     // 标签日志，不炸 run；其余异常重抛，避免静默吞掉装配类 bug。
     let childStream = true;
     try {
-      childStream =
-        (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
+      childStream = (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
     } catch (cause) {
       if (!isAppError(cause, "PREFERENCES_INVALID_VALUE")) throw cause;
       log.error("subagentStream pref read failed", { error: cause });
     }
 
-    const maxSteps =
-      opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+    const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     return await runner.run({
       definition: def,
       sessionId: childSessionId,

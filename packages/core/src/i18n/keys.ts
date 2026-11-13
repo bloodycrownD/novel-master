@@ -190,10 +190,14 @@ const ERROR_MESSAGE_KEYS = [
   // smart_sort_rule
   "error.smart_sort_rule.import_yaml_invalid",
   // tool：搜索配置
-  "error.tool.search_not_configured",
   "error.tool.search_api_key_required",
   "error.tool.search_searxng_base_url_invalid",
   "error.tool.search_engine_order_invalid",
+  "error.tool.search_template_invalid",
+  "error.tool.search_secret_detected",
+  "error.tool.search_engine_not_found",
+  "error.tool.search_test_failed",
+  "error.tool.search_curl_parse_failed",
   // usage：统计入参校验
   "error.usage.invalid_day_format",
   "error.usage.invalid_day",

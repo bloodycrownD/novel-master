@@ -1316,17 +1316,14 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(src, /readonly cards: readonly PromptTurnCardDto\[\];/);
     // 组卡 / 文本卡 DTO 与 core 判别联合对齐（discriminator = type）
     assert.match(src, /export type PromptToolGroupDto = \{/);
-    assert.match(src, /readonly type: 'toolGroup';/);
+    assert.match(src, /readonly type: "toolGroup";/);
     assert.match(src, /export type PromptTextCardDto = \{/);
-    assert.match(src, /readonly type: 'text' \| 'thinking';/);
+    assert.match(src, /readonly type: "text" \| "thinking";/);
     assert.match(src, /export type PromptTextCardDto = \{/);
     assert.match(src, /export type PromptToolGroupDto = \{/);
     assert.match(src, /export type PromptWorkplaceDto = \{/);
     // 轮卡片联合含三成员（text/thinking、toolGroup、workplace）
-    assert.match(
-      src,
-      /export type PromptTurnCardDto =\r?\n {2}\| PromptTextCardDto\r?\n {2}\| PromptToolGroupDto\r?\n {2}\| PromptWorkplaceDto;/,
-    );
+    assert.match(src, /export type PromptTurnCardDto = PromptTextCardDto \| PromptToolGroupDto \| PromptWorkplaceDto;/);
     // 反向：旧形态的段 DTO 与可选字段全部退役
     assert.doesNotMatch(src, /PromptPreviewSegmentDto/);
     // 只截 PromptPreviewTurnDto 的类型体比对，并剥掉行内注释，免得注释里解释
