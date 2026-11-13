@@ -22,6 +22,10 @@
       "types": "./dist/public/chat.d.ts",
       "import": "./dist/public/chat.js"
     },
+    "./settings": {
+      "types": "./dist/public/settings.d.ts",
+      "import": "./dist/public/settings.js"
+    },
     "./compaction": {
       "types": "./dist/public/compaction.d.ts",
       "import": "./dist/public/compaction.js"

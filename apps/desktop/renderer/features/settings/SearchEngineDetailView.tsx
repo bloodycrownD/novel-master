@@ -40,6 +40,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
 import { ENGINE_META, NEW_ENGINE_SENTINEL, engineLabel } from "./search-engine-meta";
 import { ApiKeyStatusTag, SettingsField, SettingsFormSection, SettingsPanel, SettingsSection, SettingsStatus } from "./settings-ui";
@@ -153,10 +154,10 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   if (engineId == null) {
     return (
       <SettingsPanel>
-        <SettingsFormSection title="搜索引擎">
-          <p className="settings-hint">未指定引擎，请从搜索配置列表选择。</p>
+        <SettingsFormSection title={settingsTranslator({ key: "settings.search.detail.engine_section.desktop" })}>
+          <p className="settings-hint">{settingsTranslator({ key: "settings.search.empty.no_engine_selected.desktop" })}</p>
           <Button variant="secondary" onClick={() => nav.pop()}>
-            返回列表
+            {settingsTranslator({ key: "settings.search.detail.back_to_list.desktop" })}
           </Button>
         </SettingsFormSection>
       </SettingsPanel>
@@ -168,7 +169,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     return (
       <SettingsPanel>
         <SettingsFormSection title={ENGINE_META.duckduckgo.label} desc={ENGINE_META.duckduckgo.desc}>
-          <p className="settings-hint">内置免费引擎，无需 API Key；在列表页开关控制是否参与搜索。它忽略 params 透传，也不支持 site: 等高级检索语法。</p>
+          <p className="settings-hint">{settingsTranslator({ key: "settings.search.detail.builtin_body.desktop" })}</p>
         </SettingsFormSection>
       </SettingsPanel>
     );
@@ -178,7 +179,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   if (!isCreate && !loaded) {
     return (
       <SettingsPanel>
-        <p className="settings-hint">加载中…</p>
+        <p className="settings-hint">{settingsTranslator({ key: "settings.search.empty.loading.desktop" })}</p>
       </SettingsPanel>
     );
   }
@@ -191,7 +192,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   const uses = (macro: string) => [form.url, form.headersJson, form.defaultBody].some((text) => text.includes(macro));
   const usesApiKey = uses("{{apiKey}}");
   const usesBaseUrl = uses("{{baseUrl}}");
-  const title = isCreate ? "新建自定义引擎" : engine?.name ?? (engineLabel(engineId) || "搜索引擎");
+  const titleFallback = engineLabel(engineId) || settingsTranslator({ key: "settings.search.detail.engine_section.desktop" });
+  const title = isCreate ? settingsTranslator({ key: "settings.search.list.create_custom" }) : engine?.name ?? titleFallback;
   /** 模板校验失败文案（reason 为字段原因）。 */
   const templateErrorText = (reason: string) => coreT({ key: "error.tool.search_template_invalid", params: { reason } });
 
@@ -201,9 +203,11 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     try {
       parsed = text.trim().length === 0 ? {} : JSON.parse(text);
     } catch {
-      return "Headers 必须是合法 JSON";
+      return settingsTranslator({ key: "settings.search.validation.headers_invalid_json.desktop" });
     }
-    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : "Headers 必须是 JSON 对象";
+    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : settingsTranslator({ key: "settings.search.validation.headers_not_object.desktop" });
   };
 
   /** 表单 → 校验后的模板；保存与测试共用（headers/body 的 JSON 文本先解析再校验）。 */
@@ -260,7 +264,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           setError(res.error.message);
           return;
         }
-        toastSettingsSuccess("已创建");
+        toastSettingsSuccess(settingsTranslator({ key: "settings.search.toast.created.desktop" }));
         nav.pop();
         return;
       }
@@ -282,7 +286,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         // 拍板 7 + CR2 P2-9：拦截按草稿判定（usesApiKey，与 mobile draftNeedsKey 同源）——
         // 草稿已删 {{apiKey}} 引用则放行，避免「已存生效模板 needsKey」误拦清 key 的草稿
         if (usesApiKey && engine?.hasKey !== true && key.length === 0) {
-          setError("请输入 API Key（留空不会修改已保存的密钥）");
+          setError(settingsTranslator({ key: "settings.search.validation.api_key_required" }));
           return;
         }
         // 预置：只提交与出厂模板不同的字段，未改字段保留既有覆盖（patch 浅合并）
@@ -293,7 +297,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         // baseUrl 仅在草稿与已存值不同时提交（空串 = 清除；相同 = 无写操作）
         const baseUrlChanged = usesBaseUrl && url !== (engine?.baseUrl ?? "");
         if (Object.keys(patch).length === 0 && key.length === 0 && !baseUrlChanged) {
-          toastSettingsSuccess("无改动");
+          toastSettingsSuccess(settingsTranslator({ key: "settings.search.toast.no_changes" }));
           return;
         }
         if (Object.keys(patch).length > 0) {
@@ -320,7 +324,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       }
       setApiKey(""); // 保存成功后密码框回落空白（不留明文残影）
       await reload();
-      toastSettingsSuccess("已保存");
+      toastSettingsSuccess(settingsTranslator({ key: "settings.search.toast.saved.desktop" }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -336,7 +340,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     if (template == null) return;
     const query = testQuery.trim();
     if (query.length === 0) {
-      setError("请输入测试查询");
+      setError(settingsTranslator({ key: "settings.search.validation.test_query_required.desktop" }));
       return;
     }
     setTesting(true);
@@ -398,10 +402,10 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   if (!isCreate && engine == null) {
     return (
       <SettingsPanel>
-        <SettingsFormSection title="搜索引擎">
-          <p className="settings-hint">引擎不存在，可能已被删除。</p>
+        <SettingsFormSection title={settingsTranslator({ key: "settings.search.detail.engine_section.desktop" })}>
+          <p className="settings-hint">{settingsTranslator({ key: "settings.search.empty.engine_missing.desktop" })}</p>
           <Button variant="secondary" onClick={() => nav.pop()}>
-            返回列表
+            {settingsTranslator({ key: "settings.search.detail.back_to_list.desktop" })}
           </Button>
         </SettingsFormSection>
       </SettingsPanel>
@@ -410,7 +414,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
 
   const templateFields = (
     <>
-      <SettingsField label="Method">
+      <SettingsField label={settingsTranslator({ key: "settings.search.detail.method_label.desktop" })}>
         <select
           value={form.method}
           onChange={(e) =>
@@ -424,7 +428,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           <option value="POST">POST</option>
         </select>
       </SettingsField>
-      <SettingsField label="URL（固定端点；参数由 agent 调用时传）">
+      <SettingsField label={settingsTranslator({ key: "settings.search.detail.url_label.desktop" })}>
         <input
           type="text"
           value={form.url}
@@ -434,16 +438,22 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           onChange={(e) => setForm({ ...form, url: e.target.value })}
         />
       </SettingsField>
-      <SettingsField label="Headers（JSON 对象）">
+      <SettingsField label={settingsTranslator({ key: "settings.search.detail.headers_label.desktop" })}>
         <textarea rows={4} value={form.headersJson} onChange={(e) => setForm({ ...form, headersJson: e.target.value })} placeholder={'{"Authorization": "Bearer {{apiKey}}"}'} />
       </SettingsField>
-      <SettingsField label="请求体模板（可选，合法 JSON 对象文本；留空则由 agent 调用时传参）">
+      <SettingsField label={settingsTranslator({ key: "settings.search.detail.body_label.desktop" })}>
         <textarea rows={4} value={form.defaultBody} onChange={(e) => setForm({ ...form, defaultBody: e.target.value })} placeholder={'{"query": "{{query}}", "count": "{{count}}"}'} />
         {/* FIX-26：裸形态 "{{count}}" 易误读为可写整值，双端统一强调带引号（文案与 mobile 同步） */}
-        <span className="settings-hint">{'占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字'}</span>
+        <span className="settings-hint">{settingsTranslator({ key: "settings.search.params.placeholder_note.desktop" })}</span>
       </SettingsField>
-      <SettingsField label="参数说明（拼进工具描述；内置引擎出厂固定）">
-        <textarea rows={3} value={form.paramHint} onChange={(e) => setForm({ ...form, paramHint: e.target.value })} placeholder="可经 params 透传……" disabled={isPreset} />
+      <SettingsField label={settingsTranslator({ key: "settings.search.params.title.desktop" })}>
+        <textarea
+          rows={3}
+          value={form.paramHint}
+          onChange={(e) => setForm({ ...form, paramHint: e.target.value })}
+          placeholder={settingsTranslator({ key: "settings.search.params.placeholder.desktop" })}
+          disabled={isPreset}
+        />
       </SettingsField>
     </>
   );
@@ -454,20 +464,24 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
         title={title}
         desc={
           isCreate
-            ? "从 curl 导入或直接填写请求模板；API Key 经本机安全密钥库存储。"
+            ? settingsTranslator({ key: "settings.search.detail.desc_create.desktop" })
             : customDef != null
-            ? "自定义引擎；API Key 经本机安全密钥库存储。"
-            : `${ENGINE_META[engineId]?.desc ?? ""} · 预置引擎`
+            ? settingsTranslator({ key: "settings.search.detail.desc_custom.desktop" })
+            : `${ENGINE_META[engineId]?.desc ?? ""} · ${settingsTranslator({ key: "settings.search.meta.preset_label.desktop" })}`
         }
         footer={
           <Button variant="primary" disabled={saving || clearing || testing} onClick={() => void save()}>
-            {saving ? "保存中…" : isCreate ? "创建" : "保存"}
+            {saving
+              ? settingsTranslator({ key: "settings.search.detail.saving.desktop" })
+              : isCreate
+              ? settingsTranslator({ key: "settings.search.detail.create_action.desktop" })
+              : settingsTranslator({ key: "settings.search.detail.save_action.desktop" })}
           </Button>
         }
       >
         {isCreate ? (
-          <SettingsSection title="从 curl 导入" desc="粘贴一条 curl 命令（支持 -X / -H / -d / --data-raw / -G）；识别到的明文密钥会替换为 {{apiKey}} 并在保存时写入安全密钥库。">
-            <SettingsField label="curl 命令">
+          <SettingsSection title={settingsTranslator({ key: "settings.search.curl.section_title.desktop" })} desc={settingsTranslator({ key: "settings.search.curl.section_desc.desktop" })}>
+            <SettingsField label={settingsTranslator({ key: "settings.search.curl.command_label.desktop" })}>
               <textarea
                 rows={5}
                 value={curlText}
@@ -494,33 +508,40 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                 });
                 if (draft.apiKey != null) setApiKey(draft.apiKey);
                 setImportedKey(draft.apiKey != null);
-                toastSettingsSuccess("已导入 curl 配置");
+                toastSettingsSuccess(settingsTranslator({ key: "settings.search.toast.curl_imported.desktop" }));
               }}
             >
-              解析并预填
+              {settingsTranslator({ key: "settings.search.curl.parse_action.desktop" })}
             </Button>
-            {importedKey ? <p className="settings-hint">已识别到密钥，已填入下方 API Key 输入框；保存后写入安全密钥库。</p> : null}
+            {importedKey ? <p className="settings-hint">{settingsTranslator({ key: "settings.search.curl.key_detected.desktop" })}</p> : null}
           </SettingsSection>
         ) : null}
 
-        <SettingsSection title="连接配置">
+        <SettingsSection title={settingsTranslator({ key: "settings.search.detail.connection_section.desktop" })}>
           {isCreate || customDef != null ? (
-            <SettingsField label="显示名称">
-              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="例如：我的搜索 API" />
+            <SettingsField label={settingsTranslator({ key: "settings.search.detail.name_label.desktop" })}>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder={settingsTranslator({ key: "settings.search.detail.name_placeholder.desktop" })}
+              />
             </SettingsField>
           ) : null}
           {isCreate ? null : (
-            <SettingsField label="密钥状态" row>
+            <SettingsField label={settingsTranslator({ key: "settings.search.auth.key_status_label.desktop" })} row>
               <ApiKeyStatusTag status={engine?.hasKey === true ? "set" : "not set"} />
             </SettingsField>
           )}
           {isCreate || engine?.needsKey === true || usesApiKey ? (
-            <SettingsField label={engine?.hasKey === true ? "新 API Key（留空则不修改）" : "API Key"}>
+            <SettingsField
+              label={engine?.hasKey === true ? settingsTranslator({ key: "settings.search.auth.new_key_label.desktop" }) : settingsTranslator({ key: "settings.search.auth.api_key_label" })}
+            >
               <input type="password" value={apiKey} autoComplete="new-password" onChange={(e) => setApiKey(e.target.value)} />
             </SettingsField>
           ) : null}
           {isCreate || customDef != null ? (
-            <SettingsField label="密钥注入方式（快捷写入 Headers，模板里保留 {{apiKey}} 占位符）">
+            <SettingsField label={settingsTranslator({ key: "settings.search.auth.injection_label.desktop" })}>
               <select
                 value=""
                 onChange={(e) => {
@@ -538,7 +559,7 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                   });
                 }}
               >
-                <option value="">选择注入方式…</option>
+                <option value="">{settingsTranslator({ key: "settings.search.auth.injection_placeholder.desktop" })}</option>
                 {INJECTION_OPTIONS.map((option) => (
                   <option key={option.label} value={option.label}>
                     {option.label}
@@ -552,22 +573,22 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
               variant="secondary"
               disabled={busy}
               onClick={() => {
-                void runWrite(setClearing, (id) => ipcSearchClearEngineKey({ engineId: id }), "已清除");
+                void runWrite(setClearing, (id) => ipcSearchClearEngineKey({ engineId: id }), settingsTranslator({ key: "settings.search.toast.cleared.desktop" }));
               }}
             >
-              {clearing ? "清除中…" : "清除密钥"}
+              {clearing ? settingsTranslator({ key: "settings.search.auth.clearing" }) : settingsTranslator({ key: "settings.search.auth.clear_key.desktop" })}
             </Button>
           ) : null}
           {/* 实例地址只服务模板里的 {{baseUrl}} 宏；searxng 出厂 URL 已是完整端点（示例地址），
               用户在 URL 字段里直接改成自己的实例即可。 */}
           {isCreate || usesBaseUrl ? (
-            <SettingsField label="实例 Base URL（服务模板中的 {{baseUrl}}；留空 = 清除）">
+            <SettingsField label={settingsTranslator({ key: "settings.search.auth.base_url_label.desktop" })}>
               <input type="text" value={baseUrl} placeholder="https://searxng.example.com" onChange={(e) => setBaseUrl(e.target.value)} />
             </SettingsField>
           ) : null}
         </SettingsSection>
 
-        <SettingsSection title="请求模板">
+        <SettingsSection title={settingsTranslator({ key: "settings.search.detail.template_section.desktop" })}>
           {isPreset && config?.presetOverrides[engineId] === true ? (
             <>
               <div className="settings-form-actions">
@@ -575,24 +596,24 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                   variant="secondary"
                   disabled={busy}
                   onClick={() => {
-                    void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), "已恢复默认");
+                    void runWrite(setSaving, (id) => ipcSearchResetPresetOverride({ engineId: id }), settingsTranslator({ key: "settings.search.toast.reset_done.desktop" }));
                   }}
                 >
-                  恢复默认
+                  {settingsTranslator({ key: "settings.search.detail.reset_action.desktop" })}
                 </Button>
               </div>
-              <p className="settings-hint">该引擎已有自定义覆盖；保存时只提交你修改过的字段，未改字段保留既有覆盖。</p>
+              <p className="settings-hint">{settingsTranslator({ key: "settings.search.detail.override_hint.desktop" })}</p>
             </>
           ) : null}
           {templateFields}
         </SettingsSection>
 
-        <SettingsSection title="测试" desc="草稿直测：用当前表单内容真实发起一次搜索（不保存），会消耗该引擎的调用配额。">
-          <SettingsField label="测试查询">
-            <input type="text" value={testQuery} onChange={(e) => setTestQuery(e.target.value)} placeholder="例如：人工智能" />
+        <SettingsSection title={settingsTranslator({ key: "settings.search.detail.test_section.desktop" })} desc={settingsTranslator({ key: "settings.search.detail.test_desc.desktop" })}>
+          <SettingsField label={settingsTranslator({ key: "settings.search.detail.test_query_label.desktop" })}>
+            <input type="text" value={testQuery} onChange={(e) => setTestQuery(e.target.value)} placeholder={settingsTranslator({ key: "settings.search.detail.test_query_placeholder.desktop" })} />
           </SettingsField>
           <Button variant="secondary" disabled={busy} onClick={() => void runTest()}>
-            {testing ? "测试中…" : "测试"}
+            {testing ? settingsTranslator({ key: "settings.search.detail.testing.desktop" }) : settingsTranslator({ key: "settings.search.detail.test_action.desktop" })}
           </Button>
           {testResult != null ? (
             <>
@@ -608,17 +629,17 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
                 {testResult.preview}
               </pre>
               <p className="settings-hint">
-                {testResult.resultCount != null ? `共 ${testResult.resultCount} 条` : ""}
-                {testResult.truncated ? `${testResult.resultCount != null ? " · " : ""}已截断` : ""}
+                {testResult.resultCount != null ? settingsTranslator({ key: "settings.search.detail.test_count.desktop", params: { count: testResult.resultCount } }) : ""}
+                {testResult.truncated ? `${testResult.resultCount != null ? " · " : ""}${settingsTranslator({ key: "settings.search.detail.test_truncated.desktop" })}` : ""}
               </p>
             </>
           ) : null}
         </SettingsSection>
 
         {customDef != null ? (
-          <SettingsSection title="删除引擎" desc="删除后该引擎的模板、密钥与本机保存的实例地址会一并清除。">
+          <SettingsSection title={settingsTranslator({ key: "settings.search.detail.delete_section" })} desc={settingsTranslator({ key: "settings.search.detail.delete_hint.desktop" })}>
             <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-              删除自定义引擎
+              {settingsTranslator({ key: "settings.search.detail.delete_title" })}
             </Button>
           </SettingsSection>
         ) : null}
@@ -627,14 +648,14 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       </SettingsFormSection>
       <ConfirmModal
         open={deleteOpen}
-        title="删除自定义引擎"
-        message={`确定删除「${engine?.name ?? ""}」吗？`}
-        confirmLabel="删除"
+        title={settingsTranslator({ key: "settings.search.detail.delete_title" })}
+        message={settingsTranslator({ key: "settings.search.detail.delete_confirm.desktop", params: { name: engine?.name ?? "" } })}
+        confirmLabel={settingsTranslator({ key: "settings.search.list.menu.delete" })}
         danger
         busy={busy}
         onConfirm={() => {
           // 删除走 runWrite：无论成败都收起确认框（错误经页内 SettingsStatus 展示，避免弹窗挡住原因），成功后回列表页
-          void runWrite(setSaving, (id) => ipcSearchDeleteCustomEngine({ engineId: id }), "已删除").then((ok) => {
+          void runWrite(setSaving, (id) => ipcSearchDeleteCustomEngine({ engineId: id }), settingsTranslator({ key: "settings.search.toast.deleted.desktop" })).then((ok) => {
             setDeleteOpen(false);
             if (ok) nav.pop();
           });

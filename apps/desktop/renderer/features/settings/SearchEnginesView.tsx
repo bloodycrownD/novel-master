@@ -15,6 +15,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
 import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
+import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
 import { ENGINE_META, NEW_ENGINE_SENTINEL } from "./search-engine-meta";
 import { BuiltinEngineTag, SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
@@ -27,24 +28,24 @@ import { BuiltinEngineTag, SettingsListSection, SettingsPanel, SettingsStatus } 
  */
 const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   {
-    title: "启用开关",
-    body: "只有打开开关的引擎参与搜索；默认仅内置 DuckDuckGo 启用。关闭全部引擎后搜索会返回提示，不会偷偷兜底。",
+    title: settingsTranslator({ key: "settings.search.help.toggle.title" }),
+    body: settingsTranslator({ key: "settings.search.help.toggle.body" }),
   },
   {
-    title: "引擎优先级",
-    body: "列表顺序即搜索时尝试引擎的顺序；请求失败（如密钥失效、超时）自动尝试下一个已启用且配置完整的引擎。",
+    title: settingsTranslator({ key: "settings.search.help.priority.title" }),
+    body: settingsTranslator({ key: "settings.search.help.priority.body" }),
   },
   {
-    title: "模板与自定义引擎",
-    body: '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，粘贴 curl 命令导入，用模板描述任意搜索 API（支持 {{query}}/{{count}}/{{apiKey}}/{{baseUrl}} 占位符）。请求体 defaultBody 可选，留空则由 agent 调用时传参；占位符写在字符串值里；整数字段写 "{{count}}"（带引号），执行时自动转为数字。',
+    title: settingsTranslator({ key: "settings.search.help.custom_engine.title" }),
+    body: settingsTranslator({ key: "settings.search.help.custom_engine.body.desktop" }),
   },
   {
-    title: "测试消耗配额",
-    body: "详情页的「测试搜索」会真实请求引擎接口，可能消耗引擎配额或产生计费。",
+    title: settingsTranslator({ key: "settings.search.help.test_quota.title.desktop" }),
+    body: settingsTranslator({ key: "settings.search.help.test_quota.body.desktop" }),
   },
   {
-    title: "密钥安全",
-    body: "API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。",
+    title: settingsTranslator({ key: "settings.search.help.key_security.title" }),
+    body: settingsTranslator({ key: "settings.search.help.key_security.body" }),
   },
 ];
 
@@ -115,7 +116,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
         return;
       }
       await reload();
-      toastSettingsSuccess("已删除");
+      toastSettingsSuccess(settingsTranslator({ key: "settings.search.toast.deleted.desktop" }));
     } catch (e) {
       setDeleteTarget(null);
       setError(e instanceof Error ? e.message : String(e));
@@ -139,15 +140,15 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
                 nav.push("searchEngineDetail");
               }}
             >
-              新建自定义引擎
+              {settingsTranslator({ key: "settings.search.list.create_custom" })}
             </Button>
-            <button type="button" className="icon-btn" aria-label="使用说明" onClick={() => setHelpOpen(true)}>
+            <button type="button" className="icon-btn" aria-label={settingsTranslator({ key: "settings.search.help.title" })} onClick={() => setHelpOpen(true)}>
               ?
             </button>
           </div>
         }
       >
-        {config == null && error == null ? <p className="settings-hint">加载中…</p> : null}
+        {config == null && error == null ? <p className="settings-hint">{settingsTranslator({ key: "settings.search.empty.loading.desktop" })}</p> : null}
         {(config?.engines ?? []).map((engine) => (
           <div key={engine.id} className="settings-list-item-row">
             <button
@@ -164,11 +165,13 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
               </span>
               <span className="settings-list-item__meta">
                 {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
-                {engine.isCustom ? <span className="settings-tag settings-tag--muted">自定义</span> : null}
-                {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">未设密钥</span> : null}
-                {engine.needsBaseUrl && engine.baseUrl == null ? <span className="settings-tag settings-tag--warn">未设实例地址</span> : null}
+                {engine.isCustom ? <span className="settings-tag settings-tag--muted">{settingsTranslator({ key: "settings.search.list.tag.custom.desktop" })}</span> : null}
+                {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.key_missing.desktop" })}</span> : null}
+                {engine.needsBaseUrl && engine.baseUrl == null ? (
+                  <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.base_url_missing.desktop" })}</span>
+                ) : null}
                 {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? (
-                  <span className="settings-tag settings-tag--ok">已配置</span>
+                  <span className="settings-tag settings-tag--ok">{settingsTranslator({ key: "settings.search.list.tag.configured.desktop" })}</span>
                 ) : null}
               </span>
               <span className="settings-list-item__chevron" aria-hidden="true">
@@ -180,13 +183,13 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
                 checked={engine.enabled}
                 disabled={busy}
                 onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))}
-                aria-label={`启用 ${engine.name}`}
+                aria-label={settingsTranslator({ key: "settings.search.list.toggle_aria.desktop", params: { name: engine.name } })}
               />
             </span>
             <button
               type="button"
               className="settings-list-item__menu-btn"
-              aria-label={`更多 ${engine.name}`}
+              aria-label={settingsTranslator({ key: "settings.search.list.more_menu_aria.desktop", params: { name: engine.name } })}
               onClick={(e) => {
                 if (busy) return;
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -212,16 +215,18 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
             ? []
             : [
                 {
-                  label: "上移",
+                  label: settingsTranslator({ key: "settings.search.list.menu.move_up" }),
                   action: "up",
                   disabled: order.indexOf(menu.engineId) === 0 || busy,
                 },
                 {
-                  label: "下移",
+                  label: settingsTranslator({ key: "settings.search.list.menu.move_down" }),
                   action: "down",
                   disabled: order.indexOf(menu.engineId) === order.length - 1 || busy,
                 },
-                ...(config?.engines.find((engine) => engine.id === menu.engineId)?.isCustom === true ? [{ label: "删除", action: "delete", danger: true }] : []),
+                ...(config?.engines.find((engine) => engine.id === menu.engineId)?.isCustom === true
+                  ? [{ label: settingsTranslator({ key: "settings.search.list.menu.delete" }), action: "delete", danger: true }]
+                  : []),
               ]
         }
         onSelect={(action) => {
@@ -235,9 +240,9 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
       />
       <ConfirmModal
         open={deleteTarget != null}
-        title="删除自定义引擎"
-        message={`确定删除「${deleteTarget?.name ?? ""}」吗？其密钥与本机保存的实例地址会一并清除。`}
-        confirmLabel="删除"
+        title={settingsTranslator({ key: "settings.search.detail.delete_title" })}
+        message={settingsTranslator({ key: "settings.search.list.delete_confirm.desktop", params: { name: deleteTarget?.name ?? "" } })}
+        confirmLabel={settingsTranslator({ key: "settings.search.list.menu.delete" })}
         danger
         busy={busy}
         onConfirm={() => void removeEngine()}
@@ -247,7 +252,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
         <div className="text-prompt-overlay" onClick={() => setHelpOpen(false)}>
           <div className="text-prompt-modal text-prompt-modal--wide" role="dialog" aria-modal="true" aria-labelledby="search-help-title" onClick={(e) => e.stopPropagation()}>
             <h3 id="search-help-title" className="text-prompt-modal__title">
-              使用说明
+              {settingsTranslator({ key: "settings.search.help.title" })}
             </h3>
             {HELP_SECTIONS.map((section) => (
               <p key={section.title} className="settings-hint">
@@ -257,7 +262,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
             ))}
             <div className="confirm-modal__actions">
               <Button variant="primary" onClick={() => setHelpOpen(false)}>
-                知道了
+                {settingsTranslator({ key: "settings.search.help.dismiss" })}
               </Button>
             </div>
           </div>

@@ -11,31 +11,32 @@
  */
 
 import {PRESET_ENGINE_TEMPLATES, type SearchEngineTemplate} from '@novel-master/core';
+import {settingsTranslator} from '@/i18n/settings';
 
 /** 预置引擎显示名（列表行标题 / 详情页标题共用）。 */
 export const ENGINE_LABELS: Readonly<Record<string, string>> = {
-  bocha: 'Bocha',
-  tavily: 'Tavily',
-  brave: 'Brave',
-  searxng: 'SearXNG',
-  deepseek: 'DeepSeek',
-  zhipu: '智谱',
-  duckduckgo: 'DuckDuckGo',
+  bocha: settingsTranslator({key: 'settings.search.meta.label.bocha'}),
+  tavily: settingsTranslator({key: 'settings.search.meta.label.tavily'}),
+  brave: settingsTranslator({key: 'settings.search.meta.label.brave'}),
+  searxng: settingsTranslator({key: 'settings.search.meta.label.searxng'}),
+  deepseek: settingsTranslator({key: 'settings.search.meta.label.deepseek'}),
+  zhipu: settingsTranslator({key: 'settings.search.meta.label.zhipu'}),
+  duckduckgo: settingsTranslator({key: 'settings.search.meta.label.duckduckgo'}),
 };
 
 /** 预置引擎行副标题（计费/部署口径一句话）；自定义实例用 {@link CUSTOM_ENGINE_HINT}。 */
 export const ENGINE_HINTS: Readonly<Record<string, string>> = {
-  bocha: '按量计费 · 中文检索',
-  tavily: '按量计费 · 国际',
-  brave: '按量计费 · 国际',
-  searxng: '自托管 · 免费',
-  deepseek: '按量计费 · 中文检索',
-  zhipu: '按量计费 · 中文检索',
-  duckduckgo: '内置 · 免费',
+  bocha: settingsTranslator({key: 'settings.search.meta.hint.metered_zh'}),
+  tavily: settingsTranslator({key: 'settings.search.meta.hint.metered_intl'}),
+  brave: settingsTranslator({key: 'settings.search.meta.hint.metered_intl'}),
+  searxng: settingsTranslator({key: 'settings.search.meta.hint.self_hosted_free'}),
+  deepseek: settingsTranslator({key: 'settings.search.meta.hint.metered_zh'}),
+  zhipu: settingsTranslator({key: 'settings.search.meta.hint.metered_zh'}),
+  duckduckgo: settingsTranslator({key: 'settings.search.meta.hint.builtin_free'}),
 };
 
 /** 自定义实例行副标题（无出厂文案）。 */
-export const CUSTOM_ENGINE_HINT = '自定义模板';
+export const CUSTOM_ENGINE_HINT = settingsTranslator({key: 'settings.search.meta.hint.custom_template.mobile'});
 
 /** 出厂模板查表（按动态 id 索引的只读视图；预置 id 命中，自定义实例 / DDG 返回 undefined）。 */
 // prettier-ignore

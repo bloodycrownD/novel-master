@@ -6,35 +6,37 @@
  * 时兜底——列表页（SearchEnginesView）与详情页（SearchEngineDetailView）
  * 按此取值，desc（行副标题）无读模型来源、恒用本表静态文案。
  */
+import { settingsTranslator } from "../../i18n/settings";
+
 export const ENGINE_META: Readonly<Record<string, { readonly label: string; readonly desc: string }>> = {
   // desc 为行副标题（计费/部署形态一句话），与 mobile 同构口径，勿漂移
   bocha: {
-    label: "Bocha",
-    desc: "按量计费 · 中文检索",
+    label: settingsTranslator({ key: "settings.search.meta.label.bocha" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.metered_zh" }),
   },
   tavily: {
-    label: "Tavily",
-    desc: "按量计费 · 国际",
+    label: settingsTranslator({ key: "settings.search.meta.label.tavily" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.metered_intl" }),
   },
   brave: {
-    label: "Brave",
-    desc: "按量计费 · 国际",
+    label: settingsTranslator({ key: "settings.search.meta.label.brave" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.metered_intl" }),
   },
   searxng: {
-    label: "SearXNG",
-    desc: "自托管 · 免费",
+    label: settingsTranslator({ key: "settings.search.meta.label.searxng" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.self_hosted_free" }),
   },
   deepseek: {
-    label: "DeepSeek",
-    desc: "按量计费 · 中文检索",
+    label: settingsTranslator({ key: "settings.search.meta.label.deepseek" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.metered_zh" }),
   },
   zhipu: {
-    label: "智谱",
-    desc: "按量计费 · 中文检索",
+    label: settingsTranslator({ key: "settings.search.meta.label.zhipu" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.metered_zh" }),
   },
   duckduckgo: {
-    label: "DuckDuckGo",
-    desc: "内置 · 免费",
+    label: settingsTranslator({ key: "settings.search.meta.label.duckduckgo" }),
+    desc: settingsTranslator({ key: "settings.search.meta.hint.builtin_free" }),
   },
 };
 
@@ -47,5 +49,5 @@ export const NEW_ENGINE_SENTINEL = "__new__";
 
 /** 展示名静态兜底（拍板 5：调用方先取读模型 `name`，仅未知 id / 读模型缺名落到本函数；本表未收录的 id 返回空串）。 */
 export function engineLabel(engineId: string | undefined): string {
-  return engineId == null ? "" : (ENGINE_META[engineId]?.label ?? "");
+  return engineId == null ? "" : ENGINE_META[engineId]?.label ?? "";
 }

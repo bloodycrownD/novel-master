@@ -38,6 +38,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 import {toastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
+import {settingsTranslator} from '@/i18n/settings';
 import {getSearchConfigStore} from '@/services/search-config.store';
 import {ENGINE_HINTS, ENGINE_LABELS, PRESET_TEMPLATES, engineTitle} from './search-engine-meta';
 
@@ -89,18 +90,18 @@ const TEMPLATE_FIELDS: readonly (keyof SearchEngineTemplate)[] = ['name', 'metho
 /** 认证方式下拉选项（照智能体配置 FormSelectField 的形态）。 */
 const AUTH_STYLE_OPTIONS: ReadonlyArray<{value: AuthStyle; label: string}> = [
   {value: 'bearer', label: 'Authorization: Bearer'},
-  {value: 'header', label: '自定义请求头'},
-  {value: 'none', label: '无认证'},
+  {value: 'header', label: settingsTranslator({key: 'settings.search.auth.style.custom_header.mobile'})},
+  {value: 'none', label: settingsTranslator({key: 'settings.search.auth.style.none.mobile'})},
 ];
 
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
 type WriteOp = 'save' | 'clear' | 'reset' | 'delete';
 
 const WRITE_FAIL_MESSAGES: Record<WriteOp, string> = {
-  save: '保存失败',
-  clear: '清除失败',
-  reset: '恢复默认失败',
-  delete: '删除失败',
+  save: settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}),
+  clear: settingsTranslator({key: 'settings.search.toast.clear_failed.mobile'}),
+  reset: settingsTranslator({key: 'settings.search.toast.reset_failed.mobile'}),
+  delete: settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}),
 };
 
 export function SearchEngineDetailScreen() {
@@ -131,7 +132,7 @@ export function SearchEngineDetailScreen() {
   const entry = config?.engines.find(item => item.id === engineId);
   const isCreate = engineId == null;
   const isCustom = entry?.isCustom === true;
-  let title = '新建自定义引擎';
+  let title = settingsTranslator({key: 'settings.search.list.create_custom'});
   if (engineId != null) {
     // FIX-23：读模型 name 优先（拍板 5），静态表仅未加载 / 未知 id 兜底。
     title = engineTitle(engineId, entry?.name);
@@ -152,7 +153,7 @@ export function SearchEngineDetailScreen() {
   const openParamHintEditor = useCallback(() => {
     setPromptEditorOnSaved((text: string) => setDraft(current => ({...current, paramHint: text})));
     navigation.push('PromptEditor', {
-      title: '参数说明',
+      title: settingsTranslator({key: 'settings.search.params.title.mobile'}),
       initialText: draft.paramHint,
     });
   }, [draft.paramHint, navigation]);
@@ -216,7 +217,7 @@ export function SearchEngineDetailScreen() {
         setApiKeyDraft('');
       } catch (cause) {
         if (!silent) {
-          showToast(toastMessage('加载搜索配置失败', cause));
+          showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.load_failed.mobile'}), cause));
         }
       } finally {
         setLoading(false);
@@ -233,7 +234,7 @@ export function SearchEngineDetailScreen() {
   // 与 load 分开：navigation 对象在测试 mock 里每次渲染换引用，放进 load 依赖会自激重载。
   useEffect(() => {
     if (engineId != null && config != null && entry == null) {
-      showToast(`未找到搜索引擎：${engineId}`);
+      showToast(settingsTranslator({key: 'settings.search.toast.engine_not_found.mobile', params: {name: engineId}}));
       navigation.goBack();
     }
   }, [config, engineId, entry, navigation, showToast]);
@@ -293,7 +294,7 @@ export function SearchEngineDetailScreen() {
           ...(keyDraft.length > 0 ? {apiKey: keyDraft} : {}),
           ...(draftNeedsBaseUrl && baseUrl.length > 0 ? {baseUrl} : {}),
         });
-        showToast('已创建自定义引擎');
+        showToast(settingsTranslator({key: 'settings.search.toast.custom_engine_created.mobile'}));
         navigation.goBack();
         return;
       }
@@ -305,7 +306,7 @@ export function SearchEngineDetailScreen() {
         });
       } else {
         if (draftNeedsKey && keyDraft.length === 0 && entry?.hasKey !== true) {
-          showToast('请输入 API Key（留空不会修改已保存的密钥）');
+          showToast(settingsTranslator({key: 'settings.search.validation.api_key_required'}));
           return;
         }
         // 预置覆盖按差异提交：只写入与出厂模板不同的字段，未改字段保留既有覆盖
@@ -334,7 +335,7 @@ export function SearchEngineDetailScreen() {
         const storedBaseUrl = entry?.baseUrl ?? '';
         const baseUrlChanged = draftNeedsBaseUrl && baseUrl !== storedBaseUrl;
         if (Object.keys(patch).length === 0 && keyDraft.length === 0 && !baseUrlChanged) {
-          showToast('无改动');
+          showToast(settingsTranslator({key: 'settings.search.toast.no_changes'}));
           return;
         }
         if (Object.keys(patch).length > 0) {
@@ -347,10 +348,10 @@ export function SearchEngineDetailScreen() {
           await searchStore.setEngineBaseUrl(engineId, baseUrl);
         }
       }
-      showToast('配置已保存');
+      showToast(settingsTranslator({key: 'settings.search.toast.config_saved.mobile'}));
       await load({silent: true});
     } catch (cause) {
-      showToast(toastMessage('保存失败', cause));
+      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}), cause));
       // 回读让状态标签立即反映已生效部分（与列表页同一兜底口径）；静默回读
       // 不闪全屏 loading（FIX-24），失败时保存失败的 toast 已在，不再叠加。
       await load({silent: true});
@@ -392,19 +393,23 @@ export function SearchEngineDetailScreen() {
     return (
       <ScreenFormLayout tokens={tokens}>
         <FormSectionCard tokens={tokens} title={ENGINE_LABELS.duckduckgo} hint={ENGINE_HINTS.duckduckgo} rightAction={<BuiltinTag tokens={tokens} />}>
-          <Text style={[styles.hintText, {color: tokens.textSecondary}]}>内置代码引擎，无需 API Key，开箱即用；在列表页可开关与调整优先级， 关闭后不参与搜索。</Text>
+          <Text style={[styles.hintText, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.search.detail.builtin_body.mobile'})}</Text>
         </FormSectionCard>
       </ScreenFormLayout>
     );
   }
 
   const keyField = (
-    <FormField label="API Key" tokens={tokens} hint={entry?.hasKey === true ? '已保存；留空则保留原密钥' : '保存时写入本机密钥库'}>
+    <FormField
+      label="API Key"
+      tokens={tokens}
+      hint={entry?.hasKey === true ? settingsTranslator({key: 'settings.search.auth.key_saved_hint.mobile'}) : settingsTranslator({key: 'settings.search.auth.key_store_hint.mobile'})}
+    >
       <FormTextInput
         tokens={tokens}
         value={apiKeyDraft}
         onChangeText={setApiKeyDraft}
-        placeholder={entry?.hasKey === true ? '留空保留已存密钥' : ''}
+        placeholder={entry?.hasKey === true ? settingsTranslator({key: 'settings.search.auth.key_placeholder.mobile'}) : ''}
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
@@ -412,7 +417,7 @@ export function SearchEngineDetailScreen() {
     </FormField>
   );
   const baseUrlField = (
-    <FormField label="实例地址 Base URL" tokens={tokens} hint="含 http(s)://；留空保存即清除">
+    <FormField label={settingsTranslator({key: 'settings.search.auth.base_url_label.mobile'})} tokens={tokens} hint={settingsTranslator({key: 'settings.search.auth.base_url_hint.mobile'})}>
       <FormTextInput tokens={tokens} value={baseUrlDraft} onChangeText={setBaseUrlDraft} placeholder="https://search.example.com" autoCapitalize="none" autoCorrect={false} />
     </FormField>
   );
@@ -423,17 +428,29 @@ export function SearchEngineDetailScreen() {
   // 模板表单（照智能体配置分区：连接 / 认证 / 参数说明；内置引擎名称与方法只读）。
   const templateCard = (
     <>
-      <FormSectionCard title="连接" tokens={tokens}>
-        <FormField label="显示名" tokens={tokens} hint={nameLocked ? '内置引擎名称固定；如需自定义名称请新建自定义引擎' : '列表行标题与工具描述中的引擎名'}>
-          <FormTextInput tokens={tokens} value={draft.name} onChangeText={text => patchDraft({name: text})} placeholder="如 我的搜索" autoCapitalize="none" autoCorrect={false} disabled={nameLocked} />
+      <FormSectionCard title={settingsTranslator({key: 'settings.search.detail.connection_section.mobile'})} tokens={tokens}>
+        <FormField
+          label={settingsTranslator({key: 'settings.search.detail.name_label.mobile'})}
+          tokens={tokens}
+          hint={nameLocked ? settingsTranslator({key: 'settings.search.detail.name_locked_hint.mobile'}) : settingsTranslator({key: 'settings.search.detail.name_hint.mobile'})}
+        >
+          <FormTextInput
+            tokens={tokens}
+            value={draft.name}
+            onChangeText={text => patchDraft({name: text})}
+            placeholder={settingsTranslator({key: 'settings.search.detail.name_placeholder.mobile'})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            disabled={nameLocked}
+          />
         </FormField>
-        <FormField label="请求方法" tokens={tokens}>
+        <FormField label={settingsTranslator({key: 'settings.search.detail.method_label.mobile'})} tokens={tokens}>
           <FormChipGroup tokens={tokens} options={METHOD_OPTIONS} value={draft.method} onChange={method => patchDraft({method})} disabled={nameLocked} />
         </FormField>
         <FormField
-          label="请求 URL"
+          label={settingsTranslator({key: 'settings.search.detail.url_label.mobile'})}
           tokens={tokens}
-          hint={urlLocked ? '内置引擎端点出厂固定；如需自定义请新建自定义引擎' : '固定端点；参数由 agent 调用时传（GET 拼查询串 / POST 并入请求体），无需占位符'}
+          hint={urlLocked ? settingsTranslator({key: 'settings.search.detail.url_locked_hint.mobile'}) : settingsTranslator({key: 'settings.search.detail.url_hint.mobile'})}
         >
           <FormTextInput
             tokens={tokens}
@@ -450,8 +467,8 @@ export function SearchEngineDetailScreen() {
         </FormField>
         {draftNeedsBaseUrl ? baseUrlField : undefined}
       </FormSectionCard>
-      <FormSectionCard title="认证" tokens={tokens}>
-        <FormField label="认证方式" tokens={tokens} hint="密钥只在发送瞬间注入；配置里只有 {{apiKey}} 占位符">
+      <FormSectionCard title={settingsTranslator({key: 'settings.search.auth.section_title.mobile'})} tokens={tokens}>
+        <FormField label={settingsTranslator({key: 'settings.search.auth.style_label.mobile'})} tokens={tokens} hint={settingsTranslator({key: 'settings.search.auth.style_hint.mobile'})}>
           <FormSelectField
             tokens={tokens}
             value={draft.authStyle}
@@ -460,13 +477,17 @@ export function SearchEngineDetailScreen() {
               value: option.value,
               label: option.label,
             }))}
-            sheetTitle="选择认证方式"
-            placeholder="选择认证方式"
+            sheetTitle={settingsTranslator({key: 'settings.search.auth.style_picker.mobile'})}
+            placeholder={settingsTranslator({key: 'settings.search.auth.style_picker.mobile'})}
             disabled={nameLocked}
           />
         </FormField>
         {draft.authStyle === 'header' ? (
-          <FormField label="请求头名称" tokens={tokens} hint="如 X-API-Key、X-Subscription-Token">
+          <FormField
+            label={settingsTranslator({key: 'settings.search.auth.header_name_label.mobile'})}
+            tokens={tokens}
+            hint={settingsTranslator({key: 'settings.search.auth.header_name_hint.mobile'})}
+          >
             <FormTextInput
               tokens={tokens}
               value={draft.authHeaderName}
@@ -483,11 +504,11 @@ export function SearchEngineDetailScreen() {
           <SecondaryButton
             tokens={tokens}
             fullWidth
-            label={writeOp === 'clear' ? '清除中…' : '清除已存密钥'}
+            label={writeOp === 'clear' ? settingsTranslator({key: 'settings.search.auth.clearing'}) : settingsTranslator({key: 'settings.search.auth.clear_key.mobile'})}
             onPress={() => {
               void runWrite('clear', async id => {
                 await searchStore.clearEngineKey(id);
-                showToast(`已清除 ${title} API Key`);
+                showToast(settingsTranslator({key: 'settings.search.toast.key_cleared.mobile', params: {name: title}}));
                 await load({silent: true});
               });
             }}
@@ -495,24 +516,28 @@ export function SearchEngineDetailScreen() {
           />
         )}
       </FormSectionCard>
-      <FormSectionCard title="参数说明" tokens={tokens}>
+      <FormSectionCard title={settingsTranslator({key: 'settings.search.params.title.mobile'})} tokens={tokens}>
         {/* 照智能体配置的 ExpandablePromptInput：label 行左侧文本、右侧 ⛶ 全屏编辑入口，
             输入框独占整行（不再被按钮挤出一列）。 */}
         <View style={styles.paramHintBlock}>
           <View style={styles.paramHintHeader}>
-            <Text style={[styles.fieldLabel, {color: tokens.textSecondary}]}>{nameLocked ? '参数说明（内置引擎出厂固定）' : '参数说明'}</Text>
+            <Text style={[styles.fieldLabel, {color: tokens.textSecondary}]}>
+              {nameLocked ? settingsTranslator({key: 'settings.search.params.title_locked.mobile'}) : settingsTranslator({key: 'settings.search.params.title.mobile'})}
+            </Text>
             {nameLocked ? null : (
               <Pressable onPress={openParamHintEditor} hitSlop={8} style={styles.expandBtn}>
                 <Text style={{color: tokens.textSecondary, fontSize: 20}}>⛶</Text>
               </Pressable>
             )}
           </View>
-          <Text style={[styles.fieldHint, {color: tokens.textTertiary}]}>{nameLocked ? '内置引擎出厂固定，随工具描述一起透传给 agent' : '拼进工具描述，agent 照此自行传参'}</Text>
+          <Text style={[styles.fieldHint, {color: tokens.textTertiary}]}>
+            {nameLocked ? settingsTranslator({key: 'settings.search.params.locked_hint.mobile'}) : settingsTranslator({key: 'settings.search.params.hint.mobile'})}
+          </Text>
           <FormTextInput
             tokens={tokens}
             value={draft.paramHint}
             onChangeText={text => patchDraft({paramHint: text})}
-            placeholder="如支持 count(1..20)、time_range(day/week/month/year) 等原生参数"
+            placeholder={settingsTranslator({key: 'settings.search.params.placeholder.mobile'})}
             multiline
             autoCapitalize="none"
             autoCorrect={false}
@@ -528,7 +553,7 @@ export function SearchEngineDetailScreen() {
       footer={
         <StickyFormFooter
           tokens={tokens}
-          label={isCreate ? '创建引擎' : '保存配置'}
+          label={isCreate ? settingsTranslator({key: 'settings.search.detail.create_action.mobile'}) : settingsTranslator({key: 'settings.search.detail.save_action.mobile'})}
           onPress={() => {
             handleSave().catch(() => undefined);
           }}
@@ -542,15 +567,19 @@ export function SearchEngineDetailScreen() {
       ) : (
         <>
           {config?.presetOverrides[engineId] === true ? (
-            <FormSectionCard tokens={tokens} title="模板覆盖" hint="保存后仅提交你修改过的字段，未改字段沿用出厂模板">
+            <FormSectionCard
+              tokens={tokens}
+              title={settingsTranslator({key: 'settings.search.detail.override_section.mobile'})}
+              hint={settingsTranslator({key: 'settings.search.detail.override_hint.mobile'})}
+            >
               <SecondaryButton
                 tokens={tokens}
                 fullWidth
-                label="恢复默认模板"
+                label={settingsTranslator({key: 'settings.search.detail.reset_action.mobile'})}
                 onPress={() => {
                   void runWrite('reset', async id => {
                     await searchStore.resetPresetOverride(id);
-                    showToast('已恢复默认模板');
+                    showToast(settingsTranslator({key: 'settings.search.toast.reset_done.mobile'}));
                     await load({silent: true});
                   });
                 }}
@@ -562,27 +591,39 @@ export function SearchEngineDetailScreen() {
         </>
       )}
       {isCustom ? (
-        <FormSectionCard tokens={tokens} title="删除引擎" hint="删除后模板配置与已存密钥一并清除，不可恢复">
-          <SecondaryButton tokens={tokens} fullWidth label={writeOp === 'delete' ? '删除中…' : '删除此自定义引擎'} onPress={() => setConfirmDelete(true)} disabled={writeOp != null} />
+        <FormSectionCard tokens={tokens} title={settingsTranslator({key: 'settings.search.detail.delete_section'})} hint={settingsTranslator({key: 'settings.search.detail.delete_hint.mobile'})}>
+          <SecondaryButton
+            tokens={tokens}
+            fullWidth
+            label={writeOp === 'delete' ? settingsTranslator({key: 'settings.search.list.deleting.mobile'}) : settingsTranslator({key: 'settings.search.detail.delete_action.mobile'})}
+            onPress={() => setConfirmDelete(true)}
+            disabled={writeOp != null}
+          />
         </FormSectionCard>
       ) : null}
       {/* 删除确认：删除即清模板 / 密钥 / 排序项，二次确认。 */}
       <ModalShell visible={confirmDelete} onClose={() => setConfirmDelete(false)} variant="center" animationType="fade" panelStyle={styles.confirmPanel}>
-        <Text style={[styles.confirmTitle, {color: tokens.text}]}>删除自定义引擎</Text>
-        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{`「${title}」的模板配置与已存密钥会一并清除，此操作不可撤销。`}</Text>
+        <Text style={[styles.confirmTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.detail.delete_title'})}</Text>
+        <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: title}})}</Text>
         <View style={styles.confirmActions}>
           <View style={styles.confirmAction}>
-            <SecondaryButton tokens={tokens} fullWidth label="取消" onPress={() => setConfirmDelete(false)} disabled={writeOp === 'delete'} />
+            <SecondaryButton
+              tokens={tokens}
+              fullWidth
+              label={settingsTranslator({key: 'settings.search.list.cancel.mobile'})}
+              onPress={() => setConfirmDelete(false)}
+              disabled={writeOp === 'delete'}
+            />
           </View>
           <View style={styles.confirmAction}>
             <SecondaryButton
               tokens={tokens}
               fullWidth
-              label={writeOp === 'delete' ? '删除中…' : '删除'}
+              label={writeOp === 'delete' ? settingsTranslator({key: 'settings.search.list.deleting.mobile'}) : settingsTranslator({key: 'settings.search.list.menu.delete'})}
               onPress={() => {
                 void runWrite('delete', async id => {
                   await searchStore.deleteCustomEngine(id);
-                  showToast('已删除自定义引擎');
+                  showToast(settingsTranslator({key: 'settings.search.toast.custom_engine_deleted.mobile'}));
                   setConfirmDelete(false);
                   navigation.goBack();
                 });

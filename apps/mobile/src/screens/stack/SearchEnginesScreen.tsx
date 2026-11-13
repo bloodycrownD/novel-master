@@ -29,6 +29,7 @@ import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
+import {settingsTranslator} from '@/i18n/settings';
 import {getSearchConfigStore} from '@/services/search-config.store';
 import {CUSTOM_ENGINE_HINT, ENGINE_HINTS, engineTitle} from './search-engine-meta';
 
@@ -82,7 +83,7 @@ export function SearchEnginesScreen() {
   // 会清空 header 覆盖，列表页须在重新聚焦时重设，否则「?」按钮丢失。
   const syncHeaderOverride = useCallback(() => {
     setStackOverride({
-      title: '搜索配置',
+      title: settingsTranslator({key: 'settings.search.list.title.mobile'}),
       showMenu: true,
       menuIcon: <HelpIcon color={tokens.text} />,
       onMenu: () => setHelpVisible(true),
@@ -108,7 +109,7 @@ export function SearchEnginesScreen() {
       await searchStore.setEnabled(engineId, on);
     } catch (cause) {
       setRows(current => current.map(row => (row.id === engineId ? {...row, enabled: !on} : row)));
-      showToast(toastMessage('切换启用状态失败', cause));
+      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
     } finally {
       togglingRef.current = undefined;
     }
@@ -132,7 +133,7 @@ export function SearchEnginesScreen() {
       // 重读刷新：顺序与各引擎状态以库内新值为准。
       await reload({silent: true});
     } catch (cause) {
-      showToast(toastMessage('调整顺序失败', cause));
+      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.order_failed.mobile'}), cause));
     } finally {
       setMoving(false);
     }
@@ -146,7 +147,7 @@ export function SearchEnginesScreen() {
   if (pendingDelete != null) {
     // FIX-23：读模型 name 优先（拍板 5），静态表仅未知 id 兜底。
     const label = engineTitle(pendingDelete, deleteRow?.name);
-    deleteNotice = `「${label}」的模板配置与已存密钥会一并清除，此操作不可撤销。`;
+    deleteNotice = settingsTranslator({key: 'settings.search.detail.delete_notice.mobile', params: {name: label}});
   }
 
   return (
@@ -157,7 +158,7 @@ export function SearchEnginesScreen() {
         <View style={styles.center}>
           <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           <Pressable onPress={() => void reload()}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.list.retry.mobile'})}</Text>
           </Pressable>
         </View>
       ) : (
@@ -169,7 +170,10 @@ export function SearchEnginesScreen() {
           renderItem={({item}) => {
             const hint = ENGINE_HINTS[item.id] ?? CUSTOM_ENGINE_HINT;
             // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
-            const issues = [...(item.needsKey && !item.hasKey ? ['未配置密钥'] : []), ...(item.needsBaseUrl ? ['未配置实例地址'] : [])];
+            const issues = [
+              ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
+              ...(item.needsBaseUrl ? [settingsTranslator({key: 'settings.search.list.issue.base_url_missing.mobile'})] : []),
+            ];
             return (
               <ConfigListCard
                 tokens={tokens}
@@ -210,22 +214,28 @@ export function SearchEnginesScreen() {
         />
       )}
       <View style={[styles.createBar, {borderTopColor: tokens.borderLight}]}>
-        <SecondaryButton tokens={tokens} fullWidth label="新建自定义引擎" onPress={() => navigation.navigate('SearchEngineDetail')} disabled={deleting} />
+        <SecondaryButton
+          tokens={tokens}
+          fullWidth
+          label={settingsTranslator({key: 'settings.search.list.create_custom'})}
+          onPress={() => navigation.navigate('SearchEngineDetail')}
+          disabled={deleting}
+        />
       </View>
       <BottomSheetMenu
         visible={menuEngineId != null}
         title={menuRow && engineTitle(menuRow.id, menuRow.name)}
         items={[
-          {label: '上移', action: 'up', disabled: menuIndex <= 0 || moving},
+          {label: settingsTranslator({key: 'settings.search.list.menu.move_up'}), action: 'up', disabled: menuIndex <= 0 || moving},
           {
-            label: '下移',
+            label: settingsTranslator({key: 'settings.search.list.menu.move_down'}),
             action: 'down',
             disabled: menuIndex < 0 || menuIndex >= rows.length - 1 || moving,
           },
           ...(menuRow?.isCustom === true
             ? [
                 {
-                  label: '删除',
+                  label: settingsTranslator({key: 'settings.search.list.menu.delete'}),
                   action: 'delete',
                   danger: true,
                   disabled: moving || deleting,
@@ -251,17 +261,17 @@ export function SearchEnginesScreen() {
       />
       {/* 删除确认：自定义实例的模板 / 密钥 / 排序项一并清除，不可撤销。 */}
       <ModalShell visible={pendingDelete != null} onClose={() => setPendingDelete(undefined)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>删除自定义引擎</Text>
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.detail.delete_title'})}</Text>
         <Text style={[styles.confirmBody, {color: tokens.textSecondary}]}>{deleteNotice}</Text>
         <View style={styles.confirmActions}>
           <View style={styles.confirmAction}>
-            <SecondaryButton tokens={tokens} fullWidth label="取消" onPress={() => setPendingDelete(undefined)} disabled={deleting} />
+            <SecondaryButton tokens={tokens} fullWidth label={settingsTranslator({key: 'settings.search.list.cancel.mobile'})} onPress={() => setPendingDelete(undefined)} disabled={deleting} />
           </View>
           <View style={styles.confirmAction}>
             <SecondaryButton
               tokens={tokens}
               fullWidth
-              label={deleting ? '删除中…' : '删除'}
+              label={deleting ? settingsTranslator({key: 'settings.search.list.deleting.mobile'}) : settingsTranslator({key: 'settings.search.list.menu.delete'})}
               onPress={async () => {
                 if (pendingDelete == null || deleting) {
                   return;
@@ -270,11 +280,11 @@ export function SearchEnginesScreen() {
                 try {
                   // core 同步 prune orderV2 / enabledEngines / baseUrl / SKSP ref。
                   await searchStore.deleteCustomEngine(pendingDelete);
-                  showToast('已删除自定义引擎');
+                  showToast(settingsTranslator({key: 'settings.search.toast.custom_engine_deleted.mobile'}));
                   setPendingDelete(undefined);
                   await reload({silent: true});
                 } catch (cause) {
-                  showToast(toastMessage('删除失败', cause));
+                  showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}), cause));
                 } finally {
                   setDeleting(false);
                 }
@@ -286,19 +296,13 @@ export function SearchEnginesScreen() {
       </ModalShell>
       {/* 使用说明弹窗：开关 / 优先级 / 模板 / 测试配额 / 密钥安全，无输入不避键盘。 */}
       <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
-        <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
-        <HelpSection tokens={tokens} title="启用开关" body="只有打开开关的引擎参与搜索；默认仅内置 DuckDuckGo 启用。关闭全部引擎后搜索会返回提示，不会偷偷兜底。" />
-        <HelpSection tokens={tokens} title="引擎优先级" body="列表顺序即搜索时尝试引擎的顺序；请求失败（如密钥失效、超时）自动尝试下一个已启用且配置完整的引擎。" />
-        <HelpSection
-          tokens={tokens}
-          title="模板与自定义引擎"
-          body={
-            '预置引擎的请求模板可在详情页编辑并恢复默认；也可新建自定义引擎，用模板描述任意搜索 API。请求参数由 agent 调用时自行传（GET 自动拼查询串 / POST 并入请求体）；API Key 只在发送瞬间从本机密钥库注入，配置里只出现 {{apiKey}} 占位符。'
-          }
-        />
-        <HelpSection tokens={tokens} title="密钥安全" body="API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。" />
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>{settingsTranslator({key: 'settings.search.help.title'})}</Text>
+        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.toggle.title'})} body={settingsTranslator({key: 'settings.search.help.toggle.body'})} />
+        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.priority.title'})} body={settingsTranslator({key: 'settings.search.help.priority.body'})} />
+        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.custom_engine.title'})} body={settingsTranslator({key: 'settings.search.help.custom_engine.body.mobile'})} />
+        <HelpSection tokens={tokens} title={settingsTranslator({key: 'settings.search.help.key_security.title'})} body={settingsTranslator({key: 'settings.search.help.key_security.body'})} />
         <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
-          <Text style={{color: tokens.primary, fontWeight: '600'}}>知道了</Text>
+          <Text style={{color: tokens.primary, fontWeight: '600'}}>{settingsTranslator({key: 'settings.search.help.dismiss'})}</Text>
         </Pressable>
       </ModalShell>
     </View>
