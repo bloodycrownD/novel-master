@@ -14,7 +14,6 @@
     "packages/sksp-windows": { "entry": ["src/index.ts"] },
     "packages/sksp-mac": { "entry": ["src/index.ts"] },
     "packages/tdbc-driver-better-sqlite3": { "entry": ["src/index.ts"] },
-    "packages/tdbc-driver-rn": { "entry": ["src/index.ts"] },
     "packages/tdbc-conformance": { "entry": ["src/index.ts"] },
     "packages/tokenizer-driver-node": { "entry": ["src/index.ts"] },
     "packages/tokenizer-driver-rn": { "entry": ["src/index.ts"] },
