@@ -3,6 +3,10 @@
  * 类型和小型纯函数。
  *
  * 设计口径（SPEC web-search-curl v2 透传改造）：
+ * - v3 口径（CR 拍板追认 params-only）：search 工具入参收口为
+ *   `search(engine?, params)`——搜索词与条数不再作为 schema 顶层参数，
+ *   由 `params` 承载（搜索词按 q / query / search_query 三键探测、条数按
+ *   count / max_results / maxResults 三键归一，见 search-tool run）。
  * - bocha / tavily / brave / searxng 四适配器已退役为出厂模板，deepseek / zhipu
  *   与自定义实例同为模板；模板执行器透传响应——递归提取最长对象数组后以
  *   JSON 文本回流（agent 自行读取字段），不再做 title/url/snippet 标准化映射
@@ -219,7 +223,8 @@ function unknownPlaceholderIn(text: string): string | null {
  * 校验并归一化模板输入（保存路径统一入口；入参按不可信处理，返回新对象、不回填未知键）。
  *
  * 规则（SPEC v2 §3）：method ∈ {GET, POST}；url 为非空 http(s)（先用示例值替换占位符再
- * `new URL()`，searxng 的 `{{baseUrl}}/search?...` 形态因此可过）；headers 头名为非空
+ * `new URL()`，自定义实例的 `{{baseUrl}}/search?...` 形态因此可过——出厂
+ * 模板 v3 起全是完整端点，该分支只剩自定义实例触发）；headers 头名为非空
  * RFC 7230 token（非法头名会让执行期 fetch 抛原生 TypeError 绕过 engineFailed 通道）；
  * defaultBody 可选（POST 不再强制必填——留空则依赖 agent 调用时传 params），配了则须为
  * 合法 JSON 对象文本，占位符只允许白名单四个且 JSON 键一律不含占位符（执行器只替换值，

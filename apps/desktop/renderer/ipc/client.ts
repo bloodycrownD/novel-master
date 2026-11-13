@@ -168,7 +168,6 @@ export const {
   ipcSearchDeleteCustomEngine,
   ipcSearchUpdatePresetOverride,
   ipcSearchResetPresetOverride,
-  ipcSearchTestEngine,
   ipcShellMenuPopup,
   ipcShellSetTitleBarTheme,
   ipcAppOpenExternal,

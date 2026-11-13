@@ -50,12 +50,13 @@ function fakeStores(): { kkv: KkvService; secretStore: SecretStore } {
   return { kkv, secretStore };
 }
 
-/** 构造注入 search 闭包（可选）与 mock fetchFn 的 BuiltinToolContext。 */
+/** 构造注入 search 闭包（可选）、mock fetchFn 与取消 signal（可选）的 BuiltinToolContext。 */
 function makeCtx(
   extra: {
     readonly search?: BuiltinToolContext["search"];
     readonly fetchFn?: typeof globalThis.fetch;
     readonly vfs?: BuiltinToolContext["vfs"];
+    readonly signal?: AbortSignal;
   } = {}
 ): BuiltinToolContext {
   return {
@@ -64,6 +65,7 @@ function makeCtx(
     sessionId: "sess-1",
     ...(extra.search != null ? { search: extra.search } : {}),
     ...(extra.fetchFn != null ? { fetchFn: extra.fetchFn } : {}),
+    ...(extra.signal != null ? { signal: extra.signal } : {}),
   };
 }
 
@@ -103,6 +105,18 @@ function ddgHtmlResponse(): Response {
 </div>`,
     { status: 200, headers: { "content-type": "text/html" } }
   );
+}
+
+/** DDG HTML 多结果响应（别名归一 → 客户端截断断言用，n 个可解析块）。 */
+function ddgHtmlWithResults(n: number): Response {
+  const blocks = Array.from(
+    { length: n },
+    (_, i) => `<div class="result results_links web-result">
+  <a rel="nofollow" class="result__a" href="https://ddg.example.com/${i}">DDG 标题${i}</a>
+  <a class="result__snippet">DDG 摘要${i}</a>
+</div>`
+  ).join("\n");
+  return new Response(blocks, { status: 200, headers: { "content-type": "text/html" } });
 }
 
 /** 启用指定引擎并写入 key（模板断言统一 fixture 化）。 */
@@ -677,6 +691,233 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     } finally {
       mock.timers.reset();
     }
+  });
+});
+
+describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 同步 abort → 降级链短路）", () => {
+  it("① 中途取消：链首请求 abort → run 以「搜索已取消」ToolError 终止（非链聚合错误），第二引擎零请求", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    await enableWithKey(store, "bocha", "sk-bocha");
+    await enableWithKey(store, "tavily", "sk-tavily");
+
+    const controller = new AbortController();
+    const urls: string[] = [];
+    const inFlightSignals: AbortSignal[] = [];
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      urls.push(String(url));
+      if (init?.signal != null) inFlightSignals.push(init.signal);
+      // 挂起 fetch：仅响应 abort（照真实 fetch 取消语义），触发链上「搜索已取消」兜底。
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));
+      });
+    }) as typeof globalThis.fetch;
+
+    // 直调 searchTool.run（不经 ToolRunner）：runner 的取消竞速会先以「工具调用已取消」
+    // reject 调用方，本套件要锁的是工具自身的取消分支（「搜索已取消」短路降级链）。
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error })
+    );
+    // 等链首请求挂起后再取消（中途时序）。
+    await new Promise((resolve) => setImmediate(resolve));
+    controller.abort();
+    const result = await pending;
+    assert.equal(result.ok, false);
+    const err = result.error;
+    assert.ok(err instanceof ToolError);
+    const detail = String((err as { cause?: unknown }).cause);
+    assert.match(detail, /搜索已取消/);
+    // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
+    assert.equal(detail.includes("串行搜索链"), false);
+    // fetch 收到的 init.signal 已 aborted（在途请求同步取消）。
+    assert.equal(inFlightSignals[0]?.aborted, true);
+    // 第二引擎零请求（降级链被取消短路）。
+    assert.deepEqual(urls, ["https://api.bochaai.com/v1/web-search"]);
+  });
+
+  it("② 先行取消：进入 run 前 signal 已 abort → 立即「搜索已取消」，任何引擎零请求", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    await enableWithKey(store, "bocha", "sk-bocha");
+    await enableWithKey(store, "tavily", "sk-tavily");
+
+    const controller = new AbortController();
+    controller.abort();
+    let fetchCalls = 0;
+    const fetchFn = (async () => {
+      fetchCalls += 1;
+      return bochaResponse();
+    }) as typeof globalThis.fetch;
+
+    await assert.rejects(searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })), (err: unknown) => {
+      assert.ok(err instanceof ToolError);
+      assert.match(String((err as { cause?: unknown }).cause), /搜索已取消/);
+      return true;
+    });
+    assert.equal(fetchCalls, 0, "取消先于链首请求：任何引擎都不该被请求");
+  });
+
+  it("③ 首引擎 401 失败后取消：链在第二引擎尝试前短路（取消优先于降级），仍是「搜索已取消」", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    await enableWithKey(store, "bocha", "sk-bocha");
+    await enableWithKey(store, "tavily", "sk-tavily");
+
+    const controller = new AbortController();
+    const urls: string[] = [];
+    const inFlightSignals: AbortSignal[] = [];
+    const fetchFn = (async (url: string | URL | Request, init?: RequestInit) => {
+      const target = String(url);
+      urls.push(target);
+      // 链首 bocha 真实 401（先经历一次引擎失败，再取消）。
+      if (target.includes("bocha")) return new Response("unauthorized", { status: 401 });
+      if (init?.signal != null) inFlightSignals.push(init.signal);
+      // 第二引擎挂起：仅响应 abort。
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));
+      });
+    }) as typeof globalThis.fetch;
+
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error })
+    );
+    // 等 bocha 401 处理完、tavily 请求挂起（「首个引擎 401 后」的中途时序）。
+    for (let spin = 0; spin < 50 && urls.length < 2; spin += 1) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(urls.length, 2, "前置：bocha 401 已处理、tavily 请求已挂起");
+    controller.abort();
+    const result = await pending;
+    assert.equal(result.ok, false);
+    const detail = String((result.error as { cause?: unknown }).cause);
+    assert.match(detail, /搜索已取消/);
+    assert.equal(detail.includes("串行搜索链"), false, "取消后不再聚合链错误");
+    assert.equal(inFlightSignals[0]?.aborted, true, "在途的 tavily 请求已被同步 abort");
+    // 第三引擎（链上已无）与重复请求都不会发生。
+    assert.equal(urls.length, 2);
+  });
+});
+
+describe("search 工具：params 条数别名归一（G-1，count / max_results / maxResults 三键同效）", () => {
+  it("模板引擎：max_results / maxResults 别名喂 {{count}}，count 主键优先于别名", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    await enableWithKey(store, "bocha", "sk-bocha");
+    const search = await assembleSearchToolContext(store);
+
+    const bodies: string[] = [];
+    const fetchFn = (async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return bochaResponse();
+    }) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const ctx = makeCtx({ search, fetchFn });
+
+    // snake_case 别名：max_results 与 count 同效（bocha defaultBody 的 {{count}} 槽位）。
+    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 9 } }, ctx);
+    assert.equal((JSON.parse(bodies[0]!) as Record<string, unknown>).count, 9, "max_results 别名应生效");
+    // camelCase 别名：maxResults 同效。
+    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", maxResults: 7 } }, ctx);
+    assert.equal((JSON.parse(bodies[1]!) as Record<string, unknown>).count, 7, "maxResults 别名应生效");
+    // 主键 count 优先：同传时别名被忽略。
+    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 3, max_results: 9 } }, ctx);
+    assert.equal((JSON.parse(bodies[2]!) as Record<string, unknown>).count, 3, "count 主键优先于 max_results");
+  });
+
+  it("DDG：max_results 别名进入客户端截断（3 条可解析结果只回 2 条）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    const fetchFn = (async () => ddgHtmlWithResults(3)) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+
+    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", max_results: 2 } }, ctx);
+    assert.equal((out as { engine: string }).engine, "duckduckgo");
+    assert.equal((out as { results: unknown[] }).results.length, 2, "max_results 别名应驱动 DDG 客户端截断");
+
+    // 主键 count 优先于别名（DDG 同一口径）。
+    const pinned = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: 1, max_results: 3 } }, ctx);
+    assert.equal((pinned as { results: unknown[] }).results.length, 1);
+  });
+});
+
+describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）", () => {
+  it("q 全空白：跳过并回退 query（DDG URL q 参数为「真词」）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return ddgHtmlResponse();
+    }) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "   ", query: "真词" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn }));
+    assert.equal((out as { engine: string }).engine, "duckduckgo");
+    assert.equal(new URL(urls[0]!).searchParams.get("q"), "真词", "全空白 q 应跳过，回退到 query");
+  });
+
+  it("q 非字符串：仅 q:42 报缺搜索词；q:42 与 query 同传回退 query", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    const search = await assembleSearchToolContext(store);
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return ddgHtmlResponse();
+    }) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const ctx = makeCtx({ search, fetchFn });
+
+    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42 } }, ctx), (err: unknown) => {
+      assert.ok(err instanceof ToolError);
+      const cause = (err as { cause?: unknown }).cause;
+      assert.match(String(cause), /params 缺少搜索词/);
+      return true;
+    });
+    await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42, query: "真词" } }, ctx);
+    assert.equal(new URL(urls[0]!).searchParams.get("q"), "真词", "非字符串 q 应被忽略，回退到 query");
+  });
+
+  it("count 非字符串：字符串 count 不采纳（6 条可解析结果按默认 5 截断），同传 max_results 不生效", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    const fetchFn = (async () => ddgHtmlWithResults(6)) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+
+    // 现状口径：count:"7" 非 nullish 短路 ?? 链后被 typeof 守卫打回 → normalizeMaxResults(undefined) = 默认 5；
+    // max_results:2 因 ?? 已短路不参与（DDG 完全忽略 params，截断只随归一条数）。若实现改为 typeof 感知回落，需同步更新本断言。
+    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: "7", max_results: 2 } }, ctx);
+    assert.equal((out as { results: unknown[] }).results.length, 5, "字符串 count 不采纳，按默认 5 截断；max_results 不参与");
+  });
+
+  it("搜索词优先序：q 与 query 同传时 q 优先（DDG URL q 参数为 A）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return ddgHtmlResponse();
+    }) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "A", query: "B" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn }));
+    assert.equal((out as { engine: string }).engine, "duckduckgo");
+    assert.equal(new URL(urls[0]!).searchParams.get("q"), "A", "q 应优先于 query（调换探测优先级本用例红）");
+  });
+
+  it("条数别名对内优先序：max_results 优先于 maxResults（bocha body count）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const store = createSearchConfigStore({ kkv, secretStore });
+    await enableWithKey(store, "bocha", "sk-bocha");
+    const bodies: string[] = [];
+    const fetchFn = (async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return bochaResponse();
+    }) as typeof globalThis.fetch;
+    const runner = makeRunner();
+    const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
+    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 4, maxResults: 9 } }, ctx);
+    assert.equal((JSON.parse(bodies[0]!) as Record<string, unknown>).count, 4, "max_results 应优先于 maxResults");
   });
 });
 

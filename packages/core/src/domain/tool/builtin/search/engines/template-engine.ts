@@ -91,6 +91,10 @@ function substitutePlaceholders(text: string, values: TemplatePlaceholderValues,
  * `results` 为提取结果的 JSON 文本（最长对象数组；50KB 预算内截断）。
  */
 export async function runTemplateEngine(template: SearchEngineTemplate, resolved: ResolvedEngineConfig, q: string, opts: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal) {
+  // 父 signal 已 abort（取消先于请求）：直接取消、不发起请求——已 aborted 的
+  // signal 再注册监听器不会补发回调（WHATWG 语义），不早退会空挂满 30s 超时
+  //（照 curl-tool / tool-runner 的取消早退先例）。
+  if (signal?.aborted === true) throw engineFailed(`${template.name} search cancelled before request`);
   const engine = resolved.engine;
   const numResults = normalizeMaxResults(opts.maxResults);
   const values: TemplatePlaceholderValues = {

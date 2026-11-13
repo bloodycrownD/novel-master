@@ -14,6 +14,7 @@ const SUBPATHS = [
   "prompt",
   "provider",
   "session-fs",
+  "settings",
   "smart-sort-rule",
   "vfs",
   "workplace",
@@ -39,34 +40,13 @@ describe("public 子入口 export allowlist 快照", () => {
         with: { type: "json" },
       })
     ).default as string[];
-    const forbidden = [
-      "createSessionWorktreeSnapshotStore",
-      "markDirty",
-      "getOrRefresh",
-      "invalidateSessionWorktreeSnapshot",
-    ];
+    const forbidden = ["createSessionWorktreeSnapshotStore", "markDirty", "getOrRefresh", "invalidateSessionWorktreeSnapshot"];
     for (const name of forbidden) {
-      assert.equal(
-        snapshot.includes(name),
-        false,
-        `public/workplace 不应导出 ${name}`
-      );
+      assert.equal(snapshot.includes(name), false, `public/workplace 不应导出 ${name}`);
     }
     assert.ok(snapshot.includes("assembleWorkplaceDisplay"));
-    assert.equal(
-      snapshot.includes("createSessionWorktreeBlockStore"),
-      false,
-      "public/workplace 不应再导出 createSessionWorktreeBlockStore"
-    );
-    assert.equal(
-      snapshot.includes("captureSessionWorktreeBlock"),
-      false,
-      "public/workplace 不应再导出 captureSessionWorktreeBlock"
-    );
-    assert.equal(
-      snapshot.includes("getCapturedBlockOrCapture"),
-      false,
-      "public/workplace 不应再导出 getCapturedBlockOrCapture"
-    );
+    assert.equal(snapshot.includes("createSessionWorktreeBlockStore"), false, "public/workplace 不应再导出 createSessionWorktreeBlockStore");
+    assert.equal(snapshot.includes("captureSessionWorktreeBlock"), false, "public/workplace 不应再导出 captureSessionWorktreeBlock");
+    assert.equal(snapshot.includes("getCapturedBlockOrCapture"), false, "public/workplace 不应再导出 getCapturedBlockOrCapture");
   });
 });

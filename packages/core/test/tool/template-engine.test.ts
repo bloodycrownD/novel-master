@@ -93,9 +93,13 @@ describe("模板执行器：占位符替换与 params 合并（T-E1）", () => {
 });
 
 describe("模板执行器：body 结构化替换与 POST params 浅合并三级降级（T-E2）", () => {
-  it("query 含引号/反斜杠时请求体仍为合法 JSON；整值 \"{{count}}\" 替换为 number（含数组元素）", async () => {
+  it('query 含引号/反斜杠时请求体仍为合法 JSON；整值 "{{count}}" 替换为 number（含数组元素）', async () => {
     const fetchFn = makeFetch([jsonOk({ results: [] })]);
-    const tpl = template({ method: "POST", url: "https://api.example.com/search", defaultBody: '{"query":"{{query}}","note":"plain","count":"{{count}}","nested":{"items":["{{query}}","{{count}}"]}}' });
+    const tpl = template({
+      method: "POST",
+      url: "https://api.example.com/search",
+      defaultBody: '{"query":"{{query}}","note":"plain","count":"{{count}}","nested":{"items":["{{query}}","{{count}}"]}}',
+    });
     const query = '他说："你好"\\世界';
     await runTemplateEngine(tpl, resolved("test"), query, { maxResults: 4 }, {}, fetchFn);
 
@@ -151,7 +155,14 @@ describe("模板执行器：body 结构化替换与 POST params 浅合并三级�
 describe("模板执行器：最长对象数组提取（T-E3 透传响应）", () => {
   it("多数组取最长：嵌套更深的对象数组胜出", async () => {
     const items = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
-    const out = await runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk({ shallow: [{ id: 0 }], deep: { pages: { items } }, tags: ["a", "b", "c", "d", "e", "f"] })]));
+    const out = await runTemplateEngine(
+      template({ url: "https://api.example.com/search" }),
+      resolved("test"),
+      "q",
+      {},
+      {},
+      makeFetch([jsonOk({ shallow: [{ id: 0 }], deep: { pages: { items } }, tags: ["a", "b", "c", "d", "e", "f"] })])
+    );
     assert.deepEqual(parseResults(out), items);
   });
 
@@ -163,11 +174,18 @@ describe("模板执行器：最长对象数组提取（T-E3 透传响应）", ()
 
   it("string[] / number[] 不算对象数组：混响应里只认元素为 object 的数组", async () => {
     const results = [{ id: "only-object-array" }];
-    const out = await runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk({ tags: ["a", "b", "c"], nums: [1, 2, 3, 4], results })]));
+    const out = await runTemplateEngine(
+      template({ url: "https://api.example.com/search" }),
+      resolved("test"),
+      "q",
+      {},
+      {},
+      makeFetch([jsonOk({ tags: ["a", "b", "c"], nums: [1, 2, 3, 4], results })])
+    );
     assert.deepEqual(parseResults(out), results);
   });
 
-  it("空数组 = 成功空结果（根数组与嵌套空数组皆然），文本为 \"[]\"", async () => {
+  it('空数组 = 成功空结果（根数组与嵌套空数组皆然），文本为 "[]"', async () => {
     const root = await runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("custom:root"), "q", {}, {}, makeFetch([jsonOk([])]));
     assert.deepEqual(root, { engine: "custom:root", results: "[]" });
 
@@ -180,7 +198,10 @@ describe("模板执行器：无数组降级与业务码失败（T-E4）", () => 
   const KEY = "sk-envelope-secret-key";
 
   it("响应无对象数组 → 链降级失败（错误附脱敏响应摘录）", async () => {
-    await assert.rejects(runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("custom:none"), "q", {}, {}, makeFetch([jsonOk({})])), /测试引擎 API returned no results array/);
+    await assert.rejects(
+      runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("custom:none"), "q", {}, {}, makeFetch([jsonOk({})])),
+      /测试引擎 API returned no results array/
+    );
 
     await assert.rejects(runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("custom:prim"), "q", {}, {}, makeFetch([jsonOk("plain string")])), /no results array/);
 
@@ -188,7 +209,14 @@ describe("模板执行器：无数组降级与业务码失败（T-E4）", () => 
   });
 
   it("bocha 业务码失败（HTTP 200 + body code 401）：无数组判据接住，msg 回显的 key 明文先脱敏", async () => {
-    const out = runTemplateEngine(template({ name: "博查搜索", url: "https://api.example.com/search" }), resolved("bocha", { apiKey: KEY }), "q", {}, {}, makeFetch([jsonOk({ code: 401, msg: `invalid token ${KEY} rejected` })]));
+    const out = runTemplateEngine(
+      template({ name: "博查搜索", url: "https://api.example.com/search" }),
+      resolved("bocha", { apiKey: KEY }),
+      "q",
+      {},
+      {},
+      makeFetch([jsonOk({ code: 401, msg: `invalid token ${KEY} rejected` })])
+    );
     await assert.rejects(out, (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       assert.match(message, /博查搜索 API returned no results array/);
@@ -262,7 +290,7 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
       })) as unknown as typeof globalThis.fetch;
     const pending = runTemplateEngine(tpl, resolved("bocha"), "q", {}, {}, hangingFetch).then(
       () => assert.fail("超时应抛错"),
-      (error: unknown) => error,
+      (error: unknown) => error
     );
     await new Promise((resolve) => setImmediate(resolve));
     mock.timers.tick(30_000);
@@ -284,5 +312,86 @@ describe("模板执行器：{{count}} 归一（T-E6，客户端截断已随透�
 
     await runTemplateEngine(tpl, resolved("custom:clamp"), "q", { maxResults: 99 }, {}, fetchFn);
     assert.equal(JSON.parse(fetchFn.calls[1]!.init.body as string).count, 20);
+  });
+});
+
+describe("模板执行器：父级取消透传（G-1）", () => {
+  /**
+   * 包装 AbortSignal：记录 abort 监听器的注册 / 移除（监听器无泄漏断言用），
+   * 注册与移除透传给内部真 controller.signal，行为与裸 signal 一致。
+   */
+  function recordingSignal(): {
+    readonly controller: AbortController;
+    readonly signal: AbortSignal;
+    readonly added: Array<readonly [string, () => void]>;
+    readonly removed: Array<readonly [string, () => void]>;
+  } {
+    const controller = new AbortController();
+    const added: Array<readonly [string, () => void]> = [];
+    const removed: Array<readonly [string, () => void]> = [];
+    const signal = {
+      get aborted(): boolean {
+        return controller.signal.aborted;
+      },
+      get reason(): unknown {
+        return controller.signal.reason;
+      },
+      onabort: null,
+      addEventListener(type: "abort", listener: () => void, options?: AddEventListenerOptions): void {
+        added.push([type, listener] as const);
+        controller.signal.addEventListener(type, listener, options);
+      },
+      removeEventListener(type: "abort", listener: () => void): void {
+        removed.push([type, listener] as const);
+        controller.signal.removeEventListener(type, listener);
+      },
+      dispatchEvent: () => true,
+    } as unknown as AbortSignal;
+    return { controller, signal, added, removed };
+  }
+
+  /** 挂起 fetch：仅响应 init.signal 的 abort（照真实 fetch 取消语义）。 */
+  function hangingFetch(): typeof globalThis.fetch {
+    return ((_input: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")));
+      })) as unknown as typeof globalThis.fetch;
+  }
+
+  it("父 signal 先行 abort：不发起请求直接取消（早退分支），不注册监听器、无可泄漏", async () => {
+    const { controller, signal, added, removed } = recordingSignal();
+    controller.abort();
+    let fetchCalls = 0;
+    const fetchFn = (async () => {
+      fetchCalls += 1;
+      return jsonOk([]);
+    }) as typeof globalThis.fetch;
+
+    await assert.rejects(runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal), /测试引擎 search cancelled before request/);
+    assert.equal(fetchCalls, 0, "已取消的回合不得再发引擎请求");
+    assert.equal(added.length, 0, "早退路径不注册 abort 监听器");
+    assert.equal(removed.length, 0);
+  });
+
+  it("父 signal 中途 abort：在途 fetch 同步取消（内层 controller 被连带 abort），监听器移除无泄漏", async () => {
+    const { controller, signal, added, removed } = recordingSignal();
+    const fetchFn = hangingFetch();
+
+    const pending = runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal).then(
+      () => assert.fail("取消应抛错"),
+      (error: unknown) => error
+    );
+    // 等链内 fetch 真正挂起后再取消（中途时序）。
+    await new Promise((resolve) => setImmediate(resolve));
+    controller.abort();
+
+    const error = await pending;
+    const message = error instanceof Error ? error.message : String(error);
+    assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED", "取消错误经 engineTimeoutError 走引擎失败通道（search-tool 循环再兜底转「搜索已取消」）");
+    assert.match(message, /测试引擎 search timed out after 30000ms/);
+    // 监听器无泄漏：注册与移除一一对应，且为同一 listener 引用。
+    assert.equal(added.length, 1);
+    assert.equal(removed.length, 1);
+    assert.equal(removed[0]![1], added[0]![1]);
   });
 });

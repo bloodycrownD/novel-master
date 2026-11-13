@@ -56,12 +56,17 @@ export class ToolRunner<Ctx = unknown> {
     }
 
     try {
+      const signal = (ctx as { readonly signal?: AbortSignal } | null | undefined)?.signal;
+      // 取消语义第一道（B-1）：进入时 signal 已 abort 就在**启动工具副作用之前**
+      // 直接拒绝。竞速（下方）只让调用方 reject，不会阻止已启动的 work——写类
+      // 工具副作用照常落盘；runParallel 的 worker 在 abort 后仍会从队列取下一
+      // 个 call，靠这一道保证 abort 后不再发起新的 tool.run。
+      if (signal?.aborted) throw toolFailed(name, new Error("工具调用已取消"));
       // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
       // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
       // 工具内部仍应把 ctx.signal 传给 fetch / 子进程，让底层资源尽早释放。
       const work = tool.run(parsedIn.data, ctx);
-      const signal = (ctx as { readonly signal?: AbortSignal } | null | undefined)?.signal;
       let out: unknown;
       if (signal == null) {
         out = await work;

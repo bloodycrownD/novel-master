@@ -15,7 +15,7 @@ date: 2026-11-12
 3. 五处适配器精细行为随收编丢弃：brave「域名过滤时 count 强制 20」、bocha「客户端域名过滤兜底」（域名过滤统一走 params 后无从触发）、tavily「snippet 折叠空白」与「title 缺省回填 `Source N`」（纯展示优化，统一为 title 缺省回填 url）、bocha「envelope msg→message 双候选回退」（msgPath 单路径，取空落通用错误文案）。收编保住的真行为是**候选字段容错**与**信封业务码校验**。
 4. curl 导入时序：`parseCurlCommand` 是**纯解析**（识别出的密钥值替换为 `{{apiKey}}` 占位符并随表单草稿携带），密钥真正落 SKSP 发生在**保存时**——PRD 验收「点导入 → 已替换并存入 SKSP」的时序按此修订。
 5. URL 内占位符编码：仅 `{{query}}` 做 encodeURIComponent（PRD 原文「URL 内做百分号编码」按此收窄）；`{{apiKey}}`/`{{baseUrl}}` 原样替换——apiKey 落在 URL query 时遇 `&`/`=` 可能打坏参数，属已知让渡（六份出厂模板的 apiKey 全部走 header，自定义模板同形态推荐，配置页表单提示走 header）。
-6. paramHint 超长处置：保存时**拒绝**（PRD R5 原文「建议 ≤500，超长截断」按此收紧为硬校验）+ 装配期防御性截断双道——拒绝优于静默截断（截断会吃掉 paramHint 尾部的引擎方言说明）。
+6. paramHint 超长处置：保存时**拒绝**（PRD R5 原文「建议 ≤500，超长截断」按此收紧为硬校验）+ 装配期防御性截断双道——拒绝优于静默截断（截断会吃掉 paramHint 尾部的引擎方言说明）（**v3 作废，拍板 A2**：paramHint **不限长**——保存仅 trim 与明文密钥检测、装配期不截断，本条双道口径整体作废，见 spec-v2 §9）。
 
 ## 总体方案
 
@@ -54,7 +54,7 @@ interface SearchEngineTemplate {
     okValues?: readonly (string | number)[];  // 缺省 [200, "200"]
     msgPath?: string;                // 错误消息点路径（脱敏后入错误文案）
   };
-  paramHint: string;                 // 参数说明（≤500 字符，拼进工具描述）
+  paramHint: string;                 // 参数说明（≤500 字符，拼进工具描述）（**v3**：不限长，无 500 上限）
 }
 
 interface CustomEngineDef {
@@ -67,10 +67,10 @@ interface CustomEngineDef {
 
 **模板校验契约**（`validateSearchEngineTemplate(template): Result<SearchEngineTemplate, AppError>`，保存路径统一走它；错误码 `TOOL_SEARCH_TEMPLATE_INVALID` + i18n key `error.tool.search_template_invalid`）：
 
-- method ∈ {GET, POST}；url 为非空 http(s) URL；resultPath 为合法点路径（空串=根）；fieldMap 三键各至少一个候选。**占位符感知校验**：url 校验前先把 `{{baseUrl}}` 替换为 `https://example.invalid`、`{{query}}`/`{{count}}`/`{{apiKey}}` 替换为合法示例值再 `new URL()` parse（searxng 形态 `{{baseUrl}}/search?...` 必须能通过校验）。
+- method ∈ {GET, POST}；url 为非空 http(s) URL；resultPath 为合法点路径（空串=根）；fieldMap 三键各至少一个候选。**占位符感知校验**：url 校验前先把 `{{baseUrl}}` 替换为 `https://example.invalid`、`{{query}}`/`{{count}}`/`{{apiKey}}` 替换为合法示例值再 `new URL()` parse（searxng 形态 `{{baseUrl}}/search?...` 必须能通过校验）（**v3**：该校验机制保留，但六份出厂模板 URL 已不含任何占位符——`{{baseUrl}}` 分支仅自定义模板可触发）。
 - **点路径语法**（resultPath/answerPath/envelope.codePath/msgPath 共用同一解析实现，全仓唯一）：`^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$`，不支持数组索引。
 - POST 必有 bodyTemplate 且为合法 JSON 对象文本；模板内占位符只允许 `{{query}}/{{count}}/{{apiKey}}/{{baseUrl}}` 四个（未知占位符拒绝）。
-- paramHint ≤500 字符（保存时拒绝超长；装配期快照再做防御性截断，双道）。
+- paramHint ≤500 字符（保存时拒绝超长；装配期快照再做防御性截断，双道）（**v3 作废，拍板 A2**：不限长——保存仅 trim 与明文密钥检测，双道口径作废）。
 - url/headers/bodyTemplate 不含明文密钥特征（见 §5 密钥检测）。
 
 **占位符替换语义**（模板执行器核心，全仓唯一实现）：
@@ -87,14 +87,14 @@ interface CustomEngineDef {
 |---|---|---|---|---|---|
 | bocha | POST `https://api.bochaai.com/v1/web-search` | `Authorization: Bearer {{apiKey}}` | `{"query":"{{query}}","count":"{{count}}","summary":true}` | `data.webPages.value`；title:[title,name] url:[url,link,href] snippet:[summary,snippet,description,content] | envelope code/msg；freshness 不再默认携带（原 noLimit 缺省省略，params 可传，支持日期区间） |
 | tavily | POST `https://api.tavily.com/search` | Bearer | `{"query":"{{query}}","search_depth":"basic","max_results":"{{count}}","include_answer":"basic","include_raw_content":false}` | `results`；title:[title] url:[url] snippet:[content] | answerPath `answer` |
-| brave | GET `https://api.search.brave.com/res/v1/web/search?q={{query}}&count={{count}}` | `X-Subscription-Token: {{apiKey}}` + Accept | — | `web.results`；title:[title] url:[url] snippet:[description] | |
-| searxng | GET `{{baseUrl}}/search?q={{query}}&format=json` | 无（Accept: application/json） | — | `results`；title:[title] url:[url] snippet:[content] | `{{baseUrl}}` 占位；URL 不含 count（searxng 无此参数，客户端截断）；不传 language（保留自托管实例偏好语义，参数说明提示可经 params 传） |
+| brave | GET `https://api.search.brave.com/res/v1/web/search`（**v3**：URL 已去 `?q={{query}}&count={{count}}` 尾参，搜索词/条数全走 params） | `X-Subscription-Token: {{apiKey}}` + Accept | — | `web.results`；title:[title] url:[url] snippet:[description] | |
+| searxng | GET `https://searx.example.com/search?format=json`（**v3**：出厂示例完整端点，不再用 `{{baseUrl}}` 占位、不含 `q=`，搜索词走 params 的 q） | 无（Accept: application/json） | — | `results`；title:[title] url:[url] snippet:[content] | **v3**：「未配置实例」判据改 URL 等于出厂示例值（isUnconfiguredSearxng，驱动 needsBaseUrl 与 canRun 特判）；URL 不含 count（searxng 无此参数）；不传 language（保留自托管实例偏好语义，参数说明提示可经 params 传） |
 | deepseek | POST `https://api.deepseek.com/v1/tools/search` | Bearer | `{"query":"{{query}}","count":"{{count}}"}` | `results`；title:[title] url:[url] snippet:[snippet] | 参数说明收录 query 语法（site:/-site:/"/lang:/after:/before:）与 need_content/ori_question/localization |
 | zhipu | POST `https://open.bigmodel.cn/api/paas/v4/web_search` | Bearer | `{"search_query":"{{query}}","search_engine":"search_std","search_intent":false,"count":"{{count}}"}` | `search_result`；title:[title] url:[link] snippet:[content] | search_engine 固化 search_std（params 可覆盖换 pro 系）；参数说明收录 search_engine/search_intent/content_size/search_domain_filter/search_recency_filter/request_id |
 
-**「需 key / 需 baseUrl」判定规则**（配置完整过滤与 UI 状态共用）：模板的 url/headers/bodyTemplate 文本中含 `{{apiKey}}` → 需 key（SKSP 有值）；含 `{{baseUrl}}` → 需 baseUrl（`engineBaseUrls[id]` 非空）。预置与自定义同一判据。
+**「需 key / 需 baseUrl」判定规则**（配置完整过滤与 UI 状态共用）：模板的 url/headers/bodyTemplate 文本中含 `{{apiKey}}` → 需 key（SKSP 有值）；含 `{{baseUrl}}` → 需 baseUrl（`engineBaseUrls[id]` 非空）。预置与自定义同一判据（**v3**：出厂模板零 `{{baseUrl}}` 引用——searxng 的「未配置」改由 isUnconfiguredSearxng（URL=出厂示例值）判定，`engineBaseUrls` 仅剩自定义模板可达）。
 
-各模板 paramHint 另含引擎通用提示（params 透传语义）；文案全文随 Step 1 常量落定，长度 ≤500 字符。
+各模板 paramHint 另含引擎通用提示（params 透传语义）；文案全文随 Step 1 常量落定，长度 ≤500 字符（**v3**：不限长——出厂 paramHint 实际为带字段示例的多行说明，如 brave 的 `{"q":"低代码平台","count":10,...}`）。
 
 **POST 模板 headers 补充**：四份 POST 模板（bocha/tavily/deepseek/zhipu）headers 均含 `Content-Type: application/json` 与 `Accept: application/json`（fetch 对 string body 缺省补 `text/plain` 会被 JSON API 拒收，照 bocha 现适配器行为）；GET 模板（brave/searxng）带 Accept 头照现状。T-P 断言覆盖鉴权头与 Content-Type。
 
@@ -119,7 +119,7 @@ interface CustomEngineDef {
 | `engineOrderV2` | `string[]`（全部已知 id 的排序） | 六预置 + DDG 出厂序，DDG 恒队尾 |
 | `customEngines` | `CustomEngineDef[]` | `[]` |
 | `presetOverrides` | `Record<string, Partial<SearchEngineTemplate>>` | `{}` |
-| `engineBaseUrls` | `Record<string, string>`（当前仅 searxng 用） | `{}` |
+| `engineBaseUrls` | `Record<string, string>`（**v3**：仅自定义实例的 `{{baseUrl}}` 模板可达；出厂模板零引用） | `{}` |
 
 - SKSP ref 沿用 `search/{engineId}/apiKey`（自定义实例即 `search/custom:{id}/apiKey`）；模板落库永远只有 `{{apiKey}}` 占位符；保存时对 url/headers/body 做明文密钥启发式检测命中拒绝。**密钥检测单一实现**：`search` 模块内一个共享纯函数（sk- 前缀、Bearer 长串、X-API-KEY/X-Subscription-Token 等赋值形态），`parseCurlCommand` 的密钥识别与保存校验两处调用同一实现，测试样例随常量落定（正例：sk-xxx、Bearer 后 ≥20 字符；反例：`{{apiKey}}` 占位符自身、短 token）。
 - **key 写入通道**（预置与自定义统一）：`saveEngineKey(engineId: string, key)` / `clearEngineKey(engineId: string)` 签名从 `KeyEngineId` 放宽为 `string`（自定义实例唯一落 key 路径）；`createCustomEngine` / `updateCustomEngine` 入参携带可选 `apiKey`/`baseUrl`，创建/更新时拆分落 SKSP / `engineBaseUrls`（`CustomEngineDef` 本体仍只存模板，不含明文）。
@@ -145,7 +145,7 @@ interface CustomEngineDef {
 
 ### 6. 工具面（`search-tool.ts`）
 
-- inputSchema：query（必填）/ maxResults（int）/ **engine: `z.string().min(1)`**（description 注明值域=当前启用且配置完整的引擎 id，缺省走链）/ **params: `z.record(z.unknown())`**（自由 JSON，原样透传引擎方言参数，引擎忽略未知字段）。
+- inputSchema：query（必填）/ maxResults（int）/ **engine: `z.string().min(1)`**（description 注明值域=当前启用且配置完整的引擎 id，缺省走链）/ **params: `z.record(z.unknown())`**（自由 JSON，原样透传引擎方言参数，引擎忽略未知字段）（**v3 收口，拍板 A3**：schema 只含 **engine（string，可选）+ params（object，可选）** 两参——顶层 query/maxResults 作废，搜索词按 `q`/`query`/`search_query` 取首个非空字符串、条数按 `count`/`max_results`/`maxResults` 回落归一，测试锁 T-S1 反锁两参形态）。
 - outputSchema 两处 `z.enum(ENGINE_IDS)` → `z.string()`。
 - `SearchToolOptions.recencyFilter/domainFilter` 及 `SearchRecency/DomainFilters/parseDomainFilters/matchesDomainFilters` 全删；bocha mapFreshness/tavily time_range 与 domains/brave buildBraveQuery 与 count 常量/searxng buildSearxngQuery/DDG 过滤兜底分支全删；search-tool.ts 中「⚠️ 生产恒不带 domainFilter/recencyFilter」注释随本次正式作废删除。
 - `SEARCH_NOT_CONFIGURED_MESSAGE` 改写为链空场景**中性**文案（「当前没有可用的已启用搜索引擎，请在 设置 → 搜索配置 开启或配置引擎」——同时覆盖全关与「显式指定不可用引擎且截尾后链空」两种到达路径，不谎报「未启用任何」）；不枚举引擎 id；同步处置 i18n catalog 中的死 key（见 §10）。
@@ -153,18 +153,18 @@ interface CustomEngineDef {
 
 ### 7. 描述快照与装配（`builtin-tool-context.ts` + `run-agent-turn.ts`）
 
-- `BuiltinToolSearchContext` 扩展：`engineSnapshot: readonly { id: string; name: string; paramHint: string }[]`。**快照口径与串行链同款**：`enabledEngines` ∩ 配置完整（key 存在性查 `secretStore.has`，装配期一次 IO），按 engineOrderV2 序——描述只透传真能跑的引擎，与 PRD R5「按串行链顺序」一致；「启用但未配置」的引擎对 agent 不可见（R4 精神）。paramHint 超长防御性截断 500。
+- `BuiltinToolSearchContext` 扩展：`engineSnapshot: readonly { id: string; name: string; paramHint: string }[]`。**快照口径与串行链同款**：`enabledEngines` ∩ 配置完整（key 存在性查 `secretStore.has`，装配期一次 IO），按 engineOrderV2 序——描述只透传真能跑的引擎，与 PRD R5「按串行链顺序」一致；「启用但未配置」的引擎对 agent 不可见（R4 精神）。paramHint 超长防御性截断 500（**v3 作废，拍板 A2**：不限长、装配期不截断）。
 - `assembleSearchToolContext(store)` 改 async：装配期 `readConfig()` 一次预读拼快照（照 `skills.effective` 先例；`Tool.description` 是同步 `(ctx)=>string`）。主/子代理两注入点同步 await。**装配失败降级**：readConfig 抛错 → 空快照 + `createLogger("tool.search")` warn 一条，search 工具照旧装配（链解析在 run 内自会报错）——不让搜索配置读取失败击穿整个 agent turn。
-- `searchTool.description(ctx)` 改为消费快照：**通用段重写为引擎无关文案**（只描述 query/engine/maxResults/params 语义与串行链/120s 预算/50KB 落盘口径，不枚举任何引擎 id、不承诺 DDG 恒在——现骨架三处硬编码五引擎与「未配置自动用 DDG」的承诺随改造作废）+ 逐引擎段（`- {id}（{name}）：{paramHint}`）。
+- `searchTool.description(ctx)` 改为消费快照：**通用段重写为引擎无关文案**（只描述 query/engine/maxResults/params 语义与串行链/120s 预算/50KB 落盘口径，不枚举任何引擎 id、不承诺 DDG 恒在——现骨架三处硬编码五引擎与「未配置自动用 DDG」的承诺随改造作废）+ 逐引擎段（`- {id}（{name}）：{paramHint}`）（**v3**：通用段实际描述 engine/params 两参语义——搜索词与条数在 params 内按引擎方言字段传入，结果格式段照旧）。
 - 回合内改配置不即时反映（下回合生效）——照 skills 快照既有语义。
 
 ### 8. 配置页（双端）
 
 - **core store 新方法**：`createCustomEngine(input: { def: CustomEngineDef; apiKey?: string; baseUrl?: string })`（校验 + append orderV2 + key/baseUrl 拆分落库）/ `updateCustomEngine(id, patch)` / `deleteCustomEngine(id)`（prune orderV2 与 enabledEngines + 清 SKSP ref）/ `updatePresetOverride(id, patch)` / `resetPresetOverride(id)` / `setEnabled(id, on)` / `setEngineBaseUrl(id, url)` / `testEngine(input)`；`saveEngineKey`/`clearEngineKey` 参数放宽为 `string`（预置与自定义统一 key 通道，见 §5）。
-- `testEngine({ engineId?, draft?, query, maxResults? })`：**草稿直测**（不落库，KKV/SKSP 零写入）；`draft = { template: SearchEngineTemplate; apiKey?: string; baseUrl?: string }`（baseUrl 供 searxng 形态未保存实例地址直测；占位符解析优先级 draft > KKV 现存值 > 空）。`engineId` 模式（无 draft）三分支：**预置** = SKSP 现读 key + presetOverrides 合并 + engineBaseUrls；**自定义实例** = 模板取 `customEngines[id].template` + SKSP 现读 key + engineBaseUrls（已存实例测试按钮的通道——SKSP 不回读明文，UI 拿不到 key，只能走本模式）；**DDG** = 直接走原适配器。DDG 仅支持 engineId 模式（draft 对 DDG 无意义）；draft 与 engineId 同传时 draft 优先。返回 `Result<TestEngineSuccess, TestEngineFailure>`：成功 `{ resultCount, sample: SearchResult[≤5] }`；失败 `TestEngineFailure = { message: MessageDescriptor }`（骨架走 i18n key `error.tool.search_test_failed`，引擎响应摘要进 params，整体脱敏）。
+- **（v3 作废，拍板 A4——testEngine 整链退役，本段随 spec-v2 §9 作废）** `testEngine({ engineId?, draft?, query, maxResults? })`：**草稿直测**（不落库，KKV/SKSP 零写入）；`draft = { template: SearchEngineTemplate; apiKey?: string; baseUrl?: string }`（baseUrl 供 searxng 形态未保存实例地址直测；占位符解析优先级 draft > KKV 现存值 > 空）。`engineId` 模式（无 draft）三分支：**预置** = SKSP 现读 key + presetOverrides 合并 + engineBaseUrls；**自定义实例** = 模板取 `customEngines[id].template` + SKSP 现读 key + engineBaseUrls（已存实例测试按钮的通道——SKSP 不回读明文，UI 拿不到 key，只能走本模式）；**DDG** = 直接走原适配器。DDG 仅支持 engineId 模式（draft 对 DDG 无意义）；draft 与 engineId 同传时 draft 优先。返回 `Result<TestEngineSuccess, TestEngineFailure>`：成功 `{ resultCount, sample: SearchResult[≤5] }`；失败 `TestEngineFailure = { message: MessageDescriptor }`（骨架走 i18n key `error.tool.search_test_failed`，引擎响应摘要进 params，整体脱敏）。
 - `parseCurlCommand(text): Result<CurlCommandDraft, CurlParseError>`（core 新增，双端共用；返回 `Result` 而非自造 `{ok}` 字面量——仓内 `errors/either.ts` Result 是既定基建）：支持 `-X`/`-H`/`-d`/`--data-raw`/`-G` 基本形态；疑似密钥值识别（§5 共享检测函数）→ 表单草稿携带「密钥明文 → {{apiKey}}」替换对，保存时落 SKSP；`CurlParseError = { message: MessageDescriptor }`（key `error.tool.search_curl_parse_failed`）。解析失败整体拒绝，UI 展示 reason。
-- **desktop**：IPC 新增 `ipcSearchSetEnabled`/`ipcSearchTestEngine`/`ipcSearchCreateCustomEngine`/`ipcSearchUpdateCustomEngine`/`ipcSearchDeleteCustomEngine`/`ipcSearchUpdatePresetOverride`/`ipcSearchResetPresetOverride`/`ipcSearchSetEngineBaseUrl`（完整链路：`shared/ipc-types.ts` → `renderer/ipc/{invoke-registry.ts, client.ts}` 再导出 → `src/main/ipc/handler-registry.ts` → `handlers/search.ts` 薄封装；testEngine 的 `Result` 在 handler 边界翻译——`TestEngineFailure.message` descriptor 经 `coreT` 译成中文封进 `IpcResult`，照 `format-ipc-error.ts` 先例）；**旧 `ipcSearchSetSearxngBaseUrl` 通道与 `SearchConfigDto.searxngBaseUrl` 字段退役**，searxng baseUrl 编辑改走 `ipcSearchSetEngineBaseUrl("searxng", url)`；`SearchConfigDto` 扩展（engines 值加 enabled/needsKey/hasKey/needsBaseUrl/baseUrl 回显字段、customEngines 列表、presetOverrides 状态——形状照 §5 `SearchConfigPublic`）。列表页：动态行（六预置+自定义+DDG）+ 每行开关 + 上移下移（动态 id）+ 删除（自定义）+「新建自定义引擎」入口。详情页分支：DDG 只读 / 预置（key 表单（需 key 模板）+ baseUrl 表单（需 baseUrl 模板）+ 模板高级编辑折叠区（含恢复默认）+ 测试按钮）/ 自定义（**key 表单（含 `{{apiKey}}` 注入方式快捷选择）+ baseUrl 表单（模板引用 `{{baseUrl}}` 时）**+ 全量模板表单 + 测试按钮 + 删除）；「新建」= Detail view 的 **create 模式**（复用 `searchEngineDetail` viewId + `navState.editingEngineId` 哨兵值，不新增 viewId——`settings-nav.ts`/`settings-overlay-views-stub.ts` 零改动）。curl 导入：新建页粘贴域 + 解析预填（失败整体拒绝 toast）。模板编辑表单：method/URL/headers（JSON 文本域，照 ProviderFormView headersJson 先例）/bodyTemplate（JSON 文本域）/resultPath/fieldMap 三行候选（逗号分隔）/answerPath/envelope（可选）/paramHint；保存前走 `validateSearchEngineTemplate`。
-- **mobile**：同构改造（列表开关/BottomSheetMenu 增删除项/详情模板表单照 FormField/FormTextInput 骨架/详情 create 模式**含 curl 导入粘贴域**——parseCurlCommand 双端共用，非 desktop-only）；descriptor 翻译：`TestEngineFailure.message`/`CurlParseError.message` 经 translator（toast 通道现有翻译入口）译后展示；`navigation/types.ts` route 参数 `engineId: EngineId` → `string`；`isKnownEngineId` 从静态表改查 config 动态清单；ENGINE_LABELS/HINTS 从 SearchEnginesScreen 抽到独立 meta 模块（Detail 屏反向 import 解耦）；**新方法由 UI 直接 `getSearchConfigStore(runtime).<method>()` 消费，不在 `search-config.store.ts` 造转手便捷函数**（现状 readSearchEngineConfig/setSearchEngineOrder 的 PASS_THROUGH 形态不再新增；`KEY_ENGINE_IDS` 再导出行随 Step 7 删除）；**core-shim 只补 mobile 生产/测试实际引用的新导出、删除 `ENGINE_IDS`/`KEY_ENGINE_IDS` 旧条目**（生产代码走 metro 直连 dist barrel，shim 是 Jest 白名单）。
+- **desktop**：IPC 新增 `ipcSearchSetEnabled`/`ipcSearchTestEngine`/`ipcSearchCreateCustomEngine`/`ipcSearchUpdateCustomEngine`/`ipcSearchDeleteCustomEngine`/`ipcSearchUpdatePresetOverride`/`ipcSearchResetPresetOverride`/`ipcSearchSetEngineBaseUrl`（完整链路：`shared/ipc-types.ts` → `renderer/ipc/{invoke-registry.ts, client.ts}` 再导出 → `src/main/ipc/handler-registry.ts` → `handlers/search.ts` 薄封装；testEngine 的 `Result` 在 handler 边界翻译——`TestEngineFailure.message` descriptor 经 `coreT` 译成中文封进 `IpcResult`，照 `format-ipc-error.ts` 先例）（**v3，拍板 A4**：`ipcSearchTestEngine` 通道连同 TestEngine DTO、invoke-registry 条目与 handlers/search.ts 封装随 testEngine 退役删除，IPC 收敛为七通道）；**旧 `ipcSearchSetSearxngBaseUrl` 通道与 `SearchConfigDto.searxngBaseUrl` 字段退役**，searxng baseUrl 编辑改走 `ipcSearchSetEngineBaseUrl("searxng", url)`；`SearchConfigDto` 扩展（engines 值加 enabled/needsKey/hasKey/needsBaseUrl/baseUrl 回显字段、customEngines 列表、presetOverrides 状态——形状照 §5 `SearchConfigPublic`）。列表页：动态行（六预置+自定义+DDG）+ 每行开关 + 上移下移（动态 id）+ 删除（自定义）+「新建自定义引擎」入口。详情页分支：DDG 只读 / 预置（key 表单（需 key 模板）+ baseUrl 表单（需 baseUrl 模板）+ 模板高级编辑折叠区（含恢复默认）+ 测试按钮）/ 自定义（**key 表单（含 `{{apiKey}}` 注入方式快捷选择）+ baseUrl 表单（模板引用 `{{baseUrl}}` 时）**+ 全量模板表单 + 测试按钮 + 删除）（**v3，拍板 A4**：详情页收缩为 mobile 同款极简形态——DDG 行不进详情页、删 defaultBody 编辑 / 注入方式快捷选择 / 宏校验 / 测试按钮，只留连接（method+URL，内置模板只读）+ 认证三态 + paramHint（内置只读））；「新建」= Detail view 的 **create 模式**（复用 `searchEngineDetail` viewId + `navState.editingEngineId` 哨兵值，不新增 viewId——`settings-nav.ts`/`settings-overlay-views-stub.ts` 零改动）。curl 导入：新建页粘贴域 + 解析预填（失败整体拒绝 toast）（**v3**：仅桌面端保留）。模板编辑表单：method/URL/headers（JSON 文本域，照 ProviderFormView headersJson 先例）/bodyTemplate（JSON 文本域）/resultPath/fieldMap 三行候选（逗号分隔）/answerPath/envelope（可选）/paramHint；保存前走 `validateSearchEngineTemplate`。
+- **mobile**：同构改造（列表开关/BottomSheetMenu 增删除项/详情模板表单照 FormField/FormTextInput 骨架/详情 create 模式**含 curl 导入粘贴域**——parseCurlCommand 双端共用，非 desktop-only）（**v3 实现事实**：mobile 详情/新建页已删 curl 导入粘贴域、测试搜索按钮与 DDG 详情入口，create 模式不预填 defaultBody 字段，认证为三态快捷选择——parseCurlCommand 剩 desktop 单端消费）；descriptor 翻译：`TestEngineFailure.message`/`CurlParseError.message` 经 translator（toast 通道现有翻译入口）译后展示（**v3**：TestEngineFailure 随 testEngine 退役消亡，剩 CurlParseError 单项）；`navigation/types.ts` route 参数 `engineId: EngineId` → `string`；`isKnownEngineId` 从静态表改查 config 动态清单；ENGINE_LABELS/HINTS 从 SearchEnginesScreen 抽到独立 meta 模块（Detail 屏反向 import 解耦）；**新方法由 UI 直接 `getSearchConfigStore(runtime).<method>()` 消费，不在 `search-config.store.ts` 造转手便捷函数**（现状 readSearchEngineConfig/setSearchEngineOrder 的 PASS_THROUGH 形态不再新增；`KEY_ENGINE_IDS` 再导出行随 Step 7 删除）；**core-shim 只补 mobile 生产/测试实际引用的新导出、删除 `ENGINE_IDS`/`KEY_ENGINE_IDS` 旧条目**（生产代码走 metro 直连 dist barrel，shim 是 Jest 白名单）。
 - 帮助弹窗文案更新（**双端**：desktop SearchHelpModal + mobile SearchEnginesScreen helpVisible；开关语义 + 模板说明 + 「测试消耗引擎配额」提示）。
 
 ### 9. 配套
@@ -174,7 +174,7 @@ interface CustomEngineDef {
 
 ### 10. i18n 契约
 
-**口径分层**：LLM-facing 文案（工具 description 通用段、paramHint、SEARCH_NOT_CONFIGURED_MESSAGE、formatter 输出）**硬编码中文**——现状先例，不进 catalog；**用户可见错误**走 `AppError(code, {key})` + catalog descriptor——`search-config.ts` 现状先例；双端设置页 UI 静态文案**硬编码中文**——双端 settings 现状，本次延续，不接 MessageDescriptor 通道。
+**口径分层**：LLM-facing 文案（工具 description 通用段、paramHint、SEARCH_NOT_CONFIGURED_MESSAGE、formatter 输出）**硬编码中文**——现状先例，不进 catalog；**用户可见错误**走 `AppError(code, {key})` + catalog descriptor——`search-config.ts` 现状先例；双端设置页 UI 静态文案**硬编码中文**——双端 settings 现状，本次延续，不接 MessageDescriptor 通道（**v3 作废并替代**：设置页 UI 文案已迁入 settings 域双语 catalog——153 key 真源 + locales settings.{zh-CN,en-US}.json + core `./settings` 子入口 + 双端 settingsTranslator，spec Δ 清单与 iteration-state spec_deviations 已补登；translator 暂固定 zh-CN，en-US 运行时不可达，属备案口径，见 spec-v2 §9 第 7/8 条）。
 
 | 处置 | key / 位置 | 内容 |
 |---|---|---|
@@ -208,6 +208,11 @@ packages/core/src/service/agent/logic/run-agent-turn.ts         [改] async 装�
 packages/core/src/index.ts  [改] 导出面增删
 packages/core/src/errors/error-codes.ts   [改] 追加 TOOL_SEARCH_TEMPLATE_INVALID
 packages/core/src/i18n/{keys.ts, catalog/zh-CN.yaml, generated-catalog.ts}   [改] §10 清单
+packages/core/src/domain/settings/i18n/keys.ts   [新] settings 域 UI 文案 key 真源（153 key；v3 settings i18n 落地，spec §10 旧口径作废）
+packages/core/locales/settings.{zh-CN,en-US}.json   [新] settings 域双语 catalog（zh/en 双源）
+packages/core/src/public/settings.ts   [新] core `./settings` 子入口（SettingsMessageDescriptor/Key/Like 三类型 re-export）
+packages/core/package.json   [改] exports 增 `"./settings"` 子路径
+apps/desktop/shared/logic/settings-i18n.ts；apps/desktop/renderer/i18n/settings.ts；apps/mobile/src/i18n/settings.ts   [新] settings 域 translator 共享逻辑与双端入口（暂固定 zh-CN，locale 接线留待设置层）
 apps/desktop/shared/ipc-types.ts；renderer/ipc/{invoke-registry.ts, client.ts}；src/main/ipc/handler-registry.ts / handlers/search.ts   [改] 新 IPC + DTO + 旧 searxng IPC 退役
 apps/desktop/renderer/features/settings/SearchEnginesView.tsx / SearchEngineDetailView.tsx / search-engine-meta.ts；shared/logic/search-engines.ts   [改]
 apps/desktop/shared/config-forms/agent-tool-catalog.ts   [改]
@@ -263,12 +268,12 @@ docs/Iterations/iterations.yaml、CHANGELOG.md   [改]
   - T-C2 engineOrderV2 容错归一（按动态全集：未知 id 丢弃/缺失补尾/损坏回默认）+ enabledEngines dangling id 归一 + setEngineOrder 放宽校验（不重复完整序列；未知 id 拒绝）。
   - T-C3 resolveEngineChain 双过滤（enabled ∩ 配置完整；占位符判据：模板含 {{apiKey}} 无 key → 不完整；DDG 不再恒入链）+ 显式三分支（钉链首 / 顺位回落 / 未知 id 抛 AppError 含引擎 id）+ `ResolvedEngineConfig.template` 携带断言。
   - T-C4 customEngines CRUD（创建 nanoid id + **append orderV2**、更新、删除 **prune orderV2 与 enabledEngines** + 清 SKSP ref）+ createCustomEngine/updateCustomEngine 入参 apiKey/baseUrl 拆分落库（SKSP/`engineBaseUrls` 断言）+ presetOverrides 写/清 + 浅合并子对象整体替换 + setEnabled 独立性。
-  - T-C5 testEngine 草稿直测（KKV/SKSP 零写入断言）+ draft.baseUrl 优先级（draft > KKV > 空）+ engineId 模式（预置合并 override/现读 key；DDG 走适配器）+ 失败返回 descriptor 且脱敏。
+  - T-C5 testEngine 草稿直测（KKV/SKSP 零写入断言）+ draft.baseUrl 优先级（draft > KKV > 空）+ engineId 模式（预置合并 override/现读 key；DDG 走适配器）+ 失败返回 descriptor 且脱敏（**v3 作废，拍板 A4**：testEngine 整链退役，相关用例随退役处置，见 spec-v2 §9）。
   - T-C7 validateSearchEngineTemplate 全规则（method 枚举/URL http(s)/bodyTemplate 合法 JSON/未知占位符拒绝/paramHint 超长拒绝/fieldMap 空/点路径语法）+ **保存路径密钥检测命中拒绝**（core 层，createCustomEngine/updatePresetOverride 双入口）。
 - T-C6 — Step 2 — blocking: yes（落点：新 `curl-import.test.ts`）：parseCurlCommand——合法 curl（-X POST -H Authorization -d JSON）解析预填、密钥值识别替换 {{apiKey}}（与保存校验共用同一检测实现）、非法输入 Result.err 返回原因。
-- T-S1 — Step 4 — blocking: yes：inputSchema 放宽（engine 任意 string 通过、params object 通过、outputSchema 接受自定义 id）。
+- T-S1 — Step 4 — blocking: yes：inputSchema 放宽（engine 任意 string 通过、params object 通过、outputSchema 接受自定义 id）（**v3**：改锁两参收口形态——schema 只含 engine（可选）+ params（可选），顶层 query/maxResults 不存在，search-tool.test.ts:200-209 已反锁）。
 - T-S2 — Step 4 — blocking: yes：params 透传 e2e——模板引擎 body 含 params 字段（need_content:true 生效于请求体）；DDG 忽略 params。
-- T-D1 — Step 4 — blocking: yes（落点：`search-tool.test.ts` 新 describe；编号避开仓内存量 describe「T-S3 串行链四口径」——那组语义归 T-R1）：启用两引擎时描述含两段说明且按链序；**快照口径=链同款（启用未配置引擎不出现）**；关闭引擎后描述无其字样（含 DDG 关闭后无 duckduckgo 字样）；DDG 启用时描述含 `DUCKDUCKGO_ENGINE_META` 逐引擎段；paramHint 超 500 截断；装配 readConfig 失败 → 空快照降级不击穿 turn；回合内配置变更不刷新。
+- T-D1 — Step 4 — blocking: yes（落点：`search-tool.test.ts` 新 describe；编号避开仓内存量 describe「T-S3 串行链四口径」——那组语义归 T-R1）：启用两引擎时描述含两段说明且按链序；**快照口径=链同款（启用未配置引擎不出现）**；关闭引擎后描述无其字样（含 DDG 关闭后无 duckduckgo 字样）；DDG 启用时描述含 `DUCKDUCKGO_ENGINE_META` 逐引擎段；paramHint 超 500 截断（**v3**：改锁「不限长、装配期不截断」——search-tool.test.ts 已反锁新口径）；装配 readConfig 失败 → 空快照降级不击穿 turn；回合内配置变更不刷新。
 - T-S4 — Step 3/4 — blocking: yes：全关场景（含 DDG 关闭）search 返回新全关提示（不崩溃）；SEARCH_NOT_CONFIGURED_MESSAGE 断言改写。
 - T-R1 — Step 4 — blocking: yes：串行链四口径回归（401 降级轨迹/全链聚合错误/钉死不降级/120s 预算——沿用原用例改 fixture 为模板引擎）+ 50KB 落盘回归。
 - T-U1 — Step 6 — blocking: yes：desktop 列表动态渲染（预置+自定义混排）、开关切换 IPC、上移下移动态 id、删除自定义（apps/desktop/test/search-engines-view.test.tsx 新文件）。

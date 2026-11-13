@@ -291,6 +291,10 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       requestHeaders.set("content-type", "application/json");
     }
 
+    // 预取消早退（B-2）：进入时 signal 已 aborted 直接拒绝，不发请求。对已
+    // aborted 的 signal 注册 listener 不会补发回调（WHATWG 语义），不走
+    // ToolRunner 兜底的直调入口（测试 / 未来装配点）会白占网络资源直到 timeoutMs。
+    if (ctx.signal?.aborted) throw toolFailed("curl", new Error(`请求已取消：${normalizedUrl}`));
     // 超时须包住 fetch + 正文读取整体：响应头到达不结束计时，
     // `text()` 下载正文阶段同样受 abort 约束，慢滴流不会无限挂起回合。
     const controller = new AbortController();

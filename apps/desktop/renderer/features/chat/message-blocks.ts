@@ -43,50 +43,60 @@ function blocksForMessage(message: ChatMessageDto): readonly ContentBlockDto[] {
   return message.contentBlocks ?? [];
 }
 
-function toolUseIdsFromMessage(message: ChatMessageDto): string[] {
-  return blocksForMessage(message)
+/** O(1) 判定版本：tool_use id 全部命中预扫 map 即视为本轮工具结果齐备。 */
+function turnToolResultsCompleteWith(assistant: ChatMessageDto, results: ReadonlyMap<string, Extract<ContentBlockDto, { type: "tool_result" }>>): boolean {
+  const toolUseIds = blocksForMessage(assistant)
     .filter((b): b is Extract<ContentBlockDto, { type: "tool_use" }> => b.type === "tool_use")
     .map((b) => b.id);
+  if (toolUseIds.length === 0) {
+    return true;
+  }
+  return toolUseIds.every((id) => results.has(id));
 }
 
-function messageHasToolUse(message: ChatMessageDto): boolean {
-  return toolUseIdsFromMessage(message).length > 0;
+/**
+ * 工具配对预扫上下文（E-1 消 O(n²)：照 mobile buildToolPairingContext 移栽）——
+ * 一次 O(n) 扫描产出全量 messages 的 toolUseId→result map 与「最后一条结果
+ * 不齐备的 assistant」，供逐消息循环内 O(1) 判定复用，取代旧实现里每条
+ * assistant 现场重建 map / 全量重扫的写法（语义严格等价）。
+ */
+interface ToolPairingContext {
+  readonly results: ReadonlyMap<string, Extract<ContentBlockDto, { type: "tool_result" }>>;
+  readonly lastIncomplete: ChatMessageDto | undefined;
 }
 
-function buildToolResultByUseId(messages: readonly ChatMessageDto[]): Map<string, Extract<ContentBlockDto, { type: "tool_result" }>> {
-  const map = new Map<string, Extract<ContentBlockDto, { type: "tool_result" }>>();
+/** 一次 O(n) 扫描构建工具配对上下文（含 toolUseId→result map 的全量收集）。 */
+function buildToolPairingContext(messages: readonly ChatMessageDto[]): ToolPairingContext {
+  const results = new Map<string, Extract<ContentBlockDto, { type: "tool_result" }>>();
   for (const message of messages) {
     for (const block of blocksForMessage(message)) {
       if (block.type === "tool_result") {
-        map.set(block.toolUseId, block);
+        results.set(block.toolUseId, block);
       }
     }
   }
-  return map;
-}
-
-function turnToolResultsComplete(assistant: ChatMessageDto, messages: readonly ChatMessageDto[]): boolean {
-  const required = toolUseIdsFromMessage(assistant);
-  if (required.length === 0) {
-    return true;
+  let lastIncomplete: ChatMessageDto | undefined;
+  for (const message of messages) {
+    if (message.role === "assistant" && !turnToolResultsCompleteWith(message, results)) {
+      lastIncomplete = message;
+    }
   }
-  const results = buildToolResultByUseId(messages);
-  return required.every((id) => results.has(id));
+  return { results, lastIncomplete };
 }
 
 // nm-style: keep-public — 测试直连的行为锁（本轮禁改测试）；生产仅 buildChatListItems 单点调用
 export function isTurnToolExecuting(assistant: ChatMessageDto, messages: readonly ChatMessageDto[], agentRunning: boolean): boolean {
-  if (!agentRunning || !messageHasToolUse(assistant) || turnToolResultsComplete(assistant, messages)) {
+  return isTurnToolExecutingWith(assistant, buildToolPairingContext(messages), agentRunning);
+}
+
+/** O(1) 判定版本：agent 运行中且该消息正是预扫出的最后一条结果不齐备 assistant。 */
+function isTurnToolExecutingWith(assistant: ChatMessageDto, context: ToolPairingContext, agentRunning: boolean): boolean {
+  const hasToolUse = blocksForMessage(assistant).some((block) => block.type === "tool_use");
+  if (!agentRunning || !hasToolUse || turnToolResultsCompleteWith(assistant, context.results)) {
     return false;
   }
   // 只有「最后一个仍缺 tool_result 的 assistant」算执行中；后续 assistant 已有结果时不归它
-  let lastIncomplete: ChatMessageDto | undefined;
-  for (const message of messages) {
-    if (message.role === "assistant" && messageHasToolUse(message) && !turnToolResultsComplete(message, messages)) {
-      lastIncomplete = message;
-    }
-  }
-  return lastIncomplete?.id === assistant.id;
+  return context.lastIncomplete?.id === assistant.id;
 }
 
 /**
@@ -132,7 +142,9 @@ export function toolCallSummary(tool: ToolCallView): string {
 export function buildChatListItems(messages: readonly ChatMessageDto[], options: BuildChatListItemsOptions = {}): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
   const runUiStopped = options.runUiStopped ?? false;
-  const results = buildToolResultByUseId(messages);
+  // 全量配对上下文只预扫一次，逐消息 O(1) 判定（E-1）
+  const context = buildToolPairingContext(messages);
+  const results = context.results;
   const items: ChatListItem[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
@@ -172,7 +184,7 @@ export function buildChatListItems(messages: readonly ChatMessageDto[], options:
 
     const hasToolUse = toolUses.length > 0;
     // Composer 已停时未配对卡直接 error；否则只有最后一个待结果的 assistant 保持 pending
-    const unpairedStatus: ToolCallStatus = runUiStopped ? "error" : isTurnToolExecuting(message, messages, agentRunning) ? "pending" : "error";
+    const unpairedStatus: ToolCallStatus = runUiStopped ? "error" : isTurnToolExecutingWith(message, context, agentRunning) ? "pending" : "error";
     const tools = toolUses.map((use): ToolCallView => {
       const result = results.get(use.id);
       if (result == null) {

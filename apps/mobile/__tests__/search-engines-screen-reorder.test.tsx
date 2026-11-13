@@ -7,7 +7,8 @@
  * - 行内开关 setEnabled（id 原样透传，与排序解耦）；
  * - 行菜单上移 / 下移：交换相邻位后整单 setEngineOrder 写库并重读，动态 id
  *   （含 `custom:` 实例）不丢；
- * - 保留项：行点击导航（DDG / 预置）、标题栏「?」帮助弹窗、排序写库失败 toast。
+ * - 保留项：行点击导航（仅预置 / 自定义实例；DDG 无详情页不导航）、标题栏
+ *   「?」帮助弹窗、排序写库失败 toast。
  *
  * 照 providers-screen-error.test.tsx 的 TestRenderer 直测风格：行卡片 / 菜单
  * mock 成带标记的可交互节点，树文本与调用参数断言；store 经

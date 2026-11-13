@@ -93,7 +93,7 @@ export interface SkillLoadTruncation {
  * load 恒从第 1 行起、取 {@link TOOL_OUTPUT_MAX_LINES} 行（无 offset/limit
  * 入参），截断判定 = 字节预算命中 或 行数帽命中（`byteCapped.lines.length <
  * lines.length`）。load 输出**不带** totalLines/returnedLines（wire 侧
- * `formatSkillLoadOutput` 只吃 path/content/truncated/files），故这里也不返回。
+ * `formatToolOutputForLlm` 的 skill load 分支只吃 path/content/truncated/files），故这里也不返回。
  */
 export function deriveSkillLoadTruncation(plain: string): SkillLoadTruncation {
   const lines = plain.split("\n");

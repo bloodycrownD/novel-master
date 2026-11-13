@@ -126,8 +126,6 @@ import {
   type SearchSetEnabledRequest,
   type SearchSetEngineBaseUrlRequest,
   type SearchSetEngineOrderRequest,
-  type SearchTestEngineRequest,
-  type SearchTestEngineResultDto,
   type SearchUpdateCustomEngineRequest,
   type SearchUpdatePresetOverrideRequest,
 } from "@shared/ipc-types";
@@ -308,7 +306,6 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcSearchDeleteCustomEngine: withReq<SearchDeleteCustomEngineRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE),
     ipcSearchUpdatePresetOverride: withReq<SearchUpdatePresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE),
     ipcSearchResetPresetOverride: withReq<SearchResetPresetOverrideRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE),
-    ipcSearchTestEngine: withReq<SearchTestEngineRequest, IpcResult<SearchTestEngineResultDto>>(invoke, IPC_CHANNELS.SEARCH_TEST_ENGINE),
     ipcShellMenuPopup: withReq<
       {
         menuId: "file" | "edit" | "view" | "window" | "help";

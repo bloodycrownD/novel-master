@@ -17,37 +17,8 @@ import { Switch } from "@/components/ui/Switch";
 import { toastSettingsSuccess } from "@/utils/settings-feedback";
 import { settingsTranslator } from "../../i18n/settings";
 import type { SettingsNavHandle } from "./settings-nav";
-import { ENGINE_META, NEW_ENGINE_SENTINEL } from "./search-engine-meta";
+import { NEW_ENGINE_SENTINEL, engineMeta } from "./search-engine-meta";
 import { BuiltinEngineTag, SettingsListSection, SettingsPanel, SettingsStatus } from "./settings-ui";
-
-/**
- * 帮助弹窗分段口径：以 mobile `SearchEnginesScreen.tsx` 帮助弹窗为真源逐字
- * 同步（五段，勿漂移）；「模板与自定义引擎」段按 SPEC v2 透传改造简化
- * （不再提响应映射与高级区，保留 curl 导入 / 占位符 / defaultBody 可选口径），
- * count 措辞按 FIX-26 定稿（整数字段带引号），W6 同步改 mobile 同句后双端统一。
- */
-const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
-  {
-    title: settingsTranslator({ key: "settings.search.help.toggle.title" }),
-    body: settingsTranslator({ key: "settings.search.help.toggle.body" }),
-  },
-  {
-    title: settingsTranslator({ key: "settings.search.help.priority.title" }),
-    body: settingsTranslator({ key: "settings.search.help.priority.body" }),
-  },
-  {
-    title: settingsTranslator({ key: "settings.search.help.custom_engine.title" }),
-    body: settingsTranslator({ key: "settings.search.help.custom_engine.body.desktop" }),
-  },
-  {
-    title: settingsTranslator({ key: "settings.search.help.test_quota.title.desktop" }),
-    body: settingsTranslator({ key: "settings.search.help.test_quota.body.desktop" }),
-  },
-  {
-    title: settingsTranslator({ key: "settings.search.help.key_security.title" }),
-    body: settingsTranslator({ key: "settings.search.help.key_security.body" }),
-  },
-];
 
 export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
   const [config, setConfig] = useState<SearchConfigDto | null>(null);
@@ -127,6 +98,30 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
 
   const order = config?.engines.map((engine) => engine.id) ?? [];
 
+  /**
+   * 帮助弹窗分段（K-1 事实口径：双端各自 catalog 键；desktop 原有的「测试消耗
+   * 配额」段随测试搜索按钮退役一并删除（v3 拍板 A4），现与 mobile 同为四段。
+   * i18n-1：译文在组件渲染期求值，接动态 locale 后随语言切换刷新。
+   */
+  const helpSections: ReadonlyArray<{ title: string; body: string }> = [
+    {
+      title: settingsTranslator({ key: "settings.search.help.toggle.title" }),
+      body: settingsTranslator({ key: "settings.search.help.toggle.body" }),
+    },
+    {
+      title: settingsTranslator({ key: "settings.search.help.priority.title" }),
+      body: settingsTranslator({ key: "settings.search.help.priority.body" }),
+    },
+    {
+      title: settingsTranslator({ key: "settings.search.help.custom_engine.title" }),
+      body: settingsTranslator({ key: "settings.search.help.custom_engine.body.desktop" }),
+    },
+    {
+      title: settingsTranslator({ key: "settings.search.help.key_security.title" }),
+      body: settingsTranslator({ key: "settings.search.help.key_security.body" }),
+    },
+  ];
+
   return (
     <SettingsPanel>
       <SettingsListSection
@@ -149,61 +144,64 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
         }
       >
         {config == null && error == null ? <p className="settings-hint">{settingsTranslator({ key: "settings.search.empty.loading.desktop" })}</p> : null}
-        {(config?.engines ?? []).map((engine) => (
-          <div key={engine.id} className="settings-list-item-row">
-            <button
-              type="button"
-              className="settings-list-item"
-              onClick={() => {
-                nav.navState.editingEngineId = engine.id;
-                nav.push("searchEngineDetail");
-              }}
-            >
-              <span className="settings-list-item__label">
-                {engine.name}
-                {engine.isCustom || ENGINE_META[engine.id] == null ? null : <span className="settings-row__desc">{ENGINE_META[engine.id]?.desc}</span>}
+        {(config?.engines ?? []).map((engine) => {
+          const meta = engineMeta(engine.id);
+          return (
+            <div key={engine.id} className="settings-list-item-row">
+              <button
+                type="button"
+                className="settings-list-item"
+                onClick={() => {
+                  nav.navState.editingEngineId = engine.id;
+                  nav.push("searchEngineDetail");
+                }}
+              >
+                <span className="settings-list-item__label">
+                  {engine.name}
+                  {engine.isCustom || meta == null ? null : <span className="settings-row__desc">{meta.desc}</span>}
+                </span>
+                <span className="settings-list-item__meta">
+                  {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
+                  {engine.isCustom ? <span className="settings-tag settings-tag--muted">{settingsTranslator({ key: "settings.search.list.tag.custom.desktop" })}</span> : null}
+                  {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.key_missing.desktop" })}</span> : null}
+                  {engine.needsBaseUrl && engine.baseUrl == null ? (
+                    <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.base_url_missing.desktop" })}</span>
+                  ) : null}
+                  {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? (
+                    <span className="settings-tag settings-tag--ok">{settingsTranslator({ key: "settings.search.list.tag.configured.desktop" })}</span>
+                  ) : null}
+                </span>
+                <span className="settings-list-item__chevron" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+              <span className="settings-list-item__switch">
+                <Switch
+                  checked={engine.enabled}
+                  disabled={busy}
+                  onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))}
+                  aria-label={settingsTranslator({ key: "settings.search.list.toggle_aria.desktop", params: { name: engine.name } })}
+                />
               </span>
-              <span className="settings-list-item__meta">
-                {engine.id === "duckduckgo" ? <BuiltinEngineTag /> : null}
-                {engine.isCustom ? <span className="settings-tag settings-tag--muted">{settingsTranslator({ key: "settings.search.list.tag.custom.desktop" })}</span> : null}
-                {engine.needsKey && !engine.hasKey ? <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.key_missing.desktop" })}</span> : null}
-                {engine.needsBaseUrl && engine.baseUrl == null ? (
-                  <span className="settings-tag settings-tag--warn">{settingsTranslator({ key: "settings.search.list.tag.base_url_missing.desktop" })}</span>
-                ) : null}
-                {!engine.isCustom && engine.id !== "duckduckgo" && (!engine.needsKey || engine.hasKey) && (!engine.needsBaseUrl || engine.baseUrl != null) ? (
-                  <span className="settings-tag settings-tag--ok">{settingsTranslator({ key: "settings.search.list.tag.configured.desktop" })}</span>
-                ) : null}
-              </span>
-              <span className="settings-list-item__chevron" aria-hidden="true">
-                ›
-              </span>
-            </button>
-            <span className="settings-list-item__switch">
-              <Switch
-                checked={engine.enabled}
-                disabled={busy}
-                onChange={(next) => void runWrite(() => ipcSearchSetEnabled({ engineId: engine.id, enabled: next }))}
-                aria-label={settingsTranslator({ key: "settings.search.list.toggle_aria.desktop", params: { name: engine.name } })}
-              />
-            </span>
-            <button
-              type="button"
-              className="settings-list-item__menu-btn"
-              aria-label={settingsTranslator({ key: "settings.search.list.more_menu_aria.desktop", params: { name: engine.name } })}
-              onClick={(e) => {
-                if (busy) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenu({
-                  engineId: engine.id,
-                  x: Math.max(8, rect.left),
-                  y: Math.max(8, rect.bottom + 4),
-                });
-              }}
-            >
-              ⋮
-            </button>
-          </div>
-        ))}
+              <button
+                type="button"
+                className="settings-list-item__menu-btn"
+                aria-label={settingsTranslator({ key: "settings.search.list.more_menu_aria.desktop", params: { name: engine.name } })}
+                onClick={(e) => {
+                  if (busy) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setMenu({
+                    engineId: engine.id,
+                    x: Math.max(8, rect.left),
+                    y: Math.max(8, rect.bottom + 4),
+                  });
+                }}
+              >
+                ⋮
+              </button>
+            </div>
+          );
+        })}
       </SettingsListSection>
       <SettingsStatus error={error} />
       <ContextMenu
@@ -254,7 +252,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
             <h3 id="search-help-title" className="text-prompt-modal__title">
               {settingsTranslator({ key: "settings.search.help.title" })}
             </h3>
-            {HELP_SECTIONS.map((section) => (
+            {helpSections.map((section) => (
               <p key={section.title} className="settings-hint">
                 <strong>{section.title}：</strong>
                 {section.body}

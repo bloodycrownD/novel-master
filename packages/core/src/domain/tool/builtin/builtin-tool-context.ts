@@ -169,8 +169,9 @@ export interface BuiltinToolSearchContext {
    */
   readonly resolveEngineChain: (inputEngine?: string) => Promise<ResolvedEngineConfig[]>;
   /**
-   * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 装配期防御性截断
-   * 500 字符——保存路径已硬校验，此为第二道）。空数组 = 当前没有可跑引擎。
+   * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 不限长，装配期
+   * 原样透传——v3 起已废除「保存拒绝 + 装配期截断 500」双道限长）。空数组
+   * = 当前没有可跑引擎。
    */
   readonly engineSnapshot: readonly {
     readonly id: string;

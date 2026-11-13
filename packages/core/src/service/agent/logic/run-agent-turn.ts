@@ -215,14 +215,14 @@ export async function assembleSkillsToolContext(
  * 参数说明只能在装配期预算）。
  *
  * 快照口径 = 串行链同款：`canRun`（enabled ∩ 配置完整，含 key / baseUrl
- * 就绪）∩ 按 engineOrderV2 序；paramHint 防御性截断 500（保存路径已硬
- * 校验，此为第二道）。
+ * 就绪）∩ 按 engineOrderV2 序；paramHint 不限长，装配期原样透传（v3 起已
+ * 废除「保存拒绝 + 装配期截断 500」双道限长，保存路径只扫密钥不扫长度）。
  *
  * 装配失败降级：`readConfig` 抛错 → 空快照 + 一条 warn，search 工具照旧
  * 装配（引擎链解析在 run 内自会报错），不让搜索配置读取失败击穿整个
  * agent turn。
  */
-// nm-style: keep-public — 19 处测试直接 import 锁装配期快照口径（本片禁改测试）；生产侧唯一调用点是 buildSearchContext 的 TEMP-DIAG 包装。
+// nm-style: keep-public — 19 处测试直接 import 锁装配期快照口径（本片禁改测试）；生产侧主 / 子两个装配点直接调用。
 export async function assembleSearchToolContext(store: SearchConfigStore): Promise<BuiltinToolSearchContext> {
   let engineSnapshot: BuiltinToolSearchContext["engineSnapshot"] = [];
   try {
@@ -242,25 +242,6 @@ export async function assembleSearchToolContext(store: SearchConfigStore): Promi
     resolveEngineChain: (inputEngine) => store.resolveEngineChain(inputEngine),
     engineSnapshot,
   };
-}
-
-/**
- * TEMP-DIAG：「当前运行时未装配搜索能力」排查——每次 turn 装配 search 上下文时
- * 记录 runtime.searchConfig 是否到位、runtime 实际键清单与快照引擎 id。
- * 定位完成后连同本函数一并删除。
- */
-async function buildSearchContext(runtime: { readonly searchConfig?: SearchConfigStore }): Promise<{ search?: BuiltinToolSearchContext }> {
-  if (runtime.searchConfig == null) {
-    searchLog.info("search 上下文未装配：runtime.searchConfig 缺失", {
-      runtimeKeys: Object.keys(runtime),
-    });
-    return {};
-  }
-  const search = await assembleSearchToolContext(runtime.searchConfig);
-  searchLog.info("search 上下文已装配", {
-    snapshot: search.engineSnapshot.map((engine) => engine.id),
-  });
-  return { search };
 }
 
 /**
@@ -791,7 +772,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // search 工具读取：闭包绑定 runtime.searchConfig + 装配期 readConfig 拼
         // 描述快照（readConfig 失败降级空快照，不击穿 turn）；CLI / 旧 mock 未
         // 注入时不装配，工具 run 返回可读错误。
-        ...(await buildSearchContext(runtime)),
+        ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
         // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
         subagent: {
           agentRegistry: runtime.agentRegistry,
@@ -1104,14 +1085,7 @@ async function runChildAgent(args: {
     // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
     // 按旧行为；CLI 已补注入，见 D6）。
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
-      throw new ToolError(
-        "FAILED",
-        {
-          key: "error.agent.child_session_busy",
-          params: { child_session_id: childSessionId },
-        },
-        { toolName: "task" }
-      );
+      throw new ToolError("FAILED", { key: "error.agent.child_session_busy", params: { child_session_id: childSessionId } }, { toolName: "task" });
     }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。
@@ -1203,7 +1177,7 @@ async function runChildAgent(args: {
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
       // search：子代理同主代理注入（引擎配置全局共享；描述快照装配期预算，
       // 链解析与凭据读取仍在 run 内）。
-      ...(await buildSearchContext(runtime)),
+      ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {
         agentRegistry: runtime.agentRegistry,
@@ -1251,15 +1225,7 @@ async function runChildAgent(args: {
     };
 
     // 装配期 false：子 agent run 不走压缩编排（P0-2）。
-    const runner = createAgentRunner(
-      assembleAgentRunnerDeps({
-        session,
-        runtime,
-        registry,
-        toolCtx,
-        includeCompactionOrchestrator: false,
-      })
-    );
+    const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: false }));
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
     // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。

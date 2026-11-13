@@ -5,6 +5,10 @@
  * 联网检索能力（写作考据、事实核验、资料收集）。
  *
  * 设计口径（SPEC web-search-curl §6/§7）：
+ * - v3 口径（CR 拍板追认 params-only）：工具入参为 `search(engine?, params)`
+ *   两参（T-S1 锁定）——query / maxResults 不再是 schema 顶层参数，由 params
+ *   承载：搜索词按 q / query / search_query 顺序取第一个非空 string，条数按
+ *   count / max_results / maxResults 三键归一（clamp 1..20）。
  * - 引擎链经 `ctx.search` 闭包解析（engineOrderV2 顺序，只含 enabled ∩
  *   配置完整的引擎；显式 input.engine 时先钉链首、该引擎不可用则沿序
  *   顺位回落；未知 id 由链解析抛错）；链空 → 返回中性配置指引提示

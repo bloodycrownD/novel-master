@@ -159,9 +159,10 @@ export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/b
  * v2 透传改造：响应映射类型（SearchEngineFieldMap / SearchEngineEnvelope）
  * 与模板映射字段一并废除，模板引擎结果以 JSON 文本回流。
  *
- * 只放行双端生产代码真正具名引用的两个 store 类型；其入参 / 载荷类型
- * （SearchConfigDeps、Create/UpdateCustomEngineInput、TestEngine*）主入口
- * 零消费者，需要时直接从源模块导入，不占公开面。
+ * 只放行双端生产代码真正具名引用的两个 store 类型；其入参类型
+ * （SearchConfigDeps、Create/UpdateCustomEngineInput）主入口零消费者，
+ * 需要时直接从源模块导入，不占公开面。v3 拍板：测试搜索按钮退役，
+ * `testEngine` store 方法与 TestEngine* 载荷类型整链随撤。
  */
 export type { SearchResponse, SearchResult, SearchToolOptions, SearchOversizeOutput, ResolvedEngineConfig, SearchEngineTemplate, CustomEngineDef } from "./domain/tool/builtin/search/types.js";
 export { validateSearchEngineTemplate } from "./domain/tool/builtin/search/types.js";

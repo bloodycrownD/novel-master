@@ -1,7 +1,7 @@
 /**
  * 搜索引擎详情页（两级结构第二级）：按引擎类别三分支 + create 模式。
+ * （v3 口径：DDG 无详情页，列表页点击已拦，本屏不设内置只读分支。）
  *
- * - duckduckgo：内置代码引擎，只读说明卡（无凭据可配）；
  * - 预置引擎：API Key（模板需 `{{apiKey}}` 时）/ baseUrl（模板需 `{{baseUrl}}`
  *   时）+ 模板表单。名称与方法为内置元数据、只读；端点 / 参数说明可改；
  * - 自定义实例：凭据 + baseUrl + 模板表单 + 删除；
@@ -20,7 +20,7 @@ import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {validateSearchEngineTemplate, type SearchConfigPublic, type SearchEngineTemplate} from '@novel-master/core';
-import {BuiltinTag} from '@/components/provider/BuiltinTag';
+import type {SettingsMessageKey} from '@novel-master/core/settings';
 import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
@@ -40,7 +40,7 @@ import {toastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
 import {getSearchConfigStore} from '@/services/search-config.store';
-import {ENGINE_HINTS, ENGINE_LABELS, PRESET_TEMPLATES, engineTitle} from './search-engine-meta';
+import {PRESET_TEMPLATES, engineTitle} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SearchEngineDetail'>;
@@ -87,22 +87,8 @@ const METHOD_OPTIONS: ReadonlyArray<ChipOption<'GET' | 'POST'>> = [
 /** 预置覆盖按差异提交时比较的模板字段（v3 起 UI 无请求体字段，defaultBody 不参与判定）。 */
 const TEMPLATE_FIELDS: readonly (keyof SearchEngineTemplate)[] = ['name', 'method', 'url', 'headers', 'paramHint'];
 
-/** 认证方式下拉选项（照智能体配置 FormSelectField 的形态）。 */
-const AUTH_STYLE_OPTIONS: ReadonlyArray<{value: AuthStyle; label: string}> = [
-  {value: 'bearer', label: 'Authorization: Bearer'},
-  {value: 'header', label: settingsTranslator({key: 'settings.search.auth.style.custom_header.mobile'})},
-  {value: 'none', label: settingsTranslator({key: 'settings.search.auth.style.none.mobile'})},
-];
-
 /** 在途写操作（互斥：同刻只允许一个；null = 空闲）。 */
 type WriteOp = 'save' | 'clear' | 'reset' | 'delete';
-
-const WRITE_FAIL_MESSAGES: Record<WriteOp, string> = {
-  save: settingsTranslator({key: 'settings.search.toast.save_failed.mobile'}),
-  clear: settingsTranslator({key: 'settings.search.toast.clear_failed.mobile'}),
-  reset: settingsTranslator({key: 'settings.search.toast.reset_failed.mobile'}),
-  delete: settingsTranslator({key: 'settings.search.toast.delete_failed.mobile'}),
-};
 
 export function SearchEngineDetailScreen() {
   const {tokens} = useTheme();
@@ -369,7 +355,14 @@ export function SearchEngineDetailScreen() {
     try {
       await go(engineId);
     } catch (cause) {
-      showToast(toastMessage(WRITE_FAIL_MESSAGES[op], cause));
+      // 失败前缀按操作查 key（调用期求值，ui-copy/i18n-1：不在模块 import 期冻结译文）。
+      const failKeys: Record<WriteOp, SettingsMessageKey> = {
+        save: 'settings.search.toast.save_failed.mobile',
+        clear: 'settings.search.toast.clear_failed.mobile',
+        reset: 'settings.search.toast.reset_failed.mobile',
+        delete: 'settings.search.toast.delete_failed.mobile',
+      };
+      showToast(toastMessage(settingsTranslator({key: failKeys[op]}), cause));
     } finally {
       setWriteOp(null);
     }
@@ -388,17 +381,7 @@ export function SearchEngineDetailScreen() {
     return <View style={[styles.centered, {backgroundColor: tokens.background}]} />;
   }
 
-  // 内置代码引擎：只读说明卡，无输入框、无保存 footer。
-  if (engineId === 'duckduckgo') {
-    return (
-      <ScreenFormLayout tokens={tokens}>
-        <FormSectionCard tokens={tokens} title={ENGINE_LABELS.duckduckgo} hint={ENGINE_HINTS.duckduckgo} rightAction={<BuiltinTag tokens={tokens} />}>
-          <Text style={[styles.hintText, {color: tokens.textSecondary}]}>{settingsTranslator({key: 'settings.search.detail.builtin_body.mobile'})}</Text>
-        </FormSectionCard>
-      </ScreenFormLayout>
-    );
-  }
-
+  // DDG 无详情页（列表页点击已拦，ui-copy/C-1 删不可达只读分支），直达表单。
   const keyField = (
     <FormField
       label="API Key"
@@ -473,10 +456,12 @@ export function SearchEngineDetailScreen() {
             tokens={tokens}
             value={draft.authStyle}
             onChange={value => patchDraft({authStyle: value as AuthStyle})}
-            options={AUTH_STYLE_OPTIONS.map(option => ({
-              value: option.value,
-              label: option.label,
-            }))}
+            // 认证三态（照智能体配置 FormSelectField 形态）；译文调用期求值（ui-copy/i18n-1）。
+            options={[
+              {value: 'bearer', label: 'Authorization: Bearer'},
+              {value: 'header', label: settingsTranslator({key: 'settings.search.auth.style.custom_header.mobile'})},
+              {value: 'none', label: settingsTranslator({key: 'settings.search.auth.style.none.mobile'})},
+            ]}
             sheetTitle={settingsTranslator({key: 'settings.search.auth.style_picker.mobile'})}
             placeholder={settingsTranslator({key: 'settings.search.auth.style_picker.mobile'})}
             disabled={nameLocked}
@@ -639,7 +624,6 @@ export function SearchEngineDetailScreen() {
 
 const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  hintText: {fontSize: 14, lineHeight: 21},
   // textarea：起始与单行输入框同高（44），内容折行时随行数自动长高。
   urlInput: {minHeight: 44},
   // 参数说明：label 行（右侧 ⛶ 全屏编辑）+ hint + 整行输入框，与智能体配置同构。

@@ -5,9 +5,9 @@
  * 只回配置状态（与 core SearchConfigPublic 同构）。
  * engineId 合法性：引擎 id 已动态化（六预置 / `custom:{nanoid8}` / duckduckgo）。
  * 写路径的校验（模板、明文检测、未知 id、顺序）全部在 core store 内，handler
- * 只做薄转发；`testEngine` 返回 Result 而 store 其余写方法 throw——Result 的
- * 失败 descriptor 在此边界经 coreT 译成中文封进 IpcResult（照 format-ipc-error
- * 先例），renderer 拿到 error.message 即为可展示文案。
+ * 只做薄转发；store 方法 throw 的失败在编排边界经 formatIpcError 封进
+ * IpcResult，renderer 拿到 error.message 即为可展示文案。
+ * （v3 拍板 A4：`testEngine` 已整链退役，desktop 无测试搜索入口。）
  */
 import type {
   IpcResult,
@@ -20,12 +20,9 @@ import type {
   SearchSetEnabledRequest,
   SearchSetEngineBaseUrlRequest,
   SearchSetEngineOrderRequest,
-  SearchTestEngineRequest,
-  SearchTestEngineResultDto,
   SearchUpdateCustomEngineRequest,
   SearchUpdatePresetOverrideRequest,
 } from "../../../../shared/ipc-types.js";
-import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
 
@@ -136,17 +133,6 @@ export async function handleSearchResetPresetOverride(req: SearchResetPresetOver
     const rt = await getDesktopRuntime();
     await rt.searchConfig.resetPresetOverride(req.engineId);
     return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSearchTestEngine(req: SearchTestEngineRequest): Promise<IpcResult<SearchTestEngineResultDto>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const result = await rt.searchConfig.testEngine(req);
-    if (!result.ok) return { ok: false, error: { code: result.error.message.key, message: coreT(result.error.message) } };
-    return { ok: true, data: { preview: result.value.preview, resultCount: result.value.resultCount, truncated: result.value.truncated } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

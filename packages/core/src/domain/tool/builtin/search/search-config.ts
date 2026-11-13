@@ -9,7 +9,8 @@
  * - `engineOrderV2`：全部已知 id 的排序，缺省六预置 + DDG 出厂序（DDG 队尾）；
  * - `customEngines`：自定义实例定义（模板只含占位符，明文 key / baseUrl 另存）；
  * - `presetOverrides`：预置模板覆盖副本（恢复默认 = 删除该键下条目）；
- * - `engineBaseUrls`：模板引用 `{{baseUrl}}` 的实例地址（当前仅 searxng 出厂用）。
+ * - `engineBaseUrls`：自定义实例 `{{baseUrl}}` 模板的实例地址槽位（v3 起出厂
+ *   模板零 `{{baseUrl}}` 引用——searxng 已改完整端点，未配置判定见 isUnconfiguredSearxng）。
  *
  * 动态已知全集 = 六预置 id ∪ {duckduckgo} ∪ customEngines 现存 id：顺序归一、
  * 开关归一、显式 engine 已知性判定、模板查找全部以它为准。读路径容错归一
@@ -24,13 +25,9 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
-import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { createLogger } from "@/infra/log/logger.js";
-import { searchWithDuckduckgo } from "./engines/duckduckgo.js";
-import { runTemplateEngine } from "./engines/template-engine.js";
 import { findPlaintextSecrets } from "./curl-import.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "./preset-templates.js";
-import { normalizeMaxResults, redactSecret, validateSearchEngineTemplate, type CustomEngineDef, type ResolvedEngineConfig, type SearchEngineTemplate } from "./types.js";
+import { validateSearchEngineTemplate, type CustomEngineDef, type ResolvedEngineConfig, type SearchEngineTemplate } from "./types.js";
 
 /**
  * KKV 模块名（照 nm-cloud-sync 命名先例）。
@@ -38,9 +35,6 @@ import { normalizeMaxResults, redactSecret, validateSearchEngineTemplate, type C
  * nm-style: keep-public — index.ts 再导出（三端共享的 KKV 模块名契约，测试直引）。
  */
 export const SEARCH_KKV_MODULE = "nm-search";
-
-/** 搜索配置域 logger（装配期快照降级与 testEngine 失败各记一条，SPEC §4）。 */
-const log = createLogger("tool.search");
 
 /** KKV 键：启用的引擎实例 id。 */
 export const KEY_ENABLED_ENGINES = "enabledEngines";
@@ -54,7 +48,7 @@ export const KEY_CUSTOM_ENGINES = "customEngines";
 /** KKV 键：预置模板覆盖副本（按预置 id 索引）。 */
 export const KEY_PRESET_OVERRIDES = "presetOverrides";
 
-/** KKV 键：引擎实例地址（按引擎 id 索引；当前仅 searxng 出厂模板引用）。 */
+/** KKV 键：引擎实例地址（按引擎 id 索引；自定义实例 {{baseUrl}} 模板的实例地址槽位）。 */
 export const KEY_ENGINE_BASE_URLS = "engineBaseUrls";
 
 /** DDG 内置代码引擎 id。 */
@@ -128,69 +122,6 @@ export interface UpdateCustomEngineInput {
   readonly template?: SearchEngineTemplate;
   readonly apiKey?: string;
   readonly baseUrl?: string;
-}
-
-/** 草稿直测入参（不落库；占位符取值优先级 draft > KKV 现存值 > 空）。 */
-export interface TestEngineDraft {
-  readonly template: SearchEngineTemplate;
-  readonly apiKey?: string;
-  readonly baseUrl?: string;
-}
-
-/** 测试搜索入参：draft 优先于 engineId；DDG 建议仅用 engineId 模式（draft + engineId=duckduckgo 组合会走模板分支——draft 模板优先生效，不路由 DDG 适配器）。 */
-export interface TestEngineInput {
-  readonly engineId?: string;
-  readonly draft?: TestEngineDraft;
-  readonly query: string;
-  readonly maxResults?: number;
-}
-
-/**
- * 测试搜索成功载荷（v2 §5）：提取结果数组前 2 条的 JSON 预览 + 截断说明，
- * 配置页测试按钮展示（不再渲染 title/url/snippet 人类列表）。
- */
-export interface TestEngineSuccess {
-  /** 预览文本：提取数组前 2 条的 JSON；引擎侧 50KB 截断导致数组文本不可解析时，为该文本的截断摘录。 */
-  readonly preview: string;
-  /** 提取到的结果数组总条数（数组文本不可解析时缺省）。 */
-  readonly resultCount?: number;
-  /** 预览是否截断（数组超过 2 条 / 预览文本超长度预算）。 */
-  readonly truncated: boolean;
-}
-
-/** 预览文本长度预算（UI 测试按钮展示用；单条结果可能很大，不设上限会撑爆弹窗）。 */
-const SEARCH_TEST_PREVIEW_MAX_LENGTH = 2000;
-
-/**
- * 结果数组预览（testEngine 成功载荷统一构造）：输入为结果数组的 JSON 文本，
- * 解析出前 2 条重新序列化为预览；引擎侧 50KB 截断标注使文本不可解析时，退化为
- * 文本本身的截断摘录（truncated=true、resultCount 缺省）。
- */
-function buildArrayPreview(arrayText: string): TestEngineSuccess {
-  let items: readonly unknown[] | undefined;
-  try {
-    const parsed: unknown = JSON.parse(arrayText);
-    if (Array.isArray(parsed)) items = parsed;
-  } catch {
-    // 引擎侧截断标注破坏了 JSON 完整性：走摘录退化分支。
-  }
-  if (items == null)
-    return {
-      preview: arrayText.slice(0, SEARCH_TEST_PREVIEW_MAX_LENGTH),
-      truncated: true,
-    };
-  const preview = JSON.stringify(items.slice(0, 2));
-  const clipped = preview.length > SEARCH_TEST_PREVIEW_MAX_LENGTH;
-  return {
-    preview: preview.slice(0, SEARCH_TEST_PREVIEW_MAX_LENGTH),
-    resultCount: items.length,
-    truncated: items.length > 2 || clipped,
-  };
-}
-
-/** 测试搜索失败载荷（descriptor 由宿主 translator 译后展示）。 */
-export interface TestEngineFailure {
-  readonly message: CoreMessageDescriptor;
 }
 
 /** 一次读取归一后的存储状态（读模型与链解析共用，避免两份归一逻辑）。 */
@@ -511,7 +442,9 @@ function engineNotFound(engineId: string): AppError<"TOOL_SEARCH_INVALID_ARGUMEN
 /**
  * 搜索配置存储（desktop / mobile runtime 用 core 导出的本工厂包
  * `kkv + secretStore` 装配；CLI 无 kkv 不装配）。写方法即错误边界：
- * 校验失败 throw `AppError` + i18n key；`testEngine` 按 spec 返回 Result。
+ * 校验失败 throw `AppError` + i18n key（v3 拍板：测试搜索按钮退役，
+ * `testEngine` 整链随撤，配置正确性由「保存即校验」+ 用户改 URL 后
+ * canRun / 链解析同源判定兜底）。
  */
 export interface SearchConfigStore {
   /** 读取对外配置（不含 key 明文）。 */
@@ -538,19 +471,11 @@ export interface SearchConfigStore {
   updatePresetOverride(engineId: string, patch: Partial<SearchEngineTemplate>): Promise<void>;
   /** 恢复预置模板默认（删除覆盖条目）。 */
   resetPresetOverride(engineId: string): Promise<void>;
-  /** 草稿直测 / 已存实例测试（KKV / SKSP 零写入；失败返回脱敏 descriptor）。 */
-  testEngine(input: TestEngineInput): Promise<Result<TestEngineSuccess, TestEngineFailure>>;
 }
 
 /** 构造搜索配置存储：绑定 kkv + secretStore，读归一与链解析复用模块纯函数。 */
 export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigStore {
   const { kkv, secretStore } = deps;
-  const testFailure = (reason: string | CoreMessageDescriptor): Result<TestEngineSuccess, TestEngineFailure> => {
-    log.debug("搜索测试失败", { reason });
-    return Result.err({
-      message: { key: "error.tool.search_test_failed", params: { reason } },
-    });
-  };
   const writeKkv = (key: string, value: object): Promise<void> => kkv.set(SEARCH_KKV_MODULE, key, JSON.stringify(value));
   const writeBaseUrls = async (baseUrls: Readonly<Record<string, string>>): Promise<void> => {
     if (Object.keys(baseUrls).length === 0) await kkvDelete(kkv, KEY_ENGINE_BASE_URLS);
@@ -709,67 +634,6 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       delete overrides[engineId];
       if (Object.keys(overrides).length === 0) await kkvDelete(kkv, KEY_PRESET_OVERRIDES);
       else await writeKkv(KEY_PRESET_OVERRIDES, overrides);
-    },
-    async testEngine(input) {
-      if (input.query.trim().length === 0) return testFailure("query is required");
-      const state = await readEngineState(kkv);
-      const { draft } = input;
-      let engineId: string;
-      let template: SearchEngineTemplate | undefined;
-      if (draft != null) {
-        const validated = validateSearchEngineTemplate(draft.template);
-        if (!validated.ok) return testFailure(validated.error.messageKey == null ? validated.error.message : { key: validated.error.messageKey, params: validated.error.messageParams });
-        template = validated.value;
-        engineId = input.engineId ?? `${CUSTOM_ENGINE_PREFIX}draft`;
-      } else if (input.engineId != null) {
-        engineId = input.engineId;
-        if (engineId !== DUCKDUCKGO_ENGINE_ID) {
-          template = effectiveTemplate(state, engineId);
-          if (template == null) return testFailure(`unknown search engine: ${engineId}`);
-        }
-      } else {
-        return testFailure("engineId or draft is required");
-      }
-
-      const options = { maxResults: normalizeMaxResults(input.maxResults) };
-      if (template == null) {
-        try {
-          const response = await searchWithDuckduckgo({ engine: engineId }, input.query, options, globalThis.fetch);
-          return Result.ok(buildArrayPreview(JSON.stringify(response.results)));
-        } catch (error) {
-          return testFailure(redactSecret(error instanceof Error ? error.message : String(error), undefined).slice(0, 300));
-        }
-      }
-
-      const draftKey = draft?.apiKey?.trim();
-      let apiKey: string | undefined;
-      if (draftKey != null && draftKey.length > 0) apiKey = draftKey;
-      else if (templateReferences(template, "apiKey")) apiKey = (await secretStore.get(searchApiKeyRef(engineId))) ?? undefined;
-      const draftBaseUrl = draft?.baseUrl?.trim();
-      let baseUrl: string | undefined;
-      if (draftBaseUrl != null && draftBaseUrl.length > 0) {
-        const normalized = normalizeEngineBaseUrl(draftBaseUrl);
-        if (normalized == null) return testFailure("invalid base URL: only http/https is supported");
-        baseUrl = normalized;
-      } else if (templateReferences(template, "baseUrl")) {
-        const stored = state.baseUrls[engineId];
-        const normalized = stored == null ? null : normalizeEngineBaseUrl(stored);
-        if (normalized != null) baseUrl = normalized;
-      }
-      try {
-        const resolved: ResolvedEngineConfig = {
-          engine: engineId,
-          ...(apiKey == null ? {} : { apiKey }),
-          ...(baseUrl == null ? {} : { baseUrl }),
-          template,
-        };
-        const response = await runTemplateEngine(template, resolved, input.query, options, {}, globalThis.fetch);
-        // 成功路径 results 恒为提取数组的 JSON 文本（无对象数组在执行器内已按降级失败抛出）。
-        const arrayText = typeof response.results === "string" ? response.results : JSON.stringify(response.results);
-        return Result.ok(buildArrayPreview(arrayText));
-      } catch (error) {
-        return testFailure(redactSecret(error instanceof Error ? error.message : String(error), apiKey).slice(0, 300));
-      }
     },
   };
 }

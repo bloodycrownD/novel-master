@@ -200,7 +200,6 @@ export const IPC_CHANNELS = {
   SEARCH_DELETE_CUSTOM_ENGINE: "nm:search/deleteCustomEngine",
   SEARCH_UPDATE_PRESET_OVERRIDE: "nm:search/updatePresetOverride",
   SEARCH_RESET_PRESET_OVERRIDE: "nm:search/resetPresetOverride",
-  SEARCH_TEST_ENGINE: "nm:search/testEngine",
 
   SHELL_MENU_POPUP: "nm:shell/menuPopup",
   SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
@@ -1776,28 +1775,6 @@ export type SearchSetEngineOrderRequest = {
 export type SearchSetEngineBaseUrlRequest = {
   readonly engineId: string;
   readonly baseUrl: string;
-};
-
-/** 草稿直测的表单草稿（不落库；apiKey/baseUrl 缺省时回退已存值；仅本文件内组合用，不对外导出）。 */
-type SearchEngineDraftDto = {
-  readonly template: SearchEngineTemplate;
-  readonly apiKey?: string;
-  readonly baseUrl?: string;
-};
-
-/** 测试搜索入参（draft 优先于 engineId；DDG 仅支持 engineId 模式）。 */
-export type SearchTestEngineRequest = {
-  readonly engineId?: string;
-  readonly draft?: SearchEngineDraftDto;
-  readonly query: string;
-  readonly maxResults?: number;
-};
-
-/** 测试搜索成功载荷（提取数组前 2 条的 JSON 预览 + 截断说明；SPEC v2 §5）。 */
-export type SearchTestEngineResultDto = {
-  readonly preview: string;
-  readonly resultCount?: number;
-  readonly truncated: boolean;
 };
 
 /** 新建自定义引擎（id 由 renderer 生成 `custom:{8 位}`；key/baseUrl 拆分落库）。 */

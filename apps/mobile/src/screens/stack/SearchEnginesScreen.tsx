@@ -5,8 +5,8 @@
  *
  * 读写直接经 `getSearchConfigStore(runtime)`（core `createSearchConfigStore`
  * 装配）：对外状态只读配置读模型，不回显 key 明文。列表页不留长说明文案，
- * 开关语义 / 串行降级 / 模板说明 / 测试消耗配额 / 密钥安全收进标题栏
- * 「?」帮助弹窗。
+ * 开关语义 / 串行降级 / 模板说明 / 密钥安全收进标题栏「?」帮助弹窗（四段；
+ * v3 起「测试消耗配额」段随测试搜索按钮退役删除）。
  */
 import React, {useCallback, useRef, useState} from 'react';
 import {ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Switch, Text, View} from 'react-native';
@@ -31,7 +31,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 import {settingsTranslator} from '@/i18n/settings';
 import {getSearchConfigStore} from '@/services/search-config.store';
-import {CUSTOM_ENGINE_HINT, ENGINE_HINTS, engineTitle} from './search-engine-meta';
+import {engineHint, engineTitle} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SearchEngineEntry = SearchConfigPublic['engines'][number];
@@ -97,24 +97,6 @@ export function SearchEnginesScreen() {
     fallbackValue: EMPTY_ROWS,
   });
 
-  // nm-style: keep-local — 行开关乐观翻转 + 失败回滚同一行数据，togglingRef
-  // 互斥在途；内联进 renderItem 会拆散回滚不变量
-  const setEnabled = async (engineId: string, on: boolean) => {
-    if (togglingRef.current != null) {
-      return;
-    }
-    togglingRef.current = engineId;
-    setRows(current => current.map(row => (row.id === engineId ? {...row, enabled: on} : row)));
-    try {
-      await searchStore.setEnabled(engineId, on);
-    } catch (cause) {
-      setRows(current => current.map(row => (row.id === engineId ? {...row, enabled: !on} : row)));
-      showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
-    } finally {
-      togglingRef.current = undefined;
-    }
-  };
-
   /** 上移（delta=-1）/ 下移（delta=+1）：交换相邻位后整单写库并重读。 */
   const moveEngine = async (engineId: string, delta: -1 | 1) => {
     if (moving) {
@@ -168,7 +150,7 @@ export function SearchEnginesScreen() {
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
           renderItem={({item}) => {
-            const hint = ENGINE_HINTS[item.id] ?? CUSTOM_ENGINE_HINT;
+            const hint = engineHint(item.id);
             // 开关本身已表达启停态，副标题只说「还缺什么才能用」。
             const issues = [
               ...(item.needsKey && !item.hasKey ? [settingsTranslator({key: 'settings.search.list.issue.key_missing.mobile'})] : []),
@@ -199,8 +181,22 @@ export function SearchEnginesScreen() {
                     ) : null}
                     <Switch
                       value={item.enabled}
-                      onValueChange={next => {
-                        setEnabled(item.id, next).catch(() => undefined);
+                      onValueChange={async next => {
+                        // 行开关（原 setEnabled 内联，ui-copy/nm-style-1）：乐观翻转 +
+                        // 失败回滚同一行；togglingRef 互斥保证同刻只有一行写库在途。
+                        if (togglingRef.current != null) {
+                          return;
+                        }
+                        togglingRef.current = item.id;
+                        setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: next} : row)));
+                        try {
+                          await searchStore.setEnabled(item.id, next);
+                        } catch (cause) {
+                          setRows(current => current.map(row => (row.id === item.id ? {...row, enabled: !next} : row)));
+                          showToast(toastMessage(settingsTranslator({key: 'settings.search.toast.toggle_failed.mobile'}), cause));
+                        } finally {
+                          togglingRef.current = undefined;
+                        }
                       }}
                       disabled={deleting}
                       trackColor={{false: tokens.border, true: tokens.primary}}

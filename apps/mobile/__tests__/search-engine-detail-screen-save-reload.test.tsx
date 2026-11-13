@@ -1,5 +1,5 @@
 /**
- * SearchEngineDetailScreen 保存/测试语义（web-search-curl T-U3/T-U4，动态清单版）：
+ * SearchEngineDetailScreen 保存语义（web-search-curl T-U3/T-U4，动态清单版）：
  * 详情页经 `getSearchConfigStore(runtime)` 直接消费 core store 方法，本套件锁：
  *
  * - 标题 override 用配置读模型里的引擎名（FIX-23：读模型 name 优先）；
@@ -9,16 +9,16 @@
  * - 需 key 的预置引擎留空保存：拦截提示，不触碰密钥库、不回读；
  * - create 保存发 createCustomEngine（key / baseUrl 按草稿拆分传参，FIX-25 预填
  *   基线 + 差异提交语义）；
- * - 测试请求分流（FIX-1 拍板 1 回归锁）：预置有覆盖且表单未改（key/baseUrl 草稿
- *   空）→ 只传 engineId 不带 draft（core 合并覆盖 + SKSP 现读）；表单改动 /
- *   key 草稿非空 / 无覆盖 → 带 draft 草稿直测。
+ * - 有覆盖预置的「恢复默认模板」与已配 key 的「清除密钥」写路径（含失败 toast
+ *   前缀，ui-copy/G-1）。
  *
  * ui/P2-8 / P2-10 回归锁（CR 第 2 轮）：预置零改动保存不发任何写调用且 toast
- * 「无改动」、baseUrl 同值不发 setEngineBaseUrl；测试失败文案错误红（FIX-27）。
- * （create 模式 curl 导入已随本迭代从 mobile 删除，本套件不再覆盖该路径。）
+ * 「无改动」、baseUrl 同值不发 setEngineBaseUrl。
+ * （v3 口径：mobile 测试搜索按钮已退役——testEngine 不在本套件覆盖面；create
+ * 模式 curl 导入亦已随本迭代删除，本套件不再覆盖该路径。）
  *
  * 照 search-engines-screen-reorder.test.tsx 的 TestRenderer 直测风格：输入框 /
- * 保存 / 测试按钮 / 状态标签 mock 成带标记的可交互节点，树文本与调用参数断言；
+ * 保存按钮 / 状态标签 mock 成带标记的可交互节点，树文本与调用参数断言；
  * store mock 扩到 core `SearchConfigStore` 全方法。
  */
 import React from 'react';
@@ -182,9 +182,9 @@ const mockSaveEngineKey = jest.fn();
 const mockClearEngineKey = jest.fn();
 const mockCreateCustomEngine = jest.fn();
 const mockSetEngineBaseUrl = jest.fn();
-const mockTestEngine = jest.fn();
 const mockUpdateCustomEngine = jest.fn();
 const mockUpdatePresetOverride = jest.fn();
+const mockResetPresetOverride = jest.fn();
 
 const mockRuntime = {
   searchConfig: {
@@ -198,8 +198,7 @@ const mockRuntime = {
     updateCustomEngine: (...args: unknown[]) => mockUpdateCustomEngine(...args),
     deleteCustomEngine: jest.fn(),
     updatePresetOverride: (...args: unknown[]) => mockUpdatePresetOverride(...args),
-    resetPresetOverride: jest.fn(),
-    testEngine: (...args: unknown[]) => mockTestEngine(...args),
+    resetPresetOverride: (...args: unknown[]) => mockResetPresetOverride(...args),
   },
 };
 
@@ -332,10 +331,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     mockSetEngineBaseUrl.mockReset().mockResolvedValue(undefined);
     mockUpdateCustomEngine.mockReset().mockResolvedValue(undefined);
     mockUpdatePresetOverride.mockReset().mockResolvedValue(undefined);
-    mockTestEngine.mockReset().mockResolvedValue({
-      ok: true,
-      value: {preview: '[{"title":"T"}]', resultCount: 2, truncated: false},
-    });
+    mockResetPresetOverride.mockReset().mockResolvedValue(undefined);
     mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
   });
 
@@ -448,6 +444,125 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     expect(mockUpdatePresetOverride).not.toHaveBeenCalled();
     expect(mockSaveEngineKey).not.toHaveBeenCalled();
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+  });
+
+  /** 按按钮文案定位 SecondaryButton mock（实例 props 即屏幕传入的 label，见顶部 mock 说明）。 */
+  function buttonByLabel(root: TestRenderer.ReactTestInstance, label: string) {
+    const nodes = root.findAllByType(SecondaryButton).filter(node => node.props.label === label);
+    expect(nodes.length).toBe(1);
+    return nodes[0]!;
+  }
+
+  describe('预置写路径：恢复默认模板 / 清除密钥（ui-copy/G-1）', () => {
+    it('有覆盖预置点恢复默认：发 resetPresetOverride、toast 完成并静默回读', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({
+          engines: [
+            {
+              id: 'bocha',
+              name: '博查搜索',
+              enabled: true,
+              needsKey: true,
+              hasKey: false,
+              needsBaseUrl: false,
+              isCustom: false,
+              paramHint: '博查参数',
+            },
+          ],
+          presetOverrides: {bocha: true},
+        }),
+      );
+      const {renderer} = await renderScreen();
+      const readsBefore = mockReadConfig.mock.calls.length;
+
+      await act(async () => {
+        buttonByLabel(renderer.root, '恢复默认模板').props.onPress();
+        await flush();
+      });
+
+      expect(mockResetPresetOverride).toHaveBeenCalledTimes(1);
+      expect(mockResetPresetOverride).toHaveBeenCalledWith('bocha');
+      expect(mockShowToast).toHaveBeenCalledWith('已恢复默认模板');
+      // 回读让覆盖区按钮随 presetOverrides 复位消失（写成功后的静默 reload）。
+      expect(mockReadConfig.mock.calls.length).toBeGreaterThan(readsBefore);
+    });
+
+    it('恢复默认失败：toast 失败前缀 + 原因，不回读', async () => {
+      mockReadConfig.mockImplementation(async () => makeConfig({presetOverrides: {bocha: true}}));
+      mockResetPresetOverride.mockRejectedValueOnce(new Error('盘炸了'));
+      const {renderer} = await renderScreen();
+      const readsBefore = mockReadConfig.mock.calls.length;
+
+      await act(async () => {
+        buttonByLabel(renderer.root, '恢复默认模板').props.onPress();
+        await flush();
+      });
+
+      expect(mockShowToast).toHaveBeenCalledWith('恢复默认失败：盘炸了');
+      // 失败路径无回读（runWrite catch 只 toast）。
+      expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+    });
+
+    it('已配 key 点清除密钥：发 clearEngineKey、toast 带引擎名并静默回读', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({
+          engines: [
+            {
+              id: 'bocha',
+              name: '博查搜索',
+              enabled: true,
+              needsKey: true,
+              hasKey: true,
+              needsBaseUrl: false,
+              isCustom: false,
+              paramHint: '博查参数',
+            },
+          ],
+        }),
+      );
+      const {renderer} = await renderScreen();
+      const readsBefore = mockReadConfig.mock.calls.length;
+
+      await act(async () => {
+        buttonByLabel(renderer.root, '清除已存密钥').props.onPress();
+        await flush();
+      });
+
+      expect(mockClearEngineKey).toHaveBeenCalledTimes(1);
+      expect(mockClearEngineKey).toHaveBeenCalledWith('bocha');
+      expect(mockShowToast).toHaveBeenCalledWith('已清除 博查搜索 API Key');
+      expect(mockReadConfig.mock.calls.length).toBeGreaterThan(readsBefore);
+    });
+
+    it('清除密钥失败：toast 失败前缀 + 原因，不回读', async () => {
+      mockReadConfig.mockImplementation(async () =>
+        makeConfig({
+          engines: [
+            {
+              id: 'bocha',
+              name: '博查搜索',
+              enabled: true,
+              needsKey: true,
+              hasKey: true,
+              needsBaseUrl: false,
+              isCustom: false,
+              paramHint: '博查参数',
+            },
+          ],
+        }),
+      );
+      mockClearEngineKey.mockRejectedValueOnce(new Error('盘炸了'));
+      const {renderer} = await renderScreen();
+      const readsBefore = mockReadConfig.mock.calls.length;
+
+      await act(async () => {
+        buttonByLabel(renderer.root, '清除已存密钥').props.onPress();
+        await flush();
+      });
+
+      expect(mockShowToast).toHaveBeenCalledWith('清除失败：盘炸了');
+      expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
+    });
   });
 
   describe('create 模式（FIX-25 预填 + 差异拆分提交）', () => {

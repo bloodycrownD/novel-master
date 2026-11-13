@@ -49,7 +49,6 @@ import {
   handleSearchSetEnabled,
   handleSearchSetEngineBaseUrl,
   handleSearchSetEngineOrder,
-  handleSearchTestEngine,
   handleSearchUpdateCustomEngine,
   handleSearchUpdatePresetOverride,
 } from "./handlers/search.js";
@@ -349,7 +348,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SEARCH_DELETE_CUSTOM_ENGINE, handleSearchDeleteCustomEngine);
   bindReq(IPC_CHANNELS.SEARCH_UPDATE_PRESET_OVERRIDE, handleSearchUpdatePresetOverride);
   bindReq(IPC_CHANNELS.SEARCH_RESET_PRESET_OVERRIDE, handleSearchResetPresetOverride);
-  bindReq(IPC_CHANNELS.SEARCH_TEST_ENGINE, handleSearchTestEngine);
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, handleShellSetTitleBarTheme);

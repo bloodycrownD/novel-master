@@ -3,7 +3,7 @@
  * `createSearchConfigStore` 工厂在 create-mobile-runtime 装配好的存储
  * （闭包注入 kkv + secretStore），UI 直接调 store 方法
  * （`readConfig` / `setEnabled` / `setEngineOrder` / `createCustomEngine` /
- * `testEngine` 等），不再在本模块造转手便捷函数。
+ * `updateCustomEngine` / `resetPresetOverride` 等），不再在本模块造转手便捷函数。
  *
  * 凭证安全口径与 core 侧一致：API key 明文只经 SKSP（ref
  * `search/{engineId}/apiKey`）写入，本模块与 UI 全程只消费读模型里的
