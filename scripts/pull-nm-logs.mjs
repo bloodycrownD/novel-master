@@ -25,8 +25,10 @@ const PACKAGE = "com.novelmaster";
 const LOG_DIR = "files/logs";
 const OUT_DIR = join(process.cwd(), "tmp", "nm-logs");
 
+let activeSerial = null;
 function adb(args) {
-  return execFileSync("adb", args, {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+  // 多设备并存（真机 + 半启动的模拟器）时必须显式 -s，否则 adb 直接报错。
+  return execFileSync("adb", activeSerial == null ? args : ["-s", activeSerial, ...args], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
 }
 
 function fail(message) {
@@ -48,6 +50,9 @@ try {
   fail(`adb 不可用：${error instanceof Error ? error.message : String(error)}`);
 }
 if (devices.length === 0) fail("没有已连接的设备（adb devices 为空）");
+// 多台在线时取第一台；需要指定时设环境变量 ANDROID_SERIAL。
+activeSerial = process.env.ANDROID_SERIAL ?? devices[0];
+if (devices.length > 1) console.error(`（检测到 ${devices.length} 台在线设备：${devices.join(", ")}；使用 ${activeSerial}，可用 ANDROID_SERIAL 覆盖）`);
 
 let listing;
 try {
