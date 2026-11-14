@@ -2,47 +2,49 @@
 // 用途：metro inspector proxy 强制校验 Origin（localhost/127.0.0.1 白名单），
 // Node 内置 WebSocket 无法设置 Origin header，故手搓。
 // 被 cdp-bg-timer-probe.mjs / cdp-probe-clear.mjs 复用。
-import http from 'node:http';
-import {randomBytes, createHash} from 'node:crypto';
+import http from "node:http";
+import { randomBytes, createHash } from "node:crypto";
 
-const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-export function wsConnect(urlStr, {origin} = {}) {
+export function wsConnect(urlStr, { origin } = {}) {
   const url = new URL(urlStr);
-  const key = randomBytes(16).toString('base64');
+  const key = randomBytes(16).toString("base64");
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: url.hostname,
       port: url.port || 80,
       path: url.pathname + url.search,
       headers: {
-        Connection: 'Upgrade',
-        Upgrade: 'websocket',
-        'Sec-WebSocket-Key': key,
-        'Sec-WebSocket-Version': '13',
-        ...(origin ? {Origin: origin} : {}),
+        Connection: "Upgrade",
+        Upgrade: "websocket",
+        "Sec-WebSocket-Key": key,
+        "Sec-WebSocket-Version": "13",
+        ...(origin ? { Origin: origin } : {}),
       },
     });
-    req.on('upgrade', (res, socket) => {
-      const expect = createHash('sha1').update(key + GUID).digest('base64');
-      if (res.headers['sec-websocket-accept'] !== expect) {
-        reject(new Error('bad Sec-WebSocket-Accept'));
+    req.on("upgrade", (res, socket) => {
+      const expect = createHash("sha1")
+        .update(key + GUID)
+        .digest("base64");
+      if (res.headers["sec-websocket-accept"] !== expect) {
+        reject(new Error("bad Sec-WebSocket-Accept"));
         return;
       }
       resolve(makeClient(socket));
     });
-    req.on('response', res => reject(new Error('handshake failed: HTTP ' + res.statusCode)));
-    req.on('error', reject);
+    req.on("response", (res) => reject(new Error("handshake failed: HTTP " + res.statusCode)));
+    req.on("error", reject);
     req.end();
   });
 }
 
 function makeClient(socket) {
-  const listeners = {message: [], close: []};
+  const listeners = { message: [], close: [] };
   let buf = Buffer.alloc(0);
   let frags = [];
 
-  socket.on('data', chunk => {
+  socket.on("data", (chunk) => {
     buf = Buffer.concat([buf, chunk]);
     for (;;) {
       if (buf.length < 2) return;
@@ -73,7 +75,7 @@ function makeClient(socket) {
         continue;
       }
       if (opcode === 0x8) {
-        listeners.close.forEach(f => f());
+        listeners.close.forEach((f) => f());
         socket.end();
         return;
       }
@@ -81,19 +83,19 @@ function makeClient(socket) {
       if (opcode === 0x1 || opcode === 0x0) {
         frags.push(payload);
         if (fin) {
-          const text = Buffer.concat(frags).toString('utf8');
+          const text = Buffer.concat(frags).toString("utf8");
           frags = [];
-          listeners.message.forEach(f => f(text));
+          listeners.message.forEach((f) => f(text));
         }
       }
     }
   });
-  socket.on('close', () => listeners.close.forEach(f => f()));
-  socket.on('error', () => {});
+  socket.on("close", () => listeners.close.forEach((f) => f()));
+  socket.on("error", () => {});
 
   return {
     send(text) {
-      sendFrame(socket, 0x1, Buffer.from(text, 'utf8'));
+      sendFrame(socket, 0x1, Buffer.from(text, "utf8"));
     },
     on(ev, fn) {
       listeners[ev].push(fn);

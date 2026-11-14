@@ -48,7 +48,9 @@ for (const r of revs) {
   byEntry.get(r.eid).push(r);
 }
 
-let base = 0, chainFree = 0, heads = new Set();
+let base = 0,
+  chainFree = 0,
+  heads = new Set();
 const chains = [];
 for (const [eid, list] of byEntry) {
   const uniq = [...new Set(list.map((r) => r.h))];
@@ -66,17 +68,26 @@ const headBin = [...heads].reduce((s, h) => s + binLen(h), 0);
 W(" head 版本数 =", heads.size, " head 独立压合计 =", MB(headBin), "MB");
 
 for (const MAXD of [1, 2, 4, 8, 16, 1e9]) {
-  let total = 0, maxDepth = 0, sumDepth = 0, nDict = 0, nFull = 0;
+  let total = 0,
+    maxDepth = 0,
+    sumDepth = 0,
+    nDict = 0,
+    nFull = 0;
   for (const c of chains) {
-    let prevPlain = null, prevDepth = 0;
+    let prevPlain = null,
+      prevDepth = 0;
     for (const h of c.uniq) {
       const p = P(h);
       const isHead = heads.has(h);
       // 策略：head 恒独立；其余在深度未超限时用前一版本做字典
       if (isHead || prevPlain === null || prevDepth + 1 > MAXD) {
-        total += Z(p); nFull++; prevDepth = 0;
+        total += Z(p);
+        nFull++;
+        prevDepth = 0;
       } else {
-        total += ZD(p, prevPlain); nDict++; prevDepth = prevDepth + 1;
+        total += ZD(p, prevPlain);
+        nDict++;
+        prevDepth = prevDepth + 1;
       }
       maxDepth = Math.max(maxDepth, prevDepth);
       sumDepth += prevDepth;
@@ -84,34 +95,55 @@ for (const MAXD of [1, 2, 4, 8, 16, 1e9]) {
     }
   }
   W(`\n== 字典链（head 独立，MAXDEPTH=${MAXD === 1e9 ? "∞" : MAXD}）==`);
-  W(" 总存储 =", MB(total), "MB  省", MB(base - total), "MB /", (((base - total) / base) * 100).toFixed(1) + "%",
-    " 字典行 =", nDict, " 独立行 =", nFull);
+  W(" 总存储 =", MB(total), "MB  省", MB(base - total), "MB /", (((base - total) / base) * 100).toFixed(1) + "%", " 字典行 =", nDict, " 独立行 =", nFull);
   W(" 最深链 =", maxDepth, " 平均深度 =", (sumDepth / (nDict + nFull)).toFixed(2));
 }
 
 // pack 参照（<=8 版本 / <=1MB 一组，head 独立）
-const MAXV = 8, MAXP = 1 << 20;
-let pack = 0, groups = 0, maxStream = 0;
+const MAXV = 8,
+  MAXP = 1 << 20;
+let pack = 0,
+  groups = 0,
+  maxStream = 0;
 for (const c of chains) {
   const headHash = [...c.uniq].find((h) => heads.has(h));
-  let buf = [], bp = 0;
+  let buf = [],
+    bp = 0;
   const flush = () => {
     if (!buf.length) return;
     const s = Z(buf.join(""));
-    pack += s; groups++; maxStream = Math.max(maxStream, s);
-    buf = []; bp = 0;
+    pack += s;
+    groups++;
+    maxStream = Math.max(maxStream, s);
+    buf = [];
+    bp = 0;
   };
   for (const h of c.uniq) {
     if (h === headHash) continue;
-    const p = P(h), sz = RAW(p);
+    const p = P(h),
+      sz = RAW(p);
     if (buf.length && (buf.length >= MAXV || bp + sz > MAXP)) flush();
-    buf.push(p); bp += sz;
+    buf.push(p);
+    bp += sz;
   }
   flush();
 }
 W("\n== pack 参照（head 独立，<=8 版本/<=1MB 一组）==");
-W(" pack 流 =", MB(pack), "MB + head", MB(headBin), "MB =", MB(pack + headBin), "MB  省", MB(base - pack), "MB /",
-  (((base - pack) / base) * 100).toFixed(1) + "%  组数 =", groups, " 单组最大流 =", (maxStream / 1024).toFixed(0) + "KB");
+W(
+  " pack 流 =",
+  MB(pack),
+  "MB + head",
+  MB(headBin),
+  "MB =",
+  MB(pack + headBin),
+  "MB  省",
+  MB(base - pack),
+  "MB /",
+  (((base - pack) / base) * 100).toFixed(1) + "%  组数 =",
+  groups,
+  " 单组最大流 =",
+  (maxStream / 1024).toFixed(0) + "KB"
+);
 
 fs.writeFileSync("tmp/dict-vs-pack.out.txt", out.join("\n"), "utf8");
 console.log("written tmp/dict-vs-pack.out.txt");

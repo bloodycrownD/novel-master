@@ -49,12 +49,8 @@ import path from "node:path";
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 
-const SCAN_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".yml", ".yaml", ".kt", ".java", ".gradle",
-]);
-const SKIP_DIRECTORIES = new Set([
-  "node_modules", "dist", "webview-dist", "coverage", ".git", "build",
-]);
+const SCAN_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".yml", ".yaml", ".kt", ".java", ".gradle"]);
+const SKIP_DIRECTORIES = new Set(["node_modules", "dist", "webview-dist", "coverage", ".git", "build"]);
 /** 显式排除面（文件级，路径前缀，仓根相对、正斜杠）：见文件头「显式排除面」声明。 */
 const SKIP_PATH_PREFIXES = ["docs/Iterations/", "apps/mobile/android/app/build.gradle"];
 const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -105,9 +101,7 @@ if (baselineMode) {
 }
 
 printFindings();
-process.exit(
-  findings.bom.length + findings.fffd.length + findings.badUtf8.length > 0 ? 1 : 0,
-);
+process.exit(findings.bom.length + findings.fffd.length + findings.badUtf8.length > 0 ? 1 : 0);
 
 /**
  * 扫描目标：暂存区模式带 content（index blob 的 Buffer），全量模式 content 为 null 走工作区。
@@ -118,7 +112,10 @@ process.exit(
 function listTrackedFiles() {
   const listed = tryGit(["ls-files", "-z"]);
   if (listed !== null) {
-    return listed.split("\0").filter(Boolean).map((rel) => ({ rel, content: null }));
+    return listed
+      .split("\0")
+      .filter(Boolean)
+      .map((rel) => ({ rel, content: null }));
   }
   console.warn("[check-encoding] `git ls-files` 不可用，回落全量遍历（会包含未跟踪文件）。");
   return walk(repoRoot).map((file) => ({
@@ -226,10 +223,7 @@ function printFindings() {
   console.error(`[check-encoding] 命中 ${total} 处（扫描面：git ${scopeNote}，排除 node_modules/dist/webview-dist/build/docs-Iterations/apps-mobile-android-app-build.gradle）`);
   printGroup("BOM（UTF-8 BOM 前缀，合法编码，仅工具链风险）", findings.bom);
   printGroup("U+FFFD（合法 UTF-8 内嵌真替换字符 ⇒ 源码被写坏；须逐字符替换）", findings.fffd);
-  printGroup(
-    "非 UTF-8（字节层非法，文件里没有 U+FFFD 码点 ⇒ 坏的是字节；须从父提交整体还原）",
-    findings.badUtf8,
-  );
+  printGroup("非 UTF-8（字节层非法，文件里没有 U+FFFD 码点 ⇒ 坏的是字节；须从父提交整体还原）", findings.badUtf8);
   console.error("[check-encoding] 口径见 wave-e H1.3 Step 4：A 类（fffd）走字节级安全替换，B 类（bad-utf8）走 `git checkout <父提交> -- <路径>`。");
 }
 
@@ -252,7 +246,5 @@ function printBaseline() {
   for (const rel of findings.badUtf8) bump("badUtf8", rel);
   console.log(`[check-encoding] baseline：扫描 ${files.length} 个文件`);
   for (const [key, count] of [...buckets].sort()) console.log(`  ${key} = ${count}`);
-  console.log(
-    `[check-encoding] 合计 bom=${findings.bom.length} fffd=${findings.fffd.length} badUtf8=${findings.badUtf8.length}`,
-  );
+  console.log(`[check-encoding] 合计 bom=${findings.bom.length} fffd=${findings.fffd.length} badUtf8=${findings.badUtf8.length}`);
 }

@@ -92,8 +92,7 @@ function jaccard(a, b) {
   return inter / (a.size + b.size - inter);
 }
 
-const isFnLike = (n) =>
-  ts.isFunctionDeclaration(n) || ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isMethodDeclaration(n);
+const isFnLike = (n) => ts.isFunctionDeclaration(n) || ts.isArrowFunction(n) || ts.isFunctionExpression(n) || ts.isMethodDeclaration(n);
 
 function enclosingIsFn(node) {
   for (let p = node.parent; p; p = p.parent) {
@@ -111,9 +110,16 @@ function wrapperInfo(body) {
   const visit = (n) => {
     if (ts.isReturnStatement(n) || ts.isExpressionStatement(n)) stmts++;
     if (
-      ts.isIfStatement(n) || ts.isForStatement(n) || ts.isForOfStatement(n) || ts.isForInStatement(n) ||
-      ts.isWhileStatement(n) || ts.isDoStatement(n) || ts.isTryStatement(n) || ts.isSwitchStatement(n)
-    ) control++;
+      ts.isIfStatement(n) ||
+      ts.isForStatement(n) ||
+      ts.isForOfStatement(n) ||
+      ts.isForInStatement(n) ||
+      ts.isWhileStatement(n) ||
+      ts.isDoStatement(n) ||
+      ts.isTryStatement(n) ||
+      ts.isSwitchStatement(n)
+    )
+      control++;
     if (ts.isCallExpression(n)) {
       calls++;
       if (!callee && ts.isIdentifier(n.expression)) callee = n.expression.text;
@@ -191,7 +197,10 @@ function referenceSignals(names) {
   }
   const bigRe = new RegExp("\\b(" + unique.map((n) => n.replace(/\$/g, "\\$")).join("|") + ")\\b", "g");
   const counts = new Map();
-  for (const files of [[coreFiles, "core"], [appFiles, "apps"]]) {
+  for (const files of [
+    [coreFiles, "core"],
+    [appFiles, "apps"],
+  ]) {
     const [list, tag] = files;
     const seenPerFile = new Map();
     for (const f of list) {
@@ -200,7 +209,10 @@ function referenceSignals(names) {
       bigRe.lastIndex = 0;
       while ((m = bigRe.exec(t))) {
         let e = seenPerFile.get(m[1]);
-        if (!e) { e = { core: 0, apps: 0 }; seenPerFile.set(m[1], e); }
+        if (!e) {
+          e = { core: 0, apps: 0 };
+          seenPerFile.set(m[1], e);
+        }
         e[tag]++;
       }
     }
@@ -243,7 +255,10 @@ for (let i = 0; i < sorted.length; i++) {
 // 引用信号（只对参与簇的名字查，控制成本）
 const clusterNames = new Set();
 for (const c of exactClusters) c.forEach((r) => clusterNames.add(r.name));
-for (const p of approx) { clusterNames.add(p.a.name); clusterNames.add(p.b.name); }
+for (const p of approx) {
+  clusterNames.add(p.a.name);
+  clusterNames.add(p.b.name);
+}
 const refs = referenceSignals([...clusterNames]);
 
 // ---------- 输出 ----------
@@ -252,13 +267,20 @@ const base = "core-symbols" + SUFFIX;
 const jsonlPath = path.join(outDir, base + ".jsonl");
 fs.writeFileSync(
   jsonlPath,
-  all.map((r) => { const { shingles, ...rest } = r; return JSON.stringify(rest); }).join("\n"),
+  all
+    .map((r) => {
+      const { shingles, ...rest } = r;
+      return JSON.stringify(rest);
+    })
+    .join("\n"),
   "utf8"
 );
 
 const fmt = (r) => {
   const ref = refs.get(r.name);
-  return `- \`${r.file}:${r.line}\` **${r.name}** (${r.kind}${r.exported ? ", exported" : ""}${r.nested ? ", nested" : ""}${r.keepLocal ? ", keep-local" : ""}) ${r.tokens}t${ref ? ` — refs core:${ref.core} apps:${ref.apps}` : ""}${r.jsDoc ? `\n  > ${r.jsDoc.replace(/\n/g, " ").slice(0, 160)}` : ""}`;
+  return `- \`${r.file}:${r.line}\` **${r.name}** (${r.kind}${r.exported ? ", exported" : ""}${r.nested ? ", nested" : ""}${r.keepLocal ? ", keep-local" : ""}) ${r.tokens}t${
+    ref ? ` — refs core:${ref.core} apps:${ref.apps}` : ""
+  }${r.jsDoc ? `\n  > ${r.jsDoc.replace(/\n/g, " ").slice(0, 160)}` : ""}`;
 };
 
 const md = [];
@@ -285,9 +307,37 @@ if (approx.length > 60) md.push(`\n（其余 ${approx.length - 60} 对见 jsonl�
 
 // 跨文件同名（不看 body 相似度；同名即候选，由 LLM 定性）
 const NOISE_METHOD_NAMES = new Set([
-  "get", "set", "has", "find", "delete", "remove", "update", "clear", "map", "run", "init",
-  "create", "build", "parse", "format", "apply", "exec", "load", "save", "read", "write",
-  "open", "close", "start", "stop", "reset", "dispose", "validate", "visit", "chat", "call",
+  "get",
+  "set",
+  "has",
+  "find",
+  "delete",
+  "remove",
+  "update",
+  "clear",
+  "map",
+  "run",
+  "init",
+  "create",
+  "build",
+  "parse",
+  "format",
+  "apply",
+  "exec",
+  "load",
+  "save",
+  "read",
+  "write",
+  "open",
+  "close",
+  "start",
+  "stop",
+  "reset",
+  "dispose",
+  "validate",
+  "visit",
+  "chat",
+  "call",
 ]);
 const byName = new Map();
 for (const r of all) {
@@ -337,7 +387,11 @@ fs.writeFileSync(mdPath, md.join("\n"), "utf8");
 const kindStat = {};
 for (const r of all) kindStat[r.kind] = (kindStat[r.kind] ?? 0) + 1;
 console.log(`files=${files.length} fns=${all.length} eligible=${eligible.length}`);
-console.log(`kinds: ${Object.entries(kindStat).map(([k, v]) => k + "=" + v).join(" ")}`);
+console.log(
+  `kinds: ${Object.entries(kindStat)
+    .map(([k, v]) => k + "=" + v)
+    .join(" ")}`
+);
 console.log(`exported=${all.filter((r) => r.exported).length} nested=${all.filter((r) => r.nested).length} keepLocal=${all.filter((r) => r.keepLocal).length}`);
 console.log(`exactClusters=${exactClusters.length} (${exactClusters.reduce((s, c) => s + c.length, 0)} 处)`);
 console.log(`approxPairs=${approx.length}`);

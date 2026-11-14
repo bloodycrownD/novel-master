@@ -17,9 +17,9 @@
  * 末尾 5 行；`--grep <关键字>` 可只打印命中行（等价于 grep -a）。
  */
 
-import {execFileSync} from "node:child_process";
-import {mkdirSync, writeFileSync, readdirSync} from "node:fs";
-import {join} from "node:path";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 const PACKAGE = "com.novelmaster";
 const LOG_DIR = "files/logs";
@@ -28,7 +28,7 @@ const OUT_DIR = join(process.cwd(), "tmp", "nm-logs");
 let activeSerial = null;
 function adb(args) {
   // 多设备并存（真机 + 半启动的模拟器）时必须显式 -s，否则 adb 直接报错。
-  return execFileSync("adb", activeSerial == null ? args : ["-s", activeSerial, ...args], {encoding: "utf8", maxBuffer: 64 * 1024 * 1024});
+  return execFileSync("adb", activeSerial == null ? args : ["-s", activeSerial, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
 function fail(message) {
@@ -45,7 +45,11 @@ const day = args.find((arg) => /^\d{8}$/.test(arg));
 let devices;
 try {
   // adb 在 Windows 上输出 CRLF，行尾 `\r` 会让 `/\tdevice$/` 失配——统一去 CR 再判。
-  devices = adb(["devices"]).split(/\r?\n/).map((line) => line.trim()).filter((line) => /\tdevice$/.test(line)).map((line) => line.split("\t")[0]);
+  devices = adb(["devices"])
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /\tdevice$/.test(line))
+    .map((line) => line.split("\t")[0]);
 } catch (error) {
   fail(`adb 不可用：${error instanceof Error ? error.message : String(error)}`);
 }
@@ -63,7 +67,7 @@ try {
       "无法 run-as 读取 " + LOG_DIR + " —— 说明设备上装的是**正式包**（release 不可 debug）。",
       "正式包日志只能从 app 内导出：设置 → 关于/诊断 → 导出日志，把导出的文件路径给 agent。",
       "（debug 包可直接重跑本脚本。）",
-    ].join("\n"),
+    ].join("\n")
   );
 }
 
@@ -81,7 +85,7 @@ function todayName() {
 
 if (files.length === 0) fail(`设备上没有匹配的日志文件（ls ${LOG_DIR} 结果：${listing.trim().replace(/\s+/g, " ")}）`);
 
-mkdirSync(OUT_DIR, {recursive: true});
+mkdirSync(OUT_DIR, { recursive: true });
 for (const name of files) {
   const content = adb(["exec-out", "run-as", PACKAGE, "cat", `${LOG_DIR}/${name}`]);
   writeFileSync(join(OUT_DIR, name), content, "utf8");

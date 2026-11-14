@@ -13,10 +13,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-const repoRoot = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")),
-  "..",
-);
+const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const hooksDir = path.join(repoRoot, ".githooks");
 
 function main() {
@@ -37,8 +34,5 @@ function main() {
 try {
   main();
 } catch (error) {
-  console.warn(
-    `[link-hooks] 未自动配置 git hooks（${error?.message ?? error}）。` +
-      `可手动执行：git config core.hooksPath .githooks`,
-  );
+  console.warn(`[link-hooks] 未自动配置 git hooks（${error?.message ?? error}）。` + `可手动执行：git config core.hooksPath .githooks`);
 }

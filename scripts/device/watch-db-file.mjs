@@ -43,4 +43,6 @@ for (let i = 0; i < seconds; i++) {
   }
   prev = cur;
 }
-try { console.log("pid:", sh('adb shell "pidof com.novelmaster || echo STOPPED"').trim()); } catch {}
+try {
+  console.log("pid:", sh('adb shell "pidof com.novelmaster || echo STOPPED"').trim());
+} catch {}

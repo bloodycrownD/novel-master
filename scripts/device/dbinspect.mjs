@@ -5,10 +5,19 @@ import { readFileSync } from "node:fs";
 const path = process.argv[2];
 const db = new Database(path, { readonly: true });
 
-const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r => r.name);
+const tables = db
+  .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+  .all()
+  .map((r) => r.name);
 console.log("== tables ==", tables.join(","));
 
-const q = (sql, ...a) => { try { return db.prepare(sql).all(...a); } catch (e) { return [{ ERR: e.message.slice(0, 120) }]; } };
+const q = (sql, ...a) => {
+  try {
+    return db.prepare(sql).all(...a);
+  } catch (e) {
+    return [{ ERR: e.message.slice(0, 120) }];
+  }
+};
 
 console.log("\n== 会话规模 TOP10（消息数/总字节） ==");
 for (const r of q(`SELECT s.id sid, COUNT(m.id) cnt, SUM(LENGTH(COALESCE(m.content_json,''))) bytes
@@ -18,7 +27,7 @@ for (const r of q(`SELECT s.id sid, COUNT(m.id) cnt, SUM(LENGTH(COALESCE(m.conte
 }
 
 console.log("\n== 消息 role 列存在性与 user 消息长度 TOP10 ==");
-const cols = q("PRAGMA table_info(chat_message)").map(c => c.name);
+const cols = q("PRAGMA table_info(chat_message)").map((c) => c.name);
 console.log("chat_message cols:", cols.join(","));
 const roleCol = cols.includes("role") ? "role" : null;
 if (roleCol) {
@@ -33,9 +42,9 @@ if (roleCol) {
 }
 
 console.log("\n== run 状态（找 interrupted 现场） ==");
-const runTables = tables.filter(t => /run|stream|unit/i.test(t));
+const runTables = tables.filter((t) => /run|stream|unit/i.test(t));
 for (const t of runTables) {
-  const c = q(`PRAGMA table_info(${t})`).map(x => x.name);
+  const c = q(`PRAGMA table_info(${t})`).map((x) => x.name);
   console.log(`-- ${t}: ${c.join(",")}`);
 }
 

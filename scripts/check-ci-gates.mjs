@@ -37,18 +37,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  ".."
-);
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const args = process.argv.slice(2);
 const printOnly = args.includes("--print");
 const targetArg = args.find((a) => !a.startsWith("--"));
-const CI_PATH =
-  targetArg == null
-    ? path.join(repoRoot, ".github", "workflows", "ci.yml")
-    : path.resolve(process.cwd(), targetArg);
+const CI_PATH = targetArg == null ? path.join(repoRoot, ".github", "workflows", "ci.yml") : path.resolve(process.cwd(), targetArg);
 
 /**
  * 预期表：步骤名 → 期望的 continue-on-error 状态 + 为什么。
@@ -213,10 +207,7 @@ const expectedByStep = new Map(EXPECTATIONS.map((e) => [e.step, e]));
 for (const exp of EXPECTATIONS) {
   const step = steps.steps.find((s) => s.name === exp.step);
   if (step == null) {
-    failures.push(
-      `预期表里的步骤在 ci.yml 中不存在：「${exp.step}」。` +
-        `要么 ci.yml 把它改名/删了，要么这张表该同步改。`
-    );
+    failures.push(`预期表里的步骤在 ci.yml 中不存在：「${exp.step}」。` + `要么 ci.yml 把它改名/删了，要么这张表该同步改。`);
     continue;
   }
   const actual = hasContinueOnError(step);
@@ -248,9 +239,7 @@ if (nodeEIndex >= 0) {
   const tail = source.slice(nodeEIndex);
   const firstBreak = tail.indexOf("\n");
   // 一行之内必须能看到收尾的引号或结尾；看不到 ⇒ 这条 node -e 跨行了。
-  const endsOnSameLine = /node -e[^\n]*["'`)\]]\s*(?:#.*)?$/.test(
-    tail.slice(0, firstBreak === -1 ? undefined : firstBreak)
-  );
+  const endsOnSameLine = /node -e[^\n]*["'`)\]]\s*(?:#.*)?$/.test(tail.slice(0, firstBreak === -1 ? undefined : firstBreak));
   if (!endsOnSameLine) {
     failures.push(
       `ci.yml:${lineNo} 的 \`node -e\` 跨行了。RULE 明记「cmd 下多行 node -e 会被静默丢弃\n` +
@@ -266,32 +255,18 @@ if (printOnly) {
   console.log(`[check-ci-gates] ${path.relative(repoRoot, CI_PATH)} 共 ${steps.steps.length} 步：`);
   for (const step of steps.steps) {
     const coe = hasContinueOnError(step);
-    console.log(
-      `  ${step.name} | coe=${coe} | job=${step.job} | line=${step.line}` +
-        `${isGateStep(step) ? " | 门禁" : ""}`
-    );
+    console.log(`  ${step.name} | coe=${coe} | job=${step.job} | line=${step.line}` + `${isGateStep(step) ? " | 门禁" : ""}`);
   }
   process.exit(0);
 }
 
 if (failures.length > 0) {
-  console.error(
-    `[check-ci-gates] 红：${failures.length} 处形状问题（${path.relative(
-      repoRoot,
-      CI_PATH
-    )}）。\n`
-  );
+  console.error(`[check-ci-gates] 红：${failures.length} 处形状问题（${path.relative(repoRoot, CI_PATH)}）。\n`);
   for (const [i, msg] of failures.entries()) {
     console.error(`  ${i + 1}) ${msg}\n`);
   }
-  console.error(
-    `[check-ci-gates] 口径：EXPECTATIONS 表在 scripts/check-ci-gates.mjs，` +
-      `「why」列是每条松紧的决策理由。`
-  );
+  console.error(`[check-ci-gates] 口径：EXPECTATIONS 表在 scripts/check-ci-gates.mjs，` + `「why」列是每条松紧的决策理由。`);
   process.exit(1);
 }
 
-console.log(
-  `[check-ci-gates] OK：${steps.steps.length} 步形状符合预期表` +
-    `（门禁步 ${steps.steps.filter(isGateStep).length} 个全部已登记，无跨行 node -e）。`
-);
+console.log(`[check-ci-gates] OK：${steps.steps.length} 步形状符合预期表` + `（门禁步 ${steps.steps.filter(isGateStep).length} 个全部已登记，无跨行 node -e）。`);

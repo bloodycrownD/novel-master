@@ -41,10 +41,7 @@ export function parseCollectedCount(stdout) {
 export function assertNonZeroCollected({ collected, where, details = [] }) {
   if (typeof collected === "number" && collected > 0) return;
   const reported = collected === null || collected === undefined ? "(缺失)" : String(collected);
-  console.error(
-    `[zero-collect-guard] 拒绝把空跑当全绿放行：${where} 实测 # tests ${reported}。` +
-      `node --test 收集 0 条时退出码仍是 0，所以这条必须显式判。`,
-  );
+  console.error(`[zero-collect-guard] 拒绝把空跑当全绿放行：${where} 实测 # tests ${reported}。` + `node --test 收集 0 条时退出码仍是 0，所以这条必须显式判。`);
   for (const detail of details) {
     if (detail) console.error(`[zero-collect-guard]   · ${detail}`);
   }

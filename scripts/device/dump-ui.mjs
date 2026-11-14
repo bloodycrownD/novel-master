@@ -12,6 +12,6 @@ for (const m of xml.matchAll(/<node[^>]*>/g)) {
   const id = /resource-id="([^"]*)"/.exec(s)?.[1] ?? "";
   if (!t && !d) continue;
   if (++n > 60) break;
-  const label = t || ("desc:" + d);
+  const label = t || "desc:" + d;
   console.log(`${clk ? "[CLK]" : "     "} ${label} | ${b} | ${cls.replace("android.widget.", "")}${id ? " | " + id : ""}`);
 }

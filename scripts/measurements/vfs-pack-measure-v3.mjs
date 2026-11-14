@@ -33,7 +33,8 @@ for (const r of q(`SELECT encoding e, COUNT(*) n,
    SUM(CASE WHEN byte_len = CAST(LENGTH(bytes)*3/4 AS INT) THEN 1 ELSE 0 END) eq_bin_len,
    SUM(CASE WHEN byte_len = LENGTH(bytes)*3/4-2 THEN 1 ELSE 0 END) eq_bin_len2,
    SUM(LENGTH(bytes)) text_bytes, SUM(byte_len) blen
-   FROM vfs_content_blob GROUP BY 1`)) W(" ", r);
+   FROM vfs_content_blob GROUP BY 1`))
+  W(" ", r);
 
 const blobs = new Map();
 for (const r of q("SELECT content_hash h, encoding e, bytes b, byte_len bl, LENGTH(bytes) tb FROM vfs_content_blob")) {
@@ -95,42 +96,60 @@ for (const [eid, list] of byEntry) {
   chainStream += Z(uniq.map(getPlain).join(""));
 }
 // 分组 pack：head 独立，其余 <=8 版本/<=1MB 一组
-const PACK_MAX_VERSIONS = 8, PACK_MAX_PLAIN = 1 << 20;
-let packStream = 0, groups = 0, maxPlain = 0, maxStream = 0;
+const PACK_MAX_VERSIONS = 8,
+  PACK_MAX_PLAIN = 1 << 20;
+let packStream = 0,
+  groups = 0,
+  maxPlain = 0,
+  maxStream = 0;
 const headKeptHashes = new Set();
 for (const [eid, list] of byEntry) {
   const uniq = [...new Set(list.map((r) => r.h))];
   if (uniq.length < 2) continue;
   const headHash = list.find((r) => r.v === entries.get(eid)?.hv)?.h;
   if (headHash && uniq.includes(headHash)) headKeptHashes.add(headHash);
-  let buf = [], bufPlain = 0;
+  let buf = [],
+    bufPlain = 0;
   const flush = () => {
     if (!buf.length) return;
     const s = Z(buf.join(""));
-    packStream += s; groups++;
-    maxPlain = Math.max(maxPlain, bufPlain); maxStream = Math.max(maxStream, s);
-    buf = []; bufPlain = 0;
+    packStream += s;
+    groups++;
+    maxPlain = Math.max(maxPlain, bufPlain);
+    maxStream = Math.max(maxStream, s);
+    buf = [];
+    bufPlain = 0;
   };
   for (const h of uniq) {
     if (h === headHash) continue;
-    const p = getPlain(h), sz = RAW(p);
+    const p = getPlain(h),
+      sz = RAW(p);
     if (buf.length && (buf.length >= PACK_MAX_VERSIONS || bufPlain + sz > PACK_MAX_PLAIN)) flush();
-    buf.push(p); bufPlain += sz;
+    buf.push(p);
+    bufPlain += sz;
   }
   flush();
 }
 const headKeptBin = [...headKeptHashes].reduce((s, h) => s + binLen(h), 0);
 W("\n== pack 结果（二进制口径）==");
-W(" 多版本 hash 独立压 =", MB(mBase), "MB → 全链单流 =", MB(chainStream), "MB（省", MB(mBase - chainStream), "MB /",
-  (((mBase - chainStream) / mBase) * 100).toFixed(1) + "%）");
-W(" 分组 pack 流 =", MB(packStream), "MB + 独立 head =", MB(headKeptBin), "MB =", MB(packStream + headKeptBin), "MB（省",
-  MB(mBase - packStream), "MB /", (((mBase - packStream) / mBase) * 100).toFixed(1) + "%）");
+W(" 多版本 hash 独立压 =", MB(mBase), "MB → 全链单流 =", MB(chainStream), "MB（省", MB(mBase - chainStream), "MB /", (((mBase - chainStream) / mBase) * 100).toFixed(1) + "%）");
+W(
+  " 分组 pack 流 =",
+  MB(packStream),
+  "MB + 独立 head =",
+  MB(headKeptBin),
+  "MB =",
+  MB(packStream + headKeptBin),
+  "MB（省",
+  MB(mBase - packStream),
+  "MB /",
+  (((mBase - packStream) / mBase) * 100).toFixed(1) + "%）"
+);
 W(" 组数 =", groups, " 单组最大明文 =", (maxPlain / 1024).toFixed(0) + "KB 单组最大流 =", (maxStream / 1024).toFixed(0) + "KB");
 W("\n== 全库总量预测 ==");
 W(" 现状二进制口径 =", MB(totalBin), "MB（文本口径", MB(totalText), "MB）");
 W(" 去 base64 + pack 后 =", MB(sBase + packStream + headKeptBin), "MB");
-W(" 相对现状文本口径省 =", MB(totalText - (sBase + packStream + headKeptBin)), "MB /",
-  (((totalText - (sBase + packStream + headKeptBin)) / totalText) * 100).toFixed(1) + "%");
+W(" 相对现状文本口径省 =", MB(totalText - (sBase + packStream + headKeptBin)), "MB /", (((totalText - (sBase + packStream + headKeptBin)) / totalText) * 100).toFixed(1) + "%");
 W(" 其中去 base64 贡献 =", MB(totalText - totalBin), "MB，pack 贡献 =", MB(mBase - packStream), "MB");
 
 fs.writeFileSync("tmp/vfs-pack-measure3.out.txt", out.join("\n"), "utf8");

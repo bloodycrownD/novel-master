@@ -66,20 +66,34 @@ W(" 去重后唯一明文合计 =", MB(totalPlainUnique), "MB；整体压缩比�
 // 多版本 entry（唯一 hash 数 >= 2）
 let multiEntry = 0;
 const rowsOut = [];
-let baseIndep = 0, packBest = 0, headKept = 0, packGrouped = 0, singleOnly = 0;
-const shortBucket = { base: 0, best: 0, n: 0 }, longBucket = { base: 0, best: 0, n: 0 };
-const PACK_MAX_VERSIONS = 8, PACK_MAX_PLAIN = 1 << 20;
-let groups = 0, maxPlain = 0, maxStream = 0;
+let baseIndep = 0,
+  packBest = 0,
+  headKept = 0,
+  packGrouped = 0,
+  singleOnly = 0;
+const shortBucket = { base: 0, best: 0, n: 0 },
+  longBucket = { base: 0, best: 0, n: 0 };
+const PACK_MAX_VERSIONS = 8,
+  PACK_MAX_PLAIN = 1 << 20;
+let groups = 0,
+  maxPlain = 0,
+  maxStream = 0;
 for (const [eid, list] of byEntry) {
   const uniq = [...new Set(list.map((r) => r.h))];
-  if (uniq.length < 2) { singleOnly += uniq.reduce((s, h) => s + binSize(h), 0); continue; }
+  if (uniq.length < 2) {
+    singleOnly += uniq.reduce((s, h) => s + binSize(h), 0);
+    continue;
+  }
   multiEntry++;
   const base = uniq.reduce((s, h) => s + binSize(h), 0);
   const best = Z(uniq.map(getPlain).join(""));
-  baseIndep += base; packBest += best;
+  baseIndep += base;
+  packBest += best;
   const allShort = uniq.every((h) => RAW(getPlain(h)) <= 32768);
   const b = allShort ? shortBucket : longBucket;
-  b.base += base; b.best += best; b.n++;
+  b.base += base;
+  b.best += best;
+  b.n++;
 
   // 分组打包模拟：head 版本保持独立，其余按唯一 hash 分组
   const head = entries.get(eid)?.hv;
@@ -87,18 +101,24 @@ for (const [eid, list] of byEntry) {
   const keepHead = headHash && uniq.includes(headHash);
   const rest = uniq.filter((h) => h !== headHash);
   if (keepHead) headKept += binSize(headHash);
-  let buf = [], bufPlain = 0;
+  let buf = [],
+    bufPlain = 0;
   const flush = () => {
     if (!buf.length) return;
     const s = Z(buf.join(""));
-    packGrouped += s; groups++;
-    maxPlain = Math.max(maxPlain, bufPlain); maxStream = Math.max(maxStream, s);
-    buf = []; bufPlain = 0;
+    packGrouped += s;
+    groups++;
+    maxPlain = Math.max(maxPlain, bufPlain);
+    maxStream = Math.max(maxStream, s);
+    buf = [];
+    bufPlain = 0;
   };
   for (const h of rest) {
-    const p = getPlain(h), sz = RAW(p);
+    const p = getPlain(h),
+      sz = RAW(p);
     if (buf.length && (buf.length >= PACK_MAX_VERSIONS || bufPlain + sz > PACK_MAX_PLAIN)) flush();
-    buf.push(p); bufPlain += sz;
+    buf.push(p);
+    bufPlain += sz;
   }
   flush();
   rowsOut.push({ eid, v: list.length, u: uniq.length, base, best, path: entries.get(eid)?.p });
@@ -106,15 +126,34 @@ for (const [eid, list] of byEntry) {
 rowsOut.sort((a, b) => b.base - a.base);
 W("\n== 多版本 entry（unique hash >= 2）==");
 W(" count =", multiEntry, " 单版本 entry 部分存储 =", MB(singleOnly), "MB");
-W(" 独立压（去重后）= ", MB(baseIndep), "MB → 全链单流（理论极限）= ", MB(packBest), "MB  省 ", MB(baseIndep - packBest),
-  "MB /", (((baseIndep - packBest) / baseIndep) * 100).toFixed(1) + "%");
-W(" 分组 pack（<=8 版本/<=1MB，head 保持独立）= ", MB(packGrouped), "MB + head ", MB(headKept), "MB = ", MB(packGrouped + headKept),
-  "MB  省 ", MB(baseIndep - packGrouped), "MB /", (((baseIndep - packGrouped) / baseIndep) * 100).toFixed(1) + "%");
+W(" 独立压（去重后）= ", MB(baseIndep), "MB → 全链单流（理论极限）= ", MB(packBest), "MB  省 ", MB(baseIndep - packBest), "MB /", (((baseIndep - packBest) / baseIndep) * 100).toFixed(1) + "%");
+W(
+  " 分组 pack（<=8 版本/<=1MB，head 保持独立）= ",
+  MB(packGrouped),
+  "MB + head ",
+  MB(headKept),
+  "MB = ",
+  MB(packGrouped + headKept),
+  "MB  省 ",
+  MB(baseIndep - packGrouped),
+  "MB /",
+  (((baseIndep - packGrouped) / baseIndep) * 100).toFixed(1) + "%"
+);
 W(" 组数 =", groups, " 单组最大明文 =", (maxPlain / 1024).toFixed(0) + "KB 单组最大流 =", (maxStream / 1024).toFixed(0) + "KB");
-W(" 拆分：全版本<=32KB 的 entry n=" + shortBucket.n, MB(shortBucket.base), "->", MB(shortBucket.best),
-  "省 " + (((shortBucket.base - shortBucket.best) / Math.max(1, shortBucket.base)) * 100).toFixed(1) + "%");
-W("      含>32KB 版本的 entry n=" + longBucket.n, MB(longBucket.base), "->", MB(longBucket.best),
-  "省 " + (((longBucket.base - longBucket.best) / Math.max(1, longBucket.base)) * 100).toFixed(1) + "%");
+W(
+  " 拆分：全版本<=32KB 的 entry n=" + shortBucket.n,
+  MB(shortBucket.base),
+  "->",
+  MB(shortBucket.best),
+  "省 " + (((shortBucket.base - shortBucket.best) / Math.max(1, shortBucket.base)) * 100).toFixed(1) + "%"
+);
+W(
+  "      含>32KB 版本的 entry n=" + longBucket.n,
+  MB(longBucket.base),
+  "->",
+  MB(longBucket.best),
+  "省 " + (((longBucket.base - longBucket.best) / Math.max(1, longBucket.base)) * 100).toFixed(1) + "%"
+);
 W("\n top12:");
 for (const r of rowsOut.slice(0, 12)) {
   W(`  eid=${r.eid} 版本=${r.v} 唯一=${r.u} 独立=${(r.base / 1024).toFixed(0)}KB 单流=${(r.best / 1024).toFixed(0)}KB ${r.path ?? ""}`);
@@ -123,8 +162,16 @@ for (const r of rowsOut.slice(0, 12)) {
 // 全库合计（含单版本）
 W("\n== 全库合计 ==");
 const afterPack = singleOnly + packGrouped + headKept;
-W(" 现状（二进制口径）= ", MB(totalStoredBin), "MB → pack 后 = ", MB(afterPack), "MB  省 ", MB(totalStoredBin - afterPack),
-  "MB /", (((totalStoredBin - afterPack) / totalStoredBin) * 100).toFixed(1) + "%");
+W(
+  " 现状（二进制口径）= ",
+  MB(totalStoredBin),
+  "MB → pack 后 = ",
+  MB(afterPack),
+  "MB  省 ",
+  MB(totalStoredBin - afterPack),
+  "MB /",
+  (((totalStoredBin - afterPack) / totalStoredBin) * 100).toFixed(1) + "%"
+);
 W(" 其中本次可达（multi-entry 部分）=", MB(baseIndep - packGrouped), "MB");
 
 fs.writeFileSync("tmp/vfs-pack-measure2.out.txt", out.join("\n"), "utf8");

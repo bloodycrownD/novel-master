@@ -25,16 +25,7 @@ const GATES = {
   "typecheck-desktop": ["run", "typecheck", "-w", "@novel-master/desktop"],
   "typecheck-mobile": ["run", "typecheck", "-w", "@novel-master/mobile"],
   "typecheck-cli": ["run", "typecheck", "-w", "@novel-master/cli"],
-  "test-mobile": [
-    "test",
-    "-w",
-    "@novel-master/mobile",
-    "--",
-    "--silent",
-    "chat-prompt-tokens",
-    "use-chat-tab-scope",
-    "agent-editor",
-  ],
+  "test-mobile": ["test", "-w", "@novel-master/mobile", "--", "--silent", "chat-prompt-tokens", "use-chat-tab-scope", "agent-editor"],
 };
 
 const name = process.argv[2];
@@ -58,7 +49,7 @@ const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`;
 fs.writeFileSync(logPath, out, "utf8");
 const lines = out.split(/\r?\n/).filter((l) => l.length > 0);
 const seconds = ((Date.now() - started) / 1000).toFixed(1);
-const status = r.error ? 1 : (r.status ?? 1);
+const status = r.error ? 1 : r.status ?? 1;
 
 console.log(`GATE ${name} EXIT=${status} TIME=${seconds}s LINES=${lines.length} LOG=${logPath}`);
 console.log(lines.slice(status === 0 ? -12 : -200).join("\n"));

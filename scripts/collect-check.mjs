@@ -34,7 +34,11 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--dir") dir = argv[++i];
-    else if (arg === "--ext") extensions = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
+    else if (arg === "--ext")
+      extensions = argv[++i]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     else {
       console.error(`[collect-check] 无法识别的参数：${arg}`);
       process.exit(1);
@@ -64,9 +68,7 @@ try {
   // package.json 读不到不影响判定，只是诊断信息少一行。
 }
 
-console.log(
-  `[collect-check] ${packageName} 扫描面 ${scanRoot}（递归 ${extensions.join(" / ")}），收集到 ${files.length} 个文件`,
-);
+console.log(`[collect-check] ${packageName} 扫描面 ${scanRoot}（递归 ${extensions.join(" / ")}），收集到 ${files.length} 个文件`);
 // 守卫本体与各包 run-tests.mjs 共用仓内 scripts/lib/zero-collect-guard.mjs（H6.6：只有一份）。
 assertNonZeroCollected({
   collected: files.length,

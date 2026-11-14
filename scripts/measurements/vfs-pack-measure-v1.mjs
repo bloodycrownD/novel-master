@@ -33,8 +33,7 @@ function plainOf(encoding, bytes, hash) {
     try {
       return dec.decode(unzlibSync(get()));
     } catch (e) {
-      bad.push({ hash, encoding, typeof: isStr ? "text" : u8.constructor.name, len: isStr ? bytes.length : u8.byteLength,
-        label, err: String(e && e.message) });
+      bad.push({ hash, encoding, typeof: isStr ? "text" : u8.constructor.name, len: isStr ? bytes.length : u8.byteLength, label, err: String(e && e.message) });
     }
   }
   return null;
@@ -45,19 +44,24 @@ const cols = (t) => q(`PRAGMA table_info(${t})`).map((c) => c.name);
 W("chat_message cols has content_encoding:", cols("chat_message").includes("content_encoding"));
 
 // ---------- F1：chat_message 明文规模 → 压缩后二进制 / b64 两形态 ----------
-let plainBytes = 0, binTotal = 0, b64Total = 0, msgCount = 0;
+let plainBytes = 0,
+  binTotal = 0,
+  b64Total = 0,
+  msgCount = 0;
 const rows = q("SELECT content_json c FROM chat_message WHERE COALESCE(content_json,'') != ''");
 for (const r of rows) {
   msgCount++;
   const raw = RAW(r.c);
   const bin = Z(r.c);
-  plainBytes += raw; binTotal += bin; b64Total += Math.ceil(bin / 3) * 4;
+  plainBytes += raw;
+  binTotal += bin;
+  b64Total += Math.ceil(bin / 3) * 4;
 }
 W("\n== F1 chat_message（迁移前副本，全部明文行）==");
 W(" rows =", msgCount, " plaintext =", MB(plainBytes), "MB");
 W(" 压缩后二进制合计 =", MB(binTotal), "MB", " 压缩比 =", (plainBytes / binTotal).toFixed(2) + ":1");
 W(" 若按 zlib-b64 存（base64 文本）=", MB(b64Total), "MB", " 压缩比 =", (plainBytes / b64Total).toFixed(2) + ":1");
-W(" 去 base64 可省 =", MB(b64Total - binTotal), "MB", "（占二进制口径 +" + (((b64Total / binTotal) - 1) * 100).toFixed(1) + "%）");
+W(" 去 base64 可省 =", MB(b64Total - binTotal), "MB", "（占二进制口径 +" + ((b64Total / binTotal - 1) * 100).toFixed(1) + "%）");
 
 // ---------- F1：vfs_content_blob / session_file_cache_blob 规模 ----------
 W("\n== F1 vfs_content_blob / session_file_cache_blob 按 encoding / TYPEOF ==");
@@ -84,55 +88,108 @@ for (const r of revs) {
   byEntry.get(r.eid).push(r);
 }
 W("\n== VFS 规模 ==");
-W(" entries =", entries.size, " active revisions(hash) =", revs.filter((r) => r.st === "active" && r.h).length,
-  " deleted revs =", revs.filter((r) => r.st === "deleted").length, " blob rows =", blobs.size);
+W(
+  " entries =",
+  entries.size,
+  " active revisions(hash) =",
+  revs.filter((r) => r.st === "active" && r.h).length,
+  " deleted revs =",
+  revs.filter((r) => r.st === "deleted").length,
+  " blob rows =",
+  blobs.size
+);
 W(" 引用不到 blob 行的 active revision 数 =", [...byEntry.values()].flat().filter((r) => !blobs.has(r.h)).length);
 
-let multi = 0, indepAll = 0, concatAll = 0, plainAll = 0;
-const shortOnly = { indep: 0, concat: 0, n: 0 }, hasLong = { indep: 0, concat: 0, n: 0 };
+let multi = 0,
+  indepAll = 0,
+  concatAll = 0,
+  plainAll = 0;
+const shortOnly = { indep: 0, concat: 0, n: 0 },
+  hasLong = { indep: 0, concat: 0, n: 0 };
 const details = [];
 for (const [eid, list] of byEntry) {
   if (list.length < 2) continue;
   multi++;
   const pls = list.map((r) => plainOf(blobs.get(r.h).e, blobs.get(r.h).b, r.h));
-  if (pls.some((p) => p === null)) { W(" !!! decode failed in entry", eid, "versions", list.map((r) => r.v).join(",")); continue; }
+  if (pls.some((p) => p === null)) {
+    W(" !!! decode failed in entry", eid, "versions", list.map((r) => r.v).join(","));
+    continue;
+  }
   const indep = list.reduce((s, r) => s + blobs.get(r.h).bl, 0);
   const concat = Z(pls.join(""));
   const plain = pls.reduce((s, p) => s + RAW(p), 0);
-  indepAll += indep; concatAll += concat; plainAll += plain;
+  indepAll += indep;
+  concatAll += concat;
+  plainAll += plain;
   const allShort = pls.every((p) => RAW(p) <= 32768);
   const b = allShort ? shortOnly : hasLong;
-  b.indep += indep; b.concat += concat; b.n++;
+  b.indep += indep;
+  b.concat += concat;
+  b.n++;
   details.push({ eid, path: entries.get(eid)?.p, n: list.length, indep, concat, plain, maxV: Math.max(...pls.map(RAW)) });
 }
 details.sort((a, b) => b.indep - a.indep);
 W("\n== 多版本 entry（>=2 active 版本） ==");
-W(" count =", multi, " plaintext =", MB(plainAll), "MB", " independent =", MB(indepAll), "MB", " concat(deflate) =", MB(concatAll), "MB",
-  " saving =", (((indepAll - concatAll) / indepAll) * 100).toFixed(1) + "%");
-W(" 全版本<=32KB 的 entry: n=" + shortOnly.n, MB(shortOnly.indep), "->", MB(shortOnly.concat),
-  " saving=" + (((shortOnly.indep - shortOnly.concat) / Math.max(1, shortOnly.indep)) * 100).toFixed(1) + "%");
-W(" 含>32KB 版本的 entry: n=" + hasLong.n, MB(hasLong.indep), "->", MB(hasLong.concat),
-  " saving=" + (((hasLong.indep - hasLong.concat) / Math.max(1, hasLong.indep)) * 100).toFixed(1) + "%");
+W(
+  " count =",
+  multi,
+  " plaintext =",
+  MB(plainAll),
+  "MB",
+  " independent =",
+  MB(indepAll),
+  "MB",
+  " concat(deflate) =",
+  MB(concatAll),
+  "MB",
+  " saving =",
+  (((indepAll - concatAll) / indepAll) * 100).toFixed(1) + "%"
+);
+W(
+  " 全版本<=32KB 的 entry: n=" + shortOnly.n,
+  MB(shortOnly.indep),
+  "->",
+  MB(shortOnly.concat),
+  " saving=" + (((shortOnly.indep - shortOnly.concat) / Math.max(1, shortOnly.indep)) * 100).toFixed(1) + "%"
+);
+W(" 含>32KB 版本的 entry: n=" + hasLong.n, MB(hasLong.indep), "->", MB(hasLong.concat), " saving=" + (((hasLong.indep - hasLong.concat) / Math.max(1, hasLong.indep)) * 100).toFixed(1) + "%");
 W("\n top10 multi-version entry:");
 for (const d of details.slice(0, 10)) {
-  W(`  eid=${d.eid} v=${d.n} plain=${(d.plain / 1024).toFixed(0)}KB indep=${(d.indep / 1024).toFixed(0)}KB concat=${(d.concat / 1024).toFixed(0)}KB maxVersion=${(d.maxV / 1024).toFixed(0)}KB ${d.path ?? ""}`);
+  W(
+    `  eid=${d.eid} v=${d.n} plain=${(d.plain / 1024).toFixed(0)}KB indep=${(d.indep / 1024).toFixed(0)}KB concat=${(d.concat / 1024).toFixed(0)}KB maxVersion=${(d.maxV / 1024).toFixed(0)}KB ${
+      d.path ?? ""
+    }`
+  );
 }
 
 // ---------- pack 方案模拟：排除 head 版本 + 分组（<=8 版本 / <=1MB 明文） ----------
-for (const [MAXV, MAXP] of [[8, 1 << 20], [8, 1 << 19], [16, 1 << 20], [4, 1 << 19]]) {
-  let packSim = 0, packKept = 0, groups = 0, maxPlain = 0, maxStream = 0;
+for (const [MAXV, MAXP] of [
+  [8, 1 << 20],
+  [8, 1 << 19],
+  [16, 1 << 20],
+  [4, 1 << 19],
+]) {
+  let packSim = 0,
+    packKept = 0,
+    groups = 0,
+    maxPlain = 0,
+    maxStream = 0;
   for (const [eid, list] of byEntry) {
     if (list.length < 2) continue;
     const head = entries.get(eid)?.hv;
     const keptRow = list.find((r) => r.v === head);
     if (keptRow) packKept += blobs.get(keptRow.h).bl;
-    let buf = [], bufPlain = 0;
+    let buf = [],
+      bufPlain = 0;
     const flush = () => {
       if (!buf.length) return;
       const stream = Z(buf.join(""));
-      packSim += stream; groups++;
-      maxPlain = Math.max(maxPlain, bufPlain); maxStream = Math.max(maxStream, stream);
-      buf = []; bufPlain = 0;
+      packSim += stream;
+      groups++;
+      maxPlain = Math.max(maxPlain, bufPlain);
+      maxStream = Math.max(maxStream, stream);
+      buf = [];
+      bufPlain = 0;
     };
     for (const r of list) {
       if (r.v === head) continue;
@@ -140,14 +197,24 @@ for (const [MAXV, MAXP] of [[8, 1 << 20], [8, 1 << 19], [16, 1 << 20], [4, 1 << 
       if (p === null) continue;
       const sz = RAW(p);
       if (buf.length && (buf.length >= MAXV || bufPlain + sz > MAXP)) flush();
-      buf.push(p); bufPlain += sz;
+      buf.push(p);
+      bufPlain += sz;
     }
     flush();
   }
   W(`\n== pack 模拟 maxVersions=${MAXV} maxPlain=${(MAXP / 1024).toFixed(0)}KB ==`);
   W(" groups =", groups, " pack stream total =", MB(packSim), "MB", " kept-head standalone =", MB(packKept), "MB");
-  W(" 预计 vfs_content_blob 侧总量 =", MB(packSim + packKept), "MB（现状 multi-entry 独立压 =", MB(indepAll), "MB）",
-    " 省 =", MB(indepAll - packSim), "MB /", (((indepAll - packSim) / indepAll) * 100).toFixed(1) + "%");
+  W(
+    " 预计 vfs_content_blob 侧总量 =",
+    MB(packSim + packKept),
+    "MB（现状 multi-entry 独立压 =",
+    MB(indepAll),
+    "MB）",
+    " 省 =",
+    MB(indepAll - packSim),
+    "MB /",
+    (((indepAll - packSim) / indepAll) * 100).toFixed(1) + "%"
+  );
   W(" 单组最大明文 =", (maxPlain / 1024).toFixed(0) + "KB", " 单组最大流 =", (maxStream / 1024).toFixed(0) + "KB");
 }
 

@@ -45,7 +45,11 @@ for (const r of revs) {
 }
 
 for (const CAP of [Infinity, 16, 8, 4, 2]) {
-  let total = 0, standaloneTotal = 0, dictRows = 0, maxDepth = 0, deepReads = 0;
+  let total = 0,
+    standaloneTotal = 0,
+    dictRows = 0,
+    maxDepth = 0,
+    deepReads = 0;
   for (const [eid, list] of byEntry) {
     const uniq = [...new Set(list.map((r) => r.h))];
     const depth = new Map();
@@ -70,8 +74,7 @@ for (const CAP of [Infinity, 16, 8, 4, 2]) {
     }
   }
   W(`== 字典链 CAP=${CAP === Infinity ? "∞" : CAP} ==`);
-  W("  独立压 =", MB(standaloneTotal), "MB → 字典链 =", MB(total), "MB  省", MB(standaloneTotal - total), "MB /",
-    (((standaloneTotal - total) / standaloneTotal) * 100).toFixed(1) + "%");
+  W("  独立压 =", MB(standaloneTotal), "MB → 字典链 =", MB(total), "MB  省", MB(standaloneTotal - total), "MB /", (((standaloneTotal - total) / standaloneTotal) * 100).toFixed(1) + "%");
   W("  字典行 =", dictRows, " 最大链深 =", maxDepth, " 链深>=4 的行 =", deepReads);
 }
 

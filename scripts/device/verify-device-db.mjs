@@ -38,12 +38,15 @@ for (const t of ["vfs_content_blob", "session_file_cache_blob"]) {
   for (const r of q(dev, `SELECT encoding e, TYPEOF(bytes) t, COUNT(*) n, SUM(LENGTH(bytes)) bytes, SUM(byte_len) blen FROM ${t} GROUP BY 1,2`)) {
     W(" " + t, r);
   }
-  const m = q(dev, `SELECT
+  const m = q(
+    dev,
+    `SELECT
      SUM(CASE WHEN encoding <> 'zlib' THEN 1 ELSE 0 END) bad_enc,
      SUM(CASE WHEN TYPEOF(bytes) <> 'blob' THEN 1 ELSE 0 END) bad_type,
      SUM(CASE WHEN byte_len <> LENGTH(bytes) THEN 1 ELSE 0 END) bad_len,
      SUM(CASE WHEN encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text') THEN 1 ELSE 0 END) pending,
-     COUNT(*) n FROM ${t}`)[0];
+     COUNT(*) n FROM ${t}`
+  )[0];
   W(" " + t + " 断言", m);
 }
 
@@ -53,12 +56,16 @@ W(" ", q(dev, "SELECT module, key, value FROM kkv_entry WHERE module = 'nm-blob-
 
 // 3) 逐哈希与迁移前副本比对（vfs 的 content_hash = sha256(明文)，可直接验）
 const base = new Database(baselinePath, { readonly: true });
-let checked = 0, mismatch = 0, missing = 0;
+let checked = 0,
+  mismatch = 0,
+  missing = 0;
 const baseHashes = new Map();
 for (const r of q(base, "SELECT content_hash h, encoding e, bytes b FROM vfs_content_blob")) baseHashes.set(r.h, { e: r.e, b: r.b });
 for (const r of q(dev, "SELECT content_hash h, encoding e, bytes b FROM vfs_content_blob")) {
   const b = baseHashes.get(r.h);
-  if (!b) { continue; }
+  if (!b) {
+    continue;
+  }
   const p = plainOf(r.e, r.b);
   if (sha(p) !== r.h) mismatch += 1;
   checked += 1;
@@ -66,36 +73,50 @@ for (const r of q(dev, "SELECT content_hash h, encoding e, bytes b FROM vfs_cont
 W("\n== vfs 逐哈希（真机 vs 迁移前副本）==", " 覆盖", checked, "/", baseHashes.size, " sha 不符", mismatch);
 
 // 4) 解压全量体检 + 大小对比
-let devPlain = 0, devStored = 0, bad = 0;
+let devPlain = 0,
+  devStored = 0,
+  bad = 0;
 for (const r of q(dev, "SELECT encoding e, bytes b, byte_len bl FROM vfs_content_blob")) {
   try {
     devPlain += Buffer.byteLength(plainOf(r.e, r.b), "utf8");
     devStored += r.bl;
-  } catch { bad += 1; }
+  } catch {
+    bad += 1;
+  }
 }
-let basePlain = 0, baseStored = 0;
+let basePlain = 0,
+  baseStored = 0;
 for (const [, v] of baseHashes) {
   try {
     const p = plainOf(v.e, v.b);
     basePlain += Buffer.byteLength(p, "utf8");
     baseStored += v.e === "zlib-b64" ? Buffer.byteLength(typeof v.b === "string" ? v.b : dec.decode(v.b), "utf8") : v.b.byteLength;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 W("== vfs 体积 ==", " 迁移前落库字节", baseStored, " -> 真机落库字节", devStored, " 明文合计(真机)", devPlain, " 解压失败", bad);
 
 let fcBad = 0;
 for (const r of q(dev, "SELECT encoding e, bytes b FROM session_file_cache_blob")) {
-  try { plainOf(r.e, r.b); } catch { fcBad += 1; }
+  try {
+    plainOf(r.e, r.b);
+  } catch {
+    fcBad += 1;
+  }
 }
 W("== file_cache 解压失败 ==", fcBad);
 
 // 5) 消息表未波及（A1 不该碰 chat_message）
-const msg = q(dev, `SELECT
+const msg = q(
+  dev,
+  `SELECT
    COUNT(*) n,
    SUM(CASE WHEN COALESCE(content_json,'') = '' THEN 1 ELSE 0 END) empty_json,
    SUM(CASE WHEN content_encoding = 'zlib-b64' THEN 1 ELSE 0 END) b64_rows,
    SUM(CASE WHEN content_encoding = 'zlib' AND TYPEOF(content_blob)='blob' THEN 1 ELSE 0 END) bin_rows
-   FROM chat_message`)[0];
+   FROM chat_message`
+)[0];
 W("\n== chat_message（应仍是 mcdev 迁移后的形态：empty_json 全空 + b64_rows 占多数）==");
 W(" ", msg);
 

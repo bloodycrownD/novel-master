@@ -23,12 +23,12 @@
  * 退出码：对象形态 0 处 → 0；有命中 → 1（可作 CI / CR 门）。
  */
 
-import {readFileSync, readdirSync, statSync} from 'node:fs';
-import {join, extname} from 'node:path';
-import ts from 'typescript';
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, extname } from "node:path";
+import ts from "typescript";
 
-const ROOTS = ['packages', 'apps'];
-const SKIP = new Set(['node_modules', 'dist', 'build', '.git', 'tmp', 'release', 'coverage', '.cxx']);
+const ROOTS = ["packages", "apps"];
+const SKIP = new Set(["node_modules", "dist", "build", ".git", "tmp", "release", "coverage", ".cxx"]);
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -36,7 +36,7 @@ function* walk(dir) {
     const path = join(dir, name);
     const stat = statSync(path);
     if (stat.isDirectory()) yield* walk(path);
-    else if (['.ts', '.tsx'].includes(extname(name))) yield path;
+    else if ([".ts", ".tsx"].includes(extname(name))) yield path;
   }
 }
 
@@ -53,7 +53,7 @@ function hasAwait(node) {
 
 /** 解析源码文本，返回 {objects, arrays} 两类命中。 */
 function scanSource(text, file) {
-  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.ES2022, true, kind);
   const objects = [];
   const arrays = [];
@@ -62,40 +62,40 @@ function scanSource(text, file) {
       const spreads = node.properties.filter((property) => ts.isSpreadAssignment(property));
       const awaitSpreads = spreads.filter((spread) => hasAwait(spread.expression));
       if (spreads.length >= 2 && awaitSpreads.length > 0) {
-        const {line} = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-        objects.push({file, line: line + 1, spreads: spreads.length, snippet: node.getText(sourceFile).replace(/\s+/g, ' ').slice(0, 120)});
+        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        objects.push({ file, line: line + 1, spreads: spreads.length, snippet: node.getText(sourceFile).replace(/\s+/g, " ").slice(0, 120) });
       }
     }
     if (ts.isArrayLiteralExpression(node)) {
       const spreads = node.elements.filter((element) => ts.isSpreadElement(element));
       const awaitSpreads = spreads.filter((spread) => hasAwait(spread.expression));
       if (awaitSpreads.length > 0) {
-        const {line} = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-        arrays.push({file, line: line + 1, elements: node.elements.length, snippet: node.getText(sourceFile).replace(/\s+/g, ' ').slice(0, 120)});
+        const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+        arrays.push({ file, line: line + 1, elements: node.elements.length, snippet: node.getText(sourceFile).replace(/\s+/g, " ").slice(0, 120) });
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return {objects, arrays};
+  return { objects, arrays };
 }
 
-if (process.argv.includes('--selftest')) {
+if (process.argv.includes("--selftest")) {
   // 已知坏写法（v1.5.49 的装配形态）：扫描器必须命中，否则判据失效。
-  const {objects: selfHits} = scanSource('async function f(base, cond) { const g = async () => ({x: 1}); return {...base, ...(cond ? {s: await g()} : {})}; }', 'selftest.ts');
+  const { objects: selfHits } = scanSource("async function f(base, cond) { const g = async () => ({x: 1}); return {...base, ...(cond ? {s: await g()} : {})}; }", "selftest.ts");
   if (selfHits.length !== 1) {
     console.error(`[selftest] FAIL：期望命中 1 处，实际 ${selfHits.length} 处 —— 扫描判据已失效`);
     process.exit(2);
   }
-  console.log('[selftest] OK：能命中「≥2 spread 且含 await」的已知坏写法');
+  console.log("[selftest] OK：能命中「≥2 spread 且含 await」的已知坏写法");
 }
 
 const objects = [];
 const arrays = [];
 for (const root of ROOTS) {
   for (const file of walk(root)) {
-    const text = readFileSync(file, 'utf8');
-    if (!text.includes('...') || !text.includes('await')) continue;
+    const text = readFileSync(file, "utf8");
+    if (!text.includes("...") || !text.includes("await")) continue;
     const result = scanSource(text, file);
     objects.push(...result.objects);
     arrays.push(...result.arrays);
