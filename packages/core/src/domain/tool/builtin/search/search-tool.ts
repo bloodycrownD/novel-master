@@ -150,6 +150,7 @@ ${engineSection}
     const search = ctx.search;
     if (search == null) {
       // 未装配闭包（CLI 无 kkv / 旧测试 mock）：可读错误而非崩溃。
+      log.warn("search run：ctx.search 未注入（工具未装配搜索上下文）");
       throw toolFailed(SEARCH_TOOL_NAME, new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"));
     }
 

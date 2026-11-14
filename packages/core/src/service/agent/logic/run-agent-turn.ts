@@ -235,6 +235,12 @@ export async function assembleSearchToolContext(store: SearchConfigStore): Promi
         name: engine.name,
         paramHint: engine.paramHint,
       }));
+    // 排障插桩（正式包也可观测）：装配期读模型的逐引擎状态 + canRun + 快照。
+    searchLog.info("搜索上下文装配", {
+      engines: config.engines.map((engine) => ({ id: engine.id, enabled: engine.enabled, needsKey: engine.needsKey, hasKey: engine.hasKey, needsBaseUrl: engine.needsBaseUrl })),
+      canRun: config.canRun,
+      snapshot: engineSnapshot.map((engine) => engine.id),
+    });
   } catch (error) {
     searchLog.warn("读取搜索配置失败，search 工具描述快照降级为空", { error });
   }
@@ -751,6 +757,16 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       // 同时作为 task 工具内子 agent run 的 parentSignal，让
       // registry.abort(sessionId) 也能级联到子 run。
       const parentSignal = internalController.signal;
+      // search 装配前置（排障插桩版）：先算出 ctx 再展开进 toolCtx，装配结果自身
+      // 打一条日志——「assembleSearchToolContext 打了日志但 toolCtx 里没有」这类
+      // 悬空现象可以靠这一条与下面「toolCtx 构造完成」的对账直接定位。
+      const mainSearchCtx = runtime.searchConfig != null ? await assembleSearchToolContext(runtime.searchConfig) : undefined;
+      searchLog.info("search 装配点结果", {
+        point: "main",
+        hasStore: runtime.searchConfig != null,
+        hasCtx: mainSearchCtx != null,
+        snapshot: mainSearchCtx?.engineSnapshot.map((engine) => engine.id) ?? null,
+      });
       const toolCtx: BuiltinToolContext = {
         vfs,
         projectId: scope.projectId,
@@ -772,7 +788,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // search 工具读取：闭包绑定 runtime.searchConfig + 装配期 readConfig 拼
         // 描述快照（readConfig 失败降级空快照，不击穿 turn）；CLI / 旧 mock 未
         // 注入时不装配，工具 run 返回可读错误。
-        ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
+        ...(mainSearchCtx != null ? { search: mainSearchCtx } : {}),
         // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
         subagent: {
           agentRegistry: runtime.agentRegistry,
@@ -820,6 +836,8 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
         allowedPaths: undefined,
       };
+      // 排障插桩：toolCtx 构造完成后的对账点（与上面的「search 装配点结果」配对）。
+      searchLog.info("toolCtx 构造完成", { point: "main", hasSearch: toolCtx.search != null, keys: Object.keys(toolCtx) });
       const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: true }));
 
       // 检查点②：runner 起步前的最后一道——校验 / 名单 / 技能装配这段尾部也有
@@ -1157,6 +1175,14 @@ async function runChildAgent(args: {
         ...(opts.attachments != null && opts.attachments.length > 0 ? { attachments: opts.attachments } : {}),
       });
     }
+    // search 装配前置（排障插桩版，同主 run）：先算 ctx 再展开，结果与 toolCtx 对账。
+    const childSearchCtx = runtime.searchConfig != null ? await assembleSearchToolContext(runtime.searchConfig) : undefined;
+    searchLog.info("search 装配点结果", {
+      point: "child",
+      hasStore: runtime.searchConfig != null,
+      hasCtx: childSearchCtx != null,
+      snapshot: childSearchCtx?.engineSnapshot.map((engine) => engine.id) ?? null,
+    });
     const toolCtx: BuiltinToolContext = {
       vfs,
       projectId: parentProjectId,
@@ -1177,7 +1203,7 @@ async function runChildAgent(args: {
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
       // search：子代理同主代理注入（引擎配置全局共享；描述快照装配期预算，
       // 链解析与凭据读取仍在 run 内）。
-      ...(runtime.searchConfig != null ? { search: await assembleSearchToolContext(runtime.searchConfig) } : {}),
+      ...(childSearchCtx != null ? { search: childSearchCtx } : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {
         agentRegistry: runtime.agentRegistry,
@@ -1225,6 +1251,8 @@ async function runChildAgent(args: {
     };
 
     // 装配期 false：子 agent run 不走压缩编排（P0-2）。
+    // 排障插桩：子 run 的 toolCtx 对账点。
+    searchLog.info("toolCtx 构造完成", { point: "child", hasSearch: toolCtx.search != null, keys: Object.keys(toolCtx) });
     const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: false }));
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
