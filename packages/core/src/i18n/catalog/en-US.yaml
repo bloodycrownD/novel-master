@@ -5,8 +5,46 @@
 error:
   vfs:
     not_found: File does not exist or has been deleted.
+    zip_not_confirmed: Zip import requires explicit confirmation (CLI --yes or the client confirm dialog).
+    zip_external_not_supported: External directory ingest is not supported; provide a zip archive.
+  chat:
+    not_found: "{kind} not found: {id}"
+  infra:
+    decode_invalid_schema: Config data does not match its schema.
+    encode_not_supported: Encoding is not supported for this format.
+  prompt:
+    invalid_yaml: Invalid prompt YAML.
+    invalid_block: Invalid prompt block.
+    unknown_field: Unknown prompt field.
+    unsupported_syntax: Unsupported prompt syntax.
+  provider:
+    not_found: "Provider not found: {provider_id}"
+    conflict: Provider conflict.
+    builtin_provider: Builtin provider is protected.
+    http_error: Provider request failed.
+    model_not_saved: Fetch and save the model first.
+    unsupported_content: Unsupported provider content.
+    unsupported: Provider operation unsupported.
+    malformed_sse: Malformed provider SSE stream.
+    invalid_tool_arguments: Invalid provider tool arguments.
+    migration_orphan_pointer: Migration left an orphan pointer.
+    invalid_model_name: Invalid provider model name.
   session_fs:
     rollback_message_not_found: "Message not found: {message_id}"
+    rollback_no_checkpoint: No rollback checkpoint for this message.
+  skill:
+    missing_domain: "Writing to skill {skill_name} requires an explicit domain (global / project)."
+    missing_project_id: "Project-domain operations require projectId (skill {skill_name})."
+    not_found: "Skill not found: {skill_name}"
+    builtin_not_deletable: "Builtin skills cannot be deleted: {skill_name}"
+    builtin_name_reserved: "«{skill_name}» is reserved for builtin skills; edit the builtin skill itself in the management page instead."
+    builtin_rename_forbidden: "Builtin skills cannot be renamed: {skill_name}"
+    already_exists: "A skill with the same name already exists: {skill_name}"
+  tool:
+    not_found: "Tool not registered: {tool_name}"
+    conflict: "Tool already registered: {tool_name}"
+    failed: "Tool failed: {tool_name}"
+    forbidden: "Tool path outside allowed scope: {tool_name} -> {path}"
   cloud_sync:
     push_mutex_timeout:
       push: Push is busy waiting for the sync mutex lock; please try again later.

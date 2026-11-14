@@ -17,16 +17,30 @@
  * SMART_SORT_RULE 500-999 / 109 CONFIG 001-499 + PREFERENCES 500-999 / 110 INFRA /
  * 111 DEPTH / 112 EVENTS / 113 FEATURE_FLAGS / 114 FORMAT / 115 KKV /
  * 116 SESSION_FS / 117 PROMPT / 118 SESSION_KKV / 119 SESSION_RUN_STATE /
- * 120 USAGE / 121 WORKPLACE。
+ * 120 USAGE / 121 WORKPLACE / 123 IPC（TASK_CANCELLED / TASK_REPLACED，
+ * 控制流码 TOOL_CANCELLED 落 104 段；122 CLOUD_SYNC 三期迁入时再登记）。
+ *
+ * messageKey 是该码的缺省用户文案模板（i18n 契约 key，见 i18n/keys.ts 与
+ * catalog/*.yaml，三处缺一即红）：descriptor 通道优先于它，动态诊断文案走
+ * params.detail；中断/控制流码（TASK_CANCELLED 等）按总纲 §3.2 不带 i18n key。
  *
  * @module errors/error-codes
  */
 
+import type { CoreMessageKey } from "@/i18n/keys.js";
+
 /** 错误码定义表；新增码只能追加，数值不得复用或改号。 */
+export interface ErrorCodeDef {
+  readonly code: number;
+  readonly desc: string;
+  readonly messageKey?: CoreMessageKey;
+}
+
+/** 错误码注册表；每条 messageKey 须同步登记 i18n/keys.ts 与双 catalog。 */
 export const ErrorCodes = {
   AGENT_DOOM_LOOP: {code: 101001, desc: "doom loop detected"},
-  VFS_CHARACTER_CARD_UNRECOGNIZED: {code: 103001, desc: "not a character card"},
-  VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: {code: 103002, desc: "unsupported character card spec"},
+  VFS_CHARACTER_CARD_UNRECOGNIZED: {code: 103001, desc: "not a character card", messageKey: "error.vfs.character_card_unrecognized"},
+  VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: {code: 103002, desc: "unsupported character card spec", messageKey: "error.vfs.character_card_unsupported_spec"},
   VFS_CHARACTER_CARD_INVALID_PATH: {code: 103003, desc: "invalid character card path"},
   VFS_CHARACTER_CARD_NOT_CONFIRMED: {code: 103004, desc: "character card import not confirmed"},
   VFS_CHARACTER_CARD_IMPORT_FAILED: {code: 103005, desc: "character card import failed"},
@@ -39,19 +53,19 @@ export const ErrorCodes = {
   AGENT_INVALID_MODEL: {code: 101004, desc: "invalid or unsaved agent model"},
   AGENT_INVALID_COMPACT: {code: 101005, desc: "invalid agent compact policy"},
   AGENT_PROTOCOL_MISMATCH: {code: 101006, desc: "agent protocol mismatch"},
-  AGENT_NOT_FOUND: {code: 101007, desc: "agent not found"},
+  AGENT_NOT_FOUND: {code: 101007, desc: "agent not found", messageKey: "error.agent.not_found"},
   AGENT_IN_USE: {code: 101008, desc: "agent in use"},
-  AGENT_DUPLICATE_NAME: {code: 101009, desc: "duplicate agent name"},
+  AGENT_DUPLICATE_NAME: {code: 101009, desc: "duplicate agent name", messageKey: "error.agent.duplicate_name"},
   AGENT_BUILTIN_PROTECTED: {code: 101010, desc: "builtin agent protected"},
 
   // 102 VFS 001-999：vfs 路径、zip、content-store 与端口失败。
-  VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found"},
-  VFS_REPLACE_NOT_FOUND: {code: 102002, desc: "replace target string not found"},
+  VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found", messageKey: "error.vfs.not_found"},
+  VFS_REPLACE_NOT_FOUND: {code: 102002, desc: "replace target string not found", messageKey: "error.vfs.replace_not_found"},
   VFS_DIRECTORY_NOT_EMPTY: {code: 102003, desc: "directory not empty"},
   VFS_INVALID_PATH: {code: 102004, desc: "invalid vfs path"},
   VFS_INVALID_NAME: {code: 102005, desc: "invalid vfs entry name"},
   VFS_IS_DIRECTORY: {code: 102006, desc: "path is a directory"},
-  VFS_ALREADY_EXISTS: {code: 102007, desc: "path already exists"},
+  VFS_ALREADY_EXISTS: {code: 102007, desc: "path already exists", messageKey: "error.vfs.already_exists"},
   VFS_NOT_A_DIRECTORY: {code: 102008, desc: "path is not a directory"},
   VFS_PARENT_NOT_FOUND: {code: 102009, desc: "parent path not found"},
   VFS_INVALID_PATTERN: {code: 102010, desc: "invalid vfs grep pattern"},
@@ -66,34 +80,54 @@ export const ErrorCodes = {
   VFS_INVARIANT_VIOLATION: {code: 102020, desc: "vfs invariant violation"},
   VFS_RESTORE_FAILED: {code: 102021, desc: "vfs mutating path restore failed"},
   VFS_OPERATION_UNSUPPORTED: {code: 102022, desc: "vfs operation unsupported by this service"},
+  VFS_ZIP_NOT_CONFIRMED: {code: 102023, desc: "zip import not confirmed", messageKey: "error.vfs.zip_not_confirmed"},
+  VFS_ZIP_EXTERNAL_NOT_SUPPORTED: {code: 102024, desc: "external directory ingest unsupported", messageKey: "error.vfs.zip_external_not_supported"},
+  VFS_ZIP_IMPORT_FAILED: {code: 102025, desc: "zip import failed"},
 
-  // 104 TOOL 001-999：工具入参（phase 2 logic）与搜索配置/引擎失败。
+  // 104 TOOL 001-999：工具入参（phase 2 logic）、搜索配置/引擎失败与工具取消。
   TOOL_INVALID_ARGUMENT: {code: 104001, desc: "invalid tool argument"},
   TOOL_SEARCH_INVALID_ARGUMENT: {code: 104002, desc: "invalid search configuration argument"},
   TOOL_SEARCH_FAILED: {code: 104003, desc: "search engine request failed"},
-  TOOL_SEARCH_TEMPLATE_INVALID: {code: 104004, desc: "invalid search engine template"},
+  TOOL_SEARCH_TEMPLATE_INVALID: {code: 104004, desc: "invalid search engine template", messageKey: "error.tool.search_template_invalid"},
+  TOOL_NOT_FOUND: {code: 104005, desc: "tool not registered", messageKey: "error.tool.not_found"},
+  TOOL_CONFLICT: {code: 104006, desc: "tool already registered", messageKey: "error.tool.conflict"},
+  TOOL_FAILED: {code: 104007, desc: "tool execution failed", messageKey: "error.tool.failed"},
+  TOOL_FORBIDDEN: {code: 104008, desc: "tool path outside allowed scope", messageKey: "error.tool.forbidden"},
+  TOOL_CANCELLED: {code: 104009, desc: "tool execution cancelled"},
 
   // 105 PROVIDER 001-999：provider logic/model 的入参、模型 id 与密钥校验。
   PROVIDER_INVALID_ARGUMENT: {code: 105001, desc: "invalid provider argument"},
   PROVIDER_INVALID_SAVED_MODEL_ID: {code: 105002, desc: "invalid saved model id"},
   PROVIDER_API_KEY_NOT_SET: {code: 105003, desc: "provider api key not set"},
   PROVIDER_INVARIANT_VIOLATION: {code: 105004, desc: "provider invariant violation"},
+  PROVIDER_NOT_FOUND: {code: 105005, desc: "provider not found", messageKey: "error.provider.not_found"},
+  PROVIDER_CONFLICT: {code: 105006, desc: "provider conflict", messageKey: "error.provider.conflict"},
+  PROVIDER_BUILTIN_PROVIDER: {code: 105007, desc: "builtin provider protected", messageKey: "error.provider.builtin_provider"},
+  PROVIDER_HTTP_ERROR: {code: 105008, desc: "provider http request failed", messageKey: "error.provider.http_error"},
+  PROVIDER_MODEL_NOT_SAVED: {code: 105009, desc: "application model not saved", messageKey: "error.provider.model_not_saved"},
+  PROVIDER_UNSUPPORTED_CONTENT: {code: 105010, desc: "unsupported provider content", messageKey: "error.provider.unsupported_content"},
+  PROVIDER_UNSUPPORTED: {code: 105011, desc: "provider operation unsupported", messageKey: "error.provider.unsupported"},
+  PROVIDER_MALFORMED_SSE: {code: 105012, desc: "malformed provider sse stream", messageKey: "error.provider.malformed_sse"},
+  PROVIDER_INVALID_TOOL_ARGUMENTS: {code: 105013, desc: "invalid provider tool arguments", messageKey: "error.provider.invalid_tool_arguments"},
+  PROVIDER_MIGRATION_ORPHAN_POINTER: {code: 105014, desc: "migration left an orphan pointer", messageKey: "error.provider.migration_orphan_pointer"},
+  PROVIDER_SAVED_MODEL_IN_USE: {code: 105015, desc: "saved model in use", messageKey: "error.provider.saved_model_in_use"},
+  PROVIDER_INVALID_MODEL_NAME: {code: 105016, desc: "invalid provider model name", messageKey: "error.provider.invalid_model_name"},
 
   // 106 CHAT 002-999：消息行/元数据损坏（001 为历史保留）。
   CHAT_MESSAGE_CORRUPT: {code: 106002, desc: "chat message row corrupt"},
-  CHAT_NOT_FOUND: {code: 106003, desc: "chat entity not found"},
+  CHAT_NOT_FOUND: {code: 106003, desc: "chat entity not found", messageKey: "error.chat.not_found"},
   CHAT_CONFLICT: {code: 106004, desc: "chat conflict"},
 
   // 107 SKILL 001-999：技能名、域参数、路径与内置保护。
   SKILL_INVALID_NAME: {code: 107001, desc: "invalid skill name"},
-  SKILL_MISSING_DOMAIN: {code: 107002, desc: "skill domain missing"},
-  SKILL_MISSING_PROJECT_ID: {code: 107003, desc: "skill project id missing"},
+  SKILL_MISSING_DOMAIN: {code: 107002, desc: "skill domain missing", messageKey: "error.skill.missing_domain"},
+  SKILL_MISSING_PROJECT_ID: {code: 107003, desc: "skill project id missing", messageKey: "error.skill.missing_project_id"},
   SKILL_INVALID_PATH: {code: 107004, desc: "invalid skill path"},
-  SKILL_NOT_FOUND: {code: 107005, desc: "skill not found"},
-  SKILL_BUILTIN: {code: 107006, desc: "builtin skill protected"},
-  SKILL_BUILTIN_NAME_RESERVED: {code: 107007, desc: "builtin skill name reserved"},
-  SKILL_BUILTIN_RENAME: {code: 107008, desc: "builtin skill rename rejected"},
-  SKILL_ALREADY_EXISTS: {code: 107009, desc: "skill already exists"},
+  SKILL_NOT_FOUND: {code: 107005, desc: "skill not found", messageKey: "error.skill.not_found"},
+  SKILL_BUILTIN: {code: 107006, desc: "builtin skill protected", messageKey: "error.skill.builtin_not_deletable"},
+  SKILL_BUILTIN_NAME_RESERVED: {code: 107007, desc: "builtin skill name reserved", messageKey: "error.skill.builtin_name_reserved"},
+  SKILL_BUILTIN_RENAME: {code: 107008, desc: "builtin skill rename rejected", messageKey: "error.skill.builtin_rename_forbidden"},
+  SKILL_ALREADY_EXISTS: {code: 107009, desc: "skill already exists", messageKey: "error.skill.already_exists"},
 
   // 108 COMPACTION_CONDITIONS 001-499 + SMART_SORT_RULE 500-999。
   COMPACTION_CONDITIONS_INVALID_SCHEMA: {code: 108001, desc: "invalid compaction conditions schema"},
@@ -105,6 +139,8 @@ export const ErrorCodes = {
   SMART_SORT_RULE_BUILTIN_PROTECTED: {code: 108504, desc: "builtin smart sort rule protected"},
 
   // 109 CONFIG 001-499 + PREFERENCES 500-999。
+  CONFIG_DECODE_INVALID_SCHEMA: {code: 109001, desc: "config data does not match its schema", messageKey: "error.infra.decode_invalid_schema"},
+  CONFIG_DECODE_ENCODE_NOT_SUPPORTED: {code: 109002, desc: "encoding not supported for this format", messageKey: "error.infra.encode_not_supported"},
   PREFERENCES_INVALID_VALUE: {code: 109500, desc: "invalid preference value"},
 
   // 110 INFRA 001-999：组合根启动前置条件与平台能力检查。
@@ -123,13 +159,25 @@ export const ErrorCodes = {
   DEPTH_INVALID_SLICE: {code: 111001, desc: "invalid depth slice"},
 
   // 116 SESSION_FS 001-999。
-  SESSION_FS_RESTORE_REVISION_MISSING: {code: 116001, desc: "restore revision missing"},
-  SESSION_FS_INVALID_ROLLBACK_OPTIONS: {code: 116002, desc: "invalid rollback option combination"},
+  SESSION_FS_RESTORE_REVISION_MISSING: {code: 116001, desc: "restore revision missing", messageKey: "error.session_fs.restore_revision_missing"},
+  SESSION_FS_INVALID_ROLLBACK_OPTIONS: {code: 116002, desc: "invalid rollback option combination", messageKey: "error.session_fs.invalid_rollback_options"},
+  SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND: {code: 116003, desc: "rollback message not found", messageKey: "error.session_fs.rollback_message_not_found"},
+  SESSION_FS_ROLLBACK_MESSAGE_SESSION_MISMATCH: {code: 116004, desc: "rollback message session mismatch", messageKey: "error.session_fs.rollback_message_session_mismatch"},
+  SESSION_FS_ROLLBACK_NO_CHECKPOINT: {code: 116005, desc: "rollback checkpoint missing", messageKey: "error.session_fs.rollback_no_checkpoint"},
+  SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED: {code: 116006, desc: "rollback vfs restore failed", messageKey: "error.session_fs.vfs_restore_failed"},
+  SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED: {code: 116007, desc: "rollback revision backfill required", messageKey: "error.session_fs.rollback_revision_backfill_required"},
+  SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET: {code: 116008, desc: "rollback undo_send empty target"},
+  SESSION_FS_ROLLBACK_CONFLICT: {code: 116009, desc: "rollback optimistic-lock conflict", messageKey: "error.session_fs.rollback_conflict"},
+  SESSION_FS_ROLLBACK_TAIL_DRIFT: {code: 116010, desc: "rollback tail drift", messageKey: "error.session_fs.rollback_tail_drift"},
 
   // 117 PROMPT 001-999：布局校验与动态宏校验。
   PROMPT_INVALID_LAYOUT: {code: 117001, desc: "invalid prompt layout"},
   PROMPT_INVALID_MACRO: {code: 117002, desc: "invalid prompt macro"},
   PROMPT_INVARIANT_VIOLATION: {code: 117003, desc: "prompt normalization invariant violation"},
+  PROMPT_INVALID_YAML: {code: 117004, desc: "invalid prompt yaml", messageKey: "error.prompt.invalid_yaml"},
+  PROMPT_INVALID_BLOCK: {code: 117005, desc: "invalid prompt block", messageKey: "error.prompt.invalid_block"},
+  PROMPT_UNKNOWN_FIELD: {code: 117006, desc: "unknown prompt field", messageKey: "error.prompt.unknown_field"},
+  PROMPT_UNSUPPORTED_SYNTAX: {code: 117007, desc: "unsupported prompt syntax", messageKey: "error.prompt.unsupported_syntax"},
 
   // 121 WORKPLACE 001-999：工作区规则、缓存载荷与物化失败。
   WORKPLACE_INVALID_RULE_SNAPSHOT: {code: 121001, desc: "invalid workplace rule snapshot"},
@@ -137,7 +185,11 @@ export const ErrorCodes = {
   WORKPLACE_MATERIALIZE_FAILED: {code: 121003, desc: "workplace materialize failed"},
   WORKPLACE_INVALID_RULE_ROW: {code: 121004, desc: "invalid workplace rule row"},
   WORKPLACE_ROOT_RULE_LOCKED: {code: 121005, desc: "root directory rules cannot be disabled"},
-} as const satisfies Record<string, {readonly code: number; readonly desc: string}>;
+
+  // 123 IPC 001-999：跨进程控制流码（总纲 §四：cancelled/replaced 平级，不算用户可见错误）。
+  TASK_CANCELLED: {code: 123001, desc: "task cancelled"},
+  TASK_REPLACED: {code: 123002, desc: "task replaced by a newer run"},
+} as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;
 export type ErrorNumber = (typeof ErrorCodes)[ErrorKey]["code"];
