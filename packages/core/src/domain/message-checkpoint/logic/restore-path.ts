@@ -21,7 +21,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -93,7 +93,7 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
       try {
         await vfs.delete(logicalPath);
       } catch (error) {
-        if (!isVfsError(error, "NOT_FOUND")) {
+        if (!isAppError(error, "VFS_NOT_FOUND")) {
           throw error;
         }
       }
@@ -126,7 +126,7 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
     try {
       await vfs.delete(logicalPath);
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }

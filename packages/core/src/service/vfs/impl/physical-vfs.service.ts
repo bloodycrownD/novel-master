@@ -27,8 +27,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
-import { AppError } from "@/errors/app-error.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
 import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
@@ -234,7 +233,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       );
     } catch (error) {
       // 挂载点根等目录行按「无此文件」归一（本视图 read 只面向文件）
-      if (isVfsError(error, "IS_DIRECTORY")) {
+      if (isAppError(error, "VFS_IS_DIRECTORY")) {
         throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
       }
       throw error;

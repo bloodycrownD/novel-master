@@ -14,7 +14,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock, afterEach } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import {
   postSse,
   resetShouldUseXhrForSseCacheForTests,
@@ -177,7 +177,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
       assert.equal(err.name, "LlmStreamTimeoutError");
       assert.equal(err.phase, "first-chunk");
       // 不得冒充用户取消（ProviderError "Request aborted"）
-      assert.ok(!(err instanceof ProviderError));
+      assert.ok(!isAppError(err));
       return true;
     });
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import {
   createAnthropicSseParserState,
   feedAnthropicSseChunk,
@@ -164,8 +164,7 @@ describe("anthropic-sse-parser", () => {
     assert.throws(
       () => finishAnthropicSse(state),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "MALFORMED_SSE");
+        assert.ok(isAppError(err, "PROVIDER_MALFORMED_SSE"));
         return true;
       },
     );

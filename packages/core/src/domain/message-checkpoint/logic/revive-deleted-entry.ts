@@ -21,7 +21,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import { ensureDirectoryChain } from "./ensure-directory-chain.js";
 import type { RestorePathError, RestorePathOutcome } from "./restore-path-model.js";
@@ -67,7 +67,7 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
     try {
       await vfs.delete(logicalPath);
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
@@ -88,7 +88,7 @@ export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps,
     try {
       await vfs.delete(logicalPath);
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }

@@ -6,7 +6,7 @@ import { DefaultProviderService } from "../../src/service/provider/impl/provider
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
 import { SqliteSavedModelRepository } from "../../src/domain/provider/repositories/impl/sqlite-saved-model.repository.js";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import {
   BUILTIN_PROVIDER_UUID_OPENAI,
   BUILTIN_PROVIDER_UUID_OPENCODE,
@@ -74,7 +74,7 @@ describe("ProviderService", () => {
           baseUrl: "https://example.com/v1",
           displayName: "   ",
         }),
-      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -92,7 +92,7 @@ describe("ProviderService", () => {
 
     await assert.rejects(
       () => bundle.providers.edit(provider.id, { displayName: "  " }),
-      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
 
     const renamed = await bundle.providers.edit(provider.id, {
@@ -112,11 +112,11 @@ describe("ProviderService", () => {
         bundle.providers.edit(BUILTIN_PROVIDER_UUID_OPENAI, {
           protocol: "gemini",
         }),
-      (e) => e instanceof ProviderError && e.code === "BUILTIN_PROVIDER",
+      ((e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
     await assert.rejects(
       () => bundle.providers.delete(BUILTIN_PROVIDER_UUID_OPENAI),
-      (e) => e instanceof ProviderError && e.code === "BUILTIN_PROVIDER",
+      ((e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
   });
 
@@ -129,7 +129,7 @@ describe("ProviderService", () => {
           "00000000-0000-4000-8000-000000000000",
           "hi",
         ),
-      (e) => e instanceof ProviderError && e.code === "MODEL_NOT_SAVED",
+      ((e) => isAppError(e, "PROVIDER_MODEL_NOT_SAVED"),
     );
   });
 
@@ -170,7 +170,7 @@ describe("ProviderService", () => {
 
     await assert.rejects(
       () => bundle.providers.delete(created.id),
-      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
     // 半套防护：模型必须仍在（服务层只有 savedList，没有 listByProvider）
     const still = await bundle.providerModels.savedList(created.id);

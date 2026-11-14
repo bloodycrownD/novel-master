@@ -18,7 +18,6 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 
 import { AppError, isAppError } from "@/errors/app-error.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
@@ -223,7 +222,7 @@ export class SkillsService implements SkillService {
     domain: SkillDomain,
     projectId?: string
   ): Promise<AppError<"SKILL_NOT_FOUND">> {
-    if (!isVfsError(error, "NOT_FOUND")) {
+    if (!isAppError(error, "VFS_NOT_FOUND")) {
       throw error;
     }
     const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
@@ -246,7 +245,7 @@ export class SkillsService implements SkillService {
       entries = await vfs.list(SKILLS_ROOT, { recursive: true });
     } catch (error) {
       // 技能根目录尚不存在 = 无技能（write 首个 SKILL.md 时才会建目录行）
-      if (isVfsError(error, "NOT_FOUND")) {
+      if (isAppError(error, "VFS_NOT_FOUND")) {
         return [];
       }
       throw error;
@@ -351,7 +350,7 @@ export class SkillsService implements SkillService {
           version: result.version,
         };
       } catch (error) {
-        if (isVfsError(error, "NOT_FOUND")) {
+        if (isAppError(error, "VFS_NOT_FOUND")) {
           continue;
         }
         throw error;
@@ -582,7 +581,7 @@ export class SkillsService implements SkillService {
         try {
           source = (await vfs.read(entryPath)).content;
         } catch (error) {
-          if (!isVfsError(error, "NOT_FOUND")) {
+          if (!isAppError(error, "VFS_NOT_FOUND")) {
             throw error;
           }
         }

@@ -1,11 +1,11 @@
-// legacy-port: VfsService / VfsRestorePort — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
+// legacy-port: VfsService / VfsRestorePort — phase 2 端口统一后残余 isVfsError 判别随 legacy 形态守卫一起收敛。
 /**
  * VFS path move/rename via {@link VfsService} composition (files and directory trees).
  *
  * @module domain/vfs/logic/vfs-move
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
@@ -55,7 +55,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.mkdir(path);
     return Result.ok(undefined);
   } catch (error) {
-    if (!isVfsError(error, "ALREADY_EXISTS")) {
+    if (!isAppError(error, "VFS_ALREADY_EXISTS")) {
       throw error;
     }
   }
@@ -63,7 +63,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.read(path);
     return Result.err(new AppError("VFS_NOT_A_DIRECTORY", `Not a directory: ${path}`, { path }));
   } catch (readError) {
-    if (isVfsError(readError, "IS_DIRECTORY")) {
+    if (isAppError(readError, "VFS_IS_DIRECTORY")) {
       return Result.ok(undefined);
     }
     throw readError;
@@ -101,10 +101,10 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       await vfs.read(to);
       return alreadyExists();
     } catch (error) {
-      if (isVfsError(error, "IS_DIRECTORY")) {
+      if (isAppError(error, "VFS_IS_DIRECTORY")) {
         return alreadyExists();
       }
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
@@ -113,7 +113,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       const hasDirRow = targetEntries.some((e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo);
       if (targetEntries.length > 0 || hasDirRow) return alreadyExists();
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }

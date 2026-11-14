@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import {
   assertSseParseSucceededOrThrow,
   isSseParseDebugEnabled,
@@ -60,8 +60,7 @@ describe("sse-parse-errors", () => {
     assert.throws(
       () => assertSseParseSucceededOrThrow(diag, [], "openai"),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "MALFORMED_SSE");
+        assert.ok(isAppError(err, "PROVIDER_MALFORMED_SSE"));
         assert.match(err.message, /malformed SSE line/);
         return true;
       },

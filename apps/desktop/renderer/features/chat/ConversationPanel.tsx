@@ -733,7 +733,7 @@ export function ConversationPanel({
           : {}),
       });
       if (!result.ok) {
-        if (result.error.code === 'ROLLBACK_REVISION_BACKFILL_REQUIRED') {
+        if (result.error.code === 'SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED') {
           setConfirmState({
             kind: 'rollback-backfill',
             messageId,
@@ -745,8 +745,8 @@ export function ConversationPanel({
           return;
         }
         if (
-          result.error.code === 'ROLLBACK_VFS_RESTORE_FAILED' ||
-          result.error.code === 'ROLLBACK_UNDO_SEND_EMPTY_TARGET'
+          result.error.code === 'SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED' ||
+          result.error.code === 'SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET'
         ) {
           setConfirmState({
             kind: 'rollback-degraded',

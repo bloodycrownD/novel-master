@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { blocksToTextOnly } from "../../src/infra/llm-protocol/logic/text-only-content.js";
 
 describe("blocksToTextOnly", () => {
@@ -14,8 +14,7 @@ describe("blocksToTextOnly", () => {
           },
         ]),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "UNSUPPORTED_CONTENT");
+        assert.ok(isAppError(err, "PROVIDER_UNSUPPORTED_CONTENT"));
         assert.match(err.message, /image/);
         return true;
       },

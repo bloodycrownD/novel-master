@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import {
   parseToolArgumentsJson,
   tryParseToolArgumentsJson,
@@ -23,8 +23,7 @@ describe("tool-arguments-parse", () => {
     assert.throws(
       () => parseToolArgumentsJson("{not-json", "gemini"),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
+        assert.ok(isAppError(err, "PROVIDER_INVALID_TOOL_ARGUMENTS"));
         return true;
       },
     );

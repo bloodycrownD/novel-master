@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
@@ -28,9 +28,7 @@ describe("PersistentState", () => {
       () => {
         void ctx.state.setCurrentModelId("prov1/model");
       },
-      (error: unknown) =>
-        error instanceof ProviderError &&
-        error.code === "INVALID_SAVED_MODEL_ID",
+      ((error: unknown) => isAppError(error, "PROVIDER_INVALID_SAVED_MODEL_ID"),
     );
   });
 

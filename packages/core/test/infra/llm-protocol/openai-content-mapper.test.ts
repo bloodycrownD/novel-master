@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import {
   blocksToOpenAiMessageContent,
@@ -162,7 +162,7 @@ describe("openai-content-mapper", () => {
     assert.throws(
       () =>
         blocksToOpenAiMessageContent([{ type: "thinking", text: "hmm" }]),
-      (e: unknown) => e instanceof ProviderError && e.code === "UNSUPPORTED_CONTENT",
+      (e: unknown) => isAppError(e, "PROVIDER_UNSUPPORTED_CONTENT"),
     );
   });
 

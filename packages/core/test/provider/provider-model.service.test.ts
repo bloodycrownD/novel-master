@@ -7,7 +7,7 @@ import { formatSavedModelDisplayName } from "../../src/domain/provider/logic/for
 import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import {
   savedModelContextWindowTokens,
   savedModelThinkingLevel,
@@ -136,7 +136,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           contextWindowTokens: 0,
         }),
-      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -188,7 +188,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           tokenCounterMode: "not-a-mode" as "auto",
         }),
-      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -259,7 +259,7 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
     assert.equal(after.modelName, "Label A");
     await assert.rejects(
       () => bundle.providerModels.editSaved(created.id, ""),
-      (e) => e instanceof ProviderError && e.code === "INVALID_MODEL_NAME",
+      ((e) => isAppError(e, "PROVIDER_INVALID_MODEL_NAME"),
     );
   });
 });
@@ -273,7 +273,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     await state.setCurrentModelId(saved.id);
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -296,7 +296,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     );
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -319,7 +319,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     });
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -337,7 +337,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     });
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 

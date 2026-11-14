@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteProviderRepository } from "../../src/domain/provider/repositories/impl/sqlite-provider.repository.js";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -41,10 +41,9 @@ async function insertProviderRow(
 
 function expectEmptyDisplayNameError(error: unknown, providerId: string): boolean {
   return (
-    error instanceof ProviderError &&
-    error.code === "INVALID_ARGUMENT" &&
+    isAppError(error, "PROVIDER_INVALID_ARGUMENT") &&
     error.message.includes("display_name 不得为空") &&
-    error.providerId === providerId
+    (error.details as {providerId?: string} | undefined)?.providerId === providerId
   );
 }
 
@@ -92,12 +91,13 @@ describe("SqliteProviderRepository", () => {
     await assert.rejects(
       () => repo.list(),
       (error) => {
-        if (!(error instanceof ProviderError) || error.code !== "INVALID_ARGUMENT") {
+        if (!isAppError(error, "PROVIDER_INVALID_ARGUMENT")) {
           return false;
         }
+        const providerId = (error.details as {providerId?: string} | undefined)?.providerId;
         assert.match(error.message, /display_name 不得为空/);
-        assert.match(error.providerId ?? "", /^[0-9a-f-]{36}$/i);
-        assert.notEqual(error.message.trim(), error.providerId);
+        assert.match(providerId ?? "", /^[0-9a-f-]{36}$/i);
+        assert.notEqual(error.message.trim(), providerId);
         return true;
       },
     );

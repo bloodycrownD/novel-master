@@ -10,7 +10,7 @@
 import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { AppError } from "@/errors/app-error.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
 import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
@@ -148,15 +148,15 @@ async function rmRecursiveWhenTargetIsDirectory(vfs: VfsService, path: string, r
     await vfs.read(path);
     return false;
   } catch (error: unknown) {
-    if (isVfsError(error, "IS_DIRECTORY")) {
+    if (isAppError(error, "VFS_IS_DIRECTORY")) {
       return true;
     }
-    if (isVfsError(error, "NOT_FOUND")) {
+    if (isAppError(error, "VFS_NOT_FOUND")) {
       try {
         const entries = await vfs.list(path);
         return entries.length > 0;
       } catch (listError: unknown) {
-        if (isVfsError(listError, "NOT_FOUND")) {
+        if (isAppError(listError, "VFS_NOT_FOUND")) {
           return false;
         }
         throw listError;

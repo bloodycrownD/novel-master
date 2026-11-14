@@ -11,7 +11,7 @@ import type { VfsGrepMatch, VfsReadResult } from "@/domain/vfs/ports/vfs-service
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { AppError } from "@/errors/app-error.js";
 import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
@@ -442,7 +442,7 @@ async function probeFileAbsentForWrite(ctx: BuiltinToolContext, logicalPath: str
     await ctx.vfs.read(logicalPath);
     return false;
   } catch (error) {
-    if (isVfsError(error, "NOT_FOUND")) {
+    if (isAppError(error, "VFS_NOT_FOUND")) {
       return true;
     }
     log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error });

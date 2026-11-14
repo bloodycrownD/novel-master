@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock, afterEach } from "node:test";
-import { ProviderError } from "../../../src/errors/provider-errors.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import {
   postSse,
   resetShouldUseXhrForSseCacheForTests,
@@ -262,8 +262,7 @@ describe("llm-sse-transport", () => {
             { signal: preAborted.signal },
           ),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderError);
-          assert.equal(err.code, "HTTP_ERROR");
+          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /Request aborted/);
           return true;
         },
@@ -283,8 +282,7 @@ describe("llm-sse-transport", () => {
       await assert.rejects(
         promise,
         (err: unknown) => {
-          assert.ok(err instanceof ProviderError);
-          assert.equal(err.code, "HTTP_ERROR");
+          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /Request aborted/);
           return true;
         },
@@ -394,8 +392,7 @@ describe("llm-sse-transport", () => {
             "openai-test",
           ),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderError);
-          assert.equal(err.code, "HTTP_ERROR");
+          assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
           assert.match(String(err.message), /401/);
           return true;
         },
@@ -423,8 +420,7 @@ describe("llm-sse-transport", () => {
           { fetchFn: fetchFn as typeof fetch },
         ),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "HTTP_ERROR");
+        assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
         assert.match(String(err.message), /401/);
         return true;
       },
@@ -515,8 +511,7 @@ describe("llm-sse-transport", () => {
           { fetchFn: fetchFn as typeof fetch },
         ),
       (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "HTTP_ERROR");
+        assert.ok(isAppError(err, "PROVIDER_HTTP_ERROR"));
         assert.match(String(err.message), /does not support fetch stream bodies/);
         return true;
       },

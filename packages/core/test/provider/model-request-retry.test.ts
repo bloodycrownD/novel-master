@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
-import { ProviderError } from "../../src/errors/provider-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -185,8 +185,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      (error: unknown) =>
-        error instanceof ProviderError && error.code === "HTTP_ERROR",
+      ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 3);
   });
@@ -239,8 +238,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      (error: unknown) =>
-        error instanceof ProviderError && error.code === "HTTP_ERROR",
+      ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 1, "abort 形态错误不应重试");
   });
@@ -324,8 +322,7 @@ describe("DefaultModelRequestService retry", () => {
     try {
       await assert.rejects(
         () => svc.request(SAVED_MODEL_ID, "hello"),
-        (error: unknown) =>
-          error instanceof ProviderError && error.code === "HTTP_ERROR",
+        ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
       );
       assert.equal(calls, 1);
     } finally {

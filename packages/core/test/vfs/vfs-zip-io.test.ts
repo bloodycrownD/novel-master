@@ -2,7 +2,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
-import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
+import { createVfsZipIoService, isAppError } from "@novel-master/core/vfs";
 
 import { createCharacterCardImportService, type VfsService } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
@@ -137,7 +137,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
 
     const still = await vfs.read("/keep.md");
@@ -189,7 +189,7 @@ describe("VfsZipIoService", () => {
     const zipBytes = buildVfsZip(new Map([["other.md", "x"]]));
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED"
+      (e: unknown) => isAppError(e, "VFS_ZIP_NOT_CONFIRMED")
     );
     const read = await vfs.read("/stay.md");
     assert.equal(read.content, "stay");
@@ -300,7 +300,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
     assert.equal(deleteReached, false);
   });
@@ -322,7 +322,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipWithParent, { confirmed: true }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
   });
@@ -509,7 +509,7 @@ describe("VfsZipIoService", () => {
           confirmed: false,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED"
+      (e: unknown) => isAppError(e, "VFS_ZIP_NOT_CONFIRMED")
     );
 
     const invalidUtf8Zip = zipSync({
@@ -521,7 +521,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
 
     assert.equal((await vfs.read("/a/stay.txt")).content, "stay-a");
@@ -556,7 +556,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -593,7 +593,7 @@ describe("VfsZipIoService", () => {
           ),
           { confirmed: true, directoryPath: "/a" }
         ),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -613,7 +613,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/note.md", "note");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    const assertInvalidPath = (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH";
+    const assertInvalidPath = (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH");
 
     await assert.rejects(() => zipSvc.export(scope, { directoryPath: "/note.md" }), assertInvalidPath);
     await assert.rejects(
