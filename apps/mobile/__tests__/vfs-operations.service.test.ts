@@ -5,7 +5,6 @@
  * userVfsTurn.executeOp 记录 op），被测 service 与 core 的 moveVfsPath /
  * buildUserVfs*Op 编排逻辑全部真实执行。
  */
-import {VfsError} from '@novel-master/core';
 import type {UserVfsTurnOp} from '@novel-master/core/chat';
 import type {VfsListEntry, VfsScope, VfsService} from '@novel-master/core/vfs';
 import {
@@ -22,8 +21,15 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 type FakeEntry = {path: string; kind: 'file' | 'directory'};
 
-function notFound(path: string): VfsError {
-  return new VfsError('NOT_FOUND', `Path not found: ${path}`, {path});
+/** 类已退役：FakeVfs 抛 legacy mapper 手搓旧形态对象（name + 字符串短码）。 */
+type LegacyVfsError = Error & {code: string; path?: string};
+
+function notFound(path: string): LegacyVfsError {
+  return Object.assign(new Error(`Path not found: ${path}`), {
+    name: 'VfsError',
+    code: 'NOT_FOUND',
+    path,
+  });
 }
 
 class FakeVfs {
@@ -39,7 +45,9 @@ class FakeVfs {
       return {path, content, version: 1, mtimeMs: 0};
     }
     if (this.dirs.has(path)) {
-      throw new VfsError('IS_DIRECTORY', `Path is a directory: ${path}`, {
+      throw Object.assign(new Error(`Path is a directory: ${path}`), {
+        name: 'VfsError',
+        code: 'IS_DIRECTORY',
         path,
       });
     }

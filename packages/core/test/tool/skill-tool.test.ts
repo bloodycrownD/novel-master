@@ -1,3 +1,4 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -16,7 +17,6 @@ import type {
   SkillFileContent,
   SkillService,
 } from "../../src/service/skills/skills.port.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
@@ -213,7 +213,7 @@ describe("skill 工具", () => {
           { action: "load" },
           skillToolCtx(fakeSkillService()),
         ),
-      (e: unknown) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -272,7 +272,7 @@ describe("skill 工具", () => {
           { action: "read", name: "demo", offset: 99 },
           skillToolCtx(fakeSkillService()),
         ),
-      (e: unknown) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -301,7 +301,7 @@ describe("skill 工具", () => {
           skillToolCtx(fakeSkillService()),
         ),
       (e: unknown) =>
-        e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+        isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -349,9 +349,9 @@ describe("skill 工具", () => {
           skillToolCtx(svc),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        JSON.stringify((e as ToolError).details).includes("domain"),
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
+        JSON.stringify((e as AppError).details).includes("domain"),
     );
     assert.equal(
       svc.calls.length,
@@ -377,9 +377,9 @@ describe("skill 工具", () => {
       await assert.rejects(
         () => runner.call(SKILL_TOOL_NAME, c.input, skillToolCtx(svc)),
         (e: unknown) =>
-          e instanceof ToolError &&
-          e.code === "INVALID_ARGUMENT" &&
-          JSON.stringify((e as ToolError).details).includes(c.field),
+          isAppError(e) && e.key.startsWith("TOOL_") &&
+          e.key === "TOOL_INVALID_ARGUMENT" &&
+          JSON.stringify((e as AppError).details).includes(c.field),
         `输入 ${JSON.stringify(c.input)} 应因缺 ${c.field} 报 INVALID_ARGUMENT`,
       );
       assert.equal(svc.calls.length, 0, "schema 拦截后不应触达 SkillService");
@@ -397,9 +397,9 @@ describe("skill 工具", () => {
           skillToolCtx(svc),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        JSON.stringify((e as ToolError).details).includes("不得包含 .."),
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
+        JSON.stringify((e as AppError).details).includes("不得包含 .."),
     );
     assert.equal(
       svc.calls.length,
@@ -452,7 +452,7 @@ describe("skill 工具", () => {
             sessionId: "s",
           },
         ),
-      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+      (e: unknown) => isAppError(e, "TOOL_FAILED"),
     );
   });
 

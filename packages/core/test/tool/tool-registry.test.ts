@@ -1,7 +1,7 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { z } from "zod";
 
 describe("ToolRegistry", () => {
@@ -41,7 +41,7 @@ describe("ToolRegistry", () => {
             return null;
           },
         }),
-      (e) => e instanceof ToolError && e.code === "CONFLICT" && e.toolName === "dup",
+      (e) => isAppError(e, "TOOL_CONFLICT") && e.details?.toolName === "dup",
     );
   });
 

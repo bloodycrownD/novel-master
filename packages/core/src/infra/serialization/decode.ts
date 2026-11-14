@@ -5,7 +5,7 @@
  */
 
 import type { ZodType } from "zod";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
+import { AppError } from "@/errors/app-error.js";
 
 function zodMessage(error: { message: string }): string {
   return error.message;
@@ -17,7 +17,7 @@ function zodMessage(error: { message: string }): string {
 export function decode<T>(raw: unknown, schema: ZodType<T>): T {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
-    throw new ConfigDecodeError("INVALID_SCHEMA", zodMessage(parsed.error));
+    throw new AppError("CONFIG_DECODE_INVALID_SCHEMA", { detail: zodMessage(parsed.error) });
   }
   return parsed.data;
 }

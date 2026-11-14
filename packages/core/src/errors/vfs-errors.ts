@@ -1,16 +1,29 @@
 /**
- * VFS domain errors: typed codes for path and replace failures.
+ * VFS 错误的结构守卫与 legacy 短码类型。
  *
- * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
- * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
- * `userMessageOf` + translator 翻译。
+ * `VfsError` 类已退役（统一 `new AppError("VFS_*", params)` 构造），本文件保留三样：
+ * - {@link VfsErrorCode} 字符串短码联合：legacy-vfs-error mapper 手搓旧形态对象、
+ *   apps/CLI 的 `name + code` 消费仍走它；与 AppError 的 `VFS_*` key 是两套，不合并。
+ * - {@link VfsReplaceNotFoundDetails}：edit REPLACE_NOT_FOUND 的 LCS 诊断字段类型。
+ * - {@link isVfsError} 双形态守卫：AppError（`name` 以 `VFS_` 开头且 `code` 为数字）
+ *   与 legacy 手搓对象（`name === "VfsError"` + 字符串短码）都能判中，沿 cause 链
+ *   回溯。不带短码实参的调用对两种形态都收窄；带短码实参只精确匹配 legacy 形态
+ *   （AppError 的 `code` 是数字，判 key 请用 `isAppError(error, "VFS_*")`）。
  *
  * @module errors/vfs-errors
  */
 
-import type { MessageParams } from "@/common/i18n.js";
-import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
-import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
+/** VFS 域字符串短码（legacy mapper 形态与结构守卫的实参用，非 AppError key）。 */
+export type VfsErrorCode =
+  | "NOT_FOUND"
+  | "REPLACE_NOT_FOUND"
+  | "DIRECTORY_NOT_EMPTY"
+  | "INVALID_PATH"
+  | "INVALID_NAME"
+  | "IS_DIRECTORY"
+  | "ALREADY_EXISTS"
+  | "NOT_A_DIRECTORY"
+  | "PARENT_NOT_FOUND";
 
 /**
  * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
@@ -30,52 +43,18 @@ export type VfsReplaceNotFoundDetails = {
   readonly fileHintPreview?: string;
 };
 
-/** Discriminant codes for {@link VfsError}. */
-export type VfsErrorCode =
-  | "NOT_FOUND"
-  | "REPLACE_NOT_FOUND"
-  | "DIRECTORY_NOT_EMPTY"
-  | "INVALID_PATH"
-  | "INVALID_NAME"
-  | "IS_DIRECTORY"
-  | "ALREADY_EXISTS"
-  | "NOT_A_DIRECTORY"
-  | "PARENT_NOT_FOUND";
-
-/**
- * Unified error for VFS service and repository operations.
- */
-export class VfsError extends Error {
+/** {@link isVfsError} 判中后的结构形状；AppError 形态下 `path` 缺省在 `details.path`。 */
+export type LegacyVfsError = Error & {
   readonly code: VfsErrorCode;
   readonly path?: string;
   readonly details?: unknown;
-  readonly messageKey?: CoreMessageKey;
-  readonly messageParams?: MessageParams;
+};
 
-  constructor(
-    code: VfsErrorCode,
-    message: string | CoreMessageDescriptor,
-    options?: {
-      path?: string;
-      details?: unknown;
-    }
-  ) {
-    const localized = resolveLocalizedMessage(message);
-    super(localized.text);
-    this.name = "VfsError";
-    this.code = code;
-    this.path = options?.path;
-    this.details = options?.details;
-    this.messageKey = localized.messageKey;
-    this.messageParams = localized.messageParams;
-  }
-}
-
-/** Type guard that works across duplicate module instances (e.g. src vs dist in tests). */
+/** 双形态结构守卫（src/dist 双模块实例下 instanceof 会 false negative，不走 instanceof）。 */
 export function isVfsError(
   error: unknown,
   code?: VfsErrorCode
-): error is VfsError {
+): error is LegacyVfsError {
   if (matchesVfsError(error, code)) {
     return true;
   }
@@ -88,56 +67,15 @@ export function isVfsError(
 function matchesVfsError(
   error: unknown,
   code?: VfsErrorCode
-): error is VfsError {
+): error is LegacyVfsError {
   if (typeof error !== "object" || error === null) {
     return false;
   }
   const candidate = error as { name?: unknown; code?: unknown };
-  if (candidate.name !== "VfsError" || typeof candidate.code !== "string") {
+  const legacy = candidate.name === "VfsError" && typeof candidate.code === "string";
+  const modern = typeof candidate.name === "string" && candidate.name.startsWith("VFS_") && typeof candidate.code === "number";
+  if (!legacy && !modern) {
     return false;
   }
-  return code === undefined || candidate.code === code;
-}
-
-/** Path does not exist. */
-export function vfsNotFound(path: string): VfsError {
-  return new VfsError("NOT_FOUND", `Path not found: ${path}`, { path });
-}
-
-/** Non-recursive delete blocked by child paths. */
-export function vfsDirectoryNotEmpty(path: string): VfsError {
-  return new VfsError("DIRECTORY_NOT_EMPTY", `Directory not empty: ${path}`, {
-    path,
-  });
-}
-
-/** Invalid or non-normalizable path（reason 可为 descriptor，如 legacy /template 拒绝）。 */
-export function vfsInvalidPath(path: string, reason: string | CoreMessageDescriptor): VfsError {
-  return new VfsError("INVALID_PATH", typeof reason === "string" ? `Invalid path ${path}: ${reason}` : reason, {
-    path,
-  });
-}
-
-/** Path is a directory row; read/write/replace are not allowed. */
-export function vfsIsDirectory(path: string): VfsError {
-  return new VfsError("IS_DIRECTORY", `Path is a directory: ${path}`, { path });
-}
-
-/** mkdir target already exists. */
-export function vfsAlreadyExists(path: string): VfsError {
-  return new VfsError("ALREADY_EXISTS", `Path already exists: ${path}`, {
-    path,
-  });
-}
-
-/** Parent path exists as a file row. */
-export function vfsNotADirectory(path: string): VfsError {
-  return new VfsError("NOT_A_DIRECTORY", `Not a directory: ${path}`, { path });
-}
-
-/** mkdir parent path does not exist. */
-export function vfsParentNotFound(path: string): VfsError {
-  return new VfsError("PARENT_NOT_FOUND", `Parent not found: ${path}`, {
-    path,
-  });
+  return code === undefined || (legacy && candidate.code === code);
 }

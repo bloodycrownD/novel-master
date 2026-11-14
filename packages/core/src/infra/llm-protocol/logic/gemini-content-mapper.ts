@@ -6,7 +6,7 @@
 
 import { isRecord } from "@/common/guards.js";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -215,10 +215,7 @@ export function blocksToGeminiParts(
       case "redacted_thinking":
         break;
       case "image":
-        throw new ProviderError(
-          "UNSUPPORTED_CONTENT",
-          "Gemini outbound messages do not support image blocks in this iteration"
-        );
+        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", "Gemini outbound messages do not support image blocks in this iteration");
       default:
         break;
     }

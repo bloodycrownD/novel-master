@@ -5,10 +5,10 @@
  */
 
 import { textBlocks } from "@novel-master/core/chat";
+import { AppError } from "@novel-master/core/agent";
 
 import {
   assertSavedModelUuid,
-  ProviderError,
   savedModelDisplayName,
 } from "@novel-master/core/provider";
 
@@ -51,8 +51,8 @@ export async function runModel(
       }
       const saved = await rt.savedModels.findById(modelId);
       if (saved == null) {
-        throw new ProviderError(
-          "INVALID_SAVED_MODEL_ID",
+        throw new AppError(
+          "PROVIDER_INVALID_SAVED_MODEL_ID",
           `Saved model not found: ${modelId}`,
           { modelId },
         );

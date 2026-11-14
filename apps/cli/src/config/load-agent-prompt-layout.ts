@@ -5,17 +5,12 @@
  */
 
 import { decode, parseText } from "@novel-master/core";
-
-
-import { promptsDocumentSchema } from "@novel-master/core/agent";
-
-
+import { AppError, promptsDocumentSchema } from "@novel-master/core/agent";
 import { validateAgentPromptLayoutFromMaps, type AgentPromptLayout } from "@novel-master/core/prompt";
-import { PromptError } from "@novel-master/core/prompt";
 
 function extractPromptsRecord(parsed: unknown): unknown {
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new PromptError("INVALID_YAML", "prompt root must be an object");
+    throw new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must be an object" });
   }
   const record = parsed as Record<string, unknown>;
   if (
@@ -29,10 +24,7 @@ function extractPromptsRecord(parsed: unknown): unknown {
   if (nested != null && typeof nested === "object" && !Array.isArray(nested)) {
     return nested;
   }
-  throw new PromptError(
-    "INVALID_YAML",
-    "prompt root must contain prompts.system / persist / dynamic",
-  );
+  throw new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must contain prompts.system / persist / dynamic" });
 }
 
 /** 解析 YAML 中的三区 prompts 文档。 */
@@ -42,7 +34,7 @@ export function loadAgentPromptLayoutFromYaml(source: string): AgentPromptLayout
     parsed = parseText(source, "yaml");
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid YAML";
-    throw new PromptError("INVALID_YAML", message);
+    throw new AppError("PROMPT_INVALID_YAML", { detail: message });
   }
 
   const promptsRaw = extractPromptsRecord(parsed);

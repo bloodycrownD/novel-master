@@ -1,3 +1,4 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
@@ -10,7 +11,6 @@ import {
   pathStartsWithPrefix,
   readAllowedPaths,
 } from "../../src/domain/tool/logic/tool-path-policy.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 
 /**
  * A-14 / T-SC9：agent 试图写 allowedPaths 之外的路径，必须被 ToolRunner 拒掉。
@@ -216,10 +216,10 @@ describe("ToolRunner path policy (T-SC9)", () => {
           { allowedPaths: ["src", "docs"] },
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError, "应为 ToolError");
-        assert.equal((e as ToolError).code, "FORBIDDEN");
-        assert.equal((e as ToolError).toolName, "write");
-        const details = (e as ToolError).details as { path: string };
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"), "应为 ToolError");
+        assert.equal(e.key, "TOOL_FORBIDDEN");
+        assert.equal((e as AppError).details?.toolName, "write");
+        const details = (e as AppError).details as { path: string };
         assert.equal(details.path, "secrets/key.txt");
         return true;
       },
@@ -241,7 +241,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
           { path: "src-evil/x.ts", content: "x" },
           { allowedPaths: ["src"] },
         ),
-      (e) => e instanceof ToolError && e.code === "FORBIDDEN",
+      (e) => isAppError(e, "TOOL_FORBIDDEN"),
     );
     assert.equal(ran.ok, false);
   });
@@ -261,10 +261,10 @@ describe("ToolRunner path policy (T-SC9)", () => {
           { allowedPaths: ["src"] },
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal((e as ToolError).code, "FORBIDDEN");
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FORBIDDEN");
         assert.equal(
-          ((e as ToolError).details as { path: string }).path,
+          ((e as AppError).details as { path: string }).path,
           "secrets/a.ts",
         );
         return true;
@@ -305,9 +305,9 @@ describe("ToolRunner path policy (T-SC9)", () => {
           { allowedPaths: ["src"] },
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FORBIDDEN");
-        assert.equal((e as ToolError).details && (e as ToolError).details.path, "secrets/leak.md");
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FORBIDDEN");
+        assert.equal((e as AppError).details && (e as AppError).details.path, "secrets/leak.md");
         return true;
       },
     );
@@ -328,7 +328,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
           { path: "src/a.ts" },
           { allowedPaths: ["src"] },
         ),
-      (e) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+      (e) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
     assert.equal(ran.ok, false);
   });

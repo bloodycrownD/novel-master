@@ -11,9 +11,8 @@ import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-bui
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { vfsNotFound } from "../../src/errors/vfs-errors.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
-import { isVfsError } from "@novel-master/core/vfs";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
+
 import {
   TOOL_OUTPUT_MAX_BYTES,
   TOOL_OUTPUT_MAX_LINES,
@@ -41,7 +40,7 @@ describe("Builtin file tools V2 (unit)", () => {
     const runner = new ToolRunner(registry);
     await assert.rejects(
       () => runner.call("replace", { path: "/t.txt", oldString: "a", newString: "b" }, {} as BuiltinToolContext),
-      (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
+      (e: unknown) => isAppError(e, "TOOL_NOT_FOUND"),
     );
   });
 
@@ -102,9 +101,9 @@ describe("Builtin file tools V2 (unit)", () => {
 
   it("write 嵌套新路径各层祖先目录补默认规则，已有 rule_off 行不覆盖", async () => {
     const vfs = {
-      // B-1：write 前用 vfs.read 探测存在性——NOT_FOUND 即新建
+      // B-1：write 前用 vfs.read 探测存在性——NOT_FOUND 即新建（mock 生产形态：AppError VFS_NOT_FOUND）
       read: async (path: string) => {
-        throw vfsNotFound(path);
+        throw new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`});
       },
       write: async () => ({ version: 1 }),
     } as unknown as BuiltinToolContext["vfs"];
@@ -410,7 +409,7 @@ describe("Builtin file tools V2 (integration)", () => {
     await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx);
     await assert.rejects(
       () => vfs.read("/dir/a.txt"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
     );
   });
 
@@ -430,7 +429,7 @@ describe("Builtin file tools V2 (integration)", () => {
     await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx);
     await assert.rejects(
       () => vfs.read("/dir/a.txt"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
     );
   });
 
@@ -450,7 +449,7 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal((await vfs.read("/new.md")).content, "body");
     await assert.rejects(
       () => vfs.read("/old.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
     );
   });
 
@@ -530,7 +529,7 @@ describe("Builtin file tools V2 (integration)", () => {
     await runner.call("fs", { action: "rm", path: "/a.txt" }, baseCtx);
     await assert.rejects(
       () => runner.call("read", { path: "/a.txt" }, baseCtx),
-      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+      (e: unknown) => isAppError(e, "TOOL_FAILED"),
     );
   });
 
@@ -548,7 +547,7 @@ describe("Builtin file tools V2 (integration)", () => {
 
     await assert.rejects(
       () => runner.call("read", { path: "/small.txt", offset: 100 }, baseCtx),
-      (e: unknown) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+      (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
   });
 
@@ -866,10 +865,10 @@ describe("Builtin file tools V2 (integration)", () => {
     await assert.rejects(
       () => runner.call("read", { path: "/missing.txt" }, baseCtx),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FAILED");
-        assert.equal(e.toolName, "read");
-        assert.ok(isVfsError(e.cause, "NOT_FOUND"));
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FAILED");
+        assert.equal(e.details?.toolName, "read");
+        assert.ok(isAppError(e.cause, "VFS_NOT_FOUND"));
         return true;
       },
     );

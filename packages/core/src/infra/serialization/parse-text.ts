@@ -5,7 +5,7 @@
  */
 
 import { parse as parseYaml } from "yaml";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
+import { AppError } from "@/errors/app-error.js";
 
 export type TextFormat = "yaml" | "json";
 
@@ -18,13 +18,13 @@ export function parseText(source: string, format: TextFormat): unknown {
       return JSON.parse(source) as unknown;
     } catch (error) {
       const message = error instanceof Error ? error.message : "invalid JSON";
-      throw new ConfigDecodeError("INVALID_SCHEMA", message);
+      throw new AppError("CONFIG_DECODE_INVALID_SCHEMA", { detail: message });
     }
   }
   try {
     return parseYaml(source);
   } catch (error) {
     const message = error instanceof Error ? error.message : "invalid YAML";
-    throw new ConfigDecodeError("INVALID_SCHEMA", message);
+    throw new AppError("CONFIG_DECODE_INVALID_SCHEMA", { detail: message });
   }
 }

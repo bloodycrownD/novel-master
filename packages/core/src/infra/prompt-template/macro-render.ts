@@ -4,7 +4,7 @@
  * @module infra/prompt-template/macro-render
  */
 
-import { PromptError } from "../../errors/prompt-errors.js";
+import { AppError } from "../../errors/app-error.js";
 import { scanMacroActions } from "./macro-scan.js";
 
 export interface MacroRenderContext {
@@ -37,27 +37,15 @@ function lookupDot(
       typeof current !== "object" ||
       Array.isArray(current)
     ) {
-      throw new PromptError(
-        "UNKNOWN_FIELD",
-        `unknown field: .${path.join(".")}`,
-        { offset }
-      );
+      throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${path.join(".")}`, offset });
     }
     current = (current as Record<string, unknown>)[segment];
   }
   if (current == null) {
-    throw new PromptError(
-      "UNKNOWN_FIELD",
-      `unknown field: .${path.join(".")}`,
-      { offset }
-    );
+    throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${path.join(".")}`, offset });
   }
   if (typeof current !== "string") {
-    throw new PromptError(
-      "UNKNOWN_FIELD",
-      `field .${path.join(".")} is not a string`,
-      { offset }
-    );
+    throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: `field .${path.join(".")} is not a string`, offset });
   }
   return current;
 }
@@ -69,9 +57,7 @@ function lookupRoot(
 ): string {
   const value = root[key];
   if (value == null) {
-    throw new PromptError("UNKNOWN_FIELD", `unknown field: $.${key}`, {
-      offset,
-    });
+    throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: $.${key}`, offset });
   }
   return value;
 }

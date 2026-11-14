@@ -1,8 +1,9 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+
 import { createCharacterCardImportService, type VfsService } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
@@ -173,7 +174,7 @@ describe("VfsZipIoService", () => {
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
     await assert.rejects(
       () => vfs.read("/before.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 

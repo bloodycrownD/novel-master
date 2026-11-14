@@ -31,7 +31,7 @@ type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { re
  */
 export function resolveSkillRelPathCore(name: string, path: string | undefined): SkillRelPathResolution {
   // 反斜杠与 normalizePath 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的
-  // `..` 段拦截，进而在 normalizePath 里以 VfsError 抛错（本函数承诺不抛）。
+  // `..` 段拦截，进而在 normalizePath 里以 VFS_INVALID_PATH 的 AppError 抛错（本函数承诺不抛）。
   const raw = (path ?? SKILL_ENTRY_FILE).replace(/\\/g, "/");
   if (raw.trim().length === 0) {
     return { ok: false, reason: "empty" };

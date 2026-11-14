@@ -49,5 +49,6 @@ export function buildReplaceNotFoundError(path: string, fileContent: string, old
     oldStringPreview: previewChars(oldString),
     fileHintPreview: previewChars(lcsIndex >= 0 ? fileContent.slice(lcsIndex) : fileContent),
   };
-  return new AppError("VFS_REPLACE_NOT_FOUND", `Replace string not found in ${path}`, { path, details });
+  // 六个诊断字段平铺进 params（T-M3：details 不再双层嵌套，formatter 按顶层读）。
+  return new AppError("VFS_REPLACE_NOT_FOUND", {path, ...details, detail: `Replace string not found in ${path}`});
 }

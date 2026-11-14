@@ -1,3 +1,4 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 
@@ -7,7 +8,6 @@ import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-bui
 import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { formatToolErrorForLlm, formatToolOutputForLlm, isCurlOutput, isGlobOutput, isGrepOutput, isReadOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
@@ -113,8 +113,8 @@ describe("curl 工具", () => {
 
     for (const url of ["file:///etc/passwd", "ftp://x", "data:text/plain,x"]) {
       await assert.rejects(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
-        assert.ok(err instanceof ToolError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
+        assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+        assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
     }
@@ -306,8 +306,8 @@ describe("curl 工具", () => {
     mock.timers.tick(30_000);
 
     const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
+    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    assert.equal(err.key, "TOOL_FAILED");
     const message = formatToolErrorForLlm(err);
     assert.match(message, /timed out/);
     assert.match(message, /https:\/\/example\.com\/slow/);
@@ -336,8 +336,8 @@ describe("curl 工具", () => {
     mock.timers.tick(30_000);
 
     const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
+    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    assert.equal(err.key, "TOOL_FAILED");
     const message = formatToolErrorForLlm(err);
     assert.match(message, /timed out/);
     assert.match(message, /https:\/\/example\.com\/slow-body/);
@@ -349,8 +349,8 @@ describe("curl 工具", () => {
       () => assert.fail("网络错误应抛 ToolError"),
       (e: unknown) => e
     );
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
+    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    assert.equal(err.key, "TOOL_FAILED");
     assert.match(formatToolErrorForLlm(err), /Network request failed/);
   });
 
@@ -699,8 +699,8 @@ describe("curl 工具", () => {
 
     for (const input of invalidInputs) {
       await assert.rejects(runner.call("curl", input, ctx), (err: unknown) => {
-        assert.ok(err instanceof ToolError, `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
-        assert.equal(err.code, "INVALID_ARGUMENT");
+        assert.ok(isAppError(err) && err.key.startsWith("TOOL_"), `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
+        assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
       });
     }
@@ -728,8 +728,8 @@ describe("curl 工具", () => {
     mock.timers.tick(2_000);
 
     const err = await pending;
-    assert.ok(err instanceof ToolError);
-    assert.equal(err.code, "FAILED");
+    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+    assert.equal(err.key, "TOOL_FAILED");
     const message = formatToolErrorForLlm(err);
     assert.match(message, /timed out after 2000ms/);
     assert.match(message, /https:\/\/example\.com\/slow/);
@@ -748,7 +748,7 @@ describe("curl 工具", () => {
     } catch (e: unknown) {
       thrown = e;
     }
-    assert.ok(thrown instanceof ToolError);
+    assert.ok(isAppError(thrown) && thrown.key.startsWith("TOOL_"));
     assert.equal(thrown.code, "FAILED");
     const llmMessage = formatToolErrorForLlm(thrown);
     assert.match(llmMessage, /请求已取消/);

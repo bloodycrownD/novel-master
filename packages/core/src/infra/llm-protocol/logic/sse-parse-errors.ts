@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/sse-parse-errors
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
 
@@ -48,9 +48,6 @@ export function assertSseParseSucceededOrThrow(
   protocol: LlmProtocolKind
 ): void {
   if (blocks.length === 0 && diag.malformedLineCount > 0) {
-    throw new ProviderError(
-      "MALFORMED_SSE",
-      `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)`
-    );
+    throw new AppError("PROVIDER_MALFORMED_SSE", `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)`);
   }
 }

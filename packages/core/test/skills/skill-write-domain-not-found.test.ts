@@ -12,10 +12,10 @@
  * @module test/skills/skill-write-domain-not-found
  */
 
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
-import { isAppError, type AppError } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

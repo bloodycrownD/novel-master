@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ToolError } from "../../src/errors/tool-errors.js";
-import { VfsError } from "../../src/errors/vfs-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import { vfsUserMessage } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
 import { tCore } from "../helpers/core-i18n.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
@@ -19,11 +18,7 @@ function render(error: unknown, scope?: VfsScope): string {
 
 describe("vfsUserMessage", () => {
   it("REPLACE_NOT_FOUND 返回中文刷新提示", () => {
-    const err = new VfsError(
-      "REPLACE_NOT_FOUND",
-      "Replace string not found in /note.md",
-      { path: "/projects/proj-1/sessions/sess-1/note.md" },
-    );
+    const err = new AppError("VFS_REPLACE_NOT_FOUND", {path: "/projects/proj-1/sessions/sess-1/note.md", detail: "Replace string not found in /note.md"});
     assert.equal(
       render(err, sessionScope),
       "文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。",
@@ -31,9 +26,7 @@ describe("vfsUserMessage", () => {
   });
 
   it("NOT_FOUND 返回中文不存在提示（CONFLICT 已随版本校验下线）", () => {
-    const err = new VfsError("NOT_FOUND", "Path not found: /note.md", {
-      path: "/projects/proj-1/sessions/sess-1/note.md",
-    });
+    const err = new AppError("VFS_NOT_FOUND", {path: "/projects/proj-1/sessions/sess-1/note.md", detail: "Path not found: /note.md"});
     assert.equal(
       render(err, sessionScope),
       "文件不存在或已被删除。",
@@ -41,9 +34,7 @@ describe("vfsUserMessage", () => {
   });
 
   it("ALREADY_EXISTS 返回名称不能重复（双端共用映射，不再本地补）", () => {
-    const err = new VfsError("ALREADY_EXISTS", "Path already exists: /note.md", {
-      path: "/projects/proj-1/sessions/sess-1/note.md",
-    });
+    const err = new AppError("VFS_ALREADY_EXISTS", {path: "/projects/proj-1/sessions/sess-1/note.md", detail: "Path already exists: /note.md"});
     assert.equal(
       render(err, sessionScope),
       "名称不能重复",
@@ -61,13 +52,8 @@ describe("vfsUserMessage", () => {
   });
 
   it("unwraps VfsError cause from ToolError", () => {
-    const cause = new VfsError("REPLACE_NOT_FOUND", "Replace string not found in /note.md", {
-      path: "/note.md",
-    });
-    const err = new ToolError("FAILED", "Tool failed: write", {
-      toolName: "write",
-      cause,
-    });
+    const cause = new AppError("VFS_REPLACE_NOT_FOUND", {path: "/note.md", detail: "Replace string not found in /note.md"});
+    const err = new AppError("TOOL_FAILED", {toolName: "write", cause, detail: "Tool failed: write"});
     assert.equal(
       render(err, sessionScope),
       "文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。",
@@ -85,14 +71,12 @@ describe("vfsUserMessage", () => {
   });
 
   it("带 messageKey 的错误优先透传 descriptor（INVALID_NAME 迁移路径）", () => {
-    const err = new VfsError("INVALID_NAME", {key: "error.vfs.invalid_name.blank"});
+    const err = new AppError("VFS_INVALID_NAME", {key: "error.vfs.invalid_name.blank"});
     assert.deepEqual(vfsUserMessage(err), {key: "error.vfs.invalid_name.blank"});
   });
 
   it("无表项 VFS code 走操作失败兜底（{detail} 取路径）", () => {
-    const err = new VfsError("DIRECTORY_NOT_EMPTY", "Directory not empty: /note.md", {
-      path: "/note.md",
-    });
+    const err = new AppError("VFS_DIRECTORY_NOT_EMPTY", {path: "/note.md", detail: "Directory not empty: /note.md"});
     assert.equal(render(err), "操作失败：/note.md");
   });
 });

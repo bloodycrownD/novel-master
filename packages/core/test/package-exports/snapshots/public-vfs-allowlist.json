@@ -5,8 +5,6 @@
   "CHARACTER_CARD_MAX_SINGLE_FILE_BYTES",
   "CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES",
   "SqliteVfsRevisionRepository",
-  "VfsError",
-  "VfsZipError",
   "actionXmlToToolUses",
   "assertLogicalPathAllowed",
   "buildUserVfsActionXml",

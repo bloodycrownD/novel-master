@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isAppError } from "@/errors/app-error.js";
-import { vfsInvalidPath } from "@/errors/vfs-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** 把 Result 收成路径串：失败分支在测试里直接断言失败。 */
@@ -12,11 +11,11 @@ function unwrapPath(result: ReturnType<typeof resolveLogicalPath>): string {
 /** HEAD 的 throw 型 normalizePath（原样转录自 `git show HEAD:.../normalize-path.ts`），仅作逐值等价对照。 */
 function legacyNormalizePath(path: string): string {
   if (typeof path !== "string" || path.length === 0) {
-    throw vfsInvalidPath(String(path), "path must be a non-empty string");
+    throw new AppError("VFS_INVALID_PATH", {path: String(path), reason: "path must be a non-empty string", detail: `Invalid path ${String(path)}: path must be a non-empty string`});
   }
   const normalized = path.replace(/\\/g, "/");
   if (!normalized.startsWith("/")) {
-    throw vfsInvalidPath(path, "path must start with /");
+    throw new AppError("VFS_INVALID_PATH", {path: path, reason: "path must start with /", detail: `Invalid path ${path}: path must start with /`});
   }
   const stack: string[] = [];
   for (const segment of normalized.split("/")) {
@@ -25,7 +24,7 @@ function legacyNormalizePath(path: string): string {
     }
     if (segment === "..") {
       if (stack.length === 0) {
-        throw vfsInvalidPath(path, "path escapes above root");
+        throw new AppError("VFS_INVALID_PATH", {path: path, reason: "path escapes above root", detail: `Invalid path ${path}: path escapes above root`});
       }
       stack.pop();
       continue;
@@ -39,7 +38,7 @@ function legacyNormalizePath(path: string): string {
 function legacyResolveLogicalPath(input: string): string {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
-    throw vfsInvalidPath(String(input), "path must be a non-empty string");
+    throw new AppError("VFS_INVALID_PATH", {path: String(input), reason: "path must be a non-empty string", detail: `Invalid path ${String(input)}: path must be a non-empty string`});
   }
   return legacyNormalizePath(trimmed.startsWith("/") ? trimmed : `/${trimmed}`);
 }

@@ -55,7 +55,7 @@ export function encodeSmartSortRuleBundle(rules: readonly SmartSortRule[]): Smar
 /**
  * Parses + validates an unknown payload as a bundle document.
  *
- * 这里是 bundle 文档的 schema 入口边界：`decode()` 的 ConfigDecodeError 由
+ * 这里是 bundle 文档的 schema 入口边界：`decode()` 的 CONFIG_DECODE_INVALID_SCHEMA 由
  * service / app 的导入通道捕获并贴「YAML 无效」标签，保持既有错误契约。
  */
 export function decodeSmartSortRuleBundle(raw: unknown): SmartSortRuleBundleDocument {

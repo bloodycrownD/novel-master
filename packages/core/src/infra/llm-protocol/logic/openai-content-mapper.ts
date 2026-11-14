@@ -7,7 +7,7 @@
  */
 
 import { isRecord } from "@/common/guards.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
@@ -108,10 +108,7 @@ export function blocksToOpenAiMessageContent(
         });
         break;
       case "thinking":
-        throw new ProviderError(
-          "UNSUPPORTED_CONTENT",
-          "OpenAI outbound messages must not include thinking blocks; strip them before mapping"
-        );
+        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", "OpenAI outbound messages must not include thinking blocks; strip them before mapping");
       default:
         break;
     }

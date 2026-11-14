@@ -23,7 +23,7 @@ export interface PhysicalVfsService {
    * `sessions/{sid}/` 等虚拟目录无表行，从 `chat_project` / `chat_session`
    * 枚举合成；空项目与空会话同样显示目录行。
    *
-   * @throws {import("@/errors/vfs-errors.js").VfsError} `NOT_FOUND` 当路径不落在任何域前缀下，或项目/会话不存在
+   * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下，或项目/会话不存在
    */
   list(physicalPath: string): Promise<VfsListEntry[]>;
 
@@ -39,7 +39,7 @@ export interface PhysicalVfsService {
    * 返回根目录自身以外的全部后代行（目录行在前、同层按展示键排序，
    * 与 {@link list} 一致）；空目录返回空数组。
    *
-   * @throws {import("@/errors/vfs-errors.js").VfsError} `NOT_FOUND` 当路径不落在任何域前缀下，或项目/会话不存在
+   * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下，或项目/会话不存在
    */
   listTree(physicalPath: string): Promise<VfsListEntry[]>;
 
@@ -52,7 +52,7 @@ export interface PhysicalVfsService {
    * project；`/meta/` → global-meta；`/template/` → global；其余 → 无此文件。
    * 解析后走既有单 scope `ScopedVfsService.read`。
    *
-   * @throws {import("@/errors/vfs-errors.js").VfsError} `NOT_FOUND` 当路径不落在任何域前缀下或文件不存在
+   * @throws `AppError("VFS_NOT_FOUND")` 当路径不落在任何域前缀下或文件不存在
    */
   read(physicalPath: string): Promise<VfsReadResult>;
 }

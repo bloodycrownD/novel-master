@@ -13,7 +13,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getPhysicalVfs } from "../resolve-vfs-scope.js";
 import { formatIpcError } from "../format-ipc-error.js";
-import { isVfsError } from "@novel-master/core/vfs";
+import { isAppError } from "@novel-master/core/vfs";
 import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.ipc.physical");
@@ -83,8 +83,10 @@ export async function handlePhysicalList(
         );
       } catch (err) {
         // vfsNotFound：子树已不存在（如项目被并发删除）→ 跳过该子树；
-        // 其他异常同样降级跳过（不中断整树），留 warn 便于排查
-        if (!isVfsError(err, "NOT_FOUND")) {
+        // 其他异常同样降级跳过（不中断整树），留 warn 便于排查。
+        // 类退役后 service 直抛 AppError，isVfsError 带短码只认 legacy 形态，
+        // 这里按 spec Step 9 改判 key。
+        if (!isAppError(err, "VFS_NOT_FOUND")) {
           log.warn("physical-list 子树拉取失败，已跳过", { scopeDir, error: err });
         }
         continue;

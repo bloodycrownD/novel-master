@@ -1,6 +1,7 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysicalPath, isVfsError } from "@novel-master/core/vfs";
+import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysicalPath } from "@novel-master/core/vfs";
 import { scopeKey, scopePhysicalPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
@@ -35,14 +36,14 @@ describe("vfs-path-mapper", () => {
     assert.throws(
       () => assertLogicalPathAllowed({ kind: "global" }, "/template/legacy.md"),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "INVALID_PATH"));
+        assert.ok(isAppError(e, "VFS_INVALID_PATH"));
         return true;
       },
     );
     assert.throws(
       () => assertLogicalPathAllowed({ kind: "global" }, "/template"),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "INVALID_PATH"));
+        assert.ok(isAppError(e, "VFS_INVALID_PATH"));
         return true;
       },
     );
@@ -98,11 +99,11 @@ describe("vfs-path-mapper", () => {
     // 不得误吃同项目 template / 隔壁项目 meta 前缀
     assert.throws(
       () => toLogicalPath(scope, "/projects/p1/template/a.md"),
-      (e: unknown) => isVfsError(e, "INVALID_PATH"),
+      (e: unknown) => isAppError(e, "VFS_INVALID_PATH"),
     );
     assert.throws(
       () => toLogicalPath(scope, "/projects/p2/meta/skills/a/SKILL.md"),
-      (e: unknown) => isVfsError(e, "INVALID_PATH"),
+      (e: unknown) => isAppError(e, "VFS_INVALID_PATH"),
     );
   });
 

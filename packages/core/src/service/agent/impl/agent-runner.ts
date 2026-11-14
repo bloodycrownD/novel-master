@@ -25,7 +25,6 @@ import {
   type ToolCall,
 } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { ProviderError } from "@/errors/provider-errors.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
@@ -788,10 +787,7 @@ export class DefaultAgentRunner implements AgentRunner {
           if (degraded != null) {
             outcomes.push({
               ok: false,
-              error: new ProviderError(
-                "INVALID_TOOL_ARGUMENTS",
-                `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})`
-              ),
+              error: new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})`),
             });
             continue;
           }

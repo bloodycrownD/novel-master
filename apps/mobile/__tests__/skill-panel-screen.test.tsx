@@ -7,7 +7,6 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {VfsError} from '@novel-master/core/vfs';
 import {SkillPanelScreen} from '@/screens/stack/SkillPanelScreen';
 
 const mockEffectiveSkills = jest.fn();
@@ -132,7 +131,11 @@ beforeEach(() => {
 describe('SkillPanelScreen 空态容错', () => {
   it('NOT_FOUND（技能根目录不存在）静默显示空态，不弹 toast', async () => {
     mockEffectiveSkills.mockRejectedValue(
-      new VfsError('NOT_FOUND', 'vfs entry not found: /meta/skills'),
+      // 类已退役：skills 链路抛的是 legacy mapper 手搓旧形态对象。
+      Object.assign(new Error('vfs entry not found: /meta/skills'), {
+        name: 'VfsError',
+        code: 'NOT_FOUND',
+      }),
     );
 
     let renderer!: TestRenderer.ReactTestRenderer;

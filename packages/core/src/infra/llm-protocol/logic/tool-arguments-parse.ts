@@ -5,7 +5,7 @@
  */
 
 import { truncateText } from "@/common/text.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
 
 export type TryParseToolArgumentsResult =
@@ -35,8 +35,5 @@ export function parseToolArgumentsJson(
   if (parsed.ok) {
     return parsed.value;
   }
-  throw new ProviderError(
-    "INVALID_TOOL_ARGUMENTS",
-    `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})`
-  );
+  throw new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})`);
 }

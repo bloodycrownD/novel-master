@@ -15,6 +15,7 @@
  * 时区相关断言不依赖运行机器时区：统一以「本地今日 0 点 ± 固定偏移」构造时间戳。
  */
 
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, it } from "node:test";
@@ -23,7 +24,6 @@ import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
 import { buildUsageRecordFromMessage } from "../../src/domain/usage/logic/build-usage-record.js";
-import { isAppError } from "@novel-master/core/agent";
 import { createUsageStatsService } from "../../src/service/chat/create-chat-services.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
 import {
@@ -468,7 +468,7 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(buckets.length, 401);
   });
 
-  it("T-C4: range 缺省语义——聚合/流水全历史，daily 缺 range 抛 chatInvalidArgument", async () => {
+  it("T-C4: range 缺省语义——聚合/流水全历史，daily 缺 range 抛 CHAT_INVALID_ARGUMENT", async () => {
     const { ctx, session } = await seedSession();
     const today0 = localDayStart(Date.now());
     const yesterday0 = localAddDays(today0, -1);
@@ -1530,7 +1530,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(detail.toolUseCount, 3);
   });
 
-  it("空 sessionId 抛 chatInvalidArgument（不触达 SQL）", async () => {
+  it("空 sessionId 抛 CHAT_INVALID_ARGUMENT（不触达 SQL）", async () => {
     const { ctx } = await seedSession();
     const svc = createUsageStatsService(ctx.conn);
     await assert.rejects(

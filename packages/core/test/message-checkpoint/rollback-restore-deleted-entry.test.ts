@@ -19,11 +19,12 @@
  * @module test/message-checkpoint/rollback-restore-deleted-entry.test
  */
 
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/session-fs";
-import { isVfsError } from "@novel-master/core/vfs";
+
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   getNovelMasterTestContext,
@@ -139,7 +140,7 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.delete("/docs", { recursive: true });
     await assert.rejects(
       () => svfs.read("/docs/a.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
     );
 
     await ctx.sessionFs.rollbackToMessage(
@@ -186,7 +187,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.equal((await svfs.read("/origin.md")).content, "v1");
     await assert.rejects(
       () => svfs.read("/renamed.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
     );
   });
 

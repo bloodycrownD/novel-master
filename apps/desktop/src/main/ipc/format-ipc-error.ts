@@ -6,11 +6,10 @@
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isCloudSyncError } from "@novel-master/core";
 import { AgentTurnError } from "@novel-master/core/agent";
-import { ToolError } from "@novel-master/core";
 import { userMessageOf } from "@novel-master/core/i18n";
 import {
   AppError,
-  VfsError,
+  isAppError,
   isVfsError,
 } from "@novel-master/core/vfs";
 import { coreT } from "../../../shared/logic/core-i18n.js";
@@ -84,8 +83,10 @@ function typedDomainCode(err: Error): string | undefined {
 function sessionFsMissingPaths(
   err: Error,
 ): readonly string[] | undefined {
-  const paths = (err as Error & { missingLogicalPaths?: readonly string[] })
-    .missingLogicalPaths;
+  const details = (err as AppError).details as
+    | { missingLogicalPaths?: readonly string[] }
+    | undefined;
+  const paths = details?.missingLogicalPaths;
   return paths != null && paths.length > 0 ? paths : undefined;
 }
 
@@ -100,22 +101,29 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   if (err instanceof ZodError) {
     return { code: "VALIDATION", message: formatZodIssues(err) };
   }
-  if (err instanceof VfsError) {
-    return { code: err.code, message: visibleMessage(err, err.message) };
+  // 旧 ToolError 的 cause 解包：类已退役，改判 TOOL_FAILED；cause 双写在
+  // Error.cause 与 details.cause（spec §2.5），VFS cause 仍透传旧 short code。
+  if (isAppError(err, "TOOL_FAILED")) {
+    const cause = err.cause ?? (err.details as { cause?: unknown } | undefined)?.cause;
+    // key 判定须在 isVfsError 收窄前做：LegacyVfsError.code 是字符串短码、
+    // AppError.code 是数字码，两条判据链在同一变量上会把交集塌成 never。
+    const causeKey = isAppError(cause) ? cause.key : undefined;
+    if (isVfsError(cause)) {
+      const code = causeKey != null ? VFS_APP_KEY_TO_CODE[causeKey] ?? causeKey : cause.code;
+      return { code, message: visibleMessage(cause, cause.message) };
+    }
+    const fallback = cause instanceof Error ? cause.message : err.message;
+    return { code: err.key, message: visibleMessage(err, fallback) };
   }
   // 统一错误透出可读 key（AppError.key），不落成 Error.name；VFS 域在 phase 1
   // 仍对渲染层承诺旧 short code（NOT_FOUND / ALREADY_EXISTS 等）。
   if (err instanceof AppError) {
-    return { code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key, message: visibleMessage(err, err.message) };
-  }
-  if (err instanceof ToolError) {
-    const cause = err.cause;
-    if (cause instanceof VfsError || isVfsError(cause)) {
-      const vfsCause = cause as VfsError;
-      return { code: vfsCause.code, message: visibleMessage(vfsCause, vfsCause.message) };
-    }
-    const fallback = cause instanceof Error ? cause.message : err.message;
-    return { code: err.code, message: visibleMessage(err, fallback) };
+    const missingLogicalPaths = sessionFsMissingPaths(err);
+    return {
+      code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key,
+      message: visibleMessage(err, err.message),
+      ...(missingLogicalPaths != null ? { missingLogicalPaths } : {}),
+    };
   }
   if (err instanceof AgentTurnError) {
     return { code: "AGENT_RUN_ERROR", message: err.message };

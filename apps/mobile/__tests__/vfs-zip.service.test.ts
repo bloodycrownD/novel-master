@@ -4,7 +4,6 @@ import {
   importVfsZip,
   zipBaseNameFromPath,
 } from '@/services/vfs-zip.service';
-import {VfsZipError} from '@novel-master/core/vfs';
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();
@@ -152,10 +151,11 @@ describe('vfs-zip.service', () => {
   });
 
   it('surfaces VfsZipError from gather without retry', async () => {
-    const vfsErr = new VfsZipError(
-      'EXTERNAL_NOT_SUPPORTED',
-      'external storage not supported',
-    );
+    // 类已退役：zip 服务抛的是 legacy mapper 手搓旧形态对象（name + 字符串短码）。
+    const vfsErr = Object.assign(new Error('external storage not supported'), {
+      name: 'VfsZipError',
+      code: 'EXTERNAL_NOT_SUPPORTED',
+    });
     mockExport.mockRejectedValue(vfsErr);
 
     await expect(exportVfsZip(runtime, scope)).rejects.toThrow(
@@ -180,7 +180,8 @@ describe('vfs-zip.service', () => {
     await expect(
       importVfsZip(runtime, scope, {confirmed: true}),
     ).rejects.toMatchObject({
-      code: 'INVALID_ZIP',
+      // VfsZipError 类退役：zip 解析失败统一 AppError（name 即 key，code 为数字码）。
+      name: 'VFS_ZIP_INVALID_ARCHIVE',
       message: expect.stringContaining('missing EOCD'),
     });
     expect(mockImport).not.toHaveBeenCalled();

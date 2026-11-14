@@ -4,7 +4,7 @@
  * @module infra/prompt-template/macro-scan
  */
 
-import { PromptError } from "../../errors/prompt-errors.js";
+import { AppError } from "../../errors/app-error.js";
 
 export type MacroActionKind = "comment" | "dot" | "root";
 
@@ -20,27 +20,19 @@ const UNSUPPORTED_PATTERN = /\b(if|range|with|template|define)\b|:=|\|/;
 
 function assertSupportedSyntax(action: string, offset: number): void {
   if (UNSUPPORTED_PATTERN.test(action)) {
-    throw new PromptError(
-      "UNSUPPORTED_SYNTAX",
-      `unsupported template syntax near offset ${offset}`,
-      { offset }
-    );
+    throw new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported template syntax near offset ${offset}`, offset });
   }
 }
 
 function parseAction(action: string, openOffset: number): MacroAction {
   const trimmed = action.trim();
   if (trimmed.length === 0) {
-    throw new PromptError("INVALID_YAML", "empty macro action", {
-      offset: openOffset,
-    });
+    throw new AppError("PROMPT_INVALID_YAML", { detail: "empty macro action", offset: openOffset });
   }
 
   if (trimmed.startsWith("/*")) {
     if (!trimmed.endsWith("*/")) {
-      throw new PromptError("INVALID_YAML", "unclosed macro comment", {
-        offset: openOffset,
-      });
+      throw new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: openOffset });
     }
     return { kind: "comment", start: openOffset, end: openOffset, path: [] };
   }
@@ -54,9 +46,7 @@ function parseAction(action: string, openOffset: number): MacroAction {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
     if (path.length === 0) {
-      throw new PromptError("UNKNOWN_FIELD", "empty dot path", {
-        offset: openOffset,
-      });
+      throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty dot path", offset: openOffset });
     }
     return { kind: "dot", start: openOffset, end: openOffset, path };
   }
@@ -65,23 +55,15 @@ function parseAction(action: string, openOffset: number): MacroAction {
     const rest = trimmed.slice(1).trim();
     const key = rest.startsWith(".") ? rest.slice(1).trim() : rest;
     if (key.length === 0) {
-      throw new PromptError("UNKNOWN_FIELD", "empty root field", {
-        offset: openOffset,
-      });
+      throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty root field", offset: openOffset });
     }
     if (key.includes(".")) {
-      throw new PromptError("UNKNOWN_FIELD", `unknown root field: $${key}`, {
-        offset: openOffset,
-      });
+      throw new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown root field: $${key}`, offset: openOffset });
     }
     return { kind: "root", start: openOffset, end: openOffset, path: [key] };
   }
 
-  throw new PromptError(
-    "UNSUPPORTED_SYNTAX",
-    `unsupported macro action: ${trimmed}`,
-    { offset: openOffset }
-  );
+  throw new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported macro action: ${trimmed}`, offset: openOffset });
 }
 
 /**
@@ -100,9 +82,7 @@ export function scanMacroActions(template: string): readonly MacroAction[] {
     if (template.startsWith("{{/*", open)) {
       const close = template.indexOf("*/}}", open + 4);
       if (close < 0) {
-        throw new PromptError("INVALID_YAML", "unclosed macro comment", {
-          offset: open,
-        });
+        throw new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: open });
       }
       const end = close + 4;
       actions.push({
@@ -117,7 +97,7 @@ export function scanMacroActions(template: string): readonly MacroAction[] {
 
     const close = template.indexOf("}}", open + 2);
     if (close < 0) {
-      throw new PromptError("INVALID_YAML", "unclosed macro", { offset: open });
+      throw new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro", offset: open });
     }
 
     const inner = template.slice(open + 2, close);

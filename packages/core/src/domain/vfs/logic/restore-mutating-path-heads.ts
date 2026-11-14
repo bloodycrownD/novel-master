@@ -9,7 +9,6 @@ import { AppError } from "@/errors/app-error.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
-import { vfsPortError } from "./vfs-port-error.js";
 
 /** 起始 head 快照：路径不存在。 */
 type MutatingPathHeadAbsent = {
@@ -198,7 +197,8 @@ export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: Reado
       }
       await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
     } catch (error: unknown) {
-      errors.push(isVfsError(error) ? vfsPortError(error) : error);
+      // 端口已统一抛 AppError，无需再翻 legacy 形态（vfsPortError 桥已删）。
+      errors.push(error);
     }
   }
   if (errors.length > 0) {

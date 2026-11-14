@@ -7,8 +7,6 @@
  * @module public/provider
  */
 
-export { ProviderError } from "../errors/provider-errors.js";
-export type { ProviderErrorCode } from "../errors/provider-errors.js";
 export type { SecretStore } from "../infra/sksp/index.js";
 export {
   parseApplicationModelId,

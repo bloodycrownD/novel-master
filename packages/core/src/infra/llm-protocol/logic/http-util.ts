@@ -5,7 +5,7 @@
  */
 
 import { truncateText } from "@/common/text.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
 /** Trims trailing slashes from base URL. */
@@ -20,7 +20,7 @@ export function joinUrl(baseUrl: string, path: string): string {
   return `${base}${p}`;
 }
 
-/** Throws ProviderError HTTP_ERROR on non-2xx responses. */
+/** Throws `PROVIDER_HTTP_ERROR` AppError on non-2xx responses. */
 export async function assertOk(
   response: Response,
   providerId?: string
@@ -35,9 +35,7 @@ export async function assertOk(
     body = "";
   }
   const snippet = truncateText(body, 500);
-  throw new ProviderError("HTTP_ERROR", `HTTP ${response.status}: ${snippet}`, {
-    providerId,
-  });
+  throw new AppError("PROVIDER_HTTP_ERROR", `HTTP ${response.status}: ${snippet}`, {providerId});
 }
 
 /** JSON fetch with error handling. */

@@ -1,9 +1,9 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 
 describe("ToolRunner", () => {
   it("throws NOT_FOUND for missing tool", async () => {
@@ -11,7 +11,7 @@ describe("ToolRunner", () => {
     const runner = new ToolRunner(registry);
     await assert.rejects(
       () => runner.call("no.such.tool", {}, {}),
-      (e) => e instanceof ToolError && e.code === "NOT_FOUND",
+      (e) => isAppError(e, "TOOL_NOT_FOUND"),
     );
   });
 
@@ -30,9 +30,9 @@ describe("ToolRunner", () => {
     await assert.rejects(
       () => runner.call("test.sum", { a: 1 }, {}),
       (e) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
-        e.toolName === "test.sum" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
+        e.details?.toolName === "test.sum" &&
         typeof e.details === "object",
     );
   });
@@ -51,9 +51,9 @@ describe("ToolRunner", () => {
     await assert.rejects(
       () => runner.call("test.fail", {}, {}),
       (e) =>
-        e instanceof ToolError &&
-        e.code === "FAILED" &&
-        e.toolName === "test.fail" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_FAILED" &&
+        e.details?.toolName === "test.fail" &&
         (e.cause as Error | undefined)?.message === "boom",
     );
   });
@@ -72,7 +72,7 @@ describe("ToolRunner", () => {
     const runner = new ToolRunner(registry);
     await assert.rejects(
       () => runner.call("test.badOutput", {}, {}),
-      (e) => e instanceof ToolError && e.code === "FAILED",
+      (e) => isAppError(e, "TOOL_FAILED"),
     );
   });
 });

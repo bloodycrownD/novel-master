@@ -4,7 +4,7 @@
  * @module provider/commands
  */
 
-import { ProviderError } from "@novel-master/core/provider";
+import { AppError } from "@novel-master/core/agent";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { requireProviderId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -26,21 +26,21 @@ function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string,
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new ProviderError("INVALID_ARGUMENT", "Invalid --headers JSON object");
+      throw new AppError("PROVIDER_INVALID_ARGUMENT", "Invalid --headers JSON object");
     }
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof v !== "string") {
-        throw new ProviderError("INVALID_ARGUMENT", `Header ${k} must be a string`);
+        throw new AppError("PROVIDER_INVALID_ARGUMENT", `Header ${k} must be a string`);
       }
       out[k] = v;
     }
     return out;
   } catch (e) {
-    if (e instanceof ProviderError) {
+    if (e instanceof AppError) {
       throw e;
     }
-    throw new ProviderError("INVALID_ARGUMENT", "Invalid --headers JSON");
+    throw new AppError("PROVIDER_INVALID_ARGUMENT", "Invalid --headers JSON");
   }
 }
 
@@ -132,7 +132,7 @@ export async function runProvider(
       if (flags.has("name")) {
         const name = flagString(flags, "name") ?? "";
         if (name.trim() === "") {
-          throw new ProviderError("INVALID_ARGUMENT", "displayName 不能为空");
+          throw new AppError("PROVIDER_INVALID_ARGUMENT", "displayName 不能为空");
         }
         patch.displayName = name;
       }

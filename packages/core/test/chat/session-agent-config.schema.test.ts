@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "../../src/infra/serialization/decode.js";
-import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { sessionAgentConfigSchema } from "../../src/domain/chat/model/session-agent-config.schema.js";
 
 describe("sessionAgentConfigSchema（v2 单形态）", () => {
   it("缺 agentId 报错", () => {
     assert.throws(
       () => decode({}, sessionAgentConfigSchema),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
   it("空 agentId 报错", () => {
     assert.throws(
       () => decode({ agentId: "" }, sessionAgentConfigSchema),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
@@ -41,7 +41,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { agentId: "a", extra: 1 } as Record<string, unknown>,
           sessionAgentConfigSchema,
         ),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
     // 老 mode 字段现在被 .strict() 拒绝
     assert.throws(
@@ -50,7 +50,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { mode: "bind", agentId: "a" } as Record<string, unknown>,
           sessionAgentConfigSchema,
         ),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 
@@ -61,7 +61,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
           { agentId: "a", modelId: "" },
           sessionAgentConfigSchema,
         ),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 

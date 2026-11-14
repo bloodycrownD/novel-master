@@ -4,7 +4,7 @@
  * 原为 `revision-aware-vfs.service.ts` 的模块私有实现；下沉到 domain 层是为了让
  * 批量 ingest（非 session 通道）复用同一条写路径——此前它绕开 revision 层直接
  * `repo.update`，产出「entry.head_version 指向不存在的 version」的悬空 head，
- * 后续任一 checkpoint 钉住该 head 即抛 `VfsError NOT_FOUND: Revision not found`，
+ * 后续任一 checkpoint 钉住该 head 即抛 `AppError("VFS_NOT_FOUND")`（Revision not found），
  * 真 head 的 ref 停在 1 ⇒ revision 与 blob 永久不可回收。
  *
  * ⚠️ **它不是纯函数**：有 IO（走两个 repo）且读 `Date.now()`。单测请用真实

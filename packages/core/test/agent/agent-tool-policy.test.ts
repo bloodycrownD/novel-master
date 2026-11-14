@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { registerBuiltinTools, ToolError, ToolRegistry, ToolRunner } from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry, ToolRunner } from "@novel-master/core";
 
 import { AppError, isAppError, resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition, type AgentToolPolicy } from "@novel-master/core/agent";
 
@@ -148,7 +148,7 @@ describe("agent tool policy", () => {
 
     await assert.rejects(
       () => runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
-      (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND"
+      (e: unknown) => isAppError(e, "TOOL_NOT_FOUND")
     );
   });
 

@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/request-abort
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 
 /** Abort-shaped failure without referencing global `DOMException` (missing on Hermes). */
 export function isAbortLikeError(error: unknown): boolean {
@@ -40,11 +40,7 @@ export function isRequestAborted(
   if (isAbortLikeError(error)) {
     return true;
   }
-  if (
-    error instanceof ProviderError &&
-    error.code === "HTTP_ERROR" &&
-    error.message.toLowerCase().includes("abort")
-  ) {
+  if (isAppError(error, "PROVIDER_HTTP_ERROR") && error.message.toLowerCase().includes("abort")) {
     return true;
   }
   return false;

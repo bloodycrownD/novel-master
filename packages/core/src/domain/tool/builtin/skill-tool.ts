@@ -25,7 +25,7 @@ import { z } from "zod";
 
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
-import { ToolError } from "@/errors/tool-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
@@ -172,7 +172,7 @@ function refineRequiredFields(input: { action: SkillToolInput["action"] } & Reco
  */
 function requiredField<T>(value: T | undefined, field: string): T {
   if (value === undefined) {
-    throw new ToolError("INVALID_ARGUMENT", `skill 内部校验不一致：schema 放行了缺 ${field} 的调用`, { toolName: SKILL_TOOL_NAME });
+    throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用`});
   }
   return value;
 }
@@ -290,7 +290,7 @@ action 说明：
   async run(input, ctx): Promise<SkillToolOutput> {
     const skills = ctx.skills;
     if (skills == null) {
-      throw new ToolError("FAILED", "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）", { toolName: SKILL_TOOL_NAME });
+      throw new AppError("TOOL_FAILED", {toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）"});
     }
     const service: SkillService = skills.service;
 
@@ -344,7 +344,7 @@ action 说明：
         // 报错文案与「推导前先判定」逐字一致。
         const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
-          throw new ToolError("INVALID_ARGUMENT", `offset ${offset} exceeds file length (${totalLines} lines)`, { toolName: SKILL_TOOL_NAME });
+          throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
         return {

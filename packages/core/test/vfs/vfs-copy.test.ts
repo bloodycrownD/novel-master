@@ -1,6 +1,6 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isVfsError } from "@novel-master/core/vfs";
 import { copyVfsPath } from "../../src/domain/vfs/logic/vfs-copy.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -54,7 +54,7 @@ describe("copyVfsPath", () => {
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     await assert.rejects(
       () => vfs.read("/dst/x.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 });

@@ -1,12 +1,12 @@
 /**
- * 将 VfsError / AppError 格式化为 LLM 可读的分类文案（逻辑路径 + 诊断）。
+ * 将 VFS 域 AppError 格式化为 LLM 可读的分类文案（逻辑路径 + 诊断）。
  *
  * @module domain/vfs/logic/format-vfs-error-for-llm
  */
 
-import { isAppError, type AppError } from "@/errors/app-error.js";
+import type { AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import type { VfsError, VfsErrorCode, VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
+import type { VfsErrorCode, VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
 import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
@@ -65,15 +65,11 @@ function formatReplaceNotFound(error: VfsErrorLike, logicalPath: string): string
   return out;
 }
 
-/** 将 VfsError / AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
-export function formatVfsErrorForLlm(error: VfsError | AppError, _scope?: VfsScope): string {
-  let normalized: VfsErrorLike | null;
-  if (isAppError(error)) {
-    const code = APP_ERROR_TO_VFS_CODE[error.key];
-    normalized = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined, details: error.details?.details ?? error.details };
-  } else {
-    normalized = error;
-  }
+/** 将 VFS 域 AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
+export function formatVfsErrorForLlm(error: AppError, _scope?: VfsScope): string {
+  const code = APP_ERROR_TO_VFS_CODE[error.key];
+  // VfsError 类退役后 LCS 诊断字段平铺在 params/details 顶层（不再有 details.details 双层）。
+  const normalized: VfsErrorLike | null = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined, details: error.details };
   if (normalized == null) {
     return stripKnownPhysicalPrefixes(error.message);
   }

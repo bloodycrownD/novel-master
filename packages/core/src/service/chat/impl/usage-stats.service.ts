@@ -14,7 +14,7 @@ import {
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { chatInvalidArgument } from "@/errors/chat-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type {
   SessionUsageDetail,
@@ -137,7 +137,8 @@ function parseDayLocalDate(
 } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
-    throw chatInvalidArgument(
+    throw new AppError(
+      "CHAT_INVALID_ARGUMENT",
       {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}}
     );
   }
@@ -150,7 +151,7 @@ function parseDayLocalDate(
     probe.getMonth() !== month ||
     probe.getDate() !== day
   ) {
-    throw chatInvalidArgument({key: "error.usage.invalid_day", params: {field: label, value: dayLocalDate}});
+    throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.invalid_day", params: {field: label, value: dayLocalDate}});
   }
   return { year, month, day };
 }
@@ -208,7 +209,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]> {
     // 日桶序列需要界（桶数随天数线性膨胀），护栏挂在这条查询上而非区间类型。
     if (filter.range == null) {
-      throw chatInvalidArgument({key: "error.usage.daily_buckets_range_required"});
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.daily_buckets_range_required"});
     }
     const { fromMs, toMs } = this.resolveDayRangeMs(filter.range);
     // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
@@ -362,14 +363,16 @@ export class DefaultUsageStatsService implements UsageStatsService {
   ): Promise<UsageStatsRequestPage> {
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
-      throw chatInvalidArgument(
+      throw new AppError(
+        "CHAT_INVALID_ARGUMENT",
         {key: "error.usage.invalid_page_limit", params: {value: page.limit}}
       );
     }
     // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
     // 直接抛错），与 limit 同构提前拒收。
     if (!Number.isFinite(page.offset)) {
-      throw chatInvalidArgument(
+      throw new AppError(
+        "CHAT_INVALID_ARGUMENT",
         {key: "error.usage.invalid_page_offset", params: {value: page.offset}}
       );
     }
@@ -447,7 +450,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
 
   async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
     if (typeof sessionId !== "string" || sessionId.length === 0) {
-      throw chatInvalidArgument(
+      throw new AppError(
+        "CHAT_INVALID_ARGUMENT",
         {key: "error.usage.session_id_required", params: {value: String(sessionId)}}
       );
     }
@@ -584,7 +588,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const fromStart = new Date(from.year, from.month, from.day);
     const toStart = new Date(to.year, to.month, to.day);
     if (fromStart.getTime() > toStart.getTime()) {
-      throw chatInvalidArgument(
+      throw new AppError(
+        "CHAT_INVALID_ARGUMENT",
         {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}}
       );
     }

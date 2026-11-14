@@ -32,7 +32,7 @@ export interface UsageStatsFilter {
   /**
    * 时间范围：缺省语义按查询分级——`getSummary` / `getModelBreakdown` /
    * `listRequestUsage` 不限时间（全历史）；`getDailyBuckets` 必填，
-   * 否则抛 `chatInvalidArgument`（日桶序列需要界）。
+   * 否则抛 `CHAT_INVALID_ARGUMENT`（日桶序列需要界）。
    */
   readonly range?: UsageStatsRange;
   readonly model?: string | null;
@@ -200,7 +200,7 @@ export interface UsageStatsService {
 
   /**
    * 按本地时区天边界切桶，`fromDay` 到 `toDay` 逐日稠密产出（无数据日
-   * 为零值桶）；`filter.range` 必填，否则抛 `chatInvalidArgument`。
+   * 为零值桶）；`filter.range` 必填，否则抛 `CHAT_INVALID_ARGUMENT`。
    */
   getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]>;
 

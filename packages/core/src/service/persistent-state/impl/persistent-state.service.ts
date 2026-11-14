@@ -5,8 +5,7 @@
  */
 
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { ProviderError } from "@/errors/provider-errors.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -77,18 +76,10 @@ export class DefaultPersistentState implements PersistentState {
   setCurrentModelId(id: string): Promise<void> {
     const trimmed = id.trim();
     if (trimmed.includes("/")) {
-      throw new ProviderError(
-        "INVALID_SAVED_MODEL_ID",
-        `Invalid saved model id (legacy path not accepted): ${id}`,
-        { modelId: id }
-      );
+      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (legacy path not accepted): ${id}`, { modelId: id });
     }
     if (!isSavedModelUuidFormat(trimmed)) {
-      throw new ProviderError(
-        "INVALID_SAVED_MODEL_ID",
-        `Invalid saved model id (expected UUID): ${id}`,
-        { modelId: id }
-      );
+      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (expected UUID): ${id}`, { modelId: id });
     }
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
   }

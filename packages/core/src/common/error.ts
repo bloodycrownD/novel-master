@@ -85,10 +85,9 @@ export function normalizeYamlError(error: unknown, fallback: string | CoreMessag
  *   被两端执行的那段逻辑，接线被删会立刻红。
  *
  *   ⚠️ 判据按**反转**写（只让存储类绕过），不做正向白名单列举：YAML 语法错
- *   （`parseText`）与 schema 校验错（`decode`）抛的都是 `ConfigDecodeError`，
- *   而它未在任何 `packages/core/src/public/*` 导出 ⇒ app 侧无法 import，按业务
- *   错误正向列举会把最常见的失败路径整类漏判成 DB 类，「YAML 无效」标签反而从
- *   主路径上消失（功能回归）。
+ *   （`parseText`）与 schema 校验错（`decode`）抛的都是 `CONFIG_DECODE_*` 形态
+ *   的 `AppError`，按业务错误正向列举会把最常见的失败路径整类漏判成 DB 类，
+ *   「YAML 无效」标签反而从主路径上消失（功能回归）。
  *
  *   ⚠️ 若驱动把异常包了一层（不再 `TdbcError` 派生），本判据会失效 ⇒ 调用方的
  *   验收必须带一条「注入真实 DB 故障后 message 不含前缀」的断言兜底。

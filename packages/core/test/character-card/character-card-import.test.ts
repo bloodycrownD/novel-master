@@ -1,14 +1,15 @@
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  AppError,
+
   CHARACTER_CARD_MAX_FILE_COUNT,
   CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
   createCharacterCardImportService,
   type VfsService,
 } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
   getNovelMasterTestContext,
@@ -198,7 +199,7 @@ describe("CharacterCardImportService", () => {
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
     await assert.rejects(
       () => vfs.read("/角色/旧文件.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 

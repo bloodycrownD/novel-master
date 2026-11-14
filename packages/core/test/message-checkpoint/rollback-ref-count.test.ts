@@ -3,12 +3,13 @@
  *
  * entry_id 化后 revision 按 entryId 寻址；裸 SQL 改 entry_id 列名。
  */
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
@@ -100,7 +101,7 @@ describe("rollback ref_count + deferred blob gc", () => {
 
     await assert.rejects(
       () => revisions.adjustRefCount(999999, 1, 1),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
     );
   });
 

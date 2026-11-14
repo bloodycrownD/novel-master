@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/text-only-content
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
@@ -16,10 +16,7 @@ export function blocksToTextOnly(blocks: readonly ContentBlock[]): string {
       parts.push(block.text);
       continue;
     }
-    throw new ProviderError(
-      "UNSUPPORTED_CONTENT",
-      `Provider does not support ${block.type} content blocks; use Anthropic or send text only`
-    );
+    throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", `Provider does not support ${block.type} content blocks; use Anthropic or send text only`);
   }
   return parts.join("\n\n");
 }

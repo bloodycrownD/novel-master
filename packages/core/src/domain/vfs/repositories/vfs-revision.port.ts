@@ -127,7 +127,7 @@ export interface VfsRevisionRepository {
   /**
    * 批量增减 ref_count。
    *
-   * delta = +1 时，对缺失的 (entryId, version) 行抛 `VfsError("NOT_FOUND")`——
+   * delta = +1 时，对缺失的 (entryId, version) 行抛 `AppError("VFS_NOT_FOUND")`——
    * 这跟逐条 {@link adjustRefCount} 的语义保持一致，用来守护 T-RB-REF-MISSING 不变量；
    * delta = -1 时缺失行直接 no-op（UPDATE 命不中即跳过）。
    *

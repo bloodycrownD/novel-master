@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatLocalDateTime } from "@novel-master/core/provider";
-import { PromptError } from "../../src/errors/prompt-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
 
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
@@ -51,11 +51,7 @@ describe("renderMacro", () => {
           dot: {},
           root: { time: "t", week_cn: "w" },
         }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNSUPPORTED_SYNTAX");
-        return true;
-      },
+      (error: unknown) => isAppError(error, "PROMPT_UNSUPPORTED_SYNTAX"),
     );
   });
 
@@ -66,11 +62,7 @@ describe("renderMacro", () => {
           dot: {},
           root: { time: "t", week_cn: "w" },
         }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNKNOWN_FIELD");
-        return true;
-      },
+      (error: unknown) => isAppError(error, "PROMPT_UNKNOWN_FIELD"),
     );
   });
 
@@ -81,11 +73,7 @@ describe("renderMacro", () => {
           dot: {},
           root: { time: "t", week_cn: "w" },
         }),
-      (error: unknown) => {
-        assert.ok(error instanceof PromptError);
-        assert.equal(error.code, "UNKNOWN_FIELD");
-        return true;
-      },
+      (error: unknown) => isAppError(error, "PROMPT_UNKNOWN_FIELD"),
     );
   });
 });

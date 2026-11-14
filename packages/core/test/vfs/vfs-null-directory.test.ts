@@ -1,6 +1,7 @@
 /**
  * T-NULL-DIR：insertDirectory 双 NULL；读路径不解 ContentStore、不泄漏 `"null"`。
  */
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
@@ -8,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { createVfsService } from "@novel-master/core/vfs";
-import { isVfsError } from "@/errors/vfs-errors.js";
+
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -50,7 +51,7 @@ describe("directory NULL content contract", () => {
     await assert.rejects(
       () => vfs.read(GLOBAL_SCOPE, dir),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "IS_DIRECTORY"));
+        assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
         return true;
       },
     );

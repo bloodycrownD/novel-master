@@ -17,7 +17,7 @@ import type { VfsContentStore } from "../../content-store/vfs-content-store.port
 import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-stored-content.js";
 import type { VfsRevision, VfsRevisionStatus } from "../../model/vfs-revision.js";
 import type { VfsRevisionAppendInput, VfsRevisionPointerMeta, VfsRevisionRepository } from "../vfs-revision.port.js";
-import { VfsError } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
 
@@ -249,7 +249,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const sql24 = "UPDATE vfs_revision SET ref_count = ref_count + #{delta}\n       WHERE entry_id = #{entryId} AND version = #{version}";
     const result = await executeTemplate(this.conn, this.parser, sql24, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
-      throw new VfsError("NOT_FOUND", `Revision not found: entry ${entryId}@${version}`, { details: { entryId, version } });
+      // 记录缺失而非路径缺失，无 path 可挂；走旧签名过渡保 details 一层形态（与旧 VfsError 一致）。
+      throw new AppError("VFS_NOT_FOUND", `Revision not found: entry ${entryId}@${version}`, { entryId, version });
     }
   }
 
@@ -275,9 +276,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       if (missing.length > 0) {
         const first = missing[0]!;
-        throw new VfsError("NOT_FOUND", `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, {
-          details: { missing },
-        });
+        throw new AppError("VFS_NOT_FOUND", `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, { missing });
       }
     }
 

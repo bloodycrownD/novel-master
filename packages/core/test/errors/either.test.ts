@@ -14,7 +14,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result, type ResultWire } from "../../src/errors/either.js";
-import { isVfsError, vfsNotFound } from "../../src/errors/vfs-errors.js";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
+
+// vfsNotFound 工厂已退役（统一 new AppError）；本文件只是把带 name/code/path 的
+// 错误对象当 Result 载体用，本地按 legacy 手搓形态造同款对象（字段面与旧工厂一致）。
+function vfsNotFound(path: string): Error & { code: string; path: string } {
+  return Object.assign(new Error(`Path not found: ${path}`), {name: "VfsError", code: "NOT_FOUND", path});
+}
 
 describe("either 对象风格：构造与分支收窄", () => {
   it("r.ok 字段收窄后可安全取 value/error", () => {

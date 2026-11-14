@@ -5,10 +5,10 @@
  */
 import {types} from '@react-native-documents/picker';
 import {
+  AppError,
   createVfsZipIoService,
   type VfsScope,
   type VfsZipImportOptions,
-  VfsZipError,
 } from '@novel-master/core/vfs';
 import {exportBytesViaDocumentPicker, pickAndReadBytes} from './document-io';
 import {blobFs, bytesToBase64} from './rn-file-io';
@@ -76,14 +76,14 @@ function assertZipArchive(bytes: Uint8Array): void {
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
   if (!hasLocalHeader) {
-    throw new VfsZipError(
-      'INVALID_ZIP',
+    throw new AppError(
+      'VFS_ZIP_INVALID_ARCHIVE',
       `not a ZIP archive (${bytes.length} bytes)`,
     );
   }
   if (findZipEocdOffset(bytes) < 0) {
-    throw new VfsZipError(
-      'INVALID_ZIP',
+    throw new AppError(
+      'VFS_ZIP_INVALID_ARCHIVE',
       `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)`,
     );
   }
@@ -130,12 +130,12 @@ export async function pickZipFileBytes(): Promise<Uint8Array | null> {
     mimeTypes: [types.zip],
     localFileName: 'import.zip',
     buildCopyError: copyError =>
-      new VfsZipError(
-        'INVALID_ZIP',
+      new AppError(
+        'VFS_ZIP_INVALID_ARCHIVE',
         copyError ?? 'failed to copy picked ZIP into app cache',
       ),
     buildMissingError: fsPath =>
-      new VfsZipError('INVALID_ZIP', `ZIP file not found at ${fsPath}`),
+      new AppError('VFS_ZIP_INVALID_ARCHIVE', `ZIP file not found at ${fsPath}`),
   });
   if (bytes == null) {
     return null;

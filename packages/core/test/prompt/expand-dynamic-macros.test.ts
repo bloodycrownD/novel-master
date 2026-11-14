@@ -29,7 +29,7 @@ describe("expandDynamicMacros", () => {
     assert.match(out.ok ? out.value : "", /\/snapshot-tree/);
   });
 
-  it("非法宏返回 PROMPT_INVALID_MACRO，不漏出旧 PromptError", async () => {
+  it("非法宏返回 PROMPT_INVALID_MACRO，不漏出 infra 的 AppError", async () => {
     const out = await expandDynamicMacros("坏: {{.missing}}", {});
 
     assert.equal(out.ok, false);

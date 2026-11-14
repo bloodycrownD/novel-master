@@ -1,8 +1,9 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createCharacterCardImportService } from "@novel-master/core/vfs";
-import { isVfsError } from "@novel-master/core/vfs";
+
 import { isSessionFsError } from "@novel-master/core/session-fs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -275,7 +276,7 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal((await svfs.read("/old.md")).content, "v1");
     await assert.rejects(
       () => svfs.read("/新文件.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
     );
     const msgsAfter4 = await ctx.messages.listBySession(session.id);
     assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3

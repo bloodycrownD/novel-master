@@ -5,21 +5,7 @@
  */
 
 import { TdbcError } from "@novel-master/core";
-
-
 import { AppError } from "@novel-master/core/agent";
-
-
-import { PromptError } from "@novel-master/core/prompt";
-
-
-import { ProviderError } from "@novel-master/core/provider";
-
-
-import { SessionFsError } from "@novel-master/core/session-fs";
-
-
-import { VfsError, VfsZipError } from "@novel-master/core/vfs";
 import { SkspError } from "@novel-master/core/sksp";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "./i18n.js";
@@ -35,18 +21,8 @@ function visibleMessage(error: unknown): string {
 }
 
 export function formatCliError(error: unknown): string {
-  if (error instanceof AppError) {
-    return visibleMessage(error);
-  }
-  if (
-    error instanceof VfsError ||
-    error instanceof VfsZipError ||
-    error instanceof PromptError ||
-    error instanceof TdbcError ||
-    error instanceof ProviderError ||
-    error instanceof SessionFsError ||
-    error instanceof SkspError
-  ) {
+  // per-domain 类已退役（统一 AppError），TdbcError / SkspError 不在本期范围。
+  if (error instanceof AppError || error instanceof TdbcError || error instanceof SkspError) {
     return visibleMessage(error);
   }
   if (error instanceof Error) {
@@ -56,20 +32,6 @@ export function formatCliError(error: unknown): string {
 }
 
 export function exitCodeForError(error: unknown): number {
-  if (error instanceof AppError) {
-    return EXIT_RUNTIME;
-  }
-  if (
-    error instanceof VfsError ||
-    error instanceof VfsZipError ||
-    error instanceof PromptError ||
-    error instanceof TdbcError ||
-    error instanceof ProviderError ||
-    error instanceof SessionFsError ||
-    error instanceof SkspError
-  ) {
-    return EXIT_RUNTIME;
-  }
   if (error instanceof Error && error.message.startsWith("Usage:")) {
     return EXIT_USAGE;
   }

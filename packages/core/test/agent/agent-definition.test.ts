@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode, ConfigDecodeError } from "@novel-master/core";
+import { decode, encode } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/agent";
 
-import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
+import { agentDefinitionSchema } from "@novel-master/core/agent";
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
@@ -136,7 +137,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 
@@ -161,7 +162,7 @@ describe("agentDefinitionSchema", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA")
     );
   });
 

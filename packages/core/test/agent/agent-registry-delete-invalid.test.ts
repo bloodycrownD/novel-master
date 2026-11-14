@@ -1,6 +1,7 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createAgentRegistryService, isAppError } from "@novel-master/core/agent";
+import { createAgentRegistryService } from "@novel-master/core/agent";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,

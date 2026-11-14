@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "../../src/errors/vfs-errors.js";
 import { AppError } from "../../src/errors/app-error.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { buildReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
   formatToolErrorForLlm,
@@ -340,13 +338,8 @@ describe("formatToolOutputForLlm", () => {
 
 describe("formatToolErrorForLlm", () => {
   it("unwraps VfsError cause from ToolError", () => {
-    const cause = new VfsError("NOT_FOUND", "Path not found: /missing", {
-      path: "/missing",
-    });
-    const err = new ToolError("FAILED", "Tool failed: read", {
-      toolName: "read",
-      cause,
-    });
+    const cause = new AppError("VFS_NOT_FOUND", {path: "/missing", detail: "Path not found: /missing"});
+    const err = new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "Tool failed: read"});
     assert.equal(
       formatToolErrorForLlm(err),
       "Error: [NOT_FOUND] Path not found: /missing",
@@ -354,13 +347,8 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-01: session scope maps physical path to logical", () => {
-    const cause = new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
-      path: physicalPath,
-    });
-    const err = new ToolError("FAILED", "Tool failed: read", {
-      toolName: "read",
-      cause,
-    });
+    const cause = new AppError("VFS_NOT_FOUND", {path: physicalPath, detail: `Path not found: ${physicalPath}`});
+    const err = new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "Tool failed: read"});
     const content = formatToolErrorForLlm(err, { vfsScope: sessionScope });
     assert.ok(content.includes("[NOT_FOUND]"));
     assert.ok(content.includes("/missing.txt"));
@@ -372,7 +360,7 @@ describe("formatToolErrorForLlm", () => {
     // oldString 12 字符；文件里 "same" 出现 2 次 ⇒ lcsLength=4、lcsOccurrences=2。
     const cause = buildReplaceNotFoundError(physicalPath, "aa same bb same cc", "sameXXXXXXXX");
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "Tool failed: edit", { cause }),
+      new AppError("TOOL_FAILED", {toolName: "edit", cause, detail: "Tool failed: edit"}),
       { vfsScope: sessionScope },
     );
     assert.ok(content.includes("[REPLACE_NOT_FOUND]"));
@@ -381,11 +369,9 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-03: NOT_FOUND category", () => {
-    const cause = new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
-      path: physicalPath,
-    });
+    const cause = new AppError("VFS_NOT_FOUND", {path: physicalPath, detail: `Path not found: ${physicalPath}`});
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "x", { cause }),
+      new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
     assert.ok(content.includes("[NOT_FOUND]"));
@@ -394,7 +380,7 @@ describe("formatToolErrorForLlm", () => {
   it("T-ERR-04: REPLACE_NOT_FOUND includes LCS snippet", () => {
     const cause = buildReplaceNotFoundError(physicalPath, "prefix function hello() suffix", "function hello()tail");
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "x", { cause }),
+      new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
     assert.ok(content.includes("[REPLACE_NOT_FOUND]"));
@@ -405,7 +391,7 @@ describe("formatToolErrorForLlm", () => {
   it("T-ERR-05: short LCS suggests re-read", () => {
     const cause = buildReplaceNotFoundError(physicalPath, "xx ab yy", "abZZZZZZ");
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "x", { cause }),
+      new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
     assert.ok(content.includes("Almost no matching text"));
@@ -415,9 +401,9 @@ describe("formatToolErrorForLlm", () => {
     // 模拟 bug 3：oldString 里是字面 entity，文件里是真正的中文引号。
     // 预览并列就能看出 `&ldquo;` vs `“` 的区别，且 LLM 可直接照抄修正。
     // 预览值是本用例的断言对象，无法由 LCS 计算复现，直接按生产形态构造 AppError。
-    const cause = new AppError("VFS_REPLACE_NOT_FOUND", `Replace string not found in ${physicalPath}`, {path: physicalPath, details: {oldStringLength: 20, longestCommonSubstring: "你好世界测试", lcsLength: 6, lcsOccurrences: 1, oldStringPreview: '&ldquo;你好', fileHintPreview: '“你好'}});
+    const cause = new AppError("VFS_REPLACE_NOT_FOUND", {path: physicalPath, oldStringLength: 20, longestCommonSubstring: "你好世界测试", lcsLength: 6, lcsOccurrences: 1, oldStringPreview: '&ldquo;你好', fileHintPreview: '“你好', detail: `Replace string not found in ${physicalPath}`});
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "x", { cause }),
+      new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "x"}),
       { vfsScope: sessionScope },
     );
     assert.ok(content.includes("Preview (first 100 chars, JSON-escaped)"));
@@ -430,19 +416,12 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("summarizes INVALID_ARGUMENT zod issues", () => {
-    const err = new ToolError("INVALID_ARGUMENT", "Invalid input for tool: write", {
-      toolName: "write",
-      details: {
-        issues: [{ code: "custom", path: ["path"], message: "Required" }],
-      },
-    });
+    const err = new AppError("TOOL_INVALID_ARGUMENT", {toolName: "write", issues: [{ code: "custom", path: ["path"], message: "Required" }], detail: "Invalid input for tool: write"});
     assert.equal(formatToolErrorForLlm(err), "Error: Required");
   });
 
   it("falls back to ToolError message without cause", () => {
-    const err = new ToolError("NOT_FOUND", "Tool not registered: missing", {
-      toolName: "missing",
-    });
+    const err = new AppError("TOOL_NOT_FOUND", {toolName: "missing", detail: "Tool not registered: missing"});
     assert.equal(
       formatToolErrorForLlm(err),
       "Error: Tool not registered: missing",

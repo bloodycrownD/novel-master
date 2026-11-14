@@ -31,8 +31,7 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import { isAppError } from "@/errors/app-error.js";
-import { ToolError } from "@/errors/tool-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext, BuiltinToolSubagentContext } from "./builtin-tool-context.js";
 
@@ -160,20 +159,20 @@ async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSu
     if (!isSessionNotFound(error)) {
       throw error;
     }
-    throw new ToolError("FAILED", `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`, { toolName: "task" });
+    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`});
   }
   // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
   if (session.parentSessionId !== subagent.parentSessionId) {
-    throw new ToolError("FAILED", `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`, { toolName: "task" });
+    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`});
   }
   // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
   if (subagent.isSessionRunActive(sessionId)) {
-    throw new ToolError("FAILED", `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`, { toolName: "task" });
+    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`});
   }
   // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
   const existing = await subagent.messages.listBySession(sessionId);
   if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
-    throw new ToolError("FAILED", `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`, { toolName: "task" });
+    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`});
   }
   return sessionId;
 }
@@ -225,11 +224,11 @@ ${formatCallableList(callable)}
   async run(input, ctx) {
     const subagent = ctx.subagent;
     if (subagent == null) {
-      throw new ToolError("FAILED", "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）", { toolName: "task" });
+      throw new AppError("TOOL_FAILED", {toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）"});
     }
     // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 resolveAgentToolRegistry）。
     if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
-      throw new ToolError("FAILED", `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`, { toolName: "task" });
+      throw new AppError("TOOL_FAILED", {toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`});
     }
 
     const defs = await subagent.agentRegistry.list();
@@ -237,7 +236,7 @@ ${formatCallableList(callable)}
     const def = defs.find((d) => d.name === input.subagentName && d.mode !== "primary");
     if (def == null) {
       const callableNames = defs.filter((d) => d.mode !== "primary").map((d) => d.name);
-      throw new ToolError("FAILED", `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`, { toolName: "task" });
+      throw new AppError("TOOL_FAILED", {toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`});
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
@@ -256,7 +255,7 @@ ${formatCallableList(callable)}
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
       const materialized = attachmentScanner.fromPaths(filePaths);
-      if (!materialized.ok) throw new ToolError("FAILED", `fileAttachment 路径非法：${materialized.error.message}`, { toolName: "task" });
+      if (!materialized.ok) throw new AppError("TOOL_FAILED", {toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}`});
       attachments = materialized.value;
     }
 

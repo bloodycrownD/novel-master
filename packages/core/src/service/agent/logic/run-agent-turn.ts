@@ -32,11 +32,10 @@ import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-conf
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { MessageParams } from "@/common/i18n.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
-import { ToolError } from "@/errors/tool-errors.js";
 import { Result } from "@/errors/either.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_SUBAGENT_CHILD_SESSION_CREATED } from "@/domain/events/model/event-types.js";
@@ -1103,7 +1102,7 @@ async function runChildAgent(args: {
     // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
     // 按旧行为；CLI 已补注入，见 D6）。
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
-      throw new ToolError("FAILED", { key: "error.agent.child_session_busy", params: { child_session_id: childSessionId } }, { toolName: "task" });
+      throw new AppError("TOOL_FAILED", {toolName: "task", descriptor: {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}}});
     }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。

@@ -7,6 +7,7 @@
  * INVALID_ARGUMENT 且文案含「definition.name 必填」，并确认拒绝后
  * 注册表无落盘。
  */
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -14,7 +15,6 @@ import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { createAgentRegistryService } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
@@ -66,8 +66,8 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("error.agent.invalid_schema.name_required"),
     );
 
@@ -136,8 +136,8 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("error.agent.duplicate_name"),
     );
 

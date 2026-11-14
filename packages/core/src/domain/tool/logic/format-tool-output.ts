@@ -14,8 +14,6 @@
 import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { isAppError } from "@/errors/app-error.js";
-import { ToolError } from "@/errors/tool-errors.js";
-import { VfsError, isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
 
@@ -298,34 +296,36 @@ export function formatToolOutputForLlm(out: unknown): string {
 /**
  * Formats tool execution failures for LLM `tool_result` content.
  *
- * @remarks Unwraps {@link ToolError} `cause` (e.g. {@link VfsError}) so the model sees actionable detail.
+ * @remarks Unwraps `TOOL_FAILED` 等 ToolError 形态错误的 `cause`（如 VFS 域 AppError）so the model sees actionable detail.
  */
 // nm-style: keep-public — 两个测试文件直接 import（本片禁改测试）；且是 tool_result 错误文案的统一出口，内联进 buildToolResultBlock 会把 13 处测试锁定的格式搬进另一模块。
 export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorForLlmOptions): string {
   let message: string;
-  if (error instanceof ToolError) {
-    if (error.code === "INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {
+  if (isAppError(error) && error.key.startsWith("TOOL_")) {
+    if (error.key === "TOOL_INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {
       const issues = error.details.issues as readonly ZodIssue[];
       const summary = issues.map((i) => i.message).join("; ");
       message = summary.length > 0 ? summary : error.message;
-    } else if (error.cause != null) {
-      // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
-      // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
-      let unwrapped: unknown = error.cause;
-      while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
-        unwrapped = unwrapped.cause;
-      }
-      const vfsError = unwrapped instanceof VfsError ? unwrapped : isVfsError(unwrapped) ? unwrapped : undefined;
-      const cause = error.cause;
-      if (vfsError != null) {
-        message = formatVfsErrorForLlm(vfsError, options?.vfsScope);
-      } else if (isAppError(cause)) {
-        message = formatVfsErrorForLlm(cause, options?.vfsScope);
-      } else {
-        message = cause instanceof Error ? cause.message : String(cause);
-      }
     } else {
-      message = error.message;
+      const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
+      if (cause != null) {
+        // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
+        // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
+        let unwrapped: unknown = cause;
+        while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
+          unwrapped = unwrapped.cause;
+        }
+        const vfsError = isAppError(unwrapped) && unwrapped.key.startsWith("VFS_") ? unwrapped : undefined;
+        if (vfsError != null) {
+          message = formatVfsErrorForLlm(vfsError, options?.vfsScope);
+        } else if (isAppError(cause)) {
+          message = formatVfsErrorForLlm(cause, options?.vfsScope);
+        } else {
+          message = cause instanceof Error ? cause.message : String(cause);
+        }
+      } else {
+        message = error.message;
+      }
     }
   } else if (error instanceof Error) {
     message = error.message;

@@ -11,7 +11,7 @@ import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
-import { ToolError } from "@/errors/tool-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
 import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
 
@@ -54,9 +54,7 @@ export type FsLsOutput = {
 export type FsCommandResult = { readonly ok: true } | FsLsOutput;
 
 function invalidCommand(reason: string): never {
-  throw new ToolError("INVALID_ARGUMENT", `Invalid fs command: ${reason}`, {
-    toolName: "fs",
-  });
+  throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: ${reason}`});
 }
 
 function requireField(value: string | undefined, field: string): string {

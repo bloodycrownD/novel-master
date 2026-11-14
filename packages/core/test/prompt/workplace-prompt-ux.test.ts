@@ -3,7 +3,8 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode, ConfigDecodeError } from "@novel-master/core";
+import { decode, encode } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/agent";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@novel-master/core/workplace";
@@ -73,7 +74,7 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError && /workplace/.test(e.message)
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA") && /workplace/.test(e.message)
     );
     const blank = validateAgentPromptLayoutFromMaps({}, {}, undefined, {
       workplace: "   ",

@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
@@ -34,7 +34,6 @@ import type {
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { ToolError } from "@/errors/tool-errors.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -272,8 +271,8 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FAILED");
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /找不到子会话/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -327,8 +326,8 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
-        assert.equal(e.code, "FAILED");
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /不是当前会话派生的子会话/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -361,7 +360,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx2)
         ),
-      (e: unknown) => e instanceof ToolError && /不是当前会话派生的子会话/.test(e.message)
+      (e: unknown) => isAppError(e) && e.key.startsWith("TOOL_") && /不是当前会话派生的子会话/.test(e.message)
     );
     // 反向：项目不同但父相同 → 放行（子代理本就共享父工作区，不按 project 拦）。
     const out = await subagentTool.run(
@@ -393,7 +392,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /正在运行中/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -420,7 +419,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           },
           toolCtx(ctx)
         ),
-      (e: unknown) => e instanceof ToolError && /正在运行中/.test(e.message)
+      (e: unknown) => isAppError(e) && e.key.startsWith("TOOL_") && /正在运行中/.test(e.message)
     );
   });
 
@@ -456,7 +455,7 @@ describe("task sessionId 续用（T-TS*）", () => {
           toolCtx(overLimit.ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError);
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
         assert.match(e.message, /已有 \d+ 条消息/);
         assert.match(e.message, /去掉 sessionId/);
         return true;
@@ -569,8 +568,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
             toolCtx(ctx)
           ),
         (e: unknown) => {
-          assert.ok(e instanceof ToolError, `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
-          assert.equal(e.code, "FAILED");
+          assert.ok(isAppError(e) && e.key.startsWith("TOOL_"), `路径 ${JSON.stringify(bad)} 应抛 ToolError`);
+          assert.equal(e.key, "TOOL_FAILED");
           assert.match(e.message, /fileAttachment 路径非法/);
           return true;
         }
@@ -599,8 +598,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
           toolCtx(ctx)
         ),
       (e: unknown) => {
-        assert.ok(e instanceof ToolError, "路径非法必须是 ToolError，不是裸 VfsError");
-        assert.equal(e.code, "FAILED");
+        assert.ok(isAppError(e) && e.key.startsWith("TOOL_"), "路径非法必须是 ToolError，不是裸 VfsError");
+        assert.equal(e.key, "TOOL_FAILED");
         assert.match(e.message, /fileAttachment 路径非法/);
         // 原 message 保留（VfsError 的中文/英文 reason 仍在文案里）
         assert.match(e.message, /Invalid path/);

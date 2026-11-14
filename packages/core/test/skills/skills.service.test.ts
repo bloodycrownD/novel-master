@@ -8,12 +8,12 @@
  * @module test/skills/skills.service
  */
 
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { isAppError } from "@novel-master/core/agent";
-import { isVfsError } from "@novel-master/core/vfs";
+
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -164,7 +164,7 @@ describe("SkillService（T-SK5）", () => {
     // 隔壁技能目录未被写脏
     await assert.rejects(
       () => ctx.globalMetaVfs().read("/meta/skills/victim.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
     );
   });
 

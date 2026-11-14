@@ -25,7 +25,7 @@ import { renameVfsEntry, renameVfsDirectory } from "@/domain/vfs/logic/vfs-renam
 // 本文件的删除路径（appendDeletedRevision → nextVersionFor）必须跟着引用共享实现。
 import { nextVersionFor, writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { VfsError, vfsInvalidPath, vfsNotFound } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsContentSize } from "../internal-vfs.port.js";
@@ -88,7 +88,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      throw vfsInvalidPath(path, "cannot delete root");
+      throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`});
     }
 
     await runInTransactionOrConn(this.conn, async (tx) => {
@@ -110,16 +110,16 @@ export class RevisionAwareVfsService implements InternalVfsService {
       // entry 缺失（已被 hardDelete 且 revision 无 entry 可挂）时直接抛 NOT_FOUND。
       const existing = await entryRepo.findByPath(scopeKey, normalized);
       if (existing == null) {
-        throw new VfsError("NOT_FOUND", `cannot resetHeadToVersion: entry missing for ${normalized}`, { path: normalized });
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}`});
       }
       const entryId = existing.entryId;
 
       const rev = await revisionRepo.findByEntryAndVersion(entryId, version);
       if (rev == null || rev.status === "deleted") {
-        throw new VfsError("NOT_FOUND", `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`, { path: normalized });
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`});
       }
       if (rev.content == null) {
-        throw new VfsError("NOT_FOUND", `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`, { path: normalized });
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`});
       }
 
       // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
@@ -145,7 +145,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      throw vfsInvalidPath(path, "cannot hardDelete root");
+      throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot hardDelete root", detail: `Invalid path ${path}: cannot hardDelete root`});
     }
 
     await runInTransactionOrConn(this.conn, async (tx) => {
@@ -254,7 +254,7 @@ async function deleteWithRevision(entryRepo: VfsEntryRepository, revisionRepo: V
   const entry = await entryRepo.findByPath(scopeKey, path);
   if (entry == null) {
     if (!recursive) {
-      throw vfsNotFound(path);
+      throw new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`});
     }
     // WHY: Worktree 可从子文件推断目录，但 vfs_entry 未必有 directory 行。
     const under = await entryRepo.listEntriesUnderPrefix(scopeKey, path);

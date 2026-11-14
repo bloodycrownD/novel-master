@@ -212,14 +212,14 @@ describe("SessionService agent config（v2，T-S3）", () => {
 
     // partial overlay 下 agentId 会从 baseline 继承，schema 主要兌锋点变成 modelId。
     // 空串 modelId 不满足 min(1)，会被 schema 拒绝。
-    // 这里按 name 判定（避免 tsx 双实例下 instanceof ConfigDecodeError prototype 不匹配）。
+    // 这里按 name 判定（避免 tsx 双实例下 instanceof prototype 不匹配）；AppError 的 name 即 key。
     await assert.rejects(
       () =>
         ctx.sessions.updateSessionAgentConfig(session.id, {
           modelId: "",
         }),
       (error: unknown) =>
-        error instanceof Error && error.name === "ConfigDecodeError",
+        error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
     );
   });
 

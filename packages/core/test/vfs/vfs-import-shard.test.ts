@@ -9,6 +9,7 @@
  * @module test/vfs/vfs-import-shard
  */
 
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import {
@@ -19,7 +20,7 @@ import {
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK } from "../../src/domain/vfs/logic/vfs-import-chunk.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import {
   openNovelMasterTestConnection,
@@ -161,21 +162,21 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     // 前 2 片的文件已被补偿删除（补偿挂在片失败的内层，不挂外层 catch）。
     await assert.rejects(
       () => vfs.read("/f0000.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
     await assert.rejects(
       () => vfs.read("/f0199.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
     // 失败片本身未落库。
     await assert.rejects(
       () => vfs.read(failPath),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
     // 旧内容**不恢复**（段 B0 已删，补偿只清半棵新树）——这是分片的既定行为损失。
     await assert.rejects(
       () => vfs.read("/before.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
 
     // 补偿用 releaseAndDeleteVfsPrefix（减 live ref + 删 entry + GC 无引用 revision）
@@ -223,7 +224,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     // 补偿照跑：目标前缀回到「空的可重试态」。
     await assert.rejects(
       () => vfs.read("/a.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
     const remaining = await vfs.list("/", { recursive: true });
     assert.deepEqual(remaining, [], "补偿后目标前缀应为空");

@@ -1,6 +1,6 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isAppError } from "@novel-master/core/agent";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

@@ -2,10 +2,10 @@
  * MessageTranscriptEffectsService 单测。
  */
 
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
-import { isAppError } from '@novel-master/core/agent';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
 import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
@@ -355,7 +355,7 @@ describe('MessageTranscriptEffectsService', () => {
   // cr-chat-1：get 全局按 id 查，跨会话传入他会话的合法 user 消息 id 时，
   // 必须按旧实现的 404 口径拦下——不得拿他会话的 seq 对本会话错误范围执行
   // hide/show、清 KKV 两域或失效 token cache。
-  it('cr-chat-1：跨会话锚点 id 抛 chatNotFound，两会话消息与 KKV 域零变化', async () => {
+  it('cr-chat-1：跨会话锚点 id 抛 CHAT_NOT_FOUND，两会话消息与 KKV 域零变化', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionA = await ctx.sessions.create(project.id);

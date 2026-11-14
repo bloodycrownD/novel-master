@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  ConfigDecodeError,
-  decode,
-  encode,
-  parseText,
-  stringifyText,
-} from "@novel-master/core";
+import { decode, encode, parseText, stringifyText } from "@novel-master/core";
 
-import { agentDefinitionSchema, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
+import { agentDefinitionSchema, isAppError, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 
@@ -141,8 +135,7 @@ prompts:
           agentDefinitionSchema,
         ),
       (e: unknown) =>
-        e instanceof ConfigDecodeError &&
-        e.code === "INVALID_SCHEMA" &&
+        isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA") &&
         /subagentCallable/.test(e.message),
     );
   });

@@ -10,9 +10,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
+import { isAppError } from "../../src/errors/app-error.js";
 import {
   createPhysicalVfsService,
-  isVfsError,
   type PhysicalVfsService,
 } from "@novel-master/core/vfs";
 import {
@@ -182,15 +182,15 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     const ctx = getNovelMasterTestContext();
     const svc = createPhysicalVfsService(ctx.conn);
     await assert.rejects(svc.list("/nope"), (err: unknown) => {
-      assert.ok(isVfsError(err));
-      assert.equal(err.code, "NOT_FOUND");
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal(err.key, "VFS_NOT_FOUND");
       return true;
     });
     await assert.rejects(
       svc.list(`/projects/nonexistent-${testIsolationSuffix()}`),
       (err: unknown) => {
-        assert.ok(isVfsError(err));
-        assert.equal(err.code, "NOT_FOUND");
+        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+        assert.equal(err.key, "VFS_NOT_FOUND");
         return true;
       },
     );
@@ -267,15 +267,15 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     await assert.rejects(
       svc.read(`/template/absent-${suffix}.md`),
       (err: unknown) => {
-        assert.ok(isVfsError(err));
-        assert.equal(err.code, "NOT_FOUND");
+        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+        assert.equal(err.key, "VFS_NOT_FOUND");
         return true;
       },
     );
     // 不落任何域前缀
     await assert.rejects(svc.read("/nope/x.md"), (err: unknown) => {
-      assert.ok(isVfsError(err));
-      assert.equal(err.code, "NOT_FOUND");
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal(err.key, "VFS_NOT_FOUND");
       return true;
     });
   });
@@ -430,8 +430,8 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     ]);
 
     await assert.rejects(svc.listTree("/nope"), (err: unknown) => {
-      assert.ok(isVfsError(err));
-      assert.equal(err.code, "NOT_FOUND");
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal(err.key, "VFS_NOT_FOUND");
       return true;
     });
   });
@@ -512,16 +512,16 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
     await assert.rejects(
       svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`),
       (err: unknown) => {
-        assert.ok(isVfsError(err));
-        assert.equal(err.code, "NOT_FOUND");
+        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+        assert.equal(err.key, "VFS_NOT_FOUND");
         return true;
       },
     );
     await assert.rejects(
       svc.read(`/projects/${projectA.id}/sessions/${sessionB.id}/x.md`),
       (err: unknown) => {
-        assert.ok(isVfsError(err));
-        assert.equal(err.code, "NOT_FOUND");
+        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+        assert.equal(err.key, "VFS_NOT_FOUND");
         return true;
       },
     );
@@ -564,8 +564,7 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
       await assert.rejects(
         svc.read(path),
         (err: unknown) => {
-          assert.ok(isVfsError(err), `${path} 应抛 VfsError`);
-          assert.equal(err.code, "NOT_FOUND", `${path} 应为 NOT_FOUND`);
+          assert.ok(isAppError(err, "VFS_NOT_FOUND"), `${path} 应抛 VFS_NOT_FOUND`);
           return true;
         },
       );

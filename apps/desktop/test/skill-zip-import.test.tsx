@@ -123,7 +123,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     );
   });
 
-  it("非 zip 字节拒绝（VfsZipError 落 name 兕底路径，message 含 not a ZIP）", async () => {
+  it("非 zip 字节拒绝（VFS_ZIP_INVALID_ARCHIVE 透出 key，message 含 not a ZIP）", async () => {
     const res = await handleVfsZipImportBytes({
       workspaceScope: "global-meta",
       bytes: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
@@ -132,7 +132,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     });
     assert.equal(res.ok, false);
     if (!res.ok) {
-      assert.equal(res.error.code, "VfsZipError");
+      assert.equal(res.error.code, "VFS_ZIP_INVALID_ARCHIVE");
       assert.match(res.error.message, /not a ZIP/i);
     }
   });

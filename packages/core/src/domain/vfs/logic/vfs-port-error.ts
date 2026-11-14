@@ -1,16 +1,15 @@
-// legacy-port: VfsService / VfsRestorePort — phase 2 由端口实现改抛 AppError 后删除。
 /**
- * 旧 VfsError 端口异常 → AppError 的单一映射。
+ * VFS 端口失败载荷类型。
  *
- * domain 逻辑只在本层消费旧 code（NOT_FOUND / IS_DIRECTORY / ALREADY_EXISTS 等）；
- * 映射时保留原 message 与 path，原错误挂到 details.cause，方便 phase 2 排查。
+ * `vfsPortError` 桥（旧 VfsError → AppError）已随端口实现统一改抛 AppError 删除；
+ * 本文件只保留 `copyVfsPath` / `moveVfsPath` 的 Result 错误类型别名。
  *
  * @module domain/vfs/logic/vfs-port-error
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { isAppError, type AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import type { VfsError, VfsErrorCode } from "@/errors/vfs-errors.js";
+import type { VfsErrorCode } from "@/errors/vfs-errors.js";
 
 const VFS_ERROR_KEYS = {
   NOT_FOUND: "VFS_NOT_FOUND",
@@ -27,11 +26,7 @@ const VFS_ERROR_KEYS = {
 /** 端口异常转换后的失败载荷。 */
 export type VfsPortError = AppError<(typeof VFS_ERROR_KEYS)[VfsErrorCode]>;
 
-/** 把旧 VfsError 翻成 AppError，保留 message / path / details。 */
-export function vfsPortError(error: VfsError): VfsPortError {
-  return new AppError(VFS_ERROR_KEYS[error.code], error.message, {
-    path: error.path,
-    ...(error.details != null ? { details: error.details } : {}),
-    cause: error,
-  });
+/** 端口失败载荷守卫：VFS_* 前缀的 AppError（端口已统一抛 AppError）。 */
+export function isVfsPortError(error: unknown): error is VfsPortError {
+  return isAppError(error) && error.key.startsWith("VFS_");
 }

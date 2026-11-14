@@ -1,6 +1,6 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isVfsError } from "@novel-master/core/vfs";
 import { moveVfsPath, remapPathUnderDir } from "../../src/domain/vfs/logic/vfs-move.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -24,7 +24,7 @@ describe("moveVfsPath", () => {
     assert.equal(read.content, "content");
     await assert.rejects(
       () => vfs.read("/old.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 
@@ -45,7 +45,7 @@ describe("moveVfsPath", () => {
     assert.equal((await vfs.read("/dst/sub/b.md")).content, "b");
     await assert.rejects(
       () => vfs.read("/src/a.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 
@@ -64,7 +64,7 @@ describe("moveVfsPath", () => {
     assert.deepEqual(await vfs.list("/renamed-dir"), []);
     await assert.rejects(
       () => vfs.list("/empty-dir"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
 
     // rename 后新目录仍可正常写入子项。
@@ -97,11 +97,11 @@ describe("moveVfsPath", () => {
     );
     await assert.rejects(
       () => vfs.read(`${oldDir}/child.md`),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
     await assert.rejects(
       () => vfs.list(oldDir),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
+      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
     );
   });
 

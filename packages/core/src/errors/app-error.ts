@@ -53,7 +53,7 @@ export interface ErrorParamsMap {
   TOOL_SEARCH_TEMPLATE_INVALID: {readonly reason: string};
   TOOL_NOT_FOUND: {readonly toolName: string};
   TOOL_CONFLICT: {readonly toolName: string};
-  TOOL_INVALID_ARGUMENT: {readonly toolName: string; readonly issues: readonly ZodIssue[]};
+  TOOL_INVALID_ARGUMENT: {readonly toolName: string; readonly issues?: readonly ZodIssue[]};
   TOOL_FAILED: {readonly toolName: string; readonly cause?: unknown};
   TOOL_FORBIDDEN: {readonly toolName: string; readonly path: string};
   PROVIDER_NOT_FOUND: {readonly providerId: string};
@@ -76,6 +76,10 @@ export interface ErrorParamsMap {
   SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED: {readonly missingLogicalPaths: string; readonly sessionId?: string; readonly messageId?: string};
   SESSION_FS_ROLLBACK_CONFLICT: {readonly expectedMessageCount: number; readonly actualMessageCount: number; readonly sessionId?: string; readonly messageId?: string};
   SESSION_FS_ROLLBACK_TAIL_DRIFT: {readonly expectedMessageCount: number; readonly actualMessageCount: number; readonly sessionId?: string; readonly messageId?: string};
+  PROMPT_INVALID_YAML: {readonly offset?: number};
+  PROMPT_INVALID_BLOCK: {readonly offset?: number};
+  PROMPT_UNKNOWN_FIELD: {readonly offset?: number};
+  PROMPT_UNSUPPORTED_SYNTAX: {readonly offset?: number};
   KKV_NOT_FOUND: {readonly module: string; readonly key: string};
   PREFERENCES_INVALID_VALUE: {readonly key: string; readonly expectedType: string; readonly actualValue: string};
 }
@@ -155,7 +159,9 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
     this.code = ErrorCodes[key].code;
     this.desc = def.desc;
     this.messageKey = descriptor?.key ?? def.messageKey;
-    this.messageParams = descriptor?.params ?? (params == null ? undefined : toSnakeCase(params as Record<string, unknown>) as MessageParams);
+    // descriptor 命中时 messageParams 只取 descriptor.params（为空即 undefined，与旧 VfsError
+    // wire 一致）；不再回退 toSnakeCase(params)——那会把 descriptor 对象自身当参数透传出去。
+    this.messageParams = descriptor != null ? descriptor.params : (params == null ? undefined : toSnakeCase(params as Record<string, unknown>) as MessageParams);
     this.details = legacy ? detailsOrOptions as Record<string, unknown> | undefined : params as Record<string, unknown> | undefined;
   }
 

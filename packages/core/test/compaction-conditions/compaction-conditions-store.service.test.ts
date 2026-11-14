@@ -1,9 +1,9 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createCompactionConditionsStore,
 } from "@novel-master/core/compaction";
-import { isAppError } from "@novel-master/core/agent";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 

@@ -85,6 +85,10 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED: ["missingLogicalPaths", "sessionId?", "messageId?"],
   SESSION_FS_ROLLBACK_CONFLICT: ["expectedMessageCount", "actualMessageCount", "sessionId?", "messageId?"],
   SESSION_FS_ROLLBACK_TAIL_DRIFT: ["expectedMessageCount", "actualMessageCount", "sessionId?", "messageId?"],
+  PROMPT_INVALID_YAML: ["offset?"],
+  PROMPT_INVALID_BLOCK: ["offset?"],
+  PROMPT_UNKNOWN_FIELD: ["offset?"],
+  PROMPT_UNSUPPORTED_SYNTAX: ["offset?"],
   KKV_NOT_FOUND: ["module", "key"],
   PREFERENCES_INVALID_VALUE: ["key", "expectedType", "actualValue"],
 };
@@ -308,5 +312,32 @@ describe("AppError", () => {
 
   it("toSnakeCase：顶层成员名 camelCase → snake_case，值原样透传", () => {
     assert.deepEqual(toSnakeCase({ toolName: "read", already_snake: 1, nested: { innerKey: 2 } }), { tool_name: "read", already_snake: 1, nested: { innerKey: 2 } });
+  });
+
+  it("T-M1: PromptError 4 码退役映射——offset 进 params，detail 覆盖动态文案", () => {
+    const yaml = new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: 12 });
+    assert.equal(yaml.code, 117004);
+    assert.equal(yaml.message, "unclosed macro comment");
+    assert.deepEqual(yaml.details, { detail: "unclosed macro comment", offset: 12 });
+    assert.deepEqual(yaml.messageParams, { detail: "unclosed macro comment", offset: 12 });
+    assert.equal(yaml.messageKey, "error.prompt.invalid_yaml");
+    assert.equal(new AppError("PROMPT_INVALID_BLOCK").code, 117005);
+    const unknownField = new AppError("PROMPT_UNKNOWN_FIELD", { detail: "unknown field: .a.b", offset: 3 });
+    assert.equal(unknownField.code, 117006);
+    assert.equal(unknownField.messageKey, "error.prompt.unknown_field");
+    assert.equal(isAppError(unknownField, "PROMPT_UNKNOWN_FIELD"), true);
+    const syntax = new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: "unsupported syntax near offset 7", offset: 7 });
+    assert.equal(syntax.code, 117007);
+    assert.equal(syntax.messageKey, "error.prompt.unsupported_syntax");
+  });
+
+  it("T-M2: ConfigDecodeError 2 码退役映射", () => {
+    const schema = new AppError("CONFIG_DECODE_INVALID_SCHEMA", { detail: "invalid JSON" });
+    assert.equal(schema.code, 109001);
+    assert.equal(schema.message, "invalid JSON");
+    assert.equal(schema.messageKey, "error.infra.decode_invalid_schema");
+    const encodeUnsupported = new AppError("CONFIG_DECODE_ENCODE_NOT_SUPPORTED", { detail: "schema does not define toWire" });
+    assert.equal(encodeUnsupported.code, 109002);
+    assert.equal(encodeUnsupported.messageKey, "error.infra.encode_not_supported");
   });
 });

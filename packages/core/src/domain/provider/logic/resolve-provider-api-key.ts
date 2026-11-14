@@ -6,7 +6,6 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { providerApiKeyNotSetMessage } from "@/errors/provider-errors.js";
 import { resolveProviderApiKeySecretRef, type LlmProvider } from "@/domain/provider/model/provider.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { builtinDefaultApiKey } from "./builtin-providers.js";
@@ -26,7 +25,7 @@ export async function resolveProviderApiKey(provider: Pick<LlmProvider, "id" | "
   if (fallback != null && fallback !== "") {
     return Result.ok(fallback);
   }
-  return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", providerApiKeyNotSetMessage(provider.id), { providerId: provider.id }));
+  return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", `API key not set for provider ${provider.id}. Configure it in provider settings.`, { providerId: provider.id }));
 }
 
 /** list/UI 是否应把该服务商视为已配置可用 API key。 */

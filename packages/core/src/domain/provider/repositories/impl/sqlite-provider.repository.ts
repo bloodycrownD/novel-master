@@ -9,7 +9,7 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { LlmProvider } from "../../model/provider.js";
 import type { ProviderRepository } from "../provider.port.js";
 
@@ -33,7 +33,7 @@ function parseJsonObject(json: string): Record<string, unknown> {
 function rowToProvider(row: Row): LlmProvider {
   const displayRaw = row.display_name;
   if (displayRaw == null || String(displayRaw).trim() === "") {
-    throw new ProviderError("INVALID_ARGUMENT", `服务商 display_name 不得为空（id=${String(row.id)}）`, { providerId: String(row.id) });
+    throw new AppError("PROVIDER_INVALID_ARGUMENT", `服务商 display_name 不得为空（id=${String(row.id)}）`, { providerId: String(row.id) });
   }
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(parseJsonObject(String(row.headers_json ?? "{}")))) {

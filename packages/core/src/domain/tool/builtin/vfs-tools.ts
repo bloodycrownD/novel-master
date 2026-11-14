@@ -11,8 +11,8 @@ import type { VfsGrepMatch, VfsReadResult } from "@/domain/vfs/ports/vfs-service
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
-import { ToolError } from "@/errors/tool-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -141,10 +141,10 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const totalLines = lines.length;
 
       if (offset > 1 && totalLines === 0) {
-        throw new ToolError("INVALID_ARGUMENT", `offset ${offset} exceeds file length (0 lines)`, { toolName: "read" });
+        throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (0 lines)`});
       }
       if (totalLines > 0 && offset > totalLines) {
-        throw new ToolError("INVALID_ARGUMENT", `offset ${offset} exceeds file length (${totalLines} lines)`, { toolName: "read" });
+        throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
       }
 
       const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(lines, offset, limit);

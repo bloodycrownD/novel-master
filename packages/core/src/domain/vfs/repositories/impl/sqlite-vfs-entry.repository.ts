@@ -13,7 +13,6 @@ import { AppError } from "@/errors/app-error.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { vfsDirectoryNotEmpty, vfsNotFound } from "@/errors/vfs-errors.js";
 import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
@@ -277,7 +276,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql36 = "UPDATE vfs_entry\n       SET content = NULL,\n           content_hash = #{contentHash},\n           head_version = #{nextVersion},\n           mtime_ms = #{mtimeMs}\n       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'";
     const result = await executeTemplate(this.conn, this.parser, sql36, { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized });
     if (result.changes === 0) {
-      throw vfsNotFound(normalized);
+      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
     }
 
     const sql17 = "SELECT head_version FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -328,12 +327,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const sql20 = "SELECT 1 FROM vfs_entry\n         WHERE scope_key = #{scopeKey}\n           AND path LIKE #{pattern} ESCAPE '\\'\n           AND path <> #{path}\n         LIMIT 1";
       const childRows = await queryTemplate(this.conn, this.parser, sql20, { scopeKey, pattern, path: normalized });
       if (childRows.length > 0) {
-        throw vfsDirectoryNotEmpty(normalized);
+        throw new AppError("VFS_DIRECTORY_NOT_EMPTY", {path: normalized, detail: `Directory not empty: ${normalized}`});
       }
 
       const result = await executeTemplate(this.conn, this.parser, `DELETE FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`, { scopeKey, path: normalized });
       if (result.changes === 0) {
-        throw vfsNotFound(normalized);
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
       }
       return result.changes;
     }
@@ -341,7 +340,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql21 = "DELETE FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const result = await executeTemplate(this.conn, this.parser, sql21, { scopeKey, path: normalized, pattern });
     if (result.changes === 0) {
-      throw vfsNotFound(normalized);
+      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
     }
     return result.changes;
   }
@@ -606,7 +605,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql49 = "UPDATE vfs_entry SET path = #{newPath}\n       WHERE scope_key = #{scopeKey} AND path = #{oldPath}";
     const result = await executeTemplate(tx, parser, sql49, { scopeKey, oldPath: oldNorm, newPath: newNorm });
     if (result.changes === 0) {
-      throw vfsNotFound(oldNorm);
+      throw new AppError("VFS_NOT_FOUND", {path: oldNorm, detail: `Path not found: ${oldNorm}`});
     }
   }
 
@@ -635,7 +634,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       // 允许空目录（无子项）：根自身已被上面这条 UPDATE 改到新路径
       // （rootResult.changes === 1）即算成功，不能再按旧路径 SELECT 复核——
       // 根已改名，旧路径必然查不到。
-      throw vfsNotFound(oldBase);
+      throw new AppError("VFS_NOT_FOUND", {path: oldBase, detail: `Path not found: ${oldBase}`});
     }
   }
 

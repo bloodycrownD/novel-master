@@ -12,8 +12,7 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
 import { applyMergePatch } from "../../src/common/json.js";
-import { AppError } from "../../src/errors/app-error.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import { tCore } from "../helpers/core-i18n.js";
@@ -170,8 +169,8 @@ describe("agent 管理工具", () => {
     await assert.rejects(
       () => runner.call("agent", { action: "get" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("name") &&
         e.message.includes("agentId"),
     );
@@ -182,8 +181,8 @@ describe("agent 管理工具", () => {
     await assert.rejects(
       () => runner.call("agent", { action: "create" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("definition"),
     );
   });
@@ -198,8 +197,8 @@ describe("agent 管理工具", () => {
           makeCtx(fakeAgentRegistry()),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("name") &&
         e.message.includes("agentId"),
     );
@@ -215,7 +214,7 @@ describe("agent 管理工具", () => {
     await assert.rejects(
       () => runner.call("agent", { action: "list" }, bare),
       (e: unknown) =>
-        e instanceof ToolError && e.code === "FAILED" && e.message.includes("agents"),
+        isAppError(e, "TOOL_FAILED") && e.message.includes("agents"),
     );
   });
 
@@ -288,13 +287,13 @@ describe("agent 管理工具", () => {
     await assert.rejects(
       () => runner.call("agent", { action: "get", name: "nope" }, ctx),
       (e: unknown) =>
-        e instanceof ToolError && e.code === "FAILED" && e.message.includes("nope"),
+        isAppError(e, "TOOL_FAILED") && e.message.includes("nope"),
     );
     await assert.rejects(
       () => runner.call("agent", { action: "get", agentId: "agent-404" }, ctx),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "FAILED" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_FAILED" &&
         e.message.includes("agent-404"),
     );
   });
@@ -338,8 +337,8 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("未注册工具名") &&
         e.message.includes("nope_tool"),
     );
@@ -358,8 +357,8 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "FAILED" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_FAILED" &&
         e.message.includes("数据库只读"),
     );
   });
@@ -459,8 +458,8 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("至少包含一个要修改的字段"),
     );
     assert.ok(!registry.calls.some((c) => c.method === "upsert"));
@@ -476,8 +475,8 @@ describe("agent 管理工具", () => {
           makeCtx(fakeAgentRegistry()),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "FAILED" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_FAILED" &&
         e.message.includes("内置 agent"),
     );
   });
@@ -509,8 +508,8 @@ describe("agent 管理工具", () => {
           makeCtx(registry),
         ),
       (e: unknown) =>
-        e instanceof ToolError &&
-        e.code === "INVALID_ARGUMENT" &&
+        isAppError(e) && e.key.startsWith("TOOL_") &&
+        e.key === "TOOL_INVALID_ARGUMENT" &&
         e.message.includes("agent-404") &&
         e.message.includes("未找到"),
     );

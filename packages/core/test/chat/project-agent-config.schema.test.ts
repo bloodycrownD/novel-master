@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 import { projectAgentConfigSchema, projectAgentModeSchema } from "../../src/domain/chat/model/project-agent-config.schema.js";
 import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
-import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";
 import { tCore } from "../helpers/core-i18n.js";
 
 function minimalDefinitionWire() {
@@ -34,11 +33,11 @@ describe("projectAgentConfigSchema", () => {
   });
 
   it("custom 缺 definition 拒绝", () => {
-    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), ConfigDecodeError);
+    assert.throws(() => decode({ mode: "custom" }, projectAgentConfigSchema), (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
   it("非法 mode 拒绝", () => {
-    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), ConfigDecodeError);
+    assert.throws(() => decode({ mode: "registry" }, projectAgentModeSchema), (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"));
   });
 
   it("configToWire 对重名块 definition 抛错（第二份同款循环已被收敛点覆盖）", () => {

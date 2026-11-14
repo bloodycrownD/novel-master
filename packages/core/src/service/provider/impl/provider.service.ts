@@ -6,7 +6,7 @@
 
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { randomUUID } from "@/infra/random-uuid.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import {
@@ -44,11 +44,7 @@ export interface DefaultProviderServiceDeps {
 function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
   const trimmed = raw.trim();
   if (trimmed === "") {
-    throw new ProviderError(
-      "INVALID_ARGUMENT",
-      {key: "error.provider.display_name_required"},
-      providerId != null ? { providerId } : undefined
-    );
+    throw new AppError("PROVIDER_INVALID_ARGUMENT", {key: "error.provider.display_name_required"}, providerId != null ? { providerId } : undefined);
   }
   return trimmed;
 }
@@ -70,9 +66,7 @@ export class DefaultProviderService implements ProviderService {
   async get(id: string): Promise<LlmProvider> {
     const p = await this.deps.providers.findById(id);
     if (!p) {
-      throw new ProviderError("NOT_FOUND", `Provider not found: ${id}`, {
-        providerId: id,
-      });
+      throw new AppError("PROVIDER_NOT_FOUND", `Provider not found: ${id}`, { providerId: id });
     }
     return p;
   }
@@ -129,11 +123,7 @@ export class DefaultProviderService implements ProviderService {
   async edit(id: string, patch: EditProviderPatch): Promise<LlmProvider> {
     const provider = await this.get(id);
     if (provider.isBuiltin && patch.protocol !== undefined) {
-      throw new ProviderError(
-        "BUILTIN_PROVIDER",
-        `Cannot change protocol of built-in provider: ${id}`,
-        { providerId: id }
-      );
+      throw new AppError("PROVIDER_BUILTIN_PROVIDER", `Cannot change protocol of built-in provider: ${id}`, { providerId: id });
     }
 
     // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
@@ -220,11 +210,7 @@ export class DefaultProviderService implements ProviderService {
   async delete(id: string): Promise<void> {
     const provider = await this.get(id);
     if (provider.isBuiltin) {
-      throw new ProviderError(
-        "BUILTIN_PROVIDER",
-        `Cannot delete built-in provider: ${id}`,
-        { providerId: id }
-      );
+      throw new AppError("PROVIDER_BUILTIN_PROVIDER", `Cannot delete built-in provider: ${id}`, { providerId: id });
     }
 
     // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
@@ -261,15 +247,11 @@ export class DefaultProviderService implements ProviderService {
       const blockingRefs = refs.filter((r) => r !== "currentModelId");
       if (blockingRefs.length > 0) {
         // 写死复用 SAVED_MODEL_IN_USE、**不新造 PROVIDER_IN_USE**：
-        // provider-errors.ts 的码表里没有后者（写了会编译不过）；
+        // 码表里没有后者（写了会编译不过）；
         // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
         // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
         // 新造码只会让前端拿不到已处理的文案。
-        throw new ProviderError(
-          "SAVED_MODEL_IN_USE",
-          {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}},
-          { providerId: id }
-        );
+        throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, { providerId: id });
       }
     }
 

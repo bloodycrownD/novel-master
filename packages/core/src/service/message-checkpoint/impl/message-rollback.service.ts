@@ -25,7 +25,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { AppError } from "@/errors/app-error.js";
-import { sessionFsRollbackMessageNotFound, sessionFsRollbackMessageSessionMismatch, sessionFsRollbackRevisionBackfillRequired, sessionFsRollbackVfsRestoreFailed, sessionFsRollbackUndoSendEmptyTarget, sessionFsRollbackConflict, sessionFsRollbackTailDrift, isSessionFsError } from "@/errors/session-fs-errors.js";
+import { isSessionFsError } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { userMessageOf } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -164,17 +164,16 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       if (!options?.skipVfsReconcile && plan.targetTree.size === 0) {
         const liveHeads = await listSessionFileHeads(this.deps.entries, projectId, sessionId);
         if (liveHeads.length > 0) {
-          throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId, plan.mode);
+          // undo_send 无 baseline：双 messageKey（rewind / undo_send）走 descriptor 通道（translator 无 select）。
+          throw new AppError("SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET", plan.mode === "rewind" ? {key: "error.session_fs.rollback_undo_send_empty_target.rewind"} : {key: "error.session_fs.rollback_undo_send_empty_target.undo_send"}, { sessionId, messageId: anchorMessageId });
         }
       }
 
       if (!options?.skipVfsReconcile) {
         const missing = await findMissingRevisionPointers(this.deps.revisions, this.deps.entries, plan.scope, plan.targetTree, plan.pathsNeedWrite, plan.checkpointEntryIdByPath);
         if (missing.length > 0 && !options?.revisionHeadBackfill) {
-          throw sessionFsRollbackRevisionBackfillRequired(missing, {
-            sessionId,
-            messageId: anchorMessageId,
-          });
+          // details 保留 camelCase 数组（readRollbackRevisionBackfillMissingPaths / IPC 提取消费），模板参数才 join 成串。
+          throw new AppError("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED", {key: "error.session_fs.rollback_revision_backfill_required", params: {missing_logical_paths: missing.join(", ")}}, { missingLogicalPaths: missing, sessionId, messageId: anchorMessageId });
         }
       }
 
@@ -194,14 +193,14 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             current: currentCount,
           });
           if (currentCount !== plan.messageCountSnapshot) {
-            throw sessionFsRollbackConflict(sessionId, anchorMessageId, plan.messageCountSnapshot, currentCount);
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", { expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId });
           }
 
           // CD-01 第 2 步 · 文件维度指纹乐观锁：消息数不变不代表文件面没变。
           // 必须用 **tx 面** repo 重算——事务内用外层 conn 会重入驱动 mutex 死锁。
           const currentFingerprint = await this.computeFileTreeFingerprint(tx, projectId, sessionId);
           if (!sameFileTreeFingerprint(currentFingerprint, plan.fileTreeFingerprint)) {
-            throw sessionFsRollbackConflict(sessionId, anchorMessageId, plan.fileTreeFingerprint.length, currentFingerprint.length);
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", { expectedMessageCount: plan.fileTreeFingerprint.length, actualMessageCount: currentFingerprint.length, sessionId, messageId: anchorMessageId });
           }
 
           if (!options?.skipVfsReconcile) {
@@ -215,7 +214,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             } catch (cause) {
               // {detail} 取嵌套 descriptor（userMessageOf 命中时），否则退回 message 文本（spec G2 组合站点）
               const detail = userMessageOf(cause) ?? (isSessionFsError(cause) || isVfsError(cause) || cause instanceof Error ? cause.message : String(cause));
-              throw sessionFsRollbackVfsRestoreFailed({key: "error.session_fs.vfs_restore_failed", params: {detail}}, { sessionId, messageId: anchorMessageId });
+              // {detail} 可能是嵌套 descriptor（userMessageOf 命中时），translator 递归渲染——走 descriptor 参数通道。
+              throw new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", {key: "error.session_fs.vfs_restore_failed", params: {detail}}, { sessionId, messageId: anchorMessageId });
             }
           }
           // CD-01 第 4 步 · tailIds 断言：truncateTailInTransaction 只吃 afterSeq、
@@ -225,7 +225,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // 与 skipVfsReconcile **无关**（那条只跳 VFS reconcile，消息截断照跑）。
           const actualTailIds = await txMessages.listIdsAfterSeq(sessionId, plan.truncateAfterSeq);
           if (!sameIdList(actualTailIds, plan.tailMessageIds)) {
-            throw sessionFsRollbackTailDrift(sessionId, anchorMessageId, plan.tailMessageIds.length, actualTailIds.length);
+            throw new AppError("SESSION_FS_ROLLBACK_TAIL_DRIFT", { expectedMessageCount: plan.tailMessageIds.length, actualMessageCount: actualTailIds.length, sessionId, messageId: anchorMessageId });
           }
           await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
             projectId: plan.projectId,
@@ -290,10 +290,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   private async resolveRollbackPlan(sessionId: string, projectId: string, anchorMessageId: string): Promise<RollbackPlan> {
     const clicked = await this.deps.messages.findById(anchorMessageId);
     if (clicked == null) {
-      throw sessionFsRollbackMessageNotFound(anchorMessageId);
+      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", { messageId: anchorMessageId });
     }
     if (clicked.sessionId !== sessionId) {
-      throw sessionFsRollbackMessageSessionMismatch(anchorMessageId, sessionId);
+      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_SESSION_MISMATCH", { messageId: anchorMessageId, sessionId });
     }
 
     // plan 拉取收窄（rollback-large-jank Step 2）：锚点解析只做 tool_result

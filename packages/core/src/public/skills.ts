@@ -44,15 +44,3 @@ export {
   validateSkillName,
   isValidSkillName,
 } from "../domain/skills/model/skill-name.js";
-export {
-  skillAlreadyExists,
-  skillBuiltin,
-  skillBuiltinNameReserved,
-  skillBuiltinRename,
-  skillInvalidName,
-  skillInvalidPath,
-  skillMissingDomain,
-  skillMissingProjectId,
-  skillNotFound,
-  skillNotFoundInDomain,
-} from "../errors/skill-errors.js";

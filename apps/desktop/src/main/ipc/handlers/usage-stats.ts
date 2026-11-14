@@ -211,7 +211,7 @@ export async function handleUsageStatsQuery(
       }
       case "sessionDetail":
         // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
-        // sessionId 缺失传空串，由服务层 chatInvalidArgument 拒绝并落入 error。
+        // sessionId 缺失传空串，由服务层 CHAT_INVALID_ARGUMENT 拒绝并落入 error。
         return {
           ok: true,
           data: toSessionDetailDto(

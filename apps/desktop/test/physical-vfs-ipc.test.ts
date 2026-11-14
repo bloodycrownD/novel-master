@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { VfsError } from "@novel-master/core/vfs";
+import { AppError } from "@novel-master/core/vfs";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
@@ -170,8 +170,9 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       const originalListTree = svc.listTree.bind(svc);
       svc.listTree = async (physicalPath: string) => {
         if (physicalPath === "/meta") {
-          throw new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
+          throw new AppError("VFS_NOT_FOUND", {
             path: physicalPath,
+            detail: `Path not found: ${physicalPath}`,
           });
         }
         return originalListTree(physicalPath);

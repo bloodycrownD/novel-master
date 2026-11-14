@@ -7,7 +7,6 @@
   "LlmStreamTimeoutError",
   "OPENAI_SAMPLING_DEFAULTS",
   "PromptTokenResolveBailedError",
-  "ProviderError",
   "SSE_WHOLE_CALL_TIMEOUT_MS",
   "STREAM_IDLE_TIMEOUT_MS",
   "THINKING_LEVEL_OPTIONS",

@@ -1,8 +1,9 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/session-fs";
-import { isVfsError } from "@novel-master/core/vfs";
+
 import { backfillMissingRevisionIfNeeded } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -101,8 +102,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
         assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
-        const err = error as { missingLogicalPaths?: readonly string[] };
-        assert.deepEqual(err.missingLogicalPaths, ["/b.md"]);
+        const err = error as { details?: { missingLogicalPaths?: readonly string[] } };
+        assert.deepEqual(err.details?.missingLogicalPaths, ["/b.md"]);
         return true;
       },
     );
@@ -273,7 +274,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await assert.rejects(
       () => svfs.read("/gone.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
     );
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);

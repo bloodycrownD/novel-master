@@ -10,14 +10,12 @@
  * Mobile unit tests only need error classes, so we re-export just those.
  */
 
-export {VfsError, isVfsError} from '../../../packages/core/dist/errors/vfs-errors.js';
-export {VfsZipError} from '../../../packages/core/dist/errors/vfs-zip-errors.js';
+// per-domain 错误类已退役（统一 new AppError(key, params)），shim 只留双形态守卫。
+export {isVfsError} from '../../../packages/core/dist/errors/vfs-errors.js';
 export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js';
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
-export {ProviderError} from '../../../packages/core/dist/errors/provider-errors.js';
-export {ToolError} from '../../../packages/core/dist/errors/tool-errors.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 export {CloudSyncError, isCloudSyncError, CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
 export type {KkvService} from '../../../packages/core/dist/service/kkv/kkv.port.js';

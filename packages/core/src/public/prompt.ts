@@ -4,8 +4,6 @@
  * @module public/prompt
  */
 
-export { PromptError } from "../errors/prompt-errors.js";
-export type { PromptErrorCode } from "../errors/prompt-errors.js";
 export type {
   AgentPromptLayout,
   PersistPromptBlock,

@@ -1,7 +1,6 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ConfigDecodeError } from "@novel-master/core";
-import { isAppError } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
@@ -73,7 +72,7 @@ describe("ProjectService agent config", () => {
         ctx.projects.updateAgentConfig(project.id, {
           mode: "custom",
         }),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
 
     await assert.rejects(
@@ -82,7 +81,7 @@ describe("ProjectService agent config", () => {
           mode: "custom",
           definition: customDefinition(""),
         }),
-      ConfigDecodeError,
+      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
     );
   });
 

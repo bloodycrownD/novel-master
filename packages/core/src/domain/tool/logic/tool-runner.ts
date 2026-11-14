@@ -4,7 +4,7 @@
  * @module domain/tool/tool-runner
  */
 
-import { toolFailed, toolInvalidArgument, toolNotFound, toolPathForbidden } from "@/errors/tool-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -40,19 +40,19 @@ export class ToolRunner<Ctx = unknown> {
   async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Output> {
     const tool = this.registry.get(name);
     if (!tool) {
-      throw toolNotFound(name);
+      throw new AppError("TOOL_NOT_FOUND", {toolName: name, detail: `Tool not registered: \${name}`});
     }
 
     const parsedIn = tool.inputSchema.safeParse(input);
     if (!parsedIn.success) {
-      throw toolInvalidArgument(name, parsedIn.error.issues);
+      throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: name, issues: parsedIn.error.issues, detail: `Invalid input for tool: \${name}`});
     }
 
     // A-14: path 白名单二次校验（schema 之后的第二道闸）。
     // ctx 上没有 allowedPaths 时 checkToolPathPolicy 直接返回 null，向后兼容。
     const disallowedPath = checkToolPathPolicy(parsedIn.data, ctx);
     if (disallowedPath !== null) {
-      throw toolPathForbidden(name, disallowedPath);
+      throw new AppError("TOOL_FORBIDDEN", {toolName: name, path: disallowedPath, detail: `Tool path outside allowed scope: \${name} -> \${disallowedPath}`});
     }
 
     try {
@@ -61,7 +61,7 @@ export class ToolRunner<Ctx = unknown> {
       // 直接拒绝。竞速（下方）只让调用方 reject，不会阻止已启动的 work——写类
       // 工具副作用照常落盘；runParallel 的 worker 在 abort 后仍会从队列取下一
       // 个 call，靠这一道保证 abort 后不再发起新的 tool.run。
-      if (signal?.aborted) throw toolFailed(name, new Error("工具调用已取消"));
+      if (signal?.aborted) throw new AppError("TOOL_FAILED", {toolName: name, cause: new Error("工具调用已取消"), detail: `Tool failed: \${name}`});
       // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
       // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
@@ -95,7 +95,7 @@ export class ToolRunner<Ctx = unknown> {
       if (tool.outputSchema) {
         const parsedOut = tool.outputSchema.safeParse(out);
         if (!parsedOut.success) {
-          throw toolFailed(name, parsedOut.error);
+          throw new AppError("TOOL_FAILED", {toolName: name, cause: parsedOut.error, detail: `Tool failed: \${name}`});
         }
         return parsedOut.data as Output;
       }
@@ -104,7 +104,7 @@ export class ToolRunner<Ctx = unknown> {
     } catch (e: unknown) {
       // ToolError 用形状判定：跨 duplicate module 实例（src / dist）instanceof 会漏。
       if (typeof e === "object" && e !== null && (e as { name?: unknown }).name === "ToolError" && typeof (e as { code?: unknown }).code === "string") throw e;
-      throw toolFailed(name, e);
+      throw new AppError("TOOL_FAILED", {toolName: name, cause: e, detail: `Tool failed: \${name}`});
     }
   }
 

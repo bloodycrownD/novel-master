@@ -10,7 +10,6 @@ import {
   DEFAULT_HIDE_START_DEPTH,
   type CompactionConditions,
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
@@ -73,7 +72,7 @@ function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 function rethrowDecodeError(error: unknown): never {
-  if (error instanceof ConfigDecodeError && error.code === "INVALID_SCHEMA") {
+  if (isAppError(error, "CONFIG_DECODE_INVALID_SCHEMA")) {
     throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", error.message);
   }
   throw error;

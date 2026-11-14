@@ -11,6 +11,7 @@
  *
  * entry_id 化后 revision 按 entryId 寻址；ref_count 直接读裸列校验。
  */
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -22,7 +23,7 @@ import {
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -98,7 +99,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
           ],
           +1,
         ),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
     );
 
     // 部分存在、部分缺失：只要有一条缺失就抛错
@@ -124,7 +125,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
           ],
           +1,
         ),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
     );
     // 抛错前不应 UPDATE 已存在的行（前置校验失败，整批不落库）
     // 初始 live head ref_count=1，没被改动
@@ -297,7 +298,7 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
         incrementRefsForCheckpointFiles(revisions, [
           { entryId: 555001, revisionVersion: 1 },
         ]),
-      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+      (err: unknown) => isAppError(err, "VFS_NOT_FOUND"),
     );
 
     // decrement helper 对缺失行 no-op，不抛错

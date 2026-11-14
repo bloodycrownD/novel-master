@@ -3,6 +3,7 @@
  * 不依赖工具自身监听 signal——否则 waiting 中的回合会被慢工具（curl / search
  * 等长请求）占住线程、停止按钮点不动。
  */
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { describe, it } from "node:test";
@@ -10,7 +11,6 @@ import { z } from "zod";
 
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 
 describe("ToolRunner：回合取消竞速（A-24）", () => {
   it("工具永不返回时，abort 让 call 立即 reject（不等工具）", async () => {
@@ -29,7 +29,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     const pending = runner.call("hang", {}, { signal: controller.signal });
     controller.abort();
     await assert.rejects(pending, (err: unknown) => {
-      assert.ok(err instanceof ToolError);
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
       return true;
     });
@@ -63,7 +63,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     const controller = new AbortController();
     controller.abort(); // 先 abort 再 call：工具副作用必须还没启动就被拒
     await assert.rejects(runner.call("side-effect", {}, { signal: controller.signal }), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
       return true;
     });
@@ -154,7 +154,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       const pending = runner.call("late-reject", {}, { signal: controller.signal });
       controller.abort();
       await assert.rejects(pending, (err: unknown) => {
-        assert.ok(err instanceof ToolError);
+        assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
         assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
         return true;
       });

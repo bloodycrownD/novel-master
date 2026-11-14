@@ -10,7 +10,7 @@ import { Result } from "@/errors/either.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
-import { vfsPortError, type VfsPortError } from "./vfs-port-error.js";
+import { isVfsPortError, type VfsPortError } from "./vfs-port-error.js";
 
 /** mkdirIgnoreExistingDirectory 的失败载荷。 */
 type VfsNotADirectoryError = AppError<"VFS_NOT_A_DIRECTORY">;
@@ -124,8 +124,9 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       await run();
       return Result.ok(undefined);
     } catch (error) {
-      if (isVfsError(error)) {
-        return Result.err(vfsPortError(error));
+      // 端口已统一抛 AppError，VFS 域错误直接收口（vfsPortError 桥已删）。
+      if (isVfsPortError(error)) {
+        return Result.err(error);
       }
       throw error;
     }
@@ -166,8 +167,8 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
   try {
     entries = await vfs.list(normalizeDirPath(from), { recursive: true });
   } catch (error) {
-    if (isVfsError(error)) {
-      return Result.err(vfsPortError(error));
+    if (isVfsPortError(error)) {
+      return Result.err(error);
     }
     throw error;
   }

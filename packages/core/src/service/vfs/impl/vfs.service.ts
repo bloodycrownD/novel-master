@@ -16,7 +16,6 @@ import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
-import { vfsAlreadyExists, vfsInvalidPath, vfsIsDirectory, vfsNotADirectory, vfsNotFound, vfsParentNotFound } from "@/errors/vfs-errors.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { matchGlob } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult } from "../internal-vfs.port.js";
@@ -38,7 +37,7 @@ export class DefaultVfsService implements InternalVfsService {
       const entry = await this.repo.findByPath(scopeKey, normalized);
       // 虚拟 storage root 无目录行时视为空目录，与 mkdir 豁免一致
       if (entry == null && entries.length === 0) {
-        throw vfsNotFound(normalized);
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
       }
     }
     return entries;
@@ -49,24 +48,24 @@ export class DefaultVfsService implements InternalVfsService {
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      throw vfsInvalidPath(path, "cannot mkdir root");
+      throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot mkdir root", detail: `Invalid path ${path}: cannot mkdir root`});
     }
     const nameCheck = assertValidVfsEntryName(normalized);
     if (!nameCheck.ok) throwLegacyVfs(nameCheck.error);
 
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing != null) {
-      throw vfsAlreadyExists(normalized);
+      throw new AppError("VFS_ALREADY_EXISTS", {path: normalized, detail: `Path already exists: ${normalized}`});
     }
 
     const parent = parentDir(normalized);
     if (parent !== "/" && !isStorageRootParent(parent)) {
       const parentEntry = await this.repo.findByPath(scopeKey, parent);
       if (parentEntry == null) {
-        throw vfsParentNotFound(parent);
+        throw new AppError("VFS_PARENT_NOT_FOUND", {path: parent, detail: `Parent not found: ${parent}`});
       }
       if (parentEntry.entryKind !== "directory") {
-        throw vfsNotADirectory(parent);
+        throw new AppError("VFS_NOT_A_DIRECTORY", {path: parent, detail: `Not a directory: ${parent}`});
       }
     }
 
@@ -76,10 +75,10 @@ export class DefaultVfsService implements InternalVfsService {
   async read(scopeKey: string, path: string): Promise<VfsReadResult> {
     const entry = await this.repo.findByPath(scopeKey, path);
     if (entry == null) {
-      throw vfsNotFound(path);
+      throw new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`});
     }
     if (entry.entryKind === "directory") {
-      throw vfsIsDirectory(path);
+      throw new AppError("VFS_IS_DIRECTORY", {path, detail: `Path is a directory: ${path}`});
     }
     return {
       path: entry.path,
@@ -99,7 +98,7 @@ export class DefaultVfsService implements InternalVfsService {
     const normalized = resolved.value;
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing?.entryKind === "directory") {
-      throw vfsIsDirectory(normalized);
+      throw new AppError("VFS_IS_DIRECTORY", {path: normalized, detail: `Path is a directory: ${normalized}`});
     }
     if (existing == null) {
       // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
@@ -150,7 +149,7 @@ export class DefaultVfsService implements InternalVfsService {
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      throw vfsInvalidPath(path, "cannot delete root");
+      throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`});
     }
     await this.repo.delete(scopeKey, normalized, {
       recursive: options?.recursive === true,

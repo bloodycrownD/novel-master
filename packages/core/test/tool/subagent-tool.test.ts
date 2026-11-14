@@ -1,3 +1,4 @@
+import { isAppError } from "@/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -14,7 +15,6 @@ import type {
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
-import { ToolError } from "@/errors/tool-errors.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -198,7 +198,7 @@ describe("subagent-tool / task", () => {
           makeToolCtx(ctx),
         ),
       (err: unknown) =>
-        err instanceof ToolError && err.message.includes("未找到"),
+        isAppError(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到"),
     );
   });
 

@@ -1,3 +1,4 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -6,7 +7,6 @@ import {
   parseFsCommand,
   type FsToolInput,
 } from "../../src/domain/tool/logic/fs-command.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -89,7 +89,7 @@ describe("fs-command parser", () => {
     for (const input of bad) {
       assert.throws(
         () => parseFsCommand(input),
-        (e: unknown) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+        (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
       );
     }
   });

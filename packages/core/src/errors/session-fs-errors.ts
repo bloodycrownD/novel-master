@@ -1,18 +1,18 @@
 /**
- * Session FS errors: message rollback failures.
+ * Session FS 回滚错误的结构守卫（phase 1 双形态）。
  *
- * message 通道放宽为 `string | CoreMessageDescriptor`（spec §5 G1.2）：descriptor
- * 时 `Error.message` 取 key 原文，`messageKey`/`messageParams` 供边界
- * `userMessageOf` + translator 翻译。
+ * 类已退役，构造统一 `new AppError("SESSION_FS_*", params)`（`this.name = key`）；
+ * 守卫保持结构判别 + cause 链回溯（总纲 §7.2-3），两种形态都认：
+ * ① 旧形态：`name === "SessionFsError"` 且 `code` 是字符串短码（src/dist 双模块
+ *    实例与过渡期在途对象）；② AppError 形态：`name` 以 `SESSION_FS_` 开头且
+ *    `code` 是数字。不用 instanceof——测试环境存在双模块实例，会 false negative。
  *
  * @module errors/session-fs-errors
  */
 
-import type { MessageParams } from "@/common/i18n.js";
-import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
-import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
+import type { AppError } from "@/errors/app-error.js";
 
-/** Discriminant codes for {@link SessionFsError}. */
+/** 域短码（守卫第二实参与跨端旧形态消费用；AppError 形态下对应 `SESSION_FS_` 前缀 key）。 */
 export type SessionFsErrorCode =
   | "ROLLBACK_MESSAGE_NOT_FOUND"
   | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
@@ -31,54 +31,6 @@ export type SessionFsErrorCode =
   // truncateTailInTransaction 连带截断，而用户从没回滚过它。
   | "ROLLBACK_TAIL_DRIFT";
 
-/**
- * Unified error for session-fs rollback operations.
- */
-export class SessionFsError extends Error {
-  readonly code: SessionFsErrorCode;
-  readonly sessionId?: string;
-  readonly messageId?: string;
-  readonly logicalPath?: string;
-  readonly revisionVersion?: number;
-  readonly missingLogicalPaths?: readonly string[];
-  /**
-   * A-22 乐观锁：仅在 ROLLBACK_CONFLICT 下生效，记录快照期与事务内重读到的
-   * 会话消息计数，方便 UI 提示「期间有新消息写入」。
-   */
-  readonly expectedMessageCount?: number;
-  readonly actualMessageCount?: number;
-  readonly messageKey?: CoreMessageKey;
-  readonly messageParams?: MessageParams;
-
-  constructor(
-    code: SessionFsErrorCode,
-    message: string | CoreMessageDescriptor,
-    options?: {
-      sessionId?: string;
-      messageId?: string;
-      logicalPath?: string;
-      revisionVersion?: number;
-      missingLogicalPaths?: readonly string[];
-      expectedMessageCount?: number;
-      actualMessageCount?: number;
-    }
-  ) {
-    const localized = resolveLocalizedMessage(message);
-    super(localized.text);
-    this.name = "SessionFsError";
-    this.code = code;
-    this.sessionId = options?.sessionId;
-    this.messageId = options?.messageId;
-    this.logicalPath = options?.logicalPath;
-    this.revisionVersion = options?.revisionVersion;
-    this.missingLogicalPaths = options?.missingLogicalPaths;
-    this.expectedMessageCount = options?.expectedMessageCount;
-    this.actualMessageCount = options?.actualMessageCount;
-    this.messageKey = localized.messageKey;
-    this.messageParams = localized.messageParams;
-  }
-}
-
 function unwrapCause(error: unknown): unknown {
   if (typeof error !== "object" || error === null) {
     return error;
@@ -90,148 +42,31 @@ function unwrapCause(error: unknown): unknown {
   return error;
 }
 
-/** Type guard for {@link SessionFsError}. */
-export function isSessionFsError(
-  error: unknown,
-  code?: SessionFsErrorCode
-): error is SessionFsError {
+/** 双形态守卫：AppError（key 前缀 `SESSION_FS_`）与旧形态（name + 字符串短码）都判中（含 cause 链）。 */
+export function isSessionFsError(error: unknown, code?: SessionFsErrorCode): error is AppError {
   const candidate = unwrapCause(error);
   if (typeof candidate !== "object" || candidate === null) {
     return false;
   }
   const err = candidate as { name?: unknown; code?: unknown };
-  if (err.name !== "SessionFsError" || typeof err.code !== "string") {
-    return false;
+  if (typeof err.name === "string" && err.name.startsWith("SESSION_FS_") && typeof err.code === "number") {
+    return code === undefined || err.name === `SESSION_FS_${code}`;
   }
-  return code === undefined || err.code === code;
-}
-
-export function sessionFsRollbackMessageNotFound(
-  messageId: string
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_MESSAGE_NOT_FOUND",
-    {key: "error.session_fs.rollback_message_not_found", params: {message_id: messageId}},
-    { messageId }
-  );
-}
-
-export function sessionFsRollbackMessageSessionMismatch(
-  messageId: string,
-  sessionId: string
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_MESSAGE_SESSION_MISMATCH",
-    {key: "error.session_fs.rollback_message_session_mismatch", params: {message_id: messageId}},
-    { messageId, sessionId }
-  );
-}
-
-/**
- * targetTree 为空却仍有 live 文件时抛出，让上层走「仅截断消息」的降级路径
- * （skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
- *
- * @param mode 回滚模式（CD-01 第 1 步起对 rewind 同样生效），带进 detail 便于
- *        上层区分是哪条路径触发的；错误码保持 `ROLLBACK_UNDO_SEND_EMPTY_TARGET`
- *        不变（既有降级判定 `isRollbackVfsDegradableError` 依赖它）。
- */
-export function sessionFsRollbackUndoSendEmptyTarget(
-  sessionId: string,
-  messageId: string,
-  mode?: string
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
-    mode === "rewind"
-      ? {key: "error.session_fs.rollback_undo_send_empty_target.rewind"}
-      : {key: "error.session_fs.rollback_undo_send_empty_target.undo_send"},
-    { sessionId, messageId }
-  );
-}
-
-/** VFS reconcile 失败，UI 可提供仅截断消息的降级回滚。 */
-export function sessionFsRollbackVfsRestoreFailed(
-  message: string | CoreMessageDescriptor,
-  options?: {
-    sessionId?: string;
-    messageId?: string;
-    logicalPath?: string;
-  }
-): SessionFsError {
-  return new SessionFsError("ROLLBACK_VFS_RESTORE_FAILED", message, options);
-}
-
-/**
- * checkpoint revision 缺失，需用户确认 head 回补后再回滚。
- */
-export function sessionFsRollbackRevisionBackfillRequired(
-  missingLogicalPaths: readonly string[],
-  options?: {
-    sessionId?: string;
-    messageId?: string;
-  }
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_REVISION_BACKFILL_REQUIRED",
-    {key: "error.session_fs.rollback_revision_backfill_required", params: {paths: missingLogicalPaths.join(", ")}},
-    { ...options, missingLogicalPaths }
-  );
+  return err.name === "SessionFsError" && typeof err.code === "string" && (code === undefined || err.code === code);
 }
 
 /** 判断是否为 revision 缺失需回补错误（含 cause 链）。 */
-export function isRollbackRevisionBackfillRequiredError(
-  error: unknown
-): error is SessionFsError {
+export function isRollbackRevisionBackfillRequiredError(error: unknown): error is AppError {
   return isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
 }
 
-/** 从回补错误中读取缺失快照的逻辑路径列表。 */
-export function readRollbackRevisionBackfillMissingPaths(
-  error: unknown
-): readonly string[] {
+/** 从回补错误中读取缺失快照的逻辑路径列表（details.missingLogicalPaths，camelCase 供内部消费）。 */
+export function readRollbackRevisionBackfillMissingPaths(error: unknown): readonly string[] {
   if (!isRollbackRevisionBackfillRequiredError(error)) {
     return [];
   }
-  return error.missingLogicalPaths ?? [];
-}
-
-/**
- * A-22 乐观锁冲突：resolveRollbackPlan 解析完成到事务开始之间，会话消息计数发生了变化。
- *
- * @remarks 事务内重读会话消息计数，与 plan 阶段记录的快照不一致时抛出。上层调用方可以重试
- *          （rollbackToMessage 本身在重试上限内会自动重试），或提示用户「回滚期间有新消息写入」。
- */
-export function sessionFsRollbackConflict(
-  sessionId: string,
-  messageId: string,
-  expectedMessageCount: number,
-  actualMessageCount: number
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_CONFLICT",
-    {key: "error.session_fs.rollback_conflict", params: {expected_count: expectedMessageCount, actual_count: actualMessageCount}},
-    { sessionId, messageId, expectedMessageCount, actualMessageCount }
-  );
-}
-
-/**
- * CD-01 第 4 步：待截断的 tail 与 plan 阶段记录的不一致。
- *
- * 只带 expected / actual 两个**计数**，不带 id 列表——错误信息不该泄漏消息
- * 正文内容。上层（desktop / mobile）尚无对应文案，走既有的
- * `formatDegradableMessage` 降级路径即可显示成「工作区无法恢复：…」。
- */
-export function sessionFsRollbackTailDrift(
-  sessionId: string,
-  messageId: string,
-  expectedTailCount: number,
-  actualTailCount: number
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_TAIL_DRIFT",
-    {key: "error.session_fs.rollback_tail_drift", params: {expected_count: expectedTailCount, actual_count: actualTailCount}},
-    { sessionId, messageId, expectedMessageCount: expectedTailCount, actualMessageCount: actualTailCount }
-  );
+  const details = (error as AppError).details as { missingLogicalPaths?: readonly string[] } | undefined;
+  return details?.missingLogicalPaths ?? [];
 }
 
 /**

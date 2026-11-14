@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isAppError } from "@/errors/app-error.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import {
@@ -161,7 +161,7 @@ describe("SqliteVfsEntryRepository", () => {
     await assert.rejects(
       () => repo.delete(GLOBAL_SCOPE, tree, { recursive: false }),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
+        assert.ok(isAppError(e, "VFS_DIRECTORY_NOT_EMPTY"));
         return true;
       },
     );
@@ -198,7 +198,7 @@ describe("SqliteVfsEntryRepository", () => {
     await assert.rejects(
       () => repo.delete(sk, "/", { recursive: false }),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
+        assert.ok(isAppError(e, "VFS_DIRECTORY_NOT_EMPTY"));
         return true;
       },
     );

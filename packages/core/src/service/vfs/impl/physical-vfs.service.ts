@@ -27,7 +27,8 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
-import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
 import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
@@ -159,7 +160,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       return this.listScopeFirstLevel({ kind: "global" }, normalized);
     }
 
-    throw vfsNotFound(normalized);
+    throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
   }
 
   /**
@@ -194,7 +195,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       const projectId = projectsMatch[1]!;
       const project = await this.projects.findById(projectId);
       if (project == null) {
-        throw vfsNotFound(`/projects/${projectId}`);
+        throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`});
       }
       return (await this.projectTreeRows(projectId, projectsMatch[2])).sort(
         compareEntries
@@ -215,7 +216,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       );
     }
 
-    throw vfsNotFound(normalized);
+    throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
   }
 
   async read(physicalPath: string): Promise<VfsReadResult> {
@@ -224,7 +225,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     const normalized = logicalResult.value;
     const resolved = resolvePhysicalPath(normalized);
     if (resolved == null) {
-      throw vfsNotFound(normalized);
+      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
     }
     let result: VfsReadResult;
     try {
@@ -234,7 +235,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     } catch (error) {
       // 挂载点根等目录行按「无此文件」归一（本视图 read 只面向文件）
       if (isVfsError(error, "IS_DIRECTORY")) {
-        throw vfsNotFound(normalized);
+        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
       }
       throw error;
     }
@@ -255,7 +256,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   ): Promise<VfsListEntry[]> {
     const project = await this.projects.findById(projectId);
     if (project == null) {
-      throw vfsNotFound(`/projects/${projectId}`);
+      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`});
     }
     if (rest == null || rest === "/") {
       // 项目根：三个子域挂载点均合成目录行（空项目同样显示）
@@ -284,7 +285,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         `/projects/${projectId}${rest}`
       );
     }
-    throw vfsNotFound(`/projects/${projectId}${rest}`);
+    throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`});
   }
 
   /** 会话域内是否有任意 VFS 条目（用于过滤无工作区文件的子 agent 会话）。 */
@@ -337,12 +338,12 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     const sidMatch = rest.match(/^\/([^/]+)(\/.*)?$/);
     if (sidMatch == null) {
-      throw vfsNotFound(`/projects/${projectId}/sessions${rest}`);
+      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`});
     }
     const sessionId = sidMatch[1]!;
     const session = await this.sessions.findById(sessionId);
     if (session == null || session.projectId !== projectId) {
-      throw vfsNotFound(`/projects/${projectId}/sessions/${sessionId}`);
+      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`});
     }
     return this.listScopeFirstLevel(
       { kind: "session", projectId, sessionId },
@@ -499,7 +500,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         `/projects/${projectId}${rest}`
       );
     }
-    throw vfsNotFound(`/projects/${projectId}${rest}`);
+    throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`});
   }
 
   /** `/projects/{pid}/sessions[/...]` 子树（主会话 + 子 agent 会话 BFS 展开）。 */
@@ -539,12 +540,12 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     const sidMatch = rest.match(/^\/([^/]+)(\/.*)?$/);
     if (sidMatch == null) {
-      throw vfsNotFound(`/projects/${projectId}/sessions${rest}`);
+      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`});
     }
     const sessionId = sidMatch[1]!;
     const session = await this.sessions.findById(sessionId);
     if (session == null || session.projectId !== projectId) {
-      throw vfsNotFound(`/projects/${projectId}/sessions/${sessionId}`);
+      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`});
     }
     return this.scopeTreeRows(
       { kind: "session", projectId, sessionId },

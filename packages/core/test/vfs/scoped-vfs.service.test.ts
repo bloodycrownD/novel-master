@@ -1,6 +1,7 @@
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isVfsError, toPhysicalPath } from "@novel-master/core/vfs";
+import { toPhysicalPath } from "@novel-master/core/vfs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -43,7 +44,7 @@ describe("ScopedVfsService", () => {
     await assert.rejects(
       () => ctx.globalVfs().write("/template/legacy.md", "x"),
       (e: unknown) => {
-        assert.ok(isVfsError(e, "INVALID_PATH"));
+        assert.ok(isAppError(e, "VFS_INVALID_PATH"));
         return true;
       },
     );

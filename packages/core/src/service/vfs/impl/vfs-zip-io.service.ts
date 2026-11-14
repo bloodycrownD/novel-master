@@ -7,14 +7,12 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { throwLegacyVfs, throwLegacyVfsZip } from "./legacy-vfs-error.js";
 import { AppError } from "@/errors/app-error.js";
-import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
 import { type VfsScope, scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { resolveZipDirectoryPath, zipDirectoryEntryNameRelativeToDirectory, zipEntryNameRelativeToDirectory } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
-import { vfsNotADirectory } from "@/errors/vfs-errors.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -75,13 +73,13 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
     return;
   }
   if (existing.entryKind !== "directory") {
-    throw vfsNotADirectory(logical);
+    throw new AppError("VFS_NOT_A_DIRECTORY", {path: logical, detail: `Not a directory: ${logical}`});
   }
 }
 
 /**
- * 导入失败的错误包装：保留测试钩子直抛与 VfsZipError 原形，其余包成
- * `IMPORT_FAILED`，并在消息里带上分片进度（已提交 N 片 / 失败在第 K 片）。
+ * 导入失败的错误包装：保留测试钩子直抛与 legacy VfsZipError 形态（`name` 手搓对象）原形，
+ * 其余包成 `VFS_ZIP_IMPORT_FAILED`，并在消息里带上分片进度（已提交 N 片 / 失败在第 K 片）。
  *
  * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
  * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
@@ -96,15 +94,15 @@ function wrapImportError(error: unknown, committedShards?: number, failedShard?:
   const base = error instanceof Error ? error.message : "import transaction failed";
   // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
   if (committedShards != null && failedShard != null) {
-    return vfsZipError("IMPORT_FAILED", {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}});
+    return new AppError("VFS_ZIP_IMPORT_FAILED", {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}});
   }
-  return vfsZipError("IMPORT_FAILED", base);
+  return new AppError("VFS_ZIP_IMPORT_FAILED", base);
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
-    throw vfsZipError("INVALID_PATH", `ZIP target path is a file, not a directory: ${directoryPath}`);
+    throw new AppError("VFS_ZIP_INVALID_PATH", `ZIP target path is a file, not a directory: ${directoryPath}`);
   }
 }
 
@@ -171,7 +169,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
   async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<void> {
     if (options.confirmed !== true) {
-      throw vfsZipError("NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or mobile confirm dialog)");
+      throw new AppError("VFS_ZIP_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or mobile confirm dialog)");
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);

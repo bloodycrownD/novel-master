@@ -33,7 +33,7 @@ export function validateDynamicMacros(content: string, blockLabel: MessageLike):
   try {
     actions = scanMacroActions(content);
   } catch (error) {
-    // 宏扫描器（infra）对残缺模板会抛旧 PromptError；在本函数内转成领域失败，不穿透。
+    // 宏扫描器（infra）对残缺模板会抛 PROMPT_* 形态的 AppError；在本函数内转成领域失败，不穿透。
     const detail = error instanceof Error ? error.message : String(error);
     return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.scan_failed", params: { block: blockLabel, detail } }, { cause: error }));
   }

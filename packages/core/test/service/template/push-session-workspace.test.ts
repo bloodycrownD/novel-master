@@ -3,7 +3,7 @@
  * - T-WP1 整树覆盖：project 有 A/B、session 有 B'/C → push 后 project 为 B'/C（A 被删）
  * - T-WP2 目录规则覆盖：push 后 project 规则 = session 版本（copyScope 覆盖语义）
  * - T-WP3 blob 无孤儿（sessionTemplatePush 载体，镜像 vfs-gc-trigger T-G2 模式）
- * - T-WP4 会话不存在抛 chatNotFound；事务失败回滚不留半态
+ * - T-WP4 会话不存在抛 CHAT_NOT_FOUND；事务失败回滚不留半态
  *
  * T-WP5（既有 pull/template 测试不回归）由同目录既有测试文件守护，本文件不重复。
  *
@@ -152,7 +152,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     );
   });
 
-  it("T-WP4a: 会话不存在抛 chatNotFound", async () => {
+  it("T-WP4a: 会话不存在抛 CHAT_NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     await assert.rejects(

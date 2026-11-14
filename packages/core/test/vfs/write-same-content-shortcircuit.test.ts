@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService, isVfsError } from "@novel-master/core/vfs";
+import { createVfsService } from "@novel-master/core/vfs";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

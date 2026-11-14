@@ -9,12 +9,11 @@ import { SEARCH_NOT_CONFIGURED_MESSAGE, dispatchSearch } from "../../src/domain/
 import { assembleSearchToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { createSearchConfigStore, type SearchConfigPublic, type SearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
-import { AppError } from "../../src/errors/app-error.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
-import { ToolError } from "../../src/errors/tool-errors.js";
 import { formatToolOutputForLlm, isCurlOutput, isSearchOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import type { ParallelToolOutcome } from "../../src/domain/tool/logic/tool-runner.js";
@@ -177,8 +176,8 @@ describe("search 工具：run 基础行为", () => {
   it("未装配 search 闭包（CLI / 旧 mock）时抛可读 ToolError 而非崩溃", async () => {
     const runner = makeRunner();
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx()), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       assert.match(err.message, /search/);
       return true;
     });
@@ -195,7 +194,7 @@ describe("search 工具：run 基础行为", () => {
 
     // schema 只校验形状（engine/params）；搜索词缺失在 run 内以可读错误拒绝。
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { count: 5 } }, ctx), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
       return true;
@@ -418,8 +417,8 @@ describe("search 工具：run 基础行为", () => {
 
     const runner = makeRunner();
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       assert.equal(err.message.includes("sk-bocha-secret"), false);
       return true;
     });
@@ -586,8 +585,8 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
 
     const runner = makeRunner();
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 每引擎一行：引擎名前缀 + 各自状态码（链尾 DDG 兜底也失败时同样一行）。
       assert.match(detail, /^串行搜索链全部尝试失败：/);
@@ -615,8 +614,8 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
 
     const runner = makeRunner();
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "bocha", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 只含 bocha 一行，无 tavily 摘要（钉死语义，不降级）。
       assert.match(detail, /bocha: .*401/);
@@ -671,10 +670,10 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
         await new Promise((resolve) => setImmediate(resolve));
       }
       // 第五位 DDG 尝试前预算耗尽被拦下。
-      const err = (await callPromise) as ToolError;
+      const err = (await callPromise) as AppError;
 
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
       // 已收集的四个引擎超时摘要各一行 + 预算耗尽说明。
       for (const engineId of ["bocha", "tavily", "brave", "deepseek"]) {
@@ -725,7 +724,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     const result = await pending;
     assert.equal(result.ok, false);
     const err = result.error;
-    assert.ok(err instanceof ToolError);
+    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
     const detail = String((err as { cause?: unknown }).cause);
     assert.match(detail, /搜索已取消/);
     // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
@@ -751,7 +750,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     }) as typeof globalThis.fetch;
 
     await assert.rejects(searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.match(String((err as { cause?: unknown }).cause), /搜索已取消/);
       return true;
     });
@@ -869,7 +868,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
     const ctx = makeCtx({ search, fetchFn });
 
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42 } }, ctx), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
       return true;
@@ -927,8 +926,8 @@ describe("search 工具：显式未知 engine（钉死未知 id）", () => {
     const store = createSearchConfigStore({ kkv, secretStore });
     const runner = makeRunner();
     await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })), (err: unknown) => {
-      assert.ok(err instanceof ToolError);
-      assert.equal(err.code, "FAILED");
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
       const cause = err.cause as AppError;
       assert.ok(cause instanceof AppError);
       assert.equal(cause.messageKey, "error.tool.search_engine_not_found");

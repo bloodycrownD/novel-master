@@ -9,7 +9,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { chatNotFound } from "@/errors/chat-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
@@ -27,7 +27,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
     }
     await this.conn.transaction(async (tx) => {
       await initializeSessionWorkspace(tx, session.projectId, sessionId, {
@@ -50,7 +50,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
     }
     await this.conn.transaction(async (tx) => {
       await pushSessionWorkspace(tx, session.projectId, sessionId);

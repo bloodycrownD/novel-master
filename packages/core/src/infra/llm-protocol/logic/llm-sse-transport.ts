@@ -42,7 +42,7 @@
  */
 
 import { truncateText } from "@/common/text.js";
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 import { createSseChunkEmitter } from "./sse-chunk-emitter.js";
@@ -252,7 +252,7 @@ function isTransportTimeoutError(error: unknown): boolean {
 
 /**
  * POST and deliver SSE text chunks incrementally (UTF-8 decoded strings).
- * HTTP 4xx/5xx throw {@link ProviderError} with code `HTTP_ERROR`.
+ * HTTP 4xx/5xx throw `PROVIDER_HTTP_ERROR` AppError.
  *
  * 传输三分支逐请求择优（registered native → XHR → fetch）；whole-call
  * 语义与 settle 守卫在公共层装配（见模块文档）。
@@ -453,13 +453,7 @@ export function postSse(
     const runXhr = (): void => {
       const XhrCtor = getXmlHttpRequestCtor();
       if (XhrCtor == null) {
-        rejectOnce(
-          new ProviderError(
-            "HTTP_ERROR",
-            "XMLHttpRequest is not available in this environment",
-            { providerId }
-          )
-        );
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "XMLHttpRequest is not available in this environment", { providerId }));
         return;
       }
 
@@ -501,9 +495,7 @@ export function postSse(
       if (signal != null) {
         if (signal.aborted) {
           emitter.dispose();
-          rejectOnce(
-            new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
-          );
+          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "Request aborted", { providerId }));
           return;
         }
         signal.addEventListener(
@@ -550,11 +542,7 @@ export function postSse(
         if (status < 200 || status >= 300) {
           const body = xhr.responseText;
           const snippet = truncateText(body, 500);
-          rejectOnce(
-            new ProviderError("HTTP_ERROR", `HTTP ${status}: ${snippet}`, {
-              providerId,
-            })
-          );
+          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", `HTTP ${status}: ${snippet}`, { providerId }));
           return;
         }
 
@@ -563,16 +551,12 @@ export function postSse(
 
       xhr.onerror = () => {
         emitter.dispose();
-        rejectOnce(
-          new ProviderError("HTTP_ERROR", "XHR network error", { providerId })
-        );
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "XHR network error", { providerId }));
       };
 
       xhr.onabort = () => {
         emitter.dispose();
-        rejectOnce(
-          new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
-        );
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "Request aborted", { providerId }));
       };
 
       applyXhrHeaders(xhr, init.headers);
@@ -631,11 +615,7 @@ export function postSse(
 
           if (response.body == null) {
             const contentType = response.headers.get("content-type") ?? "none";
-            throw new ProviderError(
-              "HTTP_ERROR",
-              `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`,
-              { providerId }
-            );
+            throw new AppError("PROVIDER_HTTP_ERROR", `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, { providerId });
           }
 
           logSse(logTag, "fetch stream start", {

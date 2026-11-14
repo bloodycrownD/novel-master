@@ -6,7 +6,6 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
@@ -40,7 +39,7 @@ function isLegacyTemplateLogicalPath(normalized: string): boolean {
  */
 function assertNormalizedPathAllowed(normalized: string): void {
   if (isLegacyTemplateLogicalPath(normalized)) {
-    throw vfsInvalidPath(normalized, LEGACY_TEMPLATE_MESSAGE);
+    throw new AppError("VFS_INVALID_PATH", {path: normalized, reason: LEGACY_TEMPLATE_MESSAGE});
   }
 }
 
@@ -65,7 +64,7 @@ export function resolveLogicalPath(input: string): Result<string, AppError<"VFS_
 /**
  * Validates that a logical path is allowed for the given scope.
  *
- * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀仍抛旧 `VfsError`
+ * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀带 descriptor messageKey 抛出
  */
 export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
   const resolved = resolveLogicalPath(logical);
@@ -76,7 +75,7 @@ export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): voi
 /**
  * Converts a caller logical path to the physical `vfs_entry.path`.
  *
- * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀仍抛旧 `VfsError`
+ * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀带 descriptor messageKey 抛出
  */
 export function toPhysicalPath(scope: VfsScope, logical: string): string {
   const resolved = resolveLogicalPath(logical);
@@ -120,7 +119,7 @@ export function toPhysicalPath(scope: VfsScope, logical: string): string {
 /**
  * Converts a physical path back to the logical path for the scope.
  *
- * @throws AppError<"VFS_INVALID_PATH"> 物理路径非法；越出 scope 时仍抛旧 `VfsError`
+ * @throws AppError<"VFS_INVALID_PATH"> 物理路径非法或越出 scope
  */
 export function toLogicalPath(scope: VfsScope, physical: string): string {
   const resolved = normalizePath(physical);
@@ -129,7 +128,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
   switch (scope.kind) {
     case "global": {
       if (normalized !== GLOBAL_PHYSICAL_PREFIX && !normalized.startsWith(`${GLOBAL_PHYSICAL_PREFIX}/`)) {
-        throw vfsInvalidPath(physical, "not in global template scope");
+        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in global template scope", detail: `Invalid path ${physical}: not in global template scope`});
       }
       if (normalized === GLOBAL_PHYSICAL_PREFIX) {
         return "/";
@@ -142,7 +141,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
         return "/";
       }
       if (!normalized.startsWith(`${prefix}/`)) {
-        throw vfsInvalidPath(physical, "not in project template scope");
+        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project template scope", detail: `Invalid path ${physical}: not in project template scope`});
       }
       return normalized.slice(prefix.length);
     }
@@ -152,7 +151,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
         return "/";
       }
       if (!normalized.startsWith(`${prefix}/`)) {
-        throw vfsInvalidPath(physical, "not in session scope");
+        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in session scope", detail: `Invalid path ${physical}: not in session scope`});
       }
       return normalized.slice(prefix.length);
     }
@@ -165,7 +164,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
       // 域内逻辑路径自带 /meta 段：物理必须形如 /projects/{pid}/meta[...]，
       // 否则是同项目其他子域（如 template）的路径，不属于 project-meta 域
       if (normalized !== metaPrefix && !normalized.startsWith(`${metaPrefix}/`)) {
-        throw vfsInvalidPath(physical, "not in project meta scope");
+        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project meta scope", detail: `Invalid path ${physical}: not in project meta scope`});
       }
       // 剥掉 /projects/{pid} 项目段，保留域内自带的 /meta 段
       return normalized.slice(prefix.length);

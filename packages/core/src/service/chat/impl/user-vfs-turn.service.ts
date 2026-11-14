@@ -22,7 +22,7 @@ import {
   MutatingPathRestoreCompositeError,
   restoreMutatingPathHeads,
 } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
-import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -73,15 +73,15 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     op: UserVfsTurnOp
   ): Promise<UserVfsTurnExecuteResult> {
     if (op.tools.length === 0) {
-      throw chatInvalidArgument("userVfsTurn.op.tools must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", "userVfsTurn.op.tools must not be empty");
     }
     if (op.actionXml.trim() === "") {
-      throw chatInvalidArgument("userVfsTurn.op.actionXml must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", "userVfsTurn.op.actionXml must not be empty");
     }
 
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw chatNotFound("session", sessionId);
+      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
     }
 
     const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);

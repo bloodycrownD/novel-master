@@ -9,8 +9,7 @@
 
 import { isAppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import { ToolError } from "@/errors/tool-errors.js";
-import { VfsError, isVfsError, type VfsErrorCode } from "@/errors/vfs-errors.js";
+import { isVfsError, type VfsErrorCode } from "@/errors/vfs-errors.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { CORE_MESSAGE_KEYS } from "@/i18n/keys.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
@@ -50,8 +49,12 @@ function operationFailed(detail: string): CoreMessageDescriptor {
  * 终端用户可见 VFS 文案 descriptor；与 formatVfsErrorForLlm 分离。
  */
 export function vfsUserMessage(error: unknown, _scope?: VfsScope): CoreMessageDescriptor {
-  if (error instanceof ToolError && error.cause != null) {
-    return vfsUserMessage(error.cause, _scope);
+  // 旧 ToolError 的 cause 解包（类已退役，等价判 TOOL_ 前缀 AppError；cause 双写在 Error.cause 与 details.cause）。
+  if (isAppError(error) && error.key.startsWith("TOOL_")) {
+    const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
+    if (cause != null) {
+      return vfsUserMessage(cause, _scope);
+    }
   }
   // 错误自带 messageKey（迁移后的抛错点）→ 直接透传 descriptor。
   if (typeof error === "object" && error !== null) {
@@ -63,19 +66,18 @@ export function vfsUserMessage(error: unknown, _scope?: VfsScope): CoreMessageDe
   }
 
   let shape: VfsErrorLike | null;
-  if (error instanceof VfsError) {
-    shape = { code: error.code, message: error.message, path: error.path };
-  } else if (isAppError(error)) {
+  if (isAppError(error)) {
     const code = APP_ERROR_TO_VFS_CODE[error.key];
     shape = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined };
     if (shape == null) {
       return operationFailed(error.message);
     }
   } else if (isVfsError(error)) {
-    shape = { code: (error as VfsError).code, message: (error as VfsError).message, path: (error as VfsError).path };
+    // legacy 手搓旧形态对象（legacy-vfs-error mapper 产物）。
+    shape = { code: error.code, message: error.message, path: error.path };
   } else if (typeof error === "object" && error !== null && "code" in error && "message" in error && typeof (error as IpcLikeError).code === "string" && typeof (error as IpcLikeError).message === "string") {
-    // IPC 边界只留下 code/message：复用旧 VfsError 构造后再走同一张文案表。
-    return vfsUserMessage(new VfsError((error as IpcLikeError).code as VfsErrorCode, (error as IpcLikeError).message, { path: undefined }), _scope);
+    // IPC 边界只留下 code/message：直接组 shape 走同一张文案表。
+    shape = { code: (error as IpcLikeError).code as VfsErrorCode, message: (error as IpcLikeError).message, path: undefined };
   } else if (error instanceof Error) {
     return operationFailed(error.message);
   } else {

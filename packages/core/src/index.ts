@@ -121,8 +121,6 @@ export {
  * Tool 运行时：注册表、执行器与内置 `vfs.*` 工具。
  */
 export type { Tool } from "./domain/tool/model/tool.js";
-export { ToolError } from "./errors/tool-errors.js";
-export type { ToolErrorCode } from "./errors/tool-errors.js";
 export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
 export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
 export type { ToolCall, ParallelToolOutcome } from "./domain/tool/logic/tool-runner.js";
@@ -177,5 +175,3 @@ export { parseText, type TextFormat } from "./infra/serialization/parse-text.js"
 export { stringifyText } from "./infra/serialization/stringify-text.js";
 export { decode } from "./infra/serialization/decode.js";
 export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
-export { ConfigDecodeError } from "./errors/config-decode-errors.js";
-export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";

@@ -1,7 +1,6 @@
 [
   "CloudSyncCoordinator",
   "CloudSyncError",
-  "ConfigDecodeError",
   "DB_BACKUP_PROVIDER_TABLES",
   "DEFAULT_LEASE_SECONDS",
   "EMPTY_CLOUD_SYNC_STATUS",
@@ -32,7 +31,6 @@
   "TOOL_OUTPUT_MAX_LINE_LENGTH",
   "TOOL_OUTPUT_MAX_MATCHES",
   "TdbcError",
-  "ToolError",
   "ToolRegistry",
   "ToolRunner",
   "WORKSPACE_STATE_MODULE",

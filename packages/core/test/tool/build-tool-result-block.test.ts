@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ToolError } from "../../src/errors/tool-errors.js";
-import { VfsError } from "../../src/errors/vfs-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import {
   buildToolResultBlock,
   resolveToolResultOk,
@@ -24,7 +23,7 @@ describe("buildToolResultBlock", () => {
   it("R1: error outcome sets ok false and Error: content", () => {
     const block = buildToolResultBlock("tu2", {
       ok: false,
-      error: new ToolError("NOT_FOUND", "Path not found"),
+      error: new AppError("TOOL_NOT_FOUND", {toolName: "read", detail: "Path not found"}),
     });
     assert.equal(block.ok, false);
     assert.ok(block.content.startsWith("Error:"));
@@ -33,14 +32,12 @@ describe("buildToolResultBlock", () => {
 
   it("T-BTRB-01: error with vfsScope summary uses classified message", () => {
     // entry_id 化后 vfsError.path 已是逻辑路径（无物理前缀）
-    const cause = new VfsError("NOT_FOUND", "Path not found: /f.txt", {
-      path: "/f.txt",
-    });
+    const cause = new AppError("VFS_NOT_FOUND", {path: "/f.txt", detail: "Path not found: /f.txt"});
     const block = buildToolResultBlock(
       "tu4",
       {
         ok: false,
-        error: new ToolError("FAILED", "Tool failed: read", { cause }),
+        error: new AppError("TOOL_FAILED", {toolName: "read", cause, detail: "Tool failed: read"}),
       },
       {
         toolName: "read",
@@ -209,7 +206,7 @@ describe("buildToolResultBlock", () => {
   it("T-SK8: skill 失败 outcome 不透传 skillRef", () => {
     const block = buildToolResultBlock("tu-skill-e", {
       ok: false,
-      error: new ToolError("NOT_FOUND", "Skill not found"),
+      error: new AppError("TOOL_NOT_FOUND", {toolName: "skill", detail: "Skill not found"}),
     });
     assert.equal(block.meta?.skillRef, undefined);
   });

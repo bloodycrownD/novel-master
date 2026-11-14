@@ -28,7 +28,7 @@ type DynamicMacroError = AppError<"PROMPT_INVALID_MACRO">;
 /**
  * 展开 dynamic 文本中的白名单宏；每轮 assembly 实时计算。
  *
- * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 PromptError 漏出本层。
+ * @returns 宏模板非法时返回 `PROMPT_INVALID_MACRO`，不把 infra 的 AppError 漏出本层。
  */
 export async function expandDynamicMacros(content: string, ctx: DynamicMacroContext): Promise<Result<string, DynamicMacroError>> {
   const now = ctx.now ?? new Date();
