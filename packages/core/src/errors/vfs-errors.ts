@@ -104,18 +104,6 @@ export function vfsNotFound(path: string): VfsError {
   return new VfsError("NOT_FOUND", `Path not found: ${path}`, { path });
 }
 
-/** Replace oldString not found in content. */
-export function vfsReplaceNotFound(
-  path: string,
-  details?: VfsReplaceNotFoundDetails
-): VfsError {
-  return new VfsError(
-    "REPLACE_NOT_FOUND",
-    `Replace string not found in ${path}`,
-    { path, ...(details != null ? { details } : {}) }
-  );
-}
-
 /** Non-recursive delete blocked by child paths. */
 export function vfsDirectoryNotEmpty(path: string): VfsError {
   return new VfsError("DIRECTORY_NOT_EMPTY", `Directory not empty: ${path}`, {
@@ -128,16 +116,6 @@ export function vfsInvalidPath(path: string, reason: string | CoreMessageDescrip
   return new VfsError("INVALID_PATH", typeof reason === "string" ? `Invalid path ${path}: ${reason}` : reason, {
     path,
   });
-}
-
-/**
- * Entry name rejected by {@link validateVfsEntryName}（创建/重命名入口拦截）。
- *
- * message 传中文 reason 或 descriptor（invalid_name.* 子段）；LLM 面由
- * format-vfs-error-for-llm 包装 `[INVALID_NAME]` 前缀与路径。
- */
-export function vfsInvalidName(name: string, reason: string | CoreMessageDescriptor): VfsError {
-  return new VfsError("INVALID_NAME", reason, { path: name });
 }
 
 /** Path is a directory row; read/write/replace are not allowed. */

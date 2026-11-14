@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import {
-  formatRollbackRevisionBackfillAlertMessage,
-  isRollbackRevisionBackfillRequiredError,
-} from "@novel-master/core/session-fs";
+import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/session-fs";
 import { isVfsError } from "@novel-master/core/vfs";
 import { backfillMissingRevisionIfNeeded } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -93,23 +90,6 @@ async function setupMultiFilePartialScenario() {
 }
 
 describe("MessageRollbackService (revision head backfill)", () => {
-  it("formatRollbackRevisionBackfillAlertMessage undo_send 末句为发送前状态", () => {
-    const message = formatRollbackRevisionBackfillAlertMessage(["/a.md"], "undo_send");
-    assert.match(message, /回滚至发送前状态/);
-    assert.doesNotMatch(message, /回滚至锚点/);
-  });
-
-  it("formatRollbackRevisionBackfillAlertMessage 列出丢失快照的文件名", () => {
-    const message = formatRollbackRevisionBackfillAlertMessage([
-      "/a.md",
-      "/notes/b.md",
-    ]);
-    assert.match(message, /丢失快照的文件/);
-    assert.match(message, /· a\.md/);
-    assert.match(message, /· notes\/b\.md/);
-    assert.match(message, /其余文件将正常回滚至锚点/);
-  });
-
   it("RB1: 多文件 revision 缺失且未确认 — 抛 BACKFILL_REQUIRED，消息与 VFS 不变", async () => {
     const { ctx, project, session, svfs, assistant1 } =
       await setupMultiFilePartialScenario();

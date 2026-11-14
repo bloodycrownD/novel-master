@@ -1,6 +1,5 @@
 [
   "DEFAULT_HIDE_START_DEPTH",
-  "compactionConditionsInvalidSchema",
   "compactionConditionsSchema",
   "createCompactionConditionEvaluator",
   "createCompactionConditionsStore",

@@ -127,33 +127,6 @@ export function sessionFsRollbackMessageSessionMismatch(
   );
 }
 
-export function sessionFsRestoreRevisionMissing(
-  logicalPath: string,
-  revisionVersion: number
-): SessionFsError {
-  return new SessionFsError(
-    "RESTORE_REVISION_MISSING",
-    {key: "error.session_fs.restore_revision_missing", params: {logical_path: logicalPath, revision_version: revisionVersion}},
-    { logicalPath, revisionVersion }
-  );
-}
-
-/**
- * Reserved error code for rollback-without-checkpoint scenarios.
- *
- * @remarks Rollback no longer throws this: message truncation always proceeds; workspace
- *          restore uses prior/empty tree when no checkpoint exists.
- */
-export function sessionFsRollbackNoCheckpoint(
-  messageId: string,
-  sessionId: string
-): SessionFsError {
-  return new SessionFsError("ROLLBACK_NO_CHECKPOINT", "该消息无回滚点", {
-    messageId,
-    sessionId,
-  });
-}
-
 /**
  * targetTree 为空却仍有 live 文件时抛出，让上层走「仅截断消息」的降级路径
  * （skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
@@ -223,29 +196,6 @@ export function readRollbackRevisionBackfillMissingPaths(
 }
 
 /**
- * 构建「快照丢失需回补」二次确认 Alert 正文。
- *
- * @param missingLogicalPaths checkpoint 指向但 revision 行缺失的文件路径
- */
-export function formatRollbackRevisionBackfillAlertMessage(
-  missingLogicalPaths: readonly string[],
-  mode?: import("@/presentation/chat/rollback-confirm.js").RollbackMode
-): string {
-  const displayNames = missingLogicalPaths.map((logicalPath) =>
-    logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath
-  );
-  const fileLines =
-    displayNames.length > 0
-      ? displayNames.map((name) => `· ${name}`).join("\n")
-      : "· （未知文件）";
-  const tailLine =
-    mode === "undo_send"
-      ? "其余文件将正常回滚至发送前状态。"
-      : "其余文件将正常回滚至锚点。";
-  return `快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n${fileLines}\n\n${tailLine}`;
-}
-
-/**
  * A-22 乐观锁冲突：resolveRollbackPlan 解析完成到事务开始之间，会话消息计数发生了变化。
  *
  * @remarks 事务内重读会话消息计数，与 plan 阶段记录的快照不一致时抛出。上层调用方可以重试
@@ -262,13 +212,6 @@ export function sessionFsRollbackConflict(
     {key: "error.session_fs.rollback_conflict", params: {expected_count: expectedMessageCount, actual_count: actualMessageCount}},
     { sessionId, messageId, expectedMessageCount, actualMessageCount }
   );
-}
-
-/** 判断错误是否为乐观锁冲突（含 cause 链）。 */
-export function isRollbackConflictError(
-  error: unknown
-): error is SessionFsError {
-  return isSessionFsError(error, "ROLLBACK_CONFLICT");
 }
 
 /**

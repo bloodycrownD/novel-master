@@ -11,8 +11,7 @@ import {
   type CompactionConditions,
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
-import { compactionConditionsInvalidSchema } from "@/errors/compaction-conditions-errors.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
 
@@ -75,7 +74,7 @@ function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
 
 function rethrowDecodeError(error: unknown): never {
   if (error instanceof ConfigDecodeError && error.code === "INVALID_SCHEMA") {
-    throw compactionConditionsInvalidSchema(error.message);
+    throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", error.message);
   }
   throw error;
 }
@@ -119,11 +118,7 @@ export class DefaultCompactionConditionsStore
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch (error) {
-      throw compactionConditionsInvalidSchema(
-        `invalid JSON in nm-compaction-conditions/policy: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (isV2Document(parsed)) {
       // v2 → v3 → v4 两步迁移：先升到 v3 形态，再补 hideStartDepth 升 v4。

@@ -4,8 +4,7 @@
  * @module service/persistent-preferences/impl/persistent-preferences.service
  */
 
-import { isAppError } from "@/errors/app-error.js";
-import { preferencesInvalidValue } from "@/errors/preferences-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { formatBoolean, parseBoolean } from "@/infra/kkv-value-codec.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
@@ -117,7 +116,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     }
     const parsed = parseBoolean(raw);
     if (!parsed.ok) {
-      throw preferencesInvalidValue(key, "boolean", raw);
+      throw new AppError("PREFERENCES_INVALID_VALUE", `Preference key "${key}" expected boolean, got: ${raw}`, {key, expectedType: "boolean", actualValue: raw});
     }
     return parsed.value;
   }

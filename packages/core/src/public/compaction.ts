@@ -9,9 +9,6 @@ export type { HideMessageSeqRange } from "../domain/depth/logic/resolve-hide-mes
 export type { CompactionConditions } from "../domain/compaction-conditions/model/compaction-conditions.js";
 export { DEFAULT_HIDE_START_DEPTH } from "../domain/compaction-conditions/model/compaction-conditions.js";
 export { compactionConditionsSchema } from "../domain/compaction-conditions/model/compaction-conditions.schema.js";
-export {
-  compactionConditionsInvalidSchema,
-} from "../errors/compaction-conditions-errors.js";
 export type { CompactionConditionsStore } from "../service/compaction-conditions/compaction-conditions-store.port.js";
 export { createCompactionConditionsStore } from "../service/compaction-conditions/create-compaction-conditions-store.js";
 export {

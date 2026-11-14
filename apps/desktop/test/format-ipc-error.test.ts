@@ -5,21 +5,17 @@ import { AppError, VfsError } from "@novel-master/core/vfs";
 import { AgentTurnError } from "@novel-master/core/agent";
 // 走公开子入口而非 core src：src 的 `@/` 别名只有 core-dist hook 覆盖，
 // 测试直接加载 src 会在 `@/i18n/*` 上解析失败（迁移后新增的运行时 import）。
-import {
-  sessionFsRollbackNoCheckpoint,
-  sessionFsRollbackRevisionBackfillRequired,
-  sessionFsRollbackVfsRestoreFailed,
-} from "@novel-master/core/session-fs";
+import { sessionFsRollbackRevisionBackfillRequired, sessionFsRollbackVfsRestoreFailed } from "@novel-master/core/session-fs";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
 import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
 
 describe("formatIpcError", () => {
-  it("maps sessionFsRollbackNoCheckpoint to ROLLBACK_NO_CHECKPOINT", () => {
-    const err = sessionFsRollbackNoCheckpoint("msg-1", "sess-1");
+  it("透传 SESSION_FS_ROLLBACK_NO_CHECKPOINT AppError（code 即 key，中文经 coreT 渲染）", () => {
+    const err = new AppError("SESSION_FS_ROLLBACK_NO_CHECKPOINT", {messageId: "msg-1", sessionId: "sess-1"});
     const payload = formatIpcError(err);
-    assert.equal(payload.code, "ROLLBACK_NO_CHECKPOINT");
-    assert.match(payload.message, /该消息无回滚点/);
+    assert.equal(payload.code, "SESSION_FS_ROLLBACK_NO_CHECKPOINT");
+    assert.equal(payload.message, "该消息无回滚点");
   });
 
   it("maps sessionFsRollbackVfsRestoreFailed to ROLLBACK_VFS_RESTORE_FAILED", () => {

@@ -5,7 +5,7 @@
  */
 
 import type { KkvRepository } from "@/domain/kkv/repositories/kkv.port.js";
-import { kkvNotFound } from "@/errors/kkv-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { KkvService } from "../kkv.port.js";
 
 /**
@@ -21,7 +21,7 @@ export class DefaultKkvService implements KkvService {
   async get(module: string, key: string): Promise<string> {
     const entry = await this.repo.get(module, key);
     if (entry == null) {
-      throw kkvNotFound(module, key);
+      throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`, {module, key});
     }
     return entry.value;
   }
@@ -33,7 +33,7 @@ export class DefaultKkvService implements KkvService {
   async delete(module: string, key: string): Promise<void> {
     const deleted = await this.repo.delete(module, key);
     if (!deleted) {
-      throw kkvNotFound(module, key);
+      throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`, {module, key});
     }
   }
 }

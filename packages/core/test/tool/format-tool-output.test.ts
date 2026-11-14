@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError, vfsReplaceNotFound } from "../../src/errors/vfs-errors.js";
+import { VfsError } from "../../src/errors/vfs-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
+import { buildReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
@@ -367,12 +369,8 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-02: REPLACE_NOT_FOUND includes category and LCS diagnostics", () => {
-    const cause = vfsReplaceNotFound(physicalPath, {
-      oldStringLength: 12,
-      longestCommonSubstring: "same",
-      lcsLength: 4,
-      lcsOccurrences: 2,
-    });
+    // oldString 12 字符；文件里 "same" 出现 2 次 ⇒ lcsLength=4、lcsOccurrences=2。
+    const cause = buildReplaceNotFoundError(physicalPath, "aa same bb same cc", "sameXXXXXXXX");
     const content = formatToolErrorForLlm(
       new ToolError("FAILED", "Tool failed: edit", { cause }),
       { vfsScope: sessionScope },
@@ -394,12 +392,7 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-04: REPLACE_NOT_FOUND includes LCS snippet", () => {
-    const cause = vfsReplaceNotFound(physicalPath, {
-      oldStringLength: 10,
-      longestCommonSubstring: "function hello()",
-      lcsLength: 16,
-      lcsOccurrences: 1,
-    });
+    const cause = buildReplaceNotFoundError(physicalPath, "prefix function hello() suffix", "function hello()tail");
     const content = formatToolErrorForLlm(
       new ToolError("FAILED", "x", { cause }),
       { vfsScope: sessionScope },
@@ -410,12 +403,7 @@ describe("formatToolErrorForLlm", () => {
   });
 
   it("T-ERR-05: short LCS suggests re-read", () => {
-    const cause = vfsReplaceNotFound(physicalPath, {
-      oldStringLength: 10,
-      longestCommonSubstring: "ab",
-      lcsLength: 2,
-      lcsOccurrences: 1,
-    });
+    const cause = buildReplaceNotFoundError(physicalPath, "xx ab yy", "abZZZZZZ");
     const content = formatToolErrorForLlm(
       new ToolError("FAILED", "x", { cause }),
       { vfsScope: sessionScope },
@@ -426,14 +414,8 @@ describe("formatToolErrorForLlm", () => {
   it("T-ERR-06: REPLACE_NOT_FOUND 携带预览（JSON 转义）诊断", () => {
     // 模拟 bug 3：oldString 里是字面 entity，文件里是真正的中文引号。
     // 预览并列就能看出 `&ldquo;` vs `“` 的区别，且 LLM 可直接照抄修正。
-    const cause = vfsReplaceNotFound(physicalPath, {
-      oldStringLength: 20,
-      longestCommonSubstring: "你好世界测试",
-      lcsLength: 6,
-      lcsOccurrences: 1,
-      oldStringPreview: '&ldquo;你好',
-      fileHintPreview: '“你好',
-    });
+    // 预览值是本用例的断言对象，无法由 LCS 计算复现，直接按生产形态构造 AppError。
+    const cause = new AppError("VFS_REPLACE_NOT_FOUND", `Replace string not found in ${physicalPath}`, {path: physicalPath, details: {oldStringLength: 20, longestCommonSubstring: "你好世界测试", lcsLength: 6, lcsOccurrences: 1, oldStringPreview: '&ldquo;你好', fileHintPreview: '“你好'}});
     const content = formatToolErrorForLlm(
       new ToolError("FAILED", "x", { cause }),
       { vfsScope: sessionScope },
