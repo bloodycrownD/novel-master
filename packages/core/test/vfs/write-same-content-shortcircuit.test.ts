@@ -10,6 +10,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -58,15 +59,15 @@ describe("writeWithRevision same-content shortcircuit", () => {
     const vfs = createVfsService(conn);
     const path = `/sc1-${testIsolationSuffix()}.md`;
 
-    const first = await vfs.write(GLOBAL_SCOPE, path, "same-body");
+    const first = unwrap(await vfs.write(GLOBAL_SCOPE, path, "same-body"));
     assert.equal(first.version, 1);
     const revBefore = await countRevisions(conn, GLOBAL_SCOPE, path);
 
-    const second = await vfs.write(GLOBAL_SCOPE, path, "same-body");
+    const second = unwrap(await vfs.write(GLOBAL_SCOPE, path, "same-body"));
     assert.equal(second.version, 1);
     assert.equal(await countRevisions(conn, GLOBAL_SCOPE, path), revBefore);
 
-    const read = await vfs.read(GLOBAL_SCOPE, path);
+    const read = unwrap(await vfs.read(GLOBAL_SCOPE, path));
     assert.equal(read.content, "same-body");
     assert.equal(read.version, 1);
   });
@@ -76,8 +77,8 @@ describe("writeWithRevision same-content shortcircuit", () => {
     const vfs = createVfsService(conn);
     const path = `/sc2-${testIsolationSuffix()}.md`;
 
-    await vfs.write(GLOBAL_SCOPE, path, "alpha");
-    const next = await vfs.write(GLOBAL_SCOPE, path, "beta");
+    unwrap(await vfs.write(GLOBAL_SCOPE, path, "alpha"));
+    const next = unwrap(await vfs.write(GLOBAL_SCOPE, path, "beta"));
     assert.equal(next.version, 2);
     assert.equal(await countRevisions(conn, GLOBAL_SCOPE, path), 2);
 
@@ -102,7 +103,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
       assert.ok(row.content_hash);
     }
 
-    assert.equal((await vfs.read(GLOBAL_SCOPE, path)).content, "beta");
+    assert.equal(unwrap(await vfs.read(GLOBAL_SCOPE, path)).content, "beta");
   });
 
   it("T-SC3: 版本比对已移除——后写直接覆盖为最新版（last-write-wins）", async () => {
@@ -110,15 +111,15 @@ describe("writeWithRevision same-content shortcircuit", () => {
     const vfs = createVfsService(conn);
     const path = `/sc3-${testIsolationSuffix()}.md`;
 
-    await vfs.write(GLOBAL_SCOPE, path, "live");
-    await vfs.write(GLOBAL_SCOPE, path, "newer");
+    unwrap(await vfs.write(GLOBAL_SCOPE, path, "live"));
+    unwrap(await vfs.write(GLOBAL_SCOPE, path, "newer"));
     const revBefore = await countRevisions(conn, GLOBAL_SCOPE, path);
 
     // last-write-wins：不做版本比对，后写内容直接覆盖为最新版
-    const result = await vfs.write(GLOBAL_SCOPE, path, "live");
+    const result = unwrap(await vfs.write(GLOBAL_SCOPE, path, "live"));
     assert.ok(result.version > 2, "覆盖后版本应递增");
 
-    const head = await vfs.read(GLOBAL_SCOPE, path);
+    const head = unwrap(await vfs.read(GLOBAL_SCOPE, path));
     assert.equal(head.content, "live");
     assert.ok(head.version > 2);
   });

@@ -20,6 +20,7 @@ import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 /** 带 SQL 计数的测试上下文：conn 是装饰过的，counter 和它一对一。 */
 type CountedCtx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
@@ -63,7 +64,7 @@ describe("T-SC1 scanContents 批量读 blob", () => {
 
     // 写入阶段会发大量 SQL，清掉后再 grep，只统计读取路径。
     c.counter.clear();
-    const matches = await vfs.grep("needle", { pathPrefix: "/docs" });
+    const matches = unwrap(await vfs.grep("needle", { pathPrefix: "/docs" }));
 
     // grep 命中全部 500 文件，证明 scanContents 正常解出明文。
     assert.equal(matches.length, N);

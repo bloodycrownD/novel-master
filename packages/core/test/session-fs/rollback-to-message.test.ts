@@ -21,15 +21,15 @@ describe("rollbackToMessage", () => {
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "here" }],
     }));
-    await svfs.write("/rb1.md", "anchor-body", { versionCheck: false });
-    const v1 = (await svfs.read("/rb1.md")).version;
+    unwrap(await svfs.write("/rb1.md", "anchor-body", { versionCheck: false }));
+    const v1 = unwrap(await svfs.read("/rb1.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
-    await svfs.write("/rb1.md", "later-body", { versionCheck: false });
+    unwrap(await svfs.write("/rb1.md", "later-body", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     await ctx.sessionFs.rollbackToMessage(
@@ -38,18 +38,18 @@ describe("rollbackToMessage", () => {
       assistant1.id,
     );
 
-    const after = await svfs.read("/rb1.md");
+    const after = unwrap(await svfs.read("/rb1.md"));
     assert.equal(after.content, "anchor-body");
     // 产品允许 live ≠ 锚点 version（可升 live head）
     assert.ok(after.version >= v1);
 
     // 同文再 write（带 expectedVersion）吃短路，不 bump
-    const again = await svfs.write("/rb1.md", "anchor-body", {
+    const again = unwrap(await svfs.write("/rb1.md", "anchor-body", {
       expectedVersion: after.version,
       versionCheck: true,
-    });
+    }));
     assert.equal(again.version, after.version);
-    assert.equal((await svfs.read("/rb1.md")).content, "anchor-body");
+    assert.equal(unwrap(await svfs.read("/rb1.md")).content, "anchor-body");
   });
 
   it("assistant anchor keeps that round write and rolls back later checkpoints", async () => {
@@ -62,14 +62,14 @@ describe("rollbackToMessage", () => {
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "here" }],
     }));
-    await svfs.write("/poem.md", "roses", { versionCheck: false });
+    unwrap(await svfs.write("/poem.md", "roses", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     }));
-    await svfs.write("/poem.md", "violets", { versionCheck: false });
+    unwrap(await svfs.write("/poem.md", "violets", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     await ctx.sessionFs.rollbackToMessage(
@@ -78,7 +78,7 @@ describe("rollbackToMessage", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "roses");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -95,7 +95,7 @@ describe("rollbackToMessage", () => {
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
     }));
-    await svfs.write("/poem.md", "draft", { versionCheck: false });
+    unwrap(await svfs.write("/poem.md", "draft", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("nice")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -109,7 +109,7 @@ describe("rollbackToMessage", () => {
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
-    assert.equal((await svfs.read("/poem.md")).content, "draft");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "draft");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 4);
   });
@@ -119,7 +119,7 @@ describe("rollbackToMessage", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    await svfs.write("/keep.md", "stable", { versionCheck: false });
+    unwrap(await svfs.write("/keep.md", "stable", { versionCheck: false }));
 
     const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -133,7 +133,7 @@ describe("rollbackToMessage", () => {
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
-    assert.equal((await svfs.read("/keep.md")).content, "stable");
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 3);
   });

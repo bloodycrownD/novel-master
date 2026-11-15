@@ -3,7 +3,7 @@
  */
 
 import { Result } from "../../../src/errors/either.js";
-import { rejectsErr } from "../../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {
   describe,
@@ -55,13 +55,13 @@ function makeRuntime(overrides: {
   readonly delete?: (id: string) => Promise<void>;
   readonly userVfsTurn?: UserVfsTurnService;
   readonly sessionVfs?: () => {
-    read: (path: string) => Promise<{ content: string }>;
+    read: (path: string) => Promise<unknown>;
   };
 }): AgentTurnRuntimePort {
   return {
     state: {
-      getCurrentAgentId: async () => "a1",
-      getCurrentModelId: async () => "openai/gpt",
+      getCurrentAgentId: async () => Result.ok("a1"),
+      getCurrentModelId: async () => Result.ok("openai/gpt"),
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
@@ -95,13 +95,15 @@ function makeRuntime(overrides: {
       {} as AgentTurnRuntimePort["eventOrchestrator"],
     sessionVfs:
       overrides.sessionVfs ??
-      (() => ({} as never)),
+      // annotate 行号补算会先 read 草稿 path：默认给「读不到」的 Err 通道
+      // （静默跳过行号补算，不阻断 append 编排）。
+      (() => ({ read: async () => Result.err(new Error("no vfs in stub")) })),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => emptyRuleView(),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () => Result.ok(emptyRuleView()),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -146,7 +148,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
     // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "",
@@ -162,7 +164,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 缺依赖可能失败；门闩与 append 语义仍可检
     }
@@ -190,7 +192,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -208,7 +210,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
             callbackCount += 1;
           },
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -269,7 +271,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       userVfsTurn: mockUserVfsTurn(),
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hello",
@@ -277,7 +279,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           annotateDrafts: drafts,
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败；append 语义仍可检
     }
@@ -376,12 +378,12 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => ({ content: source }),
+        read: async () => Result.ok({ content: source }),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -396,7 +398,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败；append 已发生即可
     }
@@ -421,14 +423,13 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => {
-          throw new Error("no such file");
-        },
+        // 错误通道迁移四期：read 失败走 Result.err（不再 throw）
+        read: async () => Result.err(new Error("no such file")),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -443,7 +444,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -469,12 +470,12 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
       },
       userVfsTurn: mockUserVfsTurn(),
       sessionVfs: () => ({
-        read: async () => ({ content: source }),
+        read: async () => Result.ok({ content: source }),
       }),
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -489,7 +490,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }
@@ -517,7 +518,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     });
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p1", sessionId: "s1" },
         "hi",
@@ -534,7 +535,7 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
           ],
           stream: false,
         },
-      );
+      ));
     } catch {
       // runner 可能失败
     }

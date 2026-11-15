@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import { mapUserSaveToToolUses } from "../../src/domain/vfs/logic/user-vfs-save-mapping.js";
 import { readUserVfsSaveBaseline } from "../../src/domain/vfs/logic/read-user-vfs-save-baseline.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
+import { Result } from "../../src/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 describe("save baseline parity", () => {
   it("T-BL-01: disk baseline differs from stale memory baseline mapping", async () => {
@@ -11,10 +13,10 @@ describe("save baseline parity", () => {
     const contentC = "line1\nLINE2\nline3";
 
     const vfs = {
-      read: async () => ({ content: diskB, version: 2 }),
+      read: async () => Result.ok({ path: "/note.md", content: diskB, version: 2, mtimeMs: 0 }),
     } as VfsService;
 
-    const baseline = await readUserVfsSaveBaseline(vfs, "/note.md");
+    const baseline = unwrap(await readUserVfsSaveBaseline(vfs, "/note.md"));
     const fromDisk = mapUserSaveToToolUses(baseline, contentC, "/note.md", contentC);
     const fromMemory = mapUserSaveToToolUses(memoryA, contentC, "/note.md", contentC);
 

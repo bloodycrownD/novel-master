@@ -105,7 +105,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     const messagesAfter = await ctx.messages.listBySession(session.id);
     assert.ok(messagesAfter.length > messagesBefore);
     // /a.md 未被恢复到锡点版本——根本没有进入 reconcile。
-    assert.equal((await svfs.read("/a.md")).content, "at-anchor");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "at-anchor");
   });
 
   it("T-SC11b: 仅第一次事务注入写入 → 重试后成功提交（乐观锁重试生效）", async () => {
@@ -141,7 +141,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     // 重试后锡点消息被截断（undo_send 语义含锡点），竞态写入也被一起截掉。
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
   });
 
   it("T-SC11c: 无并发写入的正常路径不受影响", async () => {
@@ -166,7 +166,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1.id);
-    assert.equal((await svfs.read("/a.md")).content, "v2");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v2");
   });
 });
 

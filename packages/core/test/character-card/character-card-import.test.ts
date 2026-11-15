@@ -49,7 +49,7 @@ function parseTree(input: Uint8Array | string): ReadonlyMap<string, string> {
 }
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
-  const entries = await vfs.list(dir, { recursive: true });
+  const entries = unwrap(await vfs.list(dir, { recursive: true }));
   return entries
     .filter((entry) => entry.kind === "file")
     .map((entry) => entry.path)
@@ -80,8 +80,8 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/旧文件.md", "old");
-    await vfs.write("/大纲/保留.md", "outline");
+    unwrap(await vfs.write("/角色/旧文件.md", "old"));
+    unwrap(await vfs.write("/大纲/保留.md", "outline"));
 
     const svc = createCharacterCardImportService(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
@@ -90,13 +90,14 @@ describe("CharacterCardImportService", () => {
       directoryPath: "/角色",
     });
 
-    assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
-    assert.equal((await vfs.read("/角色/开场/开场001.md")).content, "开场一");
+    assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "导入描述");
+    assert.equal((unwrap(await vfs.read("/角色/开场/开场001.md"))).content, "开场一");
     assert.ok(
-      (await vfs.read("/角色/世界书/设定.md")).content.includes("世界书正文"),
+      (unwrap(await vfs.read("/角色/世界书/设定.md"))).content.includes("世界书正文"),
     );
-    await assert.rejects(() => vfs.read("/角色/旧文件.md"));
-    assert.equal((await vfs.read("/大纲/保留.md")).content, "outline");
+    const staleOld = await vfs.read("/角色/旧文件.md");
+    assert.ok(!staleOld.ok, "被覆盖的旧文件应走 Err 通道");
+    assert.equal((unwrap(await vfs.read("/大纲/保留.md"))).content, "outline");
   });
 
   /**
@@ -120,14 +121,15 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
     const oldBody = `card-gc-residue-old-${suffix}`;
-    await vfs.write("/角色/独有旧文件.md", oldBody);
+    unwrap(await vfs.write("/角色/独有旧文件.md", oldBody));
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
     const svc = createCharacterCardImportService(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" });
 
-    await assert.rejects(() => vfs.read("/角色/独有旧文件.md"));
+    const staleReplaced = await vfs.read("/角色/独有旧文件.md");
+    assert.ok(!staleReplaced.ok, "被替换的旧文件应走 Err 通道");
     const residue = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_content_blob
        WHERE content_hash = ? AND ref_count <= 0`,
@@ -150,7 +152,7 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay");
+    unwrap(await vfs.write("/角色/stay.md", "stay"));
 
     const svc = createCharacterCardImportService(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
@@ -163,7 +165,7 @@ describe("CharacterCardImportService", () => {
       (e: unknown) =>
         e instanceof AppError && e.key === "VFS_CHARACTER_CARD_NOT_CONFIRMED",
     );
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
   // CS-05 分片提交后的新语义（对齐 ZIP Z5）：失败片回滚 + 补偿把半棵新树清掉，
@@ -180,7 +182,7 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
     // 对齐 ZIP Z5：目标子树先写旧文件，insert 钩子失败后应被补偿清掉
-    await vfs.write("/角色/旧文件.md", "old");
+    unwrap(await vfs.write("/角色/旧文件.md", "old"));
 
     const svc = createCharacterCardImportService(ctx.conn, {
       testHook: { throwOnInsertLogical: "/角色/角色描述.md" },
@@ -196,12 +198,12 @@ describe("CharacterCardImportService", () => {
       (e: unknown) => e instanceof Error && e.message === "test import failure"
     );
 
-    await assert.rejects(() => vfs.read("/角色/角色描述.md"));
+    const compensated = await vfs.read("/角色/角色描述.md");
+    assert.ok(!compensated.ok, "补偿后半棵新树应走 Err 通道");
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
-    await assert.rejects(
-      () => vfs.read("/角色/旧文件.md"),
-      (e: unknown) => isAppError(e, "VFS_NOT_FOUND")
-    );
+    const goneOld = await vfs.read("/角色/旧文件.md");
+    assert.ok(!goneOld.ok, "补偿后旧文件应走 Err 通道");
+    if (!goneOld.ok) assert.ok(isAppError(goneOld.error, "VFS_NOT_FOUND"));
   });
 
   it("T-C9: importFromBytes 解析失败 → 子树不变", async () => {
@@ -214,7 +216,7 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay-bytes");
+    unwrap(await vfs.write("/角色/stay.md", "stay-bytes"));
 
     let deleteReached = false;
     const hooked = createCharacterCardImportService(ctx.conn, {
@@ -224,17 +226,17 @@ describe("CharacterCardImportService", () => {
         },
       },
     });
-    await assert.rejects(
-      () =>
-        hooked.importFromBytes(scope, buildBrokenPngBytes(), {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) =>
-        e instanceof AppError && e.key === "VFS_CHARACTER_CARD_UNRECOGNIZED",
-    );
+    const broken = await hooked.importFromBytes(scope, buildBrokenPngBytes(), {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    assert.ok(!broken.ok, "解析失败应走 Err 通道");
+    if (!broken.ok) {
+      assert.ok(broken.error instanceof AppError);
+      assert.equal(broken.error.key, "VFS_CHARACTER_CARD_UNRECOGNIZED");
+    }
     assert.equal(deleteReached, false);
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay-bytes");
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay-bytes");
   });
 
   it("T-C15: 导入成功后已有规则行（自定义 headCount 与 rule_off）不被覆盖", async () => {
@@ -248,20 +250,20 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
     unwrap(await vfs.mkdir("/角色"));
-    await vfs.write("/角色/旧.md", "old");
+    unwrap(await vfs.write("/角色/旧.md", "old"));
 
     const wt = createWorkplaceService(ctx.conn, scope);
-    await wt.setDirRule({
+    unwrap(await wt.setDirRule({
       logicalPath: "/角色",
       sortField: "name",
       sortOrder: "asc",
       headCount: 7,
       tailCount: 1,
       fillPolicy: "filename",
-    });
+    }));
     // 预置一条 rule_off 行：导入重建同名目录后也不得被覆盖为默认开启
-    await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false });
-    const before = await wt.getDirRule("/角色");
+    unwrap(await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false }));
+    const before = unwrap(await wt.getDirRule("/角色"));
     assert.ok(before);
     assert.equal(before.headCount, 7);
 
@@ -273,12 +275,12 @@ describe("CharacterCardImportService", () => {
     );
 
     // 行为契约（替代原源码正则断言）：已有行原样保留
-    const after = await wt.getDirRule("/角色");
+    const after = unwrap(await wt.getDirRule("/角色"));
     assert.ok(after);
     assert.equal(after.headCount, 7);
     assert.equal(after.sortField, "name");
     assert.equal(after.fillPolicy, "filename");
-    const worldbook = await wt.getDirRule("/角色/世界书");
+    const worldbook = unwrap(await wt.getDirRule("/角色/世界书"));
     assert.ok(worldbook);
     assert.equal(worldbook.ruleEnabled, false);
     assert.equal(worldbook.headCount, 0);
@@ -315,7 +317,7 @@ describe("CharacterCardImportService", () => {
       "/角色/世界书/章节",
       "/角色/世界书/章节/深层",
     ]) {
-      const rule = await wt.getDirRule(dir);
+      const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
       assert.equal(rule.sortField, "name");
@@ -326,7 +328,7 @@ describe("CharacterCardImportService", () => {
     }
 
     // 经 WorkplaceService 文件树视图确认导入目录参与裁剪（PRD 验收第 5 条）
-    const view = await wt.materializeLiveView();
+    const view = unwrap(await wt.materializeLiveView());
     assert.ok(view.filetreeDisplay.includes("设定.md"));
     assert.ok(view.filetreeDisplay.includes("开场001.md"));
   });
@@ -396,9 +398,9 @@ describe("CharacterCardImportService", () => {
     );
 
     // 已写文件完整保留
-    assert.equal((await vfs.read("/角色/角色描述.md")).content, "描述");
+    assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "描述");
     assert.equal(
-      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      (unwrap(await vfs.read("/角色/世界书/章节/深层/设定.md"))).content,
       "深层设定",
     );
     // 补行失败后 workplace 表无残留行（best-effort，不阻断也不留脏数据）
@@ -433,7 +435,7 @@ describe("CharacterCardImportService", () => {
 
     const wt = createWorkplaceService(ctx.conn, scope);
     for (const dir of ["/世界书", "/世界书/章节", "/世界书/章节/深层"]) {
-      const rule = await wt.getDirRule(dir);
+      const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
       assert.equal(rule.headCount, 0);
@@ -441,10 +443,10 @@ describe("CharacterCardImportService", () => {
       assert.equal(rule.fillPolicy, "header");
     }
     // 根自身 / 不补规则行
-    assert.equal(await wt.getDirRule("/"), undefined);
-    assert.equal((await vfs.read("/角色描述.md")).content, "描述");
+    assert.equal(unwrap(await wt.getDirRule("/")), undefined);
+    assert.equal((unwrap(await vfs.read("/角色描述.md"))).content, "描述");
     assert.equal(
-      (await vfs.read("/世界书/章节/深层/设定.md")).content,
+      (unwrap(await vfs.read("/世界书/章节/深层/设定.md"))).content,
       "深层设定",
     );
   });
@@ -496,9 +498,9 @@ describe("CharacterCardImportService", () => {
     assert.equal(warns.length, 1);
     assert.equal(warns[0]!.scope, "vfs.import-dir-rules");
     assert.match(warns[0]!.message, /directory=\/角色\/世界书/);
-    assert.equal((await vfs.read("/角色/角色描述.md")).content, "描述");
+    assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "描述");
     assert.equal(
-      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      (unwrap(await vfs.read("/角色/世界书/章节/深层/设定.md"))).content,
       "深层设定",
     );
 
@@ -509,11 +511,11 @@ describe("CharacterCardImportService", () => {
       "/角色/世界书/章节",
       "/角色/世界书/章节/深层",
     ]) {
-      const rule = await wt.getDirRule(dir);
+      const rule = unwrap(await wt.getDirRule(dir));
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
     }
-    assert.equal(await wt.getDirRule("/角色/世界书"), undefined);
+    assert.equal(unwrap(await wt.getDirRule("/角色/世界书")), undefined);
   });
 
   it("T-C16: fixture PNG 经 importFromBytes 落盘子树", async () => {
@@ -543,7 +545,7 @@ describe("CharacterCardImportService", () => {
 
     for (const [rel, content] of expected) {
       const logical = `/角色/${rel}`;
-      assert.equal((await vfs.read(logical)).content, content);
+      assert.equal((unwrap(await vfs.read(logical))).content, content);
     }
     const files = await listFilePaths(vfs, "/角色");
     assert.deepEqual(
@@ -581,8 +583,8 @@ describe("CharacterCardImportService", () => {
       confirmed: true,
       directoryPath: "/开场",
     });
-    assert.equal((await vfs.read("/开场/角色描述.md")).content, "d");
-    assert.equal((await vfs.read("/开场/开场/开场001.md")).content, "hi");
+    assert.equal((unwrap(await vfs.read("/开场/角色描述.md"))).content, "d");
+    assert.equal((unwrap(await vfs.read("/开场/开场/开场001.md"))).content, "hi");
   });
 
   it("导入后删无关文件再 capture 不抛 Revision not found", async () => {
@@ -619,7 +621,7 @@ describe("CharacterCardImportService", () => {
     });
 
     assert.equal(
-      (await vfs.read("/角色/世界书/世界观.md")).content.includes("世界书正文"),
+      (unwrap(await vfs.read("/角色/世界书/世界观.md"))).content.includes("世界书正文"),
       true,
     );
 
@@ -689,7 +691,7 @@ describe("CharacterCardImportService", () => {
     });
 
     // 导入本体已落库
-    assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
+    assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "导入描述");
     // 三件套对齐：两域清空 + token cache 失效；pending 保留
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
@@ -742,7 +744,7 @@ describe("CharacterCardImportService", () => {
       { confirmed: true, directoryPath: "/角色" },
     );
 
-    assert.equal((await pvfs.read("/角色/角色描述.md")).content, "导入描述");
+    assert.equal((unwrap(await pvfs.read("/角色/角色描述.md"))).content, "导入描述");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       ["canon"],
@@ -791,7 +793,7 @@ describe("CharacterCardImportService", () => {
     }
 
     // 导入本体已落库，缓存对齐失败仅 warn 留痕
-    assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
+    assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "导入描述");
     assert.ok(records.some((record) => record.level === "warn"));
   });
 
@@ -805,11 +807,12 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay");
+    unwrap(await vfs.write("/角色/stay.md", "stay"));
 
     const svc = createCharacterCardImportService(ctx.conn);
     // 48MB + 1 字节的任意内容：闸门在解析之前拦截，无需合法 PNG/JSON
     const oversized = new Uint8Array(48 * 1024 * 1024 + 1);
+    // 输入闸门在 src 里仍走 throw 通道（解析失败才收 Result），按 throws 断言
     await assert.rejects(
       () =>
         svc.importFromBytes(scope, oversized, {
@@ -824,8 +827,8 @@ describe("CharacterCardImportService", () => {
       },
     );
     // 零写库：子树原样保留
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
-    const entries = await vfs.list("/角色", { recursive: true });
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
+    const entries = unwrap(await vfs.list("/角色", { recursive: true }));
     assert.equal(entries.filter((entry) => entry.kind === "file").length, 1);
   });
 
@@ -839,7 +842,7 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay");
+    unwrap(await vfs.write("/角色/stay.md", "stay"));
 
     const svc = createCharacterCardImportService(ctx.conn);
     // 直接走 import（桌面/CLI 的公开入口）验证树闸门：单文件 8MiB + 1 字节
@@ -861,7 +864,7 @@ describe("CharacterCardImportService", () => {
       },
     );
     // 零写库：子树原样保留
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
   it("体积闸门：md 树条目数超上限抛 TOO_LARGE 且零写库", async () => {
@@ -874,7 +877,7 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay");
+    unwrap(await vfs.write("/角色/stay.md", "stay"));
 
     const tree = new Map<string, string>();
     for (let i = 0; i <= CHARACTER_CARD_MAX_FILE_COUNT; i++) {
@@ -894,7 +897,7 @@ describe("CharacterCardImportService", () => {
         return true;
       },
     );
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
   it("体积闸门：md 树总量超上限抛 TOO_LARGE 且零写库", async () => {
@@ -907,7 +910,7 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/角色/stay.md", "stay");
+    unwrap(await vfs.write("/角色/stay.md", "stay"));
 
     // 每条略低于单文件闸，5 条累加超过总量闸。
     const chunk = "x".repeat(Math.floor(CHARACTER_CARD_MAX_SINGLE_FILE_BYTES * 0.9));
@@ -929,7 +932,7 @@ describe("CharacterCardImportService", () => {
         return true;
       },
     );
-    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+    assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 });
 

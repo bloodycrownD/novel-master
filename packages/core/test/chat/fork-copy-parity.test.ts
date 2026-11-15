@@ -38,7 +38,7 @@ describe("fork/copy parity (F1)", () => {
     const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
     const sourceEntry = unwrap(await entries.findByPath(sk, "/note.md"));
     assert.ok(sourceEntry != null);
-    const sourceHash = await entries.findContentHash(sk, "/note.md");
+    const sourceHash = unwrap(await entries.findContentHash(sk, "/note.md"));
     assert.ok(sourceHash, "源 entry 须有 content_hash");
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
@@ -49,9 +49,9 @@ describe("fork/copy parity (F1)", () => {
     const targetEntry = unwrap(await entries.findByPath(forkSk, "/note.md"));
     assert.ok(targetEntry != null);
 
-    const live = await ctx.sessionVfs(project.id, forked.id).read("/note.md");
+    const live = unwrap(await ctx.sessionVfs(project.id, forked.id).read("/note.md"));
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const rev = await revisions.findByEntryAndVersion(targetEntry.entryId, live.version);
+    const rev = unwrap(await revisions.findByEntryAndVersion(targetEntry.entryId, live.version));
     assert.ok(rev, "须存在带 content 的 vfs_revision，不得靠 backfill");
     assert.equal(rev.content, "fork-body");
     assert.equal(rev.status, "active");

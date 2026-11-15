@@ -120,11 +120,11 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
     }));
     // 触碰 a.md（重写内容 → mtime 前进）。mtime 毫秒粒度：循环写入直到 mtime
     // 真的变化（同毫秒内重写不前进）。
-    const mtimeBefore = (await realVfs.read("/a.md")).mtimeMs;
+    const mtimeBefore = unwrap(await realVfs.read("/a.md")).mtimeMs;
     let mtimeAdvanced = false;
     for (let i = 0; i < 60 && !mtimeAdvanced; i++) {
       await realVfs.write("/a.md", `正文甲改${i}`.repeat(50));
-      mtimeAdvanced = (await realVfs.read("/a.md")).mtimeMs !== mtimeBefore;
+      mtimeAdvanced = unwrap(await realVfs.read("/a.md")).mtimeMs !== mtimeBefore;
     }
     assert.ok(mtimeAdvanced, "前提不成立：60 次重写都没让 mtime 前进（无法验证敏感性）");
     // 快照的 path/status 没变，mtime 变了 → 清缓存逼出重读后指纹必须不同

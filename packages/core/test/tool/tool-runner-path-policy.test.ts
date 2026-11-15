@@ -1,4 +1,6 @@
 import { isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
+import type { AppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
@@ -135,7 +137,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     name: "write";
     description: string;
     inputSchema: z.ZodType<{ path: string; content: string }>;
-    run: () => Promise<{ ok: true }>;
+    run: () => Promise<Result<{ ok: true }, AppError>>;
   } {
     return {
       name: "write",
@@ -146,7 +148,8 @@ describe("ToolRunner path policy (T-SC9)", () => {
       }),
       async run() {
         ran.ok = true;
-        return { ok: true as const };
+        // 四期门⑦：工具闭包返回 Result，runner 统一解包 out.value。
+        return Result.ok({ ok: true as const });
       },
     };
   }
@@ -155,7 +158,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     name: "fs";
     description: string;
     inputSchema: z.ZodType<{ action: "mv"; from: string; to: string }>;
-    run: () => Promise<{ ok: true }>;
+    run: () => Promise<Result<{ ok: true }, AppError>>;
   } {
     return {
       name: "fs",
@@ -167,7 +170,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
       }),
       async run() {
         ran.ok = true;
-        return { ok: true as const };
+        return Result.ok({ ok: true as const });
       },
     };
   }
@@ -287,7 +290,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
       }),
       async run() {
         ran.ok = true;
-        return { ok: true as const };
+        return Result.ok({ ok: true as const });
       },
     } as never);
     const runner = new ToolRunner(registry);

@@ -5,6 +5,7 @@
  * 既有用例都直接调 helper/driver 或手工构造 context，把 agent-runner 里
  * `tools` / `sessionKkv` 两行删掉也不会变红。
  */
+import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
@@ -612,10 +613,10 @@ describe("AgentRunner 每 step usage 回锚", () => {
               tokenCount: resolved.tokenCount,
               counterKind: resolved.counterKind,
             });
-            return false;
+            return Result.ok(false);
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: {
@@ -788,10 +789,10 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
               tokenCount: resolved.tokenCount,
               counterKind: resolved.counterKind,
             });
-            return realTrigger.shouldTrigger(session, evaluation);
+            return Result.ok(await realTrigger.shouldTrigger(session, evaluation));
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: messagesStub,
@@ -876,10 +877,10 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
                 tokenCount: resolved.tokenCount,
                 toolCount: evaluation.tools?.length ?? 0,
               });
-              return realTrigger.shouldTrigger(s, evaluation);
+              return Result.ok(await realTrigger.shouldTrigger(s, evaluation));
             },
             async getHideStartDepth() {
-              return 6;
+              return Result.ok(6);
             },
           },
           messages: {
@@ -996,10 +997,10 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
               },
               { sessionKkv: evaluation.sessionKkv, preferEstimate: true },
             );
-            return false;
+            return Result.ok(false);
           },
           async getHideStartDepth() {
-            return 6;
+            return Result.ok(6);
           },
         },
         messages: {

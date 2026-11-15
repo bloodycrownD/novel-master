@@ -13,6 +13,7 @@
  */
 import assert from "node:assert/strict";
 import { after, describe, it, mock } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type {
@@ -152,9 +153,9 @@ function createCompactionConditionsStub(hideStartDepth: number) {
     shouldRequestCompaction: mock.fn(async () => {
       const hit = firstCall;
       firstCall = false;
-      return hit;
+      return Result.ok(hit);
     }),
-    getHideStartDepth: mock.fn(async () => hideStartDepth),
+    getHideStartDepth: mock.fn(async () => Result.ok(hideStartDepth)),
   };
 }
 
@@ -284,12 +285,13 @@ class CountingAgentSession extends InMemoryAgentSession {
 function realVisibleFloorEvaluator(visibleFloor: number) {
   return createCompactionConditionEvaluator({
     conditionsStore: {
-      getConditions: async () => ({
-        schemaVersion: 4,
-        enabled: true,
-        visibleFloor,
-        hideStartDepth: 6,
-      }),
+      getConditions: async () =>
+        Result.ok({
+          schemaVersion: 4,
+          enabled: true,
+          visibleFloor,
+          hideStartDepth: 6,
+        }),
     },
     // 只配 visibleFloor 时这两个依赖永不被调用，给空壳即可。
     tokenCounters: {} as never,

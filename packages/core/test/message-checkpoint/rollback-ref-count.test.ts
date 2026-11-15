@@ -64,7 +64,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     }
 
     assert.equal(gcSpy.mock.callCount(), 0);
-    assert.equal((await svfs.read("/hot.md")).content, "anchor");
+    assert.equal(unwrap(await svfs.read("/hot.md")).content, "anchor");
   });
 
   it("T-RB-REF-CAP: capture 后 checkpoint 指针对应 ref 累加", async () => {
@@ -84,7 +84,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       blocks: [{ type: "text", text: "w" }],
     }));
     await svfs.write("/cap.md", "body", { versionCheck: false });
-    const version = (await svfs.read("/cap.md")).version;
+    const version = unwrap(await svfs.read("/cap.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const entry = unwrap(await entries.findByPath(sk, "/cap.md"));
@@ -120,9 +120,9 @@ describe("rollback ref_count + deferred blob gc", () => {
     const sk = scopeKey(scope);
 
     await svfs.write("/live.md", "a", { versionCheck: false });
-    const v1 = (await svfs.read("/live.md")).version;
+    const v1 = unwrap(await svfs.read("/live.md")).version;
     await svfs.write("/live.md", "b", { versionCheck: false });
-    const v2 = (await svfs.read("/live.md")).version;
+    const v2 = unwrap(await svfs.read("/live.md")).version;
 
     const entry = unwrap(await entries.findByPath(sk, "/live.md"));
     assert.ok(entry != null);
@@ -155,7 +155,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     const sk = scopeKey(scope);
 
     await svfs.write("/multi.md", "same", { versionCheck: false });
-    const version = (await svfs.read("/multi.md")).version;
+    const version = unwrap(await svfs.read("/multi.md")).version;
     const a1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "1" }],
     }));
@@ -183,7 +183,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.equal(Number(after[0]?.ref_count), 2);
     assert.ok(
-      await revisions.findByEntryAndVersion(eid, version),
+      unwrap(await revisions.findByEntryAndVersion(eid, version)),
     );
   });
 
@@ -207,7 +207,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       blocks: [{ type: "text", text: "w" }],
     }));
     await svfs.write("/conserv.md", "keep", { versionCheck: false });
-    const version = (await svfs.read("/conserv.md")).version;
+    const version = unwrap(await svfs.read("/conserv.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const entry = unwrap(await entries.findByPath(sk, "/conserv.md"));
@@ -237,7 +237,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       session.id,
       ctx.conn,
     );
-    assert.ok(await revisions.findByEntryAndVersion(eid, version));
+    assert.ok(unwrap(await revisions.findByEntryAndVersion(eid, version)));
   });
 
   it("T-RB-REF-TRUNC: 回滚截断 tail checkpoint 后 ref 递减且归零 revision 被删", async () => {
@@ -258,16 +258,16 @@ describe("rollback ref_count + deferred blob gc", () => {
       blocks: [{ type: "text", text: "cp1" }],
     }));
     await svfs.write("/trunc-a.md", "anchor", { versionCheck: false });
-    const vAnchor = (await svfs.read("/trunc-a.md")).version;
+    const vAnchor = unwrap(await svfs.read("/trunc-a.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp2" }],
     }));
     await svfs.write("/trunc-a.md", "tail", { versionCheck: false });
-    const vTail = (await svfs.read("/trunc-a.md")).version;
+    const vTail = unwrap(await svfs.read("/trunc-a.md")).version;
     await svfs.write("/tail-only.md", "orphan", { versionCheck: false });
-    const vOrphan = (await svfs.read("/tail-only.md")).version;
+    const vOrphan = unwrap(await svfs.read("/tail-only.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     const entryA = unwrap(await entries.findByPath(sk, "/trunc-a.md"));
@@ -287,10 +287,10 @@ describe("rollback ref_count + deferred blob gc", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/trunc-a.md")).content, "anchor");
+    assert.equal(unwrap(await svfs.read("/trunc-a.md")).content, "anchor");
     // tail revision 的 ref 归零（checkpoint 解除 + live head 回退到 anchor），应被 sweep
     assert.equal(
-      await revisions.findByEntryAndVersion(entryA.entryId, vTail),
+      unwrap(await revisions.findByEntryAndVersion(entryA.entryId, vTail)),
       null,
     );
     // tail-only.md 在 cp2 tail checkpoint 里且不在 cp1 targetTree 里，回滚时
@@ -303,12 +303,12 @@ describe("rollback ref_count + deferred blob gc", () => {
     assert.equal(tailEntryAfter, null, "tail-only.md 回滚后 entry 应被删");
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(
-      await revisions.findByEntryAndVersion(entryTail.entryId, vOrphan),
+      unwrap(await revisions.findByEntryAndVersion(entryTail.entryId, vOrphan)),
       null,
       "tail-only.md 的 vOrphan revision 应被全局孤儿清扫回收",
     );
 
-    assert.ok(await revisions.findByEntryAndVersion(entryA.entryId, vAnchor));
+    assert.ok(unwrap(await revisions.findByEntryAndVersion(entryA.entryId, vAnchor)));
     const anchorRef = await ctx.conn.query<{ ref_count: number }>(
       `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
       [entryA.entryId, vAnchor],
@@ -335,7 +335,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       blocks: [{ type: "text", text: "w" }],
     }));
     await svfs.write("/session-del.md", "gone", { versionCheck: false });
-    const version = (await svfs.read("/session-del.md")).version;
+    const version = unwrap(await svfs.read("/session-del.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const entry = unwrap(await entries.findByPath(sk, "/session-del.md"));
@@ -354,7 +354,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       (await checkpoints.listFilePointersForSession(session.id)).length,
       0,
     );
-    assert.equal(await revisions.findByEntryAndVersion(eid, version), null);
+    assert.equal(unwrap(await revisions.findByEntryAndVersion(eid, version)), null);
   });
 
   it("T-RB-GC-DEFER: sweep 后 runDeferredBlobGc 删除 orphan blob", async () => {
@@ -380,7 +380,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     const entry = unwrap(await entries.findByPath(scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md"));
     assert.ok(entry != null);
     // 确认 orphan revision 存在
-    const orphanRev = await revisions.findByEntryAndVersion(entry.entryId, 2);
+    const orphanRev = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));
     assert.ok(orphanRev != null, "orphan revision 应在 sweep 前存在");
 
     await sweepSessionRevisions(
@@ -393,7 +393,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
 
     // sweep 后 orphan revision 应被删除
-    const afterSweep = await revisions.findByEntryAndVersion(entry.entryId, 2);
+    const afterSweep = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));
     assert.equal(afterSweep, null, "orphan revision 应在 sweep 后被删除");
 
     // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
@@ -408,7 +408,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.equal(Number(blobRows[0]!.n), 0, "orphan blob 行已被 gc");
     clearDecodedContentCaches();
-    await assert.rejects(() => contentStore.get(orphanHash));
-    assert.equal((await svfs.read("/defer.md")).content, "keep-final");
+    assert.ok(!(await contentStore.get(orphanHash)).ok, "缺失 blob 的冷态读必须走 Err");
+    assert.equal(unwrap(await svfs.read("/defer.md")).content, "keep-final");
   });
 });

@@ -27,8 +27,8 @@ describe("MessageCheckpointService.capture", () => {
     const tree = await repo.loadFileTree(session.id, assistant.id);
     assert.ok(tree);
     assert.equal(tree.size, 2);
-    assert.equal((await svfs.read("/a.md")).version, tree.get("/a.md"));
-    assert.equal((await svfs.read("/nested/b.md")).version, tree.get("/nested/b.md"));
+    assert.equal(unwrap(await svfs.read("/a.md")).version, tree.get("/a.md"));
+    assert.equal(unwrap(await svfs.read("/nested/b.md")).version, tree.get("/nested/b.md"));
   });
 
   it("skips checkpoint when session has no files", async () => {
@@ -59,7 +59,7 @@ describe("MessageCheckpointService.capture", () => {
     const tree = await repo.loadFileTree(session.id, user.id);
     assert.ok(tree);
     assert.equal(tree.size, 1);
-    assert.equal((await svfs.read("/manual.md")).version, tree.get("/manual.md"));
+    assert.equal(unwrap(await svfs.read("/manual.md")).version, tree.get("/manual.md"));
   });
 
   it("does not capture on manual FileEditor-style write without capture call", async () => {

@@ -10,6 +10,8 @@
  * 计数方式：沿用 workplace-view-cache.test.ts 的 spying 范式——包装
  * VfsEntryRepository 对 listFileMetaUnderPrefix 计数（命中缓存不触它）。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
+import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -80,7 +82,7 @@ function createSpyingWorkplaceService(conn: import("@novel-master/core").TdbcCon
           compiled.push(compiledRule.value);
         }
       }
-      return compiled;
+      return Result.ok(compiled);
     },
     smartRuleRows: () => smartRepo.listOrdered(),
   });
@@ -99,7 +101,7 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
   it("T-B3a：smart 排序目录改智能规则——签名 miss 重算且排序刷新", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/r/第5章.md", "五");
     await pvfs.write("/r/序章.md", "序");
@@ -118,7 +120,7 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
     // 首评（D13 后）：builtin-zh-prologue（fixed_min）命中「序章」提取哨兵
     // 元组 (-Infinity)，builtin-zh-chapter 命中「第5章」提取序号 5；
     // 元组比较 -Infinity < 5 → 序章恒在前
-    const first = filePathsUnder(await wt.buildListRows(), "/r");
+    const first = filePathsUnder(unwrap(await wt.buildListRows()), "/r");
     assert.deepEqual(first, ["/r/序章.md", "/r/第5章.md"], "smart 排序：序章（fixed_min 哨兵）排在第5章（序号 5）前");
     assert.equal(calls.listFileMetaUnderPrefix, 1, "首次评估全量加载一次");
 
@@ -131,7 +133,7 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
 
     // 再评：签名 miss 重算——「序章」失去哨兵元组退化为无序号，而「第5章」
     // 仍命中 zh-chapter 提取 [5]；比较全序第 1 条（有序号者在前）序反转
-    const second = filePathsUnder(await wt.buildListRows(), "/r");
+    const second = filePathsUnder(unwrap(await wt.buildListRows()), "/r");
     assert.equal(calls.listFileMetaUnderPrefix, 2, "改智能规则后签名失效，缓存 miss 重算");
     assert.deepEqual(second, ["/r/第5章.md", "/r/序章.md"], "禁用后：有序号的第5章排在无序号的序章前（全序第 1 条）");
     assert.notDeepEqual(second, first, "排序结果与旧缓存不一致");
@@ -140,17 +142,17 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
   it("T-B3b：未动智能规则时缓存照旧命中（含非 smart 库）", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/b.md", "B");
 
     const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
-    const first = await wt.buildListRows();
+    const first = unwrap(await wt.buildListRows());
     assert.equal(calls.listFileMetaUnderPrefix, 1);
 
     // 无写、无规则改动：智能规则表指纹恒定，第二次评估命中缓存
-    const second = await wt.buildListRows();
+    const second = unwrap(await wt.buildListRows());
     assert.equal(calls.listFileMetaUnderPrefix, 1, "智能规则未变，签名恒定，缓存照旧命中");
     assert.deepEqual(second, first, "两次结果 deep-equal");
   });

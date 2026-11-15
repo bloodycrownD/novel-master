@@ -1,6 +1,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
@@ -24,7 +25,7 @@ describe("rollback reach hash batch", () => {
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     await svfs.write("/dup.md", "v1", { versionCheck: false });
-    const version = (await svfs.read("/dup.md")).version;
+    const version = unwrap(await svfs.read("/dup.md")).version;
 
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
@@ -85,7 +86,8 @@ describe("rollback reach hash batch", () => {
       deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo: VfsEntryRepository = {
-      findByPath: async () => ({ entryId: 1, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      // 四期后 findByPath 端口返回 Result（Err 通道），mock 需按新端口给 Ok 形态。
+      findByPath: async () => Result.ok({ entryId: 1, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
       findContentHash: async () => null,
       findContentHashesByPaths: async () => new Map(),
       list: async () => [],
@@ -108,7 +110,7 @@ describe("rollback reach hash batch", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = await findMissingRevisionPointers(
+    const missing = unwrap(await findMissingRevisionPointers(
       revisionRepo,
       entryRepo,
       scope,
@@ -117,7 +119,7 @@ describe("rollback reach hash batch", () => {
         ["/b.md", 2],
       ]),
       ["/a.md", "/b.md"]
-    );
+    ));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
@@ -204,7 +206,7 @@ describe("rollback reach hash batch", () => {
 
     const entry = unwrap(await entries.findByPath(sk, "/batch-del.md"));
     assert.ok(entry != null);
-    const liveVersion = (await svfs.read("/batch-del.md")).version;
+    const liveVersion = unwrap(await svfs.read("/batch-del.md")).version;
     const reachable = new Set([revisionPairKey(entry.entryId, liveVersion)]);
 
     const deleted = await revisions.deleteExceptReachable(sk, "/", reachable);
@@ -213,6 +215,6 @@ describe("rollback reach hash batch", () => {
 
     assert.equal(deleted, 2);
     assert.deepEqual(versions, [liveVersion]);
-    assert.equal((await svfs.read("/batch-del.md")).content, "live");
+    assert.equal(unwrap(await svfs.read("/batch-del.md")).content, "live");
   });
 });

@@ -39,7 +39,7 @@ describe("MessageRollbackService (revision model)", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "roses");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -66,8 +66,8 @@ describe("MessageRollbackService (revision model)", () => {
 
     // 无 prior 时回退到 anchor 自身 checkpoint：/anchor.md 恢复到 capture 版本，
     // /later.md 不在 checkpoint 里 → 删除。
-    assert.equal((await svfs.read("/anchor.md")).content, "at-send");
-    await assert.rejects(() => svfs.read("/later.md"));
+    assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
+    assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
   });
@@ -102,7 +102,7 @@ describe("MessageRollbackService (revision model)", () => {
         return true;
       },
     );
-    assert.equal((await svfs.read("/poem.md")).content, "draft");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "draft");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 4);
   });
@@ -126,7 +126,7 @@ describe("MessageRollbackService (revision model)", () => {
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
-    assert.equal((await svfs.read("/keep.md")).content, "stable");
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 3);
   });
@@ -153,7 +153,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
-    assert.equal((await svfs.read("/state.md")).content, "baseline");
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, priorAsst.id);
@@ -177,7 +177,7 @@ describe("MessageRollbackService (revision model)", () => {
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
-    assert.equal((await svfs.read("/solo.md")).content, "only");
+    assert.equal(unwrap(await svfs.read("/solo.md")).content, "only");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
   });
@@ -214,8 +214,8 @@ describe("MessageRollbackService (revision model)", () => {
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
     // 导入的文件应保留（baseline checkpoint 保护了它们）。
-    assert.equal((await svfs.read("/角色描述.md")).content, "card-desc");
-    assert.equal((await svfs.read("/世界书/设定.md")).content, "world");
+    assert.equal(unwrap(await svfs.read("/角色描述.md")).content, "card-desc");
+    assert.equal(unwrap(await svfs.read("/世界书/设定.md")).content, "world");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
   });
@@ -274,11 +274,11 @@ describe("MessageRollbackService (revision model)", () => {
     // 回滚按「目标检查点完成态」执行：/old.md 复活复现、tail 期导入的
     // /新文件.md（不在 prior tree）被删除。
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user4.id);
-    assert.equal((await svfs.read("/old.md")).content, "v1");
-    await assert.rejects(
-      () => svfs.read("/新文件.md"),
-      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
-    );
+    assert.equal(unwrap(await svfs.read("/old.md")).content, "v1");
+    {
+      const r = await svfs.read("/新文件.md");
+      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "导入的新文件应走 Err 且为 VFS_NOT_FOUND");
+    }
     const msgsAfter4 = await ctx.messages.listBySession(session.id);
     assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3
   });
@@ -305,7 +305,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
-    assert.equal((await svfs.read("/file.md")).content, "prior-content");
+    assert.equal(unwrap(await svfs.read("/file.md")).content, "prior-content");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, priorAsst.id);
@@ -336,7 +336,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, vfsUser.id);
 
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, vfsUser.id);
@@ -380,7 +380,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
-    assert.equal((await svfs.read("/deep/nested/file.md")).content, "content");
+    assert.equal(unwrap(await svfs.read("/deep/nested/file.md")).content, "content");
   });
 
   it("R10: rollback nested file when parent directory still exists", async () => {
@@ -405,7 +405,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
-    assert.equal((await svfs.read("/dir/file.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/dir/file.md")).content, "v1");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -430,7 +430,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
 
-    assert.equal((await svfs.read("/state.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, textOnly.id);
@@ -473,7 +473,7 @@ describe("MessageRollbackService (revision model)", () => {
     await svfs.write("/created.md", "new file", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    const filesBefore = (await svfs.list("/", { recursive: true })).length;
+    const filesBefore = unwrap(await svfs.list("/", { recursive: true })).length;
     const messageCountBefore = (
       await ctx.messages.listBySession(session.id)
     ).length;
@@ -487,12 +487,12 @@ describe("MessageRollbackService (revision model)", () => {
     );
 
     assert.equal(
-      (await svfs.list("/", { recursive: true })).length,
+      unwrap(await svfs.list("/", { recursive: true })).length,
       filesBefore,
       "被拦下的回滚不得删掉任何文件"
     );
     assert.equal(
-      (await svfs.read("/created.md")).content,
+      unwrap(await svfs.read("/created.md")).content,
       "new file",
       "被拦下的回滚不得动 live 树"
     );
@@ -531,7 +531,7 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 3);
     assert.equal(messages[0]!.role, "user");

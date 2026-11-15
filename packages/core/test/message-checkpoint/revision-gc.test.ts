@@ -23,14 +23,14 @@ describe("revision GC", () => {
       blocks: [{ type: "text", text: "a" }],
     }));
     await svfs.write("/gc.md", "v1", { versionCheck: false });
-    const v1 = (await svfs.read("/gc.md")).version;
+    const v1 = unwrap(await svfs.read("/gc.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     }));
     await svfs.write("/gc.md", "v2", { versionCheck: false });
-    const v2 = (await svfs.read("/gc.md")).version;
+    const v2 = unwrap(await svfs.read("/gc.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     const scope = {
@@ -55,7 +55,7 @@ describe("revision GC", () => {
       false
     );
 
-    const head = (await svfs.read("/gc.md")).version;
+    const head = unwrap(await svfs.read("/gc.md")).version;
     assert.notEqual(head, v2);
     assert.equal(revisionPairKey(entry.entryId, v1).includes(String(entry.entryId)), true);
   });
@@ -72,9 +72,9 @@ describe("revision GC", () => {
       blocks: [{ type: "text", text: "w" }],
     }));
     await svfs.write("/trim.md", "one", { versionCheck: false });
-    const v1 = (await svfs.read("/trim.md")).version;
+    const v1 = unwrap(await svfs.read("/trim.md")).version;
     await svfs.write("/trim.md", "two", { versionCheck: false });
-    const v2 = (await svfs.read("/trim.md")).version;
+    const v2 = unwrap(await svfs.read("/trim.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const scope = {

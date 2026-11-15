@@ -169,23 +169,24 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     parentSignal: new AbortController().signal,
     createChildSession: async (title: string) => {
       const s = unwrap(await sessions.createSubSession(PARENT_ID, PROJECT_ID, title));
-      return s.id;
+      return Result.ok(s.id);
     },
     parentSessionId: opts.parentSessionId ?? PARENT_ID,
     isSessionRunActive: (id: string) => active.has(id),
-    resolveChildModelId: (def) => ({
-      savedModelId: def.model ?? "parent-saved",
-      workspaceModelId: "ws-model",
-    }),
+    resolveChildModelId: (def) =>
+      Result.ok({
+        savedModelId: def.model ?? "parent-saved",
+        workspaceModelId: "ws-model",
+      }),
     runChildAgent: async (def, childSessionId, runOpts) => {
       capturedSessionIds.push(childSessionId);
       capturedOpts.push(runOpts);
-      return {
+      return Result.ok({
         stepsExecuted: 1,
         finished: true,
         stopReason: "completed" as const,
         rounds: [],
-      };
+      });
     },
   };
 
@@ -223,7 +224,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx, createdSessions, capturedSessionIds } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    const out = await subagentTool.run(
+    const out = unwrap(await subagentTool.run(
       {
         description: "续做",
         prompt: "接着上一步继续",
@@ -231,7 +232,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "  kid-1  ",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(createdSessions.length, 0, "续用不得新建子会话");
     assert.deepEqual(capturedSessionIds, ["kid-1"], "runChildAgent 必须收到同一 id");
     assert.equal(out.subagentSessionId, "kid-1");
@@ -240,10 +241,10 @@ describe("task sessionId 续用（T-TS*）", () => {
   it("T-TS1b: 缺省 / 空串 / 纯空白 sessionId 一律新开（模型显式传空串等价于不传）", async () => {
     for (const sessionId of [undefined, "", "   "]) {
       const { ctx, createdSessions } = makeSubagent();
-      await subagentTool.run(
+      unwrap(await subagentTool.run(
         { description: "新任务", prompt: "p", subagentName: "general", sessionId },
         toolCtx(ctx)
-      );
+      ));
       assert.equal(createdSessions.length, 1, `sessionId=${JSON.stringify(sessionId)} 应新开`);
     }
   });
@@ -252,7 +253,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx, capturedOpts } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "续做",
         prompt: "第二轮的任务正文",
@@ -260,7 +261,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "kid-1",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.prompt, "第二轮的任务正文");
   });
 
@@ -365,7 +366,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       (e: unknown) => isAppError(e) && e.key.startsWith("TOOL_") && /不是当前会话派生的子会话/.test(e.message)
     );
     // 反向：项目不同但父相同 → 放行（子代理本就共享父工作区，不按 project 拦）。
-    const out = await subagentTool.run(
+    const out = unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "p",
@@ -373,7 +374,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "x-kid",
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(out.subagentSessionId, "x-kid");
   });
 
@@ -430,7 +431,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       sessions: [childSession("kid-max")],
       messageCounts: { "kid-max": TASK_SESSION_RESUME_MAX_MESSAGES },
     });
-    const okOut = await subagentTool.run(
+    const okOut = unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "p",
@@ -438,7 +439,7 @@ describe("task sessionId 续用（T-TS*）", () => {
         sessionId: "kid-max",
       },
       toolCtx(atLimit.ctx)
-    );
+    ));
     assert.equal(okOut.subagentSessionId, "kid-max", "恰好等于上限应放行");
 
     const overLimit = makeSubagent({
@@ -470,7 +471,7 @@ describe("task sessionId 续用（T-TS*）", () => {
 describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA1: 预算内路径物化为合规新写入附件（name=storageName / userAttach / content:null / attach），且过落库硬 parse", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "读设定",
         prompt: "看这两份",
@@ -478,7 +479,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md", "notes/b.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     const atts = capturedOpts[0]!.attachments!;
     assert.equal(atts.length, 2);
     for (const [i, path] of ["/notes/a.md", "/notes/b.md"].entries()) {
@@ -501,7 +502,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-TA1b: 重复路径去重（相对写法与带前导 / 同形），去重发生在分配名额之前", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "读设定",
         prompt: "p",
@@ -509,22 +510,22 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md", "/notes/a.md", "notes/a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.attachments!.length, 1, "同形路径只占一个名额");
   });
 
   it("T-TA1c: 未传 fileAttachment 时不注入 attachments 键（老调用方零变化）", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       { description: "d", prompt: "p", subagentName: "general" },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.attachments, undefined);
   });
 
   it("T-TA2: 附件全量挂载、prompt 原文不加尾注（体积预算由子会话 prepare 链负责，见 T-A 组）", async () => {
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "原始正文",
@@ -532,7 +533,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["notes/a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(capturedOpts[0]!.prompt, "原始正文", "派发侧不再拼尾注");
     assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
@@ -541,7 +542,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     const { ctx, capturedOpts, capturedSessionIds } = makeSubagent({
       sessions: [childSession("kid-1")],
     });
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -550,7 +551,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["a.md"],
       },
       toolCtx(ctx)
-    );
+    ));
     assert.deepEqual(capturedSessionIds, ["kid-1"]);
     assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
@@ -614,7 +615,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA3i: 20+ 条附件全量挂载（条数上限退役）且 prompt 无尾注", async () => {
     const paths = Array.from({ length: 25 }, (_, i) => `f${i}.md`);
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -622,7 +623,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: paths,
       },
       toolCtx(ctx)
-    );
+    ));
     assert.equal(
       capturedOpts[0]!.attachments!.length,
       25,
@@ -640,7 +641,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
     // 派发侧：照挂，不筛、不加尾注
     const { ctx: subCtx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
+    unwrap(await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
@@ -648,7 +649,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         fileAttachment: ["huge.md"],
       },
       toolCtx(subCtx)
-    );
+    ));
     const attached = capturedOpts[0]!.attachments!;
     assert.equal(attached.length, 1, "超预算附件也照挂");
     assert.equal(attached[0]!.path, "/huge.md");
@@ -668,14 +669,14 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       hidden: false,
       attachments: attached,
     };
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [childMsg],
       {
         sessionId: session.id,
         sessionKkv: createSessionKkvService(ctx.conn),
         vfs,
       },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
     assert.match(body, /"display": "filename"/);

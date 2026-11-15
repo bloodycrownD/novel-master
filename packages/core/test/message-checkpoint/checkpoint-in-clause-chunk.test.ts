@@ -143,7 +143,7 @@ async function seedCheckpoints(
     const p = `/ck-${i}.md`;
     await svfs.write(p, `body-${i}`, { versionCheck: false });
     const entry = unwrap(await entries.findByPath(sk, p));
-    const version = (await svfs.read(p)).version;
+    const version = unwrap(await svfs.read(p)).version;
     pointers.push({ entryId: entry!.entryId, version });
   }
 

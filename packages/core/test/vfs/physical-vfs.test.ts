@@ -7,11 +7,11 @@
  * @module test/vfs/physical-vfs
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
-import { isAppError } from "../../src/errors/app-error.js";
+import { isAppError, type AppError } from "../../src/errors/app-error.js";
 import {
   createPhysicalVfsService,
   type PhysicalVfsService,
@@ -41,7 +41,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
   it("物理根 = template/meta/projects 三个挂载点目录行", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createPhysicalVfsService(ctx.conn);
-    assert.deepEqual(await svc.list("/"), [
+    assert.deepEqual(unwrap(await svc.list("/")), [
       { path: "/meta", kind: "directory" },
       { path: "/projects", kind: "directory" },
       { path: "/template", kind: "directory" },
@@ -63,16 +63,16 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     ));
 
     const svc = createPhysicalVfsService(ctx.conn);
-    const templateRows = await svc.list("/template");
+    const templateRows = unwrap(await svc.list("/template"));
     assert.ok(
       templateRows.some(
         (r) => r.kind === "file" && r.path === `/template/root-${suffix}.md`,
       ),
     );
-    assert.deepEqual(await svc.list("/meta"), [
+    assert.deepEqual(unwrap(await svc.list("/meta")), [
       { path: "/meta/skills", kind: "directory" },
     ]);
-    const skillRows = await svc.list("/meta/skills");
+    const skillRows = unwrap(await svc.list("/meta/skills"));
     assert.ok(
       skillRows.some(
         (r) =>
@@ -109,7 +109,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     const svc = createPhysicalVfsService(ctx.conn);
 
     // /projects 下两个项目目录行（含空项目），label = 项目名（展示用，替代 UUID）
-    const projectRows = await svc.list("/projects");
+    const projectRows = unwrap(await svc.list("/projects"));
     assert.ok(
       projectRows.some(
         (r) =>
@@ -128,13 +128,13 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     );
 
     // 项目 1：三个子域挂载点目录行
-    assert.deepEqual(await svc.list(`/projects/${p1.id}`), [
+    assert.deepEqual(unwrap(await svc.list(`/projects/${p1.id}`)), [
       { path: `/projects/${p1.id}/template`, kind: "directory" },
       { path: `/projects/${p1.id}/meta`, kind: "directory" },
       { path: `/projects/${p1.id}/sessions`, kind: "directory" },
     ]);
     // 各子域内容行（拼物理前缀）
-    const p1Template = await svc.list(`/projects/${p1.id}/template`);
+    const p1Template = unwrap(await svc.list(`/projects/${p1.id}/template`));
     assert.ok(
       p1Template.some(
         (r) =>
@@ -142,7 +142,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
           r.path === `/projects/${p1.id}/template/p1-${suffix}.md`,
       ),
     );
-    const p1Meta = await svc.list(`/projects/${p1.id}/meta`);
+    const p1Meta = unwrap(await svc.list(`/projects/${p1.id}/meta`));
     assert.ok(
       p1Meta.some(
         (r) =>
@@ -151,7 +151,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
       ),
     );
     // 会话目录行：有 title 的带 label，未命名的无 label 键（回退 UUID）；按名字排在前
-    const sessionRows = await svc.list(`/projects/${p1.id}/sessions`);
+    const sessionRows = unwrap(await svc.list(`/projects/${p1.id}/sessions`));
     const s1Row = sessionRows.find(
       (r) => r.path === `/projects/${p1.id}/sessions/${s1.id}`,
     );
@@ -160,7 +160,7 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
       (r) => r.path === `/projects/${p1.id}/sessions/${sUntitled.id}`,
     );
     assert.ok(untitledRow != null && untitledRow.label === undefined);
-    const s1Rows = await svc.list(`/projects/${p1.id}/sessions/${s1.id}`);
+    const s1Rows = unwrap(await svc.list(`/projects/${p1.id}/sessions/${s1.id}`));
     assert.ok(
       s1Rows.some(
         (r) =>
@@ -170,31 +170,26 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     );
 
     // 空项目：三个子域挂载点目录行照样显示；空 sessions 列表为空
-    assert.deepEqual(await svc.list(`/projects/${p2.id}`), [
+    assert.deepEqual(unwrap(await svc.list(`/projects/${p2.id}`)), [
       { path: `/projects/${p2.id}/template`, kind: "directory" },
       { path: `/projects/${p2.id}/meta`, kind: "directory" },
       { path: `/projects/${p2.id}/sessions`, kind: "directory" },
     ]);
-    assert.deepEqual(await svc.list(`/projects/${p2.id}/template`), []);
-    assert.deepEqual(await svc.list(`/projects/${p2.id}/sessions`), []);
+    assert.deepEqual(unwrap(await svc.list(`/projects/${p2.id}/template`)), []);
+    assert.deepEqual(unwrap(await svc.list(`/projects/${p2.id}/sessions`)), []);
   });
 
   it("不存在或不落任何域前缀的目录报 NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createPhysicalVfsService(ctx.conn);
-    await assert.rejects(svc.list("/nope"), (err: unknown) => {
+    await rejectsErr(svc.list("/nope"), (err: unknown) => {
       assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-      assert.equal(err.key, "VFS_NOT_FOUND");
-      return true;
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
-    await assert.rejects(
-      svc.list(`/projects/nonexistent-${testIsolationSuffix()}`),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-        assert.equal(err.key, "VFS_NOT_FOUND");
-        return true;
-      },
-    );
+    await rejectsErr(svc.list(`/projects/nonexistent-${testIsolationSuffix()}`), (err: unknown) => {
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
+    });
   });
 });
 
@@ -226,37 +221,37 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
 
     const svc = createPhysicalVfsService(ctx.conn);
     assert.equal(
-      (await svc.read(`/template/g-${suffix}.md`)).content,
+      unwrap(await svc.read(`/template/g-${suffix}.md`)).content,
       "GLOBAL",
     );
     assert.equal(
-      (await svc.read(`/meta/skills/gm-${suffix}/SKILL.md`)).content,
+      unwrap(await svc.read(`/meta/skills/gm-${suffix}/SKILL.md`)).content,
       "GLOBAL-META",
     );
     assert.equal(
-      (await svc.read(`/projects/${project.id}/template/pt-${suffix}.md`))
+      unwrap(await svc.read(`/projects/${project.id}/template/pt-${suffix}.md`))
         .content,
       "PROJECT",
     );
     assert.equal(
-      (
+      unwrap(
         await svc.read(
           `/projects/${project.id}/meta/skills/pm-${suffix}/SKILL.md`,
-        )
+        ),
       ).content,
       "PROJECT-META",
     );
     assert.equal(
-      (
+      unwrap(
         await svc.read(
           `/projects/${project.id}/sessions/${session.id}/ss-${suffix}.md`,
-        )
+        ),
       ).content,
       "SESSION",
     );
 
     // read 返回的 path 回写为物理路径
-    const readBack = await svc.read(`/template/g-${suffix}.md`);
+    const readBack = unwrap(await svc.read(`/template/g-${suffix}.md`));
     assert.equal(readBack.path, `/template/g-${suffix}.md`);
   });
 
@@ -265,19 +260,14 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     const svc = createPhysicalVfsService(ctx.conn);
     const suffix = testIsolationSuffix();
     // 文件不存在（域前缀合法）
-    await assert.rejects(
-      svc.read(`/template/absent-${suffix}.md`),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-        assert.equal(err.key, "VFS_NOT_FOUND");
-        return true;
-      },
-    );
-    // 不落任何域前缀
-    await assert.rejects(svc.read("/nope/x.md"), (err: unknown) => {
+    await rejectsErr(svc.read(`/template/absent-${suffix}.md`), (err: unknown) => {
       assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-      assert.equal(err.key, "VFS_NOT_FOUND");
-      return true;
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
+    });
+    // 不落任何域前缀
+    await rejectsErr(svc.read("/nope/x.md"), (err: unknown) => {
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
 
@@ -317,7 +307,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     svc: PhysicalVfsService,
     dir: string,
   ): Promise<VfsListEntry[]> {
-    const rows = await svc.list(dir);
+    const rows = unwrap(await svc.list(dir));
     const out: VfsListEntry[] = [];
     for (const row of rows) {
       out.push(row);
@@ -350,7 +340,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     ));
 
     const svc = createPhysicalVfsService(ctx.conn);
-    const rows = await svc.listTree("/meta");
+    const rows = unwrap(await svc.listTree("/meta"));
     // 全部层级行一次返回；目录行在前、文件行在后，同层按展示键
     // （无 label 用路径末段）排序，故目录间按 basename 而非全路径排
     const expected = [
@@ -389,7 +379,7 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     await ctx.globalVfs().write(`/g-${suffix}.md`, "G");
 
     const svc = createPhysicalVfsService(ctx.conn);
-    const tree = await svc.listTree("/");
+    const tree = unwrap(await svc.listTree("/"));
     // 根树包含三挂载点与项目/会话虚拟目录行（子会话目录行同样合成）
     assert.ok(tree.some((r) => r.path === "/template" && r.kind === "directory"));
     assert.ok(
@@ -423,17 +413,16 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     await ctx.projectVfs(project.id).write(`/a/${suffix}.md`, "A");
     const svc = createPhysicalVfsService(ctx.conn);
 
-    const subTree = await svc.listTree(`/projects/${project.id}/template`);
+    const subTree = unwrap(await svc.listTree(`/projects/${project.id}/template`));
     // 子树只含后代行（含隐含中间目录行），根自身不返回
     assert.deepEqual(subTree, [
       { path: `/projects/${project.id}/template/a`, kind: "directory" },
       { path: `/projects/${project.id}/template/a/${suffix}.md`, kind: "file" },
     ]);
 
-    await assert.rejects(svc.listTree("/nope"), (err: unknown) => {
+    await rejectsErr(svc.listTree("/nope"), (err: unknown) => {
       assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-      assert.equal(err.key, "VFS_NOT_FOUND");
-      return true;
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
     });
   });
 });
@@ -449,7 +438,7 @@ describe("core/B-1: 排序键统一 label ?? 路径末段", () => {
     const named = unwrap(await ctx.projects.create(`0-${suffix}`));
 
     const svc = createPhysicalVfsService(ctx.conn);
-    const rows = (await svc.list("/projects")).filter(
+    const rows = unwrap(await svc.list("/projects")).filter(
       (r) =>
         r.path === `/projects/${named.id}` ||
         r.path === `/projects/${unnamed.id}`,
@@ -482,7 +471,7 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
     await ctx.sessionVfs(project.id, child.id).write(`/left-${suffix}.md`, "R");
 
     const svc = createPhysicalVfsService(ctx.conn);
-    const rows = await svc.list(`/projects/${project.id}/sessions`);
+    const rows = unwrap(await svc.list(`/projects/${project.id}/sessions`));
     const paths = rows.map((r) => r.path);
     assert.ok(
       paths.includes(`/projects/${project.id}/sessions/${main.id}`),
@@ -510,22 +499,14 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
     const sessionB = unwrap(await ctx.sessions.create(projectB.id, `B会话-${suffix}`));
 
     const svc = createPhysicalVfsService(ctx.conn);
-    await assert.rejects(
-      svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-        assert.equal(err.key, "VFS_NOT_FOUND");
-        return true;
-      },
-    );
-    await assert.rejects(
-      svc.read(`/projects/${projectA.id}/sessions/${sessionB.id}/x.md`),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "VFS_NOT_FOUND"));
-        assert.equal(err.key, "VFS_NOT_FOUND");
-        return true;
-      },
-    );
+    await rejectsErr(svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`), (err: unknown) => {
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
+    });
+    await rejectsErr(svc.read(`/projects/${projectA.id}/sessions/${sessionB.id}/x.md`), (err: unknown) => {
+      assert.ok(isAppError(err, "VFS_NOT_FOUND"));
+      assert.equal((err as AppError).key, "VFS_NOT_FOUND");
+    });
   });
 });
 
@@ -562,13 +543,9 @@ describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
       `/projects/${project.id}/sessions/${session.id}`,
     ];
     for (const path of mountRoots) {
-      await assert.rejects(
-        svc.read(path),
-        (err: unknown) => {
-          assert.ok(isAppError(err, "VFS_NOT_FOUND"), `${path} 应抛 VFS_NOT_FOUND`);
-          return true;
-        },
-      );
+      await rejectsErr(svc.read(path), (err: unknown) => {
+        assert.ok(isAppError(err, "VFS_NOT_FOUND"), `${path} 应报 VFS_NOT_FOUND`);
+      });
     }
   });
 });

@@ -24,10 +24,22 @@ import { renameVfsEntry, renameVfsDirectory } from "@/domain/vfs/logic/vfs-renam
 // 本文件的删除路径（appendDeletedRevision → nextVersionFor）必须跟着引用共享实现。
 import { nextVersionFor, writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
+
+/**
+ * 事务回调内的域失败走「抛错回滚」通道，过驱动事务边界后 AppError 被包成
+ * TdbcError（原 AppError 挂在 cause 上）。这里解出域错误本体，供调用方把
+ * **可容忍**的域失败（VFS_NOT_FOUND）收进 Err；解不出原样上抛。
+ */
+function unwrapTxDomainError(cause: unknown): AppError | undefined {
+  if (isAppError(cause)) return cause;
+  const inner = (cause as { cause?: unknown } | null)?.cause;
+  return isAppError(inner) ? inner : undefined;
+}
+
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsContentSize } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 
@@ -88,14 +100,23 @@ export class RevisionAwareVfsService implements InternalVfsService {
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`});
+      return Result.err(new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`}));
     }
 
-    await runInTransactionOrConn(this.conn, async (tx) => {
-      const entryRepo = new SqliteVfsEntryRepository(tx);
-      const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      await deleteWithRevision(entryRepo, revisionRepo, scopeKey, normalized, options?.recursive === true);
-    });
+    // 事务回调内仍按「失败靠抛错回滚」抛；到本方法边界把**域失败**收进 Err——
+    // 签名承诺 Result，调用方按 `!r.ok` 容忍 VFS_NOT_FOUND（四期迁移时实现侧
+    // 漏改，裸 throw 会让 revive/restore 的容忍分支失效，RB4b 暴露）。
+    try {
+      await runInTransactionOrConn(this.conn, async (tx) => {
+        const entryRepo = new SqliteVfsEntryRepository(tx);
+        const revisionRepo = new SqliteVfsRevisionRepository(tx);
+        await deleteWithRevision(entryRepo, revisionRepo, scopeKey, normalized, options?.recursive === true);
+      });
+    } catch (cause) {
+      const domain = unwrapTxDomainError(cause);
+      if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
+      throw cause;
+    }
     return Result.ok(undefined);
   }
 
@@ -150,31 +171,41 @@ export class RevisionAwareVfsService implements InternalVfsService {
       throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot hardDelete root", detail: `Invalid path ${path}: cannot hardDelete root`});
     }
 
-    await runInTransactionOrConn(this.conn, async (tx) => {
-      const entryRepo = new SqliteVfsEntryRepository(tx);
-      const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      // 本回调内的 repo 解包均为事务回调内解包（总纲 §五例外 2）：失败靠抛错回滚。
-      if (options?.recursive === true) {
-        // B-1 修复保留：recursive hardDelete 仍要先 adjustRef 释放 live head。
-        const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, normalized);
-        for (const head of heads) {
-          await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
-        }
-        // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
-        await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
-      } else {
-        const entry = await entryRepo.findByPath(scopeKey, normalized);
-        if (!entry.ok) throw entry.error;
-        if (entry.value != null && entry.value.entryKind === "file") {
-          await adjustRef(revisionRepo, entry.value.entryId, entry.value.version, -1);
+    // 事务回调内仍按「失败靠抛错回滚」抛；到本方法边界把**域失败**收进 Err——
+    // 签名承诺 Result，restore 的容忍分支按 `wiped.error.key === "VFS_NOT_FOUND"`
+    // 容忍目标不存在（与上方 delete 的 RB4b 修复同款：四期迁移时实现侧漏改，
+    // 裸 throw 会穿透调用方的容忍分支）。
+    try {
+      await runInTransactionOrConn(this.conn, async (tx) => {
+        const entryRepo = new SqliteVfsEntryRepository(tx);
+        const revisionRepo = new SqliteVfsRevisionRepository(tx);
+        // 本回调内的 repo 解包均为事务回调内解包（总纲 §五例外 2）：失败靠抛错回滚。
+        if (options?.recursive === true) {
+          // B-1 修复保留：recursive hardDelete 仍要先 adjustRef 释放 live head。
+          const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, normalized);
+          for (const head of heads) {
+            await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
+          }
           // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
           await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
+        } else {
+          const entry = await entryRepo.findByPath(scopeKey, normalized);
+          if (!entry.ok) throw entry.error;
+          if (entry.value != null && entry.value.entryKind === "file") {
+            await adjustRef(revisionRepo, entry.value.entryId, entry.value.version, -1);
+            // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
+            await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
+          }
         }
-      }
-      // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
-      const deleted = await entryRepo.delete(scopeKey, normalized, { recursive: options?.recursive === true });
-      if (!deleted.ok) throw deleted.error;
-    });
+        // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
+        const deleted = await entryRepo.delete(scopeKey, normalized, { recursive: options?.recursive === true });
+        if (!deleted.ok) throw deleted.error;
+      });
+    } catch (cause) {
+      const domain = unwrapTxDomainError(cause);
+      if (domain != null && domain.key === "VFS_NOT_FOUND") return Result.err(domain);
+      throw cause;
+    }
     return Result.ok(undefined);
   }
 

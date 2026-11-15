@@ -1,3 +1,4 @@
+import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -51,7 +52,7 @@ function makeRuntime(
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
     },
     agentRegistry: registry,
     projects: ctx.projects,
@@ -73,13 +74,14 @@ function makeRuntime(
       ({} as ReturnType<AgentTurnRuntimePort["sessionVfs"]>),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () =>
+          Result.ok({
+            rows: [],
+            displayByPath: new Map(),
+          }),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -133,7 +135,7 @@ describe("runAgentTurn project agent config", () => {
     let capturedDefinition: AgentDefinition | undefined;
 
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",
@@ -142,7 +144,7 @@ describe("runAgentTurn project agent config", () => {
             capturedDefinition = resolveCtx.definition;
           },
         },
-      );
+      ));
     } catch {
       // runner deps stubbed; onAfterResolveModel runs before runner
     }
@@ -209,7 +211,7 @@ describe("runAgentTurn project agent config", () => {
     let capturedDefinition: AgentDefinition | undefined;
     let capturedModel: string | undefined;
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: project.id, sessionId: session.id },
         "hello",
@@ -219,7 +221,7 @@ describe("runAgentTurn project agent config", () => {
             capturedModel = resolveCtx.savedModelId;
           },
         },
-      );
+      ));
     } catch {
       // runner deps stubbed; onAfterResolveModel runs before runner
     }

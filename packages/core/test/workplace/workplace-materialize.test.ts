@@ -83,7 +83,7 @@ describe("worktree materialize", () => {
 
     calls.scanContents = 0;
     calls.findByPath = 0;
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     assert.ok(rows.length >= 4);
     assert.equal(calls.scanContents, 0);
     assert.equal(calls.findByPath, 0);
@@ -95,7 +95,7 @@ describe("worktree materialize", () => {
     // materialize 组合的 live + persist 并发评估经 conn 级 inFlight 去重，
     // 合并为单次 metadata 加载（旧断言的“各一次”是实例级无共享时的行为）
     await pvfs.write("/visible/d.md", "D");
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
     assert.equal(
@@ -122,7 +122,7 @@ describe("worktree materialize", () => {
     });
 
     calls.findByPath = 0;
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(calls.findByPath, 0);
     assert.match(materialized.workplaceDisplay, /a\.md/);
     assert.match(materialized.workplaceDisplay, /b\.md/);
@@ -156,7 +156,7 @@ describe("worktree materialize", () => {
     });
 
     calls.findByPath = 0;
-    const materialized = await wt.materialize();
+    const materialized = unwrap(await wt.materialize());
     assert.equal(
       calls.findByPath,
       2,
@@ -184,8 +184,8 @@ describe("worktree materialize", () => {
     });
 
     const [rows, materialized] = await Promise.all([
-      wt.buildListRows(),
-      wt.materialize(),
+      wt.buildListRows().then(unwrap),
+      wt.materialize().then(unwrap),
     ]);
     assert.deepEqual(
       rows.map((r) => r.path),
@@ -206,8 +206,8 @@ describe("worktree materialize", () => {
       inclusionMode: "show",
     });
 
-    const materialized = await wt.materialize();
-    const fileTree = await wt.renderFileTree();
+    const materialized = unwrap(await wt.materialize());
+    const fileTree = unwrap(await wt.renderFileTree());
     assert.equal(materialized.filetreeDisplay, fileTree);
     assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
@@ -226,9 +226,9 @@ describe("worktree materialize", () => {
       sessionId: session.id,
     });
 
-    const { workplaceDisplay } = await wt.materializePersistBlock();
+    const { workplaceDisplay } = unwrap(await wt.materializePersistBlock());
     assert.ok(workplaceDisplay.length > 0);
-    const display = await wt.renderDisplay();
+    const display = unwrap(await wt.renderDisplay());
     assert.equal(workplaceDisplay, display);
   });
 });

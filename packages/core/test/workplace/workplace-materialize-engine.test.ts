@@ -1,3 +1,5 @@
+import { unwrap } from "../helpers/result-unwrap.js";
+import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -16,9 +18,9 @@ function createSpyVfs(
       findByPathCalls.push(path);
       const content = contents.get(path);
       if (content == null) {
-        return null;
+        return Result.ok(null);
       }
-      return { entryId: 1, scopeKey, path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ entryId: 1, scopeKey, path, content, version: 1, mtimeMs: 0 });
     },
     findContentHash: async () => null,
     insert: async () => ({ version: 1 }),
@@ -106,7 +108,7 @@ describe("worktree materialize engine", () => {
       allDirs: new Set(["/", "/show", "/hdr", "/hid", "/fn"]),
     };
 
-    const view = evaluateWorkplaceRuleView(scope, ctx);
+    const view = unwrap(evaluateWorkplaceRuleView(scope, ctx));
     assert.equal(view.displayByPath.get("/show/a.md"), "full");
     assert.equal(view.displayByPath.get("/hdr/b.md"), "header");
     assert.equal(view.displayByPath.get("/hid/c.md"), "hidden");
@@ -119,12 +121,12 @@ describe("worktree materialize engine", () => {
       ]),
     );
 
-    const block = await materializeBlockFromView(
+    const block = unwrap(await materializeBlockFromView(
       view,
       vfs,
       scope,
       ctx.mtimeByPath,
-    );
+    ));
 
     assert.equal(vfs.findByPathCalls.length, 2);
     assert.ok(vfs.findByPathCalls.includes("/show/a.md"));

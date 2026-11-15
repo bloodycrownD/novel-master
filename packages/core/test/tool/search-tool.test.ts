@@ -489,7 +489,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     };
     const store: SearchConfigStore = {
       ...createSearchConfigStore(fakeStores()),
-      readConfig: async () => config,
+      readConfig: async () => Result.ok(config),
     };
     const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
     assert.equal(ctx.search!.engineSnapshot[0]!.paramHint.length, 600);
@@ -506,9 +506,8 @@ describe("search 工具：描述快照（T-D1）", () => {
   it("装配 readConfig 失败 → 空快照降级不击穿装配（链解析仍在 run 内自会报错）", async () => {
     const failingStore: SearchConfigStore = {
       ...createSearchConfigStore(fakeStores()),
-      readConfig: async () => {
-        throw new AppError("KKV_NOT_FOUND", "search config unavailable");
-      },
+      // 四期门⑦：readConfig 失败沿返回值通道到达（Err），不再 throw。
+      readConfig: async () => Result.err(new AppError("KKV_NOT_FOUND", "search config unavailable")),
     };
     const search = await assembleSearchToolContext(failingStore);
     assert.deepEqual(search.engineSnapshot, []);
@@ -1074,11 +1073,11 @@ describe("dispatch：引擎分发与链空文案", () => {
       apiKey: "k",
       template: PRESET_ENGINE_TEMPLATES.bocha,
     };
-    const out = await dispatchSearch(resolved, "q", {}, {}, fetchFn);
+    const out = unwrap(await dispatchSearch(resolved, "q", {}, {}, fetchFn));
     assert.equal(out.engine, "bocha");
     assert.equal(urls[0], "https://api.bochaai.com/v1/web-search");
 
-    const ddg = await dispatchSearch({ engine: "duckduckgo" }, "q", {}, { ignored: true }, fetchFn);
+    const ddg = unwrap(await dispatchSearch({ engine: "duckduckgo" }, "q", {}, { ignored: true }, fetchFn));
     assert.equal(ddg.engine, "duckduckgo");
     assert.ok(urls[1]!.startsWith("https://html.duckduckgo.com/html/"));
   });

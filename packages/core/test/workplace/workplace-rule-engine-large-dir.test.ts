@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -49,7 +50,7 @@ describe("workplace rule engine 大目录性能与语义回归", () => {
     });
 
     const t0 = Date.now();
-    const view = await wt.buildListRows();
+    const view = unwrap(await wt.buildListRows());
     const elapsed = Date.now() - t0;
 
     const dirRow = view.find((r) => r.kind === "dir" && r.path === "/世界书");
@@ -90,7 +91,7 @@ describe("workplace rule engine 大目录性能与语义回归", () => {
     // b 显式 show（非 auto）：auto 名次表中无 b，旧实现 index 兜底 0
     await wt.setFileRule({logicalPath: "/d/b.md", inclusionMode: "show"});
 
-    const view = await wt.buildListRows();
+    const view = unwrap(await wt.buildListRows());
     const bRow = view.find((r) => r.kind === "file" && r.path === "/d/b.md") as
       | {kind: "file"; displayState: string}
       | undefined;

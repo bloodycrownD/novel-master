@@ -241,7 +241,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       }
       throw error;
     }
-    if (!result.ok) return result;
+    // inner 的 read 链失败走 Result 通道（错误通道迁移四期）：目录行按
+    // 「无此文件」归一（本视图 read 只面向文件），抛出路径（旧 wiring）同款处理。
+    if (!result.ok) {
+      if (isAppError(result.error, "VFS_IS_DIRECTORY")) {
+        return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
+      }
+      return result;
+    }
     const prefix = scopePhysicalPrefix(resolved.scope);
     return Result.ok({
       ...result.value,

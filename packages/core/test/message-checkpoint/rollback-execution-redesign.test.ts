@@ -68,10 +68,10 @@ describe("rollback execution redesign", () => {
 
     assert.equal(resetSpy.mock.callCount(), diffCount);
     for (let i = 0; i < diffCount; i++) {
-      assert.equal((await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
+      assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
     }
     for (let i = diffCount; i < fileCount; i++) {
-      assert.equal((await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
+      assert.equal(unwrap(await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
     }
   });
 
@@ -164,7 +164,7 @@ describe("rollback execution redesign", () => {
       project.id,
       assistant2.id,
     );
-    assert.equal((await svfs.read("/stable.md")).content, "chapter-2");
+    assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-2");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 4);
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant2.id));
@@ -175,7 +175,7 @@ describe("rollback execution redesign", () => {
       project.id,
       assistant1.id,
     );
-    assert.equal((await svfs.read("/stable.md")).content, "chapter-1");
+    assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-1");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant2.id), false);

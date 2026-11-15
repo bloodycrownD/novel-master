@@ -24,7 +24,7 @@ describe("compaction conditions v3 migration", () => {
       }),
     );
 
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);
@@ -56,7 +56,7 @@ describe("compaction conditions v3 migration", () => {
       }),
     );
 
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);

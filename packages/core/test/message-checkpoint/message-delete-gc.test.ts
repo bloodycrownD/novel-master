@@ -25,9 +25,9 @@ describe("MessageService.delete checkpoint GC", () => {
       blocks: [{ type: "text", text: "write" }],
     }));
     await svfs.write("/gc-delete.md", "v1", { versionCheck: false });
-    const v1 = (await svfs.read("/gc-delete.md")).version;
+    const v1 = unwrap(await svfs.read("/gc-delete.md")).version;
     await svfs.write("/gc-delete.md", "v2", { versionCheck: false });
-    const v2 = (await svfs.read("/gc-delete.md")).version;
+    const v2 = unwrap(await svfs.read("/gc-delete.md")).version;
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const scope = {
@@ -41,7 +41,7 @@ describe("MessageService.delete checkpoint GC", () => {
 
     unwrap(await ctx.messages.delete(assistant.id));
 
-    assert.equal((await svfs.read("/gc-delete.md")).content, "v2");
+    assert.equal(unwrap(await svfs.read("/gc-delete.md")).content, "v2");
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), false);
     const keys = await revisions.listKeysUnderScope(sk, "/");
     assert.ok(keys.some((k) => k.entryId === entry.entryId && k.version === v2));

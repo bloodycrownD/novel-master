@@ -27,8 +27,8 @@ function makeRuntime(overrides: {
 }): AgentRunRuntimePort {
   return {
     state: {
-      getCurrentAgentId: async () => overrides.currentAgentId ?? null,
-      getCurrentModelId: async () => overrides.currentModelId ?? null,
+      getCurrentAgentId: async () => Result.ok(overrides.currentAgentId ?? undefined),
+      getCurrentModelId: async () => Result.ok(overrides.currentModelId ?? undefined),
     },
     agentRegistry: {
       listAgentIds: async () => overrides.agentIds ?? ["fallback-agent"],

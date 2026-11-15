@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
   subagentTool,
@@ -17,6 +19,7 @@ import type {
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
   name: "general",
@@ -78,19 +81,20 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       parentSignal: new AbortController().signal,
       createChildSession: async (title) => {
         const s = await sessions.createSubSession("parent-sess", "proj-x", title);
-        return s.id;
+        return Result.ok(s.id);
       },
       // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
       parentSessionId: "parent-sess",
       isSessionRunActive: () => false,
-      resolveChildModelId: (def) => ({
-        savedModelId: def.model ?? "parent-model",
-        workspaceModelId: "ws-model",
-      }),
-      runChildAgent: async (_def, _sid, _opts: RunChildAgentOptions): Promise<AgentRunResult> => {
+      resolveChildModelId: (def) =>
+        Result.ok({
+          savedModelId: def.model ?? "parent-model",
+          workspaceModelId: "ws-model",
+        }),
+      runChildAgent: async (_def, _sid, _opts: RunChildAgentOptions): Promise<Result<AgentRunResult, AppError>> => {
         // 在真实 runChildAgent 实现里，这里会 runtime.sessionVfs(parentProjectId, parentSessionId)。
         observedVfsInRunChild = parentVfs; // 模拟：用 parentVfs 装配子 toolCtx.vfs（共享父工作区）
-        return { stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] };
+        return Result.ok({ stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] });
       },
     };
 
@@ -101,10 +105,10 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       subagent,
     };
 
-    const out: TaskToolOutput = await subagentTool.run(
+    const out: TaskToolOutput = unwrap(await subagentTool.run(
       { description: "读大纲", prompt: "请读 /outline.md", subagentName: "general" } satisfies TaskToolInput,
       ctx,
-    );
+    ));
 
     // 子 session 创建时父 projectId/sessionId 正确透传。
     assert.equal(observedProjectId, "proj-x");

@@ -135,12 +135,12 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
     const a = unwrap(await svc.createRule({ name: "a", pattern: "(\\d+)" }));
     const b = unwrap(await svc.createRule({ name: "b", pattern: "(\\d+)" }));
     await svc.setEnabledBatch([a.ruleId, b.ruleId], false);
-    const compiled = await svc.listCompiledRules();
+    const compiled = unwrap(await svc.listCompiledRules());
     assert.ok(!compiled.some((r) => r.ruleId === a.ruleId));
     assert.ok(!compiled.some((r) => r.ruleId === b.ruleId));
     const enabled = unwrap(await svc.setEnabled(a.ruleId, true));
     assert.equal(enabled.enabled, true);
-    assert.ok((await svc.listCompiledRules()).some((r) => r.ruleId === a.ruleId));
+    assert.ok(unwrap(await svc.listCompiledRules()).some((r) => r.ruleId === a.ruleId));
   });
 
   it("previewSort reports matched rule + nums and sorts accordingly", async () => {

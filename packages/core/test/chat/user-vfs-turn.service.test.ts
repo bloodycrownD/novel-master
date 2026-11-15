@@ -1,4 +1,5 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
@@ -118,7 +119,7 @@ describe("UserVfsTurnService", () => {
     const ok = await userVfsTurn.executeOp(session.id, writeOp("/ok.md", "hello", "tu_ok"));
     assert.equal(ok.ok, true);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    assert.equal((await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content, "hello");
+    assert.equal(unwrap(await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content, "hello");
   });
 
   it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
@@ -137,9 +138,9 @@ describe("UserVfsTurnService", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    assert.equal((await workplace.getDirRule("/u"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/u"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
   });
 
   it("execute 使用会抛错的 tool 时不写 pending", async () => {
@@ -225,8 +226,8 @@ describe("UserVfsTurnService", () => {
 
     assert.equal(result.ok, false);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    await assert.rejects(() => svfs.read("/a.md"));
-    await assert.rejects(() => svfs.read("/b.md"));
+    await rejectsErr(() => svfs.read("/a.md"));
+    await rejectsErr(() => svfs.read("/b.md"));
 
     // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
     const sk = scopeKey(scope);
@@ -255,16 +256,15 @@ describe("UserVfsTurnService", () => {
       status: "active",
       mtimeMs: Date.now(),
     }));
-    const beforeOrphan = await revisions.findByEntryAndVersion(orphanEntry.entryId, 99);
+    const beforeOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
     assert.ok(beforeOrphan);
 
     const baseVfs = createScopedVfsService(ctx.conn, scope);
     const failingVfs = new Proxy(baseVfs, {
       get(target, prop, receiver) {
         if (prop === "hardDelete" || prop === "resetHeadToVersion") {
-          return async () => {
-            throw new Error("restore composite boom");
-          };
+          // 错误通道迁移四期：restore 原语失败走 Result.err（不再 throw）
+          return async () => Result.err(new Error("restore composite boom"));
         }
         return Reflect.get(target, prop, receiver);
       },
@@ -299,7 +299,7 @@ describe("UserVfsTurnService", () => {
     });
     assert.equal(compositeResult.ok, false);
     assert.ok(compositeResult.partialFailure);
-    const afterOrphan = await revisions.findByEntryAndVersion(orphanEntry.entryId, 99);
+    const afterOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
     assert.equal(afterOrphan, null, "restore 抛 composite 后仍须 sweep 掉不可达 revision");
   });
 
@@ -329,8 +329,8 @@ describe("UserVfsTurnService", () => {
     assert.equal(ok.ok, true);
 
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    assert.equal((await svfs.read("/1.md")).content, "one");
-    assert.equal((await svfs.read("/2.md")).content, "two");
+    assert.equal(unwrap(await svfs.read("/1.md")).content, "one");
+    assert.equal(unwrap(await svfs.read("/2.md")).content, "two");
   });
 
   it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
@@ -345,7 +345,7 @@ describe("UserVfsTurnService", () => {
 
     const result = await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/55", true));
     assert.equal(result.ok, true);
-    await assert.rejects(() => svfs.list("/55"));
+    await rejectsErr(() => svfs.list("/55"));
   });
 
   it("T-FC1 assembly: createUserVfsTurnServiceBundle write 后有 file_cache full:{path}", async () => {

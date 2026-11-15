@@ -12,7 +12,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import { rejectsErr } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -61,7 +61,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const dbGeneralId = `db-general-${testIsolationSuffix()}`;
-    await assert.rejects(
+    await rejectsErr(
       registry.upsert(
         dbGeneralId,
         decode(
@@ -73,8 +73,9 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
           agentDefinitionSchema,
         ),
       ),
-      (e: unknown) =>
-        isAppError(e, "AGENT_INVALID_SCHEMA"),
+      (e) => {
+        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA"));
+      },
     );
   });
 
@@ -111,17 +112,3 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     assert.ok(defs.some((d) => d.name.startsWith("writer-")));
   });
 });
-
-/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
-function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
-}
-
-/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
-function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
-}

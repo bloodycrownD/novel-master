@@ -12,6 +12,7 @@
  * @module test/service/agent/run-agent-turn-subagent-stream.test
  */
 
+import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -128,7 +129,7 @@ function makeRuntime(
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
@@ -139,7 +140,8 @@ function makeRuntime(
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: args.modelRequests,
     savedModelRepo: {
-      findById: async () => ({
+      findById: async () =>
+        Result.ok({
         id: TEST_SAVED_MODEL_ID,
         providerId: "test-provider",
         alias: "test-model",
@@ -174,13 +176,14 @@ function makeRuntime(
       ctx.sessionVfs(projectId, sessionId),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
+        evaluateRuleView: async () =>
+          Result.ok({
+            rows: [],
+            displayByPath: new Map(),
+          }),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     userVfsTurn: mockUserVfsTurn(),
     sessions: ctx.sessions,
@@ -261,14 +264,14 @@ async function runTaskTurn(
   await ctx.state.setCurrentAgentId("test-default-agent");
   await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-  const result = await runAgentTurn(
+  const result = unwrap(await runAgentTurn(
     runtime,
     { projectId: project.id, sessionId: session.id },
     "请派生子代理完成任务",
     // 主会话开关走 options.stream 链路（本测试不动它）：固定 false，
     // 便于把「子 run 的 stream」与「主 run 的 stream」区分开。
     { stream: false, onStream: () => {} },
-  );
+  ));
   assert.equal(result.stopReason, "completed");
 
   assert.equal(
@@ -400,10 +403,9 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     const runtime = makeRuntime(ctx, {
       modelRequests,
       preferences: {
-        getThinkingContextEnabled: async () => false,
-        getSubagentStreamEnabled: async () => {
-          throw new Error("boom");
-        },
+        getThinkingContextEnabled: async () => Result.ok(false),
+        // 注入「读失败」的偏好窄切片（Result 通道：非 PREFERENCES_INVALID_VALUE 的 Err 重抛）
+        getSubagentStreamEnabled: async () => Result.err(new Error("boom")),
       },
     });
     runtime.eventBus = realEventBus();
@@ -411,12 +413,12 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const result = await runAgentTurn(
+    const result = unwrap(await runAgentTurn(
       runtime,
       { projectId: project.id, sessionId: session.id },
       "请派生子代理完成任务",
       { stream: false, onStream: () => {} },
-    );
+    ));
 
     // ① task 工具失败回流后主 run 继续收尾，run 本身不炸。
     assert.equal(

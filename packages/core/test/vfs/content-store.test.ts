@@ -17,6 +17,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -56,7 +57,7 @@ describe("VfsContentStore", () => {
 
     for (const plain of cases) {
       const hash = await store.put(plain);
-      const got = await store.get(hash);
+      const got = unwrap(await store.get(hash));
       assert.equal(got, plain);
 
       const meta = await conn.query<{
@@ -81,7 +82,7 @@ describe("VfsContentStore", () => {
     const plain = `new-write-binary-${testIsolationSuffix()}-中文`;
 
     const hash = await store.put(plain);
-    assert.equal(await store.get(hash), plain);
+    assert.equal(unwrap(await store.get(hash)), plain);
 
     const meta = await conn.query<{
       encoding: string;
@@ -115,9 +116,9 @@ describe("VfsContentStore", () => {
       [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
     );
 
-    assert.equal(await store.get(contentHash), plain);
+    assert.equal(unwrap(await store.get(contentHash)), plain);
 
-    const many = await store.getMany([contentHash]);
+    const many = unwrap(await store.getMany([contentHash]));
     assert.equal(many.get(contentHash), plain);
 
     // ensureBlob 认存量行，不触发 put 改写。
@@ -143,7 +144,7 @@ describe("VfsContentStore", () => {
       [contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length],
     );
 
-    assert.equal(await store.get(contentHash), plain);
+    assert.equal(unwrap(await store.get(contentHash)), plain);
   });
 
   it("同 hash 复用行不改 encoding / bytes（存量 b64 行不被 put 改写）", async () => {
@@ -176,7 +177,7 @@ describe("VfsContentStore", () => {
     assert.equal(typeof meta[0]!.bytes, "string");
     assert.equal(meta[0]!.bytes, b64);
     assert.equal(Number(meta[0]!.byte_len), b64.length);
-    assert.equal(await store.get(hash), plain);
+    assert.equal(unwrap(await store.get(hash)), plain);
   });
 
   it("gc：删除孤立 blob，保留被 vfs_entry 引用的 blob", async () => {
@@ -197,7 +198,7 @@ describe("VfsContentStore", () => {
     // 共享内存库里可能有先前用例遗留的孤立 blob，所以只断言「至少删了 hashB」。
     assert.ok(deleted >= 1, `gc 应至少清扫 1 个孤立 blob，实际 ${deleted}`);
 
-    assert.equal(await store.get(hashA), `entry-referenced-${suffix}`);
-    await assert.rejects(() => store.get(hashB));
+    assert.equal(unwrap(await store.get(hashA)), `entry-referenced-${suffix}`);
+    await rejectsErr(() => store.get(hashB));
   });
 });

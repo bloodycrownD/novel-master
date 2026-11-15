@@ -28,6 +28,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -208,7 +209,7 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       "应保留 5 个存活文件 entry",
     );
     for (let i = deleteCount; i < totalFiles; i++) {
-      const content = await vfs.read(`/orphan-partial/file-${i}.txt`);
+      const content = unwrap(await vfs.read(`/orphan-partial/file-${i}.txt`));
       assert.equal(
         content.content,
         `body-${i}`,

@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -13,6 +13,7 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
 
 import {
   TOOL_OUTPUT_MAX_BYTES,
@@ -72,7 +73,7 @@ describe("Builtin file tools V2 (unit)", () => {
     const vfs = {
       write: async (path: string, content: string) => {
         writes.push({ path, content });
-        return { version: 1 };
+        return Result.ok({ version: 1 });
       },
     } as unknown as BuiltinToolContext["vfs"];
     const sessionKkv = {
@@ -102,11 +103,10 @@ describe("Builtin file tools V2 (unit)", () => {
 
   it("write 嵌套新路径各层祖先目录补默认规则，已有 rule_off 行不覆盖", async () => {
     const vfs = {
-      // B-1：write 前用 vfs.read 探测存在性——NOT_FOUND 即新建（mock 生产形态：AppError VFS_NOT_FOUND）
-      read: async (path: string) => {
-        throw new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`});
-      },
-      write: async () => ({ version: 1 }),
+      // B-1：write 前用 vfs.read 探测存在性——NOT_FOUND 即新建（mock 生产形态：read 返回 Err(VFS_NOT_FOUND)）
+      read: async (path: string) =>
+        Result.err(new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`})),
+      write: async () => Result.ok({ version: 1 }),
     } as unknown as BuiltinToolContext["vfs"];
     const setCalls: Array<{ logicalPath: string }> = [];
     const workplace = {
@@ -117,6 +117,7 @@ describe("Builtin file tools V2 (unit)", () => {
       ],
       setDirRule: async (input: { logicalPath: string }) => {
         setCalls.push({ logicalPath: input.logicalPath });
+        return Result.ok(undefined);
       },
     };
     const ctx: BuiltinToolContext = {
@@ -143,7 +144,7 @@ describe("Builtin file tools V2 (unit)", () => {
 
   it("fs mkdir 为新目录及其祖先补默认规则", async () => {
     const vfs = {
-      mkdir: async () => {},
+      mkdir: async () => Result.ok(undefined),
     } as unknown as BuiltinToolContext["vfs"];
     const setCalls: Array<{ logicalPath: string }> = [];
     const workplace = {
@@ -151,6 +152,7 @@ describe("Builtin file tools V2 (unit)", () => {
       listDirRules: async () => [],
       setDirRule: async (input: { logicalPath: string }) => {
         setCalls.push({ logicalPath: input.logicalPath });
+        return Result.ok(undefined);
       },
     };
     const ctx: BuiltinToolContext = {
@@ -173,15 +175,16 @@ describe("Builtin file tools V2 (unit)", () => {
     const writes: Array<{ path: string; content: string }> = [];
     const vfs = {
       // read 探测到内容 → 已存在 → 走纯编辑路径，不补规则
-      read: async (path: string) => ({
-        path,
-        content: "old",
-        version: 1,
-        mtimeMs: 0,
-      }),
+      read: async (path: string) =>
+        Result.ok({
+          path,
+          content: "old",
+          version: 1,
+          mtimeMs: 0,
+        }),
       write: async (path: string, content: string) => {
         writes.push({ path, content });
-        return { version: 2 };
+        return Result.ok({ version: 2 });
       },
     } as unknown as BuiltinToolContext["vfs"];
     const setCalls: Array<{ logicalPath: string }> = [];
@@ -190,6 +193,7 @@ describe("Builtin file tools V2 (unit)", () => {
       listDirRules: async () => [],
       setDirRule: async (input: { logicalPath: string }) => {
         setCalls.push({ logicalPath: input.logicalPath });
+        return Result.ok(undefined);
       },
     };
     const ctx: BuiltinToolContext = {
@@ -213,11 +217,9 @@ describe("Builtin file tools V2 (unit)", () => {
 
   it("write 前探测失败时保守跳过补规则（B-1：宁可少补、不可误翻存量）", async () => {
     const vfs = {
-      // 探测原语自身抛错（非 NOT_FOUND）→ 保守视作已存在
-      read: async () => {
-        throw new Error("probe boom");
-      },
-      write: async () => ({ version: 1 }),
+      // 探测原语自身出错（非 NOT_FOUND 的 Err）→ 保守视作已存在
+      read: async () => Result.err(new Error("probe boom")),
+      write: async () => Result.ok({ version: 1 }),
     } as unknown as BuiltinToolContext["vfs"];
     const setCalls: Array<{ logicalPath: string }> = [];
     const workplace = {
@@ -225,6 +227,7 @@ describe("Builtin file tools V2 (unit)", () => {
       listDirRules: async () => [],
       setDirRule: async (input: { logicalPath: string }) => {
         setCalls.push({ logicalPath: input.logicalPath });
+        return Result.ok(undefined);
       },
     };
     const ctx: BuiltinToolContext = {
@@ -334,7 +337,7 @@ describe("Builtin file tools V2 (integration)", () => {
       baseCtx,
     );
     assert.equal(third.version, 3);
-    assert.equal((await vfs.read("/t.txt")).content, "stale");
+    assert.equal((unwrap(await vfs.read("/t.txt"))).content, "stale");
   });
 
   it("fs ls/glob/grep flow", async () => {
@@ -342,8 +345,8 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/docs/a.md", "# A");
-    await vfs.write("/docs/b.txt", "plain");
+    unwrap(await vfs.write("/docs/a.md", "# A"));
+    unwrap(await vfs.write("/docs/b.txt", "plain"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -400,7 +403,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await vfs.mkdir("/dir"));
-    await vfs.write("/dir/a.txt", "gone");
+    unwrap(await vfs.write("/dir/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -408,10 +411,10 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx);
-    await assert.rejects(
+    await rejectsErr(
       () => vfs.read("/dir/a.txt"),
-      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
-    );
+        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+      );
   });
 
   it("fs rm -r removes directory tree", async () => {
@@ -420,7 +423,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await vfs.mkdir("/dir"));
-    await vfs.write("/dir/a.txt", "gone");
+    unwrap(await vfs.write("/dir/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -428,10 +431,10 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx);
-    await assert.rejects(
+    await rejectsErr(
       () => vfs.read("/dir/a.txt"),
-      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
-    );
+        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+      );
   });
 
   it("fs mv migrates file content", async () => {
@@ -439,7 +442,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/old.md", "body");
+    unwrap(await vfs.write("/old.md", "body"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -447,11 +450,11 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("fs", { action: "mv", from: "/old.md", to: "/new.md" }, baseCtx);
-    assert.equal((await vfs.read("/new.md")).content, "body");
-    await assert.rejects(
+    assert.equal((unwrap(await vfs.read("/new.md"))).content, "body");
+    await rejectsErr(
       () => vfs.read("/old.md"),
-      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
-    );
+        (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+      );
   });
 
   it("fs cp duplicates file and keeps source", async () => {
@@ -459,7 +462,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/src/x.md", "x");
+    unwrap(await vfs.write("/src/x.md", "x"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -467,8 +470,8 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("fs", { action: "cp", from: "/src/x.md", to: "/dst/x.md" }, baseCtx);
-    assert.equal((await vfs.read("/src/x.md")).content, "x");
-    assert.equal((await vfs.read("/dst/x.md")).content, "x");
+    assert.equal((unwrap(await vfs.read("/src/x.md"))).content, "x");
+    assert.equal((unwrap(await vfs.read("/dst/x.md"))).content, "x");
   });
 
   it("fs cp -r duplicates directory tree", async () => {
@@ -477,7 +480,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await vfs.mkdir("/src"));
-    await vfs.write("/src/x.md", "x");
+    unwrap(await vfs.write("/src/x.md", "x"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -485,8 +488,8 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("fs", { action: "cp", from: "/src", to: "/dst", recursive: true }, baseCtx);
-    assert.equal((await vfs.read("/src/x.md")).content, "x");
-    assert.equal((await vfs.read("/dst/x.md")).content, "x");
+    assert.equal((unwrap(await vfs.read("/src/x.md"))).content, "x");
+    assert.equal((unwrap(await vfs.read("/dst/x.md"))).content, "x");
   });
 
   it("T4: read 5000 lines defaults to 2000 with truncated and nextOffset", async () => {
@@ -495,7 +498,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 5000 }, (_, i) => `line-${i + 1}`).join("\n");
-    await vfs.write("/big.txt", content);
+    unwrap(await vfs.write("/big.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -520,7 +523,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.txt", "gone");
+    unwrap(await vfs.write("/a.txt", "gone"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -539,7 +542,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/small.txt", "one\n two");
+    unwrap(await vfs.write("/small.txt", "one\n two"));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -557,7 +560,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/long.txt", "a".repeat(3000));
+    unwrap(await vfs.write("/long.txt", "a".repeat(3000)));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -583,7 +586,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
     // 单行 300KB：旧行为（truncateLine 2000 字符）只回 2000 字符，
     // 新行为按 50KB 单一预算尽量填满、末行截到预算点。
-    await vfs.write("/long-oneline.txt", "a".repeat(300 * 1024));
+    unwrap(await vfs.write("/long-oneline.txt", "a".repeat(300 * 1024)));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -629,7 +632,7 @@ describe("Builtin file tools V2 (integration)", () => {
     for (let i = 0; i < 9; i++) lines.push("b".repeat(10 * 1024));
     lines.push("c".repeat(100 * 1024));
     lines.push("d-line");
-    await vfs.write("/multi-big.txt", lines.join("\n"));
+    unwrap(await vfs.write("/multi-big.txt", lines.join("\n")));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -680,7 +683,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 100 }, (_, i) => `第${i + 1}行内容`.padEnd(20, "字")).join("\n");
-    await vfs.write("/normal.txt", content);
+    unwrap(await vfs.write("/normal.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -709,7 +712,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 5000 }, (_, i) => `line-${i + 1}`).join("\n");
-    await vfs.write("/big-t-r2.txt", content);
+    unwrap(await vfs.write("/big-t-r2.txt", content));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -736,7 +739,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     for (let i = 0; i < 120; i++) {
-      await vfs.write(`/m-${i}.txt`, "needle here");
+      unwrap(await vfs.write(`/m-${i}.txt`, "needle here"));
     }
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -820,7 +823,7 @@ describe("Builtin file tools V2 (integration)", () => {
     );
 
     // /tmp 首次建目录：文件在真实 VFS 存在且全文一致。
-    const saved = await vfs.read(rec.savedPath!);
+    const saved = unwrap(await vfs.read(rec.savedPath!));
     assert.equal(saved.content, body);
 
     // 配套动作一：file_cache upsert（同会话后续 read 免重读盘）。
@@ -830,7 +833,7 @@ describe("Builtin file tools V2 (integration)", () => {
       )
     );
     // 配套动作二：/tmp 目录链补默认规则（rule_on）。
-    assert.equal((await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
 
     // read 工具分页读回：页 1（行 1-50）+ 页 2（行 51-62）拼回全文。
     const page1 = await runner.call<{
@@ -898,15 +901,15 @@ describe("Builtin file tools V2 (integration)", () => {
     await workplace.setDirRule({ logicalPath: "/w", ruleEnabled: false });
 
     await runner.call("write", { path: "/w/x/y/a.md", content: "hi" }, baseCtx);
-    assert.equal((await workplace.getDirRule("/w"))?.ruleEnabled, false);
-    assert.equal((await workplace.getDirRule("/w/x"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/w/x/y"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/w"))?.ruleEnabled, false);
+    assert.equal(unwrap(await workplace.getDirRule("/w/x"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/w/x/y"))?.ruleEnabled, true);
 
     // 真实 VFS 的 mkdir 不递归：逐层创建，每层都应补上默认规则
     await runner.call("fs", { action: "mkdir", path: "/m" }, baseCtx);
     await runner.call("fs", { action: "mkdir", path: "/m/n" }, baseCtx);
-    assert.equal((await workplace.getDirRule("/m"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/m/n"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/m"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/m/n"))?.ruleEnabled, true);
   });
 
   it("write 编辑已有文件祖先目录仍无规则行；同树新建才补父链（B-1）", async () => {
@@ -929,10 +932,10 @@ describe("Builtin file tools V2 (integration)", () => {
     };
 
     // 预置：直写 vfs（不经工具）造已有文件，祖先目录均无 dir_rule 行
-    await vfs.write("/e/f/g/a.md", "v1");
-    assert.equal(await workplace.getDirRule("/e"), undefined);
-    assert.equal(await workplace.getDirRule("/e/f"), undefined);
-    assert.equal(await workplace.getDirRule("/e/f/g"), undefined);
+    unwrap(await vfs.write("/e/f/g/a.md", "v1"));
+    assert.equal(unwrap(await workplace.getDirRule("/e")), undefined);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f")), undefined);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f/g")), undefined);
 
     // 编辑：经工具 write 同一路径，内容更新但祖先目录仍无规则行
     const edited = await runner.call<{ version: number }>(
@@ -941,10 +944,10 @@ describe("Builtin file tools V2 (integration)", () => {
       baseCtx,
     );
     assert.ok(edited.version >= 2);
-    assert.equal((await vfs.read("/e/f/g/a.md")).content, "v2");
-    assert.equal(await workplace.getDirRule("/e"), undefined);
-    assert.equal(await workplace.getDirRule("/e/f"), undefined);
-    assert.equal(await workplace.getDirRule("/e/f/g"), undefined);
+    assert.equal((unwrap(await vfs.read("/e/f/g/a.md"))).content, "v2");
+    assert.equal(unwrap(await workplace.getDirRule("/e")), undefined);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f")), undefined);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f/g")), undefined);
 
     // 同树新建：父链各层补上 rule_on（现有行为回归保护）
     await runner.call(
@@ -952,9 +955,9 @@ describe("Builtin file tools V2 (integration)", () => {
       { path: "/e/f/h/b.md", content: "hi" },
       baseCtx,
     );
-    assert.equal((await workplace.getDirRule("/e"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/e/f"))?.ruleEnabled, true);
-    assert.equal((await workplace.getDirRule("/e/f/h"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/e"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f"))?.ruleEnabled, true);
+    assert.equal(unwrap(await workplace.getDirRule("/e/f/h"))?.ruleEnabled, true);
   });
 
   it("补目录规则失败不阻断 write/mkdir 主流程（吞错契约，G-1）", async () => {
@@ -994,10 +997,10 @@ describe("Builtin file tools V2 (integration)", () => {
       baseCtx,
     );
     assert.ok(written.version >= 1);
-    assert.equal((await vfs.read("/boom/x/a.md")).content, "hi");
+    assert.equal((unwrap(await vfs.read("/boom/x/a.md"))).content, "hi");
 
     await runner.call("fs", { action: "mkdir", path: "/boom/d" }, baseCtx);
-    const listed = await vfs.list("/boom");
+    const listed = unwrap(await vfs.list("/boom"));
     assert.ok(
       listed.some((e) => e.path === "/boom/d" && e.kind === "directory"),
     );

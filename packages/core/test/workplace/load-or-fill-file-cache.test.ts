@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { loadOrFillFileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
@@ -32,18 +33,19 @@ function fakeVfs(options: {
   const vfs = {
     async read() {
       readCalls++;
-      return {
+      return Result.ok({
         path: "/note.md",
         content: options.content ?? "hello",
         version: 1,
         mtimeMs: 123,
-      };
+      });
     },
     async findContentSize() {
       if (options.contentSize === "throw") {
-        throw new Error("probe unsupported");
+        // 错误通道迁移四期：探测失败走 Result.err（不再 throw）
+        return Result.err(new Error("probe unsupported"));
       }
-      return options.contentSize;
+      return Result.ok(options.contentSize);
     },
   };
   return Object.assign(vfs, { readCalls: () => readCalls }) as unknown as VfsService &
@@ -218,9 +220,8 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     // 在本会话余下所有轮次都渲染成 missing 且永不自愈。
     const sessionKkv = createMemorySessionKkv();
     const vfs = fakeVfs({ contentSize: { kind: "inlineChars", size: 10, mtimeMs: 5 } });
-    (vfs as unknown as { read: () => Promise<unknown> }).read = async () => {
-      throw new Error("EIO");
-    };
+    (vfs as unknown as { read: () => Promise<unknown> }).read = async () =>
+      Result.err(new Error("EIO"));
 
     const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
 

@@ -96,11 +96,13 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
   it("解析：标题/直链 href 实体解码/uddg 重定向解码（嵌套 %26）/snippet 实体解码/广告块跳过/近形类名不误伤", async () => {
     const fetchFn = makeFetch(() => htmlOk(ddgResultsHtml()));
     const out = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
+    assert.ok(out.ok, "expected Result.ok");
+    const res = out.value;
 
-    assert.equal(out.engine, "duckduckgo");
+    assert.equal(res.engine, "duckduckgo");
     // 不产生 answer 字段（v2 已废除 answerPath 机制，SearchResponse 无该字段；DDG 保留解析数组）。
-    assert.equal("answer" in out, false);
-    assert.deepEqual(out.results, [
+    assert.equal("answer" in res, false);
+    assert.deepEqual(res.results, [
       {
         // 直链 href 的 &amp; 实体解码后为 &；snippet 实体解码。
         title: "直链标题甲",
@@ -140,9 +142,10 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
       { maxResults: 2 },
       fetchFn
     );
-    assert.equal(out2.results.length, 2);
+    assert.ok(out2.ok, "expected Result.ok");
+    assert.equal(out2.value.results.length, 2);
     assert.deepEqual(
-      out2.results.map((r) => r.url),
+      out2.value.results.map((r) => r.url),
       ["https://x0.example.com/p0", "https://x1.example.com/p1"]
     );
 
@@ -153,17 +156,17 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
       { maxResults: 0 },
       fetchFn
     );
-    assert.equal(out5.results.length, 5);
+    assert.ok(out5.ok, "expected Result.ok");
+    assert.equal(out5.value.results.length, 5);
   });
 
   it("解析 0 个可解析结果抛 invalid（无块——反爬/改版页，供串行链感知降级）", async () => {
     const fetchFn = makeFetch(
       () => htmlOk("<html><body>no results here</body></html>")
     );
-    await assert.rejects(
-      searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn),
-      /DuckDuckGo returned no parseable results \(invalid response\)/
-    );
+    const r = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
+    assert.ok(!r.ok, "expected Result.err");
+    assert.match(r.error.message, /DuckDuckGo returned no parseable results \(invalid response\)/);
   });
 
   it("有块但全无有效 title/url（如 uddg 指向非 http 协议）同样抛 invalid", async () => {
@@ -173,19 +176,17 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
   <a class="result__snippet">摘要</a>
 </div>`;
     const fetchFn = makeFetch(() => htmlOk(html));
-    await assert.rejects(
-      searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn),
-      /no parseable results/
-    );
+    const r = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
+    assert.ok(!r.ok, "expected Result.err");
+    assert.match(r.error.message, /no parseable results/);
   });
 
   it("非 2xx 抛错且文案含 status（统一 engineApiErrorMessage 范式）", async () => {
     const fetchFn = makeFetch(
       () => new Response("anomaly detected", { status: 403 })
     );
-    await assert.rejects(
-      searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn),
-      /DuckDuckGo API error 403: anomaly detected/
-    );
+    const r = await searchWithDuckduckgo(ddgResolved(), "q", {}, fetchFn);
+    assert.ok(!r.ok, "expected Result.err");
+    assert.match(r.error.message, /DuckDuckGo API error 403: anomaly detected/);
   });
 });

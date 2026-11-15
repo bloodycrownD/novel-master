@@ -1,3 +1,4 @@
+import { unwrap } from "../../helpers/result-unwrap.js";
 import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -107,8 +108,8 @@ function makeRuntime(overrides: {
   const definition = overrides.definition ?? sampleDefinition;
   return {
     state: {
-      getCurrentAgentId: async () => "a1",
-      getCurrentModelId: async () => "openai/gpt",
+      getCurrentAgentId: async () => Result.ok("a1"),
+      getCurrentModelId: async () => Result.ok("openai/gpt"),
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
@@ -153,11 +154,11 @@ function makeRuntime(overrides: {
       : never),
     workplace: () =>
       ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+        renderDisplay: async () => Result.ok(""),
+        buildListRows: async () => Result.ok([]),
+        materializePersistBlock: async () => Result.ok({ workplaceDisplay: "" }),
         evaluateRuleView:
-          overrides.evaluateRuleView ?? (async () => emptyRuleView()),
+          overrides.evaluateRuleView ?? (async () => Result.ok(emptyRuleView())),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
@@ -208,12 +209,12 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p", sessionId: "s" },
         "",
         { allowResumeWithoutInput: true },
-      );
+      ));
     } catch {
       // Runner deps are stubbed; reaching runner means resume gate passed.
     }
@@ -262,11 +263,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p", sessionId: "s" },
         "请看 @notes/a.md",
-      );
+      ));
     } catch {
       // runner deps stubbed
     }
@@ -290,7 +291,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p", sessionId: "s" },
         "再提 @notes/a.md",
@@ -305,7 +306,7 @@ describe("runAgentTurn", () => {
             },
           ],
         },
-      );
+      ));
     } catch {
       // runner deps stubbed
     }
@@ -339,10 +340,10 @@ describe("runAgentTurn", () => {
       { start: 13, end: 18 },
     ];
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -383,10 +384,10 @@ describe("runAgentTurn", () => {
       { start: 10, end: 13 },
     ];
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
         attachments: scanComposerRanges(text, ranges),
         excludedScanRanges: ranges,
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -416,7 +417,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "a.md",
@@ -426,7 +427,7 @@ describe("runAgentTurn", () => {
             path: "/a.md",
           },
         ],
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -458,7 +459,7 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+      unwrap(await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
         attachments: [
           {
             name: "preview-wp",
@@ -481,7 +482,7 @@ describe("runAgentTurn", () => {
             path: "/chip.md",
           },
         ],
-      });
+      }));
     } catch {
       // runner deps stubbed
     }
@@ -625,11 +626,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p", sessionId: "s" },
         "只是一条纯文本消息",
-      );
+      ));
     } catch {
       // runner deps stubbed；走到 capture 即说明 baseline 已写
     }
@@ -721,11 +722,11 @@ describe("runAgentTurn", () => {
       },
     });
     try {
-      await runAgentTurn(
+      unwrap(await runAgentTurn(
         runtime,
         { projectId: "p", sessionId: "s" },
         "继续聊天",
-      );
+      ));
     } catch {
       // runner deps stubbed；走到断言即说明 backfill 已调
     }
@@ -748,11 +749,11 @@ describe("runAgentTurn", () => {
     });
     for (let round = 0; round < 2; round++) {
       try {
-        await runAgentTurn(
+        unwrap(await runAgentTurn(
           runtime,
           { projectId: "p", sessionId: "s" },
           `第 ${round + 1} 轮消息`,
-        );
+        ));
       } catch {
         // runner deps stubbed；走到调用记录即说明 backfill 已调
       }

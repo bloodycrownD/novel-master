@@ -75,7 +75,7 @@ describe("restore-path resetHead semantics", () => {
     );
 
     // 内容已恢复到 v3
-    const result = await svfs.read("/file.md");
+    const result = unwrap(await svfs.read("/file.md"));
     assert.equal(result.content, "v3", "rollback 后文件内容应恢复到 v3");
     assert.equal(result.version, 3, "rollback 后 head version 应为 3");
   });
@@ -101,7 +101,7 @@ describe("restore-path resetHead semantics", () => {
     );
 
     // 再确认 version 没增长
-    const result = await svfs.read("/short-circuit.md");
+    const result = unwrap(await svfs.read("/short-circuit.md"));
     assert.equal(result.version, 1, "同文短路后 head version 应保持 1");
     assert.equal(result.content, "hello", "内容应保持不变");
 

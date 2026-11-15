@@ -158,7 +158,7 @@ describe("ensureImportDirRules（stub 单测）", () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
       directories: ["/角色", "/角色/开场", "/角色/世界书"],
       existingRules: [
-        { ...buildDefaultDirRule("session:s1", "/角色/世界书"), ruleEnabled: false },
+        { ...unwrap(buildDefaultDirRule("session:s1", "/角色/世界书")), ruleEnabled: false },
       ],
     });
     await ensureImportDirRules({

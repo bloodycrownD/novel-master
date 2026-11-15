@@ -162,11 +162,10 @@ describe("SkillService（T-SK5）", () => {
       (error: unknown) =>
         isAppError(error, "SKILL_INVALID_PATH"),
     );
-    // 隔壁技能目录未被写脏（VFS 读口保留 throw 契约）
-    await assert.rejects(
-      () => ctx.globalMetaVfs().read("/meta/skills/victim.md"),
-      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
-    );
+    // 隔壁技能目录未被写脏（VFS 读口已改返回 Result，NOT_FOUND 走 Err 通道）
+    const victim = await ctx.globalMetaVfs().read("/meta/skills/victim.md");
+    assert.ok(!victim.ok, "逃逸路径读口应走 Err 通道");
+    if (!victim.ok) assert.ok(isAppError(victim.error, "VFS_NOT_FOUND"));
   });
 
   it("write 新建技能名须过 SKILL_NAME_PATTERN 校验", async () => {

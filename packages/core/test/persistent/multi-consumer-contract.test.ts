@@ -18,7 +18,7 @@ describe("PersistentState / PersistentPreferences multi-consumer", () => {
     const a = createPersistentState(ctx.conn);
     const b = createPersistentState(ctx.conn);
     await a.setCurrentProjectId("shared-project");
-    assert.equal(await b.getCurrentProjectId(), "shared-project");
+    assert.equal(unwrap(await b.getCurrentProjectId()), "shared-project");
   });
 
   it("two preferences instances on same connection see llmStream", async () => {
@@ -26,7 +26,7 @@ describe("PersistentState / PersistentPreferences multi-consumer", () => {
     const a = createPersistentPreferences(ctx.conn);
     const b = createPersistentPreferences(ctx.conn);
     await a.setLlmStreamEnabled(false);
-    assert.equal(await b.getLlmStreamEnabled(), false);
+    assert.equal(unwrap(await b.getLlmStreamEnabled()), false);
   });
 
   it("does not read legacy global-config module", async () => {
@@ -34,7 +34,7 @@ describe("PersistentState / PersistentPreferences multi-consumer", () => {
     await ctx.state.resetCurrentProjectId();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("global-config", "currentProjectId", "legacy-id");
-    assert.equal(await ctx.state.getCurrentProjectId(), undefined);
+    assert.equal(unwrap(await ctx.state.getCurrentProjectId()), undefined);
     await ctx.state.setCurrentProjectId("new-id");
     assert.equal(unwrap(await kkv.get("nm-workspace-state", "currentProjectId")), "new-id");
   });

@@ -5,7 +5,7 @@ import { decode } from "@novel-master/core";
 import { AppError, createAgentRegistryService, agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-import { tCore } from "../helpers/core-i18n.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -37,11 +37,11 @@ describe("AgentRegistryService", () => {
       prompts: { persist: [], dynamic: [] },
       runtime: { maxSteps: 3, doomLoopThreshold: 2 },
     } as unknown as AgentDefinition);
-    const merged = await registry.update(id, {
+    const merged = unwrap(await registry.update(id, {
       description: "新描述",
       model: null,
       runtime: { maxSteps: 9 },
-    });
+    }));
     assert.equal(merged.description, "新描述");
     assert.ok(!("model" in merged));
     assert.deepEqual(merged.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
@@ -70,9 +70,11 @@ describe("AgentRegistryService", () => {
       runtime: { maxSteps: 20 },
       prompts: { persist: [], dynamic: [] },
     } as unknown as AgentDefinition;
-    await assert.rejects(
+    await rejectsErr(
       () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required"
+      (e) => {
+        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.name_required");
+      }
     );
     // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
     const defs = await registry.list();
@@ -109,13 +111,15 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const id = `agent-bad-str-${testIsolationSuffix()}`;
-    await assert.rejects(
+    await rejectsErr(
       () =>
         registry.upsert(id, {
           name: "坏形状-字符串",
           prompts: "你是翻译",
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
+      (e) => {
+        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+      }
     );
     await assert.rejects(
       () => registry.get(id),
@@ -127,13 +131,15 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const id = `agent-bad-arr-${testIsolationSuffix()}`;
-    await assert.rejects(
+    await rejectsErr(
       () =>
         registry.upsert(id, {
           name: "坏形状-数组",
           prompts: [{ persist: [], dynamic: [] }],
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
+      (e) => {
+        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+      }
     );
     await assert.rejects(
       () => registry.get(id),
@@ -145,13 +151,15 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const id = `agent-bad-num-${testIsolationSuffix()}`;
-    await assert.rejects(
+    await rejectsErr(
       () =>
         registry.upsert(id, {
           name: "坏形状-数字",
           prompts: 42,
         } as unknown as AgentDefinition),
-      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape"
+      (e) => {
+        assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
+      }
     );
     await assert.rejects(
       () => registry.get(id),
@@ -193,9 +201,11 @@ describe("AgentRegistryService", () => {
       agentDefinitionSchema
     );
     await registry.upsert("writer-a", def);
-    await assert.rejects(
+    await rejectsErr(
       () => registry.upsert("writer-b", def),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name"
+      (e) => {
+        assert.ok(e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.messageKey === "error.agent.duplicate_name");
+      }
     );
   });
 
@@ -232,7 +242,7 @@ describe("AgentRegistryService", () => {
         agentDefinitionSchema
       )
     );
-    await assert.rejects(
+    await rejectsErr(
       () =>
         registry.upsert(
           "writer-b",
@@ -245,7 +255,9 @@ describe("AgentRegistryService", () => {
             agentDefinitionSchema
           )
         ),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME")
+      (e) => {
+        assert.ok(e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME"));
+      }
     );
   });
 
@@ -264,7 +276,7 @@ describe("AgentRegistryService", () => {
     await registry.upsert("agent-b", { ...def, name: "b" });
     await ctx.state.setCurrentAgentId("agent-a");
     await registry.delete("agent-a");
-    assert.equal(await ctx.state.getCurrentAgentId(), undefined);
+    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), undefined);
   });
 
   it("AG5b: delete 非当前 Agent 时保留指针", async () => {
@@ -282,7 +294,7 @@ describe("AgentRegistryService", () => {
     await registry.upsert("agent-b", { ...def, name: "b" });
     await ctx.state.setCurrentAgentId("agent-a");
     await registry.delete("agent-b");
-    assert.equal(await ctx.state.getCurrentAgentId(), "agent-a");
+    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
   });
 
   it("AG5c: 未注入 state 时 delete 不清指针", async () => {
@@ -299,20 +311,6 @@ describe("AgentRegistryService", () => {
     await registry.upsert("agent-a", def);
     await ctx.state.setCurrentAgentId("agent-a");
     await registry.delete("agent-a");
-    assert.equal(await ctx.state.getCurrentAgentId(), "agent-a");
+    assert.equal(unwrap(await ctx.state.getCurrentAgentId()), "agent-a");
   });
 });
-
-/** 错误用户可见文案：带 messageKey 时经 tCore 渲染（G1-G3 descriptor 契约），否则回退 message。 */
-function renderError(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>};
-  return textOf(error);
-}
-
-/** 含 cause 链（ToolError 包装 AppError 时 messageKey 在 cause 上）。 */
-function textOf(error: unknown): string {
-  const e = error as {message: string; messageKey?: string; messageParams?: Record<string, unknown>; cause?: unknown};
-  if (e.messageKey != null) return tCore({key: e.messageKey as never, params: e.messageParams as never});
-  if (e.cause != null && typeof e.cause === "object") return textOf(e.cause);
-  return e.message;
-}

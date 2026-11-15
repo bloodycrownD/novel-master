@@ -16,6 +16,8 @@ import { after, before, describe, it } from "node:test";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import { isAppError } from "../../src/errors/app-error.js";
 
 type CountingCtx = NovelMasterTestContext & {
   readonly counter: import("../helpers/sql-counting-connection.js").SqlCounter;
@@ -120,7 +122,11 @@ describe("T-DEL1 vfs.delete 递归删除批量化", () => {
     await vfs.write("/tree3/b.md", "B");
     await vfs.delete("/tree3", { recursive: true });
 
-    await assert.rejects(() => vfs.read("/tree3/a.md"));
-    await assert.rejects(() => vfs.read("/tree3/b.md"));
+    await rejectsErr(() => vfs.read("/tree3/a.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
+    await rejectsErr(() => vfs.read("/tree3/b.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 });

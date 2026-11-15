@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -73,7 +73,7 @@ describe("worktree materializeLiveView", () => {
     const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
     calls.listFileMetaUnderPrefix = 0;
 
-    const live = await wt.materializeLiveView();
+    const live = unwrap(await wt.materializeLiveView());
     assert.ok(live.listRows.length >= 3);
     assert.ok(live.filetreeDisplay.length > 0);
     assert.equal(calls.listFileMetaUnderPrefix, 1);
@@ -89,8 +89,8 @@ describe("worktree materializeLiveView", () => {
     calls.listFileMetaUnderPrefix = 0;
 
     const [rows, fileTree] = await Promise.all([
-      wt.buildListRows(),
-      wt.renderFileTree(),
+      wt.buildListRows().then(unwrap),
+      wt.renderFileTree().then(unwrap),
     ]);
     assert.ok(rows.length >= 2);
     assert.ok(fileTree.length > 0);
@@ -114,9 +114,9 @@ describe("worktree materializeLiveView", () => {
       inclusionMode: "show",
     });
 
-    const live = await wt.materializeLiveView();
-    const rows = await wt.buildListRows();
-    const fileTree = await wt.renderFileTree();
+    const live = unwrap(await wt.materializeLiveView());
+    const rows = unwrap(await wt.buildListRows());
+    const fileTree = unwrap(await wt.renderFileTree());
 
     assert.deepEqual(
       rows.map((r) => r.path),
@@ -153,20 +153,20 @@ describe("worktree materializeLiveView", () => {
 
     // loadContextMetadata 兜底过滤后，VFS 条目已删的残留规则不再把
     // /55 渲染成幽灵目录（原断言「幽灵可见」随兜底过滤行为变更而调整）
-    let rows = await wt.buildListRows();
+    let rows = unwrap(await wt.buildListRows());
     assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
 
     const repo = new SqliteWorkplaceRepository(ctx.conn);
     const scopeKey = `session:${session.id}`;
     assert.ok(
-      (await repo.findFileRule(scopeKey, "/55/诗歌.txt")) != null,
+      unwrap(await repo.findFileRule(scopeKey, "/55/诗歌.txt")) != null,
       "清理前残留规则行应存在",
     );
 
     await wt.deleteRulesUnderLogicalPrefix("/55");
 
-    assert.equal(await repo.findFileRule(scopeKey, "/55/诗歌.txt"), null);
-    rows = await wt.buildListRows();
+    assert.equal(unwrap(await repo.findFileRule(scopeKey, "/55/诗歌.txt")), null);
+    rows = unwrap(await wt.buildListRows());
     assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
   });
 
@@ -211,15 +211,15 @@ describe("worktree materializeLiveView", () => {
     await wt.renameRulesUnderLogicalPrefix("/原", "/新名");
 
     // 旧路径规则应不存在
-    assert.equal(await wt.getDirRule("/原"), undefined);
-    assert.equal(await wt.getDirRule("/原/子"), undefined);
+    assert.equal(unwrap(await wt.getDirRule("/原")), undefined);
+    assert.equal(unwrap(await wt.getDirRule("/原/子")), undefined);
 
     // 新路径规则应存在且保留原配置
-    const newRootRule = await wt.getDirRule("/新名");
+    const newRootRule = unwrap(await wt.getDirRule("/新名"));
     assert.ok(newRootRule != null);
     assert.equal(newRootRule.ruleEnabled, true);
 
-    const newSubRule = await wt.getDirRule("/新名/子");
+    const newSubRule = unwrap(await wt.getDirRule("/新名/子"));
     assert.ok(newSubRule != null);
     assert.equal(newSubRule.ruleEnabled, true);
 
@@ -227,25 +227,25 @@ describe("worktree materializeLiveView", () => {
     // 不是 file_rule 表）
     const fileScopeKey = `session:${session.id}`;
     const repo = new SqliteWorkplaceRepository(ctx.conn);
-    const migratedFileRule = await repo.findFileRule(
+    const migratedFileRule = unwrap(await repo.findFileRule(
       fileScopeKey,
       "/新名/c.md",
-    );
+    ));
     assert.ok(migratedFileRule != null, "/新名/c.md 的 file rule 应已迁移");
     assert.equal(migratedFileRule.inclusionMode, "hide");
 
     // 旧路径不应再有规则
-    const oldFileRule = await repo.findFileRule(
+    const oldFileRule = unwrap(await repo.findFileRule(
       fileScopeKey,
       "/原/c.md",
-    );
+    ));
     assert.equal(oldFileRule, null);
 
     // 不相关路径不受影响
-    const otherRule = await repo.findFileRule(
+    const otherRule = unwrap(await repo.findFileRule(
       fileScopeKey,
       "/其他/d.md",
-    );
+    ));
     assert.ok(otherRule != null);
     assert.equal(otherRule.inclusionMode, "show");
   });
@@ -310,9 +310,9 @@ describe("worktree materializeLiveView", () => {
     const repo = new SqliteWorkplaceRepository(ctx.conn);
     const fileScopeKey = `session:${session.id}`;
     // 旧 dir 规则仍在（未半套提交），新规则未生成
-    assert.ok((await repo.findDirRule(fileScopeKey, "/原")) != null);
-    assert.ok((await repo.findDirRule(fileScopeKey, "/原/子")) != null);
-    assert.equal(await repo.findDirRule(fileScopeKey, "/新名"), null);
+    assert.ok(unwrap(await repo.findDirRule(fileScopeKey, "/原")) != null);
+    assert.ok(unwrap(await repo.findDirRule(fileScopeKey, "/原/子")) != null);
+    assert.equal(unwrap(await repo.findDirRule(fileScopeKey, "/新名")), null);
   });
 });
 
@@ -352,12 +352,12 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
     // 绕过 IPC 层的规则清理直接删 VFS 条目，模拟历史 rename/删除残留
     unwrap(await svfs.delete("/残留", { recursive: true }));
 
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     assert.ok(
       !rows.some((r) => r.path === "/残留" || r.path.startsWith("/残留/")),
       "幽灵目录不应出现在列表行",
     );
-    const tree = await wt.renderFileTree();
+    const tree = unwrap(await wt.renderFileTree());
     assert.ok(!tree.includes("/残留"), "幽灵目录不应出现在 $filetree 宏");
   });
 
@@ -375,13 +375,13 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
       ruleEnabled: true,
     });
 
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     assert.ok(
       rows.some((r) => r.kind === "dir" && r.path === "/空目录"),
       "目录行存在的空目录不应被幽灵过滤误杀",
     );
     // 宏树按条目名渲染目录（末段 + `/`），不是完整路径
-    const tree = await wt.renderFileTree();
+    const tree = unwrap(await wt.renderFileTree());
     assert.ok(tree.includes("空目录/"));
   });
 
@@ -406,7 +406,7 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
       ruleEnabled: true,
     });
 
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     assert.ok(
       rows.some((r) => r.kind === "dir" && r.path === "/隐含"),
       "前缀下有 live 文件的目录规则不应被过滤",

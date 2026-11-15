@@ -29,6 +29,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -65,8 +66,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 
@@ -113,8 +114,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
       sessionId: session.id,
     });
     await svfs.write("/exists.md", "x", { versionCheck: false });
-    const entry = await entries.findByPath(sk, "/exists.md");
-    const version = (await svfs.read("/exists.md")).version;
+    const entry = unwrap(await entries.findByPath(sk, "/exists.md"));
+    const version = (unwrap(await svfs.read("/exists.md"))).version;
 
     await assert.rejects(
       () =>
@@ -156,8 +157,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
       sessionId: session.id,
     });
     await svfs.write("/mix.md", "x", { versionCheck: false });
-    const entry = await entries.findByPath(sk, "/mix.md");
-    const version = (await svfs.read("/mix.md")).version;
+    const entry = unwrap(await entries.findByPath(sk, "/mix.md"));
+    const version = (unwrap(await svfs.read("/mix.md"))).version;
 
     await revisions.batchAdjustRefCount(
       [
@@ -197,8 +198,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     for (let i = 0; i < 550; i++) {
       const p = `/chunk-${i}.md`;
       await svfs.write(p, `body-${i}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
     assert.equal(pointers.length, 550);
@@ -234,8 +235,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 
@@ -275,8 +276,8 @@ describe("批量 ref_count 调整（batchAdjustRefCount + helpers）", () => {
     const pointers: Array<{ entryId: number; version: number }> = [];
     for (const p of paths) {
       await svfs.write(p, `body-${p}`, { versionCheck: false });
-      const entry = await entries.findByPath(sk, p);
-      const version = (await svfs.read(p)).version;
+      const entry = unwrap(await entries.findByPath(sk, p));
+      const version = (unwrap(await svfs.read(p))).version;
       pointers.push({ entryId: entry!.entryId, version });
     }
 

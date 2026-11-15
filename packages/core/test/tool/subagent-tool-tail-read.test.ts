@@ -21,6 +21,8 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import { Result } from "@/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 const generalDef: AgentDefinition = {
   name: "general",
@@ -104,12 +106,13 @@ function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
       depth: 0,
       callableAgents: [{ name: "general" }],
       parentSignal: new AbortController().signal,
-      createChildSession: async () => "child-1",
-      resolveChildModelId: () => ({
-        savedModelId: "m",
-        workspaceModelId: "m",
-      }),
-      runChildAgent: async () => result,
+      createChildSession: async () => Result.ok("child-1"),
+      resolveChildModelId: () =>
+        Result.ok({
+          savedModelId: "m",
+          workspaceModelId: "m",
+        }),
+      runChildAgent: async () => Result.ok(result),
     },
   };
 }
@@ -128,10 +131,10 @@ async function runTask(
 ): Promise<{ text: string; counts: Counts }> {
   const counts: Counts = { listBySession: 0, listBySessionTailOfRole: 0 };
   const { ctx } = makeMock(messages, counts);
-  const output = await subagentTool.run(
+  const output = unwrap(await subagentTool.run(
     { description: "d", prompt: "p", subagentName: "general" },
     toolCtx(ctx),
-  );
+  ));
   return { text: output.text, counts };
 }
 

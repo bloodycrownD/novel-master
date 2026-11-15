@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { resolvePreviewThinkingContext } from "../../src/service/prompt/resolve-preview-thinking-context.js";
 import type { SavedModel } from "../../src/domain/provider/model/saved-model.js";
 import type { LlmProvider } from "../../src/domain/provider/model/provider.js";
@@ -33,8 +34,8 @@ function makeProvider(protocol: LlmProvider["protocol"]): LlmProvider {
 describe("resolvePreviewThinkingContext", () => {
   it("取不到模型时兜底：requestThinkingEnabled true + protocol anthropic", async () => {
     const result = await resolvePreviewThinkingContext({
-      preferences: { getThinkingContextEnabled: async () => true },
-      savedModels: { findById: async () => null },
+      preferences: { getThinkingContextEnabled: async () => Result.ok(true) },
+      savedModels: { findById: async () => Result.ok(null) },
       providers: { findById: async () => null },
       agentModelId: undefined,
       sessionModelId: undefined,
@@ -49,11 +50,11 @@ describe("resolvePreviewThinkingContext", () => {
   it("agent pin 优先于会话覆盖：档位按 pin 模型读取", async () => {
     const readIds: string[] = [];
     const result = await resolvePreviewThinkingContext({
-      preferences: { getThinkingContextEnabled: async () => false },
+      preferences: { getThinkingContextEnabled: async () => Result.ok(false) },
       savedModels: {
         findById: async (id: string) => {
           readIds.push(id);
-          return id === "m-agent" ? makeSaved("m-agent", "off") : null;
+          return Result.ok(id === "m-agent" ? makeSaved("m-agent", "off") : null);
         },
       },
       providers: { findById: async () => makeProvider("openai") },
@@ -70,9 +71,9 @@ describe("resolvePreviewThinkingContext", () => {
 
   it("档位 off → requestThinkingEnabled false（协议照常推断）", async () => {
     const result = await resolvePreviewThinkingContext({
-      preferences: { getThinkingContextEnabled: async () => true },
+      preferences: { getThinkingContextEnabled: async () => Result.ok(true) },
       savedModels: {
-        findById: async () => makeSaved("m-off", "off"),
+        findById: async () => Result.ok(makeSaved("m-off", "off")),
       },
       providers: { findById: async () => makeProvider("gemini") },
       agentModelId: "m-off",

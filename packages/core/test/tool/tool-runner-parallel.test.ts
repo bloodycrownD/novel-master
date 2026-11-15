@@ -93,7 +93,7 @@ describe("ToolRunner.runParallel", () => {
       ctxForTools,
     );
 
-    const live = await vfs.read("/race.md");
+    const live = unwrap(await vfs.read("/race.md"));
     assert.equal(live.content, "second");
 
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));

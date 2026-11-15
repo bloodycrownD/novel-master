@@ -11,6 +11,7 @@
 
 import { isAppError } from "../../src/errors/app-error.js";
 import { isVfsError } from "../../src/errors/vfs-errors.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import {
@@ -132,7 +133,7 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
       { confirmed: true }
     );
 
-    const rows = await new SqliteVfsEntryRepository(conn).scanContents(scopeKey, "/");
+    const rows = unwrap(await new SqliteVfsEntryRepository(conn).scanContents(scopeKey, "/"));
     const actual = new Map(rows.map((r) => [r.path, r.content]));
     assert.equal(actual.size, 450);
     for (const [path, content] of expected) {
@@ -160,24 +161,12 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     );
 
     // 前 2 片的文件已被补偿删除（补偿挂在片失败的内层，不挂外层 catch）。
-    await assert.rejects(
-      () => vfs.read("/f0000.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
-    await assert.rejects(
-      () => vfs.read("/f0199.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read("/f0000.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
+    await rejectsErr(() => vfs.read("/f0199.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
     // 失败片本身未落库。
-    await assert.rejects(
-      () => vfs.read(failPath),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read(failPath), (e: unknown) => isVfsError(e, "NOT_FOUND"));
     // 旧内容**不恢复**（段 B0 已删，补偿只清半棵新树）——这是分片的既定行为损失。
-    await assert.rejects(
-      () => vfs.read("/before.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
+    await rejectsErr(() => vfs.read("/before.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
 
     // 补偿用 releaseAndDeleteVfsPrefix（减 live ref + 删 entry + GC 无引用 revision）
     // ⇒ 该前缀下零 revision 残留。裸 deleteVfsPrefix 会留下一批 ref_count=1 的
@@ -221,11 +210,8 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
     );
 
     // 补偿照跑：目标前缀回到「空的可重试态」。
-    await assert.rejects(
-      () => vfs.read("/a.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND")
-    );
-    const remaining = await vfs.list("/", { recursive: true });
+    await rejectsErr(() => vfs.read("/a.md"), (e: unknown) => isVfsError(e, "NOT_FOUND"));
+    const remaining = unwrap(await vfs.list("/", { recursive: true }));
     assert.deepEqual(remaining, [], "补偿后目标前缀应为空");
   });
 

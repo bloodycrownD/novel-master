@@ -3,12 +3,13 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import { composerAtPath } from "../../src/domain/chat/logic/composer/composer-at-path.js";
 
 describe("composer-at-path", () => {
   it("T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /", () => {
-    const tokens = composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]);
+    const tokens = unwrap(composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]));
     assert.deepEqual(tokens, ["@/notes/", "@/a.md"]);
     const scanned = attachmentScanner.scanAtPaths(tokens.join(" "));
     assert.equal(scanned.length, 2);
@@ -22,7 +23,7 @@ describe("composer-at-path", () => {
     const active = composerAtPath.detectQuery("见 @ab", 5);
     assert.ok(active);
     assert.equal(active!.query, "ab");
-    const token = composerAtPath.formatToken("/ab.md", false);
+    const token = unwrap(composerAtPath.formatToken("/ab.md", false));
     const next = composerAtPath.replaceToken("见 @ab", 5, active!.start, token);
     assert.equal(next.text, "见 @/ab.md ");
   });

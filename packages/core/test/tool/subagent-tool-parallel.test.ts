@@ -11,6 +11,7 @@ import type {
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
+import { Result } from "@/errors/either.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
@@ -74,25 +75,26 @@ function setupParallel(opts: SetupOpts = {}): {
     parentSignal: opts.parentSignal ?? new AbortController().signal,
     createChildSession: async (title) => {
       const s = await sessions.createSubSession("p", "proj", title);
-      return s.id;
+      return Result.ok(s.id);
     },
     // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
     parentSessionId: "p",
     isSessionRunActive: () => false,
-    resolveChildModelId: (def) => ({
-      savedModelId: def.model ?? "parent-saved",
-      workspaceModelId: "ws-model",
-    }),
+    resolveChildModelId: (def) =>
+      Result.ok({
+        savedModelId: def.model ?? "parent-saved",
+        workspaceModelId: "ws-model",
+      }),
     runChildAgent: async (_def, childSessionId, runOpts) => {
       runChildAgentCalls.push({ childSessionId, signal: runOpts.signal });
       // 模拟延迟，让 abort 有时间生效。
       await new Promise((r) => setTimeout(r, 20));
-      return {
+      return Result.ok({
         stepsExecuted: 1,
         finished: stopReason === "completed",
         stopReason,
         rounds: [],
-      };
+      });
     },
   };
 

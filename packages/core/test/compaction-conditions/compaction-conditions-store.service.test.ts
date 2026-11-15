@@ -15,7 +15,7 @@ describe("compaction conditions store integrity", () => {
   it("S1: empty database getConditions returns null", async () => {
     const ctx = await openNovelMasterTestConnection();
     const store = createCompactionConditionsStore(ctx.conn);
-    assert.equal(await store.getConditions(), null);
+    assert.equal(unwrap(await store.getConditions()), null);
     await ctx.conn.close();
   });
 
@@ -56,7 +56,7 @@ describe("compaction conditions store integrity", () => {
       KEY,
       JSON.stringify({ schemaVersion: 3, enabled: false }),
     );
-    const conditions = await store.getConditions();
+    const conditions = unwrap(await store.getConditions());
     assert.equal(conditions?.enabled, false);
     await ctx.conn.close();
   });
@@ -69,7 +69,7 @@ describe("compaction conditions store integrity", () => {
         store.setConditions({ schemaVersion: 4, enabled: true }),
       (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
     );
-    assert.equal(await store.getConditions(), null);
+    assert.equal(unwrap(await store.getConditions()), null);
     await ctx.conn.close();
   });
 
@@ -83,7 +83,7 @@ describe("compaction conditions store integrity", () => {
       visibleFloor: 10,
     };
     await store.setConditions(input);
-    const loaded = await store.getConditions();
+    const loaded = unwrap(await store.getConditions());
     assert.deepEqual(loaded, input);
     await ctx.conn.close();
   });
@@ -102,7 +102,7 @@ describe("compaction conditions store integrity", () => {
         visibleFloor: 20,
       }),
     );
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);

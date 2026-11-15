@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
+import { unwrap } from "../helpers/result-unwrap.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -26,7 +27,7 @@ describe("worktree rule engine (integration)", () => {
       inclusionMode: "show",
     });
 
-    const live = await wt.materializeLiveView();
+    const live = unwrap(await wt.materializeLiveView());
     const dirRoot = live.listRows.find((r) => r.kind === "dir" && r.path === "/");
     assert.ok(dirRoot);
     assert.equal(dirRoot.ruleState, "rule_on");

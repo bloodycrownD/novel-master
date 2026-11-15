@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -32,10 +33,10 @@ const providerRepo: ProviderRepository = {
 const SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000001";
 
 const savedModels: SavedModelRepository = {
-  listByProvider: async () => [],
+  listByProvider: async () => Result.ok([]),
   findById: async (id) =>
     id === SAVED_MODEL_ID
-      ? {
+      ? Result.ok({
           id: SAVED_MODEL_ID,
           providerId: BUILTIN_PROVIDER_UUID_OPENAI,
           vendorModelId: "gpt-4o-mini",
@@ -43,8 +44,8 @@ const savedModels: SavedModelRepository = {
           settings: defaultSavedModelSettings("gpt-4o-mini"),
           createdAtMs: 0,
           updatedAtMs: 0,
-        }
-      : null,
+        })
+      : Result.ok(null),
   insert: async () => undefined,
   updateById: async () => undefined,
   deleteById: async () => false,
@@ -58,9 +59,10 @@ const secretStore: SecretStore = {
 };
 
 const noRetryPolicies: ModelRetryPolicyService = {
-  getPolicy: async () => null,
-  setPolicy: async () => undefined,
-  clearPolicy: async () => undefined,
+  // port 已改返回 Result：getPolicy 成功未设置 => ok(null)，set/clear 幂等成功
+  getPolicy: async () => Result.ok(null),
+  setPolicy: async () => Result.ok(undefined),
+  clearPolicy: async () => Result.ok(undefined),
 };
 
 describe("DefaultModelRequestService retry", () => {

@@ -119,7 +119,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     await vfs.write("/hist.md", "hist-body");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg(
           "回放",
@@ -137,7 +137,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
         ),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
 
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="workplaceChange">/);

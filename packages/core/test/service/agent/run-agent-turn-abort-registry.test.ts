@@ -9,7 +9,8 @@
  * @module test/service/agent/run-agent-turn-abort-registry.test
  */
 
-import { unwrap } from "../../helpers/result-unwrap.js";
+import { Result } from "../../../src/errors/either.js";
+import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -182,7 +183,7 @@ function makeRuntime(
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
@@ -192,20 +193,21 @@ function makeRuntime(
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: args.modelRequests,
     savedModelRepo: {
-      findById: async () => ({
-        id: TEST_SAVED_MODEL_ID,
-        providerId: "test-provider",
-        alias: "test-model",
-        protocolName: "anthropic",
-        protocolModelId: "claude-test",
-        thinkingEnabled: false,
-        createdAt: 0,
-        settings: {
-          schemaVersion: 2,
-          internal: { contextWindowTokens: 100000, tokenCounterMode: "auto" },
-          generation: { sampling: { enabled: false }, thinkingLevel: "off" },
-        },
-      }),
+      findById: async () =>
+        Result.ok({
+          id: TEST_SAVED_MODEL_ID,
+          providerId: "test-provider",
+          alias: "test-model",
+          protocolName: "anthropic",
+          protocolModelId: "claude-test",
+          thinkingEnabled: false,
+          createdAt: 0,
+          settings: {
+            schemaVersion: 2,
+            internal: { contextWindowTokens: 100000, tokenCounterMode: "auto" },
+            generation: { sampling: { enabled: false }, thinkingLevel: "off" },
+          },
+        }),
     } as AgentTurnRuntimePort["savedModelRepo"],
     providerRepo: {
       findById: async () => ({
@@ -376,7 +378,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: () => {} });
+    unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: () => {} }));
 
     // run 结束后所有 controller 反注册。
     assert.ok(capturedChildSessionId != null, "应捕获到 childSessionId");
@@ -438,7 +440,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     const onStreamEvents: LlmStreamEvent[] = [];
-    const result = await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: (e) => onStreamEvents.push(e) });
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "请派生子代理完成任务", { stream: false, onStream: (e) => onStreamEvents.push(e) }));
 
     // 父级 abort 直接中断了主 run（registry.abort(parentSessionId) → internalController.abort
     // → 主 runner 检测 signal.aborted → stopReason=cancelled）。这证明 registry 到主 run 的
@@ -536,7 +538,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     abortRegistry.abort(session.id);
     releaseBackfill();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled", "前奏期间的停止必须兑现为 cancelled");
     assert.equal(modelCalls, 0, "停止后不得再发模型请求");
     // 用户消息在 append 阶段已落库（停止发生在「已发送」之后）：保留，可由
@@ -628,7 +630,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     abortRegistry.abort(session.id);
     releaseRead();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled", "组装期间停止必须兑现为 cancelled");
     assert.equal(modelCalls, 0, "停止后不得发模型请求（POST 未派出即收口）");
     assert.equal(readCalls, 1, "第一个文件读完就该在第二个文件前中止（文件粒度检查点）");
@@ -681,7 +683,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     // 入口就带一个已 aborted 的 caller signal（等价于「受理瞬间用户已按停止」）。
-    const result = await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, signal: AbortSignal.abort() });
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, signal: AbortSignal.abort() }));
 
     assert.equal(result.stopReason, "cancelled", "入口已 aborted 必须由检查点⓪兑现为 cancelled");
     assert.equal(backfillCalls, 0, "⓪ 必须在 backfill 之前兑现（backfill 是前奏第一站、大会话秒级）");
@@ -770,7 +772,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     abortRegistry.abort(session.id);
     releaseList();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled", "list 期间的停止必须由检查点③兑现为 cancelled（不得跑完技能预算装配再继续）");
     assert.equal(result.stepsExecuted, 0, "runner 未起步，stepsExecuted 为 0");
     // r3-run-4 验收③：这才是「检查点③」的正向证据——skills 连门都没进。
@@ -840,7 +842,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     abortRegistry.abort(session.id);
     releaseSkills();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled", "skills 期间的停止必须由检查点④兑现为 cancelled（不得跑完剩余装配再到 loop_start）");
     assert.equal(result.stepsExecuted, 0, "runner 未起步");
     assert.equal(skills.calls(), 1, "skills 已经跑过（这道检查点在③之后）");
@@ -914,7 +916,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
 
     let result: Awaited<ReturnType<typeof runAgentTurn>>;
     try {
-      result = await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "backfill 中途按停止", { stream: false });
+      result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "backfill 中途按停止", { stream: false }));
     } finally {
       holder.findLastCheckpointedMessageId = originalLookup;
     }
@@ -972,9 +974,12 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    await assert.rejects(
+    // 错误通道迁移四期：run 内已知失败沿 Result.err 回传（不再 reject）
+    await rejectsErr(
       () => runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "第一次会超时", { stream: false, onStream: () => {} }),
-      (e: unknown) => isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"
+      (e) => {
+        assert.ok(isAppError(e, "PROVIDER_STREAM_TIMEOUT") && (e as { details?: { phase?: string } }).details?.phase === "idle");
+      }
     );
     assert.ok(firstRunSawRegistered, "第一次 run 应已执行到 model 调用");
 
@@ -983,7 +988,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
     assert.equal(abortRegistry.has(session.id), false, "超时收敛后 sessionId 应从 registry 反注册");
 
     // 同会话立即再发：正常完成（startRun 门禁放行）
-    const result = await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "同会话再发", { stream: false, onStream: () => {} });
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "同会话再发", { stream: false, onStream: () => {} }));
     assert.equal(result.stopReason, "completed");
     assert.equal(calls, 2);
     assert.equal(abortRegistry.has(session.id), false, "第二次 run 结束后 sessionId 应再次反注册");
@@ -1050,7 +1055,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     abortRegistry.abort(session.id);
     releaseList();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled");
 
     assert.equal(events.started().length, 0, "runner 从未起步，绝不能有 RUN_STARTED（发了就是 STARTED/终态失配）");
@@ -1114,7 +1119,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     abortRegistry.abort(session.id);
     releaseCapture();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
     assert.equal(result.stopReason, "cancelled");
     assert.equal(events.finished().length, 1, "检查点①命中同样必须恰好一条 FINISHED('')");
     assert.equal(events.finished()[0]!.payload.runId, "");
@@ -1382,7 +1387,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     abortRegistry.abort(childSessionId);
     gate.release();
 
-    const result = await runPromise;
+    const result = unwrap(await runPromise);
 
     assert.equal(seenChildIds.length, 1, "只应创建一个子会话");
     // 停的是**子**会话，父 run 正常走完：这是「子 run cancelled、主 run
@@ -1473,7 +1478,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const result = await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并立即停止", { stream: false });
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "派生子代理并立即停止", { stream: false }));
 
     assert.equal(result.stopReason, "cancelled", "停的是父会话，父 run 收敛为 cancelled");
     assert.equal(modelCalls, 1, "父 run 被取消后不再发第二次模型请求");

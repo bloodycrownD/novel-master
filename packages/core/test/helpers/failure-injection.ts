@@ -10,7 +10,13 @@
  * - 计数从 1 开始（按人类直觉「第几步」），0 / 负数一律不触发；
  * - 默认抛 `Error`，但允许调用方通过 `makeError` 自定义（比如想验证
  *   `CoordinatedWriteRollbackError` 的根因类型时）。
+ *
+ * 错误通道迁移四期适配：WriteStep.execute/rollback 已改收 Result<void, AppError>，
+ * 注入器成功路径补齐 `Result.ok(undefined)`；注入失败仍走 throw（未知异常通道，
+ * 与 port 注释同口）。
  */
+import { Result } from "../../src/errors/either.js";
+import type { AppError } from "../../src/errors/app-error.js";
 
 export interface FailureInjectionOptions {
   /**
@@ -45,8 +51,8 @@ export interface FailureInjector {
     },
   ): {
     name: string;
-    execute: () => Promise<void>;
-    rollback: () => Promise<void>;
+    execute: () => Promise<Result<void, AppError>>;
+    rollback: () => Promise<Result<void, AppError>>;
   };
   /** 当前已触发的正向执行次数。 */
   readonly executeCount: number;
@@ -92,6 +98,7 @@ export function createFailureInjector(
             throw makeError(name, "execute");
           }
           await onExecute?.();
+          return Result.ok(undefined);
         },
         async rollback() {
           rollbackCount += 1;
@@ -100,6 +107,7 @@ export function createFailureInjector(
             throw makeError(name, "rollback");
           }
           await onRollback?.();
+          return Result.ok(undefined);
         },
       };
     },

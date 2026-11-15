@@ -36,11 +36,11 @@ describe("Chat services", () => {
 
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md", "/sub/b.md"]);
-    assert.equal((await svfs.read("/a.md")).content, "A");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "A");
   });
 
   it("project template changes after session create do not affect session vfs", async () => {
@@ -54,8 +54,8 @@ describe("Chat services", () => {
     await pvfs.write("/a.md", "CHANGED", { versionCheck: false });
     await pvfs.write("/new.md", "NEW");
 
-    assert.equal((await svfs.read("/a.md")).content, "A");
-    const paths = (await svfs.list("/", { recursive: true }))
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "A");
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md"]);
@@ -65,7 +65,7 @@ describe("Chat services", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create("Empty"));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const paths = await ctx.sessionVfs(project.id, session.id).list("/");
+    const paths = unwrap(await ctx.sessionVfs(project.id, session.id).list("/"));
     assert.deepEqual(paths, []);
   });
 
@@ -232,7 +232,7 @@ describe("Chat services", () => {
     assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
     assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
     assert.equal(
-      (await ctx.sessionVfs(project.id, forked.id).read("/note.md")).content,
+      unwrap(await ctx.sessionVfs(project.id, forked.id).read("/note.md")).content,
       "edited",
     );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
@@ -322,7 +322,7 @@ describe("Chat services", () => {
 
     const copy = unwrap(await ctx.sessions.copy(session.id));
     const copyVfs = ctx.sessionVfs(project.id, copy.id);
-    assert.equal((await copyVfs.read("/note.md")).content, "body");
+    assert.equal(unwrap(await copyVfs.read("/note.md")).content, "body");
     const copyMsgs = await ctx.messages.listBySession(copy.id);
     assert.equal(copyMsgs.length, 2);
     assert.equal(firstTextBlock(copyMsgs[0]!.content), "hi");
@@ -330,7 +330,7 @@ describe("Chat services", () => {
     assert.notEqual(copyMsgs[0]!.id, (await ctx.messages.listBySession(session.id))[0]!.id);
 
     await svfs.write("/note.md", "mutated", { versionCheck: false });
-    assert.equal((await copyVfs.read("/note.md")).content, "body");
+    assert.equal(unwrap(await copyVfs.read("/note.md")).content, "body");
   });
 
   it("session delete purges message checkpoints in transaction", async () => {
@@ -398,7 +398,7 @@ describe("Chat services", () => {
 
     const copy = unwrap(await ctx.projects.copy(project.id));
     assert.equal(
-      (await ctx.projectVfs(copy.id).read("/foo.md")).content,
+      unwrap(await ctx.projectVfs(copy.id).read("/foo.md")).content,
       "FOO",
     );
     assert.equal((unwrap(await ctx.sessions.listByProject(copy.id))).length, 0);

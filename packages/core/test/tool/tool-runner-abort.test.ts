@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
+import { Result } from "../../src/errors/either.js";
 
 describe("ToolRunner：回合取消竞速（A-24）", () => {
   it("工具永不返回时，abort 让 call 立即 reject（不等工具）", async () => {
@@ -41,7 +42,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       name: "echo",
       description: () => "echo",
       inputSchema: z.object({ text: z.string() }),
-      run: async (input: { text: string }) => input.text,
+      run: async (input: { text: string }) => Result.ok(input.text),
     });
     const runner = new ToolRunner(registry);
     assert.equal(await runner.call("echo", { text: "ok" }, {}), "ok");
@@ -76,7 +77,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       name: "echo",
       description: () => "echo",
       inputSchema: z.object({ text: z.string() }),
-      run: async (input: { text: string }) => input.text,
+      run: async (input: { text: string }) => Result.ok(input.text),
     });
     const runner = new ToolRunner(registry);
     const controller = new AbortController();
@@ -101,7 +102,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       run: async (input: { i: number }) => {
         started.push(input.i);
         await new Promise<void>((resolve) => pending.push(resolve));
-        return input.i;
+        return Result.ok(input.i);
       },
     });
     const runner = new ToolRunner(registry);

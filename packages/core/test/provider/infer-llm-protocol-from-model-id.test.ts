@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { inferLlmProtocolFromSavedModelId } from "../../src/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import {
   BUILTIN_KEY_TO_UUID,
@@ -75,12 +76,12 @@ describe("inferLlmProtocolFromSavedModelId", () => {
   it("自定义无 builtin_key 时须传入 providers 才走行上 protocol", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "custom-gateway",
       apiKey: "k",
-    });
+    }));
     const saved = await bundle.providerModels.create(created.id, "some-model");
     assert.equal(
       await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),

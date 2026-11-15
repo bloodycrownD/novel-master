@@ -89,12 +89,12 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       textBlocks("继续"),
     ));
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare([stored], {
+    const prepared = unwrap(await promptAssembler.prepare([stored], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs: ctx.sessionVfs(project.id, session.id),
       extraInfo: "当前目录结构",
-    });
+    }));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<extra-info>/);
     assert.match(body, /当前目录结构/);
@@ -123,12 +123,12 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       { attachments },
     ));
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare([stored], {
+    const prepared = unwrap(await promptAssembler.prepare([stored], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs: ctx.sessionVfs(project.id, session.id),
       extraInfo: "备注信息",
-    });
+    }));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     // 顺序：user-ops 先闭合 → extra-info 嵌在 attachment 内 → attachment 闭合 → user-input
     const expected = [
@@ -169,7 +169,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       textBlocks("第三条"),
     ));
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [first, second, third],
       {
         sessionId: session.id,
@@ -177,7 +177,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         vfs: ctx.sessionVfs(project.id, session.id),
         extraInfo: "背景说明",
       },
-    );
+    ));
     const body1 = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     const body3 = messageBodyTextFromBlocks(prepared[2]!.content.blocks);
@@ -206,7 +206,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       textBlocks("第二条"),
     ));
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [first, second],
       {
         sessionId: session.id,
@@ -215,7 +215,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         // extraInfo 全空白
         extraInfo: "   ",
       },
-    );
+    ));
     assert.doesNotMatch(messageBodyTextFromBlocks(prepared[0]!.content.blocks), /<extra-info>/);
     assert.doesNotMatch(messageBodyTextFromBlocks(prepared[1]!.content.blocks), /<extra-info>/);
   });
@@ -241,7 +241,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       hidden: true,
     });
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [visible1, visible2, hiddenMsg],
       {
         sessionId: session.id,
@@ -249,7 +249,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         vfs: ctx.sessionVfs(project.id, session.id),
         extraInfo: "背景说明",
       },
-    );
+    ));
     // hidden 透传但未 wrap（原文恒等）
     const bodyHidden = messageBodyTextFromBlocks(prepared[2]!.content.blocks);
     assert.equal(bodyHidden, "隐藏消息");
@@ -293,11 +293,11 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
     assert.equal(messageBodyTextFromBlocks(stored.content.blocks).includes("<attachment>"), false);
 
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare([stored], {
+    const prepared = unwrap(await promptAssembler.prepare([stored], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs: ctx.sessionVfs(project.id, session.id),
-    });
+    }));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     // D2：user_ops 仅 annotate 进 <user-ops>；write 手改附件被过滤
     assert.match(body, /<user-ops>/);
@@ -363,11 +363,11 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         },
       ],
     });
-    const prepared = await promptAssembler.prepare([msg], {
+    const prepared = unwrap(await promptAssembler.prepare([msg], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs,
-    });
+    }));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<user-ops>/);
     assert.match(body, /<action name="userAttach">/);
@@ -420,11 +420,11 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         },
       ],
     });
-    await promptAssembler.prepare([msg], {
+    unwrap(await promptAssembler.prepare([msg], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs,
-    });
+    }));
 
     assert.ok(
       (unwrap(await sk.get(
@@ -494,11 +494,11 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         ],
       },
     ));
-    const prepared = await promptAssembler.prepare([stored], {
+    const prepared = unwrap(await promptAssembler.prepare([stored], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs,
-    });
+    }));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<attachment>/);
     assert.match(body, /<user-ops>/);
@@ -532,11 +532,11 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
         },
       ],
     });
-    const prepared = await promptAssembler.prepare([hidden], {
+    const prepared = unwrap(await promptAssembler.prepare([hidden], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs,
-    });
+    }));
     assert.equal(messageBodyTextFromBlocks(prepared[0]!.content.blocks), "隐藏");
     assert.equal(messageBodyTextFromBlocks(prepared[0]!.content.blocks).includes("<attachment>"), false);
     assert.equal(
@@ -600,20 +600,20 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       seenPaths: [] as string[],
     };
     // Agent 路径：对 DB 原文 prepare
-    const agentPrepared = await promptAssembler.prepare(
+    const agentPrepared = unwrap(await promptAssembler.prepare(
       [stored],
       prepareRuntime,
-    );
+    ));
     const agentUserWrap = messageBodyTextFromBlocks(agentPrepared[0]!.content.blocks);
 
     // RealPrompt / buildSessionPromptInput 同源：重新 list → prepare → layout
     const listed = (await ctx.messages.listBySession(session.id)).filter(
       (m) => !m.hidden,
     );
-    const realPromptPrepared = await promptAssembler.prepare(
+    const realPromptPrepared = unwrap(await promptAssembler.prepare(
       listed,
       prepareRuntime,
-    );
+    ));
     const layout = {
       persistEnabled: false as const,
       persist: [] as const,
@@ -659,7 +659,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/a.md", "FULL-BODY-A");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("first", {
           sessionId: session.id,
@@ -675,7 +675,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
@@ -694,7 +694,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/a.md", "FULL-BODY-A");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           id: "u1",
@@ -724,7 +724,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     assert.match(body2, /<action name="userAttach">/);
     assert.match(body2, /"alreadyReferenced": true/);
@@ -742,7 +742,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/pref.md", "PREFIX-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("again", {
           sessionId: session.id,
@@ -764,7 +764,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         vfs,
         seenPaths: ["/pref.md"],
       },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"path": "\/pref\.md"/);
@@ -781,7 +781,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/same.md", "SAME-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("conflict", {
           sessionId: session.id,
@@ -804,7 +804,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<user-ops>/);
     assert.match(body, /<action name="userAttach">/);
@@ -827,7 +827,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/notes.md", "FILE-AT-NOTES");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("d1", {
           id: "d1",
@@ -872,7 +872,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const b1 = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     const b2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     const b3 = messageBodyTextFromBlocks(prepared[2]!.content.blocks);
@@ -892,7 +892,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     await vfs.write("/pic.png", "bin");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("i1", {
           id: "i1",
@@ -922,7 +922,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     assert.match(body2, /<action name="userAttach">/);
     assert.match(body2, /"display": "filename"/);
@@ -944,7 +944,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
 1|hello
 2|world
 </file>`;
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("看旧附件", {
           sessionId: session.id,
@@ -964,7 +964,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         sessionKkv: sk,
         vfs,
       },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<user-ops>/);
     assert.match(body, /<action name="userAttach">/);
@@ -1005,7 +1005,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = createSessionKkvService(ctx.conn);
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg(plain, {
           sessionId: session.id,
@@ -1026,7 +1026,7 @@ describe("promptAssembler path degrade (T-PD*)", () => {
         vfs,
         seenPaths: ["/gone.md"],
       },
-    );
+    ));
     assert.equal(messageBodyTextFromBlocks(prepared[0]!.content.blocks), plain);
   });
 });
@@ -1047,7 +1047,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
     await vfs.write("/hdr.md", "HEADER-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("看设定", {
           sessionId: session.id,
@@ -1070,7 +1070,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
         seenPaths: [],
         workplaceSeenPaths: ["/hdr.md"],
       },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
@@ -1086,7 +1086,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
     await vfs.write("/full.md", "FULL-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("看设定", {
           sessionId: session.id,
@@ -1108,7 +1108,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
         seenPaths: ["/full.md"],
         workplaceSeenPaths: ["/full.md"],
       },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /"alreadyReferenced": true/);
     assert.equal(body.includes("FULL-BODY"), false);
@@ -1122,7 +1122,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
     await vfs.write("/gone.md", "GONE-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("历史附件", {
           sessionId: session.id,
@@ -1144,7 +1144,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
         // 只给 seenPaths，不给 workplaceSeenPaths ⇒ 回落同一集合。
         seenPaths: ["/gone.md"],
       },
-    );
+    ));
     assert.equal(
       prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
       "",
@@ -1160,7 +1160,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
     await vfs.write("/hdr.md", "HEADER-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("历史 workplace", {
           sessionId: session.id,
@@ -1184,7 +1184,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
         seenPaths: [],
         workplaceSeenPaths: ["/hdr.md"],
       },
-    );
+    ));
     assert.equal(
       prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
       "",
@@ -1200,7 +1200,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
     await vfs.write("/hdr.md", "HEADER-BODY");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           id: "w1",
@@ -1236,7 +1236,7 @@ describe("promptAssembler S0 双读（T-S0*）", () => {
         seenPaths: [],
         workplaceSeenPaths: ["/hdr.md"],
       },
-    );
+    ));
     // workplaceSeen 只在 workplace 判定里被读——绝不能写进共享 seen，
     // 否则第二条 attach 会被误判 alreadyReferenced（这正是本用例的牙齿）。
     assert.match(messageBodyTextFromBlocks(prepared[1]!.content.blocks), /1\|HEADER-BODY/);
@@ -1273,12 +1273,12 @@ describe("promptAssembler tool_result 透传 (T-S1)", () => {
       createdAtMs: 0,
       hidden: false,
     };
-    const prepared = await promptAssembler.prepare([toolResultMsg], {
+    const prepared = unwrap(await promptAssembler.prepare([toolResultMsg], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs: ctx.sessionVfs(project.id, session.id),
       extraInfo: "自定义附加信息",
-    });
+    }));
     assert.equal(prepared.length, 1);
     assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
     assert.equal(
@@ -1311,11 +1311,11 @@ describe("promptAssembler tool_result 透传 (T-S1)", () => {
       createdAtMs: 0,
       hidden: false,
     };
-    const prepared = await promptAssembler.prepare([toolResultMsg], {
+    const prepared = unwrap(await promptAssembler.prepare([toolResultMsg], {
       sessionId: session.id,
       sessionKkv: sk,
       vfs: ctx.sessionVfs(project.id, session.id),
-    });
+    }));
     assert.equal(prepared.length, 1);
     assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
   });
@@ -1341,7 +1341,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/big.md", big);
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("refs", {
           sessionId: session.id,
@@ -1349,7 +1349,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     // 预算内项仍 full（行号正文）
     assert.match(body, /1\|S{50}/);
@@ -1375,7 +1375,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/b.md", half);
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("refs", {
           sessionId: session.id,
@@ -1383,7 +1383,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.equal(body.includes("文件过长"), false);
     assert.match(body, /1\|AAAA/);
@@ -1398,7 +1398,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/blob.bin", "x");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           sessionId: session.id,
@@ -1414,7 +1414,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /二进制文件，不提供正文/);
     assert.equal(body.includes("1|blob.bin"), false);
@@ -1437,7 +1437,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     );
 
     // 先用一条满预算的 attach 吃光预算，再看 workplace 侧是否被牵连
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           id: "m1",
@@ -1459,7 +1459,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
-    );
+    ));
     // attach 侧确实被降级（预算生效）
     assert.match(messageBodyTextFromBlocks(prepared[0]!.content.blocks), /文件过长，可用 read/);
     // workplace 侧豁免：仍是 1|basename，且没有二进制/超限文案
@@ -1482,7 +1482,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/fill.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           id: "m1",
@@ -1504,7 +1504,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
-    );
+    ));
     // 前提自查：前置附件确实恰好吃满、未被降级（降了就说明 used 没被填满）
     assert.equal(
       messageBodyTextFromBlocks(prepared[0]!.content.blocks).includes("文件过长"),
@@ -1525,7 +1525,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/filler.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           id: "m1",
@@ -1539,7 +1539,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body1 = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body1, /文件过长，可用 read/);
     const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
@@ -1558,7 +1558,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     const legacyXml =
       '<action name="userAttach">\n{"path":"/huge.md","content":"1|OLD"}\n</action>';
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           sessionId: session.id,
@@ -1574,7 +1574,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     // 主牙齿：原样带过 ⇒ **无 display 键**。走 fileRefAction 重排必然带上
     // `display`，所以这条断言直接钉死「有没有被重排」，比断言文案有力得多。
@@ -1599,7 +1599,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     const fatContent = "O".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
     const legacyXml = `<action name="userAttach">\n{"path":"/x.md","content":"${fatContent}"}\n</action>`;
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", {
           sessionId: session.id,
@@ -1615,7 +1615,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.equal(body.includes("文件过长"), false);
     assert.equal(body.includes('"display"'), false);
@@ -1632,13 +1632,13 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
     await vfs.write("/b.md", "B".repeat(1_000));
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/a.md")] }),
         userMsg("m2", { id: "m2", sessionId: session.id, attachments: [attachFile("/b.md")] }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     // m1 恰好吃满、不降级（前提自查）
     const body1 = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.equal(body1.includes("文件过长"), false);
@@ -1669,7 +1669,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
       "1|AAAAAAAAAA\n2|BBBBBBBBBB" +
       "\n</file>";
 
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/filler.md")] }),
         userMsg("m2", {
@@ -1687,7 +1687,7 @@ describe("promptAssembler 附件预算与降级 (T-A)", () => {
         }),
       ],
       { sessionId: session.id, sessionKkv: sk, vfs },
-    );
+    ));
     // 前提自查：前置吃掉 99_980，剩 20 额度恰等于明文 20。
     const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     assert.equal(body2.includes("文件过长"), false, "按明文计量 → 20 字符在预算内，不降级");

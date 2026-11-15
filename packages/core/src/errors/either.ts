@@ -23,6 +23,9 @@
  * @module errors/either
  */
 
+import { ErrorCodes, type ErrorKey } from "./error-codes.js";
+import { AppError } from "./app-error.js";
+
 /**
  * Result 的线上形态：跨 IPC / JSON 传输时的纯数据 DTO。
  *
@@ -288,6 +291,12 @@ function serializeErrorPayload(error: unknown): unknown {
  * serializeErrorPayload 的落地端：带 name/message 的序列化产物重建为 Error
  * 实例（code 等字段回填，`name` 还原后结构守卫照常可用）；Error 本体原样
  * （structuredClone 通道里 Error 还是 Error）；其余（字符串等）原样。
+ *
+ * AppError 载荷（key + code 成对出现且 key 在码表登记）重建为**真 AppError
+ * 实例**：isAppError 是 instanceof 判定，裸 Error + Object.assign 过不了守卫，
+ * isVfsError 这类域守卫在 JSON 通道落地端会全部漏判。重建后仍用线上字段整体
+ * 覆盖（message / name / desc / messageKey / messageParams / details 逐字还原，
+ * 不经构造器重新推导），保证过线形态零漂移。
  */
 function deserializeErrorPayload(raw: unknown): unknown {
     if (raw instanceof Error) {
@@ -300,6 +309,14 @@ function deserializeErrorPayload(raw: unknown): unknown {
         typeof (raw as { name?: unknown }).name === "string"
     ) {
         const {name, message, ...rest} = raw as { name: string; message: string; } & Record<string, unknown>;
+        if (
+            typeof (rest as { key?: unknown }).key === "string" &&
+            (rest as { key: string }).key in ErrorCodes
+        ) {
+            const revivedAppError = new AppError((rest as { key: ErrorKey }).key);
+            Object.assign(revivedAppError, rest, {message, name});
+            return revivedAppError;
+        }
         const revived = new Error(message);
         Object.assign(revived, rest);
         revived.name = name;

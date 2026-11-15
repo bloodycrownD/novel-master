@@ -1,10 +1,12 @@
 import { createVfsService } from "@novel-master/core/vfs";
+import { isAppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@novel-master/core";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
 
 novelMasterTestFixture();
@@ -73,22 +75,22 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
-    const first = await vfs.write(GLOBAL_SCOPE, "/rev.txt", "one");
+    const first = unwrap(await vfs.write(GLOBAL_SCOPE, "/rev.txt", "one"));
     assert.equal(first.version, 1);
 
     const eid1 = await entryIdForPath(conn, "/rev.txt");
-    const rev1 = await revisions.findByEntryAndVersion(eid1, 1);
+    const rev1 = unwrap(await revisions.findByEntryAndVersion(eid1, 1));
     assert.ok(rev1);
-    assert.equal(rev1.content, "one");
-    assert.equal(rev1.status, "active");
+    assert.equal(rev1!.content, "one");
+    assert.equal(rev1!.status, "active");
 
-    const second = await vfs.write(GLOBAL_SCOPE, "/rev.txt", "two", { expectedVersion: 1 });
+    const second = unwrap(await vfs.write(GLOBAL_SCOPE, "/rev.txt", "two", { expectedVersion: 1 }));
     assert.equal(second.version, 2);
 
-    const rev2 = await revisions.findByEntryAndVersion(eid1, 2);
+    const rev2 = unwrap(await revisions.findByEntryAndVersion(eid1, 2));
     assert.ok(rev2);
-    assert.equal(rev2.content, "two");
-    assert.equal(rev2.status, "active");
+    assert.equal(rev2!.content, "two");
+    assert.equal(rev2!.status, "active");
   });
 
   it("read returns live head content", async () => {
@@ -96,10 +98,10 @@ describe("RevisionAwareVfsService (integration)", () => {
     const conn = ctx.conn;
     const vfs = createVfsService(conn);
 
-    await vfs.write(GLOBAL_SCOPE, "/head.txt", "first");
-    await vfs.write(GLOBAL_SCOPE, "/head.txt", "second", { expectedVersion: 1 });
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/head.txt", "first"));
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/head.txt", "second", { expectedVersion: 1 }));
 
-    const read = await vfs.read(GLOBAL_SCOPE, "/head.txt");
+    const read = unwrap(await vfs.read(GLOBAL_SCOPE, "/head.txt"));
     assert.equal(read.content, "second");
     assert.equal(read.version, 2);
   });
@@ -110,16 +112,16 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
-    await vfs.write(GLOBAL_SCOPE, "/history.txt", "v1");
-    await vfs.write(GLOBAL_SCOPE, "/history.txt", "v2", { expectedVersion: 1 });
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/history.txt", "v1"));
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/history.txt", "v2", { expectedVersion: 1 }));
 
     const eid = await entryIdForPath(conn, "/history.txt");
-    const old = await revisions.findByEntryAndVersion(eid, 1);
+    const old = unwrap(await revisions.findByEntryAndVersion(eid, 1));
     assert.ok(old);
-    assert.equal(old.content, "v1");
-    assert.equal(old.status, "active");
+    assert.equal(old!.content, "v1");
+    assert.equal(old!.status, "active");
 
-    const head = await vfs.read(GLOBAL_SCOPE, "/history.txt");
+    const head = unwrap(await vfs.read(GLOBAL_SCOPE, "/history.txt"));
     assert.equal(head.content, "v2");
   });
 
@@ -128,9 +130,9 @@ describe("RevisionAwareVfsService (integration)", () => {
     const conn = ctx.conn;
     const vfs = createVfsService(conn);
 
-    const written = await vfs.write(GLOBAL_SCOPE, "/del.txt", "content");
+    const written = unwrap(await vfs.write(GLOBAL_SCOPE, "/del.txt", "content"));
     const eidBeforeDelete = await entryIdForPath(conn, "/del.txt");
-    await vfs.delete(GLOBAL_SCOPE, "/del.txt");
+    unwrap(await vfs.delete(GLOBAL_SCOPE, "/del.txt"));
 
     // entry 已被删，直接查 revision 表确认墓碑
     const deletedRows = await conn.query<{ status: string; content_hash: string | null }>(
@@ -140,7 +142,9 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.ok(deletedRows.length > 0);
     assert.equal(deletedRows[0]!.status, "deleted");
     assert.equal(deletedRows[0]!.content_hash, null);
-    await assert.rejects(() => vfs.read(GLOBAL_SCOPE, "/del.txt"));
+    await rejectsErr(() => vfs.read(GLOBAL_SCOPE, "/del.txt"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("re-create after delete allocates version 1 (entry 重建后从 1 开始)", async () => {
@@ -149,22 +153,22 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
-    await vfs.write(GLOBAL_SCOPE, "/again.txt", "v1");
-    await vfs.write(GLOBAL_SCOPE, "/again.txt", "v2", { expectedVersion: 1 });
-    await vfs.delete(GLOBAL_SCOPE, "/again.txt");
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/again.txt", "v1"));
+    unwrap(await vfs.write(GLOBAL_SCOPE, "/again.txt", "v2", { expectedVersion: 1 }));
+    unwrap(await vfs.delete(GLOBAL_SCOPE, "/again.txt"));
 
-    const restored = await vfs.write(GLOBAL_SCOPE, "/again.txt", "restored", {
+    const restored = unwrap(await vfs.write(GLOBAL_SCOPE, "/again.txt", "restored", {
       versionCheck: false,
-    });
+    }));
     // entry 重建后新 entry_id 没有历史，version 从 1 开始
     assert.equal(restored.version, 1);
 
     const eid = await entryIdForPath(conn, "/again.txt");
-    const rev = await revisions.findByEntryAndVersion(eid, 1);
+    const rev = unwrap(await revisions.findByEntryAndVersion(eid, 1));
     assert.ok(rev);
-    assert.equal(rev.content, "restored");
-    assert.equal(rev.status, "active");
-    assert.equal((await vfs.read(GLOBAL_SCOPE, "/again.txt")).content, "restored");
+    assert.equal(rev!.content, "restored");
+    assert.equal(rev!.status, "active");
+    assert.equal(unwrap(await vfs.read(GLOBAL_SCOPE, "/again.txt")).content, "restored");
   });
 
   it("recursive delete succeeds when directory row is missing but children exist", async () => {
@@ -172,17 +176,19 @@ describe("RevisionAwareVfsService (integration)", () => {
     const conn = ctx.conn;
     const vfs = createVfsService(conn);
     const root = `/${testIsolationSuffix()}`;
-    await vfs.mkdir(GLOBAL_SCOPE, root);
+    unwrap(await vfs.mkdir(GLOBAL_SCOPE, root));
     const dir = `${root}/55`;
-    await vfs.write(GLOBAL_SCOPE, `${dir}/诗歌.txt`, "poem", { versionCheck: false });
+    unwrap(await vfs.write(GLOBAL_SCOPE, `${dir}/诗歌.txt`, "poem", { versionCheck: false }));
     await conn.execute(
       `DELETE FROM vfs_entry WHERE scope_key = ? AND path = ? AND entry_kind = 'directory'`,
       [GLOBAL_SCOPE, dir],
     );
 
-    await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
+    unwrap(await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true }));
 
-    await assert.rejects(() => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`));
+    await rejectsErr(() => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
     // 查 revision 表确认墓碑版本
     const entryRows = await conn.query<{ entry_id: number }>(
       `SELECT entry_id FROM vfs_entry WHERE scope_key = ? AND path = ?`,
@@ -200,9 +206,9 @@ describe("RevisionAwareVfsService (integration)", () => {
     const path = `/${testIsolationSuffix()}/tv1.txt`;
 
     // 写到 v5
-    let r = await vfs.write(GLOBAL_SCOPE, path, "c1");
+    let r = unwrap(await vfs.write(GLOBAL_SCOPE, path, "c1"));
     for (let v = 2; v <= 5; v++) {
-      r = await vfs.write(GLOBAL_SCOPE, path, `c${v}`, { expectedVersion: r.version });
+      r = unwrap(await vfs.write(GLOBAL_SCOPE, path, `c${v}`, { expectedVersion: r.version }));
     }
     assert.equal(r.version, 5);
     const eid = await entryIdForPath(conn, path);
@@ -211,10 +217,10 @@ describe("RevisionAwareVfsService (integration)", () => {
     await windHeadBackTo(conn, path, 5, 3, [4, 5]);
 
     // 回拨后再 write：旧实现发 head+1=4 会撞 UNIQUE(vfs_revision)，新实现发 MAX+1=6
-    const w = await vfs.write(GLOBAL_SCOPE, path, "c6", { expectedVersion: 3 });
+    const w = unwrap(await vfs.write(GLOBAL_SCOPE, path, "c6", { expectedVersion: 3 }));
     assert.equal(w.version, 6);
 
-    const rev6 = await revisions.findByEntryAndVersion(eid, 6);
+    const rev6 = unwrap(await revisions.findByEntryAndVersion(eid, 6));
     assert.ok(rev6, "v6 revision 应已落库");
     assert.equal(rev6!.content, "c6");
     assert.equal(rev6!.status, "active");
@@ -232,16 +238,16 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const path = `/${testIsolationSuffix()}/tv2.txt`;
 
-    let r = await vfs.write(GLOBAL_SCOPE, path, "c1");
+    let r = unwrap(await vfs.write(GLOBAL_SCOPE, path, "c1"));
     for (let v = 2; v <= 5; v++) {
-      r = await vfs.write(GLOBAL_SCOPE, path, `c${v}`, { expectedVersion: r.version });
+      r = unwrap(await vfs.write(GLOBAL_SCOPE, path, `c${v}`, { expectedVersion: r.version }));
     }
     const eid = await entryIdForPath(conn, path);
 
     await windHeadBackTo(conn, path, 5, 3, [4, 5]);
 
     // 回拨后 rm：旧实现墓碑 head+1=4 撞被钉住的 v4，新实现墓碑 MAX+1=6
-    await vfs.delete(GLOBAL_SCOPE, path);
+    unwrap(await vfs.delete(GLOBAL_SCOPE, path));
 
     const tombstone = await conn.query<{ status: string; content_hash: string | null }>(
       `SELECT status, content_hash FROM vfs_revision WHERE entry_id = ? AND version = 6`,
@@ -263,7 +269,9 @@ describe("RevisionAwareVfsService (integration)", () => {
       [GLOBAL_SCOPE, path],
     );
     assert.equal(entryRows.length, 0);
-    await assert.rejects(() => vfs.read(GLOBAL_SCOPE, path));
+    await rejectsErr(() => vfs.read(GLOBAL_SCOPE, path), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("T-V3：部分文件 head 回拨时递归删除，批量墓碑全部成功无 UNIQUE 冲突", async () => {
@@ -272,27 +280,27 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const root = `/${testIsolationSuffix()}`;
     const dir = `${root}/tv3`;
-    await vfs.mkdir(GLOBAL_SCOPE, root);
-    await vfs.mkdir(GLOBAL_SCOPE, dir);
+    unwrap(await vfs.mkdir(GLOBAL_SCOPE, root));
+    unwrap(await vfs.mkdir(GLOBAL_SCOPE, dir));
 
     // a.txt 写到 v3 后拨回 v1（v3 被 checkpoint 钉住）；b/c 正常 v1
     const a = `${dir}/a.txt`;
-    let r = await vfs.write(GLOBAL_SCOPE, a, "a1");
-    r = await vfs.write(GLOBAL_SCOPE, a, "a2", { expectedVersion: r.version });
-    r = await vfs.write(GLOBAL_SCOPE, a, "a3", { expectedVersion: r.version });
+    let r = unwrap(await vfs.write(GLOBAL_SCOPE, a, "a1"));
+    r = unwrap(await vfs.write(GLOBAL_SCOPE, a, "a2", { expectedVersion: r.version }));
+    r = unwrap(await vfs.write(GLOBAL_SCOPE, a, "a3", { expectedVersion: r.version }));
     assert.equal(r.version, 3);
     const aEid = await entryIdForPath(conn, a);
     await windHeadBackTo(conn, a, 3, 1, [3]);
 
     const b = `${dir}/b.txt`;
     const c = `${dir}/c.txt`;
-    await vfs.write(GLOBAL_SCOPE, b, "b1");
-    await vfs.write(GLOBAL_SCOPE, c, "c1");
+    unwrap(await vfs.write(GLOBAL_SCOPE, b, "b1"));
+    unwrap(await vfs.write(GLOBAL_SCOPE, c, "c1"));
     const bEid = await entryIdForPath(conn, b);
     const cEid = await entryIdForPath(conn, c);
 
     // 递归删除：批量墓碑发号 a=max(1,3)+1=4、b/c=max(1,1)+1=2，全部避开占号段
-    await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
+    unwrap(await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true }));
 
     const tombstones = await conn.query<{ entry_id: number; version: number; status: string }>(
       `SELECT entry_id, version, status FROM vfs_revision
@@ -325,8 +333,8 @@ describe("RevisionAwareVfsService (integration)", () => {
 
     // 造病灶：orphan 写到 v2 后直接删 entry 行（revision 留下占号），再把 sqlite_sequence 压回 max(entry_id)
     const orphan = `${root}/tv7-orphan.txt`;
-    let r = await vfs.write(GLOBAL_SCOPE, orphan, "o1");
-    r = await vfs.write(GLOBAL_SCOPE, orphan, "o2", { expectedVersion: r.version });
+    let r = unwrap(await vfs.write(GLOBAL_SCOPE, orphan, "o1"));
+    r = unwrap(await vfs.write(GLOBAL_SCOPE, orphan, "o2", { expectedVersion: r.version }));
     assert.equal(r.version, 2);
     const orphanEid = await entryIdForPath(conn, orphan);
     await conn.execute(`DELETE FROM vfs_entry WHERE entry_id = ?`, [orphanEid]);
@@ -341,13 +349,13 @@ describe("RevisionAwareVfsService (integration)", () => {
 
     // write 新文件：新 entry_id 不撞孤儿，version 从 1 起
     const fresh = `${root}/tv7-fresh.txt`;
-    const w = await vfs.write(GLOBAL_SCOPE, fresh, "n1");
+    const w = unwrap(await vfs.write(GLOBAL_SCOPE, fresh, "n1"));
     assert.ok(w.version >= 1);
     const freshEid = await entryIdForPath(conn, fresh);
     assert.notEqual(freshEid, orphanEid, "新 entry 不应复用孤儿 entry_id");
 
     // rm：墓碑按 max(head, MAX)+1 发号，成功落库
-    await vfs.delete(GLOBAL_SCOPE, fresh);
+    unwrap(await vfs.delete(GLOBAL_SCOPE, fresh));
     const tombstone = await conn.query<{ status: string }>(
       `SELECT status FROM vfs_revision WHERE entry_id = ? AND version = ?`,
       [freshEid, w.version + 1],

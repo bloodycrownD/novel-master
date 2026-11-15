@@ -52,8 +52,8 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     // undo_send 锚点，回滚后 user1 自身也被删除——和 R2 同语义）。
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1);
 
-    assert.equal((await svfs.read("/anchor.md")).content, "at-send");
-    await assert.rejects(() => svfs.read("/later.md"));
+    assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
+    assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
   });
@@ -90,9 +90,9 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     await svfs.write("/tail.md", "tail-dirty", { versionCheck: false });
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1);
 
-    assert.equal((await svfs.read("/keep.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "v1");
     // tail.md 不在 assistant1 的 checkpoint 里——回滚会删除它。
-    await assert.rejects(() => svfs.read("/tail.md"));
+    assert.ok(!(await svfs.read("/tail.md")).ok, "tail.md 应已被回滚删除");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1);
@@ -119,7 +119,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     await svfs.write("/a.md", "dirty", { versionCheck: false });
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1);
-    assert.equal((await svfs.read("/a.md")).content, "a");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "a");
   });
 
   it("T-DS4d: 无 live 文件时是 no-op，不抛错", async () => {

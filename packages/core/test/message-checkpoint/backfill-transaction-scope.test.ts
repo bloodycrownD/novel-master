@@ -216,12 +216,12 @@ describe("CS-05b backfill 事务边界", () => {
     const vfs = createScopedVfsService(conn, scope);
     const entries = new SqliteVfsEntryRepository(conn);
     for (const [rel, content] of expected) {
-      assert.equal((await vfs.read(`/${rel}`)).content, content);
+      assert.equal(unwrap(await vfs.read(`/${rel}`)).content, content);
     }
-    const rows = await entries.scanContents(
+    const rows = unwrap(await entries.scanContents(
       `session:${seeded.projectId}:${seeded.sessionId}`,
       "/"
-    );
+    ));
     assert.equal(rows.length, expected.size);
 
     // ⚠️ `WHERE scope_key = session:<sid>` 是 **workplace 键空间**
@@ -286,7 +286,7 @@ describe("CS-05b backfill 事务边界", () => {
     // 新内容逐字节完整（导入是全量覆盖语义，但补写失败不影响任何一条导入语句）。
     const vfs = createScopedVfsService(conn, scope);
     for (const [rel, content] of expected) {
-      assert.equal((await vfs.read(`/${rel}`)).content, content);
+      assert.equal(unwrap(await vfs.read(`/${rel}`)).content, content);
     }
     const rows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM message_checkpoint WHERE session_id = ?`,

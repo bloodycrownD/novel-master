@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -22,7 +23,7 @@ describe("worktree list order", () => {
       logicalPath: "/parent/sub/b.md",
       inclusionMode: "show",
     });
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
 
     const parentDir = "/parent";
     const subDir = "/parent/sub";
@@ -39,7 +40,7 @@ describe("worktree list order", () => {
     assert.ok(aIdx > parentIdx, "a.md after parent dir");
     assert.ok(subIdx < aIdx, "sub dir before sibling a.md");
 
-    const display = await wt.renderDisplay();
+    const display = unwrap(await wt.renderDisplay());
     const subPos = display.indexOf('path="/parent/sub/b.md"');
     const aPos = display.indexOf('path="/parent/a.md"');
     assert.ok(subPos >= 0, "sub file in display");
@@ -64,7 +65,7 @@ describe("worktree list order", () => {
       tailCount: 1,
       fillPolicy: "hidden",
     });
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     const fileRows = rows.filter((r) => r.path.startsWith("/novel/"));
     // smart 序：第一章 [1] → 第四章 [4] → 第十章 [10]（name 拼音序会是 十/四/一）
     assert.deepEqual(
@@ -95,7 +96,7 @@ describe("worktree list order", () => {
       tailCount: 0,
       fillPolicy: "hidden",
     });
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     const dirPaths = rows
       .filter((r) => r.kind === "dir" && r.path.startsWith("/vols/"))
       .map((r) => r.path);

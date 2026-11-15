@@ -18,6 +18,7 @@ import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/sessio
 import { parseFileCachePayload, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { clearDecodedContentCaches, decodedContentCacheStats } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import type { TdbcConnection } from "@novel-master/core";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -48,16 +49,16 @@ describe("vfs content-store × 进程内解压产物层", () => {
     const hash = await store.put(plain);
 
     // 第一次读：真解压，同时回填内存层
-    assert.equal(await store.get(hash), plain);
+    assert.equal(unwrap(await store.get(hash)), plain);
     const afterFirst = decodedContentCacheStats().find((s) => s.name === "content-body");
     assert.ok(afterFirst != null && afterFirst.entries > 0, "首读后应已入池");
 
     await corruptBlobRow(conn, "vfs_content_blob", hash);
-    assert.equal(await store.get(hash), plain, "第二次读命中内存层（没有碰被投毒的 blob）");
+    assert.equal(unwrap(await store.get(hash)), plain, "第二次读命中内存层（没有碰被投毒的 blob）");
 
     // 反向锁：清掉内存层再读 → 必须撞上脏数据（证明上一条不是巧合）
     clearDecodedContentCaches();
-    await assert.rejects(() => store.get(hash));
+    await rejectsErr(() => store.get(hash));
   });
 
   it("getMany：内存命中的 hash 参与结果但不解压，未命中的照常读库", async () => {
@@ -69,10 +70,10 @@ describe("vfs content-store × 进程内解压产物层", () => {
     const cachedHash = await store.put(cachedPlain);
     const freshHash = await store.put(freshPlain);
 
-    assert.equal(await store.get(cachedHash), cachedPlain); // 只把第一条读进池
+    assert.equal(unwrap(await store.get(cachedHash)), cachedPlain); // 只把第一条读进池
     await corruptBlobRow(conn, "vfs_content_blob", cachedHash);
 
-    const result = await store.getMany([cachedHash, freshHash, cachedHash]);
+    const result = unwrap(await store.getMany([cachedHash, freshHash, cachedHash]));
     assert.equal(result.get(cachedHash), cachedPlain, "命中项来自内存");
     assert.equal(result.get(freshHash), freshPlain, "未命中项照常解压");
     assert.equal(result.size, 2, "重复入参自然去重");
@@ -90,7 +91,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
 
     // 首读（池空）：一趟 blob IN 查询
     ctx.counter.clear();
-    const first = await store.getMany(hashes);
+    const first = unwrap(await store.getMany(hashes));
     assert.equal(first.size, 3);
     assert.equal(ctx.counter.countBySubstring("FROM vfs_content_blob"), 1, "首读要发一趟 blob 批量查询");
 
@@ -98,7 +99,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     // 按键逐条比对（两次读的 Map 迭代序可能不同：首读按 SQL 行序落值，
     // 二读按入参序落值——不是缓存语义的一部分，别拿 entries 顺序当断言）。
     ctx.counter.clear();
-    const second = await store.getMany(hashes);
+    const second = unwrap(await store.getMany(hashes));
     assert.equal(second.size, first.size);
     for (const [hash, plain] of first) {
       assert.equal(second.get(hash), plain);
@@ -126,7 +127,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     assert.equal(String(entryRows[0]!.content_hash), vfsHash, "两套存储对同一正文算出同一个 hash（共池的前提）");
 
     // 经 vfs 读一次 → 正文入池
-    assert.equal(await store.get(vfsHash), body);
+    assert.equal(unwrap(await store.get(vfsHash)), body);
     // 再把 file_cache 侧的 blob 投毒：若 file_cache 读链自己去解压必失败
     await corruptBlobRow(conn, "session_file_cache_blob", vfsHash);
 

@@ -1,4 +1,5 @@
 import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
+import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 
 // PersistentState.setCurrentModelId 会校验 UUID，测试里统一用这个常量。
@@ -92,9 +93,10 @@ describe("SessionService agent config（v2，T-S3）", () => {
     const { SqliteVfsEntryRepository } = await import(
       "../../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
     );
+    // port 已改返回 Result<string | undefined, AppError>，stub 同形
     const emptyState = {
-      getCurrentAgentId: async () => undefined as string | undefined,
-      getCurrentModelId: async () => undefined as string | undefined,
+      getCurrentAgentId: async () => Result.ok(undefined as string | undefined),
+      getCurrentModelId: async () => Result.ok(undefined as string | undefined),
     };
     const emptyRegistry = { listAgentIds: async () => [] as const };
     const svc = new DefaultSessionService({

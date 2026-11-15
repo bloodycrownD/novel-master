@@ -110,6 +110,21 @@ function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
  */
 const ROLLBACK_OPTIMISTIC_RETRY_LIMIT = 3;
 
+/**
+ * 沿 cause 链判定「是否乐观锁冲突」。
+ *
+ * 事务体内抛出的 AppError 会被 better-sqlite3 驱动的 transaction 包装成
+ * TdbcError（cause 指向原错误，见 tdbc-driver transaction 的 catch 重抛），
+ * 直接 `isAppError(error, …)` 永远判不中 ⇒ 乐观锁重试循环从未生效
+ * （T-SC11b / T-RB-FP-R3 / T-RB-FP-R4 暴露）。深度上限 8 防环。
+ */
+function isRollbackConflictError(error: unknown): boolean {
+  for (let cur: unknown = error, depth = 0; cur != null && typeof cur === "object" && depth < 8; depth += 1, cur = (cur as {cause?: unknown}).cause) {
+    if (isAppError(cur, "SESSION_FS_ROLLBACK_CONFLICT")) return true;
+  }
+  return false;
+}
+
 /** 逐项比对两份文件维度指纹（有序对列表，长度不同即不等）。 */
 function sameFileTreeFingerprint(a: ReadonlyArray<readonly [string, number]>, b: ReadonlyArray<readonly [string, number]>): boolean {
   if (a.length !== b.length) {
@@ -248,8 +263,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         break;
       } catch (error) {
         // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
-        const isConflict = isAppError(error, "SESSION_FS_ROLLBACK_CONFLICT");
-        if (!isConflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
+        // 判定走 cause 链（isRollbackConflictError）：驱动会把事务体内抛出的
+        // 非 TdbcError 包一层，裸 isAppError 判不中 ⇒ 重试从未生效。
+        if (!isRollbackConflictError(error) || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
           throw error;
         }
         // 冲突重试前不再做其他事——重新 resolveRollbackPlan 会拉到最新的消息列表。

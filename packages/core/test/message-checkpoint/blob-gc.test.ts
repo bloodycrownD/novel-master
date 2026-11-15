@@ -46,13 +46,14 @@ async function blobRowCount(
   return Number(rows[0]!.n);
 }
 
-/** 行已缺失 + 池冷态 ⇒ 读必抛（完整性契约冷态不变）。 */
+/** 行已缺失 + 池冷态 ⇒ 读必走 Err（完整性契约冷态不变；四期后失败通道是 Result.err）。 */
 async function assertColdReadRejects(
   store: SqliteVfsContentStore,
   contentHash: string
 ): Promise<void> {
   clearDecodedContentCaches();
-  await assert.rejects(() => store.get(contentHash));
+  const r = await store.get(contentHash);
+  assert.ok(!r.ok, "行已缺失 + 池冷态 ⇒ get 必须返回 Err");
 }
 
 describe("sweepSessionRevisions + blob gc", () => {
@@ -115,7 +116,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     assert.equal(await blobRowCount(ctx.conn, orphanHash), 0, "orphan blob 行已被 gc");
     await assertColdReadRejects(contentStore, orphanHash);
     // live 正文仍可读
-    assert.equal((await svfs.read("/gc1.md")).content, "keep-live-v3");
+    assert.equal(unwrap(await svfs.read("/gc1.md")).content, "keep-live-v3");
   });
 
   it("T-GC2: session A sweep 后 gc 不得删除 session B 仍引用的 blob", async () => {
@@ -155,7 +156,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");
     await assertColdReadRejects(contentStore, onlyAHash);
     assert.equal(unwrap(await contentStore.get(sharedHash)), sharedPlain);
-    assert.equal((await svfsB.read("/b.md")).content, sharedPlain);
-    assert.equal((await svfsA.read("/a.md")).content, sharedPlain);
+    assert.equal(unwrap(await svfsB.read("/b.md")).content, sharedPlain);
+    assert.equal(unwrap(await svfsA.read("/a.md")).content, sharedPlain);
   });
 });

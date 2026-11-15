@@ -57,7 +57,7 @@ describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => 
       const p = `/perf-${i}.md`;
       await svfs.write(p, `body-${i}`, { versionCheck: false });
       const entry = unwrap(await entries.findByPath(sk, p));
-      const version = (await svfs.read(p)).version;
+      const version = unwrap(await svfs.read(p)).version;
       pointers.push({ entryId: entry!.entryId, revisionVersion: version });
     }
 

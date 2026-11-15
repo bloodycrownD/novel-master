@@ -132,7 +132,7 @@ describe("N-P1-01: 项目删除必须回收 project / project:meta 两个 scope 
     )!;
     assert.equal(refBefore[1], 1, "前置条件：live-head revision ref_count = 1");
 
-    const hash = await entryRepo.findContentHash(copyScope, "/tpl.md");
+    const hash = unwrap(await entryRepo.findContentHash(copyScope, "/tpl.md"));
     assert.ok(hash != null);
     const blobBefore = await blobRefCount(hash);
 

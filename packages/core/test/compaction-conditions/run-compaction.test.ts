@@ -118,7 +118,7 @@ describe("runCompaction", () => {
       }),
     );
 
-    const first = await store.getConditions();
+    const first = unwrap(await store.getConditions());
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.hideStartDepth, 6);
 

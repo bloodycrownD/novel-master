@@ -1,13 +1,14 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AppError } from "../../src/errors/app-error.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { textBlocks } from "@novel-master/core/chat";
 import {
   isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
-  isSessionFsError,
 } from "@novel-master/core/session-fs";
+// isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
+import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   scopeKey,
@@ -78,7 +79,8 @@ describe("MessageRollbackService (degraded fallback)", () => {
         assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
         assert.equal(isRollbackVfsDegradableError(error), false);
         assert.equal(
-          isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED"),
+          isSessionFsError(error) &&
+            isAppError(error, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"),
           true,
         );
         assert.equal((error as {messageKey?: string}).messageKey, "error.session_fs.rollback_revision_backfill_required");
@@ -86,7 +88,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 4);
   });
@@ -104,7 +106,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       { revisionHeadBackfill: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -128,7 +130,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       { skipVfsReconcile: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -145,7 +147,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "roses");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -171,7 +173,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
 
-    assert.equal((await svfs.read("/state.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, textOnly.id);
@@ -190,7 +192,11 @@ describe("MessageRollbackService (degraded fallback)", () => {
           "missing-message-id",
         ),
       (error: unknown) => {
-        assert.equal(isSessionFsError(error, "ROLLBACK_MESSAGE_NOT_FOUND"), true);
+        assert.equal(
+          isSessionFsError(error) &&
+            isAppError(error, "SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND"),
+          true,
+        );
         assert.equal(isRollbackVfsDegradableError(error), false);
         return true;
       },
@@ -245,7 +251,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       skipVfsReconcile: true,
     });
 
-    assert.equal((await svfs.read("/keep.md")).content, "mutated");
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "mutated");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
   });
@@ -274,7 +280,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       revisionHeadBackfill: true,
     });
 
-    assert.equal((await svfs.read("/state.md")).content, "baseline");
+    assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, priorAsst.id);
@@ -297,7 +303,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
       { skipVfsReconcile: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);

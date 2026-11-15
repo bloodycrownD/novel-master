@@ -34,7 +34,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     // assistant 又写了新文件，扩大「会被误删」的面。
     await svfs.write("/later.md", "later", { versionCheck: false });
 
-    const filesBefore = (await svfs.list("/")).length;
+    const filesBefore = unwrap(await svfs.list("/")).length;
 
     await assert.rejects(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
@@ -53,11 +53,11 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     );
 
     // 文件一个不少；消息也没被截断。
-    const filesAfter = (await svfs.list("/")).length;
+    const filesAfter = unwrap(await svfs.list("/")).length;
     assert.equal(filesAfter, filesBefore);
-    assert.equal((await svfs.read("/keep-a.md")).content, "a");
-    assert.equal((await svfs.read("/keep-b.md")).content, "b");
-    assert.equal((await svfs.read("/later.md")).content, "later");
+    assert.equal(unwrap(await svfs.read("/keep-a.md")).content, "a");
+    assert.equal(unwrap(await svfs.read("/keep-b.md")).content, "b");
+    assert.equal(unwrap(await svfs.read("/later.md")).content, "later");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
   });
@@ -80,7 +80,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
       skipVfsReconcile: true,
     });
 
-    assert.equal((await svfs.read("/keep.md")).content, "stable");
+    assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
   });
@@ -106,8 +106,8 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     // anchor checkpoint 存在 → targetTree 非空 → 正常回滚，不抛护栏错误。
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
-    assert.equal((await svfs.read("/anchor.md")).content, "at-send");
-    await assert.rejects(() => svfs.read("/later.md"));
+    assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
+    assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
   });
 });
 

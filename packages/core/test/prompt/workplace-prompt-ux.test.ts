@@ -4,6 +4,7 @@
 import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { decode, encode } from "@novel-master/core";
 import { isAppError } from "@novel-master/core/agent";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
@@ -130,8 +131,12 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       { kind: "session", projectId: "p", sessionId: "s" },
       {
         sessionKkv: createMemorySessionKkv(),
-        workplace: mockWorkplaceService(""),
-        vfs: { read: async () => ({ content: "x", mtimeMs: 1 }) } as never,
+        // evaluateRuleView port 已改返回 Result<WorkplaceRuleView, AppError>，内联 mock 同形
+        workplace: {
+          scope: { kind: "session", projectId: "p", sessionId: "s" },
+          evaluateRuleView: async () => Result.ok({rows: [], displayByPath: new Map()}),
+        } as never,
+        vfs: { read: async () => Result.ok({ content: "x", mtimeMs: 1 }) } as never,
         layout,
       }
     );

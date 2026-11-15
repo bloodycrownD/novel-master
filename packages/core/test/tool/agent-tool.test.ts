@@ -13,6 +13,7 @@ import type { AgentRegistryService } from "../../src/service/agent/agent-registr
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
 import { applyMergePatch } from "../../src/common/json.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import { tCore } from "../helpers/core-i18n.js";
@@ -31,8 +32,10 @@ const GENERAL_DEF = def("general", { description: "内置通用 agent" });
 function fakeAgentRegistry(options?: {
   /** registry.list() 的返回（含虚拟 seed general，照真实语义）。 */
   readonly list?: readonly AgentDefinition[];
-  /** upsert 抛错场景（模拟服务层校验失败）。 */
+  /** upsert 抛错场景（模拟 repository 层未知异常——四期后该通道仍走 throw）。 */
   readonly upsertThrows?: (agentId: string) => Error;
+  /** upsert 域校验拒绝（四期门⑦：已知失败走 Result.err，不再 throw）。 */
+  readonly upsertErr?: (agentId: string) => AppError;
 }): AgentRegistryService & {
   readonly calls: { readonly method: string; readonly args: unknown[] }[];
 } {
@@ -52,8 +55,12 @@ function fakeAgentRegistry(options?: {
   persisted.set("agent-1", def("beta"));
 
   const upsertImpl = async (id: string, definition: AgentDefinition) => {
+    // repository 层未知异常仍 throw（真实 service 同语义）。
     if (options?.upsertThrows != null) throw options.upsertThrows(id);
+    // 四期门⑦：服务层域校验拒绝走 Result.err（不再 throw），fake 与真实 service 同语义。
+    if (options?.upsertErr != null) return Result.err(options.upsertErr(id));
     persisted.set(id, definition);
+    return Result.ok(undefined);
   };
   const recordedUpsert = record("upsert", upsertImpl);
 
@@ -77,7 +84,7 @@ function fakeAgentRegistry(options?: {
       if (current == null) throw new AppError("AGENT_NOT_FOUND", `未找到 ${id}`);
       const merged = applyMergePatch(current, patch);
       await recordedUpsert(id, merged);
-      return merged;
+      return Result.ok(merged);
     }),
     delete: record("delete", async (id: string) => {
       persisted.delete(id);
@@ -322,7 +329,7 @@ describe("agent 管理工具", () => {
 
   it("T-AG3：upsert 抛 AppError（未注册工具名）→ INVALID_ARGUMENT 且含原因", async () => {
     const registry = fakeAgentRegistry({
-      upsertThrows: () => new AppError("AGENT_INVALID_TOOL_POLICY", { detail: "工具策略含未注册工具名：nope_tool" }),
+      upsertErr: () => new AppError("AGENT_INVALID_TOOL_POLICY", { detail: "工具策略含未注册工具名：nope_tool" }),
     });
     const runner = makeRunner();
     await assert.rejects(

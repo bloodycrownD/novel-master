@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -89,7 +90,7 @@ describe("AgentRunner macro turn snapshot", () => {
 
     // 每次调用返回不同内容：若某 step 走了实时渲染，跨 step 文本必然不一致。
     let renderCount = 0;
-    const renderFileTree = mock.fn(async () => `/tree-call-${++renderCount}`);
+    const renderFileTree = mock.fn(async () => Result.ok(`/tree-call-${++renderCount}`));
     const workplace: WorkplaceService = {
       scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
       renderFileTree,
@@ -190,7 +191,7 @@ describe("AgentRunner macro turn snapshot", () => {
       },
     };
 
-    const renderFileTree = mock.fn(async () => "/tree");
+    const renderFileTree = mock.fn(async () => Result.ok("/tree"));
     const workplace: WorkplaceService = {
       scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
       renderFileTree,

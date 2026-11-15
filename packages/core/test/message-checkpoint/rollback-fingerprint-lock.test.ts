@@ -166,7 +166,7 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
     );
     // 事务整体回滚 ⇒ 工作区未被半途改写（/base.md 仍是 tail 版本）。
     assert.equal(
-      (await ctx.sessionVfs(fx.projectId, fx.sessionId).read("/base.md")).content,
+      unwrap(await ctx.sessionVfs(fx.projectId, fx.sessionId).read("/base.md")).content,
       "tail-body",
       "冲突后不得留下半途写盘的结果"
     );
@@ -208,7 +208,7 @@ describe("C2-10 R4: 间隙新增文件 ⇒ 删集合按事务内 live 树重算"
       ["/base.md"],
       `最终工作区应只剩锚点期的 /base.md，实际 ${JSON.stringify(paths)}`
     );
-    assert.equal((await svfs.read("/base.md")).content, fx.anchorBody);
+    assert.equal(unwrap(await svfs.read("/base.md")).content, fx.anchorBody);
     // 消息按 afterSeq 截断到锚点。
     assert.equal((await ctx.messages.listBySession(fx.sessionId)).length, 2);
   });

@@ -1,7 +1,19 @@
-import { isVfsError } from "../../src/errors/vfs-errors.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createVfsService } from "@novel-master/core/vfs";
+import { isAppError, type AppError } from "@/errors/app-error.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+
+/**
+ * 事务回调内的域失败走「抛错回滚」通道（infra/tdbc 事务边界把非 TdbcError
+ * 包成 TdbcError、message 原样保留），这里沿 cause 解出 AppError 供 key 断言。
+ */
+function vfsAppError(e: unknown): AppError {
+  if (isAppError(e)) return e;
+  const cause = (e as {cause?: unknown}).cause;
+  assert.ok(isAppError(cause), `预期 VFS 域 AppError（直接或经 cause 包装），实际 ${String(e)}`);
+  return cause;
+}
 
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
@@ -33,11 +45,11 @@ describe("VFS directory nodes", () => {
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
-    const listed = await vfs.list(GLOBAL_SCOPE, root);
+    const listed = unwrap(await vfs.list(GLOBAL_SCOPE, root));
     assert.deepEqual(listed, [
       { path: drafts, kind: "directory", version: 1 },
     ]);
-    assert.deepEqual(await vfs.list(GLOBAL_SCOPE, drafts), []);
+    assert.deepEqual(unwrap(await vfs.list(GLOBAL_SCOPE, drafts)), []);
     const paths = await vfs.glob(GLOBAL_SCOPE, "**/.keep", { cwd: root });
     assert.equal(paths.length, 0);
   });
@@ -49,19 +61,18 @@ describe("VFS directory nodes", () => {
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
     await vfs.delete(GLOBAL_SCOPE, drafts);
-    assert.deepEqual(await vfs.list(GLOBAL_SCOPE, root), []);
+    assert.deepEqual(unwrap(await vfs.list(GLOBAL_SCOPE, root)), []);
 
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "x", { versionCheck: false });
-    await assert.rejects(
-      () => vfs.delete(GLOBAL_SCOPE, drafts),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
-        return true;
-      },
-    );
+    // 判空在事务回调内（总纲 §五例外 2：失败靠抛错回滚），AppError 过驱动事务
+    // 边界被包成 TdbcError（message 原样保留），故沿 cause 解出域错误再断 key。
+    await assert.rejects(() => vfs.delete(GLOBAL_SCOPE, drafts), (e: unknown) => {
+      assert.equal(vfsAppError(e).key, "VFS_DIRECTORY_NOT_EMPTY");
+      return true;
+    });
     await vfs.delete(GLOBAL_SCOPE, drafts, { recursive: true });
-    assert.deepEqual(await vfs.list(GLOBAL_SCOPE, root), []);
+    assert.deepEqual(unwrap(await vfs.list(GLOBAL_SCOPE, root)), []);
   });
 
   it("read/write/replace fail on directory paths", async () => {
@@ -75,9 +86,8 @@ describe("VFS directory nodes", () => {
       () => vfs.write(GLOBAL_SCOPE, drafts, "x", { versionCheck: false }),
       () => vfs.replace(GLOBAL_SCOPE, drafts, "a", "b"),
     ]) {
-      await assert.rejects(fn, (e: unknown) => {
-        assert.ok(isVfsError(e, "IS_DIRECTORY"));
-        return true;
+      await rejectsErr(fn, (e: unknown) => {
+        assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
       });
     }
   });
@@ -88,7 +98,7 @@ describe("VFS directory nodes", () => {
     const root = await prepareRoot(vfs);
     const drafts = `${root}/drafts`;
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "hi", { versionCheck: false });
-    const listed = await vfs.list(GLOBAL_SCOPE, root);
+    const listed = unwrap(await vfs.list(GLOBAL_SCOPE, root));
     assert.ok(listed.some((e) => e.path === drafts && e.kind === "directory"));
   });
 
@@ -106,9 +116,9 @@ describe("VFS directory nodes", () => {
       [GLOBAL_SCOPE, dirPath],
     );
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "updated", { versionCheck: false });
-    const listed = await vfs.list(GLOBAL_SCOPE, root);
+    const listed = unwrap(await vfs.list(GLOBAL_SCOPE, root));
     assert.ok(!listed.some((e) => e.path === drafts && e.kind === "directory"));
-    assert.equal((await vfs.read(GLOBAL_SCOPE, `${drafts}/a.md`)).content, "updated");
+    assert.equal(unwrap(await vfs.read(GLOBAL_SCOPE, `${drafts}/a.md`)).content, "updated");
   });
 
   it("recursive delete succeeds for virtual directory without directory row", async () => {
@@ -125,10 +135,9 @@ describe("VFS directory nodes", () => {
 
     await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
 
-    await assert.rejects(
-      () => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
-    );
+    await rejectsErr(() => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("recursive delete succeeds for worktree-only empty virtual directory", async () => {
@@ -136,7 +145,8 @@ describe("VFS directory nodes", () => {
     const vfs = createVfsService(ctx.conn);
     const root = await prepareRoot(vfs);
     const dir = `${root}/empty-virtual`;
-    await assert.doesNotReject(() => vfs.delete(GLOBAL_SCOPE, dir, { recursive: true }));
+    const delResult = await vfs.delete(GLOBAL_SCOPE, dir, { recursive: true });
+    assert.ok(delResult.ok, "预期删除成功（虚拟目录无 directory 行也放行）");
   });
 
   it("mkdir fails when parent path is a file row", async () => {
@@ -144,26 +154,18 @@ describe("VFS directory nodes", () => {
     const vfs = createVfsService(ctx.conn);
     const parentFile = `${await prepareRoot(vfs)}/parent-file`;
     await vfs.write(GLOBAL_SCOPE, parentFile, "content", { versionCheck: false });
-    await assert.rejects(
-      () => vfs.mkdir(GLOBAL_SCOPE, `${parentFile}/child`),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "NOT_A_DIRECTORY"));
-        return true;
-      },
-    );
+    await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, `${parentFile}/child`), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_A_DIRECTORY"));
+    });
   });
 
   it("mkdir requires existing parent", async () => {
     const ctx = getNovelMasterTestContext();
     const vfs = createVfsService(ctx.conn);
     const nested = `${await prepareRoot(vfs)}/nested/leaf`;
-    await assert.rejects(
-      () => vfs.mkdir(GLOBAL_SCOPE, nested),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "PARENT_NOT_FOUND"));
-        return true;
-      },
-    );
+    await rejectsErr(() => vfs.mkdir(GLOBAL_SCOPE, nested), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_PARENT_NOT_FOUND"));
+    });
   });
 
   it("grep skips directory rows; glob skips directory paths", async () => {
@@ -173,7 +175,7 @@ describe("VFS directory nodes", () => {
     const dir = `${root}/dir`;
     await vfs.mkdir(GLOBAL_SCOPE, dir);
     await vfs.write(GLOBAL_SCOPE, `${dir}/.keep`, "placeholder", { versionCheck: false });
-    const hits = await vfs.grep(GLOBAL_SCOPE, "placeholder", { cwd: root });
+    const hits = unwrap(await vfs.grep(GLOBAL_SCOPE, "placeholder", { cwd: root }));
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.path, `${dir}/.keep`);
     const paths = await vfs.glob(GLOBAL_SCOPE, "**/*", { cwd: root });
@@ -188,7 +190,7 @@ describe("VFS directory nodes", () => {
     const root = await prepareRoot(vfs);
     await vfs.mkdir(GLOBAL_SCOPE, `${root}/empty`);
     const wt = createWorkplaceService(conn, { kind: "global" });
-    const rows = await wt.buildListRows();
+    const rows = unwrap(await wt.buildListRows());
     const logicalEmpty = root + "/empty";
     assert.ok(
       rows.some((r) => r.kind === "dir" && r.path === logicalEmpty),

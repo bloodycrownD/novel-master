@@ -94,7 +94,7 @@ describe("template pull", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const rows = await swt.buildListRows();
+    const rows = unwrap(await swt.buildListRows());
     const fileRow = rows.find((r) => r.kind === "file" && r.path === "/a.md");
     assert.ok(fileRow);
     assert.equal(fileRow.inclusionMode, "show");
@@ -129,11 +129,11 @@ describe("template pull", () => {
     });
     await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
 
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
     assert.deepEqual(paths, ["/x.md"]);
-    assert.equal((await svfs.read("/x.md")).content, "NEW");
+    assert.equal(unwrap(await svfs.read("/x.md")).content, "NEW");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
     assert.equal(
       (await checkpointRepo.listFilePointersForSession(session.id)).length,
@@ -149,7 +149,7 @@ describe("template pull", () => {
 
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();
@@ -166,7 +166,7 @@ describe("template pull", () => {
 
     await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
 
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();

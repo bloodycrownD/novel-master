@@ -66,28 +66,28 @@ function mockVfs(): VfsService {
   return {
     async read(path: string) {
       const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
     },
     async write(path: string, content: string) {
       files.set(path, content);
-      return { version: 1 };
+      return Result.ok({ version: 1 });
     },
     async replace(path: string, oldString: string, newString: string) {
       const c = files.get(path) ?? "";
       files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
+      return Result.ok({ version: 1, replacements: 1 });
     },
     async list() {
-      return [...files.keys()];
+      return Result.ok([...files.keys()]);
     },
     async glob() {
-      return [];
+      return Result.ok([]);
     },
     async grep() {
-      return [];
+      return Result.ok([]);
     },
     async delete() {
-      return { deleted: true };
+      return Result.ok(undefined);
     },
   } as unknown as VfsService;
 }
@@ -1281,7 +1281,7 @@ describe("AgentRunner", () => {
     // 版本参数已从 write 工具移除：stale options 被忽略，覆盖成功无 [CONFLICT]
     assert.equal(resultBlock.ok, true);
     assert.ok(!resultBlock.content.includes("[CONFLICT]"));
-    assert.equal((await vfs.read("/conflict.txt")).content, "stale");
+    assert.equal(unwrap(await vfs.read("/conflict.txt")).content, "stale");
     assert.ok(!resultBlock.content.includes("/projects/"));
     assert.ok(!resultBlock.content.includes("/sessions/"));
   });
@@ -1594,7 +1594,7 @@ describe("AgentRunner", () => {
     assert.ok(goodResult);
     assert.equal(badResult.ok, false);
     assert.equal(goodResult.ok, true);
-    const file = await vfs.read("/ok.txt");
+    const file = unwrap(await vfs.read("/ok.txt"));
     assert.equal(file.content, "hi");
   });
 
@@ -1723,13 +1723,14 @@ describe("AgentRunner", () => {
           registry,
           toolCtx: mockToolCtx(mockVfs()),
           preferences: {
-            getThinkingContextEnabled: async () => {
-              throw new AppError(
-                "PREFERENCES_INVALID_VALUE",
-                "not-a-bool",
-                { key: "chat.thinkingContext" },
-              );
-            },
+            getThinkingContextEnabled: async () =>
+              Result.err(
+                new AppError(
+                  "PREFERENCES_INVALID_VALUE",
+                  "not-a-bool",
+                  { key: "chat.thinkingContext" },
+                ),
+              ),
           },
         }),
       );

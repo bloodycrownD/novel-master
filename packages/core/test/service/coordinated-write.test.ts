@@ -17,6 +17,7 @@ import {
   CoordinatedWriteRollbackError,
   runCoordinatedWrite,
 } from "@/service/coordinated-write.js";
+import { Result } from "../../src/errors/either.js";
 import { createFailureInjector } from "../helpers/failure-injection.js";
 
 describe("CoordinatedWrite", () => {
@@ -196,12 +197,18 @@ describe("CoordinatedWrite", () => {
       await new CoordinatedWrite()
         .register({
           name: "a",
-          execute: async () => order.push("execute:a"),
+          execute: async () => {
+            order.push("execute:a");
+            return Result.ok(undefined);
+          },
           rollback: boom("a"),
         })
         .register({
           name: "b",
-          execute: async () => order.push("execute:b"),
+          execute: async () => {
+            order.push("execute:b");
+            return Result.ok(undefined);
+          },
           rollback: boom("b"),
         })
         .register(
@@ -258,13 +265,25 @@ describe("CoordinatedWrite", () => {
     const inner = new CoordinatedWrite()
       .register({
         name: "inner-a",
-        execute: async () => order.push("inner-a:execute"),
-        rollback: async () => order.push("inner-a:rollback"),
+        execute: async () => {
+          order.push("inner-a:execute");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("inner-a:rollback");
+          return Result.ok(undefined);
+        },
       })
       .register({
         name: "inner-b",
-        execute: async () => order.push("inner-b:execute"),
-        rollback: async () => order.push("inner-b:rollback"),
+        execute: async () => {
+          order.push("inner-b:execute");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("inner-b:rollback");
+          return Result.ok(undefined);
+        },
       });
 
     // 内层正常跑完，外层第二步失败；外层回滚时，内层的步骤不在外层注册表里，
@@ -277,8 +296,12 @@ describe("CoordinatedWrite", () => {
             execute: async () => {
               order.push("outer-a:execute");
               await inner.run();
+              return Result.ok(undefined);
             },
-            rollback: async () => order.push("outer-a:rollback"),
+            rollback: async () => {
+              order.push("outer-a:rollback");
+              return Result.ok(undefined);
+            },
           })
           .register({
             name: "outer-b",
@@ -286,7 +309,10 @@ describe("CoordinatedWrite", () => {
               order.push("outer-b:execute");
               throw new Error("outer-b:boom");
             },
-            rollback: async () => order.push("outer-b:rollback"),
+            rollback: async () => {
+              order.push("outer-b:rollback");
+              return Result.ok(undefined);
+            },
           })
           .run(),
     );
@@ -305,13 +331,25 @@ describe("CoordinatedWrite", () => {
     await runCoordinatedWrite([
       {
         name: "a",
-        execute: async () => order.push("a"),
-        rollback: async () => order.push("a:r"),
+        execute: async () => {
+          order.push("a");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("a:r");
+          return Result.ok(undefined);
+        },
       },
       {
         name: "b",
-        execute: async () => order.push("b"),
-        rollback: async () => order.push("b:r"),
+        execute: async () => {
+          order.push("b");
+          return Result.ok(undefined);
+        },
+        rollback: async () => {
+          order.push("b:r");
+          return Result.ok(undefined);
+        },
       },
     ]);
     assert.deepEqual(order, ["a", "b"]);

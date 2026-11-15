@@ -1,6 +1,8 @@
 /**
  * Agent run 内 VFS write：不走已退役的 BlockStore.capture；write 可 upsert file_cache。
  */
+import { unwrap } from "../../helpers/result-unwrap.js";
+import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
@@ -43,28 +45,28 @@ function mockVfs(): VfsService {
   return {
     async read(path: string) {
       const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
     },
     async write(path: string, content: string) {
       files.set(path, content);
-      return { version: 1 };
+      return Result.ok({ version: 1 });
     },
     async replace(path: string, oldString: string, newString: string) {
       const c = files.get(path) ?? "";
       files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
+      return Result.ok({ version: 1, replacements: 1 });
     },
     async list() {
-      return [...files.keys()];
+      return Result.ok([...files.keys()]);
     },
     async glob() {
-      return [];
+      return Result.ok([]);
     },
     async grep() {
-      return [];
+      return Result.ok([]);
     },
     async delete() {
-      return { deleted: true };
+      return Result.ok(undefined);
     },
   } as unknown as VfsService;
 }
@@ -169,7 +171,7 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
     });
 
     assert.equal(materializePersistBlock.mock.callCount(), 0);
-    assert.equal((await vfs.read("/out.txt")).content, "mutated");
+    assert.equal(unwrap(await vfs.read("/out.txt")).content, "mutated");
     const cacheKeys = await sessionKkv.listKeys(
       MOCK_SESSION_ID,
       SESSION_KKV_DOMAIN_FILE_CACHE,

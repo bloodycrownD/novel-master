@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
@@ -29,7 +30,8 @@ function message(role: string, content: string, seq: number): ChatMessageData {
 
 function mockWorktree(fileTree: string): WorkplaceService {
   return {
-    renderFileTree: async () => fileTree,
+    // port 已改返回 Result<string, AppError>，mock 同形
+    renderFileTree: async () => Result.ok(fileTree),
   } as unknown as WorkplaceService;
 }
 
@@ -89,7 +91,8 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   });
 
   it("$filetree 走 WorkplaceService.renderFileTree，不调用 vfs.list", async () => {
-    const renderFileTree = mock.fn(async () => "/\n└── x.md 全部加载");
+    // port 已改返回 Result<string, AppError>，mock 同形
+    const renderFileTree = mock.fn(async () => Result.ok("/\n└── x.md 全部加载"));
     const workplace = { renderFileTree } as unknown as WorkplaceService;
     const list = mock.fn(async () => []);
     const vfs = {

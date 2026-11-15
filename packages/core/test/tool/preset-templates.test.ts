@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
 import { validateSearchEngineTemplate, type SearchResponse, type SearchToolOptions } from "../../src/domain/tool/builtin/search/types.js";
@@ -24,7 +25,7 @@ async function runPreset(
     });
   }) as typeof globalThis.fetch;
   const template = PRESET_ENGINE_TEMPLATES[id];
-  const out = await runTemplateEngine(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn);
+  const out = unwrap(await runTemplateEngine(template, { engine: id, template, ...extra }, QUERY, options, params, fetchFn));
   return { call: calls[0]!, out };
 }
 

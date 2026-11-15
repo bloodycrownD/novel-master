@@ -1,5 +1,5 @@
-import { unwrap } from "../helpers/result-unwrap.js";
-import { isVfsError } from "@novel-master/core/vfs";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { toPhysicalPath } from "@novel-master/core/vfs";
@@ -14,14 +14,14 @@ describe("ScopedVfsService", () => {
     await ctx.globalVfs().write("/g.md", "global");
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
-    const projectPaths = await pvfs.list("/", { recursive: true });
+    const projectPaths = unwrap(await pvfs.list("/", { recursive: true }));
     assert.equal(projectPaths.length, 0);
   });
 
   it("global list shows unified logical paths", async () => {
     const ctx = getNovelMasterTestContext();
     await ctx.globalVfs().write("/seed/hello.md", "hi");
-    const paths = await ctx.globalVfs().list("/", { recursive: true });
+    const paths = unwrap(await ctx.globalVfs().list("/", { recursive: true }));
     assert.ok(paths.some((e) => e.path === "/seed/hello.md"));
     assert.ok(!paths.some((e) => e.path.startsWith("/template/")));
   });
@@ -35,28 +35,26 @@ describe("ScopedVfsService", () => {
       unwrap(toPhysicalPath({ kind: "project", projectId: project.id }, "/prompts/system.md")),
       `/projects/${project.id}/template/prompts/system.md`,
     );
-    const read = await pvfs.read("/prompts/system.md");
+    const read = unwrap(await pvfs.read("/prompts/system.md"));
     assert.equal(read.content, "system prompt");
     assert.equal(read.path, "/prompts/system.md");
   });
 
   it("rejects legacy /template logical paths", async () => {
     const ctx = getNovelMasterTestContext();
-    await assert.rejects(
-      () => ctx.globalVfs().write("/template/legacy.md", "x"),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "INVALID_PATH"));
-        return true;
-      },
-    );
+    await rejectsErr(() => ctx.globalVfs().write("/template/legacy.md", "x"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_INVALID_PATH"));
+    });
   });
 
   it("session paths invisible to project scope", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    await ctx.sessionVfs(project.id, session.id).write("/note.md", "n");
-    await assert.rejects(() => ctx.projectVfs(project.id).read("/note.md"));
+    unwrap(await ctx.sessionVfs(project.id, session.id).write("/note.md", "n"));
+    await rejectsErr(() => ctx.projectVfs(project.id).read("/note.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("grep with pathGlob filters logical paths", async () => {
@@ -65,7 +63,7 @@ describe("ScopedVfsService", () => {
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/grep-glob/a.md", "# A");
     await pvfs.write("/grep-glob/b.txt", "# B");
-    const hits = await pvfs.grep("#", { pathGlob: "/grep-glob/**/*.md" });
+    const hits = unwrap(await pvfs.grep("#", { pathGlob: "/grep-glob/**/*.md" }));
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.path, "/grep-glob/a.md");
     assert.equal(hits[0]!.line, 1);

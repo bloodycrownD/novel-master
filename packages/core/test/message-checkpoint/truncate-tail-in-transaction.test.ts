@@ -82,7 +82,7 @@ describe("truncateTailInTransaction", () => {
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const cp = await checkpoints.loadFileTree(session.id, m2.id);
     assert.equal(cp, null);
-    assert.equal((await svfs.read("/a.md")).content, "v1");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
   });
 
   it("tail 非空时清空 file_cache / pending；保留 rule_snapshot", async () => {

@@ -1,4 +1,5 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { isAppError } from "../../src/errors/app-error.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
@@ -32,43 +33,43 @@ describe("VfsBatchIoService", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/keep.md", "keep");
+    unwrap(await vfs.write("/keep.md", "keep"));
     unwrap(await vfs.mkdir("/chap"));
 
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     assert.deepEqual(report.written.sort(), ["/chap/a.md", "/chap/b.md"]);
     assert.equal(report.failed.length, 0);
-    assert.equal((await vfs.read("/keep.md")).content, "keep");
-    assert.equal((await vfs.read("/chap/a.md")).content, "A");
+    assert.equal(unwrap(await vfs.read("/keep.md")).content, "keep");
+    assert.equal(unwrap(await vfs.read("/chap/a.md")).content, "A");
   });
 
   it("T-B2: conflicts without confirm → zero writes", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/chap/a.md", "old");
+    unwrap(await vfs.write("/chap/a.md", "old"));
 
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("new") },
-    ]);
+    ]));
     assert.equal(plan.conflicts.length, 1);
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(report.written, []);
     assert.ok(report.skipped.includes("/chap/a.md"));
-    assert.equal((await vfs.read("/chap/a.md")).content, "old");
+    assert.equal(unwrap(await vfs.read("/chap/a.md")).content, "old");
   });
 
   it("T-B3: invalid UTF-8 goes to skipped, not written", async () => {
@@ -79,18 +80,20 @@ describe("VfsBatchIoService", () => {
     const bad = new Uint8Array([0xff, 0xfe, 0xfd]);
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "bad.bin", bytes: bad },
       { kind: "file", relativePath: "ok.md", bytes: enc("ok") },
-    ]);
+    ]));
     assert.ok(plan.skippedBinary.includes("bad.bin"));
     assert.equal(plan.writes.length, 1);
-    const report = await batch.applyBatchIngest(scope, "/", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(report.written, ["/ok.md"]);
     assert.ok(report.skipped.includes("bad.bin"));
-    await assert.rejects(() => vfs.read("/bad.bin"));
+    await rejectsErr(() => vfs.read("/bad.bin"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("T-B4: empty directory entry creates directory node", async () => {
@@ -100,13 +103,13 @@ describe("VfsBatchIoService", () => {
 
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "directory", relativePath: "empty" },
-    ]);
+    ]));
     assert.deepEqual(plan.mkdirPaths, ["/empty"]);
-    await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: false });
+    unwrap(await batch.applyBatchIngest(scope, "/", plan, { overwriteConfirmed: false }));
 
-    const listed = await vfs.list("/", { recursive: false });
+    const listed = unwrap(await vfs.list("/", { recursive: false }));
     const empty = listed.find((e) => e.path === "/empty");
     assert.ok(empty);
     assert.equal(empty.kind, "directory");
@@ -116,14 +119,14 @@ describe("VfsBatchIoService", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/chap/a.md", "A");
-    await vfs.write("/chap/sub/b.md", "B");
+    unwrap(await vfs.write("/chap/a.md", "A"));
+    unwrap(await vfs.write("/chap/sub/b.md", "B"));
 
     const batch = createVfsBatchIoService(ctx.conn);
-    const plan = await batch.planBatchExport(
+    const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/chap"],
-    );
+    ));
     const rels = plan.files.map((f) => f.relativePath).sort();
     assert.deepEqual(rels, ["a.md", "sub/b.md"]);
   });
@@ -134,14 +137,14 @@ describe("VfsBatchIoService", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/卷一/第一章.md", "A");
-    await vfs.write("/卷二/第一章.md", "B");
+    unwrap(await vfs.write("/卷一/第一章.md", "A"));
+    unwrap(await vfs.write("/卷二/第一章.md", "B"));
 
     const batch = createVfsBatchIoService(ctx.conn);
-    const plan = await batch.planBatchExport(
+    const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/卷一/第一章.md", "/卷二/第一章.md"],
-    );
+    ));
     const rels = plan.files.map((f) => f.relativePath);
     assert.equal(plan.files.length, 2);
     assert.equal(new Set(rels).size, 2, "两个 relativePath 必须互不相同");
@@ -154,13 +157,13 @@ describe("VfsBatchIoService", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/卷一/第一章.md", "A");
+    unwrap(await vfs.write("/卷一/第一章.md", "A"));
 
     const batch = createVfsBatchIoService(ctx.conn);
-    const plan = await batch.planBatchExport(
+    const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       ["/卷一/第一章.md"],
-    );
+    ));
     assert.equal(plan.files.length, 1);
     assert.equal(plan.files[0]!.relativePath, "第一章.md");
   });
@@ -171,15 +174,15 @@ describe("VfsBatchIoService", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
-    await vfs.write("/卷一/a.md", "单文件");
-    await vfs.write("/卷一/子/b.md", "目录里的");
+    unwrap(await vfs.write("/卷一/a.md", "单文件"));
+    unwrap(await vfs.write("/卷一/子/b.md", "目录里的"));
 
     const batch = createVfsBatchIoService(ctx.conn);
-    const plan = await batch.planBatchExport(
+    const plan = unwrap(await batch.planBatchExport(
       { kind: "project", projectId: project.id },
       // 单文件在前 ⇒ 它先占住 `卷一/a.md`；随后目录分支再产出同 rel ⇒ 撞名
       ["/卷一/a.md", "/卷一"],
-    );
+    ));
     const rels = plan.files.map((f) => f.relativePath);
     assert.equal(new Set(rels).size, rels.length, "plan.files 不得含重复项");
     assert.equal((plan.skipped ?? []).length, 1, "被去重的那条必须进 skipped");
@@ -200,19 +203,23 @@ describe("VfsBatchIoService", () => {
       testHook: { throwOnWriteLogical: "/chap/b.md" },
     });
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(report.written, [], "失败发生在第 1 片，无已提交分片");
     assert.ok(report.failed.length >= 1);
     // failed[0].path 报的是**失败片的首个 logical**（不是真正抛错的那条）。
     assert.equal(report.failed[0]!.path, "/chap/a.md");
-    await assert.rejects(() => vfs.read("/chap/a.md"));
-    await assert.rejects(() => vfs.read("/chap/b.md"));
+    await rejectsErr(() => vfs.read("/chap/a.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
+    await rejectsErr(() => vfs.read("/chap/b.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   // A-8 契约（主差分断言）：跨片失败时 `written` 必须**如实报告已提交分片**。
@@ -235,12 +242,12 @@ describe("VfsBatchIoService", () => {
       relativePath: `f${String(i).padStart(4, "0")}.md`,
       bytes: enc(`B${i}`),
     }));
-    const plan = await batch.planBatchIngest(scope, "/chap", entries);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", entries));
     assert.equal(plan.writes.length, total);
 
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     // 第 1 片 200 个全部提交 ⇒ 必须在 written 里，且顺序稳定。
     const expectedCommitted = entries
@@ -258,8 +265,10 @@ describe("VfsBatchIoService", () => {
       );
     }
     // 第 1 片确实落库可读。
-    assert.equal((await vfs.read(expectedCommitted[0]!)).content, "B0");
-    await assert.rejects(() => vfs.read(failLogical));
+    assert.equal(unwrap(await vfs.read(expectedCommitted[0]!)).content, "B0");
+    await rejectsErr(() => vfs.read(failLogical), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
   });
 
   it("T-B7: plan detects same-path file/directory type conflict", async () => {
@@ -267,15 +276,15 @@ describe("VfsBatchIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "foo", bytes: enc("file") },
       { kind: "directory", relativePath: "foo" },
-    ]);
+    ]));
     assert.equal(plan.typeConflicts.length, 1);
     assert.match(plan.typeConflicts[0]!.message, /both file and directory/);
-    const report = await batch.applyBatchIngest(scope, "/", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(report.written, []);
     assert.equal(report.failed.length, 1);
   });
@@ -285,15 +294,15 @@ describe("VfsBatchIoService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "file", relativePath: "foo", bytes: enc("parent") },
       { kind: "file", relativePath: "foo/bar.txt", bytes: enc("child") },
-    ]);
+    ]));
     assert.equal(plan.typeConflicts.length, 1);
     assert.match(plan.typeConflicts[0]!.message, /under file/);
-    const report = await batch.applyBatchIngest(scope, "/", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(report.written, []);
     assert.equal(report.failed.length, 1);
   });
@@ -305,13 +314,13 @@ describe("VfsBatchIoService", () => {
 
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/chap", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
-    ]);
+    ]));
 
     const writtenViaWriter: string[] = [];
-    const report = await batch.applyBatchIngestWithWriter(
+    const report = unwrap(await batch.applyBatchIngestWithWriter(
       scope,
       "/chap",
       plan,
@@ -322,16 +331,18 @@ describe("VfsBatchIoService", () => {
           if (logical.endsWith("/b.md")) {
             throw new Error("simulated write fail");
           }
-          await vfs.write(logical, content, { versionCheck: false });
+          unwrap(await vfs.write(logical, content, { versionCheck: false }));
           writtenViaWriter.push(logical);
         },
       },
-    );
+    ));
 
     assert.deepEqual(report.written, ["/chap/a.md"]);
     assert.equal(report.failed.length, 1);
-    assert.equal((await vfs.read("/chap/a.md")).content, "A");
-    await assert.rejects(() => vfs.read("/chap/b.md"));
+    assert.equal(unwrap(await vfs.read("/chap/a.md")).content, "A");
+    await rejectsErr(() => vfs.read("/chap/b.md"), (e: unknown) => {
+      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+    });
     assert.deepEqual(writtenViaWriter, ["/chap/a.md"]);
   });
 });
@@ -394,15 +405,15 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       new SqliteVfsEntryRepository(ctx.conn),
       { sessionKkv: ctx.sessionKkv },
     );
-    const plan = await batch.planBatchIngest(scope, "/导入", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     assert.deepEqual(report.written, ["/导入/a.md"]);
-    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "A");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       [],
@@ -429,15 +440,15 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       { sessionKkv: ctx.sessionKkv },
     );
     const scope = { kind: "project" as const, projectId: project.id };
-    const plan = await batch.planBatchIngest(scope, "/导入", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     assert.deepEqual(report.written, ["/导入/a.md"]);
-    assert.equal((await pvfs.read("/导入/a.md")).content, "A");
+    assert.equal(unwrap(await pvfs.read("/导入/a.md")).content, "A");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       ["tc2:canon"],
@@ -479,13 +490,13 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       | Awaited<ReturnType<typeof batch.applyBatchIngest>>
       | undefined;
     try {
-      const plan = await batch.planBatchIngest(scope, "/导入", [
+      const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
         { kind: "file", relativePath: "a.md", bytes: enc("A") },
-      ]);
+      ]));
       await assert.doesNotReject(async () => {
-        report = await batch.applyBatchIngest(scope, "/导入", plan, {
+        report = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
           overwriteConfirmed: false,
-        });
+        }));
       });
     } finally {
       console.warn = originalWarn;
@@ -493,7 +504,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
     // 导入本体已落库；缓存对齐失败只 warn 留痕
     assert.deepEqual(report!.written, ["/导入/a.md"]);
-    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "A");
     assert.ok(warnCalls.length >= 1);
   });
 
@@ -507,23 +518,23 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.write("/导入/a.md", "old");
+    unwrap(await vfs.write("/导入/a.md", "old"));
 
     const batch = new DefaultVfsBatchIoService(
       ctx.conn,
       new SqliteVfsEntryRepository(ctx.conn),
       { sessionKkv: ctx.sessionKkv },
     );
-    const plan = await batch.planBatchIngest(scope, "/导入", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
       { kind: "file", relativePath: "a.md", bytes: enc("new") },
-    ]);
+    ]));
     assert.equal(plan.conflicts.length, 1);
     await seedDirtyCaches(session.id, "tc4");
 
     // 未确认覆盖 ⇒ 零写入早退 ⇒ 缓存不动
-    const skippedReport = await batch.applyBatchIngest(scope, "/导入", plan, {
+    const skippedReport = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.deepEqual(skippedReport.written, []);
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
@@ -535,11 +546,11 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     );
 
     // 确认覆盖 ⇒ 真写入 ⇒ 两域清理
-    const applied = await batch.applyBatchIngest(scope, "/导入", plan, {
+    const applied = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
       overwriteConfirmed: true,
-    });
+    }));
     assert.deepEqual(applied.written, ["/导入/a.md"]);
-    assert.equal((await vfs.read("/导入/a.md")).content, "new");
+    assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "new");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       [],
@@ -566,16 +577,16 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       { sessionKkv: ctx.sessionKkv },
     );
     // 同一相对路径既是文件又是目录 ⇒ plan 带 typeConflicts（T-B7 同款构造）。
-    const plan = await batch.planBatchIngest(scope, "/冲突", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/冲突", [
       { kind: "file", relativePath: "foo", bytes: enc("file") },
       { kind: "directory", relativePath: "foo" },
-    ]);
+    ]));
     assert.equal(plan.typeConflicts.length, 1);
 
     await seedDirtyCaches(session.id, "tc4b");
-    const report = await batch.applyBatchIngest(scope, "/冲突", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/冲突", plan, {
       overwriteConfirmed: true,
-    });
+    }));
 
     // 零写入 ⇒ 两域不动，脏 key 原样（这里 overwriteConfirmed=true 也不改变口径：
     // 门闸看的是 written，不是确认位）。
@@ -608,15 +619,15 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     };
     await seedDirtyCaches(session.id, "tc5");
 
-    const plan = await batch.planBatchIngest(scope, "/导入", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
-    ]);
-    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+    ]));
+    const report = unwrap(await batch.applyBatchIngest(scope, "/导入", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     assert.deepEqual(report.written, ["/导入/a.md"]);
-    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "A");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       [],
@@ -639,27 +650,27 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     };
 
     // 预置同名文件 ⇒ plan 带 conflict，才能造出「零写入早退」
-    await vfs.write("/导入/a.md", "old");
+    unwrap(await vfs.write("/导入/a.md", "old"));
 
     const batch = new DefaultVfsBatchIoService(
       ctx.conn,
       new SqliteVfsEntryRepository(ctx.conn),
       { sessionKkv: ctx.sessionKkv },
     );
-    const plan = await batch.planBatchIngest(scope, "/导入", [
+    const plan = unwrap(await batch.planBatchIngest(scope, "/导入", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
-    ]);
+    ]));
     assert.equal(plan.conflicts.length, 1);
 
     // 零写入（冲突未确认早退）⇒ 不清
     await seedDirtyCaches(session.id, "tc6-early");
-    const zeroWritten = await batch.applyBatchIngestWithWriter(
+    const zeroWritten = unwrap(await batch.applyBatchIngestWithWriter(
       scope,
       "/导入",
       plan,
       { overwriteConfirmed: false },
       { async mkdir() {}, async writeFile() {} },
-    );
+    ));
     assert.deepEqual(zeroWritten.written, []);
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
@@ -669,7 +680,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     // 真写入 ⇒ 清（这条链自身不清缓存：user-vfs-turn + vfs write 工具只 upsert
     // 单条 file_cache，不清 rule_snapshot）
     await seedDirtyCaches(session.id, "tc6");
-    const report = await batch.applyBatchIngestWithWriter(
+    const report = unwrap(await batch.applyBatchIngestWithWriter(
       scope,
       "/导入",
       plan,
@@ -677,13 +688,13 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       {
         async mkdir() {},
         async writeFile(logical, content) {
-          await vfs.write(logical, content, { versionCheck: false });
+          unwrap(await vfs.write(logical, content, { versionCheck: false }));
         },
       },
-    );
+    ));
 
     assert.deepEqual(report.written, ["/导入/a.md"]);
-    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.equal(unwrap(await vfs.read("/导入/a.md")).content, "A");
     assert.deepEqual(
       await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
       [],
@@ -700,12 +711,12 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     // ② 必须**重新 plan 一份含 a.md+b.md 的 plan**——第二段的 plan 只有 a.md，
     // writer 碰不到 b.md，「b.md 抛错」根本无从发生。
     await seedDirtyCaches(session.id, "tc6-writer-partial");
-    const partialPlan = await batch.planBatchIngest(scope, "/导入2", [
+    const partialPlan = unwrap(await batch.planBatchIngest(scope, "/导入2", [
       { kind: "file", relativePath: "a.md", bytes: enc("A2") },
       { kind: "file", relativePath: "b.md", bytes: enc("B2") },
-    ]);
+    ]));
     assert.equal(partialPlan.writes.length, 2);
-    const partial = await batch.applyBatchIngestWithWriter(
+    const partial = unwrap(await batch.applyBatchIngestWithWriter(
       scope,
       "/导入2",
       partialPlan,
@@ -719,7 +730,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
           await vfs.write(logical, content, { versionCheck: false });
         },
       },
-    );
+    ));
 
     assert.deepEqual(partial.written, ["/导入2/a.md"]);
     assert.equal(partial.failed.length, 1);
@@ -749,16 +760,16 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       testHook: { throwOnWriteLogical: "/chap/b.md" },
     });
     await seedDirtyCaches(session.id, "tc7-same-shard");
-    const sameShardPlan = await sameShardBatch.planBatchIngest(scope, "/chap", [
+    const sameShardPlan = unwrap(await sameShardBatch.planBatchIngest(scope, "/chap", [
       { kind: "file", relativePath: "a.md", bytes: enc("A") },
       { kind: "file", relativePath: "b.md", bytes: enc("B") },
-    ]);
-    const sameShardReport = await sameShardBatch.applyBatchIngest(
+    ]));
+    const sameShardReport = unwrap(await sameShardBatch.applyBatchIngest(
       scope,
       "/chap",
       sameShardPlan,
       { overwriteConfirmed: false }
-    );
+    ));
     assert.deepEqual(sameShardReport.written, [], "同片失败没有任何已提交分片");
     assert.equal(sameShardReport.failed.length, 1);
     assert.deepEqual(
@@ -785,20 +796,20 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       relativePath: `f${String(i).padStart(4, "0")}.md`,
       bytes: enc(`T${i}`),
     }));
-    const crossShardPlan = await crossShardBatch.planBatchIngest(
+    const crossShardPlan = unwrap(await crossShardBatch.planBatchIngest(
       scope,
       "/chap2",
       entries
-    );
+    ));
     assert.equal(crossShardPlan.writes.length, total);
 
     await seedDirtyCaches(session.id, "tc7-cross-shard");
-    const crossShardReport = await crossShardBatch.applyBatchIngest(
+    const crossShardReport = unwrap(await crossShardBatch.applyBatchIngest(
       scope,
       "/chap2",
       crossShardPlan,
       { overwriteConfirmed: false }
-    );
+    ));
 
     assert.equal(crossShardReport.written.length, 200, "第 1 片 200 个已提交");
     assert.equal(crossShardReport.failed.length, 1);
@@ -848,11 +859,11 @@ describe("VfsBatchIoService 分片事务计数", () => {
     }));
 
     const batch = createVfsBatchIoService(conn);
-    const plan = await batch.planBatchIngest(scope, "/chap", entries);
+    const plan = unwrap(await batch.planBatchIngest(scope, "/chap", entries));
     probe.reset();
-    const report = await batch.applyBatchIngest(scope, "/chap", plan, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/chap", plan, {
       overwriteConfirmed: false,
-    });
+    }));
 
     assert.equal(report.failed.length, 0);
     assert.equal(report.written.length, total);
@@ -877,27 +888,27 @@ describe("VfsBatchIoService 分片事务计数", () => {
     const scope = { kind: "project" as const, projectId: project.id };
     const batch = createVfsBatchIoService(conn);
 
-    const mkdirOnly = await batch.planBatchIngest(scope, "/", [
+    const mkdirOnly = unwrap(await batch.planBatchIngest(scope, "/", [
       { kind: "directory", relativePath: "empty-dir" },
-    ]);
+    ]));
     probe.reset();
-    await batch.applyBatchIngest(scope, "/", mkdirOnly, {
+    unwrap(await batch.applyBatchIngest(scope, "/", mkdirOnly, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.equal(probe.transactionCount, 1, "纯 mkdir 只跑段 B0");
 
-    const nothing = await batch.planBatchIngest(scope, "/", []);
+    const nothing = unwrap(await batch.planBatchIngest(scope, "/", []));
     probe.reset();
-    const report = await batch.applyBatchIngest(scope, "/", nothing, {
+    const report = unwrap(await batch.applyBatchIngest(scope, "/", nothing, {
       overwriteConfirmed: false,
-    });
+    }));
     assert.equal(probe.transactionCount, 0, "空 plan 不开任何事务");
     assert.deepEqual(report.written, []);
     assert.equal(
-      (
+      unwrap(
         await createScopedVfsService(conn, scope).list("/", {
           recursive: false,
-        })
+        }),
       ).length,
       1,
       "目录行确实建出来了"

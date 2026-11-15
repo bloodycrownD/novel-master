@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -12,7 +13,7 @@ describe("worktree getDirRule", () => {
     const wt = createWorkplaceService(ctx.conn, { kind: "global" });
     const path = "/my-dir";
 
-    assert.equal(await wt.getDirRule(path), undefined);
+    assert.equal(unwrap(await wt.getDirRule(path)), undefined);
 
     await wt.setDirRule({
       logicalPath: path,
@@ -23,7 +24,7 @@ describe("worktree getDirRule", () => {
       fillPolicy: "header",
     });
 
-    const rule = await wt.getDirRule(path);
+    const rule = unwrap(await wt.getDirRule(path));
     assert.ok(rule);
     assert.equal(rule.logicalPath, path);
     assert.equal(rule.sortField, "updated");

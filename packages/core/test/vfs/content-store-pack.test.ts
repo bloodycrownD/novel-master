@@ -12,7 +12,8 @@ import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import type { Result } from "@/errors/either.js";
+import { Result } from "@/errors/either.js";
+import { AppError } from "@/errors/app-error.js";
 import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -435,9 +436,9 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const pack = await insertPackRows(conn, entryIdPack, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, [pA, pB]);
     await conn.execute(`DELETE FROM vfs_content_blob WHERE content_hash IN (?, ?)`, [hA, hB]);
 
-    assert.equal(await store.get(hA), pA);
-    assert.equal(await store.get(hB), pB);
-    assert.equal(await store.get(hHead), pHead, "head 仍走 blob 原路径");
+    assert.equal(unwrapResult(await store.get(hA)), pA);
+    assert.equal(unwrapResult(await store.get(hB)), pB);
+    assert.equal(unwrapResult(await store.get(hHead)), pHead, "head 仍走 blob 原路径");
     // 一 hash 一 member 行（主键保证）；重复 hash 不产生第二行。
     assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?`, [pack.packId]), 2);
 
@@ -460,13 +461,13 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     await insertPackRows(conn, entryIdFossil, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, [f0, f1, f2]);
     await conn.execute(`DELETE FROM vfs_content_blob WHERE content_hash IN (?, ?, ?)`, [hf0, hf1, hf2]);
 
-    assert.equal(await store.get(hf0), f0);
-    assert.equal(await store.get(hf1), f1);
-    assert.equal(await store.get(hf2), f2);
-    assert.equal(await store.get(hHeadF), pHeadF);
+    assert.equal(unwrapResult(await store.get(hf0)), f0);
+    assert.equal(unwrapResult(await store.get(hf1)), f1);
+    assert.equal(unwrapResult(await store.get(hf2)), f2);
+    assert.equal(unwrapResult(await store.get(hHeadF)), pHeadF);
 
     // 混组批量读回（getMany 的 member 聚合路径）。
-    const many = await store.getMany([hA, hB, hHead, hf0, hf1, hf2, hHeadF]);
+    const many = unwrapResult(await store.getMany([hA, hB, hHead, hf0, hf1, hf2, hHeadF]));
     assert.equal(many.size, 7);
     assert.equal(many.get(hA), pA);
     assert.equal(many.get(hB), pB);
@@ -503,8 +504,8 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     // live head 永不被打包的读侧体现：blob 表始终有 head 行、get 命中即返回。
     assert.equal(await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`, [hHead]), 1);
 
-    assert.equal(await store.get(hHead), pHead);
-    assert.equal((await store.getMany([hHead])).get(hHead), pHead);
+    assert.equal(unwrapResult(await store.get(hHead)), pHead);
+    assert.equal(unwrapResult(await store.getMany([hHead])).get(hHead), pHead);
   });
 
   it("T-VP4: GC 语义——无引用 pack 回收 / 成员被引用整包保留 / 孤儿 member 回收 / ref_count 触发器互不干扰", async () => {
@@ -685,7 +686,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     const pathFossil = `/tvp6/fossil-${suffix}.md`;
     await entryRepo.insertWithContentHash(sk, pathFossil, member2.contentHash);
-    const sizeFossil = await entryRepo.findContentSizeByPath(sk, pathFossil);
+    const sizeFossil = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathFossil));
     assert.ok(sizeFossil != null);
     assert.equal(sizeFossil!.kind, "blobCompressedBytes");
     assert.equal(sizeFossil!.size, member2.compressedByteLen, "应返回原 blob 行 byte_len 的复制值（非 delta 段长）");
@@ -702,7 +703,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     );
     const pathBoth = `/tvp6/both-${suffix}.md`;
     await entryRepo.insertWithContentHash(sk, pathBoth, hBoth);
-    const sizeBoth = await entryRepo.findContentSizeByPath(sk, pathBoth);
+    const sizeBoth = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathBoth));
     assert.ok(sizeBoth != null);
     assert.equal(sizeBoth!.size, bothByteLen, "blob 行存在时不得回退 member");
 
@@ -710,7 +711,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const pathGhost = `/tvp6/ghost-${suffix}.md`;
     const hGhost = hashContent(`tvp6-ghost-${suffix}`);
     await entryRepo.insertWithContentHash(sk, pathGhost, hGhost);
-    assert.equal(await entryRepo.findContentSizeByPath(sk, pathGhost), null);
+    assert.equal(unwrapResult(await entryRepo.findContentSizeByPath(sk, pathGhost)), null);
   });
 
   // T-VP6 的后半句（pbp-13）：member 回退值必须恒等于「被替换 blob 行的byte_len
@@ -753,12 +754,12 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     await entryRepo.insertWithContentHash(sk, pathUnder, hashUnder);
 
     // —— 探测层：回退值口径（承 T-VP6，这里落在超限侧）——
-    const sizeOver = await entryRepo.findContentSizeByPath(sk, pathOver);
+    const sizeOver = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathOver));
     assert.ok(sizeOver != null);
     assert.equal(sizeOver!.kind, "blobCompressedBytes");
     assert.equal(sizeOver!.size, overBytes, "member 回退值必须是 compressed_byte_len（不是段长）");
     assert.ok(sizeOver!.size > gate, "超限组必须真的过闸门");
-    const sizeUnder = await entryRepo.findContentSizeByPath(sk, pathUnder);
+    const sizeUnder = unwrapResult(await entryRepo.findContentSizeByPath(sk, pathUnder));
     assert.ok(sizeUnder != null);
     assert.equal(sizeUnder!.size, memberUnder!.compressedByteLen);
     assert.ok(sizeUnder!.size <= gate, `对照组不得超闸门（实测 ${sizeUnder!.size} vs ${gate}）`);
@@ -773,16 +774,16 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
       },
       async read(target: string) {
         readCalls += 1;
-        const entry = await entryRepo.findByPath(sk, target);
+        const entry = unwrapResult(await entryRepo.findByPath(sk, target));
         if (entry == null) {
-          throw new Error(`vfs_not_found: ${target}`);
+          return Result.err(new AppError("VFS_NOT_FOUND", { path: target }));
         }
-        return {
+        return Result.ok({
           path: target,
           content: entry.content,
           version: entry.version,
           mtimeMs: entry.mtimeMs,
-        };
+        });
       },
     } as unknown as VfsService;
 
@@ -815,14 +816,10 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const store = new SqliteVfsContentStore(conn);
     const suffix = testIsolationSuffix();
     const hGhost = hashContent(`no-blob-no-member-${suffix}`);
-    await assert.rejects(
-      () => store.get(hGhost),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.equal(error.message, `vfs_content_blob 缺失: ${hGhost}`);
-        return true;
-      }
-    );
+    const ghostResult = await store.get(hGhost);
+    assert.ok(!ghostResult.ok, "预期 Err 分支（get 已改返回 Result，不再 throw）");
+    assert.ok(ghostResult.error instanceof Error);
+    assert.equal(ghostResult.error.message, `vfs_content_blob 缺失: ${hGhost}`);
   });
 
   it("T-VP14: 抽回死区——put 抽回 fossil 组首成员后 blob/member 双侧读回全等、pack 流字节不变", async () => {
@@ -861,11 +858,11 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     assert.ok(bytesEqual(bytesBefore, afterRows[0]!.bytes), "pack 流字节应不变");
 
     // 双侧读回全等：h0 走 blob 路径；h1/h2 沿段链（含已成死区的段 0 作 base）。
-    assert.equal(await store.get(m0.contentHash), f0);
-    assert.equal(await store.get(m1.contentHash), f1);
-    assert.equal(await store.get(m2.contentHash), f2);
+    assert.equal(unwrapResult(await store.get(m0.contentHash)), f0);
+    assert.equal(unwrapResult(await store.get(m1.contentHash)), f1);
+    assert.equal(unwrapResult(await store.get(m2.contentHash)), f2);
 
-    const many = await store.getMany([m0.contentHash, m1.contentHash, m2.contentHash]);
+    const many = unwrapResult(await store.getMany([m0.contentHash, m1.contentHash, m2.contentHash]));
     assert.equal(many.get(m0.contentHash), f0);
     assert.equal(many.get(m1.contentHash), f1);
     assert.equal(many.get(m2.contentHash), f2);
@@ -886,7 +883,7 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const fossil = await insertPackRows(conn, 987654321, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, fossilPlains);
 
     __resetVfsPackDecodeCountersForTests();
-    const many = await store.getMany([hB, ...pack.members.map((m) => m.contentHash), ...fossil.members.map((m) => m.contentHash)]);
+    const many = unwrapResult(await store.getMany([hB, ...pack.members.map((m) => m.contentHash), ...fossil.members.map((m) => m.contentHash)]));
 
     assert.equal(many.size, 6);
     assert.equal(many.get(hB), pB);

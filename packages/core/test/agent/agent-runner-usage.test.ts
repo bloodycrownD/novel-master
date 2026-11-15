@@ -8,6 +8,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -128,7 +129,7 @@ function stubSavedModelRepository(saved: SavedModel | null): SavedModelRepositor
   const noop = noopSavedModelRepository();
   return {
     ...noop,
-    findById: async () => saved,
+    findById: async () => Result.ok(saved),
   };
 }
 

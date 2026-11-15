@@ -160,13 +160,11 @@ export class SkillsService implements SkillService {
     if (!vfsRes.ok) {
       return null;
     }
-    try {
-      const vfs = vfsRes.value;
-      await vfs.read(`${SKILLS_ROOT}/${name}/${path}`);
-      return true;
-    } catch {
-      return false;
-    }
+    // 错误通道迁移四期适配：vfs.read 已改返回 Result、不再以 throw 报 NOT_FOUND——
+    // 旧的 try/catch 判定会永远走 return true（探测恒真），错误提示「切另一域」。
+    const vfs = vfsRes.value;
+    const read = await vfs.read(`${SKILLS_ROOT}/${name}/${path}`);
+    return read.ok;
   }
 
   /**

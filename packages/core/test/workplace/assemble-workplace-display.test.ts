@@ -280,7 +280,7 @@ describe("assembleWorkplaceDisplay", () => {
     );
     const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md")));
     assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
-    assert.equal((await vfs.read("/e.md")).content, "beta");
+    assert.equal(unwrap(await vfs.read("/e.md")).content, "beta");
   });
 
   it("T-WP4: clearSession 后再度 assemble 重新跑规则引擎并写快照", async () => {
@@ -569,7 +569,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
     // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
-    const prepared = await promptAssembler.prepare(
+    const prepared = unwrap(await promptAssembler.prepare(
       [
         {
           id: "e2e-attach",
@@ -599,7 +599,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         seenPaths: out.prefixPaths,
         workplaceSeenPaths: out.visiblePaths,
       }
-    );
+    ));
     const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);

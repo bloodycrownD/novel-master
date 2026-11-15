@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -29,7 +30,7 @@ describe("smart 规则懒加载口径", () => {
       fillPolicy: "hidden" as const,
     };
     const listNovelPaths = async () =>
-      (await wt.buildListRows())
+      (unwrap(await wt.buildListRows()))
         .filter((r) => r.path.startsWith("/novel/"))
         .map((r) => r.path);
 

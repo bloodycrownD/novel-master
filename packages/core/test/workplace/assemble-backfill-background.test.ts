@@ -14,6 +14,7 @@
  *
  * T-BF1/T-BF4 需要「写侧被挂住仍能返回」，用内存 kkv 的 set 闸门表达。
  */
+import { Result } from "../../src/errors/either.js";
 import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
@@ -38,19 +39,19 @@ const LAYOUT: Pick<AgentPromptLayout, "workplace"> = { workplace: "【done】" }
 function fakeVfs(content: string): VfsService {
   return {
     async read() {
-      return {
+      return Result.ok({
         path: "/note.md",
         content,
         version: 1,
         mtimeMs: 1_700_000_000_000,
-      };
+      });
     },
     async findContentSize() {
-      return {
+      return Result.ok({
         kind: "inlineChars" as const,
         size: content.length,
         mtimeMs: 1_700_000_000_000,
-      };
+      } as const);
     },
   } as unknown as VfsService;
 }

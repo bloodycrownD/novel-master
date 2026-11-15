@@ -80,7 +80,7 @@ describe("rollback-restore-deleted-entry", () => {
     );
 
     // 旧内容回来：按目标检查点完成态，anchor 时点 /dup.md = old-content。
-    assert.equal((await svfs.read("/dup.md")).content, "old-content");
+    assert.equal(unwrap(await svfs.read("/dup.md")).content, "old-content");
     // 复活后 live entry 就是 anchor 时的 entryA（entryId 原位复活）。
     const revived = unwrap(await entries.findByPath(sk, "/dup.md"));
     assert.ok(revived != null);
@@ -139,10 +139,10 @@ describe("rollback-restore-deleted-entry", () => {
     }));
     // 递归删除整棵 /docs 子树（每个文件的 entry 行都被物理删除）。
     unwrap(await svfs.delete("/docs", { recursive: true }));
-    await assert.rejects(
-      () => svfs.read("/docs/a.md"),
-      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
-    );
+    {
+      const r = await svfs.read("/docs/a.md");
+      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "删除后读取应走 Err 且为 VFS_NOT_FOUND");
+    }
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,
@@ -150,9 +150,9 @@ describe("rollback-restore-deleted-entry", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/docs/a.md")).content, "alpha");
-    assert.equal((await svfs.read("/docs/b.md")).content, "beta");
-    assert.equal((await svfs.read("/docs/sub/c.md")).content, "gamma");
+    assert.equal(unwrap(await svfs.read("/docs/a.md")).content, "alpha");
+    assert.equal(unwrap(await svfs.read("/docs/b.md")).content, "beta");
+    assert.equal(unwrap(await svfs.read("/docs/sub/c.md")).content, "gamma");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -185,11 +185,11 @@ describe("rollback-restore-deleted-entry", () => {
     // path 快照冻结 capture 时点路径：回滚后文件回到 /origin.md（anchor 完成态），
     // tail 期的现路径 /renamed.md 被清除——与旧行为（跟随现路径 /renamed.md）不同，
     // 属本修复引入的有意行为变更。
-    assert.equal((await svfs.read("/origin.md")).content, "v1");
-    await assert.rejects(
-      () => svfs.read("/renamed.md"),
-      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
-    );
+    assert.equal(unwrap(await svfs.read("/origin.md")).content, "v1");
+    {
+      const r = await svfs.read("/renamed.md");
+      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "rename 后旧路径读取应走 Err 且为 VFS_NOT_FOUND");
+    }
   });
 
   it("锚点版本高于重建 entry（V=2）：无选项回滚直接复现旧内容，不误报 BACKFILL_REQUIRED", async () => {
@@ -239,7 +239,7 @@ describe("rollback-restore-deleted-entry", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/dup2.md")).content, "old-v2");
+    assert.equal(unwrap(await svfs.read("/dup2.md")).content, "old-v2");
     const revived = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(revived != null);
     assert.equal(revived.entryId, entryA.entryId);
@@ -353,7 +353,7 @@ describe("rollback-restore-deleted-entry", () => {
     });
 
     // 降级语义：锚点内容真缺，回滚后正文保持 live（重建）现状。
-    assert.equal((await svfs.read("/dup2.md")).content, "rebuilt-content");
+    assert.equal(unwrap(await svfs.read("/dup2.md")).content, "rebuilt-content");
     const revived = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(revived != null);
     assert.equal(revived.entryId, entryA.entryId);

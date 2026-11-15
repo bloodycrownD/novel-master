@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmChatRequest, LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -16,9 +17,10 @@ const secretStore: SecretStore = {
 };
 
 const noRetryPolicies: ModelRetryPolicyService = {
-  getPolicy: async () => null,
-  setPolicy: async () => undefined,
-  clearPolicy: async () => undefined,
+  // port 已改返回 Result：getPolicy 成功未设置 => ok(null)，set/clear 幂等成功
+  getPolicy: async () => Result.ok(null),
+  setPolicy: async () => Result.ok(undefined),
+  clearPolicy: async () => Result.ok(undefined),
 };
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
@@ -49,16 +51,17 @@ function createService(
   };
 
   const savedModels: SavedModelRepository = {
-    listByProvider: async () => [],
-    findById: async () => ({
-      id: TEST_SAVED_MODEL_ID,
-      providerId: protocol,
-      vendorModelId,
-      modelName: vendorModelId,
-      settings,
-      createdAtMs: 0,
-      updatedAtMs: 0,
-    }),
+    listByProvider: async () => Result.ok([]),
+    findById: async () =>
+      Result.ok({
+        id: TEST_SAVED_MODEL_ID,
+        providerId: protocol,
+        vendorModelId,
+        modelName: vendorModelId,
+        settings,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+      }),
     insert: async () => undefined,
     updateById: async () => undefined,
     deleteById: async () => false,

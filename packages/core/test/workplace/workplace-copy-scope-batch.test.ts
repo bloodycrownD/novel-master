@@ -10,6 +10,8 @@
  * @module test/workplace/workplace-copy-scope-batch
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
+import { Result } from "../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
@@ -110,7 +112,7 @@ describe("T-WP1 copyScope 批量 upsert", () => {
 
     // 计数窗口：只统计 copyScope 本身发出的 SQL（含前置 deleteScope）。
     c.counter.clear();
-    await c.repo.copyScope(FROM_SCOPE, TO_SCOPE, (p) => `/copy${p}`);
+    await c.repo.copyScope(FROM_SCOPE, TO_SCOPE, (p) => Result.ok(`/copy${p}`));
 
     const dirDeletes = c.counter.countBySubstring(
       "DELETE FROM workplace_dir_rule",
@@ -138,8 +140,8 @@ describe("T-WP1 copyScope 批量 upsert", () => {
     );
 
     // 正确性：目标 scope 应有完整的 50 + 50 条，路径被 /copy 前缀映射。
-    const toDirs = await c.repo.listDirRules(TO_SCOPE);
-    const toFiles = await c.repo.listFileRules(TO_SCOPE);
+    const toDirs = unwrap(await c.repo.listDirRules(TO_SCOPE));
+    const toFiles = unwrap(await c.repo.listFileRules(TO_SCOPE));
     assert.equal(toDirs.length, N, "目标 scope dir rule 数应为 50");
     assert.equal(toFiles.length, N, "目标 scope file rule 数应为 50");
     assert.ok(
@@ -152,7 +154,7 @@ describe("T-WP1 copyScope 批量 upsert", () => {
     );
 
     // 源 scope 不应被 copyScope 改动。
-    const fromDirs = await c.repo.listDirRules(FROM_SCOPE);
+    const fromDirs = unwrap(await c.repo.listDirRules(FROM_SCOPE));
     assert.equal(fromDirs.length, N, "源 scope dir rule 不应被 copyScope 改动");
   });
 
@@ -162,7 +164,7 @@ describe("T-WP1 copyScope 批量 upsert", () => {
     const emptyTo = "project:copy-empty-to";
 
     c.counter.clear();
-    await c.repo.copyScope(emptyFrom, emptyTo, (p) => p);
+    await c.repo.copyScope(emptyFrom, emptyTo, (p) => Result.ok(p));
 
     // 源为空 → batchUpsert* 走空数组 no-op，不发 INSERT。
     const dirInserts = c.counter.countBySubstring(

@@ -109,8 +109,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
       },
     );
 
-    assert.equal((await svfs.read("/a.md")).content, "tail-a");
-    assert.equal((await svfs.read("/b.md")).content, "tail-b");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "tail-a");
+    assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 4);
   });
@@ -128,8 +128,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
       { revisionHeadBackfill: true },
     );
 
-    assert.equal((await svfs.read("/a.md")).content, "anchor-a");
-    assert.equal((await svfs.read("/b.md")).content, "tail-b");
+    assert.equal(unwrap(await svfs.read("/a.md")).content, "anchor-a");
+    assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -151,13 +151,13 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
     const sk = scopeKey(scope);
 
-    const backfilled = await backfillMissingRevisionIfNeeded(
+    const backfilled = unwrap(await backfillMissingRevisionIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
       sk,
       "/ghost.md",
       null,  // entryId = null → entry not exist
       7,
-    );
+    ));
 
     assert.equal(backfilled, false);
   });
@@ -191,7 +191,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       { revisionHeadBackfill: true },
     );
 
-    assert.equal((await svfs.read("/gone.md")).content, "anchor-gone");
+    assert.equal(unwrap(await svfs.read("/gone.md")).content, "anchor-gone");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -225,7 +225,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/gone2.md")).content, "anchor-content");
+    assert.equal(unwrap(await svfs.read("/gone2.md")).content, "anchor-content");
   });
 
   it("RB4b(手工删 revision 行): entry 与 revision 都缺 — 维持降级不复现", async () => {
@@ -273,10 +273,10 @@ describe("MessageRollbackService (revision head backfill)", () => {
       { revisionHeadBackfill: true },
     );
 
-    await assert.rejects(
-      () => svfs.read("/gone.md"),
-      (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
-    );
+    {
+      const r = await svfs.read("/gone.md");
+      assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
+    }
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -296,7 +296,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       { revisionHeadBackfill: true },
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -313,7 +313,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       assistant1.id,
     );
 
-    assert.equal((await svfs.read("/poem.md")).content, "roses");
+    assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
@@ -343,13 +343,13 @@ describe("MessageRollbackService (revision head backfill)", () => {
       [entry.entryId],
     );
 
-    const backfilled = await backfillMissingRevisionIfNeeded(
+    const backfilled = unwrap(await backfillMissingRevisionIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
       sk,
       "/exists.md",
       entry.entryId,
       1,
-    );
+    ));
 
     assert.equal(backfilled, false);
     const after = await ctx.conn.query<{ version: number }>(

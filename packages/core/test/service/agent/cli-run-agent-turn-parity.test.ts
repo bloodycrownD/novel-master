@@ -1,6 +1,7 @@
 /**
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
+import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {
@@ -69,13 +70,14 @@ function makeRuntime(
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
+      getCurrentModelId: async () => Result.ok(TEST_SAVED_MODEL_ID),
     },
     agentRegistry: registry,
     projects: ctx.projects,
     messages: ctx.messages,
     savedModelRepo: {
-      getById: async () => null,
+      // 错误通道迁移四期：findById 走 Result 通道（查不到 → Ok(null)，调用方降级）
+      findById: async () => Result.ok(null),
     } as AgentTurnRuntimePort["savedModelRepo"],
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
@@ -108,13 +110,13 @@ async function runUntilRunner(
 ): Promise<AgentDefinition | undefined> {
   let capturedDefinition: AgentDefinition | undefined;
   try {
-    await runAgentTurn(runtime, scope, content, {
+    unwrap(await runAgentTurn(runtime, scope, content, {
       ...options,
       onAfterResolveModel: async (resolveCtx) => {
         capturedDefinition = resolveCtx.definition;
         await options?.onAfterResolveModel?.(resolveCtx);
       },
-    });
+    }));
   } catch {
     // runner deps stubbed；definition / flush 已在 runner 之前完成
   }

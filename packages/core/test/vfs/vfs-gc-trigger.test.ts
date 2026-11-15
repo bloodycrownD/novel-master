@@ -166,12 +166,12 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
 
     // 替换后 session 树与 project 快照一致
-    const paths = (await svfs.list("/", { recursive: true }))
+    const paths = (unwrap(await svfs.list("/", { recursive: true })))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();
     assert.deepEqual(paths, ["/a.md", "/b.md"]);
-    assert.equal((await svfs.read("/a.md")).content, `A2-${suffix}`);
+    assert.equal(unwrap(await svfs.read("/a.md")).content, `A2-${suffix}`);
 
     // 替换链后：所有 vfs_content_blob 行必须被某 revision 或某 entry 引用
     //（CS-07 守卫生效后，「entry 还在但 revision 已被 sweep」的过渡态 blob
@@ -207,10 +207,10 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const newHash = (
-      await entryRepo.findContentHash("global", `/repl/new-${suffix}.md`)
+      unwrap(await entryRepo.findContentHash("global", `/repl/new-${suffix}.md`))
     )!;
     const keepHash = (
-      await entryRepo.findContentHash(projectScope, `/keep/keep-${suffix}.md`)
+      unwrap(await entryRepo.findContentHash(projectScope, `/keep/keep-${suffix}.md`))
     )!;
     const refBefore = await ctx.conn.query<{ ref_count: number }>(
       `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
@@ -237,7 +237,7 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
 
     // 前缀外保留文件：内容不变，blob 仍被 live head revision 引用，ref_count 不变
     assert.equal(
-      (await pvfs.read(`/keep/keep-${suffix}.md`)).content,
+      unwrap(await pvfs.read(`/keep/keep-${suffix}.md`)).content,
       `keep-${suffix}`,
     );
 
@@ -252,7 +252,7 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     );
 
     // 替换语义：旧文件 entry 已被删除，新文件已拷入
-    const paths = (await pvfs.list("/", { recursive: true }))
+    const paths = (unwrap(await pvfs.list("/", { recursive: true })))
       .filter((e) => e.kind === "file")
       .map((e) => e.path)
       .sort();
@@ -652,10 +652,10 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
          VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
-      const holder = await new SqliteVfsEntryRepository(ctx.conn).findByPath(
+      const holder = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
         scope,
         "/holder.md"
-      );
+      ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
          VALUES (?, 1, 'active', 0, ?, 1)`,
@@ -683,10 +683,10 @@ describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION�
          VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
         [scope, freeHash]
       );
-      const lonely = await new SqliteVfsEntryRepository(ctx.conn).findByPath(
+      const lonely = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
         scope,
         "/lonely.md"
-      );
+      ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
          VALUES (?, 1, 'active', 0, ?, 1)`,
@@ -818,10 +818,10 @@ describe("CS-07 第三条升级路径：被撤回 v18 留下的 user_version = 1
          VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
         [scope, guardedHash]
       );
-      const holder = await new SqliteVfsEntryRepository(ctx.conn).findByPath(
+      const holder = unwrap(await new SqliteVfsEntryRepository(ctx.conn).findByPath(
         scope,
         "/holder.md"
-      );
+      ));
       await ctx.conn.execute(
         `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
          VALUES (?, 1, 'active', 0, ?, 1)`,

@@ -2,6 +2,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import { Result } from "../../src/errors/either.js";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
@@ -93,7 +94,7 @@ describe("rollback version short-circuit", () => {
       deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo: VfsEntryRepository = {
-      findByPath: async () => ({ entryId, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      findByPath: async () => Result.ok({ entryId, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
       findContentHash: async () => null,
       findContentHashesByPaths: async () => new Map(),
       list: async () => [],
@@ -116,7 +117,7 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = await findMissingRevisionPointers(revisionRepo, entryRepo, scope, new Map([["/a.md", 1]]), ["/a.md"]);
+    const missing = unwrap(await findMissingRevisionPointers(revisionRepo, entryRepo, scope, new Map([["/a.md", 1]]), ["/a.md"]));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
@@ -168,7 +169,7 @@ describe("rollback version short-circuit", () => {
     };
     const liveHeadByPath = new Map([["/same.md", 2]]);
     const entryRepo: VfsEntryRepository = {
-      findByPath: async () => ({ entryId, path: "/x", version: 2, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      findByPath: async () => Result.ok({ entryId, path: "/x", version: 2, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
       findContentHash: async () => null,
       findContentHashesByPaths: async () => new Map(),
       list: async () => [],
@@ -232,9 +233,9 @@ describe("rollback version short-circuit", () => {
       deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo = {
-      findContentHash: async () => "same-hash",
+      findContentHash: async () => Result.ok("same-hash"),
       findContentHashesByPaths: async () => new Map(),
-      findByPath: async () => ({ entryId }),
+      findByPath: async () => Result.ok({ entryId }),
     } as unknown as VfsEntryRepository;
     const vfs: VfsRestorePort = {
       write: async () => {
@@ -277,16 +278,16 @@ describe("rollback version short-circuit", () => {
     };
 
     await svfs.write("/delta.md", "anchor", { versionCheck: false });
-    const anchorVersion = (await svfs.read("/delta.md")).version;
+    const anchorVersion = unwrap(await svfs.read("/delta.md")).version;
     await svfs.write("/delta.md", "tail", { versionCheck: false });
-    const liveHeadByPath = new Map([["/delta.md", (await svfs.read("/delta.md")).version]]);
+    const liveHeadByPath = new Map([["/delta.md", unwrap(await svfs.read("/delta.md")).version]]);
 
     const result = await restorePathToRevision(svfs, revisions, scope, "/delta.md", anchorVersion, liveHeadByPath, entries);
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.value, "restored");
-    assert.equal((await svfs.read("/delta.md")).content, "anchor");
+    assert.equal(unwrap(await svfs.read("/delta.md")).content, "anchor");
   });
 
   it("RB-SC1：head 与 checkpoint 同 version 时回滚截断消息且正文不变", async () => {
@@ -296,7 +297,7 @@ describe("rollback version short-circuit", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/stable.md", "keep-me", { versionCheck: false });
-    const headVersion = (await svfs.read("/stable.md")).version;
+    const headVersion = unwrap(await svfs.read("/stable.md")).version;
     const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
@@ -308,12 +309,12 @@ describe("rollback version short-circuit", () => {
       blocks: [{ type: "text", text: "a2" }],
     }));
 
-    assert.equal((await svfs.read("/stable.md")).version, headVersion);
+    assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
-    assert.equal((await svfs.read("/stable.md")).content, "keep-me");
-    assert.equal((await svfs.read("/stable.md")).version, headVersion);
+    assert.equal(unwrap(await svfs.read("/stable.md")).content, "keep-me");
+    assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);

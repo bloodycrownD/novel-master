@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -105,31 +105,37 @@ describe("fs-command integration", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    await vfs.write("/a.txt", "body");
-    await executeFsCommand(
-      vfs,
-      parseFsCommand({ action: "mv", from: "/a.txt", to: "/b.txt" }),
+    unwrap(await vfs.write("/a.txt", "body"));
+    unwrap(
+      await executeFsCommand(
+        vfs,
+        parseFsCommand({ action: "mv", from: "/a.txt", to: "/b.txt" }),
+      ),
     );
-    assert.equal((await vfs.read("/b.txt")).content, "body");
+    assert.equal(unwrap(await vfs.read("/b.txt")).content, "body");
 
-    await executeFsCommand(vfs, parseFsCommand({ action: "mkdir", path: "/dir" }));
-    await vfs.write("/dir/x.txt", "x");
-    await executeFsCommand(
-      vfs,
-      parseFsCommand({
-        action: "cp",
-        from: "/dir",
-        to: "/copy",
-        recursive: true,
-      }),
+    unwrap(await executeFsCommand(vfs, parseFsCommand({ action: "mkdir", path: "/dir" })));
+    unwrap(await vfs.write("/dir/x.txt", "x"));
+    unwrap(
+      await executeFsCommand(
+        vfs,
+        parseFsCommand({
+          action: "cp",
+          from: "/dir",
+          to: "/copy",
+          recursive: true,
+        }),
+      ),
     );
-    assert.equal((await vfs.read("/copy/x.txt")).content, "x");
+    assert.equal(unwrap(await vfs.read("/copy/x.txt")).content, "x");
 
-    await executeFsCommand(
-      vfs,
-      parseFsCommand({ action: "rm", path: "/copy", recursive: true }),
+    unwrap(
+      await executeFsCommand(
+        vfs,
+        parseFsCommand({ action: "rm", path: "/copy", recursive: true }),
+      ),
     );
-    await assert.rejects(() => vfs.read("/copy/x.txt"));
+    await rejectsErr(() => vfs.read("/copy/x.txt"));
   });
 
   it("rm without recursive recursively deletes non-empty directory", async () => {
@@ -139,10 +145,10 @@ describe("fs-command integration", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     unwrap(await vfs.mkdir("/55"));
-    await vfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+    unwrap(await vfs.write("/55/诗歌.txt", "poem", { versionCheck: false }));
 
-    await executeFsCommand(vfs, parseFsCommand({ action: "rm", path: "/55" }));
-    await assert.rejects(() => vfs.list("/55"));
+    unwrap(await executeFsCommand(vfs, parseFsCommand({ action: "rm", path: "/55" })));
+    await rejectsErr(() => vfs.list("/55"));
   });
 
   it("rmdir fails on non-empty directory", async () => {
@@ -164,11 +170,13 @@ describe("fs-command integration", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     for (let i = 0; i < 4000; i++) {
-      await vfs.write(`/f-${i}.txt`, "x");
+      unwrap(await vfs.write(`/f-${i}.txt`, "x"));
     }
-    const out = await executeFsCommand(
-      vfs,
-      parseFsCommand({ action: "ls", path: "/", recursive: true }),
+    const out = unwrap(
+      await executeFsCommand(
+        vfs,
+        parseFsCommand({ action: "ls", path: "/", recursive: true }),
+      ),
     );
     assert.ok("entries" in out);
     assert.equal(out.truncated, true);

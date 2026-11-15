@@ -96,9 +96,9 @@ describe("ProviderService", () => {
       (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
 
-    const renamed = await bundle.providers.edit(provider.id, {
+    const renamed = unwrap(await bundle.providers.edit(provider.id, {
       displayName: "新名称",
-    });
+    }));
     assert.equal(
       savedModelDisplayName(saved, renamed.displayName),
       "新名称/m1",
@@ -204,9 +204,9 @@ describe("ProviderService", () => {
     // 不抛 SAVED_MODEL_IN_USE —— 只有 currentModelId 引用
     unwrap(await bundle.providers.delete(created.id));
 
-    const still = await new SqliteSavedModelRepository(
+    const still = unwrap(await new SqliteSavedModelRepository(
       ctx.conn
-    ).findById(saved.id);
+    ).findById(saved.id));
     assert.equal(
       still,
       null,
@@ -215,7 +215,7 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
     // 服务层刻意不动软指针（清它的是三个调用方，见文件头契约注记）
     assert.equal(
-      await ctx.state.getCurrentModelId(),
+      unwrap(await ctx.state.getCurrentModelId()),
       saved.id,
       "DefaultProviderService 不负责清 currentModelId 软指针",
     );

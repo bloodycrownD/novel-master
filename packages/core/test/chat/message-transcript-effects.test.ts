@@ -89,8 +89,8 @@ describe('MessageTranscriptEffectsService', () => {
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
-    assert.equal((await svfs.read('/keep.md')).content, 'stable');
-    assert.equal((await svfs.read('/tail.md')).content, 'tail');
+    assert.equal(unwrap(await svfs.read('/keep.md')).content, 'stable');
+    assert.equal(unwrap(await svfs.read('/tail.md')).content, 'tail');
   });
 
   it('T-CR5/T-SF1：setMessageFloorAtMessage 仅清 rule_snapshot+file_cache，保留 pending', async () => {
@@ -210,7 +210,7 @@ describe('MessageTranscriptEffectsService', () => {
     const after = await ctx.messages.listBySession(session.id);
 
     assert.equal(after.length, before.length);
-    assert.equal((await svfs.read('/keep.md')).content, 'stable');
+    assert.equal(unwrap(await svfs.read('/keep.md')).content, 'stable');
   });
 
   it('T-SF4b：末条 hidden user 锚点置位后恢复可见', async () => {
