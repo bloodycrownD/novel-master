@@ -101,14 +101,14 @@ export class DefaultPersistentState implements PersistentState {
   }
 
   private async get(key: string): Promise<string | undefined> {
-    try {
-      return await this.kkv.get(MODULE, key);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+    const raw = await this.kkv.get(MODULE, key);
+    if (!raw.ok) {
+      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
         return undefined;
       }
-      throw error;
+      throw raw.error;
     }
+    return raw.value;
   }
 
   private async set(key: string, value: string): Promise<void> {

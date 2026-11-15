@@ -81,12 +81,13 @@ export async function buildRealPromptPreviewTurns(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
+  if (!sessionConfig.ok) throw sessionConfig.error;
   const thinking = await resolvePreviewThinkingContext({
     preferences: runtime.preferences,
     savedModels: runtime.savedModelRepo,
     providers: runtime.providerRepo,
     agentModelId: definition.model,
-    sessionModelId: sessionConfig.modelId,
+    sessionModelId: sessionConfig.value.modelId,
   });
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
   // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。

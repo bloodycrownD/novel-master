@@ -11,6 +11,7 @@
  * @module test/chat/fork-copy-batch-insert
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
@@ -74,24 +75,24 @@ function assertMessagesClone(
 describe("T-FK2 fork/copy 消息批量化", () => {
   it(`fork ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
     const c = getCtx();
-    const project = await c.projects.create(`P-fk2-${testIsolationSuffix()}`);
-    const session = await c.sessions.create(project.id);
+    const project = unwrap(await c.projects.create(`P-fk2-${testIsolationSuffix()}`));
+    const session = unwrap(await c.sessions.create(project.id));
 
     // 准备阶段：append 40 条消息。这段 SQL 不计入统计。
     let lastId = "";
     for (let i = 0; i < MSG_COUNT; i++) {
-      const m = await c.messages.append(
+      const m = unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
         textBlocks(`m${i}`),
-      );
+      ));
       lastId = m.id;
     }
 
     // 清掉准备阶段的 SQL，只统计 fork 这一段。
     c.counter.clear();
 
-    const forked = await c.messages.fork(session.id, lastId);
+    const forked = unwrap(await c.messages.fork(session.id, lastId));
 
     // fork 内部除了消息 INSERT，还有 session insert / VFS copy / checkpoint seed 等，
     // 但只有 batchInsert 这一条会碰 chat_message 表——找出所有 chat_message 的 INSERT。
@@ -124,20 +125,20 @@ describe("T-FK2 fork/copy 消息批量化", () => {
 
   it(`copy ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
     const c = getCtx();
-    const project = await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`);
-    const session = await c.sessions.create(project.id);
+    const project = unwrap(await c.projects.create(`P-fk2cp-${testIsolationSuffix()}`));
+    const session = unwrap(await c.sessions.create(project.id));
 
     for (let i = 0; i < MSG_COUNT; i++) {
-      await c.messages.append(
+      unwrap(await c.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
         textBlocks(`c${i}`),
-      );
+      ));
     }
 
     c.counter.clear();
 
-    const copied = await c.sessions.copy(session.id);
+    const copied = unwrap(await c.sessions.copy(session.id));
 
     const chatInserts = c.counter
       .all()

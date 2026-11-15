@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
@@ -19,6 +20,12 @@ import {
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
+  return outcomeValue(await assembleWorkplaceDisplay(...args));
+}
+
 describe("Workplace C0 协议", () => {
   it("T-W1: 无 workplace → false；assemble 空串；不注入双消息", async () => {
     const layout: AgentPromptLayout = {
@@ -29,7 +36,7 @@ describe("Workplace C0 协议", () => {
 
     const sk = createMemorySessionKkv();
     const wt = mockWorkplaceService("WT");
-    const out = await assembleWorkplaceDisplay(
+    const out = await assembleDisplay(
       { kind: "session", projectId: "p", sessionId: "s" },
       {
         sessionKkv: sk,

@@ -1,6 +1,5 @@
 [
   "DEFAULT_WORKPLACE_DIR_RULE",
-  "WorkplaceAssemblyAbortedError",
   "assembleWorkplaceDisplay",
   "computeHeadTailIndices",
   "createTemplatePullService",

@@ -2,6 +2,7 @@
  * T-FR* / T-FR-D*：失败补偿走 resetHead/hardDelete（经 sessionVfs）。
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -76,8 +77,8 @@ async function countDeletedRevisions(
 describe("fail restore compensation (sessionVfs)", () => {
   it("T-FR1: present 补偿回到快照 version/正文，不因补偿净增写回 revision", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
@@ -100,8 +101,8 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR2: absent 补偿硬删，不注水 deleted 墓碑", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
@@ -119,8 +120,8 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR3: present 文件改写后 resetHead 拨回到快照 version，不 bump/不 append", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
@@ -141,12 +142,12 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR-D1: directory 补偿硬删快照外新文件，快照内拨回且无写回注水", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
-    await vfs.mkdir("/d");
+    unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
     const revAAfterCapture = await countRevisions(ctx.conn, sk, "/d/a.md");
@@ -167,15 +168,15 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR-D2: 空目录下新写文件可被清理，revision row 在 entry 删除后 sweep 仍可回收", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const sk = scopeKey(project.id, session.id);
 
-    await vfs.mkdir("/empty");
+    unwrap(await vfs.mkdir("/empty"));
     await vfs.write("/empty/x.md", "x", { versionCheck: false });
 
     const xRows = await ctx.conn.query<{ entry_id: number }>(
@@ -211,7 +212,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     assert.ok(deleted >= 1, "sweep 应通过全局孤儿清扫回收到 entry 已删的 orphan revision");
 
     // re-create entry 后旧 entry_id 的 revision 已被上一步 sweep 清掉（不再残留）
-    await vfs.mkdir("/empty");
+    unwrap(await vfs.mkdir("/empty"));
     await vfs.write("/empty/x.md", "x", { versionCheck: false });
     const revRows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_revision WHERE entry_id = ?`,
@@ -222,12 +223,12 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR-D3: directory 两文件改写后均拨回，无额外写回 version", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
-    await vfs.mkdir("/d");
+    unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
     await vfs.write("/d/b.md", "B0", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
@@ -251,12 +252,12 @@ describe("fail restore compensation (sessionVfs)", () => {
 
   it("T-FR-D4: 快照外子路径新建被硬删；快照内 head 不因补偿 bump", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const sk = scopeKey(project.id, session.id);
 
-    await vfs.mkdir("/d");
+    unwrap(await vfs.mkdir("/d"));
     await vfs.write("/d/a.md", "keep", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
     const aBefore = await vfs.read("/d/a.md");

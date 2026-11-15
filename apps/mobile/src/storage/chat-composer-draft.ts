@@ -11,6 +11,9 @@ import {
   type MessageAttachment,
 } from '@novel-master/core/chat';
 
+/** core Result 的线上结构（`Result` 本体尚未进 public 面，三期收口时换真类型）。 */
+type ResultWire<T> = {readonly ok: true; readonly value: T} | {readonly ok: false; readonly error: unknown};
+
 export type ChatComposerDraft = {
   readonly text: string;
   readonly attachments: readonly MessageAttachment[];
@@ -74,8 +77,9 @@ export function readChatComposerDraftState(
 }
 
 type ComposerDraftPersistence = {
-  getComposerDraftJson(id: string): Promise<string | null>;
-  setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean>;
+  // ResultWire：core 的 Result 线上结构（`Result` 本体尚未进 public 面，三期收口）。
+  getComposerDraftJson(id: string): Promise<ResultWire<string | null>>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<ResultWire<boolean>>;
 };
 
 /** 仅持久 text+tokenRanges（状态条不进列；attach 恒空）。 */
@@ -91,7 +95,8 @@ async function persistAttachTextDraft(
     // D1：undefined 原样透传（序列化侧不写字段），不臆造 `[]` 默认值。
     tokenRanges: draft.tokenRanges,
   });
-  await sessions.setComposerDraftJson(sessionId, json);
+  const saved = await sessions.setComposerDraftJson(sessionId, json);
+  if (!saved.ok) throw saved.error;
 }
 
 /**
@@ -118,6 +123,9 @@ export function writeChatComposerDraft(
     if (sessions != null) {
       void sessions
         .setComposerDraftJson(sessionId, null)
+        .then((r) => {
+          if (!r.ok) warnPersistFailure(r.error);
+        })
         .catch(warnPersistFailure);
     }
     return;
@@ -145,6 +153,9 @@ export function writeChatComposerDraftState(
     if (sessions != null) {
       void sessions
         .setComposerDraftJson(sessionId, null)
+        .then((r) => {
+          if (!r.ok) warnPersistFailure(r.error);
+        })
         .catch(warnPersistFailure);
     }
     return;
@@ -170,6 +181,9 @@ export function clearChatComposerDraft(
   if (sessions != null) {
     void sessions
       .setComposerDraftJson(sessionId, null)
+      .then((r) => {
+        if (!r.ok) warnPersistFailure(r.error);
+      })
       .catch(warnPersistFailure);
   }
 }
@@ -186,7 +200,8 @@ export async function hydrateChatComposerDraftFromDb(
   sessions: ComposerDraftPersistence,
 ): Promise<ChatComposerDraft> {
   const raw = await sessions.getComposerDraftJson(sessionId);
-  const parsed = parseComposerDraftJson(raw);
+  if (!raw.ok) throw raw.error;
+  const parsed = parseComposerDraftJson(raw.value);
   const prev = bySession.get(sessionId);
   const statusOnly =
     prev?.attachments.filter(

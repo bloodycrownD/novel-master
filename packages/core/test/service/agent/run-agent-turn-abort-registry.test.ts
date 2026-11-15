@@ -9,6 +9,7 @@
  * @module test/service/agent/run-agent-turn-abort-registry.test
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -350,8 +351,8 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
       },
     });
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-R2");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-R2"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     // 包一层 sessions.createSubSession 捕获 childSessionId（保留其他方法不变）。
@@ -359,9 +360,11 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     runtime.sessions = new Proxy(ctx.sessions, {
       get(target, prop, receiver) {
         if (prop === "createSubSession") {
+          // 错误通道迁移二期：createSubSession 返回 Result——解包后再捕获 id。
           return async (parentId: string, projId: string, title?: string) => {
             const child = await originalCreateSubSession(parentId, projId, title);
-            seenChildIds.push(child.id);
+            if (!child.ok) throw child.error;
+            seenChildIds.push(child.value.id);
             return child;
           };
         }
@@ -410,17 +413,19 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
       },
     });
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-A4");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-A4"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const originalCreateSubSession = ctx.sessions.createSubSession.bind(ctx.sessions);
     runtime.sessions = new Proxy(ctx.sessions, {
       get(target, prop, receiver) {
         if (prop === "createSubSession") {
+          // 错误通道迁移二期：createSubSession 返回 Result——解包后再捕获 id。
           return async (parentId: string, projId: string, title?: string) => {
             const child = await originalCreateSubSession(parentId, projId, title);
-            seenChildIds.push(child.id);
+            if (!child.ok) throw child.error;
+            seenChildIds.push(child.value.id);
             return child;
           };
         }
@@ -487,8 +492,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-EARLY");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-EARLY"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     runtime.eventBus = realEventBus();
@@ -568,8 +573,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-ASM-ABORT");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-ASM-ABORT"));
     // 预置两条 full 文件的规则快照且不写 VFS 正文：file_cache miss → 逐文件
     // 回填（read 进 (missing) 兜底），「文件之间」的窗口由 read 闸门制造。
     await ctx.sessionKkv.set(
@@ -652,8 +657,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-EARLY0");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-EARLY0"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -713,8 +718,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-EARLY2");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-EARLY2"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -805,8 +810,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-EARLY3");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-EARLY3"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -867,14 +872,14 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-BACKFILL-ABORT");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-BACKFILL-ABORT"));
     // 造一批消息 + 一个 live 文件：游标缺失 → backfill 必走全量扫描。
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/a.md", "v1", { versionCheck: false });
     const MSG_COUNT = 20;
     for (let i = 0; i < MSG_COUNT; i++) {
-      await ctx.messages.append(session.id, "user", textBlocks(`第 ${i} 条`));
+      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`第 ${i} 条`)));
     }
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
@@ -926,8 +931,8 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     // 幂等可恢复：中断那一轮没补完的，下一轮不带信号必须补齐并写游标。
     // 注意游标不等于本用例造的 MSG_COUNT——中断之后 run 仍会走到检查点①，
     // 那时本轮用户消息已经 append（21 条）。所以对着**实际**条数断言。
-    await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id);
-    const cursor = await ctx.sessionKkv.get(session.id, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY);
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
+    const cursor = unwrap(await ctx.sessionKkv.get(session.id, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY));
     const allMessages = await ctx.messages.listBySession(session.id);
     assert.equal(cursor, String(allMessages.length), "下一轮不带信号必须把剩余空窗补齐并写游标（中途退出提交已写部分，幂等可恢复）");
     assert.ok(allMessages.length > MSG_COUNT, "中断之后 run 仍走到了检查点①，本轮用户消息已落库");
@@ -958,8 +963,8 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-T6");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-T6"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     runtime.eventBus = realEventBus();
@@ -1007,8 +1012,8 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-CP2");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-CP2"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1070,8 +1075,8 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-CP1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-CP1"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1129,8 +1134,8 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-PRELUDE-THROW");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-PRELUDE-THROW"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1187,8 +1192,8 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-RUNNER-FAILED");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-RUNNER-FAILED"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1230,8 +1235,8 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-FINDBYID");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-FINDBYID"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1331,8 +1336,8 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-CHILD-CP2");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-CHILD-CP2"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1344,9 +1349,11 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     runtime.sessions = new Proxy(ctx.sessions, {
       get(target, prop, receiver) {
         if (prop === "createSubSession") {
+          // 错误通道迁移二期：createSubSession 返回 Result——解包后再捕获 id。
           return async (parentId: string, projId: string, title?: string) => {
             const child = await originalCreateSubSession(parentId, projId, title);
-            seenChildIds.push(child.id);
+            if (!child.ok) throw child.error;
+            seenChildIds.push(child.value.id);
             childSessionCreated = true;
             return child;
           };
@@ -1436,8 +1443,8 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-CHILD-CP1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-CHILD-CP1"));
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
     const events = recordingEventBus();
@@ -1450,9 +1457,11 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     runtime.sessions = new Proxy(ctx.sessions, {
       get(target, prop, receiver) {
         if (prop === "createSubSession") {
+          // 错误通道迁移二期：createSubSession 返回 Result——解包后再捕获 id。
           return async (parentId: string, projId: string, title?: string) => {
             const child = await originalCreateSubSession(parentId, projId, title);
-            seenChildIds.push(child.id);
+            if (!child.ok) throw child.error;
+            seenChildIds.push(child.value.id);
             abortRegistry.abort(session.id);
             return child;
           };

@@ -27,6 +27,7 @@
  * @module test/service/chat/session-copy-no-full-read
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -221,15 +222,15 @@ async function seedSession(prefix: string): Promise<{
   sessionId: string;
   lastMessageId: string;
 }> {
-  const project = await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+  const project = unwrap(await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
   let lastMessageId = "";
   for (let i = 0; i < MSG_COUNT; i++) {
-    const m = await ctx.messages.append(
+    const m = unwrap(await ctx.messages.append(
       session.id,
       i % 2 === 0 ? "user" : "assistant",
       textBlocks(`${prefix}-m${i}`),
-    );
+    ));
     lastMessageId = m.id;
   }
   return { projectId: project.id, sessionId: session.id, lastMessageId };
@@ -348,13 +349,13 @@ describe("C2-3 C2: copy 与 fork 的读/写顺序形状一致", () => {
 
 describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () => {
   it("T-COPY-4: 三类消息逐字段复制，两列恒 NULL", async () => {
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-c3-${testIsolationSuffix()}`
-    );
-    const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
 
     // ① user + attachments
-    await ctx.messages.append(session.id, "user", textBlocks("第一条"), {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("第一条"), {
       attachments: [
         {
           name: "/notes/a.md",
@@ -364,9 +365,9 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
           path: "/notes/a.md",
         },
       ],
-    });
+    }));
     // ② assistant + usage + provider 三件套 + raw
-    await ctx.messages.append(
+    unwrap(await ctx.messages.append(
       session.id,
       "assistant",
       textBlocks("第二条"),
@@ -381,15 +382,15 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
           totalTokens: 33,
         },
       }
-    );
+    ));
     // ③ hidden 行（明文；V1' 后全库单形态明文读，布局内不再造压缩行）。
-    const m3 = await ctx.messages.append(session.id, "user", textBlocks("第三条"));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("第三条")));
     await ctx.conn.execute(
       `UPDATE chat_message SET hidden = 1 WHERE id = ?`,
       [m3.id]
     );
 
-    const copied = await ctx.sessions.copy(session.id);
+    const copied = unwrap(await ctx.sessions.copy(session.id));
     const source = await ctx.messages.listBySession(session.id);
     const target = await ctx.messages.listBySession(copied.id);
     assert.equal(target.length, 3, "三条一条不少");
@@ -450,11 +451,13 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
   });
 
   it("T-COPY-5: 空会话 copy 不抛，且不产生任何 chat_message 读", async () => {
-    const project = await ctx.projects.create(`P-c3b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const { result: copied, reads, trace } = await observe(() =>
+    const project = unwrap(await ctx.projects.create(`P-c3b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const { result: copiedResult, reads, trace } = await observe(() =>
       ctx.sessions.copy(session.id)
     );
+    // 错误通道迁移二期：copy 走 Result 通道——解包后再取 session。
+    const copied = unwrap(copiedResult);
     assert.ok(copied.id.length > 0);
     assert.deepEqual(
       reads.filter((r) => r.mouth === "listBySession"),

@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
@@ -96,10 +97,10 @@ describe("file_cache 缓存 blob 延期 GC", () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
     const sk = createSessionKkvService(conn);
-    const project = await ctx.projects.create(`P-g2-${testIsolationSuffix()}`);
-    const s1 = await ctx.sessions.create(project.id);
-    const s2 = await ctx.sessions.create(project.id);
-    const s3 = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-g2-${testIsolationSuffix()}`));
+    const s1 = unwrap(await ctx.sessions.create(project.id));
+    const s2 = unwrap(await ctx.sessions.create(project.id));
+    const s3 = unwrap(await ctx.sessions.create(project.id));
     const key = "full:/del.md";
     const sharedBody = `g2-shared-${testIsolationSuffix()}`;
     const soloBody = `g2-solo-${testIsolationSuffix()}`;
@@ -126,15 +127,15 @@ describe("file_cache 缓存 blob 延期 GC", () => {
     const soloHash = await currentEntryHash(conn, s3.id, key);
 
     // 删独占 body 的 s3：删除事务提交后 GC 被调度，独占 blob 应已被回收
-    await ctx.sessions.delete(s3.id);
+    unwrap(await ctx.sessions.delete(s3.id));
     assert.equal(await blobCountByHash(conn, soloHash!), 0);
 
     // 删共享 body 的 s1：s2 仍引用 shared blob，GC 不得误删，s2 命中不受影响
-    await ctx.sessions.delete(s1.id);
+    unwrap(await ctx.sessions.delete(s1.id));
     assert.equal(await currentEntryHash(conn, s1.id, key), null);
     assert.equal(await blobCountByHash(conn, sharedHash!), 1);
     assert.equal(
-      await sk.get(s2.id, SESSION_KKV_DOMAIN_FILE_CACHE, key),
+      unwrap(await sk.get(s2.id, SESSION_KKV_DOMAIN_FILE_CACHE, key)),
       serializeFileCachePayload({ body: sharedBody, mtimeMs: 2 })
     );
   });

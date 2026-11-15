@@ -15,6 +15,8 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
@@ -165,9 +167,10 @@ export interface BuiltinToolSearchContext {
   /**
    * 解析本次调用的串行引擎链（engineOrderV2 优先级序；显式 inputEngine
    * 时钉链首或沿序顺位回落；只含 enabled ∩ 配置完整的引擎；链空返回
-   * 空数组，工具回落中性配置指引文案）。
+   * 空数组，工具回落中性配置指引文案）。无效引擎名返回
+   * `Result.err(TOOL_SEARCH_INVALID_ARGUMENT)`（工具侧解包进 ToolError 通道）。
    */
-  readonly resolveEngineChain: (inputEngine?: string) => Promise<ResolvedEngineConfig[]>;
+  readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /**
    * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 不限长，装配期
    * 原样透传——v3 起已废除「保存拒绝 + 装配期截断 500」双道限长）。空数组

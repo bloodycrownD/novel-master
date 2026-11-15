@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -30,8 +31,8 @@ function createNoGetContentStore(): VfsContentStore {
 describe("rollback version short-circuit", () => {
   it("existsByEntryAndVersion：有行即 true，且不解压 blob", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -44,17 +45,17 @@ describe("rollback version short-circuit", () => {
     const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     await entries.insert(scopeKey(scope), "/blob-only.md", "seed");
-    const entry = await entries.findByPath(scopeKey(scope), "/blob-only.md");
+    const entry = unwrap(await entries.findByPath(scopeKey(scope), "/blob-only.md"));
     assert.ok(entry != null);
 
-    await revisions.append({
+    unwrap(await revisions.append({
       entryId: entry.entryId,
       version: 3,
       content: null,
       contentHash: "deadbeef",
       status: "active",
       mtimeMs: Date.now(),
-    });
+    }));
 
     assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 3), true);
     assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 2), false);
@@ -263,8 +264,8 @@ describe("rollback version short-circuit", () => {
 
   it("restorePathToRevision：head version 不等且正文不同时仍执行 restore", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
@@ -290,22 +291,22 @@ describe("rollback version short-circuit", () => {
 
   it("RB-SC1：head 与 checkpoint 同 version 时回滚截断消息且正文不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/stable.md", "keep-me", { versionCheck: false });
     const headVersion = (await svfs.read("/stable.md")).version;
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("u1"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("u2"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("u2")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a2" }],
-    });
+    }));
 
     assert.equal((await svfs.read("/stable.md")).version, headVersion);
 

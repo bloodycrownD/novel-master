@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -13,8 +14,8 @@ function assertOk(result: { readonly ok: boolean }): void {
 describe("copyVfsPath", () => {
   it("copies a file without deleting the source", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     await vfs.write("/a.txt", "hello");
@@ -26,11 +27,11 @@ describe("copyVfsPath", () => {
 
   it("copies a directory tree when recursive is true", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    await vfs.mkdir("/src");
+    unwrap(await vfs.mkdir("/src"));
     await vfs.write("/src/x.md", "x");
 
     assertOk(await copyVfsPath(vfs, "/src", "/dst", { recursive: true }));
@@ -41,11 +42,11 @@ describe("copyVfsPath", () => {
 
   it("fails to copy a directory without recursive", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    await vfs.mkdir("/src");
+    unwrap(await vfs.mkdir("/src"));
     await vfs.write("/src/x.md", "x");
 
     const result = await copyVfsPath(vfs, "/src", "/dst");

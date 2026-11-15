@@ -10,6 +10,7 @@
  * @module test/chat/tool-result-meta.test
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -141,8 +142,8 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
 describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
   it("messages.append 写入带 meta.subagentSessionId 的 tool_result，重读仍拿到同一值", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "main");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "main"));
 
     const block: ToolResultBlock = {
       type: "tool_result",
@@ -151,7 +152,7 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
       meta: { subagentSessionId: "sess-subagent-xyz" },
     };
 
-    await ctx.messages.append(session.id, "user", { blocks: [block] });
+    unwrap(await ctx.messages.append(session.id, "user", { blocks: [block] }));
 
     const list = await ctx.messages.listBySession(session.id);
     assert.equal(list.length, 1);
@@ -165,16 +166,16 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
 
   it("子 agent 场景：createSubSession + append tool_result meta，闭环一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const child = await ctx.sessions.createSubSession(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const child = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "查大纲",
-    );
+    ));
 
     // 子 session 写一条 assistant 消息（模拟子 agent 跑完落库）。
-    await ctx.messages.append(child.id, "assistant", textBlocks("子代理结果"));
+    unwrap(await ctx.messages.append(child.id, "assistant", textBlocks("子代理结果")));
 
     // 父 session 写一条 user 消息带 tool_result，meta.subagentSessionId 指向 child。
     const block: ToolResultBlock = {
@@ -183,7 +184,7 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
       content: "子代理结果",
       meta: { subagentSessionId: child.id },
     };
-    await ctx.messages.append(parent.id, "user", { blocks: [block] });
+    unwrap(await ctx.messages.append(parent.id, "user", { blocks: [block] }));
 
     const parentMessages = await ctx.messages.listBySession(parent.id);
     assert.equal(parentMessages.length, 1);

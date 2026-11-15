@@ -7,6 +7,7 @@
  * 该计数即「全量评估次数」（命中缓存与采样签名都不触它；采样走
  * computeEntrySignature 的单行聚合 SQL）。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -95,7 +96,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC1：同 scope 连续两次 buildListRows——仅一次全量 metadata 且结果一致", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/b.md", "B");
@@ -116,7 +117,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC2：写同一文件后签名失效——重评估计数增长且新内容可见", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
 
@@ -141,7 +142,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC3：rename 只改 path（count/version 集合语义不变）——path 敏感签名失效，视图路径更新", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/dir/x.md", "X");
 
@@ -166,7 +167,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC4：规则同数改写（翻转 rule_enabled，行数不变）——规则序列化签名失效", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/r/a.md", "A");
     await pvfs.write("/r/b.md", "B");
@@ -210,7 +211,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC5：resetHeadToVersion 写回历史 mtime——按 updated 排序的视图变化可见", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/d/f1.md", "1");
     await sleep(3);
@@ -236,7 +237,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
     assert.equal(state1("/d/f2.md"), "hidden");
 
     // 回滚 f1 到 v1：写回历史 (version=1, mtime=最早) —— max 持有者不是被回拨行
-    await pvfs.resetHeadToVersion("/d/f1.md", 1);
+    unwrap(await pvfs.resetHeadToVersion("/d/f1.md", 1));
     const second = await wt.buildListRows();
     assert.equal(calls.listFileMetaUnderPrefix, 2, "回滚后签名变化，缓存失效");
     const state2 = (p: string) =>
@@ -253,7 +254,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC6：同 conn 两个 service 实例同 scope——第二实例命中（工厂击穿场景）", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/cross/i1.md", "I1");
     await pvfs.write("/cross/i2.md", "I2");
@@ -311,17 +312,17 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC8：mkdir 空目录改变签名——空目录在视图中可见", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
 
     const { wt, calls } = createSpyingWorkplaceService(ctx.conn, project.id);
-    await pvfs.mkdir("/empty");
+    unwrap(await pvfs.mkdir("/empty"));
     const first = await wt.buildListRows();
     assert.equal(calls.listFileMetaUnderPrefix, 1);
 
     // 空目录无文件行：若签名按 entry_kind 过滤，第二次评估将命中旧缓存、
     // 新空目录不可见——这里要求不过滤，mkdir 空目录也必须改变签名
-    await pvfs.mkdir("/empty2");
+    unwrap(await pvfs.mkdir("/empty2"));
     const second = await wt.buildListRows();
     assert.equal(calls.listFileMetaUnderPrefix, 2, "mkdir 空目录后缓存失效");
     assert.ok(
@@ -337,7 +338,7 @@ describe("workplace 评估链 L1 memo（conn 级读时校验缓存）", () => {
   it("T-WMC9：600 文件毒库性能哨兵——第二次评估零全量查询且耗时显著低于首次", async () => {
     clearAllWorkplaceViewCache();
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     const TOTAL = 600;
     for (let i = 0; i < TOTAL; i++) {

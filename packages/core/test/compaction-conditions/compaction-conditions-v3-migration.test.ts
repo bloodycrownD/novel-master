@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
@@ -30,7 +31,7 @@ describe("compaction conditions v3 migration", () => {
     assert.equal(first?.hideStartDepth, 6);
     assert.equal("tokenThreshold" in (first ?? {}), false);
 
-    const raw = await kkv.get("nm-compaction-conditions", "policy");
+    const raw = unwrap(await kkv.get("nm-compaction-conditions", "policy"));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);
@@ -61,7 +62,7 @@ describe("compaction conditions v3 migration", () => {
     assert.equal(first?.visibleFloor, 20);
     assert.equal(first?.hideStartDepth, 6);
 
-    const raw = await kkv.get("nm-compaction-conditions", "policy");
+    const raw = unwrap(await kkv.get("nm-compaction-conditions", "policy"));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);

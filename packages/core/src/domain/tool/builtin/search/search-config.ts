@@ -14,8 +14,8 @@
  *
  * 动态已知全集 = 六预置 id ∪ {duckduckgo} ∪ customEngines 现存 id：顺序归一、
  * 开关归一、显式 engine 已知性判定、模板查找全部以它为准。读路径容错归一
- * （未知 id 丢弃、缺失项补尾），写路径校验失败即 throw `AppError` + i18n key
- * （store 是保存路径的错误边界，内部校验函数返回 Result）。
+ * （未知 id 丢弃、缺失项补尾），写路径校验失败经 `Result.err` 返回（错误码 +
+ * i18n descriptor 不变）；仅 KKV 非 NOT_FOUND 的基础设施错误照常抛（平台边界）。
  *
  * @module domain/tool/builtin/search/search-config
  */
@@ -155,11 +155,10 @@ export function normalizeEngineBaseUrl(value: string): string | null {
 
 /** KKV 删除：NOT_FOUND 忽略（幂等清除）。 */
 async function kkvDelete(kkv: KkvService, key: string): Promise<void> {
-  try {
-    await kkv.delete(SEARCH_KKV_MODULE, key);
-  } catch (error) {
-    if (isAppError(error, "KKV_NOT_FOUND")) return;
-    throw error;
+  const deleted = await kkv.delete(SEARCH_KKV_MODULE, key);
+  if (!deleted.ok) {
+    if (isAppError(deleted.error, "KKV_NOT_FOUND")) return;
+    throw deleted.error;
   }
 }
 
@@ -174,13 +173,13 @@ function parseJson(raw: string | undefined): unknown {
 }
 
 /** KKV 读取容错：NOT_FOUND 归一化为 undefined（缺省视同未配置），其余错误照常抛。 */
-async function readStateKey(kkv: KkvService, key: string) {
-  try {
-    return await kkv.get(SEARCH_KKV_MODULE, key);
-  } catch (error) {
-    if (isAppError(error, "KKV_NOT_FOUND")) return undefined;
-    throw error;
+async function readStateKey(kkv: KkvService, key: string): Promise<string | undefined> {
+  const raw = await kkv.get(SEARCH_KKV_MODULE, key);
+  if (!raw.ok) {
+    if (isAppError(raw.error, "KKV_NOT_FOUND")) return undefined;
+    throw raw.error;
   }
+  return raw.value;
 }
 
 /** 读取并归一全部存储状态（5 次 KKV 并行读；容错归一集中于此，读模型与链解析共用）。 */
@@ -347,15 +346,12 @@ export async function readSearchConfig(deps: SearchConfigDeps): Promise<SearchCo
  * ② 已知但未通过（关闭 / 未配置）→ 沿 order 从该 id 起截尾，取截尾后第一个
  * 通过过滤的引擎（保留顺位回落语义，链空则返回空数组；pinned 已试探过的引擎
  * 记 `pinnedTried` 跳过，不重复读 SKSP）；③ 不在动态全集 →
- * throw `AppError`（key `error.tool.search_engine_not_found`，search-tool 边界
+ * `Result.err`（`error.tool.search_engine_not_found`，search-tool 边界解包后
  * 照常映射为工具失败）。DDG 只有 enabled 才入链，不再恒在链尾。
- *
- * throw 是公开入口的边界语义：工具 run / 装配闭包直接消费，调用方测试也按
- * rejected promise 断言（test/tool/search-config.test.ts 的 resolveEngineChain 用例）。
  *
  * nm-style: keep-public — spec §5 链解析单一入口（store 方法 + §7 快照同源 + 测试直连）。
  */
-export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: string): Promise<ResolvedEngineConfig[]> {
+export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: string): Promise<Result<ResolvedEngineConfig[], AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>> {
   const state = await readEngineState(deps.kkv);
   const resolveOne = async (engineId: string): Promise<ResolvedEngineConfig | null> => {
     if (engineId === DUCKDUCKGO_ENGINE_ID) return { engine: engineId };
@@ -386,20 +382,20 @@ export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: s
   };
 
   if (inputEngine != null) {
-    if (!state.order.includes(inputEngine)) throw engineNotFound(inputEngine);
+    if (!state.order.includes(inputEngine)) return Result.err(engineNotFound(inputEngine));
     const pinnedTried = state.enabled.includes(inputEngine);
     if (pinnedTried) {
       const pinned = await resolveOne(inputEngine);
-      if (pinned != null) return [pinned];
+      if (pinned != null) return Result.ok([pinned]);
     }
     const startIndex = state.order.indexOf(inputEngine);
     for (const engineId of state.order.slice(startIndex)) {
       if (!state.enabled.includes(engineId)) continue;
       if (engineId === inputEngine && pinnedTried) continue;
       const resolved = await resolveOne(engineId);
-      if (resolved != null) return [resolved];
+      if (resolved != null) return Result.ok([resolved]);
     }
-    return [];
+    return Result.ok([]);
   }
 
   const chain: ResolvedEngineConfig[] = [];
@@ -408,13 +404,13 @@ export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: s
     const resolved = await resolveOne(engineId);
     if (resolved != null) chain.push(resolved);
   }
-  return chain;
+  return Result.ok(chain);
 }
 
 /**
  * 保存路径模板校验：结构 + 明文密钥检测复用 validateSearchEngineTemplate（create /
  * updateCustomEngine / updatePresetOverride 三入口共用）；paramHint 流入 agent 可见
- * 工具描述，另过 findPlaintextSecrets（拍板 4，name 不扫）。失败进 Result，由 store 边界 throw。
+ * 工具描述，另过 findPlaintextSecrets（拍板 4，name 不扫）。失败进 Result，由 store 方法经 `Result.err` 返回。
  */
 function validateTemplateForSave(raw: unknown): Result<SearchEngineTemplate, AppError<"TOOL_SEARCH_TEMPLATE_INVALID">> {
   const validated = validateSearchEngineTemplate(raw);
@@ -436,38 +432,41 @@ function engineNotFound(engineId: string): AppError<"TOOL_SEARCH_INVALID_ARGUMEN
   return new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_engine_not_found", params: {engine: engineId}} });
 }
 
+/** 保存路径域校验的失败载荷：TOOL_SEARCH 两 key 的并集（参数类 + 模板类）。 */
+export type SearchConfigSaveError = AppError<"TOOL_SEARCH_INVALID_ARGUMENT"> | AppError<"TOOL_SEARCH_TEMPLATE_INVALID">;
+
 /**
  * 搜索配置存储（desktop / mobile runtime 用 core 导出的本工厂包
- * `kkv + secretStore` 装配；CLI 无 kkv 不装配）。写方法即错误边界：
- * 校验失败 throw `AppError` + i18n key（v3 拍板：测试搜索按钮退役，
- * `testEngine` 整链随撤，配置正确性由「保存即校验」+ 用户改 URL 后
- * canRun / 链解析同源判定兜底）。
+ * `kkv + secretStore` 装配；CLI 无 kkv 不装配）。写方法域校验失败经
+ * `Result.err` 返回（v3 拍板：测试搜索按钮退役，`testEngine` 整链随撤，
+ * 配置正确性由「保存即校验」+ 用户改 URL 后 canRun / 链解析同源判定兜底）；
+ * 调用方（apps runtime / IPC 边界）负责把 err 转码为各自的失败形态。
  */
 export interface SearchConfigStore {
   /** 读取对外配置（不含 key 明文）。 */
   readConfig(): Promise<SearchConfigPublic>;
   /** 解析串行引擎链（语义同 {@link resolveEngineChain}）。 */
-  resolveEngineChain(inputEngine?: string): Promise<ResolvedEngineConfig[]>;
+  resolveEngineChain(inputEngine?: string): Promise<Result<ResolvedEngineConfig[], AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 保存引擎 API key（预置与自定义统一通道；未知 engineId / 空串拒绝，防 dangling SKSP ref）。 */
-  saveEngineKey(engineId: string, apiKey: string): Promise<void>;
+  saveEngineKey(engineId: string, apiKey: string): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 清除引擎 API key（未知 engineId 拒绝）。 */
-  clearEngineKey(engineId: string): Promise<void>;
+  clearEngineKey(engineId: string): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 保存引擎顺序：动态已知 id 的不重复序列（未知 id 拒绝、缺项容忍，读侧归一补齐）。 */
-  setEngineOrder(order: readonly string[]): Promise<void>;
+  setEngineOrder(order: readonly string[]): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 开关引擎（只动 enabledEngines；未知 id 拒绝）。 */
-  setEnabled(engineId: string, on: boolean): Promise<void>;
-  /** 保存实例地址：空串清除；非空规范化（非法 throw），服务 `{{baseUrl}}` 模板。 */
-  setEngineBaseUrl(engineId: string, baseUrl: string): Promise<void>;
+  setEnabled(engineId: string, on: boolean): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
+  /** 保存实例地址：空串清除；非空规范化（非法返回 err），服务 `{{baseUrl}}` 模板。 */
+  setEngineBaseUrl(engineId: string, baseUrl: string): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 新建自定义引擎：校验模板 + 明文检测 + append engineOrderV2 + key/baseUrl 拆分落库。 */
-  createCustomEngine(input: CreateCustomEngineInput): Promise<void>;
+  createCustomEngine(input: CreateCustomEngineInput): Promise<Result<void, SearchConfigSaveError>>;
   /** 更新自定义引擎：模板重校验；apiKey/baseUrl 缺省保留、空串清除、非空覆盖。 */
-  updateCustomEngine(engineId: string, input: UpdateCustomEngineInput): Promise<void>;
+  updateCustomEngine(engineId: string, input: UpdateCustomEngineInput): Promise<Result<void, SearchConfigSaveError>>;
   /** 删除自定义引擎：从 customEngines / engineOrderV2 / enabledEngines / engineBaseUrls prune 并清 SKSP ref。 */
-  deleteCustomEngine(engineId: string): Promise<void>;
+  deleteCustomEngine(engineId: string): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
   /** 写入预置模板覆盖（浅合并、嵌套对象整体替换；保存前校验 + 明文检测）。 */
-  updatePresetOverride(engineId: string, patch: Partial<SearchEngineTemplate>): Promise<void>;
+  updatePresetOverride(engineId: string, patch: Partial<SearchEngineTemplate>): Promise<Result<void, SearchConfigSaveError>>;
   /** 恢复预置模板默认（删除覆盖条目）。 */
-  resetPresetOverride(engineId: string): Promise<void>;
+  resetPresetOverride(engineId: string): Promise<Result<void, AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
 }
 
 /** 构造搜索配置存储：绑定 kkv + secretStore，读归一与链解析复用模块纯函数。 */
@@ -487,16 +486,18 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
     },
     async saveEngineKey(engineId, apiKey) {
       const state = await readEngineState(kkv);
-      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
+      if (!state.order.includes(engineId)) return Result.err(engineNotFound(engineId));
       const trimmed = apiKey.trim();
       if (trimmed.length === 0)
-        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_api_key_required"} });
+        return Result.err(new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_api_key_required"} }));
       await secretStore.set(searchApiKeyRef(engineId), trimmed);
+      return Result.ok(undefined);
     },
     async clearEngineKey(engineId) {
       const state = await readEngineState(kkv);
-      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
+      if (!state.order.includes(engineId)) return Result.err(engineNotFound(engineId));
       await secretStore.delete(searchApiKeyRef(engineId));
+      return Result.ok(undefined);
     },
     async setEngineOrder(order) {
       const state = await readEngineState(kkv);
@@ -504,41 +505,44 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       const seen = new Set<string>();
       for (const engineId of order) {
         if (!knownIds.has(engineId) || seen.has(engineId))
-          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_engine_order_invalid", params: {order: JSON.stringify(order)}} });
+          return Result.err(new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_engine_order_invalid", params: {order: JSON.stringify(order)}} }));
         seen.add(engineId);
       }
       await writeKkv(KEY_ENGINE_ORDER_V2, order);
+      return Result.ok(undefined);
     },
     async setEnabled(engineId, on) {
       const state = await readEngineState(kkv);
-      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
+      if (!state.order.includes(engineId)) return Result.err(engineNotFound(engineId));
       const enabled = on ? [...new Set([...state.enabled, engineId])] : state.enabled.filter((id) => id !== engineId);
       await writeKkv(KEY_ENABLED_ENGINES, enabled);
+      return Result.ok(undefined);
     },
     async setEngineBaseUrl(engineId, baseUrl) {
       const state = await readEngineState(kkv);
-      if (!state.order.includes(engineId)) throw engineNotFound(engineId);
+      if (!state.order.includes(engineId)) return Result.err(engineNotFound(engineId));
       const normalized = normalizeBaseUrlForSave(baseUrl);
-      if (!normalized.ok) throw normalized.error;
+      if (!normalized.ok) return Result.err(normalized.error);
       const baseUrls = { ...state.baseUrls };
       if (normalized.value == null) delete baseUrls[engineId];
       else baseUrls[engineId] = normalized.value;
       await writeBaseUrls(baseUrls);
+      return Result.ok(undefined);
     },
     async createCustomEngine(input) {
       const { def } = input;
       if (!CUSTOM_ENGINE_ID_PATTERN.test(def.id))
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `invalid custom engine id: ${def.id}`}} });
+        return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `invalid custom engine id: ${def.id}`}} }));
       const name = def.name.trim();
       if (name.length === 0)
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} });
+        return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} }));
       const template = validateTemplateForSave(def.template);
-      if (!template.ok) throw template.error;
+      if (!template.ok) return Result.err(template.error);
       const baseUrl = normalizeBaseUrlForSave(input.baseUrl);
-      if (!baseUrl.ok) throw baseUrl.error;
+      if (!baseUrl.ok) return Result.err(baseUrl.error);
       const state = await readEngineState(kkv);
       if (state.customEngines.some((existing) => existing.id === def.id))
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `duplicate custom engine id: ${def.id}`}} });
+        return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `duplicate custom engine id: ${def.id}`}} }));
       const apiKey = input.apiKey?.trim();
       const customEngine: CustomEngineDef = {
         id: def.id,
@@ -550,20 +554,21 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       await writeKkv(KEY_ENGINE_ORDER_V2, [...state.order, def.id]);
       if (apiKey != null && apiKey.length > 0) await secretStore.set(searchApiKeyRef(def.id), apiKey);
       if (baseUrl.value != null) await writeBaseUrls({ ...state.baseUrls, [def.id]: baseUrl.value });
+      return Result.ok(undefined);
     },
     async updateCustomEngine(engineId, input) {
       const state = await readEngineState(kkv);
       const existing = state.customEngines.find((def) => def.id === engineId);
-      if (existing == null) throw engineNotFound(engineId);
+      if (existing == null) return Result.err(engineNotFound(engineId));
       const validated = input.template == null ? Result.ok(existing.template) : validateTemplateForSave(input.template);
-      if (!validated.ok) throw validated.error;
+      if (!validated.ok) return Result.err(validated.error);
       const template = validated.value;
       const name = input.name == null ? (input.template == null ? existing.name : template.name) : input.name.trim();
       if (name.length === 0)
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} });
+        return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} }));
       // 地址校验必须在任何写入之前（保存路径失败不产生半写状态）。
       const baseUrl = input.baseUrl == null ? undefined : normalizeBaseUrlForSave(input.baseUrl);
-      if (baseUrl != null && !baseUrl.ok) throw baseUrl.error;
+      if (baseUrl != null && !baseUrl.ok) return Result.err(baseUrl.error);
       const apiKey = input.apiKey?.trim();
       const updated: CustomEngineDef = { ...existing, name, template };
       const updatedEngines = state.customEngines.map((def) => (def.id === engineId ? updated : def));
@@ -578,10 +583,11 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
         else baseUrls[engineId] = baseUrl.value;
         await writeBaseUrls(baseUrls);
       }
+      return Result.ok(undefined);
     },
     async deleteCustomEngine(engineId) {
       const state = await readEngineState(kkv);
-      if (!state.customEngines.some((def) => def.id === engineId)) throw engineNotFound(engineId);
+      if (!state.customEngines.some((def) => def.id === engineId)) return Result.err(engineNotFound(engineId));
       const remainingEngines = state.customEngines.filter((def) => def.id !== engineId);
       const remainingOrder = state.order.filter((id) => id !== engineId);
       const remainingEnabled = state.enabled.filter((id) => id !== engineId);
@@ -592,28 +598,31 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       delete baseUrls[engineId];
       await writeBaseUrls(baseUrls);
       await secretStore.delete(searchApiKeyRef(engineId));
+      return Result.ok(undefined);
     },
     async updatePresetOverride(engineId, patch) {
-      if (!PRESET_ENGINE_IDS.includes(engineId)) throw engineNotFound(engineId);
+      if (!PRESET_ENGINE_IDS.includes(engineId)) return Result.err(engineNotFound(engineId));
       const state = await readEngineState(kkv);
       const template = validateTemplateForSave({
         ...PRESET_TEMPLATES[engineId],
         ...state.presetOverrides[engineId],
         ...patch,
       });
-      if (!template.ok) throw template.error;
+      if (!template.ok) return Result.err(template.error);
       await writeKkv(KEY_PRESET_OVERRIDES, {
         ...state.presetOverrides,
         [engineId]: template.value,
       });
+      return Result.ok(undefined);
     },
     async resetPresetOverride(engineId) {
-      if (!PRESET_ENGINE_IDS.includes(engineId)) throw engineNotFound(engineId);
+      if (!PRESET_ENGINE_IDS.includes(engineId)) return Result.err(engineNotFound(engineId));
       const state = await readEngineState(kkv);
       const overrides = { ...state.presetOverrides };
       delete overrides[engineId];
       if (Object.keys(overrides).length === 0) await kkvDelete(kkv, KEY_PRESET_OVERRIDES);
       else await writeKkv(KEY_PRESET_OVERRIDES, overrides);
+      return Result.ok(undefined);
     },
   };
 }

@@ -1,6 +1,7 @@
 /**
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {
   describe,
@@ -144,16 +145,16 @@ describe("cli-run-agent-turn parity", () => {
     await ctx.state.setCurrentAgentId("global-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 旧库残留 custom 配置——resolve 应忽略，走 session.agentId。
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
-    });
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
     const runtime = makeRuntime(ctx, registry);
 
     const captured = await runUntilRunner(
@@ -175,16 +176,16 @@ describe("cli-run-agent-turn parity", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const runtime = makeRuntime(ctx, registry);
 
-    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-    const originalUser = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("模型回复")));
+    const originalUser = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("用户续跑"),
-    );
+    ));
     await runtime.userVfsTurn!.executeOp(
       session.id,
       writeOp("/parity.md", "content"),
@@ -221,10 +222,10 @@ describe("cli-run-agent-turn parity", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("已有 user"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("已有 user")));
     const before = await ctx.messages.listBySession(session.id);
     assert.equal(before.length, 1);
 

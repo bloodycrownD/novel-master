@@ -23,7 +23,8 @@ export async function resolveProjectUseId(
 ): Promise<string> {
   const byId = flagString(flags, "project");
   if (byId != null) {
-    await projects.get(byId);
+    const exists = await projects.get(byId);
+    if (!exists.ok) throw exists.error;
     return byId;
   }
 
@@ -58,7 +59,8 @@ export async function resolveSessionUseId(
 ): Promise<string> {
   const byId = flagString(flags, "session");
   if (byId != null) {
-    await sessions.get(byId);
+    const exists = await sessions.get(byId);
+    if (!exists.ok) throw exists.error;
     return byId;
   }
 
@@ -71,7 +73,9 @@ export async function resolveSessionUseId(
         "Missing --project <id> for title lookup (or set current project via nm project use)",
       );
     }
-    const matches = (await sessions.listByProject(projectId)).filter(
+    const listed = await sessions.listByProject(projectId);
+    if (!listed.ok) throw listed.error;
+    const matches = listed.value.filter(
       (s) => (s.title ?? "") === label,
     );
     if (matches.length === 0) {

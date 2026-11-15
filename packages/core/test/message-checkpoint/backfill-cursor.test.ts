@@ -6,6 +6,7 @@
  *   连续对话第二轮两段式正反场景 / 删除路径回退全量。
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -316,29 +317,29 @@ async function hasCheckpoint(
 describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
   it("T-B1: 已扫会话再 backfill 为 no-op，不发全量扫描查询", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-b1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-b1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "ok" }],
-    });
+    }));
     // 首轮：游标缺失 → 全量补建 + 游标落库。
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "2");
 
     // 第二轮（= 下一轮 run 开头）：count == 游标 → 短路，不发全量扫描。
     const spy = spyFullSessionReads();
     try {
-      await ctx.messageCheckpoint.backfillMissingBaselines(
+      unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
         project.id
-      );
+      ));
     } finally {
       spy.restore();
     }
@@ -349,23 +350,23 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
   it("T-B2: 游标缺失时回退全量扫描并补写游标", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-b2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-b2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", {
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
+    }));
 
     assert.equal(await readCursor(session.id), null, "未扫过时无游标");
     const spy = spyFullSessionReads();
     try {
-      await ctx.messageCheckpoint.backfillMissingBaselines(
+      unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
         project.id
-      );
+      ));
     } finally {
       spy.restore();
     }
@@ -380,20 +381,20 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
   it("T-B3: truncate 回滚删尾后游标被清，新消息复用 seq 仍被下次 backfill 覆盖", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-b3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-b3-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", {
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "3");
 
     // undo_send 主路径（truncate-tail）：回滚到 m1 发送前，m1 自身也会被删。
@@ -401,14 +402,14 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     assert.equal(await readCursor(session.id), null, "发生删除即清游标");
 
     // 清尾后新消息复用被删的 seq（nextSeq = MAX(seq)+1，tail 已删则从头计）。
-    const m4 = await ctx.messages.append(session.id, "user", textBlocks("4"));
+    const m4 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("4")));
     assert.equal(m4.seq, m1.seq, "truncate 后新消息复用被删消息的 seq");
 
     // 下次 backfill：游标缺失 → 回退全量 → 复用 seq 的新消息被补建 + 游标补写。
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.ok(
       await hasCheckpoint(session.id, m4.id),
       "复用 seq 的新消息必须被全量补建覆盖"
@@ -418,43 +419,43 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
   it("T-B5 正向: 连续对话第二轮两段式短路（新增段源头已建点，共 2 条）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-b5a-${testIsolationSuffix()}`
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", {
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
+    }));
     // 上一轮产出形态：user + assistant 均有源头建点。
-    await ctx.messageCheckpoint.capture(session.id, project.id, m1.id);
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m1.id));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "2");
 
     // 追加新一轮「源头已建点」的两条（发送链 user capture + mutating 工具轮
     // assistant capture 的形态）。
-    const m3 = await ctx.messages.append(session.id, "user", textBlocks("3"));
-    const m4 = await ctx.messages.append(session.id, "assistant", {
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const m4 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "4" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m3.id);
-    await ctx.messageCheckpoint.capture(session.id, project.id, m4.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m3.id));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m4.id));
 
     // 第二次 run 开头 backfill：count=4 > 游标=2 → 圈段 [m3, m4] 覆盖比对通过
     // → 短路 no-op、不回退全量、游标前移至 4。
     const spy = spyFullSessionReads();
     try {
-      await ctx.messageCheckpoint.backfillMissingBaselines(
+      unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
         project.id
-      );
+      ));
     } finally {
       spy.restore();
     }
@@ -465,27 +466,27 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
   it("T-B5 反向: 纯文本轮尾部 assistant 无点 → 比对失败 → 回退补建 + 游标补写", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-b5b-${testIsolationSuffix()}`
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messageCheckpoint.capture(session.id, project.id, m1.id);
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m1.id));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "1");
 
     // 追加一轮纯文本：user 有源头建点、尾部 assistant 无点（真实空窗）。
-    const m2 = await ctx.messages.append(session.id, "user", textBlocks("2"));
-    const m3 = await ctx.messages.append(session.id, "assistant", {
+    const m2 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "3" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
     assert.equal(
       await hasCheckpoint(session.id, m3.id),
       false,
@@ -494,10 +495,10 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
     const spy = spyFullSessionReads();
     try {
-      await ctx.messageCheckpoint.backfillMissingBaselines(
+      unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
         project.id
-      );
+      ));
     } finally {
       spy.restore();
     }
@@ -512,53 +513,53 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
   it("T-B6 之一: 中间删除后新增无点消息 → 回退全量补建 + 游标补写", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-b6a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-b6a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "3");
 
     // 中间删除（tool-turn-actions 的形态：删 tool-result user + assistant 对）。
-    await ctx.messages.delete(m2.id);
+    unwrap(await ctx.messages.delete(m2.id));
     assert.equal(await readCursor(session.id), null, "发生删除即清游标");
 
     // 新增无 checkpoint 消息后下次 run：游标缺失 → 全量补建 + 游标补写。
-    const m4 = await ctx.messages.append(session.id, "user", textBlocks("4"));
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    const m4 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("4")));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.ok(await hasCheckpoint(session.id, m4.id));
     assert.equal(await readCursor(session.id), "3", "游标补写至删除后的 count");
   });
 
   it("T-B6 之二: 清空会话（truncateAfter anchor=null）重聊 → 首轮回退全量", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-b6b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-b6b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messageCheckpoint.capture(session.id, project.id, m1.id);
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m1.id));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.equal(await readCursor(session.id), "1");
 
     // 清空整会话（anchor=null 分支）。
-    await ctx.messages.truncateAfter(session.id, null);
+    unwrap(await ctx.messages.truncateAfter(session.id, null));
     assert.equal(
       (await ctx.messages.listBySession(session.id)).length,
       0
@@ -566,11 +567,11 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     assert.equal(await readCursor(session.id), null, "清空分支必须清游标");
 
     // 重聊首轮：游标缺失 → 回退全量补建 + 游标补写。
-    const m2 = await ctx.messages.append(session.id, "user", textBlocks("2"));
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    const m2 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id
-    );
+    ));
     assert.ok(await hasCheckpoint(session.id, m2.id));
     assert.equal(await readCursor(session.id), "1");
   });

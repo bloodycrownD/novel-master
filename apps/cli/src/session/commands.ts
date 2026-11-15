@@ -55,7 +55,8 @@ export async function runSession(
     case "list": {
       const projectId = await deps.scope.resolveProjectId(flags);
       const list = await deps.sessions.listByProject(projectId);
-      for (const s of list) {
+      if (!list.ok) throw list.error;
+      for (const s of list.value) {
         console.log(`${s.id}\t${s.title ?? ""}`);
       }
       return;
@@ -65,10 +66,11 @@ export async function runSession(
       const title =
         typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
       const s = await deps.sessions.create(projectId, title);
+      if (!s.ok) throw s.error;
       // Set current project and session
       await deps.state.setCurrentProjectId(projectId);
-      await deps.state.setCurrentSessionId(s.id);
-      console.log(s.id);
+      await deps.state.setCurrentSessionId(s.value.id);
+      console.log(s.value.id);
       return;
     }
     case "use": {
@@ -79,8 +81,9 @@ export async function runSession(
         currentProjectId,
       );
       const session = await deps.sessions.get(id);
+      if (!session.ok) throw session.error;
       // Set current project and session
-      await deps.state.setCurrentProjectId(session.projectId);
+      await deps.state.setCurrentProjectId(session.value.projectId);
       await deps.state.setCurrentSessionId(id);
       return;
     }
@@ -92,12 +95,14 @@ export async function runSession(
         );
       }
       const s = await deps.sessions.get(id);
-      console.log(`${s.id}\t${s.title ?? ""}`);
+      if (!s.ok) throw s.error;
+      console.log(`${s.value.id}\t${s.value.title ?? ""}`);
       return;
     }
     case "delete": {
       const sessionId = await deps.scope.resolveSessionId(flags);
-      await deps.sessions.delete(sessionId);
+      const deleted = await deps.sessions.delete(sessionId);
+      if (!deleted.ok) throw deleted.error;
       // Clear current session if it was deleted
       const currentSessionId = await deps.state.getCurrentSessionId();
       if (currentSessionId === sessionId) {
@@ -108,7 +113,8 @@ export async function runSession(
     case "copy": {
       const sessionId = await deps.scope.resolveSessionId(flags);
       const copy = await deps.sessions.copy(sessionId);
-      console.log(copy.id);
+      if (!copy.ok) throw copy.error;
+      console.log(copy.value.id);
       return;
     }
     case "vfs": {

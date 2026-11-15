@@ -301,6 +301,9 @@ export function formatToolOutputForLlm(out: unknown): string {
  */
 // nm-style: keep-public — 两个测试文件直接 import（本片禁改测试）；且是 tool_result 错误文案的统一出口，内联进 buildToolResultBlock 会把 13 处测试锁定的格式搬进另一模块。
 export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorForLlmOptions): string {
+  // 取消是控制流信号不是错误（TOOL_CANCELLED）：文案不带 `Error:` 前缀，
+  // buildToolResultBlock 因此不产出 summary，UI 卡片不弹错误文案。
+  if (isAppError(error, "TOOL_CANCELLED")) return "工具调用已取消";
   let message: string;
   if (isAppError(error) && error.key.startsWith("TOOL_")) {
     if (error.key === "TOOL_INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {

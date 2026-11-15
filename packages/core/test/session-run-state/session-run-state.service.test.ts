@@ -9,6 +9,7 @@
  * @module test/session-run-state/session-run-state.service.test
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSessionRunStateService } from "../../src/service/session-run-state/create-session-run-state-service.js";
@@ -75,7 +76,7 @@ describe("SessionRunStateService", () => {
       })
     );
 
-    const row = await svc.get(sid);
+    const row = unwrap(await svc.get(sid));
     assert.notEqual(row, null);
     assert.equal(row!.runId, "run-new");
     assert.equal(row!.status, "running");
@@ -155,7 +156,7 @@ describe("SessionRunStateService", () => {
       updatedAtMs: 4000,
     });
 
-    const row = await svc.get(sid);
+    const row = unwrap(await svc.get(sid));
     assert.notEqual(row, null);
     assert.equal(row!.status, "settled");
     assert.equal(row!.partialText, null);
@@ -187,44 +188,44 @@ describe("SessionRunStateService", () => {
     const pid = `proj-${testIsolationSuffix()}`;
     await svc.upsert(makeRow(sid, pid));
     assert.equal(await svc.deleteBySession(sid), true);
-    assert.equal(await svc.get(sid), null);
+    assert.equal(unwrap(await svc.get(sid)), null);
     assert.equal(await svc.deleteBySession(sid), false);
   });
 
   it("会话删除级联：含子会话的 run_state 行一并清理", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id);
-    const child = await ctx.sessions.createSubSession(parent.id, project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id));
+    const child = unwrap(await ctx.sessions.createSubSession(parent.id, project.id));
 
     await svc.upsert(makeRow(parent.id, project.id, { status: "running" }));
     await svc.upsert(
       makeRow(child.id, project.id, { status: "settled", textChars: 9 })
     );
 
-    await ctx.sessions.delete(parent.id);
+    unwrap(await ctx.sessions.delete(parent.id));
 
-    assert.equal(await svc.get(parent.id), null);
-    assert.equal(await svc.get(child.id), null);
+    assert.equal(unwrap(await svc.get(parent.id)), null);
+    assert.equal(unwrap(await svc.get(child.id)), null);
   });
 
   it("项目删除级联：多会话项目的 run_state 行全清", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const s1 = await ctx.sessions.create(project.id);
-    const s2 = await ctx.sessions.create(project.id);
-    const sub = await ctx.sessions.createSubSession(s1.id, project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const s1 = unwrap(await ctx.sessions.create(project.id));
+    const s2 = unwrap(await ctx.sessions.create(project.id));
+    const sub = unwrap(await ctx.sessions.createSubSession(s1.id, project.id));
 
     await svc.upsert(makeRow(s1.id, project.id, { status: "running" }));
     await svc.upsert(makeRow(s2.id, project.id, { status: "starting" }));
     await svc.upsert(makeRow(sub.id, project.id, { status: "settled" }));
 
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
-    assert.equal(await svc.get(s1.id), null);
-    assert.equal(await svc.get(s2.id), null);
-    assert.equal(await svc.get(sub.id), null);
+    assert.equal(unwrap(await svc.get(s1.id)), null);
+    assert.equal(unwrap(await svc.get(s2.id)), null);
+    assert.equal(unwrap(await svc.get(sub.id)), null);
   });
 });

@@ -12,6 +12,7 @@
  *
  * @module test/vfs/vfs-tree-copy-batch
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -44,14 +45,14 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
   it("T-BATCH-1 快路径：project → session 拷贝，content_hash 正确且共享 blob ref_count=2", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const projectVfs = ctx.projectVfs(project.id);
     // 三份本文互不相同，各自共享 blob 只在「源 + 目标」各被一条 revision 引用 → ref_count=2
     await projectVfs.write("/shared.txt", `shared-${suffix}`);
     await projectVfs.write("/other.txt", `other-${suffix}`);
-    await projectVfs.mkdir("/sub");
+    unwrap(await projectVfs.mkdir("/sub"));
     await projectVfs.write("/sub/nested.txt", `nested-${suffix}`);
 
     const projectScope = `project:${project.id}`;
@@ -98,8 +99,8 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
   it("T-BATCH-2 缺失 blob：慢路径失败且事务回滚，目标不落半套 entry", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const projectVfs = ctx.projectVfs(project.id);
     await projectVfs.write("/a.txt", `a-${suffix}`);
@@ -176,8 +177,8 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
   it("T-BATCH-3 seed 批量：首遍每文件 1 条 revision（ref_count=1），二遍幂等返回 0 且不重复 +1 blob", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const projectVfs = ctx.projectVfs(project.id);
     await projectVfs.write("/a.txt", `a-${suffix}`);
@@ -242,7 +243,7 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
     await assert.rejects(() => store.ensureBlob(hash, null), /vfs_content_blob 缺失且无可回退明文/);
     // 有明文时回退 put 应恢复成功
     await assert.doesNotReject(() => store.ensureBlob(hash, plain));
-    assert.equal(await store.get(hash), plain);
+    assert.equal(unwrap(await store.get(hash)), plain);
   });
 });
 
@@ -262,7 +263,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
   it("T-EXCL-1 删除侧：排除前缀下 entry 不删、revision/ref_count 不变，其余照常替换", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
     const projectScope = `project:${project.id}`;
 
     const pvfs = ctx.projectVfs(project.id);
@@ -273,7 +274,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
     await pvfs.write("/p.md", `p-${suffix}`);
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const skillEntry = await entryRepo.findByPath(projectScope, skillPath);
+    const skillEntry = unwrap(await entryRepo.findByPath(projectScope, skillPath));
     assert.ok(skillEntry != null);
     const refsBefore = await revisionRefCounts(ctx, skillEntry.entryId);
     assert.equal(refsBefore.size, 2, "技能文件应有 v1/v2 两条 revision");
@@ -300,7 +301,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
     });
 
     // 排除前缀：entry 保留、内容不变、revision/ref_count 不变
-    const skillAfter = await entryRepo.findByPath(projectScope, skillPath);
+    const skillAfter = unwrap(await entryRepo.findByPath(projectScope, skillPath));
     assert.ok(skillAfter != null, "排除前缀下 entry 不应被删除");
     assert.equal(
       await entryRepo.findContentHash(projectScope, skillPath),
@@ -315,9 +316,9 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
     assert.equal(await blobRefCount(skillHash), 1, "技能 blob 的 ref_count 不应变化");
 
     // 其余路径照常替换：/p.md 被删、/g.md 被拷入并 seed
-    assert.equal(await entryRepo.findByPath(projectScope, "/p.md"), null, "/p.md 应被替换删除");
+    assert.equal(unwrap(await entryRepo.findByPath(projectScope, "/p.md")), null, "/p.md 应被替换删除");
     assert.ok(
-      await entryRepo.findByPath(projectScope, `/g-${suffix}.md`),
+      unwrap(await entryRepo.findByPath(projectScope, `/g-${suffix}.md`)),
       "非排除前缀的文件应被拷入",
     );
   });
@@ -325,7 +326,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
   it("T-EXCL-2 拷贝侧：源 scope 排除前缀下条目不随拷贝镜像到目标", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
     const projectScope = `project:${project.id}`;
 
     // global 技能域有内容：拷贝时不应镜像到 project（write 自动建父目录链）
@@ -364,7 +365,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
   it("T-EXCL-3 seed 侧：排除前缀下缺失的 head revision 不被补种，其余照常补种", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
     const projectScope = `project:${project.id}`;
 
     const pvfs = ctx.projectVfs(project.id);
@@ -377,7 +378,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
     // 人为删掉技能文件的 head revision，模拟排除前缀下 head revision 意外缺失
     // （不动 global 对照文件，避免破坏源侧 blob 链）
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const skillEntry = await entryRepo.findByPath(projectScope, skillPath);
+    const skillEntry = unwrap(await entryRepo.findByPath(projectScope, skillPath));
     assert.ok(skillEntry != null);
     await ctx.conn.execute(`DELETE FROM vfs_revision WHERE entry_id = ?`, [
       skillEntry.entryId,
@@ -403,7 +404,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
     // 排除前缀下的技能 entry 未被触碰，其缺失的 head revision 也不补种（seed 随排除跳过）。
     // 注意：技能的 blob 已随人为删 revision 被触发器回收，findByPath 解明文会抛，
     // 改用 SQL 直查 entry 行。
-    const keepEntryAfter = await entryRepo.findByPath(projectScope, keepPath);
+    const keepEntryAfter = unwrap(await entryRepo.findByPath(projectScope, keepPath));
     assert.ok(keepEntryAfter != null);
     const keepRefs = await revisionRefCounts(ctx, keepEntryAfter.entryId);
     assert.ok(keepRefs.size >= 1, "/keep.md 重拷后 head revision 应被 seed");
@@ -423,7 +424,7 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
   it("T-EXCL-4 默认不传 excludePrefixes 时行为不变（排除前缀下条目照常替换）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`p-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`p-${suffix}`));
     const projectScope = `project:${project.id}`;
 
     const pvfs = ctx.projectVfs(project.id);
@@ -448,11 +449,11 @@ describe("replaceVfsSubtree excludePrefixes（隔离豁免，T-SK1）", () => {
 
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     assert.equal(
-      await entryRepo.findByPath(projectScope, skillPath),
+      unwrap(await entryRepo.findByPath(projectScope, skillPath)),
       null,
       "不传 excludePrefixes 时排除前缀下条目应照常被删除（现行为不变）",
     );
-    assert.equal(await entryRepo.findByPath(projectScope, "/p.md"), null);
-    assert.ok(await entryRepo.findByPath(projectScope, `/g-${suffix}.md`));
+    assert.equal(unwrap(await entryRepo.findByPath(projectScope, "/p.md")), null);
+    assert.ok(unwrap(await entryRepo.findByPath(projectScope, `/g-${suffix}.md`)));
   });
 });

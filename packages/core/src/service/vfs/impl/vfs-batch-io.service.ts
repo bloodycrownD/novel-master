@@ -12,7 +12,7 @@ import { joinTargetLogicalPath, normalizeBatchRelativePath, relativePathUnderAnc
 import { writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import { assertLogicalPathAllowed, resolveLogicalPath, scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { resolveLogicalPath, scopeKey, validateLogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -184,7 +184,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     const resolvedTarget = resolveLogicalPath(targetDir);
     if (!resolvedTarget.ok) throwLegacyVfs(resolvedTarget.error);
     const target = resolvedTarget.value;
-    assertLogicalPathAllowed(scope, target);
+    const allowedTarget = validateLogicalPath(scope, target);
+    if (!allowedTarget.ok) throwLegacyVfs(allowedTarget.error);
 
     const writes: BatchIngestPlanEntry[] = [];
     const mkdirPaths: string[] = [];
@@ -215,7 +216,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         const logicalResult = joinTargetLogicalPath(target, rel);
         if (!logicalResult.ok) throwLegacyVfs(logicalResult.error);
         const logical = logicalResult.value;
-        assertLogicalPathAllowed(scope, logical);
+        const allowedDir = validateLogicalPath(scope, logical);
+        if (!allowedDir.ok) throwLegacyVfs(allowedDir.error);
         if (!seenLogical.has(logical)) {
           seenLogical.add(logical);
           mkdirPaths.push(logical);
@@ -232,7 +234,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       const logicalResult = joinTargetLogicalPath(target, rel);
       if (!logicalResult.ok) throwLegacyVfs(logicalResult.error);
       const logical = logicalResult.value;
-      assertLogicalPathAllowed(scope, logical);
+      const allowedLogical = validateLogicalPath(scope, logical);
+      if (!allowedLogical.ok) throwLegacyVfs(allowedLogical.error);
       if (seenLogical.has(logical)) {
         continue;
       }
@@ -452,7 +455,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       const resolved = resolveLogicalPath(raw);
       if (!resolved.ok) throwLegacyVfs(resolved.error);
       const logical = resolved.value;
-      assertLogicalPathAllowed(scope, logical);
+      const allowedExport = validateLogicalPath(scope, logical);
+      if (!allowedExport.ok) throwLegacyVfs(allowedExport.error);
       const existing = await this.repo.findByPath(sk, logical);
 
       if (existing != null && existing.entryKind === "file") {

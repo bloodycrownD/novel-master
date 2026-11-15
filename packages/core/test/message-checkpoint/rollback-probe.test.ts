@@ -7,6 +7,7 @@
  * mobile 侧 [nm-rollback] 轴的 __DEV__ 门控断言在 apps/mobile 的
  * rollback-probe-timing.test.ts。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -45,19 +46,19 @@ function collectProbe(): {
 describe("rollback chain probe (T-R0)", () => {
   it("T-R0: rewind 回滚全链探针可捕获 plan 拉取与事务各子步打点", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-tr0-${testIsolationSuffix()}`,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    await ctx.messages.append(session.id, "user", textBlocks("hi"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "bye" }],
-    });
+    }));
     await svfs.write("/tr0.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     const collector = collectProbe();
     const rollback = createMessageRollbackService(ctx.conn, collector.options);
@@ -100,16 +101,16 @@ describe("rollback chain probe (T-R0)", () => {
 
   it("未注入探针（默认）时回滚行为零变化", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-tr0b-${testIsolationSuffix()}`,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("c"));
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("c")));
 
     // 不传 options（desktop/cli 形态）——不应抛错、行为与既有一致。
     const rollback = createMessageRollbackService(ctx.conn);

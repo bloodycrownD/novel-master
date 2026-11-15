@@ -4,6 +4,8 @@
  * @module service/chat/session.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type {
   SessionAgentConfig,
@@ -16,12 +18,12 @@ export interface SessionService {
    * 只返回 `parent_session_id IS NULL` 的顶层会话；子 session 用 repository 的
    * `listByParentSession` 自行 BFS。
    */
-  listByProject(projectId: string): Promise<ChatSession[]>;
+  listByProject(projectId: string): Promise<Result<ChatSession[], AppError>>;
 
-  get(id: string): Promise<ChatSession>;
+  get(id: string): Promise<Result<ChatSession, AppError>>;
 
   /** Creates session and copies project template VFS into session domain. */
-  create(projectId: string, title?: string | null): Promise<ChatSession>;
+  create(projectId: string, title?: string | null): Promise<Result<ChatSession, AppError>>;
 
   /**
    * 创建子 agent 会话（SPEC agent-subagent / P0-4）。
@@ -41,41 +43,41 @@ export interface SessionService {
     parentSessionId: string,
     projectId: string,
     title?: string | null
-  ): Promise<ChatSession>;
+  ): Promise<Result<ChatSession, AppError>>;
 
-  rename(id: string, title: string): Promise<ChatSession>;
+  rename(id: string, title: string): Promise<Result<ChatSession, AppError>>;
 
-  delete(id: string): Promise<void>;
+  delete(id: string): Promise<Result<void, AppError>>;
 
   /** Copies session VFS tree and all messages to a new session. */
-  copy(id: string): Promise<ChatSession>;
+  copy(id: string): Promise<Result<ChatSession, AppError>>;
 
   /**
    * Overwrites session VFS + worktree from project template;
    * clears session-fs data but not messages.
    */
-  pullTemplate(sessionId: string): Promise<void>;
+  pullTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
   /**
    * 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板，
    * 后续新建会话与其它会话「从上级同步」都会拿到覆盖后的母本。
    */
-  pushTemplate(sessionId: string): Promise<void>;
+  pushTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
   /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
-  getComposerDraftJson(id: string): Promise<string | null>;
+  getComposerDraftJson(id: string): Promise<Result<string | null, AppError>>;
 
   /**
    * 写入 `composer_draft_json`；`draftJson` 为 null 时清空列。
    * 不更新 `updated_at_ms`。
    */
-  setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<Result<boolean, AppError>>;
 
   /**
    * 读取会话智能体配置；列 NULL 视为异常（migration 后不应存在 NULL），
-   * 抛 `ChatError(INVALID_ARGUMENT)` 提示运行迁移。
+   * 该不变量破坏保留 throw（`CHAT_INVALID_ARGUMENT`），提示运行迁移。
    */
-  getSessionAgentConfig(id: string): Promise<SessionAgentConfig>;
+  getSessionAgentConfig(id: string): Promise<Result<SessionAgentConfig, AppError>>;
 
   /**
    * partial overlay 更新会话智能体配置。
@@ -88,5 +90,5 @@ export interface SessionService {
   updateSessionAgentConfig(
     id: string,
     patch: SessionAgentConfigPatch
-  ): Promise<SessionAgentConfig>;
+  ): Promise<Result<SessionAgentConfig, AppError>>;
 }

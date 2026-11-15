@@ -2,6 +2,7 @@
  * message-rollback-execution-redesign must-fix 测例：
  * T-RB-PARTIAL-WRITE / T-RB-SQL-ONCE / T-RB-STABLE-CP
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -19,40 +20,40 @@ novelMasterTestFixture();
 describe("rollback execution redesign", () => {
   it("T-RB-PARTIAL-WRITE: 多文件仅 diff 路径实质 write", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const fileCount = 6;
     const diffCount = 2;
 
-    const anchorAssistant = await ctx.messages.append(session.id, "assistant", {
+    const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "anchor" }],
-    });
+    }));
     for (let i = 0; i < fileCount; i++) {
       await svfs.write(`/partial-${i}.md`, `anchor-${i}`, {
         versionCheck: false,
       });
     }
-    await ctx.messageCheckpoint.capture(
+    unwrap(await ctx.messageCheckpoint.capture(
       session.id,
       project.id,
       anchorAssistant.id,
-    );
+    ));
 
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
-    const tailAssistant = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
+    const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "tail" }],
-    });
+    }));
     for (let i = 0; i < diffCount; i++) {
       await svfs.write(`/partial-${i}.md`, `tail-${i}`, {
         versionCheck: false,
       });
     }
-    await ctx.messageCheckpoint.capture(
+    unwrap(await ctx.messageCheckpoint.capture(
       session.id,
       project.id,
       tailAssistant.id,
-    );
+    ));
 
     const resetSpy = mock.method(RevisionAwareVfsService.prototype, "resetHeadToVersion");
     try {
@@ -76,29 +77,29 @@ describe("rollback execution redesign", () => {
 
   it("T-RB-SQL-ONCE: 回滚热路径不走 listDistinct+Set+deleteExceptReachable", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const anchorAssistant = await ctx.messages.append(session.id, "assistant", {
+    const anchorAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "anchor" }],
-    });
+    }));
     await svfs.write("/sql-once.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(
+    unwrap(await ctx.messageCheckpoint.capture(
       session.id,
       project.id,
       anchorAssistant.id,
-    );
+    ));
 
-    const tailAssistant = await ctx.messages.append(session.id, "assistant", {
+    const tailAssistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "tail" }],
-    });
+    }));
     await svfs.write("/sql-once.md", "v2", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(
+    unwrap(await ctx.messageCheckpoint.capture(
       session.id,
       project.id,
       tailAssistant.id,
-    );
+    ));
 
     const listDistinctSpy = mock.method(
       SqliteMessageCheckpointRepository.prototype,
@@ -132,31 +133,31 @@ describe("rollback execution redesign", () => {
 
   it("T-RB-STABLE-CP: 截断后仍可回滚到更早保留 checkpoint，正文正确", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp1" }],
-    });
+    }));
     await svfs.write("/stable.md", "chapter-1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
-    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
+    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp2" }],
-    });
+    }));
     await svfs.write("/stable.md", "chapter-2", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
-    const assistant3 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    const assistant3 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp3" }],
-    });
+    }));
     await svfs.write("/stable.md", "chapter-3", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,

@@ -180,18 +180,19 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
     return;
   }
   const service = createSkillsService(conn);
+  // 错误通道迁移二期：readSkillFile 已改 Result 通道——Err 不再抛出，
+  // 存在性判定改为按 `!ok` 收窄（非 NOT_FOUND 的失败原样上抛）。
+  const existing = await service.readSkillFile("global", "agent-config");
   let exists = true;
-  try {
-    await service.readSkillFile("global", "agent-config");
-  } catch (error) {
-    if (!isAppError(error, "SKILL_NOT_FOUND")) {
-      throw error;
+  if (!existing.ok) {
+    if (!isAppError(existing.error, "SKILL_NOT_FOUND")) {
+      throw existing.error;
     }
     exists = false;
   }
   // 版本落后：无条件重种当前文案（存在性只决定是否需要 seed 特权豁免
   // D2② 的新建拦截——首种时目录必不存在；重种走整文件覆盖）。
-  await service.writeSkillFile(
+  const written = await service.writeSkillFile(
     "global",
     "agent-config",
     undefined,
@@ -199,5 +200,8 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
     undefined,
     exists ? undefined : { builtinSeed: true }
   );
+  if (!written.ok) {
+    throw written.error;
+  }
   await writeSeedLedger(conn);
 }

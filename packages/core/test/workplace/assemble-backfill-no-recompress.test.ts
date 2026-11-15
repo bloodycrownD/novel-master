@@ -14,6 +14,8 @@
  *
  * @module test/workplace/assemble-backfill-no-recompress
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 
@@ -59,6 +61,12 @@ const { settlePendingFileCacheBackfills } = await import(
 );
 const { openNovelMasterTestConnection } = await import("../helpers/novel-master.js");
 
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
+  return outcomeValue(await assembleWorkplaceDisplay(...args));
+}
+
 describe("file_cache 免重压缩（后台化后仍生效）", () => {
   it("T-BF3b blob 已在库：set 侧 hash 比对命中，不再调用压缩", async () => {
     const ctx = await openNovelMasterTestConnection();
@@ -82,7 +90,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
         "blob 已存在时不得再压缩（免重压缩优化在后台化后仍生效）"
       );
       assert.equal(
-        await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/bf3b.md"),
+        unwrap(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/bf3b.md")),
         value,
         "免压缩路径仍要逐字节还原"
       );
@@ -94,8 +102,8 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
   it("T-BF3c 组装侧：清域后二次 assemble 走后台回填，blob 同 hash 不再压缩", async () => {
     const ctx = await openNovelMasterTestConnection();
     try {
-      const project = await ctx.projects.create(`P-bf3c-${Date.now()}`);
-      const session = await ctx.sessions.create(project.id);
+      const project = unwrap(await ctx.projects.create(`P-bf3c-${Date.now()}`));
+      const session = unwrap(await ctx.sessions.create(project.id));
       const sk = createSessionKkvService(ctx.conn);
       const vfs = ctx.sessionVfs(project.id, session.id);
       const body = `bf3c-unique-${Math.random().toString(36).slice(2, 10)}`;
@@ -110,7 +118,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
       const deps = { sessionKkv: sk, workplace: wt, vfs, layout: { workplace: "【done】" } };
 
       // 第一次：blob 不存在 → 真压缩
-      const out1 = await assembleWorkplaceDisplay(scope, deps);
+      const out1 = await assembleDisplay(scope, deps);
       assert.match(out1.workplaceDisplay, /bf3c-unique-/);
       await settlePendingFileCacheBackfills();
       const afterFirst = compressCalls;
@@ -119,7 +127,7 @@ describe("file_cache 免重压缩（后台化后仍生效）", () => {
       // 清 file_cache 引用行（blob 保留）→ 二次 assemble 仍 miss，
       // 读 VFS 后台回填；此时 blob 已在库 → 免压缩
       await sk.clearDomain(session.id, SESSION_KKV_DOMAIN_FILE_CACHE);
-      const out2 = await assembleWorkplaceDisplay(scope, deps);
+      const out2 = await assembleDisplay(scope, deps);
       assert.match(out2.workplaceDisplay, /bf3c-unique-/, "二次组装仍出正文（自愈重读）");
       await settlePendingFileCacheBackfills();
 

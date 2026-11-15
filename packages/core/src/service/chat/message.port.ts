@@ -4,6 +4,8 @@
  * @module service/chat/message.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type {
   ChatMessageData,
   ChatMessageHeader,
@@ -49,7 +51,7 @@ export interface MessageService {
     options: { limit: number; beforeSeq?: number }
   ): Promise<ChatMessageData[]>;
 
-  get(id: string): Promise<ChatMessageData>;
+  get(id: string): Promise<Result<ChatMessageData, AppError>>;
 
   append(
     sessionId: string,
@@ -67,32 +69,32 @@ export interface MessageService {
       /** LLM token usage（assistant message 持久化）。 */
       usage?: MessageUsage;
     }
-  ): Promise<ChatMessageData>;
+  ): Promise<Result<ChatMessageData, AppError>>;
 
-  delete(id: string): Promise<void>;
+  delete(id: string): Promise<Result<void, AppError>>;
 
   /** Replaces message content (e.g. user edit in mobile). */
   updateContent(
     messageId: string,
     content: MessageContent
-  ): Promise<ChatMessageData>;
+  ): Promise<Result<ChatMessageData, AppError>>;
 
   /**
    * Creates a new session with source session VFS and messages up to `upToMessageId`.
    */
-  fork(sessionId: string, upToMessageId: string): Promise<ChatSession>;
+  fork(sessionId: string, upToMessageId: string): Promise<Result<ChatSession, AppError>>;
 
   /** Hide a single message from LLM prompt rendering. */
-  hide(messageId: string): Promise<void>;
+  hide(messageId: string): Promise<Result<void, AppError>>;
 
   /** Show a previously hidden message. */
-  show(messageId: string): Promise<void>;
+  show(messageId: string): Promise<Result<void, AppError>>;
 
   /** Hide a range of messages by seq. Returns count of affected messages. */
-  hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
+  hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>>;
 
   /** Show a range of messages by seq. Returns count of affected messages. */
-  showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
+  showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>>;
 
   /**
    * 删除 `sessionId` 中严格位于 `afterMessageId` 之后的所有消息（及其 checkpoint 指针），
@@ -103,5 +105,5 @@ export interface MessageService {
   truncateAfter(
     sessionId: string,
     afterMessageId: string | null
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 }

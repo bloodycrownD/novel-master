@@ -41,7 +41,8 @@ export async function handleProjectsCreate(
   try {
     const rt = await getDesktopRuntime();
     const project = await rt.projects.create(req.name);
-    return { ok: true, data: toDto(project) };
+    if (!project.ok) throw project.error;
+    return { ok: true, data: toDto(project.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -53,7 +54,8 @@ export async function handleProjectsRename(
   try {
     const rt = await getDesktopRuntime();
     const project = await rt.projects.rename(req.id, req.name);
-    return { ok: true, data: toDto(project) };
+    if (!project.ok) throw project.error;
+    return { ok: true, data: toDto(project.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -64,7 +66,8 @@ export async function handleProjectsDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.projects.delete(req.id);
+    const deleted = await rt.projects.delete(req.id);
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

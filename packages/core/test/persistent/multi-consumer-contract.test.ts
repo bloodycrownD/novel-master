@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -35,6 +36,6 @@ describe("PersistentState / PersistentPreferences multi-consumer", () => {
     await kkv.set("global-config", "currentProjectId", "legacy-id");
     assert.equal(await ctx.state.getCurrentProjectId(), undefined);
     await ctx.state.setCurrentProjectId("new-id");
-    assert.equal(await kkv.get("nm-workspace-state", "currentProjectId"), "new-id");
+    assert.equal(unwrap(await kkv.get("nm-workspace-state", "currentProjectId")), "new-id");
   });
 });

@@ -28,10 +28,11 @@ export async function runProject(
       const nameFlag = flags.get("name");
       const name = typeof nameFlag === "string" ? nameFlag : "project";
       const p = await rt.projects.create(name);
+      if (!p.ok) throw p.error;
       // Set current project and clear session
-      await rt.state.setCurrentProjectId(p.id);
+      await rt.state.setCurrentProjectId(p.value.id);
       await rt.state.resetCurrentSessionId();
-      console.log(p.id);
+      console.log(p.value.id);
       return;
     }
     case "use": {
@@ -49,12 +50,14 @@ export async function runProject(
         );
       }
       const p = await rt.projects.get(id);
-      console.log(`${p.id}\t${p.name}`);
+      if (!p.ok) throw p.error;
+      console.log(`${p.value.id}\t${p.value.name}`);
       return;
     }
     case "delete": {
       const id = await rt.scope.resolveProjectId(flags);
-      await rt.projects.delete(id);
+      const deleted = await rt.projects.delete(id);
+      if (!deleted.ok) throw deleted.error;
       // Clear current project if it was deleted
       const currentId = await rt.state.getCurrentProjectId();
       if (currentId === id) {
@@ -66,7 +69,8 @@ export async function runProject(
     case "copy": {
       const id = await rt.scope.resolveProjectId(flags);
       const copy = await rt.projects.copy(id);
-      console.log(copy.id);
+      if (!copy.ok) throw copy.error;
+      console.log(copy.value.id);
       return;
     }
     case "workplace":

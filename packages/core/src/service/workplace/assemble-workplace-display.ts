@@ -14,6 +14,7 @@ import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-co
 import { joinFileBlocks, renderFileBlock, renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import { parseRuleSnapshotJson, ruleViewToSnapshotEntries, serializeRuleSnapshot, type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { Interrupt, Outcome } from "@/errors/outcome.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
@@ -84,29 +85,6 @@ interface WorkplaceAssembledFile {
   readonly body: string;
 }
 
-/**
- * workplace 组装被中止（2026-09-30「停止要等 14 秒」实锤的治本点）。
- *
- * 背景：组装段曾是**无观察点的原子块**——回滚触发的 chip 组装与发送触发的
- * run 组装在单 SQLite 连接 + JS 线程上互相排队，叠加到 16 秒；期间用户连点
- * 17 次停止，abort 全部真派发了（0~1ms）却要等组装跑完才能兑现。「停止必须
- * 从受理即可停」这条 RULE 在组装内部同样成立：按文件粒度检查
- * {@link AssembleWorkplaceDisplayOptions.shouldStop}，命中即抛本错误。
- *
- * 两个消费族的收口方式：
- * - **run 侧**（agent-runner）：`shouldStop = () => signal.aborted`，错误沿
- *   既有 catch 冒泡——`signal?.aborted` 为真即路由进统一 abort 处理
- *   （`handleAbort("catch_abort")`），无需专门 catch；
- * - **chip 侧**（mobile/desktop 的 build）：`shouldStop` 接 build 的分段弃权
- *   判据，build 里 catch 本错误并转抛各自的 bail 哨兵类（空串/null 语义）。
- */
-export class WorkplaceAssemblyAbortedError extends Error {
-  constructor() {
-    super("workplace assembly aborted (stop requested mid-files)");
-    this.name = "WorkplaceAssemblyAbortedError";
-  }
-}
-
 /** {@link assembleWorkplaceDisplay} 可选参数。 */
 // nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
 export interface AssembleWorkplaceDisplayOptions {
@@ -118,12 +96,13 @@ export interface AssembleWorkplaceDisplayOptions {
    */
   readonly kkvSessionId?: string;
   /**
-   * 按文件粒度的中止判据（2026-09-30）：真值即抛
-   * {@link WorkplaceAssemblyAbortedError}。检查点在快照加载后 + 每个文件的
+   * 按文件粒度的中止观察点（2026-09-30；错误通道迁移二期改返回值）：返回非
+   * null {@link Interrupt} 即在该文件边界收成 `Outcome.cancelled` /
+   * `Outcome.replaced` 返回，不再抛哨兵。检查点在快照加载后 + 每个文件的
    * 缓存解析/VFS 回填之前——单个大文件的读取本身仍是原子单元（可接受：
    * 粒度从「整个组装 16s」细化到「单个文件」）。缺省不检查。
    */
-  readonly shouldStop?: () => boolean;
+  readonly shouldStop?: () => Interrupt | null;
 }
 
 /**
@@ -138,15 +117,21 @@ export interface AssembleWorkplaceDisplayOptions {
  * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；
  *    `visiblePaths` = 快照全部可见 path（规范化，全量语义）；
  *    `prefixPaths` = 其中 `status === "full"` 的子集（attach 去重 S0 入集口径）
+ * 5. 错误通道迁移二期：`shouldStop` 命中 → `cancelled` / `replaced`（中断不
+ *    伪装成错误）；`resolveLogicalPath` 失败 → `failed`（决定权交上层）。
+ *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
  */
-export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<AssembleWorkplaceDisplayResult> {
+export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<Outcome<AssembleWorkplaceDisplayResult>> {
   if (!layoutHasWorkplace(deps.layout)) {
     return {
-      workplaceDisplay: "",
-      files: [],
-      prefixPaths: [],
-      visiblePaths: [],
-      fingerprint: "",
+      kind: "completed",
+      value: {
+        workplaceDisplay: "",
+        files: [],
+        prefixPaths: [],
+        visiblePaths: [],
+        fingerprint: "",
+      },
     };
   }
 
@@ -164,17 +149,21 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   }
   if (entries.length === 0) {
     return {
-      workplaceDisplay: "",
-      files: [],
-      prefixPaths: [],
-      visiblePaths: [],
-      fingerprint: "",
+      kind: "completed",
+      value: {
+        workplaceDisplay: "",
+        files: [],
+        prefixPaths: [],
+        visiblePaths: [],
+        fingerprint: "",
+      },
     };
   }
   // 快照加载是组装的第一段 IO（可能触发规则评估），加载完先看一眼再进
   // 文件循环——批量预取那条 IN 查询之后全是逐文件重活。
-  if (options?.shouldStop?.() === true) {
-    throw new WorkplaceAssemblyAbortedError();
+  const stopped = options?.shouldStop?.();
+  if (stopped != null) {
+    return stopped;
   }
 
   // 批量预取 file_cache：两条 IN 查询（entries + blobs）替代每文件两跳
@@ -192,11 +181,14 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
     // 按文件粒度的中止观察点（见 AssembleWorkplaceDisplayOptions.shouldStop）
     // ——2026-09-30 实锤：16s 原子组装段里 17 次停止点按全部真派发却无从
     // 兑现。单文件的「缓存解析 + VFS 回填」仍是本轮的最小原子单元。
-    if (options?.shouldStop?.() === true) {
-      throw new WorkplaceAssemblyAbortedError();
+    const stopped = options?.shouldStop?.();
+    if (stopped != null) {
+      return stopped;
     }
     const resolved = resolveLogicalPath(entry.path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) {
+      return { kind: "failed", error: resolved.error };
+    }
     const normalized = resolved.value;
     // 全量可见集（workplace 省略判定用，= 旧 prefixPaths 语义）。
     visiblePaths.push(normalized);
@@ -228,15 +220,18 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   }
   const workplaceBody = joinFileBlocks(blocks);
   return {
-    // 常驻前缀唯一包裹出口：非空 display 外包一层 `<workplace>`（空串不包）。
-    // 禁止在 renderFileBlock / joinFileBlocks / synthetic 路径再次包裹。
-    workplaceDisplay: workplaceBody === "" ? "" : `<workplace>\n${workplaceBody}\n</workplace>`,
-    files,
-    prefixPaths,
-    visiblePaths,
-    // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
-    // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
-    // 本身。
-    fingerprint: fingerprintParts.join(";"),
+    kind: "completed",
+    value: {
+      // 常驻前缀唯一包裹出口：非空 display 外包一层 `<workplace>`（空串不包）。
+      // 禁止在 renderFileBlock / joinFileBlocks / synthetic 路径再次包裹。
+      workplaceDisplay: workplaceBody === "" ? "" : `<workplace>\n${workplaceBody}\n</workplace>`,
+      files,
+      prefixPaths,
+      visiblePaths,
+      // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
+      // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
+      // 本身。
+      fingerprint: fingerprintParts.join(";"),
+    },
   };
 }

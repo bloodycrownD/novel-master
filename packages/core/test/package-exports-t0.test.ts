@@ -1,3 +1,4 @@
+import { unwrap } from "./helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
@@ -70,7 +71,7 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("t0-smoke", "key", "value");
-    assert.equal(await kkv.get("t0-smoke", "key"), "value");
+    assert.equal(unwrap(await kkv.get("t0-smoke", "key")), "value");
   });
 
   it("exports new public sub-entries", () => {

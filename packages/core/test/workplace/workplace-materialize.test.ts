@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -68,7 +69,7 @@ novelMasterTestFixture();
 describe("worktree materialize", () => {
   it("buildListRows and materialize list path never call scanContents", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/hidden/a.md", "A");
     await pvfs.write("/hidden/b.md", "B");
@@ -106,7 +107,7 @@ describe("worktree materialize", () => {
 
   it("filename fill display never calls findByPath", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/fn/a.md", "BODY-A");
     await pvfs.write("/fn/b.md", "BODY-B");
@@ -130,7 +131,7 @@ describe("worktree materialize", () => {
 
   it("lazy findByPath only for visible full/header files", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     for (let i = 0; i < 10; i += 1) {
       await pvfs.write(`/batch/f${i}.md`, `body-${i}`);
@@ -167,7 +168,7 @@ describe("worktree materialize", () => {
 
   it("materialize listRows match buildListRows order", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/parent/a.md", "A");
     await pvfs.write("/parent/sub/b.md", "B");
@@ -194,7 +195,7 @@ describe("worktree materialize", () => {
 
   it("materialize filetreeDisplay 与 renderFileTree 一致且含加载后缀", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/b.md", "B");
@@ -213,8 +214,8 @@ describe("worktree materialize", () => {
 
   it("T-WEC11: materializePersistBlock 与 renderDisplay 一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
 

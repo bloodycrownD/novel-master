@@ -161,12 +161,13 @@ export function useChatTabMessageActions({
       }
       try {
         const forked = await runtime.messages.fork(sessionId, messageId);
+        if (!forked.ok) throw forked.error;
         await reloadLists();
-        await setCurrentSession(forked.id);
+        await setCurrentSession(forked.value.id);
         setChatSubview('conversation');
         setConversationPanel('chat');
         resetStreamingDisplay();
-        showToast(`已分叉：${forked.title ?? forked.id}`);
+        showToast(`已分叉：${forked.value.title ?? forked.value.id}`);
       } catch (error) {
         showToast(toastMessage('分叉失败', error));
       }
@@ -422,6 +423,7 @@ export function useChatTabMessageActions({
               sessionId,
               messageId,
             );
+          if (!result.ok) throw result.error;
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
@@ -429,7 +431,7 @@ export function useChatTabMessageActions({
             projectId,
             sessionId,
           });
-          const changed = result.hiddenCount + result.shownCount;
+          const changed = result.value.hiddenCount + result.value.shownCount;
           showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
         } catch (error) {
           showToast(toastMessage('置位失败', error));

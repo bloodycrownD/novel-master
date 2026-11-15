@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -34,8 +35,8 @@ novelMasterTestFixture();
 describe("VfsZipIoService", () => {
   it("T-IO1: ZIP 导出仍为明文文件内容（不出现 null 伪串）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/plain.md", "中文正文-zip-io1");
     await vfs.write("/empty.md", "");
@@ -65,8 +66,8 @@ describe("VfsZipIoService", () => {
 
   it("Z3: import replaces domain file tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/old.md", "old");
 
@@ -95,8 +96,8 @@ describe("VfsZipIoService", () => {
   it("T-ZIP-GC-RESIDUE: 导入替换后无 ref_count<=0 的 blob 残留行", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     // 独有内容：只被这一个文件引用，删掉它不会有别处引用兜底
@@ -126,8 +127,8 @@ describe("VfsZipIoService", () => {
 
   it("Z4: invalid UTF-8 rejects import without changing domain", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/keep.md", "keep");
 
@@ -149,8 +150,8 @@ describe("VfsZipIoService", () => {
   // 否则后来者会按名字误判语义。
   it("Z5: 片失败 → 原始 Error 抛出、半棵新树被补偿删除、旧内容不恢复", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/before.md", "before");
 
@@ -180,8 +181,8 @@ describe("VfsZipIoService", () => {
 
   it("Z6: import without confirmed does not change domain", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/stay.md", "stay");
 
@@ -197,15 +198,15 @@ describe("VfsZipIoService", () => {
 
   it("export/import preserves explicit empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-empty-dir-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-empty-dir-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.mkdir("/test");
+    unwrap(await vfs.mkdir("/test"));
     await vfs.write("/note.md", "x");
     assert.ok(
       (await vfs.list("/")).some((e) => e.kind === "directory" && e.path === "/test"),
@@ -218,7 +219,7 @@ describe("VfsZipIoService", () => {
     assert.ok(names.includes("test/"), `expected test/ dir marker, got ${names.join(",")}`);
 
     await vfs.write("/note.md", "mutated", { versionCheck: false });
-    await vfs.delete("/test", { recursive: true });
+    unwrap(await vfs.delete("/test", { recursive: true }));
 
     await zipSvc.import(scope, exported, { confirmed: true });
 
@@ -232,8 +233,8 @@ describe("VfsZipIoService", () => {
 
   it("session export bytes round-trip import with UTF-8 text", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rt-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rt-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -254,9 +255,9 @@ describe("VfsZipIoService", () => {
 
   it("Z7: same ZIP bytes yield identical file paths in two session scopes", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-z7-${testIsolationSuffix()}`);
-    const sessionA = await ctx.sessions.create(project.id);
-    const sessionB = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-z7-${testIsolationSuffix()}`));
+    const sessionA = unwrap(await ctx.sessions.create(project.id));
+    const sessionB = unwrap(await ctx.sessions.create(project.id));
     const zipBytes = buildVfsZip(
       new Map([
         ["alpha.md", "alpha"],
@@ -285,8 +286,8 @@ describe("VfsZipIoService", () => {
 
   it("phase A invalid UTF-8 does not reach deleteVfsPrefix", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-val-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-val-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     let deleteReached = false;
     const zipSvc = createVfsZipIoService(ctx.conn, {
       testHook: {
@@ -307,8 +308,8 @@ describe("VfsZipIoService", () => {
 
   it("phase A parent-segment path does not reach deleteVfsPrefix", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-path-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-path-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     let deleteReached = false;
     const zipSvc = createVfsZipIoService(ctx.conn, {
       testHook: {
@@ -329,7 +330,7 @@ describe("VfsZipIoService", () => {
 
   it("project scope export round-trips template tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P2-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P2-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/t.md", "T");
 
@@ -360,8 +361,8 @@ describe("VfsZipIoService", () => {
 
   it("session ZIP imports into project template scope", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-zip-cross-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-zip-cross-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const content = "你好";
     await svfs.write("/ddd/love_message.txt", content);
@@ -382,8 +383,8 @@ describe("VfsZipIoService", () => {
 
   it("Z8: GBK 中文路径 ZIP 导入后列表路径正确", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-z8-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-z8-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -403,8 +404,8 @@ describe("VfsZipIoService", () => {
 
   it("Z9: GBK ZIP 全量覆盖后无旧文件残留", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-z9-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-z9-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -425,8 +426,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z1: directoryPath 缺省 ≡ /，行为同旧整域替换", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -446,8 +447,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z2: 导出 /a 时 ZIP 无 /b 内容", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -467,8 +468,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z3: 导入 /a 后 /b 不变且 /a 与 ZIP 一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz3-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -491,8 +492,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z4: confirmed:false / 非法 UTF-8 → 子树与兄弟均不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -530,8 +531,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z5: 恶意 ../ entry → 失败不删子树", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -564,8 +565,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z6: directoryPath=/a 且 entries 全为首段 a/... → INVALID_PATH，子树不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz6-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz6-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -602,8 +603,8 @@ describe("VfsZipIoService", () => {
 
   it("directoryPath 指向 file 时 export/import 均 INVALID_PATH", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-file-path-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-file-path-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -630,15 +631,15 @@ describe("VfsZipIoService", () => {
 
   it("空 ZIP 导入非根子树仍保留目标目录行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-empty-sub-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-empty-sub-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.mkdir("/a");
+    unwrap(await vfs.mkdir("/a"));
     await vfs.write("/a/old.txt", "old");
     await vfs.write("/b/sib.txt", "sib");
 
@@ -659,8 +660,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z7: directoryPath=/a 且 entries 为 foo.txt（首段 ≠ a）→ 导入成功", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz7-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz7-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -683,8 +684,8 @@ describe("VfsZipIoService", () => {
 
   it("T-IC2: session scope ZIP 导入后清空 rule_snapshot/file_cache 并失效 token cache", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tic2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tic2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -712,9 +713,9 @@ describe("VfsZipIoService", () => {
 
   it("T-IC3: global scope ZIP 导入后 session KKV 与 token cache 均不动", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tic3z-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-tic3z-${testIsolationSuffix()}`));
     // session 仅用来埋脏数据；导入走 global scope（非 session kind，三件套不触发）
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
@@ -741,8 +742,8 @@ describe("VfsZipIoService", () => {
     assert.equal(typeof cardSvc.import, "function");
 
     // 内部装配行为验证：单参工厂创建的服务导入后三件套对齐生效
-    const project = await ctx.projects.create(`P-tic5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tic5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -759,7 +760,7 @@ describe("VfsZipIoService", () => {
     assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), []);
     assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
 
-    const session2 = await ctx.sessions.create(project.id);
+    const session2 = unwrap(await ctx.sessions.create(project.id));
     const scope2 = {
       kind: "session" as const,
       projectId: project.id,
@@ -782,8 +783,8 @@ describe("VfsZipIoService", () => {
 
   it("T-I2: ZIP 导入后前缀下全部目录（显式 directories 与隐式父链、深嵌套）默认启用并参与裁剪", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -826,8 +827,8 @@ describe("VfsZipIoService", () => {
 
   it("T-I3: ZIP 导入后已有规则行（rule_off 与自定义 headCount）不被覆盖", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -860,8 +861,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z8: 导入到根——前缀下子目录补默认启用行、根自身 / 无规则行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz8-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz8-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -900,8 +901,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z9: 补规则行中途失败——已补目录保留、失败之后的目录仍补、导入整体成功", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz9-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz9-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -952,8 +953,8 @@ describe("VfsZipIoService", () => {
 
   it("T-Z10: 补规则行语句真失败时不影响导入整体成功，ZIP 导入仍成功且文件完整", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tz10-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tz10-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,

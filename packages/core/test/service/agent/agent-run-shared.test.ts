@@ -1,3 +1,4 @@
+import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "@/errors/app-error.js";
@@ -41,7 +42,9 @@ function makeRuntime(overrides: {
     },
     sessions: {
       getSessionAgentConfig: async () =>
-        overrides.sessionConfig ?? { agentId: "a1" },
+        overrides.sessionConfig != null
+          ? Result.ok(overrides.sessionConfig)
+          : Result.ok({ agentId: "a1" }),
     },
   };
 }
@@ -72,7 +75,7 @@ describe("agent-run-shared", () => {
     const runtime = makeRuntime({
       currentAgentId: "missing",
       getAgent: async () => {
-        throw new AppError("AGENT_NOT_FOUND", "missing");
+        throw new AppError("AGENT_NOT_FOUND", { agentId: "missing" });
       },
     });
     await assert.rejects(

@@ -15,6 +15,8 @@
  * @module test/tool/subagent-tool-session-file
  */
 
+import { Result } from "../../src/errors/either.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -82,8 +84,8 @@ interface MockResult {
   readonly capturedSessionIds: string[];
 }
 
-function chatErrorNotFound(): Error {
-  return new AppError("CHAT_NOT_FOUND", "session not found");
+function chatErrorNotFound(): Result<never, AppError> {
+  return Result.err(new AppError("CHAT_NOT_FOUND", { detail: "session not found" }));
 }
 
 function makeSubagent(opts: MockOpts = {}): MockResult {
@@ -134,8 +136,8 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     get: async (id: string) => {
       if (opts.getThrows != null) throw opts.getThrows;
       const s = known.get(id);
-      if (s == null) throw chatErrorNotFound();
-      return s;
+      if (s == null) return chatErrorNotFound();
+      return Result.ok(s);
     },
     createSubSession: async (
       parentSessionId: string,
@@ -154,7 +156,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
         updatedAtMs: 0,
       };
       known.set(id, session);
-      return session;
+      return Result.ok(session);
     },
   } as unknown as SessionService;
 
@@ -166,7 +168,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     callableAgents: [{ name: "general" }],
     parentSignal: new AbortController().signal,
     createChildSession: async (title: string) => {
-      const s = await sessions.createSubSession(PARENT_ID, PROJECT_ID, title);
+      const s = unwrap(await sessions.createSubSession(PARENT_ID, PROJECT_ID, title));
       return s.id;
     },
     parentSessionId: opts.parentSessionId ?? PARENT_ID,
@@ -631,8 +633,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-A6: 超限附件照挂（落库事实不变 → chip 可见），降级只发生在子会话 prepare 侧", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
 

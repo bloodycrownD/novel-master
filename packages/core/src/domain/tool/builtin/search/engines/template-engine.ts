@@ -30,7 +30,7 @@
 import { utf8ByteLength } from "@/common/encoding.js";
 import { isRecord } from "@/common/guards.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
-import type { AppError } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import {
   engineApiErrorMessage,
@@ -94,7 +94,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
   // 父 signal 已 abort（取消先于请求）：直接取消、不发起请求——已 aborted 的
   // signal 再注册监听器不会补发回调（WHATWG 语义），不早退会空挂满 30s 超时
   //（照 curl-tool / tool-runner 的取消早退先例）。
-  if (signal?.aborted === true) throw engineFailed(`${template.name} search cancelled before request`);
+  if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${template.name}`});
   const engine = resolved.engine;
   const numResults = normalizeMaxResults(opts.maxResults);
   const values: TemplatePlaceholderValues = {
@@ -171,7 +171,14 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TEMPLATE_ENGINE_TIMEOUT_MS);
   // nm-style: keep-local — add/removeEventListener 必须同一 listener 引用（生命周期不变量），内联会丢移除句柄。
-  const onParentAbort = () => controller.abort();
+  // parentAborted 标志：函数顶部预检（:97）已把 signal?.aborted === true 收窄掉，
+  // 在途取消判据改走监听器置位（let + 闭包写值不受属性收窄影响），且精确区分
+  // 父级取消与 30s 计时器 abort。
+  let parentAborted = false;
+  const onParentAbort = () => {
+    parentAborted = true;
+    controller.abort();
+  };
   // 父级取消（用户点停止 / 回合中断）立即 aborts 在途请求，别让 fetch 挂满超时。
   signal?.addEventListener("abort", onParentAbort, { once: true });
   try {
@@ -185,6 +192,10 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       };
       response = await fetch(requestUrl, init);
     } catch (e) {
+      // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
+      // engineTimeoutError 保留超时失败语义（search-tool 的 catch 是降级边界，
+      // 取消靠 search-tool 重判 signal 终止链降级）。
+      if (parentAborted) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${template.name}`});
       throw engineTimeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS);
     }
 

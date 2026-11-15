@@ -173,29 +173,39 @@ export async function handleUsageStatsQuery(
     const svc: UsageStatsService = rt.usageStats;
     const filter = toCoreFilter(req.filter);
     switch (req.kind) {
-      case "summary":
+      case "summary": {
+        const summary = await svc.getSummary(filter);
+        if (!summary.ok) throw summary.error;
         return {
           ok: true,
-          data: toSummaryDto(await svc.getSummary(filter)),
+          data: toSummaryDto(summary.value),
         };
-      case "daily":
+      }
+      case "daily": {
+        const buckets = await svc.getDailyBuckets(filter);
+        if (!buckets.ok) throw buckets.error;
         return {
           ok: true,
-          data: (await svc.getDailyBuckets(filter)).map(toBucketDto),
+          data: buckets.value.map(toBucketDto),
         };
-      case "hourly":
+      }
+      case "hourly": {
         // dayLocalDate 缺失时传空串，由服务层日期校验拒绝并落入 IpcResult error
+        const buckets = await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter);
+        if (!buckets.ok) throw buckets.error;
         return {
           ok: true,
-          data: (
-            await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter)
-          ).map(toBucketDto),
+          data: buckets.value.map(toBucketDto),
         };
-      case "modelBreakdown":
+      }
+      case "modelBreakdown": {
+        const rows = await svc.getModelBreakdown(filter);
+        if (!rows.ok) throw rows.error;
         return {
           ok: true,
-          data: toModelRowDtos(await svc.getModelBreakdown(filter)),
+          data: toModelRowDtos(rows.value),
         };
+      }
       case "models":
         return { ok: true, data: await svc.listModels() };
       case "requests": {
@@ -204,20 +214,22 @@ export async function handleUsageStatsQuery(
           offset: req.offset ?? 0,
           limit: req.limit ?? 50,
         });
+        if (!page.ok) throw page.error;
         return {
           ok: true,
-          data: { rows: page.rows.map(toRequestRowDto), total: page.total },
+          data: { rows: page.value.rows.map(toRequestRowDto), total: page.value.total },
         };
       }
-      case "sessionDetail":
+      case "sessionDetail": {
         // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
         // sessionId 缺失传空串，由服务层 CHAT_INVALID_ARGUMENT 拒绝并落入 error。
+        const detail = await svc.getSessionUsageDetail(req.sessionId ?? "");
+        if (!detail.ok) throw detail.error;
         return {
           ok: true,
-          data: toSessionDetailDto(
-            await svc.getSessionUsageDetail(req.sessionId ?? "")
-          ),
+          data: toSessionDetailDto(detail.value),
         };
+      }
       default: {
         const exhaustive: never = req.kind;
         return {

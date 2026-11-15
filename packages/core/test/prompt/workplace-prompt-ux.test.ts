@@ -1,6 +1,7 @@
 /**
  * annotate-workplace-ux-fix：常驻工作区 schema / 注入（T-WP1–T-WP6）。
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
@@ -27,6 +28,12 @@ function countTag(haystack: string, tag: string): number {
     n += 1;
     i = at + tag.length;
   }
+}
+
+
+/** Outcome 收窄：本文件用例只关心 completed 分支（中止语义在 abort-fingerprint 套件）。 */
+async function assembleDisplay(...args: Parameters<typeof assembleWorkplaceDisplay>) {
+  return outcomeValue(await assembleWorkplaceDisplay(...args));
 }
 
 describe("workplace schema / wire（T-WP1–T-WP3）", () => {
@@ -119,7 +126,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
     assert.equal(userBody.includes("<<workplace>"), false);
     assert.equal(userBody.includes("<workplace>\n<workplace>"), false);
 
-    const emptyOut = await assembleWorkplaceDisplay(
+    const emptyOut = await assembleDisplay(
       { kind: "session", projectId: "p", sessionId: "s" },
       {
         sessionKkv: createMemorySessionKkv(),

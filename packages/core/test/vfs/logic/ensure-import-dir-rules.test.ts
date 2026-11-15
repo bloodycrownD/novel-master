@@ -5,6 +5,7 @@
  * 键空间 / 差集 / 吞错用内存 stub（不依赖真实 DB）；等价性用例走
  * novelMasterTestFixture 对照真实 WorkplaceService.setDirRule 产物。
  */
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "../../../src/domain/vfs/repositories/vfs-entry.port.js";
@@ -182,16 +183,16 @@ describe("ensureImportDirRules（stub 单测）", () => {
 describe("ensureImportDirRules（真实 DB 等价性）", () => {
   it("helper 补入行与 WorkplaceService.setDirRule({logicalPath}) 产物逐字段等价", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-eq-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-eq-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.mkdir("/角色");
-    await vfs.mkdir("/角色/开场");
+    unwrap(await vfs.mkdir("/角色"));
+    unwrap(await vfs.mkdir("/角色/开场"));
 
     // 左边：helper 直构补行
     await ensureImportDirRules({
@@ -202,15 +203,15 @@ describe("ensureImportDirRules（真实 DB 等价性）", () => {
     });
 
     // 右边：另一个 session 走 WorkplaceService.setDirRule 逐目录设置
-    const session2 = await ctx.sessions.create(project.id);
+    const session2 = unwrap(await ctx.sessions.create(project.id));
     const scope2 = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session2.id,
     };
     const vfs2 = ctx.sessionVfs(project.id, session2.id);
-    await vfs2.mkdir("/角色");
-    await vfs2.mkdir("/角色/开场");
+    unwrap(await vfs2.mkdir("/角色"));
+    unwrap(await vfs2.mkdir("/角色/开场"));
     const wt2 = createWorkplaceService(ctx.conn, scope2);
     await wt2.setDirRule({ logicalPath: "/角色" });
     await wt2.setDirRule({ logicalPath: "/角色/开场" });

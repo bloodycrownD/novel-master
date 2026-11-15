@@ -19,7 +19,7 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import { utf8ByteLength } from "@/common/encoding.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { assertLogicalPathAllowed, scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, validateLogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { logicalFromZipEntryRelativeToDirectory, resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
@@ -141,10 +141,9 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message});
       }
       logical = logicalResult.value;
-      try {
-        assertLogicalPathAllowed(scope, logical);
-      } catch (error) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${error instanceof Error ? error.message : "path not allowed for scope"}`});
+      const allowed = validateLogicalPath(scope, logical);
+      if (!allowed.ok) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}`});
       }
 
       const sizeBytes = utf8ByteLength(content);

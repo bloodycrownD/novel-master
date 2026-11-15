@@ -14,6 +14,7 @@
  * @module test/message-checkpoint/backfill-abort-signal.test
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -303,24 +304,24 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
 
   it("T-BACKFILL-ABORT-SVC: 中断时不写游标；下一轮不带 signal 补齐剩余空窗", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-bfa-${testIsolationSuffix()}`
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/a.md", "v1", { versionCheck: false });
 
     const msgs = [];
     for (const text of ["1", "2", "3", "4"]) {
-      msgs.push(await ctx.messages.append(session.id, "user", textBlocks(text)));
+      msgs.push(unwrap(await ctx.messages.append(session.id, "user", textBlocks(text))));
     }
 
     // 第一轮：已 aborted 的 signal 进场 → 立即弃权。
-    await ctx.messageCheckpoint.backfillMissingBaselines(
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id,
       AbortSignal.abort()
-    );
+    ));
     assert.equal(
       await readCursor(session.id),
       null,
@@ -333,7 +334,7 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
     );
 
     // 第二轮：正常 backfill（不传 signal）→ 幂等补齐全部 4 条 + 游标落库。
-    await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id);
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
     for (const m of msgs) {
       assert.ok(
         await hasCheckpoint(session.id, m.id),

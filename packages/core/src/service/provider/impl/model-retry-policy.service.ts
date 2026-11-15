@@ -47,17 +47,15 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
   constructor(private readonly kkv: KkvService) {}
 
   async getPolicy(): Promise<ModelRetryPolicy | null> {
-    let raw: string;
-    try {
-      raw = await this.kkv.get(MODULE, KEY);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+    const raw = await this.kkv.get(MODULE, KEY);
+    if (!raw.ok) {
+      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
         return null;
       }
-      throw error;
+      throw raw.error;
     }
     try {
-      const parsed = JSON.parse(raw) as Partial<ModelRetryPolicy>;
+      const parsed = JSON.parse(raw.value) as Partial<ModelRetryPolicy>;
       const policy: ModelRetryPolicy = {
         maxRetries: Number(parsed.maxRetries),
         baseDelayMs: Number(parsed.baseDelayMs),
@@ -82,13 +80,12 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
   }
 
   async clearPolicy(): Promise<void> {
-    try {
-      await this.kkv.delete(MODULE, KEY);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+    const deleted = await this.kkv.delete(MODULE, KEY);
+    if (!deleted.ok) {
+      if (isAppError(deleted.error, "KKV_NOT_FOUND")) {
         return;
       }
-      throw error;
+      throw deleted.error;
     }
   }
 }

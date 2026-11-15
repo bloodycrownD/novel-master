@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -64,7 +65,7 @@ novelMasterTestFixture();
 describe("worktree materializeLiveView", () => {
   it("T-WEC13：materializeLiveView 仅加载一次 metadata", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/b.md", "B");
@@ -80,7 +81,7 @@ describe("worktree materializeLiveView", () => {
 
   it("T-WEC13：并发 buildListRows + renderFileTree 合并为单次 metadata", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/x.md", "X");
 
@@ -102,7 +103,7 @@ describe("worktree materializeLiveView", () => {
 
   it("T-WEC13：委托方法与 materializeLiveView 字段一致", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/parity/a.md", "A");
     await pvfs.write("/parity/b.md", "B");
@@ -133,11 +134,11 @@ describe("worktree materializeLiveView", () => {
 
   it("deleteRulesUnderLogicalPrefix 移除幽灵目录行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
-    await svfs.delete("/55", { recursive: true });
+    unwrap(await svfs.delete("/55", { recursive: true }));
 
     const wt = new DefaultWorkplaceService({
       conn: ctx.conn,
@@ -171,8 +172,8 @@ describe("worktree materializeLiveView", () => {
 
   it("renameRulesUnderLogicalPrefix 批量重命名目录及子路径规则", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     // 准备文件结构
     await svfs.write("/原/子/a.md", "a", { versionCheck: false });
@@ -251,8 +252,8 @@ describe("worktree materializeLiveView", () => {
 
   it("renameRulesUnderLogicalPrefix 任一侧失败时整批回滚", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/原/c.md", "c", { versionCheck: false });
 
@@ -332,8 +333,8 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
 
   it("VFS 条目已删除的残留规则不再渲染幽灵目录（列表 + 文件树）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/残留/内/a.md", "a", { versionCheck: false });
 
@@ -349,7 +350,7 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
     });
 
     // 绕过 IPC 层的规则清理直接删 VFS 条目，模拟历史 rename/删除残留
-    await svfs.delete("/残留", { recursive: true });
+    unwrap(await svfs.delete("/残留", { recursive: true }));
 
     const rows = await wt.buildListRows();
     assert.ok(
@@ -362,10 +363,10 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
 
   it("目录行在的空目录仍正常渲染（不误杀）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    await svfs.mkdir("/空目录");
+    unwrap(await svfs.mkdir("/空目录"));
 
     const wt = makeSessionWorkplace(ctx, project.id, session.id);
     await wt.setDirRule({
@@ -386,8 +387,8 @@ describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
 
   it("目录行缺失但前缀下有 live 文件的目录规则仍保留（文件隐含目录）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/隐含/a.md", "a", { versionCheck: false });
 

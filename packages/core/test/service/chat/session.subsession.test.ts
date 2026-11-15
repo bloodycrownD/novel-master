@@ -11,6 +11,7 @@
  * @module test/service/chat/session.subsession.test
  */
 
+import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { type TdbcConnection } from "@novel-master/core";
@@ -42,14 +43,14 @@ async function readParentSessionId(
 describe("SessionSubsession T-S2：createSubSession 基本行为", () => {
   it("createSubSession 写入的 session parentSessionId 正确，且不碰 VFS", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父会话");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父会话"));
 
-    const child = await ctx.sessions.createSubSession(
+    const child = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "查大纲",
-    );
+    ));
 
     assert.equal(child.parentSessionId, parent.id);
     assert.equal(child.projectId, project.id);
@@ -70,8 +71,8 @@ describe("SessionSubsession T-S2：createSubSession 基本行为", () => {
 
   it("createSubSession 父不存在时抛 NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    await assert.rejects(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    await rejectsErr(
       () => ctx.sessions.createSubSession("nope-not-exist", project.id, "x"),
       (error: unknown) =>
         error instanceof Error && /session/i.test(error.message),
@@ -80,18 +81,18 @@ describe("SessionSubsession T-S2：createSubSession 基本行为", () => {
 
   it("listByProject 不返回子 session；listByParentSession 返回子 session", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const child1 = await ctx.sessions.createSubSession(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const child1 = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "c1",
-    );
-    await ctx.sessions.createSubSession(parent.id, project.id, "c2");
+    ));
+    unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "c2"));
 
     // 仓储层 listByProject 应过滤掉子 session。
     const repo = new SqliteSessionRepository(ctx.conn);
-    const projectSessions = await repo.listByProject(project.id);
+    const projectSessions = unwrap(await repo.listByProject(project.id));
     assert.equal(projectSessions.length, 1);
     assert.equal(projectSessions[0]!.id, parent.id);
 
@@ -105,7 +106,7 @@ describe("SessionSubsession T-S2：createSubSession 基本行为", () => {
     }
 
     // service 层 listByProject 同样只返顶层。
-    const serviceList = await ctx.sessions.listByProject(project.id);
+    const serviceList = unwrap(await ctx.sessions.listByProject(project.id));
     assert.equal(serviceList.length, 1);
     assert.equal(serviceList[0]!.id, parent.id);
   });
@@ -114,24 +115,24 @@ describe("SessionSubsession T-S2：createSubSession 基本行为", () => {
 describe("SessionSubsession T-S3：删父 session 级联删子", () => {
   it("delete 父 session 同时删掉全部子 session 及其 messages", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const child = await ctx.sessions.createSubSession(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const child = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "c",
-    );
-    const grandchild = await ctx.sessions.createSubSession(
+    ));
+    const grandchild = unwrap(await ctx.sessions.createSubSession(
       child.id,
       project.id,
       "gc",
-    );
+    ));
 
     // 给子 / 孙 各写一条消息，验证级联清消息。
-    await ctx.messages.append(child.id, "user", textBlocks("子消息"));
-    await ctx.messages.append(grandchild.id, "assistant", textBlocks("孙消息"));
+    unwrap(await ctx.messages.append(child.id, "user", textBlocks("子消息")));
+    unwrap(await ctx.messages.append(grandchild.id, "assistant", textBlocks("孙消息")));
 
-    await ctx.sessions.delete(parent.id);
+    unwrap(await ctx.sessions.delete(parent.id));
 
     // 父 / 子 / 孙 行都没了。
     const repo = new SqliteSessionRepository(ctx.conn);
@@ -146,12 +147,12 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
 
   it("delete 单独子 session 不影响父与兄弟", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const c1 = await ctx.sessions.createSubSession(parent.id, project.id, "c1");
-    const c2 = await ctx.sessions.createSubSession(parent.id, project.id, "c2");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const c1 = unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "c1"));
+    const c2 = unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "c2"));
 
-    await ctx.sessions.delete(c1.id);
+    unwrap(await ctx.sessions.delete(c1.id));
 
     const repo = new SqliteSessionRepository(ctx.conn);
     assert.equal(await repo.findById(c1.id), null);
@@ -165,16 +166,16 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
 
   it("deleteByProject（项目删除）级联清理主会话及其全部子 session", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    const child = await ctx.sessions.createSubSession(
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    const child = unwrap(await ctx.sessions.createSubSession(
       parent.id,
       project.id,
       "c",
-    );
-    await ctx.messages.append(child.id, "user", textBlocks("子消息"));
+    ));
+    unwrap(await ctx.messages.append(child.id, "user", textBlocks("子消息")));
 
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
     const repo = new SqliteSessionRepository(ctx.conn);
     assert.equal(await repo.findById(parent.id), null);
@@ -187,11 +188,11 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
 describe("SessionSubsession T-S4（P2-13）：copy/fork 不继承 parent 关系", () => {
   it("copy 带子 session 的主会话后，新主会话 parentSessionId=null 且不带子", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    await ctx.sessions.createSubSession(parent.id, project.id, "子");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "子"));
 
-    const copy = await ctx.sessions.copy(parent.id);
+    const copy = unwrap(await ctx.sessions.copy(parent.id));
 
     // 新主会话是独立主会话：parentSessionId=null。
     assert.equal(copy.parentSessionId, null);
@@ -209,13 +210,13 @@ describe("SessionSubsession T-S4（P2-13）：copy/fork 不继承 parent 关系"
 
   it("messages.fork 带子 session 的主会话后，forked session parentSessionId=null", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父");
-    await ctx.sessions.createSubSession(parent.id, project.id, "子");
-    const m1 = await ctx.messages.append(parent.id, "user", textBlocks("1"));
-    await ctx.messages.append(parent.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
+    unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "子"));
+    const m1 = unwrap(await ctx.messages.append(parent.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(parent.id, "assistant", textBlocks("2")));
 
-    const forked = await ctx.messages.fork(parent.id, m1.id);
+    const forked = unwrap(await ctx.messages.fork(parent.id, m1.id));
 
     assert.equal(forked.parentSessionId, null);
     assert.equal(await readParentSessionId(ctx.conn, forked.id), null);

@@ -92,6 +92,13 @@ function keyOf(
   });
 }
 
+/** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
+async function resolveCompleted(...args: Parameters<typeof resolveCurrentPromptTokens>) {
+  const outcome = await resolveCurrentPromptTokens(...args);
+  assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
+  return outcome.value;
+}
+
 describe("chat-token-estimate-memo（单元）", () => {
   beforeEach(() => clearChatTokenEstimateMemo());
 
@@ -161,7 +168,7 @@ describe("chat-token-estimate-memo（单元）", () => {
     );
     assert.equal(lookupChatTokenEstimateMemo("sess-layout", keyA)?.tokenCount, 424242);
     // 调用方真的把 layout 传进了键：resolve 回写的条目落在含 layout 的新键上。
-    const fresh = await resolveCurrentPromptTokens(
+    const fresh = await resolveCompleted(
       "sess-layout",
       params(ctx, {system: "改版人设"}),
       { preferEstimate: true },
@@ -261,7 +268,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
       estimated: false,
       counterKind: "glm",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-1",
       params(ctx),
       { preferEstimate: true },
@@ -273,7 +280,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("估算 miss → 计算并记忆；消息变化 → 键变 → 重新计算", async () => {
-    const first = await resolveCurrentPromptTokens(
+    const first = await resolveCompleted(
       "sess-memo-2",
       params(ctxWith({fingerprint: "fp-2", messages: [msg(1, "一句话")]})),
       { preferEstimate: true },
@@ -281,14 +288,14 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     assert.equal(first.estimated, true);
     assert.ok(first.tokenCount > 0);
     // 同键再调 → 记忆命中同值。
-    const second = await resolveCurrentPromptTokens(
+    const second = await resolveCompleted(
       "sess-memo-2",
       params(ctxWith({fingerprint: "fp-2", messages: [msg(1, "一句话")]})),
       { preferEstimate: true },
     );
     assert.deepEqual(second, first);
     // 消息内容变长 → 键变 → miss → 数值按新内容重算（CJK 感知，必然更大）。
-    const third = await resolveCurrentPromptTokens(
+    const third = await resolveCompleted(
       "sess-memo-2",
       params(
         ctxWith({
@@ -302,7 +309,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("无指纹（旧路径）→ 记忆不参与：注入条目不会串值", async () => {
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-3",
       params(ctxWith({fingerprint: undefined})),
       { preferEstimate: true },
@@ -312,19 +319,19 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
   });
 
   it("精确分支完成 → 回写记忆 → 下一次估算帧直接拿精确档（升级语义）", async () => {
-    const estimate = await resolveCurrentPromptTokens(
+    const estimate = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
       { preferEstimate: true },
     );
     assert.equal(estimate.estimated, true);
     // 完整口径（preferEstimate=false）：真分词器计数并回写记忆。
-    const precise = await resolveCurrentPromptTokens(
+    const precise = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
     );
     assert.equal(precise.estimated, false, "前提：完整口径出精确读数");
-    const after = await resolveCurrentPromptTokens(
+    const after = await resolveCompleted(
       "sess-memo-4",
       params(ctxWith({fingerprint: "fp-4"})),
       { preferEstimate: true },
@@ -348,7 +355,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
       estimated: false,
       counterKind: "tiktoken",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-5",
       params(ctx),
     );
@@ -366,7 +373,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
       estimated: true,
       counterKind: "heuristic",
     });
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-memo-6",
       params(ctx),
     );
@@ -379,7 +386,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     // 注入夸张的指纹估读：分解路径必须采用缓存值（删掉 lookup 即现算真值
     // ≠ 注入值，断言即红）。layout 带 workplace 块（render 门控对齐）。
     rememberWorkplaceEstimateByFingerprint("fp-inc", 12345);
-    const result = await resolveCurrentPromptTokens(
+    const result = await resolveCompleted(
       "sess-inc",
       params(ctx, {workplace: "【工作区】"}),
       { preferEstimate: true },
@@ -390,7 +397,7 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
       `分解估读应采用注入的指纹缓存值（got ${result.tokenCount}）`,
     );
     // 跨会话共享：另一个会话同指纹不再重算 workplace 段（结果同值口径）。
-    const other = await resolveCurrentPromptTokens(
+    const other = await resolveCompleted(
       "sess-inc-2",
       params(ctxWith({fingerprint: "fp-inc"}), {workplace: "【工作区】"}),
       { preferEstimate: true },
@@ -400,12 +407,12 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
 
   it("增量分解与整串估算口径一致（哨兵替换法，差值 ≤ 各段 ceil 常数）", async () => {
     const wpLayout = {workplace: "【工作区】"};
-    const decomposed = await resolveCurrentPromptTokens(
+    const decomposed = await resolveCompleted(
       "sess-parity-a",
       params(ctxWith({fingerprint: "fp-parity"}), wpLayout),
       { preferEstimate: true },
     );
-    const whole = await resolveCurrentPromptTokens(
+    const whole = await resolveCompleted(
       "sess-parity-b",
       params(ctxWith({fingerprint: undefined}), wpLayout),
       { preferEstimate: true },

@@ -62,11 +62,13 @@ export { createTemplatePullService } from "../service/template/create-template-p
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
 export {
   assembleWorkplaceDisplay,
-  WorkplaceAssemblyAbortedError,
   type AssembleWorkplaceDisplayDeps,
   type AssembleWorkplaceDisplayResult,
   type AssembleWorkplaceDisplayOptions,
 } from "../service/workplace/assemble-workplace-display.js";
+// 控制流结果类型（错误通道迁移二期）：组装中止改沿 Outcome.cancelled/replaced
+// 返回，apps build 侧按 kind 判定收口，不再 catch 哨兵类。
+export type { Interrupt, Outcome } from "../errors/outcome.js";
 export { layoutHasWorkplace } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
   refreshRuleSnapshot,

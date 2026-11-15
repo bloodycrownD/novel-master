@@ -27,6 +27,7 @@ import {
 } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -105,18 +106,18 @@ export class DefaultProjectService implements ProjectService {
     return this.deps.projects.list();
   }
 
-  async get(id: string): Promise<ChatProject> {
+  async get(id: string): Promise<Result<ChatProject, AppError>> {
     const project = await this.deps.projects.findById(id);
     if (project == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
     }
-    return project;
+    return Result.ok(project);
   }
 
-  async create(name: string): Promise<ChatProject> {
+  async create(name: string): Promise<Result<ChatProject, AppError>> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"});
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"}));
     }
     const now = Date.now();
     const project: ChatProject = {
@@ -126,15 +127,16 @@ export class DefaultProjectService implements ProjectService {
       updatedAtMs: now,
     };
     await this.deps.projects.insert(project);
-    return project;
+    return Result.ok(project);
   }
 
-  async rename(id: string, name: string): Promise<ChatProject> {
+  async rename(id: string, name: string): Promise<Result<ChatProject, AppError>> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"});
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"}));
     }
     const existing = await this.get(id);
+    if (!existing.ok) return existing;
     const updatedAtMs = Date.now();
     const updated = await this.deps.projects.updateName(
       id,
@@ -142,12 +144,12 @@ export class DefaultProjectService implements ProjectService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
     }
-    return { ...existing, name: trimmed, updatedAtMs };
+    return Result.ok({ ...existing.value, name: trimmed, updatedAtMs });
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string): Promise<Result<void, AppError>> {
     await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const project = await r.projects.findById(id);
@@ -209,18 +211,20 @@ export class DefaultProjectService implements ProjectService {
     await runDeferredBlobGc(this.deps.conn);
     // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
     await runDeferredFileCacheGc(this.deps.conn);
+    return Result.ok(undefined);
   }
 
   /**
    * @deprecated 项目智能体已下线，保留用于 DB 历史数据读取兼容。
    */
-  async getAgentConfig(id: string): Promise<ProjectAgentConfig> {
-    await this.get(id);
+  async getAgentConfig(id: string): Promise<Result<ProjectAgentConfig, AppError>> {
+    const r = await this.get(id);
+    if (!r.ok) return Result.err(r.error);
     const json = await this.deps.projects.getAgentConfig(id);
     if (json == null) {
-      return DEFAULT_PROJECT_AGENT_CONFIG;
+      return Result.ok(DEFAULT_PROJECT_AGENT_CONFIG);
     }
-    return parseStoredAgentConfig(json);
+    return Result.ok(parseStoredAgentConfig(json));
   }
 
   /**
@@ -230,17 +234,19 @@ export class DefaultProjectService implements ProjectService {
     id: string,
     patch: ProjectAgentConfigPatch,
     options: ValidateAgentDefinitionOptions = {}
-  ): Promise<ProjectAgentConfig> {
-    await this.get(id);
+  ): Promise<Result<ProjectAgentConfig, AppError>> {
+    const r = await this.get(id);
+    if (!r.ok) return Result.err(r.error);
     const current = await this.getAgentConfig(id);
-    const merged = mergeAgentConfigPatch(current, patch);
+    if (!current.ok) return current;
+    const merged = mergeAgentConfigPatch(current.value, patch);
     const validated = decode(
       projectAgentConfigSchema.toWire(merged),
       projectAgentConfigSchema
     );
     if (validated.mode === "custom") {
       const validation = await validateAgentDefinition(validated.definition!, options);
-      if (!validation.ok) throw validation.error;
+      if (!validation.ok) return Result.err(validation.error);
     }
     const updatedAtMs = Date.now();
     const configJson = serializeAgentConfigForStorage(validated);
@@ -250,20 +256,22 @@ export class DefaultProjectService implements ProjectService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
     }
-    return validated;
+    return Result.ok(validated);
   }
 
-  async copy(id: string): Promise<ChatProject> {
+  async copy(id: string): Promise<Result<ChatProject, AppError>> {
     const source = await this.get(id);
+    if (!source.ok) return source;
+    const src = source.value;
     const sourceAgentConfigJson = await this.deps.projects.getAgentConfig(id);
-    return this.deps.conn.transaction(async (tx) => {
+    const copied = await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
       const copy: ChatProject = {
         id: randomUUID(),
-        name: `${source.name} (copy)`,
+        name: `${src.name} (copy)`,
         createdAtMs: now,
         updatedAtMs: now,
       };
@@ -312,5 +320,6 @@ export class DefaultProjectService implements ProjectService {
       );
       return copy;
     });
+    return Result.ok(copied);
   }
 }

@@ -5,6 +5,7 @@
  * @module test/vfs/entry-sequence-repair
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
@@ -33,7 +34,7 @@ async function seedOrphanOccupiedIds(
   ];
   const ids: number[] = [];
   for (const n of names) {
-    await skills.writeSkillFile("global", n, undefined, SKILL_MD(n));
+    unwrap(await skills.writeSkillFile("global", n, undefined, SKILL_MD(n)));
     const row = await ctx.conn.query<{ id: number }>(
       "SELECT entry_id AS id FROM vfs_entry WHERE scope_key = 'global:meta' AND path = ?",
       [`/meta/skills/${n}/SKILL.md`],
@@ -86,7 +87,7 @@ describe("vfs entry-sequence repair", () => {
     assert.equal(after.needsRepair, false, "修复后不再检出");
 
     const ok = `healed-${testIsolationSuffix()}`;
-    const r = await skills.writeSkillFile("global", ok, undefined, SKILL_MD(ok));
+    const r = unwrap(await skills.writeSkillFile("global", ok, undefined, SKILL_MD(ok)));
     assert.ok(r.version >= 1);
 
     // 发号器已越过孤儿最大号

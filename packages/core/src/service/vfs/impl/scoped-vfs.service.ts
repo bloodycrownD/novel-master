@@ -10,9 +10,9 @@
 
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {
-  assertLogicalPathAllowed,
   resolveLogicalPath,
   scopeKey,
+  validateLogicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 import { matchGlob } from "../glob-match.js";
@@ -48,7 +48,8 @@ export class ScopedVfsService implements VfsService {
     const resolvedDir = resolveLogicalPath(dir);
     if (!resolvedDir.ok) throwLegacyVfs(resolvedDir.error);
     const logicalDir = resolvedDir.value;
-    assertLogicalPathAllowed(this.scope, logicalDir);
+    const allowedDir = validateLogicalPath(this.scope, logicalDir);
+    if (!allowedDir.ok) throwLegacyVfs(allowedDir.error);
     return this.inner.list(this.scopeKeyStr, logicalDir, options);
   }
 
@@ -56,7 +57,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.mkdir(this.scopeKeyStr, logical);
   }
 
@@ -64,7 +66,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.read(this.scopeKeyStr, logical);
   }
 
@@ -72,7 +75,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.findContentSize(this.scopeKeyStr, logical);
   }
 
@@ -83,7 +87,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.write(this.scopeKeyStr, logical, content);
   }
 
@@ -96,7 +101,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.replace(
       this.scopeKeyStr,
       logical,
@@ -113,7 +119,8 @@ export class ScopedVfsService implements VfsService {
       const resolved = resolveLogicalPath(cwd);
       if (!resolved.ok) throwLegacyVfs(resolved.error);
       logicalCwd = resolved.value;
-      assertLogicalPathAllowed(this.scope, logicalCwd);
+      const allowedCwd = validateLogicalPath(this.scope, logicalCwd);
+      if (!allowedCwd.ok) throwLegacyVfs(allowedCwd.error);
     }
     return this.inner.glob(this.scopeKeyStr, pattern, { cwd: logicalCwd });
   }
@@ -128,7 +135,8 @@ export class ScopedVfsService implements VfsService {
       const resolved = resolveLogicalPath(prefix);
       if (!resolved.ok) throwLegacyVfs(resolved.error);
       logicalPrefix = resolved.value;
-      assertLogicalPathAllowed(this.scope, logicalPrefix);
+      const allowedPrefix = validateLogicalPath(this.scope, logicalPrefix);
+      if (!allowedPrefix.ok) throwLegacyVfs(allowedPrefix.error);
     }
     const { pathGlob, ...innerOptions } = options ?? {};
     const matches = await this.inner.grep(this.scopeKeyStr, pattern, {
@@ -144,7 +152,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.delete(this.scopeKeyStr, logical, options);
   }
 
@@ -152,7 +161,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.resetHeadToVersion(this.scopeKeyStr, logical, version);
   }
 
@@ -163,7 +173,8 @@ export class ScopedVfsService implements VfsService {
     const resolved = resolveLogicalPath(path);
     if (!resolved.ok) throwLegacyVfs(resolved.error);
     const logical = resolved.value;
-    assertLogicalPathAllowed(this.scope, logical);
+    const allowed = validateLogicalPath(this.scope, logical);
+    if (!allowed.ok) throwLegacyVfs(allowed.error);
     return this.inner.hardDelete(this.scopeKeyStr, logical, options);
   }
 
@@ -178,8 +189,10 @@ export class ScopedVfsService implements VfsService {
     const resolvedTo = resolveLogicalPath(to);
     if (!resolvedTo.ok) throwLegacyVfs(resolvedTo.error);
     const logicalTo = resolvedTo.value;
-    assertLogicalPathAllowed(this.scope, logicalFrom);
-    assertLogicalPathAllowed(this.scope, logicalTo);
+    const allowedFrom = validateLogicalPath(this.scope, logicalFrom);
+    if (!allowedFrom.ok) throwLegacyVfs(allowedFrom.error);
+    const allowedTo = validateLogicalPath(this.scope, logicalTo);
+    if (!allowedTo.ok) throwLegacyVfs(allowedTo.error);
     return this.inner.renamePath(
       this.scopeKeyStr,
       logicalFrom,
@@ -195,8 +208,10 @@ export class ScopedVfsService implements VfsService {
     const resolvedNew = resolveLogicalPath(newDir);
     if (!resolvedNew.ok) throwLegacyVfs(resolvedNew.error);
     const logicalNew = resolvedNew.value;
-    assertLogicalPathAllowed(this.scope, logicalOld);
-    assertLogicalPathAllowed(this.scope, logicalNew);
+    const allowedOld = validateLogicalPath(this.scope, logicalOld);
+    if (!allowedOld.ok) throwLegacyVfs(allowedOld.error);
+    const allowedNew = validateLogicalPath(this.scope, logicalNew);
+    if (!allowedNew.ok) throwLegacyVfs(allowedNew.error);
     return this.inner.renamePrefix(this.scopeKeyStr, logicalOld, logicalNew);
   }
 }

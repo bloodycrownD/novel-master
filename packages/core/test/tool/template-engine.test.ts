@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 
 import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import { utf8ByteLength } from "../../src/common/encoding.js";
 import type { ResolvedEngineConfig, SearchEngineTemplate } from "../../src/domain/tool/builtin/search/types.js";
@@ -367,7 +368,12 @@ describe("模板执行器：父级取消透传（G-1）", () => {
       return jsonOk([]);
     }) as typeof globalThis.fetch;
 
-    await assert.rejects(runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal), /测试引擎 search cancelled before request/);
+    await assert.rejects(runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("bocha"), "q", {}, {}, fetchFn, signal), (error: unknown) => {
+      // 错误通道迁移二期：取消统一 TOOL_CANCELLED 控制流码（不再走引擎失败文案）。
+      assert.ok(isAppError(error, "TOOL_CANCELLED"));
+      assert.match(error.message, /Tool cancelled: 测试引擎/);
+      return true;
+    });
     assert.equal(fetchCalls, 0, "已取消的回合不得再发引擎请求");
     assert.equal(added.length, 0, "早退路径不注册 abort 监听器");
     assert.equal(removed.length, 0);
@@ -387,8 +393,10 @@ describe("模板执行器：父级取消透传（G-1）", () => {
 
     const error = await pending;
     const message = error instanceof Error ? error.message : String(error);
-    assert.equal((error as { key?: string }).key, "TOOL_SEARCH_FAILED", "取消错误经 engineTimeoutError 走引擎失败通道（search-tool 循环再兜底转「搜索已取消」）");
-    assert.match(message, /测试引擎 search timed out after 30000ms/);
+    // 错误通道迁移二期：父级取消 → TOOL_CANCELLED 控制流码（30s 计时器才走
+    // engineTimeoutError 引擎失败通道），降级链在 search-tool 侧按取消短路。
+    assert.equal((error as { key?: string }).key, "TOOL_CANCELLED");
+    assert.match(message, /Tool cancelled: 测试引擎/);
     // 监听器无泄漏：注册与移除一一对应，且为同一 listener 引用。
     assert.equal(added.length, 1);
     assert.equal(removed.length, 1);

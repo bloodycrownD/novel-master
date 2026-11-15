@@ -87,12 +87,10 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     const keys = await this.kkv.listKeys(PREFERENCES_MODULE);
     const entries: Array<{ key: string; value: string }> = [];
     for (const key of keys) {
-      try {
-        const value = await this.kkv.get(PREFERENCES_MODULE, key);
-        entries.push({ key, value });
-      } catch {
-        // Skip keys removed between list and get
-      }
+      const value = await this.kkv.get(PREFERENCES_MODULE, key);
+      // Skip keys removed between list and get（KKV_NOT_FOUND 走 Err 通道）
+      if (!value.ok) continue;
+      entries.push({ key, value: value.value });
     }
     entries.sort((a, b) => a.key.localeCompare(b.key));
     return entries;
@@ -122,24 +120,23 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   private async getRaw(key: string): Promise<string | undefined> {
-    try {
-      return await this.kkv.get(PREFERENCES_MODULE, key);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+    const raw = await this.kkv.get(PREFERENCES_MODULE, key);
+    if (!raw.ok) {
+      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
         return undefined;
       }
-      throw error;
+      throw raw.error;
     }
+    return raw.value;
   }
 
   private async deletePref(key: string): Promise<void> {
-    try {
-      await this.kkv.delete(PREFERENCES_MODULE, key);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) {
+    const deleted = await this.kkv.delete(PREFERENCES_MODULE, key);
+    if (!deleted.ok) {
+      if (isAppError(deleted.error, "KKV_NOT_FOUND")) {
         return;
       }
-      throw error;
+      throw deleted.error;
     }
   }
 }

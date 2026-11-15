@@ -24,26 +24,25 @@ export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
 
   return {
     async get(key: string) {
-      try {
-        return await kkv.get(APP_UI_KKV_MODULE, key);
-      } catch (error) {
-        if (isAppError(error, 'KKV_NOT_FOUND')) {
+      const raw = await kkv.get(APP_UI_KKV_MODULE, key);
+      if (!raw.ok) {
+        if (isAppError(raw.error, 'KKV_NOT_FOUND')) {
           return key in defaults ? defaults[key] : undefined;
         }
-        throw error;
+        throw raw.error;
       }
+      return raw.value;
     },
     async set(key: string, value: string) {
       await kkv.set(APP_UI_KKV_MODULE, key, value);
     },
     async delete(key: string) {
-      try {
-        await kkv.delete(APP_UI_KKV_MODULE, key);
-      } catch (error) {
-        if (isAppError(error, 'KKV_NOT_FOUND')) {
+      const deleted = await kkv.delete(APP_UI_KKV_MODULE, key);
+      if (!deleted.ok) {
+        if (isAppError(deleted.error, 'KKV_NOT_FOUND')) {
           return;
         }
-        throw error;
+        throw deleted.error;
       }
     },
     async listKeys() {

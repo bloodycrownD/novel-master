@@ -14,6 +14,7 @@
  * @module test/vfs/vfs-batch-ingest-revision-alignment
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
@@ -72,7 +73,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   }
 
   it("D1: 批量 ingest（含覆盖写）后每个 head_version 都有对应 vfs_revision 行", async () => {
-    const project = await ctx.projects.create(`P-d1-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d1-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
     const vfs = createScopedVfsService(conn, scope);
@@ -108,7 +109,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D2: 新建 ref=1；覆盖写后旧版本 ref=0、新版本 ref=1", async () => {
-    const project = await ctx.projects.create(`P-d2-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d2-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
     const vfs = createScopedVfsService(conn, scope);
@@ -130,8 +131,8 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
       [scopeKey]
     );
     const entryRepo = new SqliteVfsEntryRepository(conn);
-    const entryA = (await entryRepo.findByPath(scopeKey, "/a.md"))!;
-    const entryB = (await entryRepo.findByPath(scopeKey, "/b.md"))!;
+    const entryA = (unwrap(await entryRepo.findByPath(scopeKey, "/a.md")))!;
+    const entryB = (unwrap(await entryRepo.findByPath(scopeKey, "/b.md")))!;
     const byEntry = new Map<number, Array<{ version: number; ref: number }>>();
     for (const r of refs) {
       const list = byEntry.get(Number(r.entry_id)) ?? [];
@@ -146,14 +147,14 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D3: checkpoint 钉住批量导入的 head 不抛 NOT_FOUND（真 head 的 ref 可回收）", async () => {
-    const project = await ctx.projects.create(`P-d3-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d3-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const messageId = (
-      await ctx.messages.append(session.id, "user", {
+      unwrap(await ctx.messages.append(session.id, "user", {
         blocks: [{ type: "text", text: "hi" }],
-      })
+      }))
     ).id;
 
     const batch = createVfsBatchIoService(conn);
@@ -191,7 +192,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("D5: 覆盖写版本单调 —— 既有 v1/v2 后批量 ingest 得 v3，版本连续无洞", async () => {
-    const project = await ctx.projects.create(`P-d5-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-d5-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
     const vfs = createScopedVfsService(conn, scope);
@@ -226,7 +227,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   });
 
   it("幂等：同内容再导入一次不新增 revision（共享 writeWithRevision 的同文短路）", async () => {
-    const project = await ctx.projects.create(`P-idem-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-idem-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const scopeKey = `project:${project.id}`;
 
@@ -263,7 +264,7 @@ describe("CS-06 批量 ingest 与 revision 层对齐", () => {
   it("writeWithRevision 复用：批量通道保留导入链路的外部文件名语义（跳过名校验）", async () => {
     // 牙齿：把 `skipNameValidation` 去掉，本条立刻红（以前能导入的外部文件名
     // 变成「导入失败」，改变了 validate-entry-name.ts 已拍板的导入语义）。
-    const project = await ctx.projects.create(`P-name-${Date.now()}`);
+    const project = unwrap(await ctx.projects.create(`P-name-${Date.now()}`));
     const scope = { kind: "project" as const, projectId: project.id };
 
     const batch = createVfsBatchIoService(conn);

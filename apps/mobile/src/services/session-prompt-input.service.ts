@@ -16,7 +16,8 @@ import {
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core/prompt';
-import {assembleWorkplaceDisplay, WorkplaceAssemblyAbortedError} from '@novel-master/core/workplace';
+import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
+import type {Interrupt} from '@novel-master/core/workplace';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export interface SessionPromptScope {
@@ -30,9 +31,10 @@ export interface SessionPromptScope {
  * 的这一轮——build 与发送链共享 JS 线程与单 SQLite 连接，曾把 POST
  * 派发从 +1.2s 拖到 +19.6s。**build 分段间 + build/resolve 关键边界检查**
  * （本类只覆盖 build 段与 build→resolve 之间的那道检查点；resolve 段内部的
- * 整串级重活由 core 抛 `PromptTokenResolveBailedError` 负责——三类弃权点在
- * chip 读口同款 catch 里收成同一个空串哨兵）命中即抛本错误，调用方
- * （chip 读口）捕获后按「保留旧标签」收场，不触发 fallback 重算。
+ * 整串级重活由 core 读口负责——错误通道迁移二期起弃权沿 Outcome.cancelled/
+ * replaced 返回，读口就地转抛本哨兵收口，三类弃权点在 chip 读口同款 catch
+ * 里收成同一个空串哨兵）命中即抛本错误，调用方（chip 读口）捕获后按
+ * 「保留旧标签」收场，不触发 fallback 重算。
  * 非 chip 消费方（预览等）不传 shouldBail，行为不变。
  */
 export class ChatPromptBuildBailedError extends Error {
@@ -109,28 +111,30 @@ export async function buildSessionPromptInput(
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
   // 挂分段弃权判据（2026-09-30「16s 原子组装段」治本的同款下沉）：run 起步后
-  // 本刷新在第一个文件边界就死；中止错误就地转抛 build 的统一哨兵类，读口
-  // catch 的判定不变。fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它
-  // 免掉重复序列化/计数。
-  let assembled: Awaited<ReturnType<typeof assembleWorkplaceDisplay>>;
-  try {
-    assembled = await assembleWorkplaceDisplay(
-      wtScope,
-      {
-        sessionKkv: runtime.sessionKkv,
-        workplace: wt,
-        vfs,
-        layout: resolved.prompts,
-      },
-      {shouldStop: () => shouldBail?.() === true},
-    );
-  } catch (error) {
-    if (error instanceof WorkplaceAssemblyAbortedError) {
-      throw new ChatPromptBuildBailedError();
-    }
-    throw error;
+  // 本刷新在第一个文件边界就死；错误通道迁移二期起中止沿 Outcome.cancelled/
+  // replaced 返回，此处转抛 build 的统一哨兵，读口 catch 的判定不变。
+  // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
+  const assembled = await assembleWorkplaceDisplay(
+    wtScope,
+    {
+      sessionKkv: runtime.sessionKkv,
+      workplace: wt,
+      vfs,
+      layout: resolved.prompts,
+    },
+    {
+      shouldStop: (): Interrupt | null =>
+        shouldBail?.() === true ? {kind: 'replaced'} : null,
+    },
+  );
+  if (assembled.kind === 'failed') {
+    // 组装内的已知失败（如路径解析）：与旧 throw 同路径上抛，不吞成弃权。
+    throw assembled.error;
   }
-  const {workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint} = assembled;
+  if (assembled.kind !== 'completed') {
+    throw new ChatPromptBuildBailedError();
+  }
+  const {workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint} = assembled.value;
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] workplace +${Date.now() - diagT0}ms`);

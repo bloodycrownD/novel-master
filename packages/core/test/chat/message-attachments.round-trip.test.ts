@@ -2,6 +2,7 @@
  * Step 5：attachments_json + MessageService.append round-trip。
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -17,14 +18,14 @@ novelMasterTestFixture();
 describe("message attachments round-trip (Step 5)", () => {
   it("append + list 读写 attachments_json；缺附件为 undefined", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const plain = await ctx.messages.append(
+    const plain = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("hello"),
-    );
+    ));
     assert.equal(plain.attachments, undefined);
 
     const attachments: MessageAttachment[] = [
@@ -42,12 +43,12 @@ describe("message attachments round-trip (Step 5)", () => {
         content: `<action name="write">\n{"path":"/x.md","content":""}\n</action>`,
       },
     ];
-    const withAtt = await ctx.messages.append(
+    const withAtt = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("你好"),
       { attachments },
-    );
+    ));
     assert.equal(withAtt.content.blocks[0]?.type, "text");
     if (withAtt.content.blocks[0]?.type === "text") {
       assert.equal(withAtt.content.blocks[0].text, "你好");
@@ -66,14 +67,14 @@ describe("message attachments round-trip (Step 5)", () => {
       "你好",
     );
 
-    const byId = await ctx.messages.get(withAtt.id);
+    const byId = unwrap(await ctx.messages.get(withAtt.id));
     assert.deepEqual(byId.attachments, attachments);
   });
 
   it("fork 保留 attachments", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const attachments: MessageAttachment[] = [
       {
         name: "/a.md",
@@ -83,13 +84,13 @@ describe("message attachments round-trip (Step 5)", () => {
         path: "/a.md",
       },
     ];
-    const msg = await ctx.messages.append(
+    const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("body"),
       { attachments },
-    );
-    const forked = await ctx.messages.fork(session.id, msg.id);
+    ));
+    const forked = unwrap(await ctx.messages.fork(session.id, msg.id));
     const forkedMessages = await ctx.messages.listBySession(forked.id);
     assert.equal(forkedMessages.length, 1);
     assert.deepEqual(forkedMessages[0]!.attachments, attachments);
@@ -97,8 +98,8 @@ describe("message attachments round-trip (Step 5)", () => {
 
   it("updateContent 保留 attachments_json（P2）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const attachments: MessageAttachment[] = [
       {
         name: "/a.md",
@@ -108,16 +109,16 @@ describe("message attachments round-trip (Step 5)", () => {
         path: "/a.md",
       },
     ];
-    const msg = await ctx.messages.append(
+    const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("old"),
       { attachments },
-    );
-    const updated = await ctx.messages.updateContent(
+    ));
+    const updated = unwrap(await ctx.messages.updateContent(
       msg.id,
       textBlocks("new"),
-    );
+    ));
     assert.equal(
       updated.content.blocks[0]?.type === "text"
         ? updated.content.blocks[0].text
@@ -129,8 +130,8 @@ describe("message attachments round-trip (Step 5)", () => {
 
   it("MA-4: 含单条非法附件的消息读回后仍带合法附件（核心端到端断言）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     // 先用严格写侧落一条合法附件的消息
     const legal: MessageAttachment[] = [
@@ -142,12 +143,12 @@ describe("message attachments round-trip (Step 5)", () => {
         path: "/keep.md",
       },
     ];
-    const msg = await ctx.messages.append(
+    const msg = unwrap(await ctx.messages.append(
       session.id,
       "user",
       textBlocks("正文"),
       { attachments: legal },
-    );
+    ));
 
     // 直接把 attachments_json 改成「一条合法 + 一条含未知键的非法」，
     // 模拟历史行里今天不再接受的附件形态（append-only，不可重写）

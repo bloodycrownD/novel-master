@@ -137,12 +137,20 @@ export async function runPrompt(
   const messages = allMessages.filter((m) => !m.hidden);
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
-  const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
+  const assembled = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: rt.sessionKkv,
     workplace: rt.workplace(wtScope),
     vfs,
     layout,
   });
+  if (assembled.kind === "failed") {
+    throw assembled.error;
+  }
+  if (assembled.kind !== "completed") {
+    // 本调用无 shouldStop 判据，中断分支恒不到（防御性收窄；错误通道迁移二期）。
+    throw new Error("workplace assembly interrupted without shouldStop");
+  }
+  const { workplaceDisplay } = assembled.value;
   // 技能索引预算：与双端预览同模式（probe + resolve 判 skill，D4 联动）。
   const skillsIndex = await budgetSkillsIndex(rt, projectId, layout);
   const ctx = {

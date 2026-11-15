@@ -67,7 +67,7 @@ export type { VfsRevisionRepository } from "../domain/vfs/repositories/vfs-revis
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
 export {
   resolveLogicalPath,
-  assertLogicalPathAllowed,
+  validateLogicalPath,
   toPhysicalPath,
   toLogicalPath,
   scopePhysicalPrefix,

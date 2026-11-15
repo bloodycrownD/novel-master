@@ -26,6 +26,7 @@
  * @module test/service/agent/subsession-workspace-isolation.test
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -267,9 +268,11 @@ function captureChildSessions(runtime: AgentTurnRuntimePort, sink: string[]): vo
   runtime.sessions = new Proxy(ctx.sessions, {
     get(target, prop, receiver) {
       if (prop === "createSubSession") {
+        // 错误通道迁移二期：createSubSession 返回 Result——解包后再捕获 id。
         return async (parentId: string, projId: string, title?: string) => {
           const child = await originalCreateSubSession(parentId, projId, title);
-          sink.push(child.id);
+          if (!child.ok) throw child.error;
+          sink.push(child.value.id);
           return child;
         };
       }
@@ -299,10 +302,10 @@ async function collectToolResultTexts(ctx: ReturnType<typeof getNovelMasterTestC
 describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
   it("子 session 的 VFS scope 天然为空（无 vfs_entry / 无 KKV），父 session 工作区不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 给项目模板写一些文件，这样主 session create 后会有内容。
     await ctx.projectVfs(project.id).write("/parent-tpl.md", "TPL");
-    const parent = await ctx.sessions.create(project.id, "父会话");
+    const parent = unwrap(await ctx.sessions.create(project.id, "父会话"));
     // 父 session 工作区此时有 /parent-tpl.md（来自 template 拷贝）。
     const parentVfs = ctx.sessionVfs(project.id, parent.id);
     const parentBefore = await parentVfs.list("/", { recursive: true });
@@ -312,7 +315,7 @@ describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
     );
 
     // 派生子 session。
-    const child = await ctx.sessions.createSubSession(parent.id, project.id, "子");
+    const child = unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "子"));
 
     // 子 session 的 VFS scope 天然为空：createSubSession 从不为其写入任何 entry。
     const childVfs = ctx.sessionVfs(project.id, child.id);
@@ -330,9 +333,9 @@ describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
     assert.equal(entryRows.length, 0, "子 session scope 的 vfs_entry 表应为空");
 
     // 子 session 的 KKV 也为空（不预写 rule_snapshot / file_cache）。
-    const ruleSnap = await ctx.sessionKkv.get(child.id, "rule_snapshot", "any");
+    const ruleSnap = unwrap(await ctx.sessionKkv.get(child.id, "rule_snapshot", "any"));
     assert.equal(ruleSnap, null, "子 session rule_snapshot 应为空");
-    const fileCache = await ctx.sessionKkv.get(child.id, "file_cache", "any");
+    const fileCache = unwrap(await ctx.sessionKkv.get(child.id, "file_cache", "any"));
     assert.equal(fileCache, null, "子 session file_cache 应为空");
 
     // 父 session 工作区在 createSubSession 前后不变。
@@ -346,13 +349,13 @@ describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
 
   it("createSubSession 后子 session 工作区不携带项目模板文件", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 项目模板含多个文件 + 子目录。
     await ctx.projectVfs(project.id).write("/a.md", "A");
     await ctx.projectVfs(project.id).write("/sub/b.md", "B");
-    const parent = await ctx.sessions.create(project.id, "父");
+    const parent = unwrap(await ctx.sessions.create(project.id, "父"));
 
-    const child = await ctx.sessions.createSubSession(parent.id, project.id, "子");
+    const child = unwrap(await ctx.sessions.createSubSession(parent.id, project.id, "子"));
 
     const childVfs = ctx.sessionVfs(project.id, child.id);
     const paths = (await childVfs.list("/", { recursive: true })).map((e) => e.path);
@@ -398,8 +401,8 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父-T3");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T3"));
 
     const vfsCalls: { projectId: string; sessionId: string }[] = [];
     const abortRegistry = createAgentAbortRegistry();
@@ -439,9 +442,9 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/parent-tpl.md", "TPL");
-    const parent = await ctx.sessions.create(project.id, "父-T4");
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T4"));
 
     const parentVfs = ctx.sessionVfs(project.id, parent.id);
     const parentPathsBefore = (await parentVfs.list("/", { recursive: true })).map((e) => e.path).sort();
@@ -485,8 +488,8 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父-T5");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T5"));
 
     const abortRegistry = createAgentAbortRegistry();
     const childIds: string[] = [];
@@ -541,8 +544,8 @@ describe("T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）", () => {
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父-T6");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T6"));
 
     const abortRegistry = createAgentAbortRegistry();
     const childIds: string[] = [];
@@ -603,8 +606,8 @@ describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => 
     await seedChildAgent(ctx, workplaceChildAgentDef);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父-T7");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T7"));
 
     const abortRegistry = createAgentAbortRegistry();
     const childIds: string[] = [];
@@ -653,20 +656,20 @@ describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => 
     const childId = childIds[0]!;
 
     // 子 session 自己的 KKV：rule_snapshot 快照含 /outline.md。
-    const childSnapshotRaw = await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
+    const childSnapshotRaw = unwrap(await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
     assert.ok(childSnapshotRaw != null && childSnapshotRaw.includes("/outline.md"), "子 session 的 rule_snapshot 应已写入且含 /outline.md");
 
     // 子 session 自己的 KKV：file_cache 缓存了来自父 VFS 的文件内容。
-    const childCacheRaw = await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md"));
+    const childCacheRaw = unwrap(await ctx.sessionKkv.get(childId, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md")));
     assert.ok(childCacheRaw != null, "子 session 的 file_cache 应已写入");
     const parsed = parseFileCachePayload(childCacheRaw);
     assert.ok(parsed.ok);
     assert.equal(parsed.value.body, "# 子代理产出", "file_cache 内容应来自父 VFS 中的文件");
 
     // 父 session 的 KKV：两域均未写入（快照隔离——父的 KKV 不被子会话装配触碰）。
-    const parentSnapshot = await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
+    const parentSnapshot = unwrap(await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
     assert.equal(parentSnapshot, null, "父 session 的 rule_snapshot 不应被子会话装配写入");
-    const parentCache = await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md"));
+    const parentCache = unwrap(await ctx.sessionKkv.get(parent.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/outline.md")));
     assert.equal(parentCache, null, "父 session 的 file_cache 不应被子会话装配写入");
 
     // 文件本体在父 VFS（快照指向的内容来自父工作区）。
@@ -706,8 +709,8 @@ describe("T-SS-8：嵌套 / 多子 session 共享父工作区", () => {
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const parent = await ctx.sessions.create(project.id, "父-T8-multi");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const parent = unwrap(await ctx.sessions.create(project.id, "父-T8-multi"));
 
     const abortRegistry = createAgentAbortRegistry();
     const childIds: string[] = [];

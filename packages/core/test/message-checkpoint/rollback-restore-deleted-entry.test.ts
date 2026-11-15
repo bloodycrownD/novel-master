@@ -19,6 +19,7 @@
  * @module test/message-checkpoint/rollback-restore-deleted-entry.test
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -37,18 +38,18 @@ novelMasterTestFixture();
 describe("rollback-restore-deleted-entry", () => {
   it("删除后同路径重建：回滚旧内容回来、tail 期新文件被回退、entry_id 不撞号", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     // anchor：/dup.md = "old-content"（entryA）
     await svfs.write("/dup.md", "old-content", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const { scopeKey } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
@@ -58,17 +59,17 @@ describe("rollback-restore-deleted-entry", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const entryA = await entries.findByPath(sk, "/dup.md");
+    const entryA = unwrap(await entries.findByPath(sk, "/dup.md"));
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建（entryB 新内容）
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/dup.md");
+    }));
+    unwrap(await svfs.delete("/dup.md"));
     await svfs.write("/dup.md", "new-content", { versionCheck: false });
-    const entryB = await entries.findByPath(sk, "/dup.md");
+    const entryB = unwrap(await entries.findByPath(sk, "/dup.md"));
     assert.ok(entryB != null);
     assert.notEqual(entryB.entryId, entryA.entryId, "重建应为新 entry");
 
@@ -81,7 +82,7 @@ describe("rollback-restore-deleted-entry", () => {
     // 旧内容回来：按目标检查点完成态，anchor 时点 /dup.md = old-content。
     assert.equal((await svfs.read("/dup.md")).content, "old-content");
     // 复活后 live entry 就是 anchor 时的 entryA（entryId 原位复活）。
-    const revived = await entries.findByPath(sk, "/dup.md");
+    const revived = unwrap(await entries.findByPath(sk, "/dup.md"));
     assert.ok(revived != null);
     assert.equal(revived.entryId, entryA.entryId);
     assert.equal(revived.headVersion, entryA.headVersion);
@@ -107,7 +108,7 @@ describe("rollback-restore-deleted-entry", () => {
       "显式插入后 sqlite_sequence 不应低于历史最大 entry_id",
     );
     await svfs.write("/fresh.md", "fresh", { versionCheck: false });
-    const freshEntry = await entries.findByPath(sk, "/fresh.md");
+    const freshEntry = unwrap(await entries.findByPath(sk, "/fresh.md"));
     assert.ok(freshEntry != null);
     assert.ok(
       freshEntry.entryId > maxId,
@@ -119,25 +120,25 @@ describe("rollback-restore-deleted-entry", () => {
 
   it("目录下多文件删除：回滚后全部复现", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde2-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     await svfs.write("/docs/a.md", "alpha", { versionCheck: false });
     await svfs.write("/docs/b.md", "beta", { versionCheck: false });
     await svfs.write("/docs/sub/c.md", "gamma", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
+    }));
     // 递归删除整棵 /docs 子树（每个文件的 entry 行都被物理删除）。
-    await svfs.delete("/docs", { recursive: true });
+    unwrap(await svfs.delete("/docs", { recursive: true }));
     await assert.rejects(
       () => svfs.read("/docs/a.md"),
       (error: unknown) => isAppError(error, "VFS_NOT_FOUND"),
@@ -160,19 +161,19 @@ describe("rollback-restore-deleted-entry", () => {
 
   it("rename 后回滚：历史 checkpoint 路径冻结 capture 时点（快照语义）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde3-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     // anchor 时点文件在 /origin.md。
     await svfs.write("/origin.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // tail 期 rename 到 /renamed.md（entry 不变、path 变更）。
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
     await svfs.renamePath("/origin.md", "/renamed.md");
 
     await ctx.sessionFs.rollbackToMessage(
@@ -193,18 +194,18 @@ describe("rollback-restore-deleted-entry", () => {
 
   it("锚点版本高于重建 entry（V=2）：无选项回滚直接复现旧内容，不误报 BACKFILL_REQUIRED", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     // anchor：/dup2.md 写两次 → head v2（entryA 持有 v1/v2 两个 revision）。
     await svfs.write("/dup2.md", "old-v1", { versionCheck: false });
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const { scopeKey } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
@@ -214,18 +215,18 @@ describe("rollback-restore-deleted-entry", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const entryA = await entries.findByPath(sk, "/dup2.md");
+    const entryA = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建一次（entryB 只有 v1，checkpoint 指针仍指
     // (entryA, 2)——按 live entryB 寻址 (entryB, 2) 必查不到）。
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/dup2.md");
+    }));
+    unwrap(await svfs.delete("/dup2.md"));
     await svfs.write("/dup2.md", "new-content", { versionCheck: false });
-    const entryB = await entries.findByPath(sk, "/dup2.md");
+    const entryB = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(entryB != null);
     assert.notEqual(entryB.entryId, entryA.entryId);
 
@@ -239,25 +240,25 @@ describe("rollback-restore-deleted-entry", () => {
     );
 
     assert.equal((await svfs.read("/dup2.md")).content, "old-v2");
-    const revived = await entries.findByPath(sk, "/dup2.md");
+    const revived = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(revived != null);
     assert.equal(revived.entryId, entryA.entryId);
   });
 
   it("diverged + 旧 entry revision 真缺：无选项回滚抛 BACKFILL_REQUIRED 而非 VFS_RESTORE_FAILED", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     // anchor 写两次：checkpoint 指针为 (entryA, 2)。
     await svfs.write("/dup2.md", "old-v1", { versionCheck: false });
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const { scopeKey } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
@@ -267,17 +268,17 @@ describe("rollback-restore-deleted-entry", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const entryA = await entries.findByPath(sk, "/dup2.md");
+    const entryA = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建也写两次（entryB 到 v2）——(entryB, 2) 恰好
     // 存在，missing 探测若误按 live entryB 寻址会漏检，直接进 restore 后
     // 复活读不到 (entryA, 2) 被包成 VFS_RESTORE_FAILED，绕过 backfill 确认流。
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/dup2.md");
+    }));
+    unwrap(await svfs.delete("/dup2.md"));
     await svfs.write("/dup2.md", "new-v1", { versionCheck: false });
     await svfs.write("/dup2.md", "new-v2", { versionCheck: false });
 
@@ -298,18 +299,18 @@ describe("rollback-restore-deleted-entry", () => {
 
   it("diverged + 确认重试：backfill 回补打在旧 entryId，不给 live 新 entry 伪造 revision 行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde6-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde6-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     // anchor 写两次：checkpoint 指针为 (entryA, 2)。
     await svfs.write("/dup2.md", "old-v1", { versionCheck: false });
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const { scopeKey } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
@@ -319,17 +320,17 @@ describe("rollback-restore-deleted-entry", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const entryA = await entries.findByPath(sk, "/dup2.md");
+    const entryA = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(entryA != null);
 
     // tail：删除 → 同路径重建一次（entryB 只有 v1）→ 手工删 (entryA, 2)。
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/dup2.md");
+    }));
+    unwrap(await svfs.delete("/dup2.md"));
     await svfs.write("/dup2.md", "rebuilt-content", { versionCheck: false });
-    const entryB = await entries.findByPath(sk, "/dup2.md");
+    const entryB = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(entryB != null);
 
     await ctx.conn.execute(
@@ -353,7 +354,7 @@ describe("rollback-restore-deleted-entry", () => {
 
     // 降级语义：锚点内容真缺，回滚后正文保持 live（重建）现状。
     assert.equal((await svfs.read("/dup2.md")).content, "rebuilt-content");
-    const revived = await entries.findByPath(sk, "/dup2.md");
+    const revived = unwrap(await entries.findByPath(sk, "/dup2.md"));
     assert.ok(revived != null);
     assert.equal(revived.entryId, entryA.entryId);
 
@@ -377,16 +378,16 @@ describe("rollback-restore-deleted-entry", () => {
 
   it("纯删除 + revision 真缺：不带选项回滚默认抛 BACKFILL_REQUIRED（既有确认流）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-rde7-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-rde7-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     await svfs.write("/gone3.md", "anchor-gone", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     const { scopeKey } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
@@ -396,16 +397,16 @@ describe("rollback-restore-deleted-entry", () => {
       projectId: project.id,
       sessionId: session.id,
     });
-    const entry = await entries.findByPath(sk, "/gone3.md");
+    const entry = unwrap(await entries.findByPath(sk, "/gone3.md"));
     assert.ok(entry != null);
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
+    }));
     // 常规删除（entry 行物理删除）+ 手工删 anchor revision 行：entry 与
     // revision 都真缺。
-    await svfs.delete("/gone3.md");
+    unwrap(await svfs.delete("/gone3.md"));
     await ctx.conn.execute(
       "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
       [entry.entryId, 1],

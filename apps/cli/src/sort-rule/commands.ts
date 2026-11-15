@@ -102,7 +102,8 @@ export async function runSortRule(
             }
           : {}),
       });
-      console.log(rule.ruleId);
+      if (!rule.ok) throw rule.error;
+      console.log(rule.value.ruleId);
       return;
     }
     case "update": {
@@ -125,7 +126,8 @@ export async function runSortRule(
         );
       }
       const rule = await svc.updateRule(ruleId, patch);
-      console.log(rule.ruleId);
+      if (!rule.ok) throw rule.error;
+      console.log(rule.value.ruleId);
       return;
     }
     case "remove": {
@@ -138,7 +140,8 @@ export async function runSortRule(
           `builtin- rule cannot be removed (disable it instead): ${ruleId}`,
         );
       }
-      await svc.deleteRule(ruleId);
+      const deleted = await svc.deleteRule(ruleId);
+      if (!deleted.ok) throw deleted.error;
       return;
     }
     case "enable":
@@ -147,7 +150,8 @@ export async function runSortRule(
       if (!ruleId) {
         throw new Error(`Usage: nm sort-rule ${subcommand} --id <ruleId>`);
       }
-      await svc.setEnabled(ruleId, subcommand === "enable");
+      const set = await svc.setEnabled(ruleId, subcommand === "enable");
+      if (!set.ok) throw set.error;
       return;
     }
     case "move": {
@@ -159,7 +163,8 @@ export async function runSortRule(
         );
       }
       const rules = await svc.moveRule(ruleId, parseMoveTarget(to));
-      for (const r of rules) {
+      if (!rules.ok) throw rules.error;
+      for (const r of rules.value) {
         console.log(`${r.sortOrder}\t${r.ruleId}`);
       }
       return;
@@ -183,7 +188,8 @@ export async function runSortRule(
       const source = await readFile(file, "utf8");
       const raw = parseText(source, formatFromPath(file));
       const rules = await svc.importRules(raw);
-      console.log(rules.length);
+      if (!rules.ok) throw rules.error;
+      console.log(rules.value.length);
       return;
     }
     case "test": {
@@ -191,7 +197,8 @@ export async function runSortRule(
         throw new Error("Usage: nm sort-rule test <name>...");
       }
       const result = await svc.previewSort(positional);
-      for (const line of result.lines) {
+      if (!result.ok) throw result.error;
+      for (const line of result.value.lines) {
         // 序号元组显示：null → '-'；其余经 core 单源 formatSortTupleForDisplay
         // 格式化（C-3）：固定档哨兵 "(固定最小,)"/"(固定最大,)"，smart "(1,)"
         // 风格（Python 元组 repr 尾逗号）。
@@ -200,7 +207,7 @@ export async function runSortRule(
         console.log(`${line.name}\t${line.matchedRuleId ?? "-"}\t${nums}`);
       }
       console.log("");
-      for (const name of result.sortedNames) {
+      for (const name of result.value.sortedNames) {
         console.log(name);
       }
       console.log("# asc");

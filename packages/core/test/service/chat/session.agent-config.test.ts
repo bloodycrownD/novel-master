@@ -1,3 +1,4 @@
+import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 
 // PersistentState.setCurrentModelId 会校验 UUID，测试里统一用这个常量。
@@ -32,10 +33,10 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("ws-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "copy-ws");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "copy-ws"));
 
-    const config = await ctx.sessions.getSessionAgentConfig(session.id);
+    const config = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.deepEqual(config, { agentId: "ws-agent", modelId: TEST_SAVED_MODEL_A });
   });
 
@@ -45,10 +46,10 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("ws-agent-2");
     await ctx.state.resetCurrentModelId();
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "no-model");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "no-model"));
 
-    const config = await ctx.sessions.getSessionAgentConfig(session.id);
+    const config = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.deepEqual(config, { agentId: "ws-agent-2" });
   });
 
@@ -59,10 +60,10 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.resetCurrentAgentId();
     await ctx.state.resetCurrentModelId();
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "fallback-registry");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "fallback-registry"));
 
-    const config = await ctx.sessions.getSessionAgentConfig(session.id);
+    const config = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.equal(config.agentId, "alpha");
     assert.equal(config.modelId, undefined);
   });
@@ -72,7 +73,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.resetCurrentAgentId();
     // registry 在 shared DB 中可能已有别的 agent，但 workspace 指针清空后
     // 若 registry 列表为空才会抛。这里改用一个隔离检查：mock 一个空 registry。
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
 
     // 直接验证空 registry + 空 state 的 service 行为：
     // 构造一个临时 session service 实例（用空 registry），看 create 是否抛。
@@ -106,7 +107,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
       agentRegistry: emptyRegistry,
     });
 
-    await assert.rejects(
+    await rejectsErr(
       () => svc.create(project.id, "should-fail"),
       (error: unknown) =>
         isAppError(error, "CHAT_INVALID_ARGUMENT"),
@@ -119,22 +120,22 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("seed");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "only-agent");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "only-agent"));
 
     // 初始从 workspace 复制了 modelId，切 agent 必须保留它
-    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    const before = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.equal(before.modelId, TEST_SAVED_MODEL_A);
 
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "switched-agent",
-    });
+    }));
     assert.deepEqual(after, {
       agentId: "switched-agent",
       modelId: TEST_SAVED_MODEL_A,
     });
 
-    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    const loaded = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.deepEqual(loaded, {
       agentId: "switched-agent",
       modelId: TEST_SAVED_MODEL_A,
@@ -146,18 +147,18 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "only-model");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "only-model"));
 
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       modelId: TEST_SAVED_MODEL_A,
-    });
+    }));
     assert.deepEqual(after, {
       agentId: "seed",
       modelId: TEST_SAVED_MODEL_A,
     });
 
-    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    const loaded = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.deepEqual(loaded, {
       agentId: "seed",
       modelId: TEST_SAVED_MODEL_A,
@@ -170,18 +171,18 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("seed");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "clear-model");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "clear-model"));
 
-    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    const before = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.equal(before.modelId, TEST_SAVED_MODEL_A);
 
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       modelId: null,
-    });
+    }));
     assert.deepEqual(after, { agentId: "seed" });
 
-    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    const loaded = unwrap(await ctx.sessions.getSessionAgentConfig(session.id));
     assert.deepEqual(loaded, { agentId: "seed" });
   });
 
@@ -191,11 +192,11 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("seed");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "keep-model");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "keep-model"));
 
     // patch 里两个都不传（空 patch），modelId 必须原地不动
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {});
+    const after = unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {}));
     assert.deepEqual(after, {
       agentId: "seed",
       modelId: TEST_SAVED_MODEL_A,
@@ -207,12 +208,12 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "reject-empty");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "reject-empty"));
 
     // partial overlay 下 agentId 会从 baseline 继承，schema 主要兌锋点变成 modelId。
-    // 空串 modelId 不满足 min(1)，会被 schema 拒绝。
-    // 这里按 name 判定（避免 tsx 双实例下 instanceof prototype 不匹配）；AppError 的 name 即 key。
+    // 空串 modelId 不满足 min(1)，会被 schema 拒绝（校验失败保留 throw 契约）。
+    // 这里按 name 判定（避免 tsx 双实例下 instanceof prototype 不匹配）；一期统一后 AppError 的 name 即 key。
     await assert.rejects(
       () =>
         ctx.sessions.updateSessionAgentConfig(session.id, {
@@ -228,8 +229,8 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "null-column");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "null-column"));
 
     // 直接把列改回 NULL 模拟未迁移的老数据
     const { SqliteSessionRepository } = await import(
@@ -238,6 +239,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     const repo = new SqliteSessionRepository(ctx.conn);
     await repo.setSessionAgentConfig(session.id, null, Date.now());
 
+    // 列 NULL 是不变量破坏：保留 throw 契约（port 注释，同 `CHAT_INVALID_ARGUMENT`）。
     await assert.rejects(
       () => ctx.sessions.getSessionAgentConfig(session.id),
       (error: unknown) =>
@@ -251,18 +253,18 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.state.setCurrentAgentId("seed");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const source = await ctx.sessions.create(project.id, "copy-source");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const source = unwrap(await ctx.sessions.create(project.id, "copy-source"));
 
     // 改一下源配置，区别于 workspace 初始值
-    await ctx.sessions.updateSessionAgentConfig(source.id, {
+    unwrap(await ctx.sessions.updateSessionAgentConfig(source.id, {
       agentId: "copied-agent",
       modelId: "copied-model",
-    });
+    }));
 
-    const copy = await ctx.sessions.copy(source.id);
-    const sourceConfig = await ctx.sessions.getSessionAgentConfig(source.id);
-    const copyConfig = await ctx.sessions.getSessionAgentConfig(copy.id);
+    const copy = unwrap(await ctx.sessions.copy(source.id));
+    const sourceConfig = unwrap(await ctx.sessions.getSessionAgentConfig(source.id));
+    const copyConfig = unwrap(await ctx.sessions.getSessionAgentConfig(copy.id));
 
     // 源不变
     assert.deepEqual(sourceConfig, {
@@ -281,21 +283,21 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "ts-bump");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "ts-bump"));
 
-    const before = await ctx.sessions.get(session.id);
+    const before = unwrap(await ctx.sessions.get(session.id));
     await new Promise((r) => setTimeout(r, 5));
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "a",
-    });
-    const after = await ctx.sessions.get(session.id);
+    }));
+    const after = unwrap(await ctx.sessions.get(session.id));
     assert.ok(after.updatedAtMs > before.updatedAtMs);
   });
 
   it("不存在的会话 getSessionAgentConfig 抛 NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessions.getSessionAgentConfig("nope-not-exist"),
       (error: unknown) =>
         isAppError(error, "CHAT_NOT_FOUND"),

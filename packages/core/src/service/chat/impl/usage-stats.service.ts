@@ -15,6 +15,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type {
   SessionUsageDetail,
@@ -130,14 +131,10 @@ function addLocalDays(base: Date, days: number): Date {
 function parseDayLocalDate(
   dayLocalDate: string,
   label = "dayLocalDate"
-): {
-  year: number;
-  month: number;
-  day: number;
-} {
+): Result<{ year: number; month: number; day: number }, AppError> {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
-    throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}} });
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}} }));
   }
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
@@ -148,9 +145,9 @@ function parseDayLocalDate(
     probe.getMonth() !== month ||
     probe.getDate() !== day
   ) {
-    throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_day", params: {field: label, value: dayLocalDate}} });
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_day", params: {field: label, value: dayLocalDate}} }));
   }
-  return { year, month, day };
+  return Result.ok({ year, month, day });
 }
 
 /** 本地日期格式化为 `YYYY-MM-DD`（与 strftime 的 day_key 同构，年份补零 4 位防 <1000 年错位死循环）。 */
@@ -178,15 +175,17 @@ export class DefaultUsageStatsService implements UsageStatsService {
 
   constructor(private readonly conn: TdbcConnection) {}
 
-  async getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary> {
-    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
+  async getSummary(filter: UsageStatsFilter): Promise<Result<UsageStatsSummary, AppError>> {
+    const range = this.resolveOptionalRange(filter.range);
+    if (!range.ok) return Result.err(range.error);
+    const { fromMs, toMs } = range.value;
     const row = await this.queryAggregateRow(
       fromMs,
       toMs,
       filter.model,
       filter.providerId
     );
-    return {
+    return Result.ok({
       calls: Number(row.calls),
       promptTokens: Number(row.prompt_tokens),
       completionTokens: Number(row.completion_tokens),
@@ -200,15 +199,17 @@ export class DefaultUsageStatsService implements UsageStatsService {
         row.avg_tokens_per_second == null
           ? null
           : Number(row.avg_tokens_per_second),
-    };
+    });
   }
 
-  async getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]> {
+  async getDailyBuckets(filter: UsageStatsFilter): Promise<Result<UsageStatsBucket[], AppError>> {
     // 日桶序列需要界（桶数随天数线性膨胀），护栏挂在这条查询上而非区间类型。
     if (filter.range == null) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.daily_buckets_range_required"} });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.daily_buckets_range_required"} }));
     }
-    const { fromMs, toMs } = this.resolveDayRangeMs(filter.range);
+    const ms = this.resolveDayRangeMs(filter.range);
+    if (!ms.ok) return Result.err(ms.error);
+    const { fromMs, toMs } = ms.value;
     // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
     // JS Date 同用进程本地时区，DST 日按挂钟日归桶；整数除法截到秒不影响
     // 日归属（日界切换发生在整秒的 0 点，毫秒截断不可能跨日）。
@@ -239,8 +240,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 无数据日复用零值行，保证桶序列稠密且首尾闭区间含两端。
     const buckets: UsageStatsBucket[] = [];
     const from = parseDayLocalDate(filter.range.fromDay, "range.fromDay");
+    if (!from.ok) return Result.err(from.error);
     for (
-      let cursor = new Date(from.year, from.month, from.day);
+      let cursor = new Date(from.value.year, from.value.month, from.value.day);
       ;
       cursor = addLocalDays(cursor, 1)
     ) {
@@ -249,7 +251,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
         this.toBucket(cursor.getTime(), rowByDay.get(dayKey) ?? ZERO_AGG_ROW)
       );
       if (dayKey === filter.range.toDay) {
-        return buckets;
+        return Result.ok(buckets);
       }
     }
   }
@@ -257,8 +259,10 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async getHourlyBuckets(
     dayLocalDate: string,
     filter: UsageStatsFilter
-  ): Promise<UsageStatsBucket[]> {
-    const { year, month, day } = parseDayLocalDate(dayLocalDate);
+  ): Promise<Result<UsageStatsBucket[], AppError>> {
+    const parsedDay = parseDayLocalDate(dayLocalDate);
+    if (!parsedDay.ok) return Result.err(parsedDay.error);
+    const { year, month, day } = parsedDay.value;
     const buckets: UsageStatsBucket[] = [];
     for (let hour = 0; hour < 24; hour++) {
       // 按本地钟点构造桶边界：常规日 24 桶；DST 缺失钟点退化为空桶（零值），
@@ -276,13 +280,15 @@ export class DefaultUsageStatsService implements UsageStatsService {
           : ZERO_AGG_ROW;
       buckets.push(this.toBucket(startMs, row));
     }
-    return buckets;
+    return Result.ok(buckets);
   }
 
   async getModelBreakdown(
     filter: UsageStatsFilter
-  ): Promise<UsageStatsModelRow[]> {
-    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
+  ): Promise<Result<UsageStatsModelRow[], AppError>> {
+    const range = this.resolveOptionalRange(filter.range);
+    if (!range.ok) return Result.err(range.error);
+    const { fromMs, toMs } = range.value;
     const rows = await queryTemplate<Row>(
       this.conn,
       this.parser,
@@ -345,30 +351,32 @@ export class DefaultUsageStatsService implements UsageStatsService {
           (prev?.billedInputTokens ?? 0) + row.billedInputTokens,
       });
     }
-    return [...merged.values()].sort(
+    return Result.ok([...merged.values()].sort(
       (a, b) =>
         b.totalTokens - a.totalTokens ||
         `${a.providerId ?? ""}/${a.modelName ?? ""}`.localeCompare(
           `${b.providerId ?? ""}/${b.modelName ?? ""}`
         )
-    );
+    ));
   }
 
   async listRequestUsage(
     filter: UsageStatsFilter,
     page: UsageStatsRequestPageQuery
-  ): Promise<UsageStatsRequestPage> {
+  ): Promise<Result<UsageStatsRequestPage, AppError>> {
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_page_limit", params: {value: page.limit}} });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_page_limit", params: {value: page.limit}} }));
     }
     // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
     // 直接抛错），与 limit 同构提前拒收。
     if (!Number.isFinite(page.offset)) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_page_offset", params: {value: page.offset}} });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.invalid_page_offset", params: {value: page.offset}} }));
     }
     const offset = Math.max(0, Math.floor(page.offset));
-    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
+    const range = this.resolveOptionalRange(filter.range);
+    if (!range.ok) return Result.err(range.error);
+    const { fromMs, toMs } = range.value;
     // total 与行集同用 whereSql：range 缺省时两者都不含时间谓词（全历史）。
     const whereSql =
       `WHERE ${USAGE_NOT_NULL_SQL}` +
@@ -401,7 +409,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
        LIMIT #{limit} OFFSET #{offset}`,
       params
     );
-    return {
+    return Result.ok({
       rows: rows.map(
         (row): UsageStatsRequestRow => ({
           createdAtMs: Number(row.created_at_ms),
@@ -423,7 +431,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
         })
       ),
       total: Number(totalRows[0]?.n ?? 0),
-    };
+    });
   }
 
   async listModels(): Promise<string[]> {
@@ -439,9 +447,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     return rows.map((row) => String(row.vendor_model_id));
   }
 
-  async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
+  async getSessionUsageDetail(sessionId: string): Promise<Result<SessionUsageDetail, AppError>> {
     if (typeof sessionId !== "string" || sessionId.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.session_id_required", params: {value: String(sessionId)}} });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.session_id_required", params: {value: String(sessionId)}} }));
     }
     // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
     // （usage_record，按 created_at_ms 倒序取首行）——消息被删除/回滚后
@@ -508,7 +516,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const cached =
       cachedToolUseCount != null ? Number.parseInt(cachedToolUseCount, 10) : NaN;
     if (Number.isFinite(cached)) {
-      return { last, visibleMessageCount, toolUseCount: cached };
+      return Result.ok({ last, visibleMessageCount, toolUseCount: cached });
     }
     // 缓存 miss：现算 assistant 行（含 hidden 行——累计口径；user 侧
     // tool_result 不计）。只投影 content 列，不选 raw_json/attachments。
@@ -558,7 +566,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     } catch (error) {
       log.warn(`工具调用缓存回填失败（不影响本次读数）：${error instanceof Error ? error.message : String(error)}`);
     }
-    return { last, visibleMessageCount, toolUseCount };
+    return Result.ok({ last, visibleMessageCount, toolUseCount });
   }
 
   /**
@@ -567,32 +575,30 @@ export class DefaultUsageStatsService implements UsageStatsService {
    * parseDayLocalDate 校验（拒绝 02-30 等溢出日期），fromDay 晚于
    * toDay 抛错；闭区间的双端含由 toMs 取 toDay 次日 0 点保证。
    */
-  private resolveDayRangeMs(range: UsageStatsRange): {
-    fromMs: number;
-    toMs: number;
-  } {
+  private resolveDayRangeMs(range: UsageStatsRange): Result<{ fromMs: number; toMs: number }, AppError> {
     const from = parseDayLocalDate(range.fromDay, "range.fromDay");
+    if (!from.ok) return Result.err(from.error);
     const to = parseDayLocalDate(range.toDay, "range.toDay");
-    const fromStart = new Date(from.year, from.month, from.day);
-    const toStart = new Date(to.year, to.month, to.day);
+    if (!to.ok) return Result.err(to.error);
+    const fromStart = new Date(from.value.year, from.value.month, from.value.day);
+    const toStart = new Date(to.value.year, to.value.month, to.value.day);
     if (fromStart.getTime() > toStart.getTime()) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}} });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}} }));
     }
-    return {
+    return Result.ok({
       fromMs: fromStart.getTime(),
       toMs: addLocalDays(toStart, 1).getTime(),
-    };
+    });
   }
 
   /** range 缺省 → (null, null)，聚合/流水查询不限时间（全历史）。 */
-  private resolveOptionalRange(range: UsageStatsRange | undefined): {
-    fromMs: number | null;
-    toMs: number | null;
-  } {
+  private resolveOptionalRange(range: UsageStatsRange | undefined): Result<{ fromMs: number | null; toMs: number | null }, AppError> {
     if (range == null) {
-      return { fromMs: null, toMs: null };
+      return Result.ok({ fromMs: null, toMs: null });
     }
-    return this.resolveDayRangeMs(range);
+    const ms = this.resolveDayRangeMs(range);
+    if (!ms.ok) return Result.err(ms.error);
+    return Result.ok(ms.value);
   }
 
   /**

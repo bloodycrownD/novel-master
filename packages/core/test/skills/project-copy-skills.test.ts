@@ -8,6 +8,7 @@
  * @module test/skills/project-copy-skills
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
@@ -28,38 +29,38 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
     const suffix = testIsolationSuffix();
-    const source = await ctx.projects.create(`P-${suffix}`);
+    const source = unwrap(await ctx.projects.create(`P-${suffix}`));
 
     // 项目域技能（SKILL.md + 辅助文件，辅助文件直接写 meta 域 vfs）
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       "novel-helper",
       undefined,
       entry("novel-helper", "项目技能"),
       source.id,
-    );
+    ));
     await ctx.projectMetaVfs(source.id).write(
       "/meta/skills/novel-helper/prompt.md",
       "辅助提示词",
     );
     // 同名 global 技能被项目副本覆盖 + 一条禁用行 + 一条无关禁用行
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "global",
       "shared-tool",
       undefined,
       entry("shared-tool", "全局版"),
-    );
-    await skills.writeSkillFile(
+    ));
+    unwrap(await skills.writeSkillFile(
       "project",
       "shared-tool",
       undefined,
       entry("shared-tool", "项目覆盖版"),
       source.id,
-    );
-    await skills.setDisabled(source.id, "shared-tool", true);
-    await skills.setDisabled(source.id, "novel-helper", true);
+    ));
+    unwrap(await skills.setDisabled(source.id, "shared-tool", true));
+    unwrap(await skills.setDisabled(source.id, "novel-helper", true));
 
-    const copy = await ctx.projects.copy(source.id);
+    const copy = unwrap(await ctx.projects.copy(source.id));
 
     // 技能文件随整树复制到新项目
     const copyList = await skills.listSkills({ projectId: copy.id });
@@ -67,12 +68,12 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     assert.ok(helper != null, "项目技能应随复制携带");
     assert.equal(helper.valid, true);
     assert.deepEqual(helper.files, ["SKILL.md", "prompt.md"]);
-    const copiedPrompt = await skills.readSkillFile(
+    const copiedPrompt = unwrap(await skills.readSkillFile(
       "project",
       "novel-helper",
       "prompt.md",
       copy.id,
-    );
+    ));
     assert.equal(copiedPrompt.content, "辅助提示词");
 
     // 负清单行按 scope_key 复制：新项目里同名禁用行生效
@@ -81,7 +82,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     assert.equal(copyView.find((s) => s.name === "shared-tool")?.domain, "project");
 
     // 副本禁用行独立于源：副本里关掉，源不受影响
-    await skills.setDisabled(copy.id, "novel-helper", false);
+    unwrap(await skills.setDisabled(copy.id, "novel-helper", false));
     const sourceView = await skills.effectiveSkills(source.id);
     assert.equal(
       sourceView.find((s) => s.name === "novel-helper")?.disabled,
@@ -99,20 +100,20 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
     const suffix = testIsolationSuffix();
-    const source = await ctx.projects.create(`P-ns-${suffix}`);
-    await ctx.sessions.create(source.id, "源会话");
-    await skills.writeSkillFile(
+    const source = unwrap(await ctx.projects.create(`P-ns-${suffix}`));
+    unwrap(await ctx.sessions.create(source.id, "源会话"));
+    unwrap(await skills.writeSkillFile(
       "project",
       "solo-skill",
       undefined,
       entry("solo-skill", "只有源项目有"),
       source.id,
-    );
+    ));
 
-    const copy = await ctx.projects.copy(source.id);
+    const copy = unwrap(await ctx.projects.copy(source.id));
 
     // sessions 不复制（既有不变式）：新项目无会话
-    const copySessions = await ctx.sessions.listByProject(copy.id);
+    const copySessions = unwrap(await ctx.sessions.listByProject(copy.id));
     assert.equal(copySessions.length, 0);
 
     // 技能在新项目、原项目也还在；其他项目（新建第三个项目）不串
@@ -121,7 +122,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const sourceList = await skills.listSkills({ projectId: source.id });
     assert.ok(sourceList.some((s) => s.name === "solo-skill"));
 
-    const third = await ctx.projects.create(`P3-${suffix}`);
+    const third = unwrap(await ctx.projects.create(`P3-${suffix}`));
     const thirdView = await skills.effectiveSkills(third.id);
     assert.equal(
       thirdView.find((s) => s.name === "solo-skill"),
@@ -134,17 +135,17 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-del-${suffix}`);
-    await skills.writeSkillFile(
+    const project = unwrap(await ctx.projects.create(`P-del-${suffix}`));
+    unwrap(await skills.writeSkillFile(
       "project",
       "doomed-skill",
       undefined,
       entry("doomed-skill", "随项目删除"),
       project.id,
-    );
-    await skills.setDisabled(project.id, "doomed-skill", true);
+    ));
+    unwrap(await skills.setDisabled(project.id, "doomed-skill", true));
 
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
     const rows = await ctx.conn.query<{ scope_key: string }>(
       "SELECT scope_key FROM skill_disabled_rule WHERE scope_key = ?",

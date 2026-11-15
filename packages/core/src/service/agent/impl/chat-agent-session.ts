@@ -39,7 +39,7 @@ export class ChatAgentSession implements AgentSession {
     });
   }
 
-  append(
+  async append(
     role: string,
     content: MessageContent,
     options?: {
@@ -51,14 +51,19 @@ export class ChatAgentSession implements AgentSession {
       attachments?: readonly MessageAttachment[];
     }
   ): Promise<ChatMessageData> {
-    return this.messages.append(this.sessionId, role, content, options);
+    const appended = await this.messages.append(this.sessionId, role, content, options);
+    if (!appended.ok) throw appended.error;
+    return appended.value;
   }
 
-  hideRange(fromSeq: number, toSeq: number): Promise<number> {
-    return this.messages.hideRange(this.sessionId, fromSeq, toSeq);
+  async hideRange(fromSeq: number, toSeq: number): Promise<number> {
+    const hidden = await this.messages.hideRange(this.sessionId, fromSeq, toSeq);
+    if (!hidden.ok) throw hidden.error;
+    return hidden.value;
   }
 
-  truncateAfterMessage(afterMessageId: string | null): Promise<void> {
-    return this.messages.truncateAfter(this.sessionId, afterMessageId);
+  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+    const truncated = await this.messages.truncateAfter(this.sessionId, afterMessageId);
+    if (!truncated.ok) throw truncated.error;
   }
 }

@@ -16,6 +16,7 @@
  * @module test/chat/message-content-perf-threshold
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -78,13 +79,13 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
     const body = largeTextBody();
 
     // 明文形态库：走生产写路径（batchInsert 直写明文）。
-    const plainProject = await ctx.projects.create(
+    const plainProject = unwrap(await ctx.projects.create(
       `P-${testIsolationSuffix()}`
-    );
-    const plainSession = await ctx.sessions.create(
+    ));
+    const plainSession = unwrap(await ctx.sessions.create(
       plainProject.id,
       `S-${testIsolationSuffix()}`
-    );
+    ));
     const messages: ChatMessageData[] = [];
     for (let i = 1; i <= ROWS; i++) {
       messages.push({

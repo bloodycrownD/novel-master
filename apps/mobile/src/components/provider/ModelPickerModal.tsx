@@ -59,9 +59,10 @@ export function ModelPickerModal({
       const sessionConfig = await runtime.sessions.getSessionAgentConfig(
         sessionId,
       );
+      if (!sessionConfig.ok) throw sessionConfig.error;
       selectedId =
-        sessionConfig.modelId && sessionConfig.modelId.length > 0
-          ? sessionConfig.modelId
+        sessionConfig.value.modelId && sessionConfig.value.modelId.length > 0
+          ? sessionConfig.value.modelId
           : undefined;
     } else {
       // workspace 全局：用 workspace 当前模型高亮。
@@ -122,10 +123,15 @@ export function ModelPickerModal({
           const current = await runtime.sessions.getSessionAgentConfig(
             sessionId,
           );
-          await runtime.sessions.updateSessionAgentConfig(sessionId, {
-            agentId: current.agentId,
-            modelId: savedModelId,
-          });
+          if (!current.ok) throw current.error;
+          const updated = await runtime.sessions.updateSessionAgentConfig(
+            sessionId,
+            {
+              agentId: current.value.agentId,
+              modelId: savedModelId,
+            },
+          );
+          if (!updated.ok) throw updated.error;
         } else {
           await runtime.state.setCurrentModelId(savedModelId);
         }

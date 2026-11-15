@@ -2,6 +2,7 @@
  * MessageTranscriptEffectsService 单测。
  */
 
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -28,40 +29,40 @@ novelMasterTestFixture();
 describe('MessageTranscriptEffectsService', () => {
   it('T-WEC1：hideMessagesInRange 更新 hidden', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    const assistant = await ctx.messages.append(session.id, 'assistant', {
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
-    });
+    }));
 
-    const count = await effects.hideMessagesInRange(
+    const count = unwrap(await effects.hideMessagesInRange(
       project.id,
       session.id,
       1,
       2,
-    );
+    ));
     assert.equal(count, 2);
 
-    const updated = await ctx.messages.get(assistant.id);
+    const updated = unwrap(await ctx.messages.get(assistant.id));
     assert.equal(updated.hidden, true);
   });
 
   it('T-WEC2：showMessagesInRange 更新 hidden', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    await ctx.messages.append(session.id, 'assistant', {
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
-    });
-    await ctx.messages.hideRange(session.id, 1, 2);
+    }));
+    unwrap(await ctx.messages.hideRange(session.id, 1, 2));
 
-    await effects.showMessagesInRange(project.id, session.id, 1, 2);
+    unwrap(await effects.showMessagesInRange(project.id, session.id, 1, 2));
 
     const messages = await ctx.messages.listBySession(session.id);
     assert.ok(messages.every(m => !m.hidden));
@@ -69,19 +70,19 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('truncateMessagesAfter 删除 tail，VFS 不变', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, 'user', textBlocks('1'));
-    const m2 = await ctx.messages.append(session.id, 'assistant', {
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
+    const m2 = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: '2' }],
-    });
+    }));
     await svfs.write('/tail.md', 'tail', { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    await ctx.messages.append(session.id, 'user', textBlocks('3'));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('3')));
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
@@ -94,8 +95,8 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('T-CR5/T-SF1：setMessageFloorAtMessage 仅清 rule_snapshot+file_cache，保留 pending', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
     await sk.set(
@@ -116,51 +117,51 @@ describe('MessageTranscriptEffectsService', () => {
       USER_VFS_PENDING_QUEUE_KEY,
       JSON.stringify([{ op: 'mkdir', path: '/keep-dir' }]),
     );
-    const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
+    const anchor = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
     assert.equal(
-      await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md'),
+      unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md')),
       null,
     );
     assert.equal(
-      await sk.get(
+      unwrap(await sk.get(
         session.id,
         SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
         RULE_SNAPSHOT_CANON_KEY,
-      ),
+      )),
       null,
     );
     assert.equal(
-      await sk.get(
+      unwrap(await sk.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       JSON.stringify([{ op: 'mkdir', path: '/keep-dir' }]),
     );
   });
 
   it('T-SF4：setMessageFloorAtMessage 后 prefix hidden、suffix visible', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    const m1 = await ctx.messages.append(session.id, 'user', textBlocks('u1'));
-    await ctx.messages.append(session.id, 'assistant', {
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
-    });
-    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('u2'));
-    await ctx.messages.append(session.id, 'assistant', {
+    }));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
-    });
-    await ctx.messages.hideRange(session.id, 3, 4);
+    }));
+    unwrap(await ctx.messages.hideRange(session.id, 3, 4));
 
-    const result = await effects.setMessageFloorAtMessage(
+    const result = unwrap(await effects.setMessageFloorAtMessage(
       project.id,
       session.id,
       m3.id,
-    );
+    ));
     assert.equal(result.hiddenCount, 2);
     assert.equal(result.shownCount, 2);
 
@@ -177,35 +178,35 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('T-WEC3：setMessageFloorAtMessage Core 路径可置位', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    await ctx.messages.append(session.id, 'assistant', {
+    const anchor = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
-    });
+    }));
 
-    await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
+    unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
   });
 
   it('T-SF6：置位不 truncate，消息条数不变', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
-    await ctx.messages.append(session.id, 'user', textBlocks('1'));
-    const m2 = await ctx.messages.append(session.id, 'assistant', {
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
+    const m2 = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: '2' }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('3'));
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('3')));
 
     const before = await ctx.messages.listBySession(session.id);
-    await effects.setMessageFloorAtMessage(project.id, session.id, m3.id);
+    unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, m3.id));
     const after = await ctx.messages.listBySession(session.id);
 
     assert.equal(after.length, before.length);
@@ -214,28 +215,28 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('T-SF4b：末条 hidden user 锚点置位后恢复可见', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    await ctx.messages.append(session.id, 'user', textBlocks('u1'));
-    await ctx.messages.append(session.id, 'assistant', {
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
-    });
-    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('u2'));
-    await ctx.messages.append(session.id, 'assistant', {
+    }));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
-    });
-    await ctx.messages.hideRange(session.id, 3, 3);
+    }));
+    unwrap(await ctx.messages.hideRange(session.id, 3, 3));
 
-    const result = await effects.setMessageFloorAtMessage(
+    const result = unwrap(await effects.setMessageFloorAtMessage(
       project.id,
       session.id,
       m3.id,
-    );
+    ));
     assert.ok(result.shownCount >= 1);
 
-    const updated = await ctx.messages.get(m3.id);
+    const updated = unwrap(await ctx.messages.get(m3.id));
     assert.equal(updated.hidden, false);
   });
 
@@ -244,19 +245,19 @@ describe('MessageTranscriptEffectsService', () => {
   // 恢复可见性计数一致（ref_count 一致）——不能留半隐藏状态。
   it('T-SC3：setMessageFloorAtMessage 中间失败 → hide/show 回滚、可见性一致', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = await ctx.messages.append(session.id, 'user', textBlocks('u1'));
-    await ctx.messages.append(session.id, 'assistant', {
+    const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
-    });
-    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('u2'));
-    await ctx.messages.append(session.id, 'assistant', {
+    }));
+    const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u2')));
+    unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
-    });
+    }));
     // 先把后两条隐藏，模拟“旧 floor 在 m3 之前”的历史状态
-    await ctx.messages.hideRange(session.id, 3, 4);
+    unwrap(await ctx.messages.hideRange(session.id, 3, 4));
 
     const before = await ctx.messages.listBySession(session.id);
     const beforeVisibility = before.map(m => ({ id: m.id, hidden: m.hidden }));
@@ -282,6 +283,7 @@ describe('MessageTranscriptEffectsService', () => {
       sessionKkv: failingKkv,
     });
 
+    // CoordinatedWrite 的补偿机制依赖 throw 回滚通道：中间步骤失败仍以 reject 冒泡。
     await assert.rejects(
       () => effects.setMessageFloorAtMessage(project.id, session.id, m3.id),
       /clear-rule-snapshot boom/,
@@ -298,17 +300,17 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('T-SF7：role=system 抛错', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    const system = await ctx.messages.append(
+    const system = unwrap(await ctx.messages.append(
       session.id,
       'system',
       textBlocks('sys'),
-    );
+    ));
 
-    await assert.rejects(
+    await rejectsErr(
       () => effects.setMessageFloorAtMessage(project.id, session.id, system.id),
       (err: unknown) => {
         assert.ok(err instanceof Error);
@@ -320,18 +322,18 @@ describe('MessageTranscriptEffectsService', () => {
 
   it('T-AC1-2：role=assistant 锚点抛错且 transcript 不变', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    const assistant = await ctx.messages.append(session.id, 'assistant', {
+    unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
+    const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
-    });
+    }));
 
     const before = await ctx.messages.listBySession(session.id);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         effects.setMessageFloorAtMessage(
           project.id,
@@ -357,23 +359,23 @@ describe('MessageTranscriptEffectsService', () => {
   // hide/show、清 KKV 两域或失效 token cache。
   it('cr-chat-1：跨会话锚点 id 抛 CHAT_NOT_FOUND，两会话消息与 KKV 域零变化', async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionA = await ctx.sessions.create(project.id);
-    const sessionB = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionA = unwrap(await ctx.sessions.create(project.id));
+    const sessionB = unwrap(await ctx.sessions.create(project.id));
     const effects = createMessageTranscriptEffectsService(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
 
     // 会话 A：user + assistant 两条（若副作用发生，前缀会被错误 hide）。
-    await ctx.messages.append(sessionA.id, 'user', textBlocks('a1'));
-    await ctx.messages.append(sessionA.id, 'assistant', {
+    unwrap(await ctx.messages.append(sessionA.id, 'user', textBlocks('a1')));
+    unwrap(await ctx.messages.append(sessionA.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
-    });
+    }));
     // 会话 B：一条合法 user 消息，跨会话传入。
-    const anchorB = await ctx.messages.append(
+    const anchorB = unwrap(await ctx.messages.append(
       sessionB.id,
       'user',
       textBlocks('b1'),
-    );
+    ));
 
     // 预置 A 的 rule_snapshot / file_cache，验证拒绝时不会被清。
     await sk.set(
@@ -392,7 +394,7 @@ describe('MessageTranscriptEffectsService', () => {
     const beforeA = await ctx.messages.listBySession(sessionA.id);
     const beforeB = await ctx.messages.listBySession(sessionB.id);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         effects.setMessageFloorAtMessage(project.id, sessionA.id, anchorB.id),
       (err: unknown) => {
@@ -417,15 +419,15 @@ describe('MessageTranscriptEffectsService', () => {
 
     // KKV 两域未被清（清域副作用未发生）。
     assert.equal(
-      await sk.get(sessionA.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md'),
+      unwrap(await sk.get(sessionA.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md')),
       JSON.stringify({ body: 'x', mtimeMs: 1 }),
     );
     assert.equal(
-      await sk.get(
+      unwrap(await sk.get(
         sessionA.id,
         SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
         RULE_SNAPSHOT_CANON_KEY,
-      ),
+      )),
       '[]',
     );
   });

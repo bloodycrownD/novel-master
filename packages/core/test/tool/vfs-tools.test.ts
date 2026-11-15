@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -250,8 +251,8 @@ novelMasterTestFixture();
 describe("Builtin file tools V2 (integration)", () => {
   it("write/edit/read flow via revision-aware vfs", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -284,8 +285,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("write without options overwrites an existing file", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -305,8 +306,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("vfs.write 不再暴露版本参数：传入 options 被忽略，重复写 last-write-wins", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -338,8 +339,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs ls/glob/grep flow", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/docs/a.md", "# A");
     await vfs.write("/docs/b.txt", "plain");
@@ -375,8 +376,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs mkdir creates directory visible in ls", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -395,10 +396,10 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs rm without -r recursively deletes non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.mkdir("/dir");
+    unwrap(await vfs.mkdir("/dir"));
     await vfs.write("/dir/a.txt", "gone");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -415,10 +416,10 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs rm -r removes directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.mkdir("/dir");
+    unwrap(await vfs.mkdir("/dir"));
     await vfs.write("/dir/a.txt", "gone");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -435,8 +436,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs mv migrates file content", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/old.md", "body");
 
@@ -455,8 +456,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs cp duplicates file and keeps source", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/src/x.md", "x");
 
@@ -472,10 +473,10 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs cp -r duplicates directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.mkdir("/src");
+    unwrap(await vfs.mkdir("/src"));
     await vfs.write("/src/x.md", "x");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -490,8 +491,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T4: read 5000 lines defaults to 2000 with truncated and nextOffset", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 5000 }, (_, i) => `line-${i + 1}`).join("\n");
     await vfs.write("/big.txt", content);
@@ -516,8 +517,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("fs rm removes a file", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.txt", "gone");
 
@@ -535,8 +536,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T5: read offset out of bounds returns error", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/small.txt", "one\n two");
 
@@ -553,8 +554,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T5: read 中等单行（3000 字符 < 50KB）完整返回，不再按 2000 字符截行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/long.txt", "a".repeat(3000));
 
@@ -577,8 +578,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T-R1: read 单行 300KB 文件返回 50KB 预算内前缀（不再是 2000 字符），末行截断不可续读", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     // 单行 300KB：旧行为（truncateLine 2000 字符）只回 2000 字符，
     // 新行为按 50KB 单一预算尽量填满、末行截到预算点。
@@ -618,8 +619,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T-R1: 多行超预算文件跨行填满预算，nextOffset 跳过被截的末行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     // 9 行 × 10KB('b') + 1 行 100KB('c') + 1 行 'd'。每行 10240B：
     // 行 1-4 累计 40963B，行 5（40963+1+10240=51204）超 51200 预算 →
@@ -675,8 +676,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T-R1: 多行正常文件（<50KB，行 ≤2000 字符）输出与旧行为一致（快照对照）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 100 }, (_, i) => `第${i + 1}行内容`.padEnd(20, "字")).join("\n");
     await vfs.write("/normal.txt", content);
@@ -704,8 +705,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T-R2: 普通文件不变——5000 行大文件仍按行数帽分页（旧行为快照）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const content = Array.from({ length: 5000 }, (_, i) => `line-${i + 1}`).join("\n");
     await vfs.write("/big-t-r2.txt", content);
@@ -731,8 +732,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T6: grep and glob truncate beyond 100 matches", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     for (let i = 0; i < 120; i++) {
       await vfs.write(`/m-${i}.txt`, "needle here");
@@ -764,8 +765,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("T-G3: 超 50KB 响应经 curl 落盘真实 VFS：/tmp 首建目录 + file_cache + 目录规则 + read 分页读回全文", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const workplace = createWorkplaceService(ctx.conn, {
       kind: "session",
@@ -853,8 +854,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("wraps VfsError as FAILED and preserves cause", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -876,8 +877,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("write/mkdir 对接真实 workplace 服务：新层级规则 on、rule_off 不覆盖", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const workplace = createWorkplaceService(ctx.conn, {
       kind: "session",
@@ -910,8 +911,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("write 编辑已有文件祖先目录仍无规则行；同树新建才补父链（B-1）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const workplace = createWorkplaceService(ctx.conn, {
       kind: "session",
@@ -958,8 +959,8 @@ describe("Builtin file tools V2 (integration)", () => {
 
   it("补目录规则失败不阻断 write/mkdir 主流程（吞错契约，G-1）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const realWorkplace = createWorkplaceService(ctx.conn, {
       kind: "session",

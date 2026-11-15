@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
@@ -43,7 +44,7 @@ export class DefaultMessageTranscriptEffectsService
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number> {
+  ): Promise<Result<number, AppError>> {
     return this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
   }
 
@@ -52,7 +53,7 @@ export class DefaultMessageTranscriptEffectsService
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number> {
+  ): Promise<Result<number, AppError>> {
     return this.deps.messages.showRange(sessionId, fromSeq, toSeq);
   }
 
@@ -76,24 +77,23 @@ export class DefaultMessageTranscriptEffectsService
     _projectId: string,
     sessionId: string,
     messageId: string
-  ): Promise<SetMessageFloorResult> {
+  ): Promise<Result<SetMessageFloorResult, AppError>> {
     // 读路径（2026-09-29 治本）：原先全量 listBySession（大会话连解压秒级）
     // 只为找锚点 + 算 MAX(seq)——锚点单行 get，MAX(seq) 用尾部一条（含
     // hidden、按 seq 取最大，与原口径一致）。
-    let anchor;
-    try {
-      anchor = await this.deps.messages.get(messageId);
-    } catch {
+    const anchorResult = await this.deps.messages.get(messageId);
+    if (!anchorResult.ok) {
       // get 的 not-found 不带会话上下文，包回原错误形态（含 sessionId）。
-      throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, sessionId, messageId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, sessionId, messageId }));
     }
+    const anchor = anchorResult.value;
     // 锚点必须归属本会话：get 全局按 id 查，跨会话传入他会话的合法消息 id
     // 会拿他会话的 seq 对本会话错误范围执行 hide/show，按旧实现的 404 口径拦下。
     if (anchor.sessionId !== sessionId) {
-      throw new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, sessionId, messageId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${messageId}`, kind: "message", id: messageId, sessionId, messageId }));
     }
     if (anchor.role !== "user") {
-      throw new AppError("CHAT_INVALID_ARGUMENT", { detail: `set-floor anchor role must be user, got: ${anchor.role}` });
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `set-floor anchor role must be user, got: ${anchor.role}` }));
     }
 
     const tail = await this.deps.messages.listBySessionTail(sessionId, {
@@ -114,18 +114,22 @@ export class DefaultMessageTranscriptEffectsService
       write.register({
         name: "hide-prefix",
         execute: async () => {
-          hiddenCount = await this.deps.messages.hideRange(
+          const r = await this.deps.messages.hideRange(
             sessionId,
             hidePrefix.fromSeq,
             hidePrefix.toSeq
           );
+          // CoordinatedWrite 的补偿协议只有 throw 通道（平台边界，保留解包 throw）。
+          if (!r.ok) throw r.error;
+          hiddenCount = r.value;
         },
         rollback: async () => {
-          await this.deps.messages.showRange(
+          const r = await this.deps.messages.showRange(
             sessionId,
             hidePrefix.fromSeq,
             hidePrefix.toSeq
           );
+          if (!r.ok) throw r.error;
         },
       });
     }
@@ -133,18 +137,21 @@ export class DefaultMessageTranscriptEffectsService
       write.register({
         name: "show-suffix",
         execute: async () => {
-          shownCount = await this.deps.messages.showRange(
+          const r = await this.deps.messages.showRange(
             sessionId,
             showSuffix.fromSeq,
             showSuffix.toSeq
           );
+          if (!r.ok) throw r.error;
+          shownCount = r.value;
         },
         rollback: async () => {
-          await this.deps.messages.hideRange(
+          const r = await this.deps.messages.hideRange(
             sessionId,
             showSuffix.fromSeq,
             showSuffix.toSeq
           );
+          if (!r.ok) throw r.error;
         },
       });
     }
@@ -180,6 +187,6 @@ export class DefaultMessageTranscriptEffectsService
       sessionId
     );
 
-    return { hiddenCount, shownCount };
+    return Result.ok({ hiddenCount, shownCount });
   }
 }

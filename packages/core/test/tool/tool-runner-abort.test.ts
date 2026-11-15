@@ -30,7 +30,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     controller.abort();
     await assert.rejects(pending, (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-      assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
+      assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
       return true;
     });
   });
@@ -64,7 +64,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     controller.abort(); // 先 abort 再 call：工具副作用必须还没启动就被拒
     await assert.rejects(runner.call("side-effect", {}, { signal: controller.signal }), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-      assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
+      assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
       return true;
     });
     assert.equal(runCount, 0);
@@ -128,7 +128,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
         assert.deepEqual(outcome, { ok: true, output: released }, `outcomes[${i}] 应为已放行的成功结果`);
       } else {
         assert.equal(outcome.ok, false, `outcomes[${i}] 应记失败`);
-        if (!outcome.ok) assert.match(String((outcome.error as { cause?: unknown }).cause), /工具调用已取消/);
+        if (!outcome.ok) assert.ok(isAppError(outcome.error, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED");
       }
     }
   });
@@ -155,7 +155,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       controller.abort();
       await assert.rejects(pending, (err: unknown) => {
         assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-        assert.match(String((err as { cause?: unknown }).cause), /工具调用已取消/);
+        assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
         return true;
       });
       rejectWork(new Error("late failure")); // 竞速已结束才 reject：不得漏成 unhandled

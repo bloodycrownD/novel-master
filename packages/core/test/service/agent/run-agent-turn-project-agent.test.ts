@@ -1,3 +1,4 @@
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
@@ -117,16 +118,16 @@ describe("runAgentTurn project agent config", () => {
     await ctx.state.setCurrentAgentId("global-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 旧库残留 custom 配置——runner 应忽略它，走 session 级。
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
-    });
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
 
     const runtime = makeRuntime(ctx, registry);
     let capturedDefinition: AgentDefinition | undefined;
@@ -198,11 +199,11 @@ describe("runAgentTurn project agent config", () => {
       ),
     );
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "session-bind-agent",
-    });
+    }));
 
     const runtime = makeRuntime(ctx, registry);
     let capturedDefinition: AgentDefinition | undefined;

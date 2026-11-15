@@ -97,14 +97,15 @@ export async function handleSkillsRead(
       req.path,
       req.projectId,
     );
+    if (!file.ok) throw file.error;
     return {
       ok: true,
       data: {
-        domain: file.domain,
-        name: file.name,
-        path: file.path,
-        content: file.content,
-        version: file.version,
+        domain: file.value.domain,
+        name: file.value.name,
+        path: file.value.path,
+        content: file.value.content,
+        version: file.value.version,
       },
     };
   } catch (err) {
@@ -124,7 +125,8 @@ export async function handleSkillsWrite(
       req.content,
       req.projectId,
     );
-    return { ok: true, data: result };
+    if (!result.ok) throw result.error;
+    return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

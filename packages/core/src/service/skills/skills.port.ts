@@ -9,6 +9,8 @@ import type {
   SkillDomain,
   SkillSummary,
 } from "@/domain/skills/model/skill.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /** 技能清单查询域：global 全局域，或某个项目域。 */
 export type SkillListScope = "global" | { readonly projectId: string };
@@ -67,6 +69,8 @@ export interface SkillInfoChanges {
  *
  * @remarks 读写经 ScopedVfsService 落 `vfs_entry`（两域逻辑前缀
  * `/meta/skills/{name}/`）；负清单读写 `skill_disabled_rule`。
+ * 已知失败（校验不通过、技能不存在、builtin 保护、缺 projectId）走
+ * `Result.err(AppError)`；未知异常（含事务回滚与 TdbcError 解包）仍走 throw。
  */
 export interface SkillService {
   /** 技能清单（含 files 相对路径、front matter 元数据、有效性）。 */
@@ -90,14 +94,14 @@ export interface SkillService {
     name: string,
     path?: string,
     projectId?: string
-  ): Promise<SkillFileContent>;
+  ): Promise<Result<SkillFileContent, AppError>>;
 
   /**
    * 写技能文件（整文件覆盖）。
    *
-   * 须显式域（缺域抛 `SkillError(MISSING_DOMAIN)`）；新建技能 = 向新
+   * 须显式域（缺域返回 `Result.err(SKILL_MISSING_DOMAIN)`）；新建技能 = 向新
    * 目录写 SKILL.md，技能名须过 SKILL_NAME_PATTERN 校验。内置保留名在
-   * 目录不存在（= 新建）时抛 `SkillError(BUILTIN_SKILL_NAME_RESERVED)`；
+   * 目录不存在（= 新建）时返回 `Result.err(SKILL_BUILTIN_NAME_RESERVED)`；
    * 目录已存在（内置本体 / 历史副本）的编辑放行；seed 通道传
    * `options.builtinSeed` 豁免新建拦截。
    */
@@ -108,19 +112,19 @@ export interface SkillService {
     content: string,
     projectId?: string,
     options?: SkillWriteOptions
-  ): Promise<{ version: number }>;
+  ): Promise<Result<{ version: number }, AppError>>;
 
   /**
    * 新建语义的内置保留名校验（D2② 门独立暴露，供 ZIP 导入等不经
    * writeSkillFile 的新建通道复用）：名单外放行；名单内且该域技能目录
-   * 不存在（= 新建）抛 `SkillError(BUILTIN_SKILL_NAME_RESERVED)`；
+   * 不存在（= 新建）返回 `Result.err(SKILL_BUILTIN_NAME_RESERVED)`；
    * 目录已存在（内置本体 / 历史副本）放行。project 域须带 projectId。
    */
   assertSkillNameNotReservedForCreate(
     domain: SkillDomain,
     name: string,
     projectId?: string
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 
   /**
    * 局部修改技能文件（匹配语义复用 normalize-for-match，同 edit 工具）。
@@ -132,19 +136,19 @@ export interface SkillService {
     path: string | undefined,
     match: SkillEditMatch,
     projectId?: string
-  ): Promise<{ version: number; replacements: number }>;
+  ): Promise<Result<{ version: number; replacements: number }, AppError>>;
 
   /** 负清单读写：disabled=true 落行、false 删行（只影响当前项目）。 */
   setDisabled(
     projectId: string,
     name: string,
     disabled: boolean
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 
   /**
    * 整目录删除技能，连带清理负清单行（global 域清所有项目行）。
    */
-  deleteSkill(location: SkillLocation): Promise<void>;
+  deleteSkill(location: SkillLocation): Promise<Result<void, AppError>>;
 
   /**
    * 编辑技能信息（重命名 + 描述同一提交）：单事务完成校验门 → 目录
@@ -152,14 +156,14 @@ export interface SkillService {
    * 同步（parseSkillFrontMatter 成功才重写；invalid 技能跳过重写）→
    * 负清单行迁移。
    *
-   * 校验门（撞错抛 SkillError）：newName 须过技能名校验；global 域内置
-   * 技能不可改名（`BUILTIN_SKILL_RENAME`，仅改描述放行）；目标名撞内置
-   * 保留名且目标目录不存在拒（`BUILTIN_SKILL_NAME_RESERVED`）；域内
-   * 已存在目标目录拒（`SKILL_ALREADY_EXISTS`）。仅改描述时不迁目录、
-   * 不迁负清单。
+   * 校验门（撞错返回 `Result.err`）：newName 须过技能名校验；global 域内置
+   * 技能不可改名（`SKILL_BUILTIN_RENAME`，仅改描述放行）；目标名撞内置
+   * 保留名且目标目录不存在拒（`SKILL_BUILTIN_NAME_RESERVED`）；域内
+   * 已存在目标目录拒（`SKILL_ALREADY_EXISTS`，事务内重查，仍走 throw
+   * 回滚通道）。仅改描述时不迁目录、不迁负清单。
    */
   updateSkillInfo(
     location: SkillLocation,
     changes: SkillInfoChanges
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 }

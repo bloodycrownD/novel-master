@@ -12,6 +12,7 @@
  * @module test/message-checkpoint/backfill-transaction-scope
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -52,8 +53,8 @@ async function seedSession(
   label: string,
   messageCount: number
 ): Promise<{ projectId: string; sessionId: string; lastMessageId: string }> {
-  const project = await ctx.projects.create(`P-${label}-${Date.now()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${label}-${Date.now()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const vfs = createScopedVfsService(conn, {
     kind: "session",
     projectId: project.id,
@@ -63,9 +64,9 @@ async function seedSession(
   let lastId = "";
   for (let i = 0; i < messageCount; i++) {
     lastId = (
-      await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
+      unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
         blocks: [{ type: "text", text: `m${i}` }],
-      })
+      }))
     ).id;
   }
   return { projectId: project.id, sessionId: session.id, lastMessageId: lastId };
@@ -299,11 +300,11 @@ describe("CS-05b backfill 事务边界", () => {
     const checkpoint = createMessageCheckpointService(conn);
 
     // 第一轮：建游标（游标缺失 ⇒ 判定回退全量，会开一条写事务写游标）。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     probe.reset();
     // 第二轮：count === 游标 ⇒ 短路。段 0 的判定、游标写入都是单条语句，
     // 整条路径**不开事务**。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     assert.equal(
       probe.transactionCount,
       0,
@@ -323,23 +324,23 @@ describe("CS-05b backfill 事务边界", () => {
     const smallAnchor = (
       await ctx.messages.listBySession(small.sessionId)
     )[0]!;
-    await checkpoint.capture(
+    unwrap(await checkpoint.capture(
       small.sessionId,
       small.projectId,
       smallAnchor.id
-    );
+    ));
 
     const big = await seedSession(ctx, conn, "b3m200", 200);
     const bigAnchor = (await ctx.messages.listBySession(big.sessionId))[196]!;
-    await checkpoint.capture(big.sessionId, big.projectId, bigAnchor.id);
+    unwrap(await checkpoint.capture(big.sessionId, big.projectId, bigAnchor.id));
 
     probe.reset();
-    await checkpoint.backfillMissingBaselines(small.sessionId, small.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(small.sessionId, small.projectId));
     assert.equal(probe.transactionCount, 1, "补写路径恰好一条短事务（段 2）");
     const smallStmts = probe.statementCountInTransaction(0);
 
     probe.reset();
-    await checkpoint.backfillMissingBaselines(big.sessionId, big.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(big.sessionId, big.projectId));
     assert.equal(probe.transactionCount, 1, "补写路径恰好一条短事务（段 2）");
     const bigStmts = probe.statementCountInTransaction(0);
 
@@ -365,16 +366,16 @@ describe("CS-05b backfill 事务边界", () => {
       return Number(rows[0]!.n);
     };
 
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     const afterFirst = await countRows();
     assert.ok(afterFirst > 0, "第一轮应当补上 checkpoint");
 
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     const afterSecond = await countRows();
     assert.equal(afterSecond, afterFirst, "第二轮不得新增行（insertCheckpoint 是替换语义）");
 
     // 第三轮：游标已前移 ⇒ 走短路，仍不得新增。
-    await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId);
+    unwrap(await checkpoint.backfillMissingBaselines(seeded.sessionId, seeded.projectId));
     assert.equal(await countRows(), afterFirst);
   });
 });

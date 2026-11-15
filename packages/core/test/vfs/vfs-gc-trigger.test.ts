@@ -17,6 +17,7 @@
  * @module test/vfs/vfs-gc-trigger
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { bootstrapNovelMaster, SCHEMA_BOOT_VERSION } from "@novel-master/core";
@@ -45,7 +46,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
   it("删除 revision 后 ref_count 递减，归零 blob 行被触发器自动删", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
 
     // 写两个文件共用同一内容（共享 blob）
@@ -55,8 +56,8 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     // 查 entry repo 拿 entry_id
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const scopeKey = `project:${project.id}`;
-    const entryA = await entryRepo.findByPath(scopeKey, "/a.md");
-    const entryB = await entryRepo.findByPath(scopeKey, "/b.md");
+    const entryA = unwrap(await entryRepo.findByPath(scopeKey, "/a.md"));
+    const entryB = unwrap(await entryRepo.findByPath(scopeKey, "/b.md"));
     assert.ok(entryA != null);
     assert.ok(entryB != null);
 
@@ -84,7 +85,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
     assert.ok(deleted >= 1, "ref_count 归零的 revision 应被 sweep 删除");
 
     // 现在 entry 可安全删
-    await entryRepo.delete(scopeKey, "/a.md", { recursive: false });
+    unwrap(await entryRepo.delete(scopeKey, "/a.md", { recursive: false }));
 
     // 触发器 trg_revision_delete_dec_blob_ref 已触发：vfs_content_blob.ref_count 从 2 到 1
     const blobMid = await ctx.conn.query<{ ref_count: number }>(
@@ -107,7 +108,7 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
 
     const deleted2 = await deleteUnreferencedUnderScope(revisionRepo, scopeKey, "/");
     assert.ok(deleted2 >= 1, "第二条 revision 也应被 sweep 删除");
-    await entryRepo.delete(scopeKey, "/b.md", { recursive: false });
+    unwrap(await entryRepo.delete(scopeKey, "/b.md", { recursive: false }));
 
     // 触发器在 DELETE revision 时判归零 —— 但此刻 /b.md 的 entry 仍在引用该
     // hash（真实 GC 链一律是「先 sweep revision、后删 entry」），守卫因此**不删**。
@@ -150,10 +151,10 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     const suffix = testIsolationSuffix();
 
     // project 域源文件 → 创建 session 时初始化拷贝
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // session 独有孤儿文件（会被 replace 删掉，其 blob 应随 sweep 回收）
@@ -198,7 +199,7 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     // global 源侧只提供 /repl 子树；project 域前缀外放一个保留文件
     const gvfs = ctx.globalVfs();
     await gvfs.write(`/repl/new-${suffix}.md`, `new-${suffix}`);
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const projectScope = `project:${project.id}`;
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write(`/repl/old-${suffix}.md`, `old-${suffix}`);
@@ -316,7 +317,7 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
   ): Promise<{ hash: string; revisionEntryId: number }> {
     // contentStore.put 负责 encoding/bytes 等列，并给出权威 content_hash
     const hash = await new SqliteVfsContentStore(ctx.conn).put(body);
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const scope = `project:${project.id}`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
 
@@ -332,7 +333,7 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
        VALUES (?, ?, 'file', 1, ?, 0)`,
       [scope, `/holder-${suffix}.md`, hash],
     );
-    const holder = await entryRepo.findByPath(scope, `/holder-${suffix}.md`);
+    const holder = unwrap(await entryRepo.findByPath(scope, `/holder-${suffix}.md`));
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
        VALUES (?, 1, 'active', 0, ?, 1)`,
@@ -406,7 +407,7 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
     const hash = await new SqliteVfsContentStore(ctx.conn).put(
       `guard-body-noregress-${suffix}`,
     );
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const scope = `project:${project.id}`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     await ctx.conn.execute(
@@ -414,7 +415,7 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
        VALUES (?, '/lonely.md', 'file', 1, ?, 0)`,
       [scope, hash],
     );
-    const entry = await entryRepo.findByPath(scope, "/lonely.md");
+    const entry = unwrap(await entryRepo.findByPath(scope, "/lonely.md"));
     await ctx.conn.execute(
       `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
        VALUES (?, 1, 'active', 0, ?, 1)`,

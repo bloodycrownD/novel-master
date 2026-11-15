@@ -13,8 +13,9 @@
  * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
  * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
  * ③ build 分段弃权（{@link buildSessionPromptInput} 的 shouldBail）与 resolve 段
- *   弃权（core 抛 {@link PromptTokenResolveBailedError}）——两类都由
- *   {@link isChipBailError} 收口，**绝不进 fallback**；
+ *   弃权（错误通道迁移二期起 core 读口沿 Outcome.cancelled/replaced 返回，
+ *   读口就地转抛 build 同款哨兵）——两类都由 {@link isChipBailError} 收口，
+ *   **绝不进 fallback**；
  * ④ run 终态后补推一次读口（走防抖入口，与抽屉自发那次合并，见文件末尾注册处）。
  *
  * r3-cache-3：第二相投递改为「直接推暖机手里已有的精确档」，不再「补读一次现值」
@@ -32,11 +33,11 @@ import {
   countPromptLlmInputHeuristicOnly,
   formatContextUsageLabel,
   formatTokenSourceBadge,
-  PromptTokenResolveBailedError,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
   type CountPromptLlmInputParams,
+  type Interrupt,
   type TokenCounter,
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
@@ -59,18 +60,15 @@ import {
 const log = createLogger("desktop.chat-prompt-tokens");
 
 /**
- * chip 读口中途弃权的两类哨兵错误统一判定：build 段（ChatPromptBuildBailedError，
- * desktop 侧本地抛）与 resolve 段（PromptTokenResolveBailedError，core 在整串级
- * 重活之前抛）。两处调用点（build / resolve）都必须用本判定收成 **null 哨兵**——
- * 漏任何一处，弃权错误都会逃逸进 {@link loadChatPromptTokenStatsResilient} 的
- * 兜底分支，而兜底是「完整 build + 启发式计数」的重活，正是要消灭的那一趟。
- * 与 mobile 的 isChipBailError 同款口径。
+ * chip 读口中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError，
+ * desktop 侧本地抛）。resolve 段自错误通道迁移二期起不再抛哨兵——core 读口
+ * 沿 Outcome.cancelled/replaced 返回，调用点就地转抛本哨兵后仍由本判定收口。
+ * 各调用点都必须收成 **null 哨兵**——漏任何一处，弃权错误都会逃逸进
+ * {@link loadChatPromptTokenStatsResilient} 的兜底分支，而兜底是「完整 build +
+ * 启发式计数」的重活，正是要消灭的那一趟。与 mobile 的 isChipBailError 同款口径。
  */
 function isChipBailError(error: unknown): boolean {
-  return (
-    error instanceof ChatPromptBuildBailedError ||
-    error instanceof PromptTokenResolveBailedError
-  );
+  return error instanceof ChatPromptBuildBailedError;
 }
 
 /**
@@ -232,7 +230,8 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = definition.model ?? sessionConfig.modelId;
+  if (!sessionConfig.ok) throw sessionConfig.error;
+  const savedModelId = definition.model ?? sessionConfig.value.modelId;
 
   if (!savedModelId) {
     // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
@@ -339,9 +338,10 @@ async function isPreciseWarmStillCurrent(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    const definition = await runtime.agentRegistry.get(sessionConfig.agentId);
+    if (!sessionConfig.ok) throw sessionConfig.error;
+    const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
     return (
-      (definition.model ?? sessionConfig.modelId) === warmSavedModelId
+      (definition.model ?? sessionConfig.value.modelId) === warmSavedModelId
     );
   } catch {
     return false;
@@ -436,6 +436,9 @@ async function loadChatPromptTokenStatsNow(
   // 整串级检查点、后台暖机的排程判断，全看这一条判据（与 mobile 同款口径）。
   const shouldBail = (): boolean =>
     isDesktopSessionRunInFlight(runtime, scope.sessionId);
+  // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
+  // Interrupt——run 在途即本轮读数被在途 run 取代，收成 replaced。
+  const bailInterrupt = (): Interrupt | null => (shouldBail() ? { kind: "replaced" } : null);
   if (shouldBail()) {
     // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
     // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
@@ -451,12 +454,22 @@ async function loadChatPromptTokenStatsNow(
       // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
       // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
       // 与压缩评估同一读口、同一口径。
-      const result = await resolvePromptTokensWithBackfill(
+      const outcome = await resolvePromptTokensWithBackfill(
         scope.sessionId,
         args.rawMessages,
         params,
-        { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail },
+        { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt },
       );
+      if (outcome.kind === "failed") {
+        // core 读口的已知失败（现无产出路径）：原样上抛，不吞成弃权。
+        throw outcome.error;
+      }
+      if (outcome.kind !== "completed") {
+        // 中途弃权（run 起步）：core 不再抛哨兵，转抛本地 bail 哨兵——既有
+        // isChipBailError catch 收成 null，绝不进 fallback。
+        throw new ChatPromptBuildBailedError();
+      }
+      const result = outcome.value;
       if (
         armPreciseWarm &&
         result.source === "local" &&
@@ -472,22 +485,27 @@ async function loadChatPromptTokenStatsNow(
           scope.sessionId,
           args.rawMessages,
           params,
-          { sessionKkv: runtime.sessionKkv, shouldBail },
+          { sessionKkv: runtime.sessionKkv, shouldBail: bailInterrupt },
         )
           .then(async (precise) => {
+            if (precise.kind !== "completed") {
+              // 中途弃权（run 起步，错误通道迁移二期沿返回值到达）：没有更
+              // 准的读数可推，静默收场。
+              return;
+            }
             // 暖机没拿到比估算更好的档（该家族只有近似档 / 编码表建不起来）
             // → 没有更准的读数可推，chip 停在 `gpt ≈` 才是如实。
-            if (precise.estimated) {
+            if (precise.value.estimated) {
               return;
             }
             // r3-cache-3：直接推这份精确档（不补读、不重跑 build）；
             // 只有「暖机期间模型已变」才在 push 内部补读一次。
             await pushPreciseStatsIfReady(runtime, scope, {
               savedModelId,
-              tokenCount: precise.tokenCount,
-              estimated: precise.estimated,
-              counterKind: precise.counterKind,
-              source: precise.source,
+              tokenCount: precise.value.tokenCount,
+              estimated: precise.value.estimated,
+              counterKind: precise.value.counterKind,
+              source: precise.value.source,
             });
           })
           .catch((error: unknown) => {

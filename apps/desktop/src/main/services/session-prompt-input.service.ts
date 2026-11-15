@@ -4,10 +4,7 @@
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 import { promptAssembler } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import {
-  assembleWorkplaceDisplay,
-  WorkplaceAssemblyAbortedError,
-} from "@novel-master/core/workplace";
+import { assembleWorkplaceDisplay, type Interrupt } from "@novel-master/core/workplace";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
@@ -21,10 +18,11 @@ export interface SessionPromptScope {
  * build 与发送链共享 main 进程的单事件循环与单 SQLite 连接，会话消息一多，
  * build 整串装配本身就是秒级重活。**build 分段间 + build/resolve 关键边界
  * 检查**（本类只覆盖 build 段内部的分段检查点；build→resolve 之间那道与
- * resolve 段内部的整串级重活分别由读口的边界检查点与 core 抛的
- * `PromptTokenResolveBailedError` 负责——三类弃权点在读口同款 catch 里收成
- * 同一个 null 哨兵）命中即抛本错误，调用方（token 读口）捕获后按「保留旧
- * 标签」收场，**不触发 fallback 重算**。
+ * resolve 段内部的整串级重活由读口的边界检查点与 core 读口负责——错误通道
+ * 迁移二期起 core 弃权沿 Outcome.cancelled/replaced 返回，读口就地转抛本
+ * 哨兵收口，三类弃权点在读口同款 catch 里收成同一个 null 哨兵）命中即抛本
+ * 错误，调用方（token 读口）捕获后按「保留旧标签」收场，**不触发 fallback
+ * 重算**。
  *
  * 非读口消费方（预览 `prompt-preview.service` 等）不传 shouldBail，行为不变。
  */
@@ -92,28 +90,31 @@ export async function buildSessionPromptInput(
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
   // 挂分段弃权判据（2026-09-30 mobile「16s 原子组装段」治本的同款下沉）：
-  // run 起步后本刷新在第一个文件边界就死；中止错误就地转抛 build 的统一
-  // 哨兵类，读口 catch 的判定不变。fingerprint 透传给 ctx——token 估算读数
-  // 的记忆缓存靠它免掉重复序列化/计数。
-  let assembled: Awaited<ReturnType<typeof assembleWorkplaceDisplay>>;
-  try {
-    assembled = await assembleWorkplaceDisplay(
-      wtScope,
-      {
-        sessionKkv: runtime.sessionKkv,
-        workplace: wt,
-        vfs,
-        layout: resolved.prompts,
-      },
-      { shouldStop: () => shouldBail?.() === true },
-    );
-  } catch (error) {
-    if (error instanceof WorkplaceAssemblyAbortedError) {
-      throw new ChatPromptBuildBailedError();
-    }
-    throw error;
+  // run 起步后本刷新在第一个文件边界就死；错误通道迁移二期起中止沿
+  // Outcome.cancelled/replaced 返回，此处转抛 build 的统一哨兵，读口 catch
+  // 的判定不变。fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
+  // 重复序列化/计数。
+  const assembled = await assembleWorkplaceDisplay(
+    wtScope,
+    {
+      sessionKkv: runtime.sessionKkv,
+      workplace: wt,
+      vfs,
+      layout: resolved.prompts,
+    },
+    {
+      shouldStop: (): Interrupt | null =>
+        shouldBail?.() === true ? { kind: "replaced" } : null,
+    },
+  );
+  if (assembled.kind === "failed") {
+    // 组装内的已知失败（如路径解析）：与旧 throw 同路径上抛，不吞成弃权。
+    throw assembled.error;
   }
-  const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled;
+  if (assembled.kind !== "completed") {
+    throw new ChatPromptBuildBailedError();
+  }
+  const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled.value;
   bail();
   const prepareRuntime = {
     sessionId: scope.sessionId,

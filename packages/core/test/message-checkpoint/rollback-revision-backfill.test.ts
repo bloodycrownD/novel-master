@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -19,23 +20,23 @@ novelMasterTestFixture();
 /** 双 checkpoint 场景：回滚到第一个 assistant anchor。 */
 async function setupR1Scenario() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = await ctx.messages.append(session.id, "user", textBlocks("poem"));
-  const assistant1 = await ctx.messages.append(session.id, "assistant", {
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "here" }],
-  });
+  }));
   await svfs.write("/poem.md", "roses", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("more"));
-  const assistant2 = await ctx.messages.append(session.id, "assistant", {
+  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
-  });
+  }));
   await svfs.write("/poem.md", "violets", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
@@ -50,7 +51,7 @@ async function deleteAnchorRevisionForPath(
   const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
   const sk = scopeKey({ kind: "session", projectId, sessionId });
   const entries = new SqliteVfsEntryRepository(ctx.conn);
-  const entry = await entries.findByPath(sk, logicalPath);
+  const entry = unwrap(await entries.findByPath(sk, logicalPath));
   if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
   const revisions = await ctx.conn.query<{ version: number }>(
     "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
@@ -67,25 +68,25 @@ async function deleteAnchorRevisionForPath(
 /** 双文件 anchor + tail 修改，/b.md 锚点 revision 可被删除。 */
 async function setupMultiFilePartialScenario() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
-  const assistant1 = await ctx.messages.append(session.id, "assistant", {
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "write" }],
-  });
+  }));
   await svfs.write("/a.md", "anchor-a", { versionCheck: false });
   await svfs.write("/b.md", "anchor-b", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("more"));
-  const assistant2 = await ctx.messages.append(session.id, "assistant", {
+  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
-  });
+  }));
   await svfs.write("/a.md", "tail-a", { versionCheck: false });
   await svfs.write("/b.md", "tail-b", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
@@ -137,8 +138,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
   it("RB4: backfill 时 entry 不存在 — 写入 deleted revision", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
@@ -163,24 +164,24 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
   it("RB4b(纯删除): entry 已删但 revision 在 — 回滚后文件复现 anchor 内容", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" },
       ],
-    });
+    }));
     // 常规删除：deleteWithRevision 写墓碑 revision 后物理删除 entry 行。
-    await svfs.delete("/gone.md");
+    unwrap(await svfs.delete("/gone.md"));
 
     // 不手工删 revision 行——checkpoint 的 path 快照 + 旧 entryId 应让回滚复活文件。
     await ctx.sessionFs.rollbackToMessage(
@@ -199,22 +200,22 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
   it("RB4b(纯删除·无 backfill 选项): 不抛 BACKFILL_REQUIRED，直接复现", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    await ctx.messages.append(session.id, "user", textBlocks("go"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     await svfs.write("/gone2.md", "anchor-content", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/gone2.md");
+    }));
+    unwrap(await svfs.delete("/gone2.md"));
 
     // entry 已删但 checkpoint 旧 entryId 的 revision 行在 → 不算 missing，
     // 无需 revisionHeadBackfill 确认也不应抛 BACKFILL_REQUIRED。
@@ -229,30 +230,30 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
   it("RB4b(手工删 revision 行): entry 与 revision 都缺 — 维持降级不复现", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("go")));
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "write" }],
-    });
+    }));
     await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 先拿到 entryId 再删除 entry
     const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
     const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const entry = await entries.findByPath(sk, "/gone.md");
+    const entry = unwrap(await entries.findByPath(sk, "/gone.md"));
     assert.ok(entry != null);
     const entryId = entry.entryId;
 
-    await ctx.messages.append(session.id, "user", textBlocks("more"));
-    await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
-    });
-    await svfs.delete("/gone.md");
+    }));
+    unwrap(await svfs.delete("/gone.md"));
 
     // 手动删除 anchor revision 行（revision 真缺，非 entry 缺）——
     // backfill 按旧 entryId 回补 deleted 墓碑，回滚走删除降级，不复现。
@@ -321,8 +322,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
   it("RB5: revision 已存在时不重复 append", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
@@ -335,7 +336,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const sk = scopeKey(scope);
 
     await svfs.write("/exists.md", "content", { versionCheck: false });
-    const entry = await entries.findByPath(sk, "/exists.md");
+    const entry = unwrap(await entries.findByPath(sk, "/exists.md"));
     assert.ok(entry != null);
     const before = await ctx.conn.query<{ version: number }>(
       "SELECT version FROM vfs_revision WHERE entry_id = ?",

@@ -2,6 +2,7 @@
  * truncate-tail-in-transaction 单测。
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -53,17 +54,17 @@ async function insertOrphanRevision(
 describe("truncateTailInTransaction", () => {
   it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", {
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "2" }],
-    });
+    }));
     await svfs.write("/a.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
 
     await ctx.conn.transaction(async (tx) => {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
@@ -86,8 +87,8 @@ describe("truncateTailInTransaction", () => {
 
   it("tail 非空时清空 file_cache / pending；保留 rule_snapshot", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sessionKkv = createSessionKkvService(ctx.conn);
     await sessionKkv.set(
       session.id,
@@ -114,8 +115,8 @@ describe("truncateTailInTransaction", () => {
       "value",
     );
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
 
     await ctx.conn.transaction(async (tx) => {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
@@ -127,32 +128,32 @@ describe("truncateTailInTransaction", () => {
     });
 
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       null,
     );
     assert.equal(
-      await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
+      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
       null,
     );
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
         RULE_SNAPSHOT_CANON_KEY,
-      ),
+      )),
       "[]",
     );
-    assert.equal(await sessionKkv.get(session.id, "other_domain", "keep"), "value");
+    assert.equal(unwrap(await sessionKkv.get(session.id, "other_domain", "keep")), "value");
   });
 
   it("afterSeq 之后无消息时不改状态条 kkv", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sessionKkv = createSessionKkvService(ctx.conn);
     const pendingJson = "[]";
     await sessionKkv.set(
@@ -168,7 +169,7 @@ describe("truncateTailInTransaction", () => {
       '{"body":"x","mtimeMs":1}',
     );
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("only"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("only")));
 
     await ctx.conn.transaction(async (tx) => {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
@@ -180,15 +181,15 @@ describe("truncateTailInTransaction", () => {
     });
 
     assert.equal(
-      await sessionKkv.get(
+      unwrap(await sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       pendingJson,
     );
     assert.equal(
-      await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
+      unwrap(await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md")),
       '{"body":"x","mtimeMs":1}',
     );
   });
@@ -199,11 +200,11 @@ describe("truncateTailInTransaction", () => {
   // 这步清扫、且那条路径没有 deferred 补做，孤儿行永久残留。
   it("sweepRevisions 缺省不 defer 时，事务内仍做全局孤儿清扫", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-gs-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-gs-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     await insertOrphanRevision(ctx.conn, 999101);
@@ -232,11 +233,11 @@ describe("truncateTailInTransaction", () => {
 
   it("显式 deferGlobalOrphanGc 时事务内跳过全局孤儿清扫", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-gd-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-gd-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
 
     await insertOrphanRevision(ctx.conn, 999102);
 

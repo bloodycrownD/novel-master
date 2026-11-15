@@ -51,7 +51,8 @@ export async function resolveAgentForProject(
   void runtime.projects;
   // 会话独立持有 agentId，去 registry 取 definition。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
-  const agentId = sessionConfig.agentId;
+  if (!sessionConfig.ok) throw sessionConfig.error;
+  const agentId = sessionConfig.value.agentId;
   try {
     const definition = await runtime.agentRegistry.get(agentId);
     return { source: "session", agentId, definition };

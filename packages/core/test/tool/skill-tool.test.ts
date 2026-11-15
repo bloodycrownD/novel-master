@@ -1,3 +1,4 @@
+import { Result } from "../../src/errors/either.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -23,11 +24,11 @@ import type { AgentDefinition } from "../../src/domain/agent/model/agent-definit
 
 /** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */
 function fakeSkillService(overrides?: {
-  readonly read?: SkillService["readSkillFile"];
-  readonly write?: SkillService["writeSkillFile"];
-  readonly edit?: SkillService["editSkillFile"];
-  readonly effective?: SkillService["effectiveSkills"];
-  readonly list?: SkillService["listSkills"];
+  readonly read?: (domain: unknown, name: string, path?: string, projectId?: string) => Promise<SkillFileContent>;
+  readonly write?: (domain: unknown, name: string, path: string | undefined, content: string, projectId?: string) => Promise<{ version: number }>;
+  readonly edit?: (domain: unknown, name: string, path: string | undefined, match: unknown, projectId?: string) => Promise<{ version: number; replacements: number }>;
+  readonly effective?: (projectId: string) => Promise<EffectiveSkill[]>;
+  readonly list?: (scope: unknown) => Promise<unknown[]>;
 }): SkillService & {
   readonly calls: { readonly method: string; readonly args: unknown[] }[];
 } {
@@ -42,26 +43,30 @@ function fakeSkillService(overrides?: {
       return fn(...args);
     };
   };
+  // 错误通道迁移二期：readSkillFile / writeSkillFile / editSkillFile 已改
+  // `Result` 通道——override 仍写裸值（测试可读性好），在这里统一包成 Ok。
+  const okv = async <T>(value: T) => Result.ok(value);
   const service = {
     readSkillFile: record(
       "readSkillFile",
-      overrides?.read ??
-        (async () =>
-          ({
-            domain: "project",
-            name: "demo",
-            path: "SKILL.md",
-            content: "---\nname: demo\ndescription: 演示\n---\n正文",
-            version: 3,
-          }) satisfies SkillFileContent),
+      async (...args: Parameters<SkillService["readSkillFile"]>) =>
+        okv(await (overrides?.read ?? (async () => ({
+          domain: "project",
+          name: "demo",
+          path: "SKILL.md",
+          content: "---\nname: demo\ndescription: 演示\n---\n正文",
+          version: 3,
+        }) satisfies Promise<SkillFileContent>))(...args)),
     ) as SkillService["readSkillFile"],
     writeSkillFile: record(
       "writeSkillFile",
-      overrides?.write ?? (async () => ({ version: 5 })),
+      async (...args: Parameters<SkillService["writeSkillFile"]>) =>
+        okv(await (overrides?.write ?? (async () => ({ version: 5 })))(...args as never)),
     ) as SkillService["writeSkillFile"],
     editSkillFile: record(
       "editSkillFile",
-      overrides?.edit ?? (async () => ({ version: 6, replacements: 1 })),
+      async (...args: Parameters<SkillService["editSkillFile"]>) =>
+        okv(await (overrides?.edit ?? (async () => ({ version: 6, replacements: 1 })))(...args as never)),
     ) as SkillService["editSkillFile"],
     effectiveSkills: record(
       "effectiveSkills",

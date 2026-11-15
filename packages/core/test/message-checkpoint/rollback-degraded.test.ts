@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "../../src/errors/app-error.js";
@@ -20,23 +21,23 @@ novelMasterTestFixture();
 /** R1 场景：双 checkpoint，回滚到第一个 assistant anchor。 */
 async function setupR1Scenario() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  const user1 = await ctx.messages.append(session.id, "user", textBlocks("poem"));
-  const assistant1 = await ctx.messages.append(session.id, "assistant", {
+  const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
+  const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "here" }],
-  });
+  }));
   await svfs.write("/poem.md", "roses", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("more"));
-  const assistant2 = await ctx.messages.append(session.id, "assistant", {
+  unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
+  const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
     blocks: [{ type: "text", text: "later" }],
-  });
+  }));
   await svfs.write("/poem.md", "violets", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
@@ -50,7 +51,7 @@ async function deleteAnchorRevisionForPath(
 ) {
   const sk = scopeKey({ kind: "session", projectId, sessionId });
   const entries = new SqliteVfsEntryRepository(ctx.conn);
-  const entry = await entries.findByPath(sk, logicalPath);
+  const entry = unwrap(await entries.findByPath(sk, logicalPath));
   if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
   const revisions = await ctx.conn.query<{ version: number }>(
     "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
@@ -153,19 +154,19 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
   it("DF4: R9 无 checkpoint anchor 完整回滚成功，不抛 degradable", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "mutate" }],
-    });
+    }));
     await svfs.write("/state.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const textOnly = await ctx.messages.append(session.id, "assistant", {
+    const textOnly = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "no tools" }],
-    });
+    }));
     await svfs.write("/state.md", "v2", { versionCheck: false });
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
@@ -178,8 +179,8 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
   it("DF5: ROLLBACK_MESSAGE_NOT_FOUND 不包装为 degradable", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     await assert.rejects(
       () =>
@@ -229,15 +230,15 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
   it("DF-U1: undo_send + skipVfsReconcile 删除锚点且 VFS 不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/keep.md", "stable", { versionCheck: false });
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("anchor"));
-    await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("anchor")));
+    unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
-    });
+    }));
     await svfs.write("/keep.md", "mutated", { versionCheck: false });
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
@@ -251,23 +252,23 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
   it("DF-U2: undo_send + revisionHeadBackfill 成功含锚点删除并对齐 prior VFS", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     await svfs.write("/state.md", "baseline", { versionCheck: false });
-    const priorAsst = await ctx.messages.append(session.id, "assistant", {
+    const priorAsst = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "setup" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id));
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("prompt"));
-    const asst1 = await ctx.messages.append(session.id, "assistant", {
+    const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("prompt")));
+    const asst1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "reply" }],
-    });
+    }));
     await svfs.write("/state.md", "after-user1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id);
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
       revisionHeadBackfill: true,

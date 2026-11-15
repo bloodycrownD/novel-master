@@ -4,6 +4,7 @@
  * @module test/chat/message-visibility
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -48,29 +49,29 @@ function recordingConnection(inner: TdbcConnection): {
 describe("Message visibility", () => {
   it("hides and shows a single message", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("msg1"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("msg1")));
 
-    await ctx.messages.hide(m1.id);
-    const hidden = await ctx.messages.get(m1.id);
+    unwrap(await ctx.messages.hide(m1.id));
+    const hidden = unwrap(await ctx.messages.get(m1.id));
     assert.equal(hidden.hidden, true);
 
-    await ctx.messages.show(m1.id);
-    const shown = await ctx.messages.get(m1.id);
+    unwrap(await ctx.messages.show(m1.id));
+    const shown = unwrap(await ctx.messages.get(m1.id));
     assert.equal(shown.hidden, false);
   });
 
   it("hides a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("4"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("4")));
 
-    const count = await ctx.messages.hideRange(session.id, 2, 3);
+    const count = unwrap(await ctx.messages.hideRange(session.id, 2, 3));
     assert.equal(count, 2);
 
     const list = await ctx.messages.listBySession(session.id);
@@ -82,12 +83,12 @@ describe("Message visibility", () => {
 
   it("listBySession includeHidden:false 在 SQL 层只回可见消息（chip 读口口径）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("visible-1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("hidden-1"));
-    await ctx.messages.append(session.id, "user", textBlocks("visible-2"));
-    await ctx.messages.hide(m2.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("visible-1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("hidden-1")));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("visible-2")));
+    unwrap(await ctx.messages.hide(m2.id));
 
     const visibleOnly = await ctx.messages.listBySession(session.id, {
       includeHidden: false,
@@ -107,12 +108,12 @@ describe("Message visibility", () => {
 
   it("listMessageHeadersBySession：头投影含 hidden、按 seq 升序、字段齐（不解压正文）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("h1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("h2"));
-    const m3 = await ctx.messages.append(session.id, "user", textBlocks("h3"));
-    await ctx.messages.hide(m3.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("h1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("h2")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("h3")));
+    unwrap(await ctx.messages.hide(m3.id));
 
     const headers = await ctx.messages.listMessageHeadersBySession(session.id);
     assert.equal(headers.length, 3);
@@ -131,12 +132,12 @@ describe("Message visibility", () => {
 
   it("listBySessionOffset：头投影列集恰为 6 列、正文零解析、offset 语义不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("o1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("o2"));
-    const m3 = await ctx.messages.append(session.id, "user", textBlocks("o3"));
-    await ctx.messages.hide(m3.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("o1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("o2")));
+    const m3 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("o3")));
+    unwrap(await ctx.messages.hide(m3.id));
 
     const { conn, sqls } = recordingConnection(ctx.conn);
     const repo = new SqliteMessageRepository(conn);
@@ -181,16 +182,16 @@ describe("Message visibility", () => {
     // 观测面照本文件既有的 recordingConnection 形态——按「实际发出的 SELECT
     // 文本 + 真库返回行」两向钉，避免改 SQL 时悄悄改坏结构。
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
     // seq1 user / seq2 assistant / seq3-5 user / seq6-8 assistant
-    await ctx.messages.append(session.id, "user", textBlocks("u1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("a1"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("u1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a1")));
     for (let i = 0; i < 3; i++) {
-      await ctx.messages.append(session.id, "user", textBlocks(`u${i + 2}`));
+      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`u${i + 2}`)));
     }
     for (let i = 0; i < 3; i++) {
-      await ctx.messages.append(session.id, "assistant", textBlocks(`a${i + 2}`));
+      unwrap(await ctx.messages.append(session.id, "assistant", textBlocks(`a${i + 2}`)));
     }
 
     const { conn, sqls } = recordingConnection(ctx.conn);
@@ -232,8 +233,8 @@ describe("Message visibility", () => {
       [3, 4, 5],
       "user tail 取最近 3 条"
     );
-    const other = await ctx.sessions.create(project.id, "S2");
-    await ctx.messages.append(other.id, "assistant", textBlocks("other"));
+    const other = unwrap(await ctx.sessions.create(project.id, "S2"));
+    unwrap(await ctx.messages.append(other.id, "assistant", textBlocks("other")));
     const leaked = await repo.listBySessionTailOfRole(session.id, "assistant", 10);
     assert.equal(
       leaked.some((m) => m.sessionId === other.id),
@@ -247,15 +248,15 @@ describe("Message visibility", () => {
 
   it("shows a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
-    await ctx.messages.hide(m1.id);
-    await ctx.messages.hide(m2.id);
+    unwrap(await ctx.messages.hide(m1.id));
+    unwrap(await ctx.messages.hide(m2.id));
 
-    const count = await ctx.messages.showRange(session.id, 1, 2);
+    const count = unwrap(await ctx.messages.showRange(session.id, 1, 2));
     assert.equal(count, 2);
 
     const list = await ctx.messages.listBySession(session.id);
@@ -265,14 +266,14 @@ describe("Message visibility", () => {
 
   it("fork preserves hidden state", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
-    await ctx.messages.hide(m1.id);
+    unwrap(await ctx.messages.hide(m1.id));
 
-    const forked = await ctx.messages.fork(session.id, m2.id);
+    const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
 
     assert.equal(forkedMsgs.length, 2);
@@ -282,14 +283,14 @@ describe("Message visibility", () => {
 
   it("session copy preserves hidden state", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
-    await ctx.messages.hide(m1.id);
+    unwrap(await ctx.messages.hide(m1.id));
 
-    const copy = await ctx.sessions.copy(session.id);
+    const copy = unwrap(await ctx.sessions.copy(session.id));
     const copyMsgs = await ctx.messages.listBySession(copy.id);
 
     assert.equal(copyMsgs.length, 2);
@@ -299,44 +300,44 @@ describe("Message visibility", () => {
 
   it("hideRange returns 0 when fromSeq > toSeq", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
 
-    const count = await ctx.messages.hideRange(session.id, 5, 3);
+    const count = unwrap(await ctx.messages.hideRange(session.id, 5, 3));
     assert.equal(count, 0);
   });
 
   it("hideRange only affects existing messages", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
-    const count = await ctx.messages.hideRange(session.id, 1, 10);
+    const count = unwrap(await ctx.messages.hideRange(session.id, 1, 10));
     assert.equal(count, 2); // Only 2 messages exist
   });
 
   it("hideRange returns 0 when hiding already hidden messages", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
-    const first = await ctx.messages.hideRange(session.id, 1, 2);
+    const first = unwrap(await ctx.messages.hideRange(session.id, 1, 2));
     assert.equal(first, 2);
 
-    const second = await ctx.messages.hideRange(session.id, 1, 2);
+    const second = unwrap(await ctx.messages.hideRange(session.id, 1, 2));
     assert.equal(second, 0);
   });
 
   it("new messages are visible by default", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("msg1"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("msg1")));
 
     assert.equal(m1.hidden, false);
   });

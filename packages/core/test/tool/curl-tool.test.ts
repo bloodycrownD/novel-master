@@ -749,10 +749,11 @@ describe("curl 工具", () => {
       thrown = e;
     }
     assert.ok(isAppError(thrown) && thrown.key.startsWith("TOOL_"));
-    assert.equal(thrown.key, "TOOL_FAILED");
+    // 错误通道迁移二期：取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为
+    // 中性文案（不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
+    assert.equal(thrown.key, "TOOL_CANCELLED");
     const llmMessage = formatToolErrorForLlm(thrown);
-    assert.match(llmMessage, /请求已取消/);
-    assert.match(llmMessage, /https:\/\/example\.com\/pre-aborted/);
+    assert.equal(llmMessage, "工具调用已取消");
     assert.equal(fetchFn.mock.callCount(), 0, "预取消不得发起任何请求");
   });
 });

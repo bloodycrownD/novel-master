@@ -68,7 +68,8 @@ export async function loadSessionAgentPickerRows(
   sessionId: string,
 ): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
-  const currentId = sessionConfig.agentId;
+  if (!sessionConfig.ok) throw sessionConfig.error;
+  const currentId = sessionConfig.value.agentId;
   const rows = await loadAgentRows(runtime);
   return {rows, currentId};
 }

@@ -10,6 +10,7 @@
  * @module test/service/template/push-session-workspace
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
@@ -31,15 +32,15 @@ describe("push-session-workspace（session → project 整树推送）", () => {
   it("T-WP1: 整树覆盖——project 孤儿文件被删、内容取 session 版本", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", `A-${suffix}`);
     await pvfs.write("/b.md", `B-old-${suffix}`);
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     // session 侧：改写 b + 新增 c（a 已删——先在 session 删掉 a）
-    await svfs.delete("/a.md");
+    unwrap(await svfs.delete("/a.md"));
     await svfs.write("/b.md", `B-new-${suffix}`);
     await svfs.write("/sub/c.md", `C-${suffix}`);
 
@@ -73,11 +74,11 @@ describe("push-session-workspace（session → project 整树推送）", () => {
   it("T-WP2: 目录规则覆盖——push 后 project 规则 = session 版本", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/b.md", `B-old-${suffix}`);
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     // create 之后才在 project 侧设独有规则（create 时会把 project 规则镜像进
     // session，放在 create 前就不再是「project 独有」了）。
     const pwt = createWorkplaceService(ctx.conn, {
@@ -120,11 +121,11 @@ describe("push-session-workspace（session → project 整树推送）", () => {
   it("T-WP3: 推送链后无 orphan blob（deferred GC 路径）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", `A-${suffix}`);
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     // session 改写 a + 新增文件，project 侧旧 blob 在推送替换后应被 sweep/GC 回收
     await svfs.write("/a.md", `A2-${suffix}`);
@@ -167,11 +168,11 @@ describe("push-session-workspace（session → project 整树推送）", () => {
   it("T-WP4b: 事务失败回滚——project 不留半态", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/keep.md", `KEEP-${suffix}`);
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/pushed.md", `PUSHED-${suffix}`);
 

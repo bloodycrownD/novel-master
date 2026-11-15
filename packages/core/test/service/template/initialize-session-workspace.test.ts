@@ -9,6 +9,7 @@
  * - (d) 事务回滚：workspace 初始化后出错不残留（session.create 事务边界原子性）
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -30,7 +31,7 @@ novelMasterTestFixture();
 describe("session create / workspace initialize (core 层)", () => {
   it("(a+b) session scope 与 template 一致、revision seed、worktree 规则复制", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const pvfs = ctx.projectVfs(project.id);
     // 非空 template：根目录文件 + 子目录文件
     await pvfs.write("/a.md", "A-content");
@@ -43,7 +44,7 @@ describe("session create / workspace initialize (core 层)", () => {
     await pwt.setDirRule({ logicalPath: "/", headCount: 3 });
 
     // session.create 走 clearCheckpoints=false 的 initializeSessionWorkspace
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // --- (a) 文件/目录/内容一致 ---
@@ -87,7 +88,7 @@ describe("session create / workspace initialize (core 层)", () => {
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     for (const p of ["/a.md", "/sub/b.md"]) {
-      const entry = await entries.findByPath(sk, p);
+      const entry = unwrap(await entries.findByPath(sk, p));
       assert.ok(entry != null, `${p} entry 应存在`);
       const live = await svfs.read(p);
       const rev = await revisions.findByEntryAndVersion(entry.entryId, live.version);
@@ -112,18 +113,18 @@ describe("session create / workspace initialize (core 层)", () => {
 
   it("(c) clearCheckpoints=false 不清 checkpoint；true 清 checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/x.md", "X");
-    const session = await ctx.sessions.create(project.id);
-    const assistant = await ctx.messages.append(
+    const session = unwrap(await ctx.sessions.create(project.id));
+    const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
       textBlocks("wrote"),
-    );
+    ));
     await ctx.sessionVfs(project.id, session.id).write("/x.md", "snap", {
       versionCheck: false,
     });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), true);
 
@@ -154,9 +155,9 @@ describe("session create / workspace initialize (core 层)", () => {
 
   it("(d) workspace 初始化随事务回滚不残留", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/keep.md", "KEEP");
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 事务内做一次 replace + copy（真在写库），然后人为抛错回滚
@@ -178,20 +179,20 @@ describe("session create / workspace initialize (core 层)", () => {
   it("(e) 技能重定位后无排除项：project 域全部带入 session，技能天然不在 project 域（T-SR2）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A-content");
     await pvfs.write("/sub/deep/b.md", "B-content");
 
     // 技能经 SkillService 落独立 meta 域，project template 域不再有 /meta/skills 内容
     const skills = createSkillsService(ctx.conn);
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "project",
       "my-skill",
       undefined,
       `---\nname: my-skill\ndescription: 演示\n---\n\nskill-${suffix}`,
       project.id,
-    );
+    ));
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const templateSkillRows = await entryRepo.listEntriesUnderPrefix(
       `project:${project.id}`,
@@ -211,7 +212,7 @@ describe("session create / workspace initialize (core 层)", () => {
       "技能应落 project:{pid}:meta 域",
     );
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // project 域全部内容带入 session（无排除项）

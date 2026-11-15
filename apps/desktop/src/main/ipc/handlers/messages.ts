@@ -106,7 +106,8 @@ export async function handleMessagesAppend(
       req.role,
       textBlocks(req.text),
     );
-    return { ok: true, data: toDto(msg) };
+    if (!msg.ok) throw msg.error;
+    return { ok: true, data: toDto(msg.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -141,9 +142,11 @@ export async function handleMessagesEdit(
   try {
     const rt = await getDesktopRuntime();
     const existing = await rt.messages.get(req.messageId);
-    const merged = applyTextEditToMessageContent(existing.content, req.text);
+    if (!existing.ok) throw existing.error;
+    const merged = applyTextEditToMessageContent(existing.value.content, req.text);
     const msg = await rt.messages.updateContent(req.messageId, merged);
-    return { ok: true, data: toDto(msg) };
+    if (!msg.ok) throw msg.error;
+    return { ok: true, data: toDto(msg.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -155,13 +158,16 @@ export async function handleMessagesHide(
   try {
     const rt = await getDesktopRuntime();
     const msg = await rt.messages.get(req.messageId);
-    const session = await rt.sessions.get(msg.sessionId);
-    await rt.messageTranscriptEffects.hideMessagesInRange(
-      session.projectId,
-      msg.sessionId,
-      msg.seq,
-      msg.seq,
+    if (!msg.ok) throw msg.error;
+    const session = await rt.sessions.get(msg.value.sessionId);
+    if (!session.ok) throw session.error;
+    const hidden = await rt.messageTranscriptEffects.hideMessagesInRange(
+      session.value.projectId,
+      msg.value.sessionId,
+      msg.value.seq,
+      msg.value.seq,
     );
+    if (!hidden.ok) throw hidden.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -174,13 +180,16 @@ export async function handleMessagesShow(
   try {
     const rt = await getDesktopRuntime();
     const msg = await rt.messages.get(req.messageId);
-    const session = await rt.sessions.get(msg.sessionId);
-    await rt.messageTranscriptEffects.showMessagesInRange(
-      session.projectId,
-      msg.sessionId,
-      msg.seq,
-      msg.seq,
+    if (!msg.ok) throw msg.error;
+    const session = await rt.sessions.get(msg.value.sessionId);
+    if (!session.ok) throw session.error;
+    const shown = await rt.messageTranscriptEffects.showMessagesInRange(
+      session.value.projectId,
+      msg.value.sessionId,
+      msg.value.seq,
+      msg.value.seq,
     );
+    if (!shown.ok) throw shown.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -193,13 +202,15 @@ export async function handleMessagesHideRange(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.get(req.sessionId);
+    if (!session.ok) throw session.error;
     const count = await rt.messageTranscriptEffects.hideMessagesInRange(
-      session.projectId,
+      session.value.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
     );
-    return { ok: true, data: { count } };
+    if (!count.ok) throw count.error;
+    return { ok: true, data: { count: count.value } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -211,13 +222,15 @@ export async function handleMessagesShowRange(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.get(req.sessionId);
+    if (!session.ok) throw session.error;
     const count = await rt.messageTranscriptEffects.showMessagesInRange(
-      session.projectId,
+      session.value.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
     );
-    return { ok: true, data: { count } };
+    if (!count.ok) throw count.error;
+    return { ok: true, data: { count: count.value } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -244,7 +257,8 @@ export async function handleMessagesDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.messages.delete(req.messageId);
+    const deleted = await rt.messages.delete(req.messageId);
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -281,8 +295,9 @@ export async function handleMessagesSetFloor(
       req.messageId,
     );
     // 置位：project∪annotate；禁止终态强制 []
+    if (!result.ok) throw result.error;
     await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
-    return { ok: true, data: result };
+    return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -294,7 +309,8 @@ export async function handleMessagesFork(
   try {
     const rt = await getDesktopRuntime();
     const forked = await rt.messages.fork(req.sessionId, req.messageId);
-    return { ok: true, data: toSessionDto(forked) };
+    if (!forked.ok) throw forked.error;
+    return { ok: true, data: toSessionDto(forked.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

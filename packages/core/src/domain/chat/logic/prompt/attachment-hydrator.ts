@@ -11,7 +11,7 @@ import { parseRuleSnapshotJson } from "@/domain/workplace/logic/rule-snapshot-co
 import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import type { SkillService } from "@/service/skills/skills.port.js";
+import type { SkillFileContent, SkillService } from "@/service/skills/skills.port.js";
 import { isBinaryFilePath } from "@/common/file.js";
 import { messageBodyTextFromBlocks } from "../../content/message-body-text.js";
 import { textBlocks } from "../../content/text-blocks.js";
@@ -239,22 +239,29 @@ export class AttachmentHydrator {
     if (!names.has(name)) {
       return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
     }
+    // 读盘竞态兜底（判定存在但读取抛错）：Err 分支与 throw 透传都按
+    // 「不存在提示」收口，不写 seen——与 Result 化前的 catch-all 同语义。
+    let file: SkillFileContent;
     try {
-      const file = await skills.readSkillFile(undefined, name, undefined, projectId);
-      this.seen.add(key);
-      const oversized = !this.budget.tryConsume(file.content.length);
-      return {
-        ...attachment,
-        action: "skillAttach",
-        content: buildUserVfsActionXml("skillAttach", {
-          name,
-          content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
-          ...(oversized ? { display: "filename" as const } : {}),
-        }),
-      };
+      const fileResult = await skills.readSkillFile(undefined, name, undefined, projectId);
+      if (!fileResult.ok) {
+        return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+      }
+      file = fileResult.value;
     } catch {
       return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
     }
+    this.seen.add(key);
+    const oversized = !this.budget.tryConsume(file.content.length);
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: buildUserVfsActionXml("skillAttach", {
+        name,
+        content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
+        ...(oversized ? { display: "filename" as const } : {}),
+      }),
+    };
   }
 
   /** 首次全文 hydrate（文本 / workplace / filename 档）→ action XML。 */

@@ -37,12 +37,13 @@ async function loadDesktopScope(
   }
 
   const sessions = await rt.sessions.listByProject(projectId);
-  if (sessionId != null && !sessions.some((s) => s.id === sessionId)) {
+  if (!sessions.ok) throw sessions.error;
+  if (sessionId != null && !sessions.value.some((s) => s.id === sessionId)) {
     sessionId = undefined;
     await rt.state.resetCurrentSessionId();
   }
-  if (sessionId == null && sessions.length > 0) {
-    sessionId = sessions[0]!.id;
+  if (sessionId == null && sessions.value.length > 0) {
+    sessionId = sessions.value[0]!.id;
     await rt.state.setCurrentSessionId(sessionId);
   }
 
@@ -66,7 +67,8 @@ export async function handleScopeSetProject(
     const rt = await getDesktopRuntime();
     await rt.state.setCurrentProjectId(req.projectId);
     const sessions = await rt.sessions.listByProject(req.projectId);
-    const sessionId = sessions[0]?.id;
+    if (!sessions.ok) throw sessions.error;
+    const sessionId = sessions.value[0]?.id;
     if (sessionId != null) {
       await rt.state.setCurrentSessionId(sessionId);
     } else {

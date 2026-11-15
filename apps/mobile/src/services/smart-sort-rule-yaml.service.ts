@@ -35,7 +35,8 @@ export async function importSmartSortRuleYaml(
         try {
             const raw = parseText(yaml, 'yaml');
             const rules = await runtime.smartSortRule.importRules(raw);
-            count = rules.length;
+            if (!rules.ok) throw rules.error;
+            count = rules.value.length;
         } catch (error) {
             throw normalizeSmartSortImportError(error);
         }

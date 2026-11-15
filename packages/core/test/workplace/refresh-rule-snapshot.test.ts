@@ -1,6 +1,7 @@
 /**
  * T-CR2（规则快照半边）：refreshRuleSnapshot 写 canon 并清空 file_cache。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
@@ -15,8 +16,8 @@ novelMasterTestFixture();
 describe("refreshRuleSnapshot (T-CR2)", () => {
   it("T-CR2/T-CR8: evaluate→写 canon；file_cache 域空（新规则保存不靠 chip）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "hello");
@@ -35,7 +36,7 @@ describe("refreshRuleSnapshot (T-CR2)", () => {
       workplace: wt,
     });
 
-    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY);
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY));
     assert.ok(raw != null && raw !== "");
     const entries = parseRuleSnapshotJson(raw!);
     assert.ok(entries.ok);

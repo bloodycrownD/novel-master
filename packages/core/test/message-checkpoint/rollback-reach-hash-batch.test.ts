@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
@@ -17,22 +18,22 @@ novelMasterTestFixture();
 describe("rollback reach hash batch", () => {
   it("listDistinctCheckpointPointersForSession：同 path+version 跨 checkpoint 只计一次", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
 
     await svfs.write("/dup.md", "v1", { versionCheck: false });
     const version = (await svfs.read("/dup.md")).version;
 
-    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+    const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a1" }],
-    });
-    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+    }));
+    const assistant2 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "a2" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     const all = await repo.listFilePointersForSession(session.id);
     const distinct = await repo.listDistinctCheckpointPointersForSession(session.id);
@@ -185,8 +186,8 @@ describe("rollback reach hash batch", () => {
 
   it("deleteExceptReachable：批量删除不可达 revision 行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
@@ -201,7 +202,7 @@ describe("rollback reach hash batch", () => {
     await svfs.write("/batch-del.md", "drop-me", { versionCheck: false });
     await svfs.write("/batch-del.md", "live", { versionCheck: false });
 
-    const entry = await entries.findByPath(sk, "/batch-del.md");
+    const entry = unwrap(await entries.findByPath(sk, "/batch-del.md"));
     assert.ok(entry != null);
     const liveVersion = (await svfs.read("/batch-del.md")).version;
     const reachable = new Set([revisionPairKey(entry.entryId, liveVersion)]);

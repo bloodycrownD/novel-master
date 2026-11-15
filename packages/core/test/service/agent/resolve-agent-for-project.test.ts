@@ -1,3 +1,4 @@
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
@@ -43,17 +44,17 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     await registry.upsert("global-agent", globalDef);
     await ctx.state.setCurrentAgentId("global-agent");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
     // 旧库可能残留 custom 配置——resolve 应忽略，不再截断 session。
     const custom = customDefinition("项目专属助手");
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: custom,
-    });
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
 
     const runtime = {
       state: ctx.state,
@@ -87,11 +88,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     );
     await ctx.state.setCurrentAgentId("global-agent");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "global-agent",
-    });
+    }));
 
     const runtime = {
       state: ctx.state,
@@ -130,13 +131,13 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     );
     await ctx.state.setCurrentAgentId("global-agent");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     // 旧库残留 custom 配置——项目智能体下线后应被忽略。
     const custom = customDefinition("项目专属助手");
-    await ctx.projects.updateAgentConfig(project.id, {
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: custom,
-    });
+    }));
     await registry.upsert(
       "session-agent",
       decode(
@@ -148,11 +149,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
         agentDefinitionSchema,
       ),
     );
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "session-agent",
       modelId: TEST_SAVED_MODEL_SESSION,
-    });
+    }));
 
     const runtime = {
       state: ctx.state,
@@ -201,11 +202,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     );
     await registry.upsert("session-agent", bindDef);
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "session-agent",
-    });
+    }));
 
     const runtime = {
       state: ctx.state,
@@ -242,12 +243,12 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     );
     await ctx.state.setCurrentAgentId("global-agent");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
     // 强行把 session 引用指向一个不存在的 agent
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "ghost-agent",
-    });
+    }));
 
     const runtime = {
       state: ctx.state,
@@ -281,8 +282,8 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     );
     await ctx.state.setCurrentAgentId("session-agent");
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S1"));
 
     const runtime = {
       state: ctx.state,

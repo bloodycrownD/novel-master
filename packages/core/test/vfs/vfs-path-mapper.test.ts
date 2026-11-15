@@ -1,7 +1,8 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysicalPath } from "@novel-master/core/vfs";
+import { resolveLogicalPath, toLogicalPath, toPhysicalPath, validateLogicalPath } from "@novel-master/core/vfs";
 import { scopeKey, scopePhysicalPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
@@ -17,66 +18,37 @@ describe("vfs-path-mapper", () => {
   });
 
   it("global toPhysicalPath maps logical root to /template", () => {
-    assert.equal(toPhysicalPath({ kind: "global" }, "/"), "/template");
-    assert.equal(
-      toPhysicalPath({ kind: "global" }, "/seed/hello.md"),
-      "/template/seed/hello.md",
-    );
+    assert.equal(unwrap(toPhysicalPath({ kind: "global" }, "/")), "/template");
+    assert.equal(unwrap(toPhysicalPath({ kind: "global" }, "/seed/hello.md")), "/template/seed/hello.md");
   });
 
   it("global toLogicalPath strips /template prefix", () => {
-    assert.equal(
-      toLogicalPath({ kind: "global" }, "/template/seed/hello.md"),
-      "/seed/hello.md",
-    );
-    assert.equal(toLogicalPath({ kind: "global" }, "/template"), "/");
+    assert.equal(unwrap(toLogicalPath({ kind: "global" }, "/template/seed/hello.md")), "/seed/hello.md");
+    assert.equal(unwrap(toLogicalPath({ kind: "global" }, "/template")), "/");
   });
 
   it("rejects legacy /template logical paths", () => {
-    assert.throws(
-      () => assertLogicalPathAllowed({ kind: "global" }, "/template/legacy.md"),
-      (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_INVALID_PATH"));
-        return true;
-      },
-    );
-    assert.throws(
-      () => assertLogicalPathAllowed({ kind: "global" }, "/template"),
-      (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_INVALID_PATH"));
-        return true;
-      },
-    );
+    for (const logical of ["/template/legacy.md", "/template"]) {
+      const rejected = validateLogicalPath({ kind: "global" }, logical);
+      assert.ok(!rejected.ok, "legacy /template 前缀必须走 Err 分支（不再 throw）");
+      if (!rejected.ok) assert.ok(isAppError(rejected.error, "VFS_INVALID_PATH"));
+    }
   });
 
   it("allows /my-template as user subdirectory", () => {
-    assert.doesNotThrow(() =>
-      assertLogicalPathAllowed({ kind: "global" }, "/my-template/readme.md"),
-    );
+    assert.ok(validateLogicalPath({ kind: "global" }, "/my-template/readme.md").ok, "/my-template 是用户子目录，应放行");
   });
 
   it("project maps logical paths under project template prefix", () => {
     const scope = { kind: "project" as const, projectId: "p1" };
-    assert.equal(
-      toPhysicalPath(scope, "/prompts/system.md"),
-      "/projects/p1/template/prompts/system.md",
-    );
-    assert.equal(
-      toLogicalPath(scope, "/projects/p1/template/prompts/system.md"),
-      "/prompts/system.md",
-    );
+    assert.equal(unwrap(toPhysicalPath(scope, "/prompts/system.md")), "/projects/p1/template/prompts/system.md");
+    assert.equal(unwrap(toLogicalPath(scope, "/projects/p1/template/prompts/system.md")), "/prompts/system.md");
   });
 
   it("global-meta：物理 = 逻辑原样（自带 /meta 段），scopeKey global:meta", () => {
     const scope = { kind: "global-meta" as const };
-    assert.equal(
-      toPhysicalPath(scope, "/meta/skills/foo/SKILL.md"),
-      "/meta/skills/foo/SKILL.md",
-    );
-    assert.equal(
-      toLogicalPath(scope, "/meta/skills/foo/SKILL.md"),
-      "/meta/skills/foo/SKILL.md",
-    );
+    assert.equal(unwrap(toPhysicalPath(scope, "/meta/skills/foo/SKILL.md")), "/meta/skills/foo/SKILL.md");
+    assert.equal(unwrap(toLogicalPath(scope, "/meta/skills/foo/SKILL.md")), "/meta/skills/foo/SKILL.md");
     assert.equal(scopeKey(scope), "global:meta");
     // 逻辑路径自带 /meta 段，挂载前缀为空串
     assert.equal(scopePhysicalPrefix(scope), "");
@@ -84,27 +56,18 @@ describe("vfs-path-mapper", () => {
 
   it("project-meta：物理前缀 /projects/{pid}（逻辑自带 /meta 段），scopeKey project:{pid}:meta", () => {
     const scope = { kind: "project-meta" as const, projectId: "p1" };
-    assert.equal(
-      toPhysicalPath(scope, "/meta/skills/foo/SKILL.md"),
-      "/projects/p1/meta/skills/foo/SKILL.md",
-    );
-    assert.equal(
-      toLogicalPath(scope, "/projects/p1/meta/skills/foo/SKILL.md"),
-      "/meta/skills/foo/SKILL.md",
-    );
-    assert.equal(toLogicalPath(scope, "/projects/p1/meta"), "/meta");
+    assert.equal(unwrap(toPhysicalPath(scope, "/meta/skills/foo/SKILL.md")), "/projects/p1/meta/skills/foo/SKILL.md");
+    assert.equal(unwrap(toLogicalPath(scope, "/projects/p1/meta/skills/foo/SKILL.md")), "/meta/skills/foo/SKILL.md");
+    assert.equal(unwrap(toLogicalPath(scope, "/projects/p1/meta")), "/meta");
     assert.equal(scopeKey(scope), "project:p1:meta");
     // 逻辑路径自带 /meta 段，挂载前缀仅项目段
     assert.equal(scopePhysicalPrefix(scope), "/projects/p1");
-    // 不得误吃同项目 template / 隔壁项目 meta 前缀
-    assert.throws(
-      () => toLogicalPath(scope, "/projects/p1/template/a.md"),
-      (e: unknown) => isAppError(e, "VFS_INVALID_PATH"),
-    );
-    assert.throws(
-      () => toLogicalPath(scope, "/projects/p2/meta/skills/a/SKILL.md"),
-      (e: unknown) => isAppError(e, "VFS_INVALID_PATH"),
-    );
+    // 不得误吃同项目 template / 隔壁项目 meta 前缀：越 scope 返回 Err（不再 throw）
+    for (const physical of ["/projects/p1/template/a.md", "/projects/p2/meta/skills/a/SKILL.md"]) {
+      const rejected = toLogicalPath(scope, physical);
+      assert.ok(!rejected.ok, `越 scope 必须走 Err 分支：${physical}`);
+      if (!rejected.ok) assert.ok(isAppError(rejected.error, "VFS_INVALID_PATH"));
+    }
   });
 
   it("脱敏规则剥离 meta 两域物理前缀（先具体后泛化）", () => {

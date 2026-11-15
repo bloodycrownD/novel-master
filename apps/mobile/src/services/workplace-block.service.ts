@@ -22,12 +22,20 @@ export async function assembleWorkplaceForMobile(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const {workplaceDisplay} = await assembleWorkplaceDisplay(wtScope, {
+  const assembled = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
     workplace: runtime.workplace(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
     layout: {workplace: 'on'},
   });
+  if (assembled.kind === 'failed') {
+    throw assembled.error;
+  }
+  if (assembled.kind !== 'completed') {
+    // 本调用无 shouldStop 判据，中断分支恒不到（防御性收窄；错误通道迁移二期）。
+    throw new Error('workplace assembly interrupted without shouldStop');
+  }
+  const {workplaceDisplay} = assembled.value;
   return {workplaceDisplay, capturedAtMs: Date.now()};
 }
 

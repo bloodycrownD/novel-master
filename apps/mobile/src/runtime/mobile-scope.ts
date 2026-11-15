@@ -39,12 +39,13 @@ export async function loadMobileScope(
   }
 
   const sessions = await runtime.sessions.listByProject(projectId);
-  if (sessionId != null && !sessions.some(s => s.id === sessionId)) {
+  if (!sessions.ok) throw sessions.error;
+  if (sessionId != null && !sessions.value.some(s => s.id === sessionId)) {
     sessionId = undefined;
     await runtime.state.resetCurrentSessionId();
   }
-  if (sessionId == null && sessions.length > 0) {
-    const nextSessionId = sessions[0]!.id;
+  if (sessionId == null && sessions.value.length > 0) {
+    const nextSessionId = sessions.value[0]!.id;
     sessionId = nextSessionId;
     await runtime.state.setCurrentSessionId(nextSessionId);
   }
@@ -59,7 +60,8 @@ export async function setMobileProject(
 ): Promise<MobileScopeSnapshot> {
   await runtime.state.setCurrentProjectId(projectId);
   const sessions = await runtime.sessions.listByProject(projectId);
-  const sessionId = sessions[0]?.id;
+  if (!sessions.ok) throw sessions.error;
+  const sessionId = sessions.value[0]?.id;
   if (sessionId != null) {
     await runtime.state.setCurrentSessionId(sessionId);
   } else {

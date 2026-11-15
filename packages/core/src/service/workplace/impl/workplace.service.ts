@@ -7,8 +7,8 @@
 import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
-  assertLogicalPathAllowed,
   scopeKey as vfsScopeKey,
+  validateLogicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
@@ -119,7 +119,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(input.logicalPath);
     if (!resolved.ok) throw resolved.error;
     const logicalPath = resolved.value;
-    assertLogicalPathAllowed(this.scope, logicalPath);
+    const allowed = validateLogicalPath(this.scope, logicalPath);
+    if (!allowed.ok) throw allowed.error;
     if (
       input.ruleEnabled === false &&
       isWorkplaceRootPath(this.scope, logicalPath)
@@ -163,7 +164,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(logicalPath);
     if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
-    assertLogicalPathAllowed(this.scope, normalized);
+    const allowed = validateLogicalPath(this.scope, normalized);
+    if (!allowed.ok) throw allowed.error;
     const rule = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
       normalized
@@ -179,7 +181,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(input.logicalPath);
     if (!resolved.ok) throw resolved.error;
     const logicalPath = resolved.value;
-    assertLogicalPathAllowed(this.scope, logicalPath);
+    const allowed = validateLogicalPath(this.scope, logicalPath);
+    if (!allowed.ok) throw allowed.error;
     await this.deps.workplace.upsertFileRule({
       scopeKey: workplaceScopeKey(this.scope),
       logicalPath,
@@ -191,7 +194,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(logicalPrefix);
     if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
-    assertLogicalPathAllowed(this.scope, normalized);
+    const allowed = validateLogicalPath(this.scope, normalized);
+    if (!allowed.ok) throw allowed.error;
     await this.deps.workplace.deleteRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
       normalized
@@ -208,8 +212,10 @@ export class DefaultWorkplaceService implements WorkplaceService {
     if (!newResolved.ok) throw newResolved.error;
     const oldNormalized = oldResolved.value;
     const newNormalized = newResolved.value;
-    assertLogicalPathAllowed(this.scope, oldNormalized);
-    assertLogicalPathAllowed(this.scope, newNormalized);
+    const allowedOld = validateLogicalPath(this.scope, oldNormalized);
+    if (!allowedOld.ok) throw allowedOld.error;
+    const allowedNew = validateLogicalPath(this.scope, newNormalized);
+    if (!allowedNew.ok) throw allowedNew.error;
     await this.deps.workplace.renameRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
       oldNormalized,

@@ -57,7 +57,8 @@ export function SessionDetailScreen() {
     setLoading(true);
     try {
       const session = await runtime.sessions.get(sessionId);
-      setSessionTitle(session.title ?? '');
+      if (!session.ok) throw session.error;
+      setSessionTitle(session.value.title ?? '');
       const agentMeta = await loadChatAgentMeta(runtime, projectId, sessionId);
       setMeta(agentMeta);
     } catch (error) {

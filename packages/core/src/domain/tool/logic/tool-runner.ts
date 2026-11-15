@@ -20,8 +20,8 @@ export type ParallelToolOutcome = { readonly ok: true; readonly output: unknown 
 
 const DEFAULT_PARALLEL_CONCURRENCY = 8;
 
-/** runner 直通的业务错误 key（原 ToolError 5 码）；TOOL_SEARCH_* 等域内细分码仍包装为 TOOL_FAILED。 */
-const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_CONFLICT", "TOOL_INVALID_ARGUMENT", "TOOL_FAILED", "TOOL_FORBIDDEN"]);
+/** runner 直通的业务错误 key（原 ToolError 5 码 + 取消控制流码）；TOOL_SEARCH_* 等域内细分码仍包装为 TOOL_FAILED。 */
+const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_CONFLICT", "TOOL_INVALID_ARGUMENT", "TOOL_FAILED", "TOOL_FORBIDDEN", "TOOL_CANCELLED"]);
 
 /**
  * Executes tools from a registry with schema validation and consistent errors.
@@ -39,6 +39,7 @@ export class ToolRunner<Ctx = unknown> {
    * @throws ToolError NOT_FOUND when tool missing
    * @throws ToolError INVALID_ARGUMENT when input invalid
    * @throws ToolError FAILED when tool throws or output violates schema
+   * @throws AppError TOOL_CANCELLED when the turn signal aborted（预检与竞速同一码，UI 不弹错误文案）
    */
   async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Output> {
     const tool = this.registry.get(name);
@@ -64,7 +65,7 @@ export class ToolRunner<Ctx = unknown> {
       // 直接拒绝。竞速（下方）只让调用方 reject，不会阻止已启动的 work——写类
       // 工具副作用照常落盘；runParallel 的 worker 在 abort 后仍会从队列取下一
       // 个 call，靠这一道保证 abort 后不再发起新的 tool.run。
-      if (signal?.aborted) throw new AppError("TOOL_FAILED", {toolName: name, cause: new Error("工具调用已取消"), detail: `Tool failed: ${name}`});
+      if (signal?.aborted) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`});
       // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
       // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
@@ -76,10 +77,10 @@ export class ToolRunner<Ctx = unknown> {
       } else {
         const racing = new Promise<unknown>((resolve, reject) => {
           if (signal.aborted) {
-            reject(new Error("工具调用已取消"));
+            reject(new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`}));
             return;
           }
-          const onAbort = () => reject(new Error("工具调用已取消"));
+          const onAbort = () => reject(new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`}));
           signal.addEventListener("abort", onAbort, { once: true });
           work.then(
             (value) => {

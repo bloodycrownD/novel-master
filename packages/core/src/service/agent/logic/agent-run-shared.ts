@@ -6,7 +6,9 @@
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
+import type { AppError } from "@/errors/app-error.js";
 import { isAppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { MessageParams } from "@/common/i18n.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
@@ -15,7 +17,8 @@ import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
  * Agent run 共享的最小 runtime 表面。
  *
  * `sessions` 用来读会话级智能体配置（`SessionAgentConfig`），service 层保证
- * 列 NULL 已被 migration 回填，调用方拿到的永远是规范化后的对象。
+ * 列 NULL 已被 migration 回填，调用方拿到的永远是规范化后的对象（会话不存在
+ * 走 `Result.err`，NULL 不变量破坏仍 throw）。
  */
 export interface AgentRunRuntimePort {
   readonly state: {
@@ -27,7 +30,7 @@ export interface AgentRunRuntimePort {
     get(agentId: string): Promise<AgentDefinition>;
   };
   readonly sessions: {
-    getSessionAgentConfig(id: string): Promise<SessionAgentConfig>;
+    getSessionAgentConfig(id: string): Promise<Result<SessionAgentConfig, AppError>>;
   };
 }
 
@@ -117,8 +120,9 @@ export async function resolveApplicationModelIdForRun(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       sessionId
     );
+    if (!sessionConfig.ok) throw sessionConfig.error;
     // modelId 可选；空串归一化为 undefined（与 workspaceModelId 同约束）
-    sessionModelId = sessionConfig.modelId || undefined;
+    sessionModelId = sessionConfig.value.modelId || undefined;
   }
   const resolved = definition.model ?? sessionModelId;
   if (resolved == null || resolved === "") {

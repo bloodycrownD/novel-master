@@ -341,27 +341,37 @@ export class DefaultAgentRunner implements AgentRunner {
         // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
         // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
         // shouldStop（2026-09-30）：组装段曾是 16s 级无观察点原子块，停止要等
-        // 它跑完才能兑现；按文件粒度检查 signal，抛 WorkplaceAssemblyAbortedError
-        // 后沿下方 catch 的 signal?.aborted 分支路由进统一 abort 处理。
+        // 它跑完才能兑现；按文件粒度检查 signal。错误通道迁移二期：哨兵类已删，
+        // 中止沿 Outcome.cancelled/replaced 返回值到达，必须在此显式路由进
+        // handleAbort——不能再依赖下方 catch 的 signal?.aborted 兜底判定。
         // fingerprint（2026-09-30）：组装顺产的内容指纹不能丢——压缩评估链
         // （token-ratio trigger 消费 evaluation.ctx）靠它命中估算记忆、走增量
         // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
         // 评估链归零）。与 desktop build 的 ctx 同款透传（见
         // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
-        const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } =
-          await assembleWorkplaceDisplay(
-            wtScope,
-            {
-              sessionKkv: this.deps.sessionKkv,
-              workplace: wt,
-              vfs: this.deps.toolCtx.vfs,
-              layout: options.definition.prompts,
-            },
-            {
-              kkvSessionId: session.kkvScopeSessionId,
-              shouldStop: () => signal?.aborted === true,
-            }
-          );
+        const assembled = await assembleWorkplaceDisplay(
+          wtScope,
+          {
+            sessionKkv: this.deps.sessionKkv,
+            workplace: wt,
+            vfs: this.deps.toolCtx.vfs,
+            layout: options.definition.prompts,
+          },
+          {
+            kkvSessionId: session.kkvScopeSessionId,
+            shouldStop: () => signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null,
+          }
+        );
+        if (assembled.kind === "cancelled" || assembled.kind === "replaced") {
+          await handleAbort("after_assemble_workplace");
+          break;
+        }
+        if (assembled.kind === "failed") {
+          // 组装内的已知失败（如路径解析）：与旧 throw 同路径进 run 收尾
+          // （FAILED 事件 + 重抛），不吞成中断。
+          throw assembled.error;
+        }
+        const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } = assembled.value;
         if (signal?.aborted) {
           await handleAbort("after_assemble_workplace");
           break;

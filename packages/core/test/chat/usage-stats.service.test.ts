@@ -15,6 +15,7 @@
  * 时区相关断言不依赖运行机器时区：统一以「本地今日 0 点 ± 固定偏移」构造时间戳。
  */
 
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -111,8 +112,8 @@ interface MsgSeed {
 
 async function seedSession() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, "usage-stats");
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, "usage-stats"));
   return { ctx, project, session };
 }
 
@@ -188,9 +189,9 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const buckets = await svc.getDailyBuckets({
+    const buckets = unwrap(await svc.getDailyBuckets({
       range: dayRange(yesterday0, today0),
-    });
+    }));
     const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
     const yesterdayBucket = buckets.find((b) => b.bucketStartMs === yesterday0);
     assert.ok(todayBucket, "应存在本地今日 0 点起算的桶");
@@ -204,9 +205,9 @@ describe("usage stats service (T-S5)", () => {
       createdAtMs: localAddDays(today0, 1) + 30 * MIN,
       usage: { prompt: 99, total: 99 },
     });
-    const again = await svc.getDailyBuckets({
+    const again = unwrap(await svc.getDailyBuckets({
       range: dayRange(yesterday0, today0),
-    });
+    }));
     const todayAgain = again.find((b) => b.bucketStartMs === today0);
     assert.equal(again.length, 2);
     assert.equal(todayAgain!.calls, 2);
@@ -226,7 +227,7 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const hourly = await svc.getHourlyBuckets(fmtLocalDay(today0), {});
+    const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
     assert.equal(hourly.length, 24);
     assert.equal(hourly[0]!.bucketStartMs, today0);
     assert.equal(hourly[0]!.calls, 1);
@@ -240,10 +241,10 @@ describe("usage stats service (T-S5)", () => {
     const { ctx, project, session } = await seedSession();
     const today0 = localDayStart(Date.now());
     // 子会话：造一个 parent_session_id 非空的 session。
-    const childSession = await ctx.sessions.create(
+    const childSession = unwrap(await ctx.sessions.create(
       project.id,
       "usage-stats-child"
-    );
+    ));
     await ctx.conn.execute(
       `UPDATE chat_session SET parent_session_id = ? WHERE id = ?`,
       [session.id, childSession.id]
@@ -267,9 +268,9 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const summary = await svc.getSummary({
+    const summary = unwrap(await svc.getSummary({
       range: dayRange(today0, today0),
-    });
+    }));
     assert.equal(summary.calls, 2);
     assert.equal(summary.promptTokens, 130);
     assert.equal(summary.completionTokens, 70);
@@ -298,14 +299,14 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     const filter = { range: dayRange(today0, today0) };
-    const summary = await svc.getSummary(filter);
+    const summary = unwrap(await svc.getSummary(filter));
     // anthropic: 100 + 2048 + 512 = 2660；openai: 200（cached 已含 prompt 内）。
     assert.equal(summary.billedInputTokens, 2660 + 200);
     assert.equal(summary.cacheReadTokens, 2048 + 50);
     assert.equal(summary.cacheCreationTokens, 512);
 
     // 桶同样携带命中率原料（展示层算比率）。
-    const buckets = await svc.getDailyBuckets(filter);
+    const buckets = unwrap(await svc.getDailyBuckets(filter));
     const todayBucket = buckets.find((b) => b.bucketStartMs === today0);
     assert.ok(todayBucket);
     assert.equal(todayBucket!.billedInputTokens, 2660 + 200);
@@ -350,7 +351,7 @@ describe("usage stats service (T-S5)", () => {
     const svc = createUsageStatsService(ctx.conn);
     const filter = { range: dayRange(today0, today0) };
     // 非配置行与 null 行归并成一个「其他」行（用量相加），配置模型独立成行。
-    const breakdown = await svc.getModelBreakdown(filter);
+    const breakdown = unwrap(await svc.getModelBreakdown(filter));
     assert.equal(breakdown.length, 2);
     const other = breakdown.find((r) => r.modelName === null);
     const modelA = breakdown.find((r) => r.modelName === "model-a");
@@ -365,7 +366,7 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(breakdown[0]!.modelName, null);
 
     // model: null → 只查「其他」桶（NULL + 非配置），不含配置模型行。
-    const summaryNull = await svc.getSummary({ ...filter, model: null });
+    const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
     assert.equal(summaryNull.calls, 2);
     assert.equal(summaryNull.promptTokens, 30);
   });
@@ -392,11 +393,11 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     const filter = { range: dayRange(today0, today0) };
-    const summaryNull = await svc.getSummary({ ...filter, model: null });
+    const summaryNull = unwrap(await svc.getSummary({ ...filter, model: null }));
     assert.equal(summaryNull.calls, 3);
     assert.equal(summaryNull.promptTokens, 35);
 
-    const breakdown = await svc.getModelBreakdown(filter);
+    const breakdown = unwrap(await svc.getModelBreakdown(filter));
     assert.equal(breakdown.length, 1);
     assert.equal(breakdown[0]!.modelName, null);
     assert.equal(breakdown[0]!.calls, 3);
@@ -422,20 +423,20 @@ describe("usage stats service (T-S5)", () => {
     const todayOnly = dayRange(today0, today0);
     const yesterdayOnly = dayRange(yesterday0, yesterday0);
 
-    const aToday = await svc.getSummary({ range: todayOnly, model: "model-a" });
+    const aToday = unwrap(await svc.getSummary({ range: todayOnly, model: "model-a" }));
     assert.equal(aToday.calls, 1);
     assert.equal(aToday.promptTokens, 10);
 
-    const aYesterday = await svc.getSummary({
+    const aYesterday = unwrap(await svc.getSummary({
       range: yesterdayOnly,
       model: "model-a",
-    });
+    }));
     assert.equal(aYesterday.calls, 0);
 
-    const bYesterday = await svc.getSummary({
+    const bYesterday = unwrap(await svc.getSummary({
       range: yesterdayOnly,
       model: "model-b",
-    });
+    }));
     assert.equal(bYesterday.calls, 1);
     assert.equal(bYesterday.promptTokens, 20);
   });
@@ -450,7 +451,7 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     const range = dayRange(localAddDays(today0, -400), today0);
-    const summary = await svc.getSummary({ range });
+    const summary = unwrap(await svc.getSummary({ range }));
     assert.ok(!("today" in summary), "summary 不应再有 today 字段");
     // 类型层负向钉子（A-1）：直接访问已删字段必报编译错，由 @ts-expect-error
     // 吸收；反之若有人把 today 加回 summary 类型、或把 kind 形态加回
@@ -464,7 +465,7 @@ describe("usage stats service (T-S5)", () => {
     void range.kind;
     assert.equal(summary.calls, 1);
     // 401 个日历日（D-400 … D）每天一桶：366 天上限已删，不再抛错。
-    const buckets = await svc.getDailyBuckets({ range });
+    const buckets = unwrap(await svc.getDailyBuckets({ range }));
     assert.equal(buckets.length, 401);
   });
 
@@ -485,20 +486,20 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     // getSummary / getModelBreakdown：缺 range = 全历史（两天都算）。
-    const summary = await svc.getSummary({ model: "model-a" });
+    const summary = unwrap(await svc.getSummary({ model: "model-a" }));
     assert.equal(summary.calls, 2);
     assert.equal(summary.totalTokens, 30);
-    const breakdown = await svc.getModelBreakdown({});
+    const breakdown = unwrap(await svc.getModelBreakdown({}));
     assert.equal(breakdown.length, 1);
     assert.equal(breakdown[0]!.totalTokens, 30);
 
     // listRequestUsage：缺 range = 全历史，total 与行集均不含时间谓词。
-    const page = await svc.listRequestUsage({}, { offset: 0, limit: 10 });
+    const page = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 10 }));
     assert.equal(page.total, 2);
     assert.equal(page.rows.length, 2);
 
     // getDailyBuckets：缺 range 抛错（日桶序列需要界）。
-    await assert.rejects(svc.getDailyBuckets({}), isChatInvalidArgument);
+    await rejectsErr(svc.getDailyBuckets({}), isChatInvalidArgument);
   });
 
   it("listModels 来自服务商配置的已保存模型，不从历史消息 distinct", async () => {
@@ -547,9 +548,9 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     // 近 7 天 = {D-6, D} 闭区间：7 桶，首桶 D-6、末桶今天，双端含。
-    const buckets = await svc.getDailyBuckets({
+    const buckets = unwrap(await svc.getDailyBuckets({
       range: dayRange(localAddDays(today0, -6), today0),
-    });
+    }));
     assert.equal(buckets.length, 7);
     assert.equal(buckets[0]!.bucketStartMs, localAddDays(today0, -6));
     assert.equal(buckets[6]!.bucketStartMs, today0);
@@ -573,25 +574,25 @@ describe("usage stats service (T-S5)", () => {
   it("T-C1: 日期区间校验：非法格式、溢出日期（02-30）、fromDay 晚于 toDay 均抛错", async () => {
     const { ctx } = await seedSession();
     const svc = createUsageStatsService(ctx.conn);
-    await assert.rejects(
+    await rejectsErr(
       svc.getSummary({
         range: { fromDay: "2026/03/08", toDay: "2026-03-10" },
       }),
       isChatInvalidArgument
     );
-    await assert.rejects(
+    await rejectsErr(
       svc.getSummary({
         range: { fromDay: "2026-03-08", toDay: "not-a-date" },
       }),
       isChatInvalidArgument
     );
-    await assert.rejects(
+    await rejectsErr(
       svc.getSummary({
         range: { fromDay: "2026-02-30", toDay: "2026-03-10" },
       }),
       isChatInvalidArgument
     );
-    await assert.rejects(
+    await rejectsErr(
       svc.getDailyBuckets({
         range: { fromDay: "2026-03-10", toDay: "2026-03-08" },
       }),
@@ -602,11 +603,11 @@ describe("usage stats service (T-S5)", () => {
   it("hourly 对非法日期字符串抛错", async () => {
     const { ctx } = await seedSession();
     const svc = createUsageStatsService(ctx.conn);
-    await assert.rejects(
+    await rejectsErr(
       svc.getHourlyBuckets("2026-02-30", {}),
       isChatInvalidArgument
     );
-    await assert.rejects(
+    await rejectsErr(
       svc.getHourlyBuckets("not-a-date", {}),
       isChatInvalidArgument
     );
@@ -629,9 +630,9 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const summary = await svc.getSummary({
+    const summary = unwrap(await svc.getSummary({
       range: dayRange(today0, today0),
-    });
+    }));
     assert.equal(summary.calls, 2);
     assert.equal(summary.cacheReadTokens, 0);
     // 0 值行入分母、无 cache 行不入：分母 = 100 而非 0，命中率不被抬高。
@@ -669,10 +670,10 @@ describe("usage stats service (T-S5)", () => {
 
     const svc = createUsageStatsService(ctx.conn);
     // model: null = 「其他模型」筛选：NULL 行与非配置模型（model-b）行全部归并成一行。
-    const breakdown = await svc.getModelBreakdown({
+    const breakdown = unwrap(await svc.getModelBreakdown({
       range: dayRange(today0, today0),
       model: null,
-    });
+    }));
     assert.equal(breakdown.length, 1);
     const row = breakdown[0]!;
     assert.equal(row.modelName, null);
@@ -719,7 +720,7 @@ describe("usage stats service (T-S5)", () => {
     const svc = createUsageStatsService(ctx.conn);
     const range = dayRange(today0, today0);
     // 无筛选：三行分列（同名模型按服务商拆开；未记录行独立）。
-    const breakdown = await svc.getModelBreakdown({ range });
+    const breakdown = unwrap(await svc.getModelBreakdown({ range }));
     assert.equal(breakdown.length, 3);
     const px = breakdown.find(
       (r) => r.providerId === "stats-px" && r.modelName === "model-a"
@@ -739,19 +740,19 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(unlogged!.totalTokens, 10);
 
     // providerId 筛选：只看 stats-py。
-    const filtered = await svc.getModelBreakdown({
+    const filtered = unwrap(await svc.getModelBreakdown({
       range,
       providerId: "stats-py",
-    });
+    }));
     assert.equal(filtered.length, 1);
     assert.equal(filtered[0]!.providerId, "stats-py");
     assert.equal(filtered[0]!.totalTokens, 25);
 
     // providerId:null → 只剩未记录的历史行。
-    const nullFiltered = await svc.getModelBreakdown({
+    const nullFiltered = unwrap(await svc.getModelBreakdown({
       range,
       providerId: null,
-    });
+    }));
     assert.equal(nullFiltered.length, 1);
     assert.equal(nullFiltered[0]!.providerId, null);
     assert.equal(nullFiltered[0]!.totalTokens, 10);
@@ -795,7 +796,7 @@ describe("usage stats service (T-S5)", () => {
     const range = dayRange(today0, today0);
     // 无筛选：两条未记录历史行（含配置模型 model-a）合并为单行
     // （modelName null、用量相加），已记录服务商的 model-a 照旧独立成行。
-    const breakdown = await svc.getModelBreakdown({ range });
+    const breakdown = unwrap(await svc.getModelBreakdown({ range }));
     assert.equal(breakdown.length, 2);
     const merged = breakdown.find(
       (r) => r.providerId === null && r.modelName === null
@@ -814,7 +815,7 @@ describe("usage stats service (T-S5)", () => {
 
     // filter.model 指定时 SQL 先按 model_name 过滤再归并：未记录的
     // model-a 行仍并入合并行（至多一行），不因模型名在配置集内而分列。
-    const byModel = await svc.getModelBreakdown({ range, model: "model-a" });
+    const byModel = unwrap(await svc.getModelBreakdown({ range, model: "model-a" }));
     assert.equal(byModel.length, 2);
     const mergedByModel = byModel.find(
       (r) => r.providerId === null && r.modelName === null
@@ -824,7 +825,7 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(mergedByModel!.totalTokens, 30);
 
     // providerId:null 筛选：未记录行合并后至多一行。
-    const nullOnly = await svc.getModelBreakdown({ range, providerId: null });
+    const nullOnly = unwrap(await svc.getModelBreakdown({ range, providerId: null }));
     assert.equal(nullOnly.length, 1);
     assert.equal(nullOnly[0]!.modelName, null);
     assert.equal(nullOnly[0]!.totalTokens, 50);
@@ -863,20 +864,20 @@ describe("usage stats service (T-S5)", () => {
     const svc = createUsageStatsService(ctx.conn);
     const range = dayRange(today0, today0);
     // 旧口径佐证：model-a 在配置集内，model:null 的 NOT IN 子句筛不中未记录行。
-    const legacyStyle = await svc.getModelBreakdown({
+    const legacyStyle = unwrap(await svc.getModelBreakdown({
       range,
       model: null,
       providerId: null,
-    });
+    }));
     assert.equal(legacyStyle.length, 0);
     // 方案 A：model: undefined（不加模型子句）+ providerId: null
     // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出，
     // 输出侧合并为单行（modelName: null）。
-    const breakdown = await svc.getModelBreakdown({
+    const breakdown = unwrap(await svc.getModelBreakdown({
       range,
       model: undefined,
       providerId: null,
-    });
+    }));
     assert.equal(breakdown.length, 1);
     assert.equal(breakdown[0]!.providerId, null);
     assert.equal(breakdown[0]!.modelName, null);
@@ -918,11 +919,11 @@ describe("usage stats service (T-S5)", () => {
     );
 
     const svc = createUsageStatsService(ctx.conn);
-    const breakdown = await svc.getModelBreakdown({
+    const breakdown = unwrap(await svc.getModelBreakdown({
       range: dayRange(today0, today0),
       model: null,
       providerId: "stats-cr2-p2",
-    });
+    }));
     // 只剩「P × 未配置模型」一行：provider 子句挡掉未记录行，
     // NOT IN 子句挡掉 P 的已配置模型行；model-legacy 不在配置集，
     // 输出侧按展示口径归并为 modelName: null（用量仍在）。
@@ -960,9 +961,9 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const spring = await svc.getDailyBuckets({
+    const spring = unwrap(await svc.getDailyBuckets({
       range: { fromDay: "2026-03-07", toDay: "2026-03-09" },
-    });
+    }));
     assert.equal(spring.length, 3, "春季拨快日桶数仍按挂钟日计 3 天");
     const d0308 = spring.find(
       (b) => fmtLocalDay(b.bucketStartMs) === "2026-03-08"
@@ -971,9 +972,9 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(d0308.calls, 2);
     assert.equal(d0308.promptTokens, 18);
 
-    const fall = await svc.getDailyBuckets({
+    const fall = unwrap(await svc.getDailyBuckets({
       range: { fromDay: "2026-10-31", toDay: "2026-11-02" },
-    });
+    }));
     assert.equal(fall.length, 3, "秋季拨慢日桶数仍按挂钟日计 3 天");
     const d1101 = fall.find(
       (b) => fmtLocalDay(b.bucketStartMs) === "2026-11-01"
@@ -992,7 +993,7 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const buckets = await svc.getHourlyBuckets("2026-03-08", {});
+    const buckets = unwrap(await svc.getHourlyBuckets("2026-03-08", {}));
     assert.equal(buckets.length, 24);
     // 缺失钟点（本地 2 点）退化为零值空桶，bucketStartMs 与下一桶重合
     //（Date 构造器把不存在的 02:00 折叠到 03:00）。
@@ -1016,7 +1017,7 @@ describe("usage stats service (T-S5)", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const buckets = await svc.getHourlyBuckets("2026-11-01", {});
+    const buckets = unwrap(await svc.getHourlyBuckets("2026-11-01", {}));
     assert.equal(buckets.length, 24);
     // 重复钟点（本地 1 点）桶加宽：1 点桶（01:00 EDT 起）到 2 点桶（02:00 EST 起）跨 2 小时。
     assert.equal(
@@ -1063,9 +1064,9 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const summary = await svc.getSummary({
+    const summary = unwrap(await svc.getSummary({
       range: dayRange(today0, today0),
-    });
+    }));
     // 速率 = 900 / (3500-500)/1000 = 300 tok/s（仅有效行）
     assert.equal(summary.avgTokensPerSecond, 300);
     // TTFT 均值 = AVG(500, 2000) = 1250（NULL 行忽略，非流式行计入）
@@ -1090,9 +1091,9 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const summary = await svc.getSummary({
+    const summary = unwrap(await svc.getSummary({
       range: dayRange(today0, today0),
-    });
+    }));
     assert.equal(summary.avgFirstTokenMs, null);
     assert.equal(summary.avgTokensPerSecond, null);
     assert.equal(summary.calls, 2);
@@ -1127,9 +1128,9 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const daily = await svc.getDailyBuckets({
+    const daily = unwrap(await svc.getDailyBuckets({
       range: dayRange(yesterday0, today0),
-    });
+    }));
     assert.equal(daily.length, 2);
     const todayBucket = daily.find((b) => b.bucketStartMs === today0);
     const yesterdayBucket = daily.find((b) => b.bucketStartMs === yesterday0);
@@ -1141,7 +1142,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     assert.equal(yesterdayBucket!.avgFirstTokenMs, 300);
 
     // hourly：今天 14 点桶有效，其余 23 个空桶 calls=0 + 双 null
-    const hourly = await svc.getHourlyBuckets(fmtLocalDay(today0), {});
+    const hourly = unwrap(await svc.getHourlyBuckets(fmtLocalDay(today0), {}));
     assert.equal(hourly.length, 24);
     const hour14 = hourly.find((b) => b.bucketStartMs === today0 + 14 * HOUR);
     assert.ok(hour14);
@@ -1201,32 +1202,32 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       modelName: "model-a",
       usage: { prompt: 1, completion: 1, total: 2 },
     });
-    const page1 = await svc.listRequestUsage({}, { offset: 0, limit: 3 });
+    const page1 = unwrap(await svc.listRequestUsage({}, { offset: 0, limit: 3 }));
     assert.equal(page1.total, 6);
     assert.equal(page1.rows.length, 3);
     // 时间倒序：最新在前
     assert.ok(page1.rows[0]!.createdAtMs >= page1.rows[1]!.createdAtMs);
     assert.equal(page1.rows[0]!.completionTokens, 14);
-    const page2 = await svc.listRequestUsage({}, { offset: 3, limit: 3 });
+    const page2 = unwrap(await svc.listRequestUsage({}, { offset: 3, limit: 3 }));
     assert.equal(page2.rows.length, 3);
     assert.ok(page2.rows[0]!.createdAtMs >= page2.rows[1]!.createdAtMs);
     // 越界页空
-    const page3 = await svc.listRequestUsage({}, { offset: 9, limit: 3 });
+    const page3 = unwrap(await svc.listRequestUsage({}, { offset: 9, limit: 3 }));
     assert.equal(page3.rows.length, 0);
     // 模型筛选：只 model-a（排除 null 行）→ 5 条
-    const filtered = await svc.listRequestUsage(
+    const filtered = unwrap(await svc.listRequestUsage(
       { model: "model-a" },
       { offset: 0, limit: 50 }
-    );
+    ));
     assert.equal(filtered.total, 5);
     for (const row of filtered.rows) {
       assert.equal(row.modelName, "model-a");
     }
     // 「其他」桶（null model）→ 1 条
-    const others = await svc.listRequestUsage(
+    const others = unwrap(await svc.listRequestUsage(
       { model: null },
       { offset: 0, limit: 50 }
-    );
+    ));
     assert.equal(others.total, 1);
     assert.equal(others.rows[0]!.modelName, null);
     // providerId 筛选三态（G-1）：'P' 档与 null 档互补，缺省档已由上述
@@ -1235,10 +1236,10 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     // （completionTokens 10/14，modelName 分别为 null / model-a）；
     // null 档只含 provider_id IS NULL 的历史行（i=1..3 与 2020 老消息），
     // 不得混入 P 行。seed 错标（如 P 行漏标）时 total 互补性即红。
-    const pFiltered = await svc.listRequestUsage(
+    const pFiltered = unwrap(await svc.listRequestUsage(
       { providerId: "P" },
       { offset: 0, limit: 50 }
-    );
+    ));
     assert.equal(pFiltered.total, 2);
     const pCompletions = pFiltered.rows
       .map((row) => row.completionTokens)
@@ -1251,17 +1252,17 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
         row.modelName === null ? 10 : 14
       );
     }
-    const nullFiltered = await svc.listRequestUsage(
+    const nullFiltered = unwrap(await svc.listRequestUsage(
       { providerId: null },
       { offset: 0, limit: 50 }
-    );
+    ));
     assert.equal(nullFiltered.total, 4);
     const nullCompletions = nullFiltered.rows
       .map((row) => row.completionTokens)
       .sort((a, b) => a - b);
     assert.deepEqual(nullCompletions, [1, 11, 12, 13]);
     // 非法 limit 拒收
-    await assert.rejects(
+    await rejectsErr(
       () => svc.listRequestUsage({}, { offset: 0, limit: 0 }),
       (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_limit"
     );
@@ -1275,7 +1276,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
     ]) {
-      await assert.rejects(
+      await rejectsErr(
         () => svc.listRequestUsage({}, { offset, limit: 10 }),
         (e: unknown) => isChatInvalidArgument(e) && (e as {messageKey?: string}).messageKey === "error.usage.invalid_page_offset"
       );
@@ -1292,7 +1293,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
   it("T-MD1: 多协议聚合——anthropic 双 cache 列 / openai 仅 cache_read / 无 cache 行不入 billed 分母；hidden 行计入累计", async () => {
     const { ctx, project, session } = await seedSession();
     // 对照会话：session 谓词界定，他 session 的行不计入本会话累计。
-    const otherSession = await ctx.sessions.create(project.id, "md-other");
+    const otherSession = unwrap(await ctx.sessions.create(project.id, "md-other"));
     const now = Date.now();
 
     // seq 1 anthropic：billed = 100 + 2048 + 512 = 2660。
@@ -1343,7 +1344,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const detail = await svc.getSessionUsageDetail(session.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
     // 会话累计输入/输出（totals）已移除（2026-09-29 拍板：含 hidden 的累计
     // 对用户无意义）——这里只锁最近行与计数行；usage 谓词的聚合口径由
     // getSummary/getModelBreakdown 套件另行锁定。
@@ -1374,16 +1375,16 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     await seedMsg(ctx, session.id, 3, { createdAtMs: now });
 
     const svc = createUsageStatsService(ctx.conn);
-    const detail = await svc.getSessionUsageDetail(session.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(detail.last!.seq, 1);
     assert.equal(detail.last!.modelName, "claude-x");
   });
 
   it("T-MD2: 空会话 → last 为 null、visibleMessageCount=0、toolUseCount=0（miss 现算 0 并落缓存）", async () => {
     const { ctx, project } = await seedSession();
-    const empty = await ctx.sessions.create(project.id, "md-empty");
+    const empty = unwrap(await ctx.sessions.create(project.id, "md-empty"));
     const svc = createUsageStatsService(ctx.conn);
-    const detail = await svc.getSessionUsageDetail(empty.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(empty.id));
     assert.equal(detail.last, null);
     assert.equal(detail.visibleMessageCount, 0);
     assert.equal(detail.toolUseCount, 0);
@@ -1433,7 +1434,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
 
     const svc = createUsageStatsService(ctx.conn);
     // ① miss：现算 2（repo 行）+ 1（明文直插行）= 3，并回填缓存。
-    const first = await svc.getSessionUsageDetail(session.id);
+    const first = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(first.toolUseCount, 3);
     assert.equal(first.visibleMessageCount, 2);
     const cacheRows = await ctx.conn.query<{ value: string }>(
@@ -1449,7 +1450,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       `DELETE FROM chat_message WHERE session_id = ? AND seq = 2`,
       [session.id]
     );
-    const second = await svc.getSessionUsageDetail(session.id);
+    const second = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(second.toolUseCount, 3);
 
     // ③ 失效：service.append 落一条含 tool_use 的 assistant 行 → 缓存删 →
@@ -1459,22 +1460,22 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       "../../src/service/chat/create-chat-services.js"
     );
     const messages = createMessageService(ctx.conn);
-    await messages.append(session.id, "assistant", {
+    unwrap(await messages.append(session.id, "assistant", {
       blocks: [
         { type: "text", text: "more" },
         toolUseBlock("t9"),
         toolUseBlock("t10"),
       ],
-    });
-    const third = await svc.getSessionUsageDetail(session.id);
+    }));
+    const third = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(third.toolUseCount, 4);
 
     // ④ 纯文本追加（无 tool_use）不失效：追加后立刻查缓存行仍在（若被
     // 失效此刻应为 0 行；下次读数若走 miss 会回填同值，值断言无法区分，
     // 故以「行存在性」为观测面）。
-    await messages.append(session.id, "assistant", {
+    unwrap(await messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "plain" }],
-    });
+    }));
     const afterPlain = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM session_kkv_entry
        WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
@@ -1523,7 +1524,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
 
     const svc = createUsageStatsService(ctx.conn);
-    const detail = await svc.getSessionUsageDetail(session.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
     // 可见数：4 条里 hidden 1 条 → 3（user 行照计——只剔 hidden 不筛角色）。
     assert.equal(detail.visibleMessageCount, 3);
     // 工具计数：2（可见 assistant）+ 1（hidden assistant）= 3；tool_result 不数。
@@ -1533,7 +1534,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
   it("空 sessionId 抛 CHAT_INVALID_ARGUMENT（不触达 SQL）", async () => {
     const { ctx } = await seedSession();
     const svc = createUsageStatsService(ctx.conn);
-    await assert.rejects(
+    await rejectsErr(
       () => svc.getSessionUsageDetail(""),
       isChatInvalidArgument
     );
@@ -1564,13 +1565,13 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
 
     // 预热缓存（miss 现算 3 → 回填）。
-    assert.equal((await svc.getSessionUsageDetail(session.id)).toolUseCount, 3);
+    assert.equal((unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount, 3);
 
     // hide/show：可见性变化不改含 hidden 口径的计数 → 缓存不失效（读数
     // 仍是缓存值；若失效会触发现算——值相同无法区分，故以「缓存行值
     // 不变」+ 下一步 delete 的对照来锁）。
-    await messages.hide(seq2);
-    await messages.show(seq2);
+    unwrap(await messages.hide(seq2));
+    unwrap(await messages.show(seq2));
     const afterVisibility = await ctx.conn.query<{ value: string }>(
       `SELECT value FROM session_kkv_entry
        WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
@@ -1579,28 +1580,28 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(afterVisibility[0]?.value, "3", "hide/show 不得失效缓存");
 
     // delete：删掉 seq2（1 个 tool_use）→ 失效 → 重算 2。
-    await messages.delete(seq2);
+    unwrap(await messages.delete(seq2));
     assert.equal(
-      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
       2,
       "delete 后应失效重算"
     );
 
     // updateContent：把 seq3 改成带 1 个 tool_use → 失效 → 重算 3。
-    await messages.updateContent(seq3, {
+    unwrap(await messages.updateContent(seq3, {
       blocks: [{ type: "text", text: "edited" }, toolUseBlock("t9")],
-    });
+    }));
     assert.equal(
-      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
       3,
       "updateContent 后应失效重算"
     );
 
     // truncateAfter：截掉 seq3（含 1 个 tool_use）→ 失效 → 重算 2。
     // 锚 seq1（seq2 已被本用例前段删除，不能再当锚）。
-    await messages.truncateAfter(session.id, seq1);
+    unwrap(await messages.truncateAfter(session.id, seq1));
     assert.equal(
-      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      (unwrap(await svc.getSessionUsageDetail(session.id))).toolUseCount,
       2,
       "truncateAfter 后应失效重算"
     );
@@ -1622,7 +1623,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     );
 
     const svc = createUsageStatsService(ctx.conn);
-    const detail = await svc.getSessionUsageDetail(session.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
     // 明文行 1；坏行按 0 计（不抛——弹窗不该被单条历史坏行打挂）。
     assert.equal(detail.toolUseCount, 1);
 
@@ -1632,7 +1633,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
        VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
       [session.id]
     );
-    const dirty = await svc.getSessionUsageDetail(session.id);
+    const dirty = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
     const after = await ctx.conn.query<{ value: string }>(
       `SELECT value FROM session_kkv_entry
@@ -1682,7 +1683,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     };
 
     try {
-      const first = await svc.getSessionUsageDetail(session.id);
+      const first = unwrap(await svc.getSessionUsageDetail(session.id));
       // 本次返回值已出：现算结果 2，不受回填拦截影响。
       assert.equal(first.toolUseCount, 2);
       const cacheAfter = await originalQuery<{ value: string }>(
@@ -1698,7 +1699,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
 
       // 下次读：哨兵当 miss 重算（原值=哨兵、无人再动 → 复核通过）正常
       // 回填——终轮抽检 B 裁决的无死循环回归锁。
-      const second = await svc.getSessionUsageDetail(session.id);
+      const second = unwrap(await svc.getSessionUsageDetail(session.id));
       assert.equal(second.toolUseCount, 2);
       const cacheFinal = await originalQuery<{ value: string }>(
         `SELECT value FROM session_kkv_entry
@@ -1746,36 +1747,36 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
     const svc = createUsageStatsService(ctx.conn);
     const filter = { range: dayRange(today0, today0) };
-    const beforeSummary = await svc.getSummary(filter);
-    const beforeDaily = await svc.getDailyBuckets(filter);
-    const beforeModels = await svc.getModelBreakdown(filter);
-    const beforePage = await svc.listRequestUsage(filter, {
+    const beforeSummary = unwrap(await svc.getSummary(filter));
+    const beforeDaily = unwrap(await svc.getDailyBuckets(filter));
+    const beforeModels = unwrap(await svc.getModelBreakdown(filter));
+    const beforePage = unwrap(await svc.listRequestUsage(filter, {
       offset: 0,
       limit: 50,
-    });
+    }));
     assert.equal(beforeSummary.calls, 2);
     assert.equal(beforeSummary.totalTokens, 180);
     assert.equal(beforePage.total, 2);
 
     // 物理硬删会话：chat_message 行全清；usage_record 无外键无级联，删除链不碰它。
-    await ctx.sessions.delete(session.id);
+    unwrap(await ctx.sessions.delete(session.id));
     const remaining = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = ?`,
       [session.id]
     );
     assert.equal(Number(remaining[0]?.n ?? 0), 0, "前置：消息确已物理删除");
 
-    assert.deepEqual(await svc.getSummary(filter), beforeSummary, "summary 逐字段不变");
-    assert.deepEqual(await svc.getDailyBuckets(filter), beforeDaily, "日桶不变");
-    assert.deepEqual(await svc.getModelBreakdown(filter), beforeModels, "模型维度不变");
-    const afterPage = await svc.listRequestUsage(filter, {
+    assert.deepEqual(unwrap(await svc.getSummary(filter)), beforeSummary, "summary 逐字段不变");
+    assert.deepEqual(unwrap(await svc.getDailyBuckets(filter)), beforeDaily, "日桶不变");
+    assert.deepEqual(unwrap(await svc.getModelBreakdown(filter)), beforeModels, "模型维度不变");
+    const afterPage = unwrap(await svc.listRequestUsage(filter, {
       offset: 0,
       limit: 50,
-    });
+    }));
     assert.equal(afterPage.total, beforePage.total, "流水计数不变");
     assert.deepEqual(afterPage.rows, beforePage.rows, "流水行逐字段不变");
     // 会话维度：最近请求读账本（不随会话删除消失）；可见消息数属内容侧，随删归零。
-    const detail = await svc.getSessionUsageDetail(session.id);
+    const detail = unwrap(await svc.getSessionUsageDetail(session.id));
     assert.equal(detail.last?.atMs, today0 + 20 * MIN, "最近请求仍可读（账本行）");
     assert.equal(detail.last?.promptTokens, 20);
     assert.equal(detail.last?.completionTokens, 10);
@@ -1799,7 +1800,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     });
     const svc = createUsageStatsService(ctx.conn);
     const filter = { range: dayRange(today0, today0) };
-    const before = await svc.getSummary(filter);
+    const before = unwrap(await svc.getSummary(filter));
     assert.equal(before.calls, 3);
     assert.equal(before.totalTokens, 190);
 
@@ -1808,11 +1809,11 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     );
     const messages = createMessageService(ctx.conn);
     // 删单条消息：内容消失，账本行保留。
-    await messages.delete(msg2);
-    assert.deepEqual(await svc.getSummary(filter), before, "删单条消息后统计不变");
+    unwrap(await messages.delete(msg2));
+    assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "删单条消息后统计不变");
     // 回滚截尾：锚 seq1，截掉其后全部（此时 seq2 已删、seq3 被截）。
-    await messages.truncateAfter(session.id, msg1);
-    assert.deepEqual(await svc.getSummary(filter), before, "回滚截尾后统计不变");
+    unwrap(await messages.truncateAfter(session.id, msg1));
+    assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "回滚截尾后统计不变");
   });
 
   it("记账点写入：append 带 token 真值的 assistant 消息 → usage_record 出一行（快照列 + 与消息同 seq/时刻）", async () => {
@@ -1821,7 +1822,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       "../../src/service/chat/create-chat-services.js"
     );
     const messages = createMessageService(ctx.conn);
-    const appended = await messages.append(
+    const appended = unwrap(await messages.append(
       session.id,
       "assistant",
       textBlocks("hello"),
@@ -1839,7 +1840,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
           durationMs: 900,
         },
       }
-    );
+    ));
 
     const rows = await ctx.conn.query<Record<string, unknown>>(
       `SELECT session_id, message_seq, provider, provider_id, model_name,
@@ -1872,13 +1873,13 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(Number(msgRow[0]?.prompt_tokens), 100);
 
     // 不入账本的三类：无 usage 的 assistant、带 usage 的 user、只有耗时无 token 真值。
-    await messages.append(session.id, "assistant", textBlocks("no usage"));
-    await messages.append(session.id, "user", textBlocks("user with usage"), {
+    unwrap(await messages.append(session.id, "assistant", textBlocks("no usage")));
+    unwrap(await messages.append(session.id, "user", textBlocks("user with usage"), {
       usage: { promptTokens: 7, completionTokens: 3 },
-    });
-    await messages.append(session.id, "assistant", textBlocks("timing only"), {
+    }));
+    unwrap(await messages.append(session.id, "assistant", textBlocks("timing only"), {
       usage: { firstTokenMs: 5, durationMs: 10 },
-    });
+    }));
     const count = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM usage_record`
     );

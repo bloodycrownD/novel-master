@@ -661,7 +661,8 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
             // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
             // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
             // 这里把不变式上提到源头（所有 user append 统一走同一 capture）。
-            checkpointAnchorMessageId = appended.id;
+            if (!appended.ok) throw appended.error;
+            checkpointAnchorMessageId = appended.value.id;
             await options?.onUserMessageAppended?.();
           },
           rollback: async () => {
@@ -795,13 +796,14 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           sessions: runtime.sessions,
           createChildSession: async (title: string): Promise<string> => {
             const child = await runtime.sessions.createSubSession(scope.sessionId, scope.projectId, title);
+            if (!child.ok) throw child.error;
             runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
               parentSessionId: scope.sessionId,
               projectId: scope.projectId,
-              childSessionId: child.id,
+              childSessionId: child.value.id,
               title,
             });
-            return child.id;
+            return child.value.id;
           },
           // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
           parentSessionId: scope.sessionId,
@@ -1210,13 +1212,14 @@ async function runChildAgent(args: {
         sessions: runtime.sessions,
         createChildSession: async (title: string): Promise<string> => {
           const grandchild = await runtime.sessions.createSubSession(childSessionId, parentProjectId, title);
+          if (!grandchild.ok) throw grandchild.error;
           runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
             parentSessionId: childSessionId,
             projectId: parentProjectId,
-            childSessionId: grandchild.id,
+            childSessionId: grandchild.value.id,
             title,
           });
-          return grandchild.id;
+          return grandchild.value.id;
         },
         // 续用归属校验（spec D2 直接父口径）：子装配点里孙会话的直接父就是本
         // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。

@@ -12,6 +12,7 @@
  *
  * @module test/chat/message-repository-yield
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -59,17 +60,17 @@ function macroTick(): Promise<void> {
 describe("message repository 行解析分片让步（T-R2）", () => {
   it("T-R2a: 120 行 listBySession 出现 2 个让步点，结果与直通逐条全等", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr2a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr2a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     for (let i = 0; i < 120; i++) {
-      await ctx.messages.append(
+      unwrap(await ctx.messages.append(
         session.id,
         i % 2 === 0 ? "user" : "assistant",
         i % 2 === 0
           ? textBlocks(`消息 ${i}`)
           : { blocks: [{ type: "text", text: `回复 ${i}` }] },
-      );
+      ));
     }
 
     // 直通基准（desktop/cli 形态：不传 yieldFn）。
@@ -115,15 +116,15 @@ describe("message repository 行解析分片让步（T-R2）", () => {
 
   it("T-R2b: 50 行整单片零让步点；61 行 tail 出现 1 个让步点且结果等价", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr2b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr2b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     for (let i = 0; i < 50; i++) {
-      await ctx.messages.append(
+      unwrap(await ctx.messages.append(
         session.id,
         "user",
         textBlocks(`行 ${i}`),
-      );
+      ));
     }
 
     // 计数型让步（不挂起）：验证单片零让步与跨片恰一次让步的次数口径。
@@ -141,7 +142,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
 
     // 61 条时 tail（61 行）恰出现 1 个让步点，结果与直通逐条等价。
     for (let i = 50; i < 61; i++) {
-      await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`));
+      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`)));
     }
     const plain = new SqliteMessageRepository(ctx.conn);
     const tailBaseline = await plain.listBySessionTail(session.id, 61);
@@ -152,10 +153,10 @@ describe("message repository 行解析分片让步（T-R2）", () => {
 
   it("T-R2c: 缺省不传 yieldFn——直通同步 map，desktop/cli 行为不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr2c-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr2c-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     for (let i = 0; i < 60; i++) {
-      await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`));
+      unwrap(await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`)));
     }
 
     // desktop/cli 形态：构造缺省不传 yieldFn → mapRows 直通同步 map。

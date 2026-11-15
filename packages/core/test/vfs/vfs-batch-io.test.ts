@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
@@ -29,10 +30,10 @@ function enc(s: string): Uint8Array {
 describe("VfsBatchIoService", () => {
   it("T-B1: ingest two files into /chap keeps siblings", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/keep.md", "keep");
-    await vfs.mkdir("/chap");
+    unwrap(await vfs.mkdir("/chap"));
 
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
@@ -52,7 +53,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B2: conflicts without confirm → zero writes", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/chap/a.md", "old");
 
@@ -72,7 +73,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B3: invalid UTF-8 goes to skipped, not written", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
     const bad = new Uint8Array([0xff, 0xfe, 0xfd]);
@@ -94,7 +95,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B4: empty directory entry creates directory node", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
     const batch = createVfsBatchIoService(ctx.conn);
@@ -113,7 +114,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B5: export plan keeps relative structure", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/chap/a.md", "A");
     await vfs.write("/chap/sub/b.md", "B");
@@ -131,7 +132,7 @@ describe("VfsBatchIoService", () => {
     // 牙齿：把锚点改回 `basenameOf(logical)` 这条立刻红（files.length === 1，
     // 第二条被 seenFileRels 静默丢弃 ⇒ ZIP 少一个文件且 UI 零提示）。
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/卷一/第一章.md", "A");
     await vfs.write("/卷二/第一章.md", "B");
@@ -151,7 +152,7 @@ describe("VfsBatchIoService", () => {
     // 陷阱专测：`relativePathUnderAnchor(p, p)` 按定义返回空串 ⇒ 任何「锚点用自身」
     // 的错修都会让单选文件被 `rel.length === 0` 整条丢掉。
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/卷一/第一章.md", "A");
 
@@ -168,7 +169,7 @@ describe("VfsBatchIoService", () => {
     // 「文件 + 同名目录同选」仍会撞 rel（文件分支得 `卷一/a.md`、目录分支也得
     // `卷一/a.md`）——skipped 是**必需通道**、不是死字段。
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
     await vfs.write("/卷一/a.md", "单文件");
     await vfs.write("/卷一/子/b.md", "目录里的");
@@ -192,7 +193,7 @@ describe("VfsBatchIoService", () => {
   // 「2 文件同片失败 ⇒ written=[]」是**同片**形态：第 1 片就抛，没有任何已提交片。
   it("T-B6: 同片内失败 → written 为空、失败片整体回滚", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
     const batch = createVfsBatchIoService(ctx.conn, {
@@ -219,7 +220,7 @@ describe("VfsBatchIoService", () => {
   // ⇒ 报告对用户说谎：声称一个都没写，实际写了 200 个）。
   it("T-B6b: 跨片失败 → written 等于已提交分片，failed[0].path 是失败片首个 logical", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
     const total = 401;
@@ -263,7 +264,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B7: plan detects same-path file/directory type conflict", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = await batch.planBatchIngest(scope, "/", [
@@ -281,7 +282,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B9: plan detects file-under-file type conflict", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const batch = createVfsBatchIoService(ctx.conn);
     const scope = { kind: "project" as const, projectId: project.id };
     const plan = await batch.planBatchIngest(scope, "/", [
@@ -299,7 +300,7 @@ describe("VfsBatchIoService", () => {
 
   it("T-B8: session writer keeps first success when second fails", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const vfs = ctx.projectVfs(project.id);
 
     const batch = createVfsBatchIoService(ctx.conn);
@@ -375,8 +376,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C1: session scope applyBatchIngest 成功后两域被清空", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -414,9 +415,9 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C2: project scope 导入成功后两域不动", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc2-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-tc2-${testIsolationSuffix()}`));
     // session 只用来埋脏数据：验证走 project scope 时缓存对齐门闸不触发
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const pvfs = ctx.projectVfs(project.id);
 
     const seeded = await seedDirtyCaches(session.id, "tc2");
@@ -449,8 +450,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C3: sessionKkv 抛错时导入仍成功返回（best-effort 吞错）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc3-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -498,8 +499,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C4: 冲突未确认早退不清缓存；确认覆盖成功后清理", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -551,8 +552,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C4b: typeConflicts 早退（零写入）两域保持脏 key 原样", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc4b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc4b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -597,8 +598,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
     // 反证（ctx.sessionKkv 的脏 key 能被清掉）。不断言 applyBatchIngest 的存在性
     // ——那是类型层的既有事实，写出来只是恒真噪声。
 
-    const project = await ctx.projects.create(`P-tc5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -628,8 +629,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C6: applyBatchIngestWithWriter（新 scope 签名）session + written 非空清理", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc6-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc6-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -734,8 +735,8 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
 
   it("T-C7: 跨片失败已有已提交分片 ⇒ 两域清空；同片失败（零写入）⇒ 两域不动", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc7-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc7-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -837,7 +838,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
   });
 
   it("T-B6c: 401 个文件（无显式目录）⇒ 恰好 3 条文件分片事务，段 B0 不跑", async () => {
-    const project = await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const total = 401;
     const entries = Array.from({ length: total }, (_, i) => ({
@@ -872,7 +873,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
   });
 
   it("T-B6d: plan.writes 为空（纯 mkdir）⇒ 只跑段 B0 一条事务；全空 plan ⇒ 零事务", async () => {
-    const project = await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`));
     const scope = { kind: "project" as const, projectId: project.id };
     const batch = createVfsBatchIoService(conn);
 

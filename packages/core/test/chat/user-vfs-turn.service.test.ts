@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
@@ -98,8 +99,8 @@ describe("UserVfsTurnService", () => {
   it("execute 失败不写盘；成功仅写盘并停写 pending kkv（无操作日志半边）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const fail = await userVfsTurn.executeOp(session.id, {
       actionXml: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
@@ -123,8 +124,8 @@ describe("UserVfsTurnService", () => {
   it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const ok = await userVfsTurn.executeOp(session.id, writeOp("/u/v/w/a.md", "hello", "tu_wr"));
     assert.equal(ok.ok, true);
@@ -143,8 +144,8 @@ describe("UserVfsTurnService", () => {
 
   it("execute 使用会抛错的 tool 时不写 pending", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registry.register({
@@ -169,8 +170,8 @@ describe("UserVfsTurnService", () => {
 
   it("T-UO-SWEEP1：第二次 tool 失败时回滚已成功 path，且 sweep+blob gc；composite 后仍 sweep", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
@@ -244,16 +245,16 @@ describe("UserVfsTurnService", () => {
 
     // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
     await svfs.write("/orphan-sweep.md", "seed", { versionCheck: false });
-    const orphanEntry = await entries.findByPath(sk, "/orphan-sweep.md");
+    const orphanEntry = unwrap(await entries.findByPath(sk, "/orphan-sweep.md"));
     assert.ok(orphanEntry != null);
     // 用 seed 产生 entry + revision 后，再 append 一个相同 entryId 但不可达的 revision
-    await revisions.append({
+    unwrap(await revisions.append({
       entryId: orphanEntry.entryId,
       version: 99,
       content: "pre-sweep-orphan",
       status: "active",
       mtimeMs: Date.now(),
-    });
+    }));
     const beforeOrphan = await revisions.findByEntryAndVersion(orphanEntry.entryId, 99);
     assert.ok(beforeOrphan);
 
@@ -304,8 +305,8 @@ describe("UserVfsTurnService", () => {
 
   it("T2：两次 tool 均成功时磁盘保留、停写 pending kkv", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
@@ -334,12 +335,12 @@ describe("UserVfsTurnService", () => {
 
   it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
 
-    await svfs.mkdir("/55");
+    unwrap(await svfs.mkdir("/55"));
     await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
 
     const result = await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/55", true));
@@ -349,15 +350,15 @@ describe("UserVfsTurnService", () => {
 
   it("T-FC1 assembly: createUserVfsTurnServiceBundle write 后有 file_cache full:{path}", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
 
     const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));
     assert.equal(result.ok, true);
 
-    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/asm-fc.md"));
+    const raw = unwrap(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/asm-fc.md")));
     assert.ok(raw != null, "sessionKkv 须经 resolveToolCtx 注入");
     const payload = parseFileCachePayload(raw!);
     assert.ok(payload.ok);

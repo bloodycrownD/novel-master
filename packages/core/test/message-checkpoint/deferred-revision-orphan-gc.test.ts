@@ -11,6 +11,7 @@
  *
  * @module test/message-checkpoint/deferred-revision-orphan-gc
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -43,14 +44,14 @@ async function drainMicrotasks(): Promise<void> {
 describe("deferred 全局孤儿清扫（T-R4）", () => {
   it("T-R4a: 回滚事务内无全局孤儿 DELETE；resolve 先于清扫 SQL；孤儿最终被清", async () => {
     const ctx = await openSqlCountingNovelMasterTestConnection();
-    const project = await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const anchor = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
     //（content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
@@ -99,14 +100,14 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
 
   it("T-R4b: 清扫进行中重复调度不重入（in-flight 去重）；孤儿残留窗口不影响回滚正确性", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
 
-    await ctx.messages.append(session.id, "user", textBlocks("a"));
-    const anchor = await ctx.messages.append(session.id, "assistant", {
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("a")));
+    const anchor = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
-    });
-    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+    }));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     // 受控连接：孤儿 DELETE 挂起在 gate 上，直到测试放行。
     const releases: Array<() => void> = [];

@@ -27,20 +27,17 @@ const LEGACY_TEMPLATE_LOGICAL = "/template";
 
 const LEGACY_TEMPLATE_MESSAGE: CoreMessageDescriptor = {key: "error.vfs.template_prefix_forbidden"};
 
-function isLegacyTemplateLogicalPath(normalized: string): boolean {
-  return normalized === LEGACY_TEMPLATE_LOGICAL || normalized.startsWith(`${LEGACY_TEMPLATE_LOGICAL}/`);
-}
-
 /**
  * 针对已规范化的路径做 `/template` 旧前缀校验。
  *
- * 抽出来是为了让 {@link toPhysicalPath} 拿到规范化结果后能直接复用，不必再
- * 走一遍 {@link resolveLogicalPath} 重复 normalize。
+ * 抽出来是为了让 {@link validateLogicalPath} 与 {@link toPhysicalPath} 拿到
+ * 规范化结果后能直接复用，不必再走一遍 {@link resolveLogicalPath} 重复 normalize。
  */
-function assertNormalizedPathAllowed(normalized: string): void {
-  if (isLegacyTemplateLogicalPath(normalized)) {
-    throw new AppError("VFS_INVALID_PATH", {path: normalized, reason: LEGACY_TEMPLATE_MESSAGE});
+function validateNormalizedPath(normalized: string): Result<void, AppError<"VFS_INVALID_PATH">> {
+  if (normalized === LEGACY_TEMPLATE_LOGICAL || normalized.startsWith(`${LEGACY_TEMPLATE_LOGICAL}/`)) {
+    return Result.err(new AppError("VFS_INVALID_PATH", {path: normalized, reason: LEGACY_TEMPLATE_MESSAGE}));
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -62,56 +59,55 @@ export function resolveLogicalPath(input: string): Result<string, AppError<"VFS_
 }
 
 /**
- * Validates that a logical path is allowed for the given scope.
+ * Validates that a logical path is allowed for the given scope（resolve + legacy `/template` 前缀校验）。
  *
- * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀带 descriptor messageKey 抛出
+ * @returns 失败分支载荷为 `VFS_INVALID_PATH`；legacy `/template` 前缀带 descriptor messageKey
  */
-export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
-  const resolved = resolveLogicalPath(logical);
-  if (!resolved.ok) throw resolved.error;
-  assertNormalizedPathAllowed(resolved.value);
+export function validateLogicalPath(_scope: VfsScope, logical: string): Result<void, AppError<"VFS_INVALID_PATH">> {
+  return resolveLogicalPath(logical).andThen((normalized) => validateNormalizedPath(normalized));
 }
 
 /**
  * Converts a caller logical path to the physical `vfs_entry.path`.
  *
- * @throws AppError<"VFS_INVALID_PATH"> 路径非法；legacy `/template` 前缀带 descriptor messageKey 抛出
+ * @returns 失败分支载荷为 `VFS_INVALID_PATH`（路径非法或 legacy `/template` 前缀）
  */
-export function toPhysicalPath(scope: VfsScope, logical: string): string {
+export function toPhysicalPath(scope: VfsScope, logical: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   const resolved = resolveLogicalPath(logical);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return resolved;
+  const allowed = validateNormalizedPath(resolved.value);
+  if (!allowed.ok) return Result.err(allowed.error);
   const normalized = resolved.value;
-  assertNormalizedPathAllowed(normalized);
   switch (scope.kind) {
     case "global":
       if (normalized === "/") {
-        return GLOBAL_PHYSICAL_PREFIX;
+        return Result.ok(GLOBAL_PHYSICAL_PREFIX);
       }
-      return `${GLOBAL_PHYSICAL_PREFIX}${normalized}`;
+      return Result.ok(`${GLOBAL_PHYSICAL_PREFIX}${normalized}`);
     case "project": {
       const prefix = `/projects/${scope.projectId}/template`;
       if (normalized === "/") {
-        return prefix;
+        return Result.ok(prefix);
       }
-      return `${prefix}${normalized}`;
+      return Result.ok(`${prefix}${normalized}`);
     }
     case "session": {
       const prefix = `/projects/${scope.projectId}/sessions/${scope.sessionId}`;
       if (normalized === "/") {
-        return prefix;
+        return Result.ok(prefix);
       }
-      return `${prefix}${normalized}`;
+      return Result.ok(`${prefix}${normalized}`);
     }
     case "global-meta":
       // 域内逻辑路径自带 /meta 段，物理 = 逻辑原样（前缀为空串）
-      return normalized;
+      return Result.ok(normalized);
     case "project-meta": {
       // 域内逻辑路径自带 /meta 段，物理仅再拼 /projects/{pid} 项目段
       const prefix = `/projects/${scope.projectId}`;
       if (normalized === "/") {
-        return prefix;
+        return Result.ok(prefix);
       }
-      return `${prefix}${normalized}`;
+      return Result.ok(`${prefix}${normalized}`);
     }
   }
 }
@@ -119,55 +115,55 @@ export function toPhysicalPath(scope: VfsScope, logical: string): string {
 /**
  * Converts a physical path back to the logical path for the scope.
  *
- * @throws AppError<"VFS_INVALID_PATH"> 物理路径非法或越出 scope
+ * @returns 失败分支载荷为 `VFS_INVALID_PATH`（物理路径非法或越出 scope）
  */
-export function toLogicalPath(scope: VfsScope, physical: string): string {
+export function toLogicalPath(scope: VfsScope, physical: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   const resolved = normalizePath(physical);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return resolved;
   const normalized = resolved.value;
   switch (scope.kind) {
     case "global": {
       if (normalized !== GLOBAL_PHYSICAL_PREFIX && !normalized.startsWith(`${GLOBAL_PHYSICAL_PREFIX}/`)) {
-        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in global template scope", detail: `Invalid path ${physical}: not in global template scope`});
+        return Result.err(new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in global template scope", detail: `Invalid path ${physical}: not in global template scope`}));
       }
       if (normalized === GLOBAL_PHYSICAL_PREFIX) {
-        return "/";
+        return Result.ok("/");
       }
-      return normalized.slice(GLOBAL_PHYSICAL_PREFIX.length);
+      return Result.ok(normalized.slice(GLOBAL_PHYSICAL_PREFIX.length));
     }
     case "project": {
       const prefix = `/projects/${scope.projectId}/template`;
       if (normalized === prefix) {
-        return "/";
+        return Result.ok("/");
       }
       if (!normalized.startsWith(`${prefix}/`)) {
-        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project template scope", detail: `Invalid path ${physical}: not in project template scope`});
+        return Result.err(new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project template scope", detail: `Invalid path ${physical}: not in project template scope`}));
       }
-      return normalized.slice(prefix.length);
+      return Result.ok(normalized.slice(prefix.length));
     }
     case "session": {
       const prefix = `/projects/${scope.projectId}/sessions/${scope.sessionId}`;
       if (normalized === prefix) {
-        return "/";
+        return Result.ok("/");
       }
       if (!normalized.startsWith(`${prefix}/`)) {
-        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in session scope", detail: `Invalid path ${physical}: not in session scope`});
+        return Result.err(new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in session scope", detail: `Invalid path ${physical}: not in session scope`}));
       }
-      return normalized.slice(prefix.length);
+      return Result.ok(normalized.slice(prefix.length));
     }
     case "global-meta":
       // 物理 = 逻辑原样（域内逻辑路径自带 /meta 段），不再剥挂载段
-      return normalized;
+      return Result.ok(normalized);
     case "project-meta": {
       const prefix = `/projects/${scope.projectId}`;
       const metaPrefix = `${prefix}/meta`;
       // 域内逻辑路径自带 /meta 段：物理必须形如 /projects/{pid}/meta[...]，
       // 否则是同项目其他子域（如 template）的路径，不属于 project-meta 域
       if (normalized !== metaPrefix && !normalized.startsWith(`${metaPrefix}/`)) {
-        throw new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project meta scope", detail: `Invalid path ${physical}: not in project meta scope`});
+        return Result.err(new AppError("VFS_INVALID_PATH", {path: physical, reason: "not in project meta scope", detail: `Invalid path ${physical}: not in project meta scope`}));
       }
       // 剥掉 /projects/{pid} 项目段，保留域内自带的 /meta 段
-      return normalized.slice(prefix.length);
+      return Result.ok(normalized.slice(prefix.length));
     }
   }
 }

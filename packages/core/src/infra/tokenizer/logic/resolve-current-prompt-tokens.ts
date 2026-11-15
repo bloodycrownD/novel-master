@@ -43,33 +43,13 @@ import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { buildCounterScope, chunkHash16, tokenChunkCache } from "./token-chunk-cache.js";
+import type { Interrupt, Outcome } from "../../../errors/outcome.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
 import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** 占用结果来源。 */
 type PromptTokenSource = "api" | "local";
-
-/**
- * resolve 段中途弃权（cr-fix-spec-r3 r3-chip-1，2026-09-30 治本点）。
- *
- * 背景：chip 读口的 build 段已有分段 bail（app 层的
- * `ChatPromptBuildBailedError`），但**进得去停不下**——resolve 链整段无观察
- * 点，其中 glm 原生整串计数单次 ~5.8s，与发送链共享 JS 线程与单 SQLite 连接。
- * 读口在 run 起步后无从兑现弃权。
- *
- * 为什么定义在 core 而不是让读口自己判：读口（mobile/desktop 的
- * chat-prompt-tokens service）在 `@novel-master/core` 之上，core 引不到 app 层的
- * 错误类；反向则让「弃权」这件事在内部分支里散成 return/null 两种形态，后者
- * 要放宽 `ResolvedPromptTokens` 返回类型并给 `token-ratio.trigger.ts` 单独加
- * 分支，改动面更大更脏。
- */
-export class PromptTokenResolveBailedError extends Error {
-  constructor() {
-    super("prompt token resolve bailed (run in flight)");
-    this.name = "PromptTokenResolveBailedError";
-  }
-}
 
 /** {@link resolveCurrentPromptTokens} 返回值。 */
 export interface ResolvedPromptTokens {
@@ -108,7 +88,9 @@ export interface ResolveCurrentPromptTokensOptions {
    */
   readonly preferEstimate?: boolean;
   /**
-   * 中途弃权判定（r3-chip-1）：真值即抛 {@link PromptTokenResolveBailedError}。
+   * 中途弃权判定（r3-chip-1；错误通道迁移二期改返回值）：返回非 null
+   * {@link Interrupt} 即在检查点收成 `Outcome.cancelled` / `Outcome.replaced`
+   * 返回，不再抛哨兵。
    *
    * 缺省 `undefined` = 永不弃权，对既有调用方（含唯一不透传的
    * `token-ratio.trigger.ts`）零影响。读口（mobile/desktop chat-prompt-tokens
@@ -123,7 +105,7 @@ export interface ResolveCurrentPromptTokensOptions {
    *
    * api 命中分支不设检查点：它只做一次 KKV 读 + 小增量估算，无整串级重活。
    */
-  readonly shouldBail?: () => boolean;
+  readonly shouldBail?: () => Interrupt | null;
 }
 
 /**
@@ -220,27 +202,27 @@ async function lookupWholeCacheEntry(sessionId: string, params: CountPromptLlmIn
  * （换模型后旧口径的占用不再适用，且避免把上一个模型的精确值喂给新模型的
  * 阈值判定）；无指纹（旧格式值）按兼容处理照常采用。
  */
-export async function resolveCurrentPromptTokens(sessionId: string, params: CountPromptLlmInputParams, options?: ResolveCurrentPromptTokensOptions): Promise<ResolvedPromptTokens> {
+export async function resolveCurrentPromptTokens(sessionId: string, params: CountPromptLlmInputParams, options?: ResolveCurrentPromptTokensOptions): Promise<Outcome<ResolvedPromptTokens>> {
   // r3-chip-1 弃权检查点执行器（api 命中分支不用：只一次 KKV 读 + 小增量
-  // 估算，无整串级重活，不值得为它加判据）。
-  // 弃权检查点执行器：未传 shouldBail 时恒假；api 命中分支不调用。
+  // 估算，无整串级重活，不值得为它加判据）。未传 shouldBail 恒 null；命中即
+  // 把调用方给的 Interrupt 直作 Outcome 的 cancelled/replaced 分支返回
+  // （错误通道迁移二期：哨兵 throw 改返回值）。api 命中分支不调用。
   const shouldBail = options?.shouldBail;
-  const bail = (): void => {
-    if (shouldBail?.() === true) {
-      throw new PromptTokenResolveBailedError();
-    }
-  };
+  const bail = (): Interrupt | null => shouldBail?.() ?? null;
   const entry = await readSessionApiPromptTokenEntry(options?.sessionKkv, sessionId);
   if (
     entry != null &&
     (entry.savedModelId == null || entry.savedModelId === params.savedModelId)
   ) {
     return {
-      tokenCount: entry.promptTokens + estimateAnchoredDelta(entry.anchorSeq, params),
-      source: "api",
-      estimated: false,
-      counterKind: "api",
-      atMs: entry.atMs,
+      kind: "completed",
+      value: {
+        tokenCount: entry.promptTokens + estimateAnchoredDelta(entry.anchorSeq, params),
+        source: "api",
+        estimated: false,
+        counterKind: "api",
+        atMs: entry.atMs,
+      },
     };
   }
 
@@ -290,7 +272,10 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 弃权检查点①：必须在**序列化之前**。下方 serializePromptLlmInput 与
     // lookupWholeCacheEntry 内部的 chunkHash16 各自把整串过一遍（真机上大
     // 会话就是秒级），检查点放在序列化之后等于「观察点在重活后面」。
-    bail();
+    const stopped = bail();
+    if (stopped != null) {
+      return stopped;
+    }
     // 估算读数记忆（2026-09-30 切会话重算治本）：同「workplace 指纹 + 消息
     // 尾戳 + tools + 模型 + layout」⇒ 序列化产物同值，serialize/hash/count
     // 三趟整串线性扫（真机 ~2s）全免。条目也可能来自精确分支的回写（升级语义：
@@ -300,10 +285,13 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
       const memoHit = lookupChatTokenEstimateMemo(sessionId, memoKey);
       if (memoHit != null) {
         return {
-          tokenCount: memoHit.tokenCount,
-          source: "local",
-          estimated: memoHit.estimated,
-          counterKind: memoHit.counterKind,
+          kind: "completed",
+          value: {
+            tokenCount: memoHit.tokenCount,
+            source: "local",
+            estimated: memoHit.estimated,
+            counterKind: memoHit.counterKind,
+          },
         };
       }
     }
@@ -343,10 +331,13 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
         counterKind: "heuristic",
       });
       return {
-        tokenCount,
-        source: "local",
-        estimated: true,
-        counterKind: "heuristic",
+        kind: "completed",
+        value: {
+          tokenCount,
+          source: "local",
+          estimated: true,
+          counterKind: "heuristic",
+        },
       };
     }
     const serialized = (await serializePromptLlmInput(params.layout, params.ctx)) + serializeToolsForTokenCount(params.tools);
@@ -355,10 +346,13 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
       // 命中即原样返回（与驱动层 L1 命中同语义；条目可能是精确档或
       // heuristic 档——后者与下方估算等价，返回谁都不是降级）。
       return {
-        tokenCount: cached.tokenCount,
-        source: "local",
-        estimated: cached.estimated,
-        counterKind: cached.counterKind,
+        kind: "completed",
+        value: {
+          tokenCount: cached.tokenCount,
+          source: "local",
+          estimated: cached.estimated,
+          counterKind: cached.counterKind,
+        },
       };
     }
     // 单趟计数（2026-09-30）：原 `max(heuristic, CJK 感知)` 是两趟整串扫，
@@ -374,10 +368,13 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
       });
     }
     return {
-      tokenCount,
-      source: "local",
-      estimated: true,
-      counterKind: "heuristic",
+      kind: "completed",
+      value: {
+        tokenCount,
+        source: "local",
+        estimated: true,
+        counterKind: "heuristic",
+      },
     };
   }
 
@@ -391,7 +388,10 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // 弃权检查点②：L1/L2 seed 之后、countPromptLlmInput 之前。家族原生计数器
   // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
   // 一眼」的形态——落在它之后就等于没有弃权点。
-  bail();
+  const stopped = bail();
+  if (stopped != null) {
+    return stopped;
+  }
   // 精确档记忆预查（2026-09-30 真机实锤补）：后台精确升级**每次进会话都会
   // 跑**，即便 L1 已有整串条目也要付 serialize+hash（真机 ~1.3s）。同键记忆
   // 里已有精确读数（上一轮升级/完整口径回写）时直接复用，重复进入的成本归
@@ -401,10 +401,13 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     const preciseMemoHit = lookupChatTokenEstimateMemo(sessionId, preciseMemoKey);
     if (preciseMemoHit != null && preciseMemoHit.estimated === false) {
       return {
-        tokenCount: preciseMemoHit.tokenCount,
-        source: "local",
-        estimated: false,
-        counterKind: preciseMemoHit.counterKind,
+        kind: "completed",
+        value: {
+          tokenCount: preciseMemoHit.tokenCount,
+          source: "local",
+          estimated: false,
+          counterKind: preciseMemoHit.counterKind,
+        },
       };
     }
   }
@@ -435,9 +438,12 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     });
   }
   return {
-    tokenCount: local.tokenCount,
-    source: "local",
-    estimated: local.estimated,
-    counterKind: local.counterKind,
+    kind: "completed",
+    value: {
+      tokenCount: local.tokenCount,
+      source: "local",
+      estimated: local.estimated,
+      counterKind: local.counterKind,
+    },
   };
 }

@@ -140,7 +140,7 @@ function isSessionNotFound(error: unknown): boolean {
 /**
  * 续用目标子会话的四态前置校验（spec D2 / D7 / D8）。
  *
- * 顺序刻意如此——先判存在性（get 抛错即不存在），再判归属（直接父口径），
+ * 顺序刻意如此——先判存在性（get 返回 err 即不存在），再判归属（直接父口径），
  * 再判活跃，最后判历史条数软闸。每态文案都引导「去掉 sessionId 新开」。
  *
  * 存在性只吞 `NOT_FOUND`（子会话真被删了）；DB 抖动等其它故障原样上抛——把它
@@ -149,18 +149,17 @@ function isSessionNotFound(error: unknown): boolean {
  *
  * @returns 校验通过的子会话 id（= 请求的 id 原样）。
  * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
- * @throws 非 `NOT_FOUND` 的 `sessions.get` 原样上抛
+ * @throws 非 `NOT_FOUND` 的 `sessions.get` 错误原样上抛
  */
 async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<string> {
-  let session;
-  try {
-    session = await subagent.sessions.get(sessionId);
-  } catch (error) {
-    if (!isSessionNotFound(error)) {
-      throw error;
+  const sessionResult = await subagent.sessions.get(sessionId);
+  if (!sessionResult.ok) {
+    if (!isSessionNotFound(sessionResult.error)) {
+      throw sessionResult.error;
     }
     throw new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`});
   }
+  const session = sessionResult.value;
   // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
   if (session.parentSessionId !== subagent.parentSessionId) {
     throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`});

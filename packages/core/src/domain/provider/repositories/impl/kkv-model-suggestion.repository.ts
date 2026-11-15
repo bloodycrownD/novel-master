@@ -55,22 +55,20 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
   }
 
   async deleteByProvider(providerId: string): Promise<void> {
-    try {
-      await this.kkv.delete(MODULE, providerId);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) return;
-      throw error;
+    const deleted = await this.kkv.delete(MODULE, providerId);
+    if (!deleted.ok) {
+      if (isAppError(deleted.error, "KKV_NOT_FOUND")) return;
+      throw deleted.error;
     }
   }
 
   private async readCache(providerId: string): Promise<ModelSuggestionCache> {
-    try {
-      const raw = await this.kkv.get(MODULE, providerId);
-      return decode(JSON.parse(raw) as unknown, modelSuggestionCacheSchema);
-    } catch (error) {
-      if (isAppError(error, "KKV_NOT_FOUND")) return { schemaVersion: 1, models: [] };
-      throw error;
+    const raw = await this.kkv.get(MODULE, providerId);
+    if (!raw.ok) {
+      if (isAppError(raw.error, "KKV_NOT_FOUND")) return { schemaVersion: 1, models: [] };
+      throw raw.error;
     }
+    return decode(JSON.parse(raw.value) as unknown, modelSuggestionCacheSchema);
   }
 
   private async writeCache(providerId: string, cache: ModelSuggestionCache): Promise<void> {

@@ -298,15 +298,16 @@ action 说明：
       case "load": {
         const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(undefined, name, undefined, skills.projectId);
+        if (!result.ok) throw result.error;
         // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
         if (skills.referencedNames?.has(name)) {
           return {
             action: "load",
-            domain: result.domain,
+            domain: result.value.domain,
             name,
-            path: result.path,
+            path: result.value.path,
             content: SKILL_LOAD_SEEN_TIP,
-            version: result.version,
+            version: result.value.version,
             files: [],
             truncated: false,
             alreadyReferenced: true,
@@ -315,19 +316,19 @@ action 说明：
         // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
         // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
         // （skill-tool 执行侧与读侧共享同一份推导函数）。
-        const { content, truncated } = deriveSkillLoadTruncation(result.content);
+        const { content, truncated } = deriveSkillLoadTruncation(result.value.content);
         // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
-        const list = await service.listSkills(result.domain === "global" ? "global" : { projectId: skills.projectId });
+        const list = await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId });
         const files = list.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
         // v1.5.30 unref 回迁：load 不再同步 +1、不再产 contentRef 引用块
         // （alreadyReferenced 分支恒返回常量 tip，本分支恒返回全文）。
         return {
           action: "load",
-          domain: result.domain,
+          domain: result.value.domain,
           name,
-          path: result.path,
+          path: result.value.path,
           content,
-          version: result.version,
+          version: result.value.version,
           files,
           truncated,
         };
@@ -335,6 +336,7 @@ action 说明：
       case "read": {
         const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(input.domain, name, input.path, skills.projectId);
+        if (!result.ok) throw result.error;
         const offset = input.offset ?? 1;
         const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
         // 分页截断推导单源（见
@@ -342,18 +344,18 @@ action 说明：
         // 推导函数内部短路（跳过整套截断推导、只回 totalLines 供报错文案），
         // 故这里直接在推导后判越界——判定收在单源函数内，调用方不重复推导，
         // 报错文案与「推导前先判定」逐字一致。
-        const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.content, offset, limit);
+        const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.value.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
           throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
         return {
           action: "read",
-          domain: result.domain,
+          domain: result.value.domain,
           name,
-          path: result.path,
+          path: result.value.path,
           content,
-          version: result.version,
+          version: result.value.version,
           offset,
           limit,
           totalLines,
@@ -369,7 +371,9 @@ action 说明：
         // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
         const domain = input.domain ?? "project";
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
-        const { version } = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
+        const written = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
+        if (!written.ok) throw written.error;
+        const { version } = written.value;
         return { action: "write", domain, name, path, version };
       }
       case "edit": {
@@ -381,13 +385,14 @@ action 说明：
         const domain = requiredField(input.domain, "domain");
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const result = await service.editSkillFile(domain, name, input.path, { oldString, newString, replaceAll: input.replaceAll }, skills.projectId);
+        if (!result.ok) throw result.error;
         return {
           action: "edit",
           domain,
           name,
           path,
-          version: result.version,
-          replacements: result.replacements,
+          version: result.value.version,
+          replacements: result.value.replacements,
         };
       }
       case "list": {

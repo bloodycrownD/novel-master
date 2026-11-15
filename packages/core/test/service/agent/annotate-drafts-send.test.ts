@@ -2,6 +2,8 @@
  * annotateDrafts 发送契约（T-AN3/T-AN4/T-AN6 Core 位点）。
  */
 
+import { Result } from "../../../src/errors/either.js";
+import { rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import {
   describe,
@@ -67,14 +69,19 @@ function makeRuntime(overrides: {
       get: async () => sampleDefinition,
     },
     projects: {
-      getAgentConfig: async () => ({ mode: "follow" }),
+      getAgentConfig: async () => Result.ok({ mode: "follow" }),
     } as AgentTurnRuntimePort["projects"],
     messages: {
       listBySession: overrides.listBySession ?? (async () => []),
+      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
       append:
-        overrides.append ??
-        (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
-      delete: overrides.delete ?? (async () => undefined),
+        overrides.append != null
+          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+        await overrides.delete!(...args);
+        return Result.ok(undefined);
+      }) as AgentTurnRuntimePort["messages"]["delete"],
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture: async () => undefined,
@@ -106,7 +113,7 @@ function makeRuntime(overrides: {
     } as AgentTurnRuntimePort["savedModelRepo"],
     userVfsTurn: overrides.userVfsTurn,
     sessions: {
-      getSessionAgentConfig: async () => ({ mode: "follow" }),
+      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
     },
   } as AgentTurnRuntimePort;
 }
@@ -302,6 +309,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
   it("无输入且无 annotate → 仍抛消息不能为空", async () => {
     userVfsUnifiedToolTurnFlag.refresh(true);
     const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
+    // runAgentTurn 的发送门仍走 throw 通道（边界校验），不适用 Result 断言。
     await assert.rejects(
       () =>
         runAgentTurn(

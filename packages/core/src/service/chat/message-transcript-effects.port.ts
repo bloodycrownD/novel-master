@@ -4,6 +4,9 @@
  * @module service/chat/message-transcript-effects.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
+
 /** 消息置位操作结果。 */
 export interface SetMessageFloorResult {
   readonly hiddenCount: number;
@@ -18,7 +21,7 @@ export interface MessageTranscriptEffectsService {
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number>;
+  ): Promise<Result<number, AppError>>;
 
   /** showRange（不 capture worktree 块）。 */
   showMessagesInRange(
@@ -26,7 +29,7 @@ export interface MessageTranscriptEffectsService {
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number>;
+  ): Promise<Result<number, AppError>>;
 
   /**
    * 截断 tail：deleteAfterSeq + tail checkpoint 清理。
@@ -44,5 +47,5 @@ export interface MessageTranscriptEffectsService {
     projectId: string,
     sessionId: string,
     messageId: string
-  ): Promise<SetMessageFloorResult>;
+  ): Promise<Result<SetMessageFloorResult, AppError>>;
 }

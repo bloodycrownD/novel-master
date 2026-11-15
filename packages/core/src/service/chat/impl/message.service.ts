@@ -36,6 +36,7 @@ import {
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -170,12 +171,12 @@ export class DefaultMessageService implements MessageService {
     );
   }
 
-  async get(id: string): Promise<ChatMessageData> {
+  async get(id: string): Promise<Result<ChatMessageData, AppError>> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id}));
     }
-    return message;
+    return Result.ok(message);
   }
 
   async append(
@@ -190,14 +191,14 @@ export class DefaultMessageService implements MessageService {
       attachments?: readonly MessageAttachment[];
       usage?: MessageUsage;
     }
-  ): Promise<ChatMessageData> {
+  ): Promise<Result<ChatMessageData, AppError>> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}));
     }
     const parsedContent = parseMessageContentValue(content);
     if (!parsedContent.ok) {
-      throw parsedContent.error;
+      return Result.err(parsedContent.error);
     }
     const normalizedContent = parsedContent.value;
     const attachments = normalizeAppendAttachments(options?.attachments);
@@ -247,18 +248,18 @@ export class DefaultMessageService implements MessageService {
     if (role === "assistant" && hasToolUse) {
       await this.invalidateToolUseCount(sessionId);
     }
-    return ChatMessage.from(message);
+    return Result.ok(ChatMessage.from(message));
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string): Promise<Result<void, AppError>> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id}));
     }
 
     const session = await this.deps.sessions.findById(message.sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId}));
     }
 
     await this.deps.conn.transaction(async (tx) => {
@@ -291,15 +292,16 @@ export class DefaultMessageService implements MessageService {
     await runDeferredBlobGc(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);
     await this.invalidateToolUseCount(message.sessionId);
+    return Result.ok(undefined);
   }
 
   async updateContent(
     messageId: string,
     content: MessageContent
-  ): Promise<ChatMessageData> {
+  ): Promise<Result<ChatMessageData, AppError>> {
     const parsedContent = parseMessageContentValue(content);
     if (!parsedContent.ok) {
-      throw parsedContent.error;
+      return Result.err(parsedContent.error);
     }
     // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
     // 下沉到 repository（port 签名为 MessageContent 对象）。
@@ -316,19 +318,20 @@ export class DefaultMessageService implements MessageService {
       }
     });
     const message = await this.get(messageId);
-    await this.invalidatePromptTokens(message.sessionId);
-    await this.invalidateToolUseCount(message.sessionId);
-    return message;
+    if (!message.ok) return message;
+    await this.invalidatePromptTokens(message.value.sessionId);
+    await this.invalidateToolUseCount(message.value.sessionId);
+    return Result.ok(message.value);
   }
 
-  async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
+  async fork(sessionId: string, upToMessageId: string): Promise<Result<ChatSession, AppError>> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}));
     }
     const upTo = await this.deps.messages.findById(upToMessageId);
     if (upTo == null || upTo.sessionId !== sessionId) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId}));
     }
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
     // seedForkCopyParity 吃同一份 toCopy），锚点之后的
@@ -339,8 +342,8 @@ export class DefaultMessageService implements MessageService {
     );
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
-      // 没有时直接抛，不为一个必然回滚的动作开事务。
-      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "No messages to fork up to the given id"});
+      // 没有时直接拒绝，不为一个必然回滚的动作开事务。
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "No messages to fork up to the given id"}));
     }
     const projectSessions = await this.deps.sessions.listByProject(
       source.projectId
@@ -358,7 +361,7 @@ export class DefaultMessageService implements MessageService {
       }
     }
     const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
-    return this.deps.conn.transaction(async (tx) => {
+    const forkedSession = await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
       // 零新增过滤语义（含 hidden 行——fork 要 Preserve hidden state）。
@@ -415,41 +418,44 @@ export class DefaultMessageService implements MessageService {
       if (!seeded.ok) throw seeded.error;
       return forked;
     });
+    return Result.ok(forkedSession);
   }
 
-  async hide(messageId: string): Promise<void> {
+  async hide(messageId: string): Promise<Result<void, AppError>> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId}));
     }
     const updated = await this.deps.messages.updateHidden(messageId, true);
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId}));
     }
     await this.invalidatePromptTokens(existing.sessionId);
+    return Result.ok(undefined);
   }
 
-  async show(messageId: string): Promise<void> {
+  async show(messageId: string): Promise<Result<void, AppError>> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId}));
     }
     const updated = await this.deps.messages.updateHidden(messageId, false);
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId}));
     }
     await this.invalidatePromptTokens(existing.sessionId);
+    return Result.ok(undefined);
   }
 
   async hideRange(
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number> {
+  ): Promise<Result<number, AppError>> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}));
     }
     const count = await this.deps.messages.updateHiddenRange(
       sessionId,
@@ -460,18 +466,18 @@ export class DefaultMessageService implements MessageService {
     if (count > 0) {
       await this.invalidatePromptTokens(sessionId);
     }
-    return count;
+    return Result.ok(count);
   }
 
   async showRange(
     sessionId: string,
     fromSeq: number,
     toSeq: number
-  ): Promise<number> {
+  ): Promise<Result<number, AppError>> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}));
     }
     const count = await this.deps.messages.updateHiddenRange(
       sessionId,
@@ -482,16 +488,16 @@ export class DefaultMessageService implements MessageService {
     if (count > 0) {
       await this.invalidatePromptTokens(sessionId);
     }
-    return count;
+    return Result.ok(count);
   }
 
   async truncateAfter(
     sessionId: string,
     afterMessageId: string | null
-  ): Promise<void> {
+  ): Promise<Result<void, AppError>> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}));
     }
 
     if (afterMessageId == null) {
@@ -516,12 +522,12 @@ export class DefaultMessageService implements MessageService {
       });
       await this.invalidatePromptTokens(sessionId);
       await this.invalidateToolUseCount(sessionId);
-      return;
+      return Result.ok(undefined);
     }
 
     const anchor = await this.deps.messages.findById(afterMessageId);
     if (anchor == null || anchor.sessionId !== sessionId) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId});
+      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId}));
     }
 
     // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。
@@ -532,7 +538,7 @@ export class DefaultMessageService implements MessageService {
     if (tailMessages.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
       await this.invalidatePromptTokens(sessionId);
-      return;
+      return Result.ok(undefined);
     }
 
     await this.deps.conn.transaction(async (tx) => {
@@ -551,5 +557,6 @@ export class DefaultMessageService implements MessageService {
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);
+    return Result.ok(undefined);
   }
 }

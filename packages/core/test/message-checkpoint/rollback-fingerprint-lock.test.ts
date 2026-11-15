@@ -21,6 +21,7 @@
  * @module test/message-checkpoint/rollback-fingerprint-lock
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -88,20 +89,20 @@ interface Fixture {
 
 /** user1 → assistantA(+capture) → user2 → assistantB(+capture)。 */
 async function seedRollbackFixture(prefix: string): Promise<Fixture> {
-  const project = await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+  const project = unwrap(await ctx.projects.create(`P-${prefix}-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`));
   const svfs = ctx.sessionVfs(project.id, session.id);
 
-  await ctx.messages.append(session.id, "user", textBlocks("q1"));
-  const anchorA = await ctx.messages.append(session.id, "assistant", textBlocks("a1"));
+  unwrap(await ctx.messages.append(session.id, "user", textBlocks("q1")));
+  const anchorA = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a1")));
   await svfs.write("/base.md", "anchor-body", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, anchorA.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorA.id));
 
-  await ctx.messages.append(session.id, "user", textBlocks("q2"));
-  const anchorB = await ctx.messages.append(session.id, "assistant", textBlocks("a2"));
+  unwrap(await ctx.messages.append(session.id, "user", textBlocks("q2")));
+  const anchorB = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("a2")));
   await svfs.write("/base.md", "tail-body", { versionCheck: false });
   await svfs.write("/extra.md", "created-after-anchor", { versionCheck: false });
-  await ctx.messageCheckpoint.capture(session.id, project.id, anchorB.id);
+  unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, anchorB.id));
 
   return {
     projectId: project.id,
@@ -237,12 +238,12 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
       if (attempt !== 0) {
         return;
       }
-      await ctx.messages.delete(victim.id);
-      const fresh = await ctx.messages.append(
+      unwrap(await ctx.messages.delete(victim.id));
+      const fresh = unwrap(await ctx.messages.append(
         fx.sessionId,
         "user",
         textBlocks("gap-injected")
-      );
+      ));
       injectedId = fresh.id;
     });
     const rollback = createMessageRollbackService(conn);

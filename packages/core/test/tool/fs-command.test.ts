@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -100,8 +101,8 @@ describe("fs-command integration", () => {
 
   it("executeFsCommand mv/rm -r/mkdir/cp -r", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     await vfs.write("/a.txt", "body");
@@ -133,11 +134,11 @@ describe("fs-command integration", () => {
 
   it("rm without recursive recursively deletes non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    await vfs.mkdir("/55");
+    unwrap(await vfs.mkdir("/55"));
     await vfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
 
     await executeFsCommand(vfs, parseFsCommand({ action: "rm", path: "/55" }));
@@ -146,10 +147,10 @@ describe("fs-command integration", () => {
 
   it("rmdir fails on non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.mkdir("/dir");
+    unwrap(await vfs.mkdir("/dir"));
     await vfs.write("/dir/a.txt", "stay");
 
     await assert.rejects(() =>
@@ -159,8 +160,8 @@ describe("fs-command integration", () => {
 
   it("ls output truncates at 50KB", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`p-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     for (let i = 0; i < 4000; i++) {
       await vfs.write(`/f-${i}.txt`, "x");

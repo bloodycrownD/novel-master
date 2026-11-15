@@ -1,3 +1,5 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -35,7 +37,7 @@ async function assembleWorkplace(
   sessionId: string
 ): Promise<string> {
   const ctx = getNovelMasterTestContext();
-  return (
+  return outcomeValue(
     await assembleWorkplaceDisplay(
       { kind: "session", projectId, sessionId },
       {
@@ -71,7 +73,7 @@ async function pinFullRule(
 describe("template pull", () => {
   it("session create copies worktree with path mapping", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
     const pwt = createWorkplaceService(ctx.conn, {
       kind: "project",
@@ -86,7 +88,7 @@ describe("template pull", () => {
       inclusionMode: "show",
     });
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const swt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
@@ -103,19 +105,19 @@ describe("template pull", () => {
 
   it("session pull clears message checkpoints but keeps messages", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/x.md", "X");
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only.md", "local");
-    await ctx.messages.append(session.id, "user", textBlocks("hi"));
-    const assistant = await ctx.messages.append(
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
+    const assistant = unwrap(await ctx.messages.append(
       session.id,
       "assistant",
       textBlocks("wrote"),
-    );
+    ));
     await svfs.write("/x.md", "snap", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
     const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
     assert.equal(
       await checkpointRepo.hasCheckpoint(session.id, assistant.id),
@@ -141,11 +143,11 @@ describe("template pull", () => {
 
   it("session create 仅复制 template 文件", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
     await ctx.projectVfs(project.id).write("/b.md", "B");
 
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const paths = (await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
@@ -156,9 +158,9 @@ describe("template pull", () => {
 
   it("session pull replace 语义移除 session 独有孤儿文件", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     await ctx.projectVfs(project.id).write("/a.md", "A");
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/orphan.md", "orphan");
 
@@ -176,9 +178,9 @@ describe("template pull", () => {
   it("T-P1: 模板拉取后 rule_snapshot / file_cache 两域被清空", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     await pinFullRule(project.id, session.id, "/a.md");
 
     // 先组装一次，让 rule_snapshot + file_cache 两域都有真实行
@@ -212,9 +214,9 @@ describe("template pull", () => {
   it("T-P2: 模板拉取后 usage_stats.toolUseCount 被写哨兵空串", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const kkv = createSessionKkvService(ctx.conn);
     await kkv.set(
       session.id,
@@ -226,11 +228,11 @@ describe("template pull", () => {
     await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
 
     assert.equal(
-      await kkv.get(
+      unwrap(await kkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USAGE_STATS,
         USAGE_STATS_TOOL_USE_COUNT_KEY,
-      ),
+      )),
       "",
       "拉取后 toolUseCount 应被写哨兵空串（失效协议是哨兵而非 delete）",
     );
@@ -239,9 +241,9 @@ describe("template pull", () => {
   it("T-P3: 同路径内容变更后拉取，workplace 前缀不再命中陈旧 file_cache", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `v1-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     await pinFullRule(project.id, session.id, "/a.md");
 
     // 第一次组装：file_cache 缓存住 v1
@@ -288,9 +290,9 @@ describe("template pull", () => {
   it("模板拉取后 session scope 无 ref_count=0 的残留 revision", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
+    const project = unwrap(await ctx.projects.create(`P-${suffix}`));
     await ctx.projectVfs(project.id).write("/a.md", `A-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sessionScope = `session:${project.id}:${session.id}`;
     const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
@@ -299,7 +301,7 @@ describe("template pull", () => {
     await ctx
       .sessionVfs(project.id, session.id)
       .write("/orphan.md", `orphan-${suffix}`);
-    const orphan = await entryRepo.findByPath(sessionScope, "/orphan.md");
+    const orphan = unwrap(await entryRepo.findByPath(sessionScope, "/orphan.md"));
     assert.ok(orphan != null, "前置条件：会话侧孤儿文件应存在");
     const orphanVersion = await revisionRepo.findMaxVersionForEntry(
       orphan.entryId,

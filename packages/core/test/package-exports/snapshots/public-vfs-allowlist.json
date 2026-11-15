@@ -6,7 +6,6 @@
   "CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES",
   "SqliteVfsRevisionRepository",
   "actionXmlToToolUses",
-  "assertLogicalPathAllowed",
   "buildUserVfsActionXml",
   "buildUserVfsCreateFileOp",
   "buildUserVfsDeleteOp",
@@ -43,6 +42,7 @@
   "scopePhysicalPrefix",
   "toLogicalPath",
   "toPhysicalPath",
+  "validateLogicalPath",
   "validateVfsEntryName",
   "vfsUserMessage"
 ]

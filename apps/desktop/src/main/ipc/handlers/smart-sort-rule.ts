@@ -60,7 +60,8 @@ export async function handleSmartSortRuleCreate(
       ...(req.description != null ? { description: req.description } : {}),
       ...(req.enabled != null ? { enabled: req.enabled } : {}),
     });
-    return { ok: true, data: rule as SmartSortRuleDto };
+    if (!rule.ok) throw rule.error;
+    return { ok: true, data: rule.value as SmartSortRuleDto };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -72,7 +73,8 @@ export async function handleSmartSortRuleUpdate(
   try {
     const rt = await getDesktopRuntime();
     const rule = await rt.smartSortRule.updateRule(req.ruleId, req.patch);
-    return { ok: true, data: rule as SmartSortRuleDto };
+    if (!rule.ok) throw rule.error;
+    return { ok: true, data: rule.value as SmartSortRuleDto };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -83,7 +85,8 @@ export async function handleSmartSortRuleDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.smartSortRule.deleteRule(req.ruleId);
+    const deleted = await rt.smartSortRule.deleteRule(req.ruleId);
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -95,7 +98,8 @@ export async function handleSmartSortRuleDeleteBatch(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.smartSortRule.deleteBatch(req.ruleIds);
+    const deleted = await rt.smartSortRule.deleteBatch(req.ruleIds);
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -108,7 +112,8 @@ export async function handleSmartSortRuleSetEnabled(
   try {
     const rt = await getDesktopRuntime();
     const rule = await rt.smartSortRule.setEnabled(req.ruleId, req.enabled);
-    return { ok: true, data: rule as SmartSortRuleDto };
+    if (!rule.ok) throw rule.error;
+    return { ok: true, data: rule.value as SmartSortRuleDto };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -132,7 +137,8 @@ export async function handleSmartSortRuleMove(
   try {
     const rt = await getDesktopRuntime();
     const rules = await rt.smartSortRule.moveRule(req.ruleId, req.to);
-    return { ok: true, data: rules as SmartSortRuleDto[] };
+    if (!rules.ok) throw rules.error;
+    return { ok: true, data: rules.value as SmartSortRuleDto[] };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -144,7 +150,8 @@ export async function handleSmartSortRuleReorder(
   try {
     const rt = await getDesktopRuntime();
     const rules = await rt.smartSortRule.reorderRules(req.orderedIds);
-    return { ok: true, data: rules as SmartSortRuleDto[] };
+    if (!rules.ok) throw rules.error;
+    return { ok: true, data: rules.value as SmartSortRuleDto[] };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

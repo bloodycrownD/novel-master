@@ -1438,7 +1438,8 @@ export class SessionStreamUnitManager {
         (async () => {
           try {
             const session = await this.runtime.sessions.get(sessionId);
-            const title = session?.title ?? undefined;
+            if (!session.ok) throw session.error;
+            const title = session.value?.title ?? undefined;
             timingLog('keepalive: session title fetched');
             return title;
           } catch {
@@ -1449,7 +1450,8 @@ export class SessionStreamUnitManager {
         (async () => {
           try {
             const project = await this.runtime.projects.get(projectId);
-            const name = project?.name ?? undefined;
+            if (!project.ok) throw project.error;
+            const name = project.value?.name ?? undefined;
             timingLog('keepalive: project name fetched');
             return name;
           } catch {
@@ -1768,7 +1770,9 @@ export class SessionStreamUnitManager {
       }
       let sessionTitle: string | null | undefined;
       try {
-        sessionTitle = (await this.runtime.sessions.get(sessionId))?.title;
+        const session = await this.runtime.sessions.get(sessionId);
+        if (!session.ok) throw session.error;
+        sessionTitle = session.value?.title;
       } catch {
         // 会话名取不到不阻塞通知
       }

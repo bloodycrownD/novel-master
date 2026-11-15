@@ -47,7 +47,12 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
     // 判定**绝不**为本地计数阻塞 run（glm 原生整串大上下文单次 ~5.8s，切模型/
     // 回滚后首个 step 会踩）；heuristic 档自动乘保守系数，方向安全。
     const tokenRead = await resolveCurrentPromptTokens(evaluation.sessionId, { layout: evaluation.layout, ctx: evaluation.ctx, savedModelId: evaluation.modelContext.savedModelId, registry: this.tokenCounters, tokenizerOverride, ...(evaluation.tools != null ? { tools: evaluation.tools } : {}) }, { sessionKkv: evaluation.sessionKkv, preferEstimate: true });
-    const { tokenCount, counterKind, estimated } = tokenRead;
+    if (tokenRead.kind !== "completed") {
+      // 中途弃权沿返回值到达（错误通道迁移二期；本触发器不透传 shouldBail，
+      // 恒不到）：不触发压缩，绝不为阈值判定阻塞 run。
+      return false;
+    }
+    const { tokenCount, counterKind, estimated } = tokenRead.value;
 
     // 非精确计数（heuristic 或任何 estimated 估算档——preferEstimate 的
     // heuristic+CJK 下限估算，或家族计数器的降级估读）不精确、可能低估，

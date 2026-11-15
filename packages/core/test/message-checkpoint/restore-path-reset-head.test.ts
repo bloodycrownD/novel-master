@@ -7,6 +7,7 @@
  * @module test/message-checkpoint/restore-path-reset-head
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -37,8 +38,8 @@ describe("restore-path resetHead semantics", () => {
   it("T-W1: 回滚到 checkpoint 后 revision 表行数不变", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-W1-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-W1-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const rollback = createMessageRollbackService(ctx.conn);
 
@@ -49,10 +50,10 @@ describe("restore-path resetHead semantics", () => {
     const countBeforeCapture = await revisionCount(ctx);
 
     // capture checkpoint
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "checkpoint-1" }],
-    });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    }));
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     // 再写新 version
     await svfs.write("/file.md", "v4", { versionCheck: false });
@@ -82,8 +83,8 @@ describe("restore-path resetHead semantics", () => {
   it("T-W2: 同文短路仍生效，不产生冗余 version 行（V12）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-W2-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-W2-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     // 写初始版本

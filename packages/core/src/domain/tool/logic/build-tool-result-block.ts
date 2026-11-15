@@ -10,6 +10,7 @@
 
 import { isRecord } from "@/common/guards.js";
 import { utf8ByteLength } from "@/common/encoding.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import { formatToolErrorForLlm, formatToolOutputForLlm } from "./format-tool-output.js";
@@ -277,12 +278,16 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     };
   }
 
+  // 取消（TOOL_CANCELLED）是控制流信号不是错误：块仍标 ok=false（LLM 知道调用
+  // 未执行），但不产出 summary——UI 卡片 status=error 且无 summary 时回退入参
+  // 摘要、不弹错误文案，呈现为 cancelled。
+  const cancelled = isAppError(outcome.error, "TOOL_CANCELLED");
   const content = formatToolErrorForLlm(outcome.error, {
     vfsScope: meta?.vfsScope,
   });
   const trimmed = content.trimStart();
   let summary: string | undefined;
-  if (trimmed.startsWith("Error:")) {
+  if (!cancelled && trimmed.startsWith("Error:")) {
     const msg = trimmed.slice("Error:".length).trimStart();
     summary = msg.length > 120 ? `${msg.slice(0, 117)}…` : msg;
   }

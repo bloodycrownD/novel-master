@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
-import { assertLogicalPathAllowed } from "./vfs-path-mapper.js";
+import { validateLogicalPath } from "./vfs-path-mapper.js";
 import { assertZipEntriesNotDomainRootPrefixed, logicalFromZipDirectoryEntryRelativeToDirectory, logicalFromZipEntryRelativeToDirectory, resolveZipDirectoryPath } from "./vfs-zip-path.js";
 
 // 闸门常量搬到 vfs-zip-limits.ts（解析器也要用同一组值，独立成模块才能避免
@@ -71,13 +71,9 @@ export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<st
 }
 
 function assertLogicalAllowed(scope: VfsScope, logical: string, entryName: string): AppError<"VFS_ZIP_INVALID_PATH"> | null {
-  try {
-    assertLogicalPathAllowed(scope, logical);
-    return null;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "path not allowed for scope";
-    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP entry "${entryName}" → logical "${logical}": ${message}` });
-  }
+  const allowed = validateLogicalPath(scope, logical);
+  if (allowed.ok) return null;
+  return new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP entry "${entryName}" → logical "${logical}": ${allowed.error.message}` });
 }
 
 /**

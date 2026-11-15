@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 
@@ -10,6 +11,7 @@ import { assembleSearchToolContext } from "../../src/service/agent/logic/run-age
 import { createSearchConfigStore, type SearchConfigPublic, type SearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
 import { DUCKDUCKGO_ENGINE_META, PRESET_ENGINE_TEMPLATES } from "../../src/domain/tool/builtin/search/preset-templates.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
@@ -27,15 +29,16 @@ function fakeStores(): { kkv: KkvService; secretStore: SecretStore } {
     get: async (module, key) => {
       const value = kkvMap.get(`${module}/${key}`);
       if (value == null) {
-        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        return Result.err(new AppError("KKV_NOT_FOUND", { detail: `KKV key not found: ${module}/${key}` }));
       }
-      return value;
+      return Result.ok(value);
     },
     set: async (module, key, value) => {
       kkvMap.set(`${module}/${key}`, value);
     },
     delete: async (module, key) => {
       kkvMap.delete(`${module}/${key}`);
+      return Result.ok(undefined);
     },
   };
   const secretStore: SecretStore = {
@@ -120,8 +123,8 @@ function ddgHtmlWithResults(n: number): Response {
 
 /** 启用指定引擎并写入 key（模板断言统一 fixture 化）。 */
 async function enableWithKey(store: SearchConfigStore, engineId: string, key: string): Promise<void> {
-  await store.setEnabled(engineId, true);
-  await store.saveEngineKey(engineId, key);
+  unwrap(await store.setEnabled(engineId, true));
+  unwrap(await store.saveEngineKey(engineId, key));
 }
 
 describe("search 工具：注册与策略", () => {
@@ -160,7 +163,7 @@ describe("search 工具：run 基础行为", () => {
   it("T-S4：全关（含 DDG 关闭）返回中性链空提示，不崩溃、不枚举引擎 id", async () => {
     const { kkv, secretStore } = fakeStores();
     const store = createSearchConfigStore({ kkv, secretStore });
-    await store.setEnabled("duckduckgo", false);
+    unwrap(await store.setEnabled("duckduckgo", false));
 
     const runner = makeRunner();
     const out = await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) }));
@@ -431,7 +434,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     const store = createSearchConfigStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
     await enableWithKey(store, "tavily", "sk-tavily");
-    await store.setEnabled("duckduckgo", false);
+    unwrap(await store.setEnabled("duckduckgo", false));
 
     const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
     const description = searchTool.description(ctx);
@@ -441,7 +444,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     assert.ok(tavilyIndex > bochaIndex, "逐引擎段应按串行链序");
     assert.equal(description.includes("duckduckgo"), false, "DDG 关闭后描述无其字样");
 
-    await store.setEnabled("bocha", false);
+    unwrap(await store.setEnabled("bocha", false));
     const afterDisable = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
     assert.equal(afterDisable.includes("bocha"), false, "下回合装配后关闭引擎不出现");
     assert.ok(afterDisable.includes("- tavily（Tavily 搜索）："));
@@ -450,8 +453,8 @@ describe("search 工具：描述快照（T-D1）", () => {
   it("快照口径=链同款：启用但未配置（无 key）的引擎不出现", async () => {
     const { kkv, secretStore } = fakeStores();
     const store = createSearchConfigStore({ kkv, secretStore });
-    await store.setEnabled("brave", true); // 无 key → 配置不完整
-    await store.setEnabled("duckduckgo", false);
+    unwrap(await store.setEnabled("brave", true)); // 无 key → 配置不完整
+    unwrap(await store.setEnabled("duckduckgo", false));
 
     const description = searchTool.description(makeCtx({ search: await assembleSearchToolContext(store) }));
     assert.equal(description.includes("brave"), false);
@@ -520,7 +523,7 @@ describe("search 工具：描述快照（T-D1）", () => {
     const { kkv, secretStore } = fakeStores();
     const store = createSearchConfigStore({ kkv, secretStore });
     await enableWithKey(store, "bocha", "sk-bocha");
-    await store.setEnabled("duckduckgo", false);
+    unwrap(await store.setEnabled("duckduckgo", false));
     const ctx = makeCtx({ search: await assembleSearchToolContext(store) });
     assert.ok(searchTool.description(ctx).includes("bocha"));
 
@@ -724,11 +727,9 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     const result = await pending;
     assert.equal(result.ok, false);
     const err = result.error;
-    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-    const detail = String((err as { cause?: unknown }).cause);
-    assert.match(detail, /搜索已取消/);
+    assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码（不再经 toolFailed 的 cause 文案）");
     // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
-    assert.equal(detail.includes("串行搜索链"), false);
+    assert.equal(err.message.includes("串行搜索链"), false);
     // fetch 收到的 init.signal 已 aborted（在途请求同步取消）。
     assert.equal(inFlightSignals[0]?.aborted, true);
     // 第二引擎零请求（降级链被取消短路）。
@@ -750,8 +751,7 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     }) as typeof globalThis.fetch;
 
     await assert.rejects(searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })), (err: unknown) => {
-      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-      assert.match(String((err as { cause?: unknown }).cause), /搜索已取消/);
+      assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
       return true;
     });
     assert.equal(fetchCalls, 0, "取消先于链首请求：任何引擎都不该被请求");
@@ -788,9 +788,8 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
     controller.abort();
     const result = await pending;
     assert.equal(result.ok, false);
-    const detail = String((result.error as { cause?: unknown }).cause);
-    assert.match(detail, /搜索已取消/);
-    assert.equal(detail.includes("串行搜索链"), false, "取消后不再聚合链错误");
+    assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
+    assert.equal(result.error.message.includes("串行搜索链"), false, "取消后不再聚合链错误");
     assert.equal(inFlightSignals[0]?.aborted, true, "在途的 tavily 请求已被同步 abort");
     // 第三引擎（链上已无）与重复请求都不会发生。
     assert.equal(urls.length, 2);

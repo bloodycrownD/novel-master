@@ -9,6 +9,7 @@
  * @module test/bootstrap/seed-builtin-skills
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -46,7 +47,7 @@ describe("内置 agent-config 技能 seed（T-AS1）", () => {
     assert.ok(item != null, "bootstrap 后 global 清单应含 agent-config");
     assert.equal(item.valid, true, "front matter 应过 strict 校验");
 
-    const read = await skills.readSkillFile("global", "agent-config");
+    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
     assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
 
     await conn.close();
@@ -59,15 +60,15 @@ describe("内置 agent-config 技能 seed（T-AS1）", () => {
     const skills = createSkillsService(conn);
     // 用户在种入版之上编辑（目录已存在，编辑路径放行；整文件覆盖有乐观锁墙，
     // 走 editSkillFile 的 replace 语义）
-    await skills.editSkillFile("global", "agent-config", undefined, {
+    unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
       oldString: "agent 配置指南",
       newString: USER_EDITED_HEADING,
-    });
+    }));
 
     // 模拟下次启动重跑 seed：已存在即跳过，不得覆盖用户改动
     await seedBuiltinSkills(conn);
 
-    const read = await skills.readSkillFile("global", "agent-config");
+    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
     assert.match(read.content, /用户改过的指南/);
     assert.doesNotMatch(read.content, /agent 配置指南/);
 
@@ -91,15 +92,15 @@ describe("内置 agent-config 技能 seed 版本化升级（T-AS4）", () => {
     const skills = createSkillsService(conn);
 
     // 模拟版本落后的存量库：内容回写成任意旧态（v1 文案 / 用户改过版均同语义）
-    await skills.editSkillFile("global", "agent-config", undefined, {
+    unwrap(await skills.editSkillFile("global", "agent-config", undefined, {
       oldString: "agent 配置指南",
       newString: USER_EDITED_HEADING,
-    });
+    }));
     await clearSeedLedger(conn);
 
     await seedBuiltinSkills(conn);
 
-    const read = await skills.readSkillFile("global", "agent-config");
+    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
     assert.equal(read.content, AGENT_CONFIG_SKILL_MD);
     await conn.close();
   });
@@ -110,11 +111,11 @@ describe("内置 agent-config 技能 seed 版本化升级（T-AS4）", () => {
     const skills = createSkillsService(conn);
 
     // 台账已=当前版（bootstrap 首种即写入）：篡改内容后 seed 不得回写。
-    await skills.writeSkillFile(
+    unwrap(await skills.writeSkillFile(
       "global", "agent-config", undefined, "稳态脏文本", undefined,
-    );
+    ));
     await seedBuiltinSkills(conn);
-    const read = await skills.readSkillFile("global", "agent-config");
+    const read = unwrap(await skills.readSkillFile("global", "agent-config"));
     assert.equal(read.content, "稳态脏文本");
     await conn.close();
   });

@@ -11,6 +11,7 @@
  * T-CR4 验证清域失败只 warn、不把压缩成功翻成失败。
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
@@ -61,7 +62,7 @@ async function appendMany(
 ): Promise<void> {
   const session = new ChatAgentSession(messages, sessionId);
   for (const role of roles) {
-    await session.append(role, textBlocks(`${role}-${Math.random()}`));
+    unwrap(await session.append(role, textBlocks(`${role}-${Math.random()}`)));
   }
 }
 
@@ -121,7 +122,7 @@ describe("runCompaction", () => {
     assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.hideStartDepth, 6);
 
-    const raw = await kkv.get("nm-compaction-conditions", "policy");
+    const raw = unwrap(await kkv.get("nm-compaction-conditions", "policy"));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);
@@ -134,8 +135,8 @@ describe("runCompaction", () => {
     // ② 显式传 "auto"。语义必须完全一致——「把缺省改成显式 auto」这类实现漂移
     // 会让其中一条红。
     for (const trigger of [undefined, "auto"] as const) {
-      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-      const sessionRow = await ctx.sessions.create(project.id);
+      const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+      const sessionRow = unwrap(await ctx.sessions.create(project.id));
       const sessionId = sessionRow.id;
 
       // 10 条消息：depth 9..0，hideStartDepth=6 会 hide 掉 depth>=6 的前缀段。
@@ -201,8 +202,8 @@ describe("runCompaction", () => {
 
   it("T-CR1（manual 语义）：trigger=\"manual\" + ok:true → 清空 rule_snapshot + file_cache，token 失效断言不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionRow = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionRow = unwrap(await ctx.sessions.create(project.id));
     const sessionId = sessionRow.id;
 
     await appendMany(ctx.messages, sessionId, [
@@ -261,8 +262,8 @@ describe("runCompaction", () => {
 
   it("T-CR1b：hide 无可隐藏范围（锚不出真用户输入）时 manual 仍清两域且 ok:true", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionRow = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionRow = unwrap(await ctx.sessions.create(project.id));
     const sessionId = sessionRow.id;
 
     // 只放 2 条 assistant：depth 只有 1 / 0，都小于 startDepth=6，
@@ -305,8 +306,8 @@ describe("runCompaction", () => {
 
   it("T-CR4（manual 容错）：clearDomain 抛错时吞错 + warn，ok:true 照旧返回", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionRow = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionRow = unwrap(await ctx.sessions.create(project.id));
     const sessionId = sessionRow.id;
 
     await appendMany(ctx.messages, sessionId, [
@@ -373,8 +374,8 @@ describe("runCompaction", () => {
 
   it("T-CC3（auto 语义）：hideStartDepth=10 时 hide-message 用 depth 10", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionRow = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionRow = unwrap(await ctx.sessions.create(project.id));
     const sessionId = sessionRow.id;
 
     // 只放 3 条消息：startDepth=10 远超可见深度，
@@ -419,8 +420,8 @@ describe("runCompaction", () => {
 
   it("T-CC4 / T-CR3（manual 变量）：hide-message 抛异常时返回 { ok: false }，不 crash 且两域不清", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionRow = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionRow = unwrap(await ctx.sessions.create(project.id));
     const sessionId = sessionRow.id;
 
     await appendMany(ctx.messages, sessionId, [

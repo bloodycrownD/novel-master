@@ -11,6 +11,7 @@
  * @module test/message-checkpoint/backfill-gap-index-join
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
@@ -97,15 +98,15 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     messageCount: number,
     capturedIndexes: readonly number[]
   ): Promise<{ projectId: string; sessionId: string; ids: string[] }> {
-    const project = await ctx.projects.create(`P-${label}-${Date.now()}-${Math.random()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${label}-${Date.now()}-${Math.random()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const ids: string[] = [];
     for (let i = 0; i < messageCount; i++) {
       ids.push(
         (
-          await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
+          unwrap(await ctx.messages.append(session.id, i % 2 === 0 ? "user" : "assistant", {
             blocks: [{ type: "text", text: `m${i}` }],
-          })
+          }))
         ).id
       );
     }
@@ -115,7 +116,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     });
     const checkpoints = createMessageCheckpointService(conn);
     for (const i of capturedIndexes) {
-      await checkpoints.capture(session.id, project.id, ids[i]!);
+      unwrap(await checkpoints.capture(session.id, project.id, ids[i]!));
     }
     return { projectId: project.id, sessionId: session.id, ids };
   }
@@ -314,8 +315,8 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     }
 
     // ③ 空消息会话（有 live 文件）⇒ 恒无空窗，不新增行。
-    const emptyProject = await ctx.projects.create(`P-f3-empty-${Date.now()}`);
-    const emptySession = await ctx.sessions.create(emptyProject.id);
+    const emptyProject = unwrap(await ctx.projects.create(`P-f3-empty-${Date.now()}`));
+    const emptySession = unwrap(await ctx.sessions.create(emptyProject.id));
     await ctx.sessionVfs(emptyProject.id, emptySession.id).write("/only.md", "x", {
       versionCheck: false,
     });

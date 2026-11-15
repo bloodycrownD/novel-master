@@ -137,12 +137,15 @@ export function TokenUsageStatsScreen() {
         usage.getDailyBuckets(filter),
         usage.getModelBreakdown(filter),
       ]);
+      if (!nextSummary.ok) throw nextSummary.error;
+      if (!nextBuckets.ok) throw nextBuckets.error;
+      if (!nextRows.ok) throw nextRows.error;
       if (seq !== reloadSeqRef.current) {
         return; // 过期响应：新一轮查询已在途，丢弃本轮结果。
       }
-      setSummary(nextSummary);
-      setDailyBuckets(nextBuckets);
-      setModelRows(nextRows);
+      setSummary(nextSummary.value);
+      setDailyBuckets(nextBuckets.value);
+      setModelRows(nextRows.value);
       // today 模式补选今天（P1-1）：补选必须写进本成功分支而非独立
       // effect——这里是重置 selectedDay 的唯一时机，独立 effect 的补选
       // 会被后到的成功回调抹掉（双端同构）；其余范围重置 null。补选 key
@@ -189,11 +192,12 @@ export function TokenUsageStatsScreen() {
           offset: page * REQUESTS_PAGE_SIZE,
           limit: REQUESTS_PAGE_SIZE,
         });
+        if (!result.ok) throw result.error;
         if (seq !== reqSeqRef.current) {
           return;
         }
-        setReqRows([...result.rows]);
-        setReqTotal(result.total);
+        setReqRows([...result.value.rows]);
+        setReqTotal(result.value.total);
         setReqPage(page);
         reqDirtyRef.current = false;
       } catch (err) {
@@ -284,7 +288,8 @@ export function TokenUsageStatsScreen() {
       .getHourlyBuckets(selectedDay, filter)
       .then(buckets => {
         if (!cancelled) {
-          setHourlyBuckets(buckets);
+          if (!buckets.ok) throw buckets.error;
+          setHourlyBuckets(buckets.value);
         }
       })
       .catch(err => {

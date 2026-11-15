@@ -7,6 +7,7 @@
  * - `content_hash` 列在 `vfs_entry` 和 `vfs_revision` 中均以 entry_id 筛选
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -26,26 +27,26 @@ novelMasterTestFixture();
 describe("fork/copy parity (F1)", () => {
   it("T-F1 / T-FK1: fork 后目标 revision 可读；源/目标共享同一 content_hash/blob", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "fork-body", { versionCheck: false });
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));
+    const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
-    const sourceEntry = await entries.findByPath(sk, "/note.md");
+    const sourceEntry = unwrap(await entries.findByPath(sk, "/note.md"));
     assert.ok(sourceEntry != null);
     const sourceHash = await entries.findContentHash(sk, "/note.md");
     assert.ok(sourceHash, "源 entry 须有 content_hash");
 
-    const forked = await ctx.messages.fork(session.id, m2.id);
+    const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
     assert.equal(forkedMsgs.length, 2);
 
     const forkSk = scopeKey({ kind: "session", projectId: project.id, sessionId: forked.id });
-    const targetEntry = await entries.findByPath(forkSk, "/note.md");
+    const targetEntry = unwrap(await entries.findByPath(forkSk, "/note.md"));
     assert.ok(targetEntry != null);
 
     const live = await ctx.sessionVfs(project.id, forked.id).read("/note.md");

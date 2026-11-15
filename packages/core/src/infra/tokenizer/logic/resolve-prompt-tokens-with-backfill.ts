@@ -9,6 +9,7 @@
  */
 
 import type { ChatMessageData } from "../../../domain/chat/model/message.js";
+import type { Outcome } from "../../../errors/outcome.js";
 import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import {
   resolveCurrentPromptTokens,
@@ -27,13 +28,15 @@ import {
  *
  * `options.shouldBail` 同样原样透传（r3-chip-1）：本函数不再有任何自己的
  * 步骤，弃权观察点全在 {@link resolveCurrentPromptTokens} 内部的两处整串级
- * 重活之前——读口传进来即生效，不传则恒不弃权（既有调用方零影响）。
+ * 重活之前——读口传进来即生效，不传则恒不弃权（既有调用方零影响）。弃权
+ * 沿 `Outcome.cancelled` / `Outcome.replaced` 透传（错误通道迁移二期：哨兵
+ * throw 改返回值，读口按 kind 判定收口）。
  */
 export async function resolvePromptTokensWithBackfill(
   sessionId: string,
   _rawMessages: readonly ChatMessageData[],
   params: CountPromptLlmInputParams,
   options?: ResolveCurrentPromptTokensOptions
-): Promise<ResolvedPromptTokens> {
+): Promise<Outcome<ResolvedPromptTokens>> {
   return resolveCurrentPromptTokens(sessionId, params, options);
 }

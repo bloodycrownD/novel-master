@@ -5,6 +5,8 @@
  * 置位压缩重置随可见窗口继承 / skills 未接线原样带过 /
  * seen 共享方向 B：assistant 已 load 过的技能，后续 $ 引用走短标记。
  */
+import { Result } from "../../src/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -111,17 +113,18 @@ function fakeSkillService(state: {
         valid: true,
         effective: true,
       })),
-    readSkillFile: async (): Promise<SkillFileContent> => {
+    // 错误通道迁移二期：readSkillFile 走 Result 通道——fake 在这里统一包 Ok。
+    readSkillFile: async (): Promise<SkillService["readSkillFile"] extends (...args: never[]) => Promise<infer R> ? R : never> => {
       if (state.readError) {
         throw new Error("skill file gone");
       }
-      return {
+      return Result.ok({
         domain: "project",
         name: "demo",
         path: "SKILL.md",
         content: state.content ?? SKILL_MD,
         version: 1,
-      };
+      }) as never;
     },
   } as unknown as SkillService;
   return Object.assign(service, { state });
@@ -130,8 +133,8 @@ function fakeSkillService(state: {
 describe("promptAssembler skillAttach (T-SK12)", () => {
   it("首次出现：读生效副本 SKILL.md 全文附 skillAttach；正文 token 原样保留", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
@@ -157,8 +160,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("第二条可见消息同技能 → alreadyReferenced 短标记，无全文（镜像 T-PD2）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
@@ -184,8 +187,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("不存在技能名：一行提示而非全文，且不写 seen（同轮再引仍是提示行，非 alreadyReferenced）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["other"] });
 
@@ -213,8 +216,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("自愈：上轮不存在（不写 seen），技能创建后再次引用重新附全文", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: [] });
 
@@ -244,8 +247,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("存在但无效（front matter 缺失）与禁用技能：仍附 SKILL.md 原文，不视为不存在", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const entries: EffectiveSkill[] = [
       {
@@ -270,13 +273,15 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
     ];
     const service = {
       effectiveSkills: async () => entries,
-      readSkillFile: async (): Promise<SkillFileContent> => ({
-        domain: "project",
-        name: "x",
-        path: "SKILL.md",
-        content: SKILL_MD,
-        version: 1,
-      }),
+      // 错误通道迁移二期：readSkillFile 走 Result 通道。
+      readSkillFile: async (): Promise<SkillFileContent> =>
+        Result.ok({
+          domain: "project",
+          name: "x",
+          path: "SKILL.md",
+          content: SKILL_MD,
+          version: 1,
+        }) as unknown as SkillFileContent,
     } as unknown as SkillService;
 
     const prepared = await promptAssembler.prepare(
@@ -301,8 +306,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("读盘竞态失败（判定存在但读取抛错）→ 按不存在提示，不写 seen", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"], readError: true });
 
@@ -327,8 +332,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("置位/压缩重置：可见窗口只剩后一条消息时 seen 重新开始 → 再次全文（镜像 T-PD3 可见窗口语义）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
     const runtimeBase = {
@@ -360,8 +365,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("S0 前缀集不预填技能 key：常驻路径 seen 与 skill: 命名空间隔离", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
@@ -384,8 +389,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("方向 B：可见历史 assistant 已 load 过的技能 → 后续 $ 引用 alreadyReferenced，不重复附全文", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
@@ -414,8 +419,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("方向 B 边界：assistant 的 read tool_use 不预填 seen（read 可能截断，与 load 不同语义）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({ names: ["demo"] });
 
@@ -443,8 +448,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("skills 未接线：skillAttach 附件原样带过（不读盘、不写 seen、不炸）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
 
     const att = skillAttach("demo");
@@ -463,8 +468,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("T-A2: skill 全文超附件预算 → skillAttach 降级 display:\"filename\" + 分段读取引导；恰好等于预算不降级", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const runtimeBase = {
       sessionId: session.id,
@@ -517,8 +522,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
 
   it("T-A5: skill 超限降级后仍写 seen → 同会话后续同技能走 alreadyReferenced", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const skills = fakeSkillService({
       names: ["demo"],

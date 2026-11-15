@@ -161,9 +161,6 @@ export {
   wrapSerializedPromptAsSystemMessage,
   convertMessagesForWebTokenizer,
   countWebTokenizerMessages,
-  // r3-chip-1：resolve 段弃权错误类必须经 public/provider 出到 app 层（core
-  // 引不到 app 层的 ChatPromptBuildBailedError，两类错误由读口同款 catch）。
-  PromptTokenResolveBailedError,
   type TokenCounter,
   type TokenCounterRegistry,
   type TokenCounterKind,
@@ -180,6 +177,9 @@ export {
   type OpenAiStyleMessage,
   type EncodingHandle,
 } from "../infra/tokenizer/index.js";
+// 控制流结果类型（错误通道迁移二期）：resolve 读口的弃权改沿
+// Outcome.cancelled/replaced 返回，apps 读口按 kind 判定，不再 catch 哨兵类。
+export type { Interrupt, Outcome } from "../infra/tokenizer/index.js";
 // token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
 // 这里直接转出（不经 infra 中转）。
 export {

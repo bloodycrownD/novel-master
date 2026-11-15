@@ -9,6 +9,7 @@
  * - **blob 行是否真被删** → 直查 `vfs_content_blob`（GC 本身的判据）；
  * - **缺失时的完整性契约是否还在** → 清空池成冷态后读，必抛。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -57,21 +58,21 @@ async function assertColdReadRejects(
 describe("sweepSessionRevisions + blob gc", () => {
   it("T-GC1: 不可达 revision 删除后，无引用 blob 被 gc（经唯一入口）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
 
-    const assistant = await ctx.messages.append(session.id, "assistant", {
+    const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "w" }],
-    });
+    }));
     await svfs.write("/gc1.md", "keep-live", { versionCheck: false });
     await svfs.write("/gc1.md", "orphan-mid", { versionCheck: false });
     await svfs.write("/gc1.md", "keep-live-v3", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     // 再写一版后不 capture，使中间版 orphan-mid 不可达（live head + checkpoint 都不指它）
     // capture 钉住的是 keep-live-v3；再写会让 orphan-mid 仍不可达
@@ -88,10 +89,10 @@ describe("sweepSessionRevisions + blob gc", () => {
       scopeKey(scope),
       "/",
     );
-    const entry = await entries.findByPath(scopeKey(scope), "/gc1.md");
+    const entry = unwrap(await entries.findByPath(scopeKey(scope), "/gc1.md"));
     assert.ok(entry != null);
     assert.ok(midKeys.some((k) => k.entryId === entry.entryId && k.version === 2));
-    assert.equal(await contentStore.get(orphanHash), "orphan-mid");
+    assert.equal(unwrap(await contentStore.get(orphanHash)), "orphan-mid");
 
     await sweepSessionRevisions(
       revisions,
@@ -119,9 +120,9 @@ describe("sweepSessionRevisions + blob gc", () => {
 
   it("T-GC2: session A sweep 后 gc 不得删除 session B 仍引用的 blob", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const sessionA = await ctx.sessions.create(project.id);
-    const sessionB = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const sessionA = unwrap(await ctx.sessions.create(project.id));
+    const sessionB = unwrap(await ctx.sessions.create(project.id));
     const svfsA = ctx.sessionVfs(project.id, sessionA.id);
     const svfsB = ctx.sessionVfs(project.id, sessionB.id);
 
@@ -153,7 +154,7 @@ describe("sweepSessionRevisions + blob gc", () => {
 
     assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");
     await assertColdReadRejects(contentStore, onlyAHash);
-    assert.equal(await contentStore.get(sharedHash), sharedPlain);
+    assert.equal(unwrap(await contentStore.get(sharedHash)), sharedPlain);
     assert.equal((await svfsB.read("/b.md")).content, sharedPlain);
     assert.equal((await svfsA.read("/a.md")).content, sharedPlain);
   });

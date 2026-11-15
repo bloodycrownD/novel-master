@@ -69,7 +69,8 @@ export function MetricDetailSheet({
       .getSessionUsageDetail(sessionId)
       .then(result => {
         if (!cancelled) {
-          setDetail(result);
+          if (!result.ok) throw result.error;
+          setDetail(result.value);
           setLoading(false);
         }
       })

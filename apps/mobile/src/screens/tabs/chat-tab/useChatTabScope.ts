@@ -491,13 +491,14 @@ export function useChatTabScope({
       // unhandled rejection；真正的失败语义由下方 await 原样承接。
       nextSessionsPromise.catch(() => undefined);
       let projectMeta: ChatProject | undefined;
-      try {
-        projectMeta = await runtime.projects.get(pid);
-      } catch {
-        projectMeta = undefined;
+      const projectResult = await runtime.projects.get(pid);
+      if (projectResult.ok) {
+        projectMeta = projectResult.value;
       }
       setCurrentProjectMeta(projectMeta);
-      setSessions(await nextSessionsPromise);
+      const nextSessions = await nextSessionsPromise;
+      if (!nextSessions.ok) throw nextSessions.error;
+      setSessions(nextSessions.value);
     } else {
       setCurrentProjectMeta(undefined);
       setSessions([]);
@@ -530,7 +531,8 @@ export function useChatTabScope({
     async (name: string) => {
       try {
         const created = await runtime.projects.create(name);
-        await setCurrentProject(created.id);
+        if (!created.ok) throw created.error;
+        await setCurrentProject(created.value.id);
         await refreshScope();
         await reloadLists();
       } catch (error) {
@@ -543,7 +545,8 @@ export function useChatTabScope({
   const handleRenameProject = useCallback(
     async (targetProjectId: string, name: string) => {
       try {
-        await runtime.projects.rename(targetProjectId, name);
+        const renamed = await runtime.projects.rename(targetProjectId, name);
+        if (!renamed.ok) throw renamed.error;
         await reloadLists();
       } catch (error) {
         showToast(toastMessage('重命名失败', error));
@@ -559,8 +562,10 @@ export function useChatTabScope({
     }
     try {
       const list = await runtime.sessions.listByProject(projectId);
-      const title = nextDefaultSessionTitle(list.map(s => s.title));
-      await runtime.sessions.create(projectId, title);
+      if (!list.ok) throw list.error;
+      const title = nextDefaultSessionTitle(list.value.map(s => s.title));
+      const created = await runtime.sessions.create(projectId, title);
+      if (!created.ok) throw created.error;
       await reloadLists();
     } catch (error) {
       showToast(toastMessage('创建失败', error));
@@ -570,7 +575,8 @@ export function useChatTabScope({
   const handleRenameSession = useCallback(
     async (targetSessionId: string, title: string) => {
       try {
-        await runtime.sessions.rename(targetSessionId, title);
+        const renamed = await runtime.sessions.rename(targetSessionId, title);
+        if (!renamed.ok) throw renamed.error;
         await reloadLists();
       } catch (error) {
         showToast(toastMessage('重命名失败', error));
@@ -594,8 +600,9 @@ export function useChatTabScope({
     async (sourceSessionId: string) => {
       try {
         const copy = await runtime.sessions.copy(sourceSessionId);
+        if (!copy.ok) throw copy.error;
         await reloadLists();
-        showToast(`已复制会话：${copy.title ?? copy.id}`);
+        showToast(`已复制会话：${copy.value.title ?? copy.value.id}`);
       } catch (error) {
         showToast(toastMessage('复制失败', error));
       }
@@ -607,7 +614,8 @@ export function useChatTabScope({
   const handleDeleteSession = useCallback(
     async (targetSessionId: string) => {
       try {
-        await runtime.sessions.delete(targetSessionId);
+        const deleted = await runtime.sessions.delete(targetSessionId);
+        if (!deleted.ok) throw deleted.error;
         // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
         // （纯内存同步方法、不抛错，放 try 内 delete 成功之后不影响 catch 语义）。
         runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
@@ -652,7 +660,8 @@ export function useChatTabScope({
       // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
       try {
         for (const id of ids) {
-          await runtime.sessions.delete(id);
+          const deleted = await runtime.sessions.delete(id);
+          if (!deleted.ok) throw deleted.error;
           // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
           // （中途失败时后面那些根本没删，遗忘它们等于误清活跃会话的状态）。
           runtime.sessionStreamUnitManager.forgetSession(id);
@@ -695,8 +704,10 @@ export function useChatTabScope({
         //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
         //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
         const doomedSessions = await runtime.sessions.listByProject(id);
-        await runtime.projects.delete(id);
-        for (const s of doomedSessions) {
+        if (!doomedSessions.ok) throw doomedSessions.error;
+        const deleted = await runtime.projects.delete(id);
+        if (!deleted.ok) throw deleted.error;
+        for (const s of doomedSessions.value) {
           runtime.sessionStreamUnitManager.forgetSession(s.id);
         }
         // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。

@@ -47,7 +47,8 @@ export async function handleSessionsListByProject(
   try {
     const rt = await getDesktopRuntime();
     const sessions = await rt.sessions.listByProject(req.projectId);
-    return { ok: true, data: sessions.map(toDto) };
+    if (!sessions.ok) throw sessions.error;
+    return { ok: true, data: sessions.value.map(toDto) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -59,7 +60,8 @@ export async function handleSessionsCreate(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.create(req.projectId, req.title);
-    return { ok: true, data: toDto(session) };
+    if (!session.ok) throw session.error;
+    return { ok: true, data: toDto(session.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -71,7 +73,8 @@ export async function handleSessionsRename(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.rename(req.id, req.title);
-    return { ok: true, data: toDto(session) };
+    if (!session.ok) throw session.error;
+    return { ok: true, data: toDto(session.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -82,7 +85,8 @@ export async function handleSessionsDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.sessions.delete(req.id);
+    const deleted = await rt.sessions.delete(req.id);
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -94,7 +98,8 @@ export async function handleSessionsPullTemplate(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.sessions.pullTemplate(req.sessionId);
+    const pulled = await rt.sessions.pullTemplate(req.sessionId);
+    if (!pulled.ok) throw pulled.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -115,11 +120,13 @@ export async function handleSessionsPushTemplate(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.sessions.pushTemplate(req.sessionId);
+    const pushed = await rt.sessions.pushTemplate(req.sessionId);
+    if (!pushed.ok) throw pushed.error;
     const session = await rt.sessions.get(req.sessionId);
+    if (!session.ok) throw session.error;
     notifyWorkspaceMutatedToRenderer({
       workspaceScope: "session",
-      projectId: session.projectId,
+      projectId: session.value.projectId,
     });
     return { ok: true, data: undefined };
   } catch (err) {
@@ -133,7 +140,8 @@ export async function handleSessionsGetComposerDraft(
   try {
     const rt = await getDesktopRuntime();
     const draftJson = await rt.sessions.getComposerDraftJson(req.sessionId);
-    return { ok: true, data: draftJson };
+    if (!draftJson.ok) throw draftJson.error;
+    return { ok: true, data: draftJson.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -144,11 +152,12 @@ export async function handleSessionsSetComposerDraft(
 ): Promise<IpcResult<boolean>> {
   try {
     const rt = await getDesktopRuntime();
-    const ok = await rt.sessions.setComposerDraftJson(
+    const saved = await rt.sessions.setComposerDraftJson(
       req.sessionId,
       req.draftJson,
     );
-    return { ok: true, data: ok };
+    if (!saved.ok) throw saved.error;
+    return { ok: true, data: saved.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -208,7 +217,8 @@ export async function handleSessionsSetAgentBinding(
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
       agentId,
     });
-    return { ok: true, data: config };
+    if (!config.ok) throw config.error;
+    return { ok: true, data: config.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -233,7 +243,8 @@ export async function handleSessionsSetModelOverride(
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
       modelId: req.modelId,
     });
-    return { ok: true, data: config };
+    if (!config.ok) throw config.error;
+    return { ok: true, data: config.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

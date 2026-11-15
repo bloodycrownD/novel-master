@@ -136,13 +136,20 @@ async function resolveWorkplaceDisplay(
     sessionId: assemble.sessionId,
   };
   // CLI 显式要看常驻正文时强制开 workplace（与 Mobile assembleWorkplaceForMobile 一致）。
-  const { workplaceDisplay } = await assembleWorkplaceDisplay(scope, {
+  const assembled = await assembleWorkplaceDisplay(scope, {
     sessionKkv: assemble.sessionKkv,
     workplace: service,
     vfs: assemble.vfs,
     layout: { workplace: "on" },
   });
-  return workplaceDisplay;
+  if (assembled.kind === "failed") {
+    throw assembled.error;
+  }
+  if (assembled.kind !== "completed") {
+    // 本调用无 shouldStop 判据，中断分支恒不到（防御性收窄；错误通道迁移二期）。
+    throw new Error("workplace assembly interrupted without shouldStop");
+  }
+  return assembled.value.workplaceDisplay;
 }
 
 function parseSortField(value: string | true | undefined): SortField | undefined {

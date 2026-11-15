@@ -13,6 +13,7 @@
  *   的 `SqlCounter.record` 只记 `(sql, kind, via)`，记不了连接身份）；
  * - `update` / `updateSortOrders` 的计数打在 **repository prototype** 上，不在 service 上。
  */
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { BUILTIN_SMART_SORT_RULE_ROWS } from "@/bootstrap/smart-sort-rule/builtin-smart-sort-rules.js";
@@ -115,7 +116,7 @@ async function resetToClean(): Promise<Harness> {
   const svc = createRawService(ctx.conn);
   for (const rule of await svc.listRules()) {
     if (!isBuiltinSmartSortRuleId(rule.ruleId)) {
-      await svc.deleteRule(rule.ruleId);
+      unwrap(await svc.deleteRule(rule.ruleId));
     }
   }
   await svc.resetDefaults();
@@ -171,7 +172,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
         },
       ],
     };
-    const out = await h.service.importRules(doc);
+    const out = unwrap(await h.service.importRules(doc));
     assert.equal(h.txCalls() - before, 1, "importRules 必须恰好一次事务");
     assert.deepEqual(
       out.map((r) => r.ruleId),
@@ -182,15 +183,15 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
   it("T-SRTX3 单语句入口零事务", async () => {
     h = await resetToClean();
     const before = h.txCalls();
-    const created = await h.service.createRule({
+    const created = unwrap(await h.service.createRule({
       name: "单条",
       pattern: "第([0-9]+)话",
       description: null,
-    });
+    }));
     await h.service.listRules();
-    await h.service.updateRule(created.ruleId, { description: "改" });
-    await h.service.setEnabled(created.ruleId, false);
-    await h.service.deleteRule(created.ruleId);
+    unwrap(await h.service.updateRule(created.ruleId, { description: "改" }));
+    unwrap(await h.service.setEnabled(created.ruleId, false));
+    unwrap(await h.service.deleteRule(created.ruleId));
     assert.equal(h.txCalls() - before, 0, "单语句入口不得开事务");
   });
 
@@ -205,16 +206,16 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
         { ...toWire(rules[0]!) },
       ],
     };
-    await assert.rejects(() => h.service.importRules(doc));
+    await rejectsErr(() => h.service.importRules(doc));
     assert.equal(h.txCalls() - before, 0, "校验段必须在事务外");
   });
 
   it("T-SRTX5 resetDefaults 中途失败 → 全表不变", async () => {
-    await h.service.createRule({
+    unwrap(await h.service.createRule({
       name: "用户规则",
       pattern: "第([0-9]+)话",
       description: null,
-    });
+    }));
     const beforeReset = await h.service.listRules();
     // `failOn` 计的是**全局**第 N 次 insert：上面 createRule 已经吃掉 1 次，
     // 所以这里 failOn("insert", 3) 炸的是 resetDefaults 里 seed 的**第 2** 条
@@ -229,21 +230,21 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
   });
 
   it("T-SRTX6 deleteBatch / setEnabledBatch 中途失败 → 零半删", async () => {
-    const a = await h.service.createRule({
+    const a = unwrap(await h.service.createRule({
       name: "A",
       pattern: "第([0-9]+)话",
       description: null,
-    });
-    const b = await h.service.createRule({
+    }));
+    const b = unwrap(await h.service.createRule({
       name: "B",
       pattern: "第([0-9]+)章",
       description: null,
-    });
-    const c = await h.service.createRule({
+    }));
+    const c = unwrap(await h.service.createRule({
       name: "C",
       pattern: "第([0-9]+)篇",
       description: null,
-    });
+    }));
     const beforeIds = (await h.service.listRules()).map((r) => r.ruleId);
 
     h.failOn("delete", 2);
@@ -301,11 +302,11 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
     h = await resetToClean();
     const created: string[] = [];
     for (let i = 0; i < 20; i++) {
-      const r = await h.service.createRule({
+      const r = unwrap(await h.service.createRule({
         name: `R${i}`,
         pattern: `第([0-9]+)话${i}`,
         description: null,
-      });
+      }));
       created.push(r.ruleId);
     }
     const all = await h.service.listRules();
@@ -333,7 +334,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
       return (origBatch as any).apply(this, args);
     } as typeof origBatch;
     try {
-      await h.service.reorderRules(reversed);
+      unwrap(await h.service.reorderRules(reversed));
     } finally {
       proto.update = origUpdate;
       proto.updateSortOrders = origBatch;
@@ -359,7 +360,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
     h = await resetToClean();
     const before = h.txCalls();
     const rules = await h.service.listRules();
-    await assert.rejects(() => h.service.reorderRules([rules[0]!.ruleId]));
+    await rejectsErr(() => h.service.reorderRules([rules[0]!.ruleId]));
     assert.equal(h.txCalls() - before, 0, "校验必须留在事务外");
   });
 
@@ -368,7 +369,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
     const svc = createRawService(ctx.conn);
     for (const r of await svc.listRules()) {
       if (!isBuiltinSmartSortRuleId(r.ruleId)) {
-        await svc.deleteRule(r.ruleId);
+        unwrap(await svc.deleteRule(r.ruleId));
       }
     }
     await svc.resetDefaults();
@@ -386,7 +387,7 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
     const all = await svc.listRules();
     const reversed = [...all].reverse().map((r) => r.ruleId);
     assert.equal(reversed.length, 607);
-    const out = await svc.reorderRules(reversed);
+    const out = unwrap(await svc.reorderRules(reversed));
     assert.equal(out.length, 607);
     assert.equal(ids.length, 600);
   });

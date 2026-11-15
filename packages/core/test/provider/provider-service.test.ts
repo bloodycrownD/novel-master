@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -57,12 +58,12 @@ describe("ProviderService", () => {
   it("T-PI3：create 不传 id → UUID；缺/空白 displayName → 错误", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "自定义网关",
       apiKey: "k",
-    });
+    }));
     assert.match(created.id, /^[0-9a-f-]{36}$/i);
     assert.equal(created.displayName, "自定义网关");
     assert.equal(created.builtinKey, null);
@@ -81,13 +82,13 @@ describe("ProviderService", () => {
   it("T-PI4：edit 清空 displayName → 错误；改名后模型主文案前缀更新", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const provider = await bundle.providers.create({
+    const provider = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "旧名称",
       apiKey: "k",
-    });
-    const saved = await bundle.providerModels.create(provider.id, "m1");
+    }));
+    const saved = unwrap(await bundle.providerModels.create(provider.id, "m1"));
     assert.equal(savedModelDisplayName(saved, provider.displayName), "旧名称/m1");
 
     await assert.rejects(
@@ -137,14 +138,14 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "tmpgw",
       apiKey: "gw-secret",
-    });
+    }));
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
-    await bundle.providers.delete(created.id);
+    unwrap(await bundle.providers.delete(created.id));
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
   });
 
@@ -154,19 +155,19 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "guardgw" + testIsolationSuffix(),
       apiKey: "guard-secret",
-    });
-    const saved = await bundle.providerModels.create(created.id, "guard-model");
-    const project = await ctx.projects.create(`proj-guard-${Date.now()}`);
-    const session = await ctx.sessions.create(project.id);
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
+    }));
+    const saved = unwrap(await bundle.providerModels.create(created.id, "guard-model"));
+    const project = unwrap(await ctx.projects.create(`proj-guard-${Date.now()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    unwrap(await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: `agent-guard-${randomUUID()}`,
       modelId: saved.id,
-    });
+    }));
 
     await assert.rejects(
       () => bundle.providers.delete(created.id),
@@ -191,17 +192,17 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "softgw" + testIsolationSuffix(),
       apiKey: "soft-secret",
-    });
-    const saved = await bundle.providerModels.create(created.id, "soft-model");
+    }));
+    const saved = unwrap(await bundle.providerModels.create(created.id, "soft-model"));
     await ctx.state.setCurrentModelId(saved.id);
 
     // 不抛 SAVED_MODEL_IN_USE —— 只有 currentModelId 引用
-    await bundle.providers.delete(created.id);
+    unwrap(await bundle.providers.delete(created.id));
 
     const still = await new SqliteSavedModelRepository(
       ctx.conn
@@ -226,14 +227,14 @@ describe("ProviderService", () => {
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     const displayName = "orphan" + testIsolationSuffix();
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName,
-    });
+    }));
     await secrets.set(`provider/${created.id}/apiKey`, "orphan-secret");
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
-    await bundle.providers.delete(created.id);
+    unwrap(await bundle.providers.delete(created.id));
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
   });
 
@@ -241,16 +242,16 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "clearkey" + testIsolationSuffix(),
       apiKey: "to-clear",
-    });
+    }));
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
     await bundle.providers.edit(created.id, { apiKey: "" });
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
-    const row = await bundle.providers.get(created.id);
+    const row = unwrap(await bundle.providers.get(created.id));
     assert.equal(row.secretRef, null);
   });
 
@@ -334,18 +335,18 @@ describe("ProviderService", () => {
     const secrets = memorySecretStore();
     const kkv = createKkvService(ctx.conn);
     const bundle = createProviderServices(ctx.conn, secrets);
-    const created = await bundle.providers.create({
+    const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
       displayName: "custom",
       apiKey: "sk-test",
-    });
+    }));
 
     await bundle.providerModels.fetch(created.id);
     const keysBefore = await kkv.listKeys("nm-model-suggestions");
     assert.ok(keysBefore.includes(created.id));
 
-    await bundle.providers.delete(created.id);
+    unwrap(await bundle.providers.delete(created.id));
     const keysAfter = await kkv.listKeys("nm-model-suggestions");
     assert.ok(!keysAfter.includes(created.id));
     clearProtocolAdapters();

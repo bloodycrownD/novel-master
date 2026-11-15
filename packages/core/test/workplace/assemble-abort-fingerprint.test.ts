@@ -2,19 +2,21 @@
  * assembleWorkplaceDisplay 的按文件粒度中止 + 内容指纹（2026-09-30
  * 「停止要等 14 秒」与「切会话重算」治本点的回归锁）。
  *
- * - shouldStop：快照加载后 + 每个文件的缓存解析/VFS 回填之前检查，真值抛
- *   WorkplaceAssemblyAbortedError。观测面用 vfs.read 调用次数——「下一个
- *   文件不再读」是中止真正生效的直接证据。
+ * - shouldStop：快照加载后 + 每个文件的缓存解析/VFS 回填之前检查，真值收成
+ *   Outcome.cancelled / replaced（错误通道迁移二期：哨兵 throw 改返回值）。
+ *   观测面用 vfs.read 调用次数——「下一个文件不再读」是中止真正生效的直接证据。
  * - fingerprint：`path|status|mtimeMs|bodyLength` 列表 join。同输入同指纹；
  *   任一文件的 mtime 变了、或正文体量变了指纹必须变（这是下游估算记忆
  *   「内容没变」判定的全部依据；r4-core-4 补体量段，挡「mtime 同、正文异」）。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { assembleWorkplaceDisplay, WorkplaceAssemblyAbortedError } from "../../src/service/workplace/assemble-workplace-display.js";
+import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, fileCacheKey } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseRuleSnapshotJson, serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
@@ -47,8 +49,8 @@ function countingVfs(vfs: VfsService): { vfs: VfsService; readCalls: () => numbe
 
 async function seedTwoFiles() {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id);
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id));
   const sk = createSessionKkvService(ctx.conn);
   const realVfs = ctx.sessionVfs(project.id, session.id);
   await realVfs.write("/a.md", "正文甲".repeat(50));
@@ -75,38 +77,33 @@ async function seedTwoFiles() {
 }
 
 describe("assembleWorkplaceDisplay：按文件粒度中止（2026-09-30 治本）", () => {
-  it("快照加载后即命中 → 抛中止错误，一个文件都不读", async () => {
+  it("快照加载后即命中 → 收成 Outcome.cancelled，一个文件都不读", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
     const { vfs, readCalls } = countingVfs(realVfs);
-    await assert.rejects(
-      () => assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => true }),
-      (error: unknown) => error instanceof WorkplaceAssemblyAbortedError,
-      "shouldStop 为真必须抛 WorkplaceAssemblyAbortedError"
-    );
+    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => ({ kind: "cancelled", reason: "user-stop" }) });
+    assert.equal(stopped.kind, "cancelled", "shouldStop 命中必须收成 Outcome.cancelled（不再抛哨兵错误）");
     assert.equal(readCalls(), 0, "快照后命中 → 连第一个文件都不该读");
   });
 
-  it("第一个文件读完翻真 → 抛中止错误，第二个文件不再读（文件粒度兑现）", async () => {
+  it("第一个文件读完翻真 → 收成 Outcome.cancelled，第二个文件不再读（文件粒度兑现）", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
     // 清 file_cache 逼出逐文件回填（回填才读 VFS）——「文件之间」的窗口
     // 只有在逐文件读时才可观测。
     await sk.clearDomain(scope.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
     const { vfs, readCalls } = countingVfs(realVfs);
-    await assert.rejects(
-      () => assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => readCalls() >= 1 }),
-      (error: unknown) => error instanceof WorkplaceAssemblyAbortedError
-    );
+    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => (readCalls() >= 1 ? { kind: "cancelled", reason: "user-stop" } : null) });
+    assert.equal(stopped.kind, "cancelled", "shouldStop 命中必须收成 Outcome.cancelled");
     assert.equal(readCalls(), 1, "第一个文件回填后翻真 → 第二个文件的 read 不该发生（文件粒度检查点）");
   });
 
   it("不传 shouldStop → 行为与原来一致（含 fingerprint 产出）", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
-    const out = await assembleWorkplaceDisplay(scope, {
+    const out = outcomeValue(await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
       vfs: realVfs,
       layout: layoutWithWorkplace(),
-    });
+    }));
     assert.ok(out.workplaceDisplay.length > 0);
     assert.ok(out.fingerprint.length > 0, "正常路径必须产出指纹");
   });
@@ -115,12 +112,12 @@ describe("assembleWorkplaceDisplay：按文件粒度中止（2026-09-30 治本�
 describe("assembleWorkplaceDisplay：内容指纹", () => {
   it("同输入两次组装指纹逐字符相同；文件 mtime 变化指纹必变", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
-    const first = await assembleWorkplaceDisplay(scope, {
+    const first = outcomeValue(await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
       vfs: realVfs,
       layout: layoutWithWorkplace(),
-    });
+    }));
     // 触碰 a.md（重写内容 → mtime 前进）。mtime 毫秒粒度：循环写入直到 mtime
     // 真的变化（同毫秒内重写不前进）。
     const mtimeBefore = (await realVfs.read("/a.md")).mtimeMs;
@@ -134,20 +131,20 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
     // （缓存未失效的窗口里指纹用缓存内旧 mtime 是既有 file_cache 语义，写
     // 路径负责失效；本用例只锁「指纹对真实输入敏感」）。
     await sk.clearDomain(scope.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
-    const second = await assembleWorkplaceDisplay(scope, {
+    const second = outcomeValue(await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
       vfs: realVfs,
       layout: layoutWithWorkplace(),
-    });
+    }));
     assert.notEqual(first.fingerprint, second.fingerprint, "文件内容/mtime 变了指纹必须变（估算记忆的失效依据）");
     // 稳定性：再组装一次（缓存已暖）指纹不变。
-    const third = await assembleWorkplaceDisplay(scope, {
+    const third = outcomeValue(await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
       vfs: realVfs,
       layout: layoutWithWorkplace(),
-    });
+    }));
     assert.equal(second.fingerprint, third.fingerprint);
   });
 
@@ -156,7 +153,7 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
     // 「mtime 同、正文异」的现实路径：树复制（vfs-tree-copy）保留源 mtime、
     // 写侧只有毫秒精度。直接在 file_cache 里造这个形态——固定 mtime，只让
     // 正文长度变。
-    const snapshotResult = parseRuleSnapshotJson((await sk.get(scope.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) ?? "");
+    const snapshotResult = parseRuleSnapshotJson((unwrap(await sk.get(scope.sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY))) ?? "");
     assert.ok(snapshotResult.ok, "前提不成立：规则快照未就绪（seedTwoFiles 应先预热）");
     assert.ok(snapshotResult.value.length > 0, "前提不成立：规则快照为空");
     const snapshot = snapshotResult.value;
@@ -178,9 +175,9 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
       });
 
     await seedFixedMtimeCache(shortBody);
-    const first = await assembleOnce();
+    const first = outcomeValue(await assembleOnce());
     await seedFixedMtimeCache(longBody);
-    const second = await assembleOnce();
+    const second = outcomeValue(await assembleOnce());
 
     // 前提自检：两次的 path|status|mtimeMs 三段逐字相同（差异只可能来自
     // 体量段，否则本用例的牙不在 bodyLength 上）。

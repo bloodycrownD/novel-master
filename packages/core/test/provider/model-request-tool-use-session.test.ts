@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
@@ -56,11 +57,11 @@ describe("ModelRequestService tool_use session round-trip", () => {
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_ANTHROPIC}/apiKey`, "sk-ant-test");
-    const model = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_ANTHROPIC, "claude-3-5-sonnet");
+    const model = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_ANTHROPIC, "claude-3-5-sonnet"));
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    await ctx.messages.append(session.id, "user", textBlocks("find foo"));
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
+    unwrap(await ctx.messages.append(session.id, "user", textBlocks("find foo")));
 
     const history = (await ctx.messages.listBySession(session.id)).filter(
       (m) => !m.hidden,
@@ -71,10 +72,10 @@ describe("ModelRequestService tool_use session round-trip", () => {
       { history },
     );
 
-    const saved = await ctx.messages.append(session.id, "assistant", {
+    const saved = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: result.blocks,
-    });
-    const reloaded = await ctx.messages.get(saved.id);
+    }));
+    const reloaded = unwrap(await ctx.messages.get(saved.id));
     const toolUse = reloaded.content.blocks.find((b) => b.type === "tool_use");
     assert.ok(toolUse);
     assert.equal(toolUse.type === "tool_use" && toolUse.id, "tu_1");

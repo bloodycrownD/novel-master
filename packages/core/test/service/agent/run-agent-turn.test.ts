@@ -1,3 +1,4 @@
+import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
@@ -115,17 +116,22 @@ function makeRuntime(overrides: {
       get: async () => definition,
     },
     projects: {
-      getAgentConfig: async () => ({ mode: "follow" }),
+      getAgentConfig: async () => Result.ok({ mode: "follow" }),
     } as AgentTurnRuntimePort["projects"],
     messages: {
       listBySession:
         overrides.listBySession ?? (async () => []),
       listBySessionTail:
         overrides.listBySessionTail ?? (async () => []),
+      // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
       append:
-        overrides.append ??
-        (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
-      delete: overrides.delete ?? (async () => undefined),
+        overrides.append != null
+          ? (async (...args: Parameters<NonNullable<typeof overrides.append>>) => Result.ok(await overrides.append!(...args))) as AgentTurnRuntimePort["messages"]["append"]
+          : (async () => Result.ok({ id: "m1", role: "user", content: { blocks: [] } })) as AgentTurnRuntimePort["messages"]["append"],
+      delete: (async (...args: Parameters<NonNullable<typeof overrides.delete>>) => {
+        await overrides.delete!(...args);
+        return Result.ok(undefined);
+      }) as AgentTurnRuntimePort["messages"]["delete"],
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture:
@@ -165,7 +171,7 @@ function makeRuntime(overrides: {
       ? { userVfsTurn: overrides.userVfsTurn }
       : {}),
     sessions: {
-      getSessionAgentConfig: async () => ({ mode: "follow" }),
+      getSessionAgentConfig: async () => Result.ok({ mode: "follow" }),
     },
   };
 }

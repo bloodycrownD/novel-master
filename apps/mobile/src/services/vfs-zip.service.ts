@@ -41,7 +41,8 @@ async function resolveWorkspaceZipName(
   }
   try {
     const project = await runtime.projects.get(projectId);
-    return `${project.name}.zip`;
+    if (!project.ok) throw project.error;
+    return `${project.value.name}.zip`;
   } catch {
     return WORKSPACE_FALLBACK_ZIP_NAME;
   }

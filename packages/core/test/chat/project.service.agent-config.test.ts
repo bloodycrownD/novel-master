@@ -1,5 +1,6 @@
-import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import {
@@ -20,41 +21,41 @@ novelMasterTestFixture();
 describe("ProjectService agent config", () => {
   it("列 NULL 时 getAgentConfig 返回 follow", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
 
-    const config = await ctx.projects.getAgentConfig(project.id);
+    const config = unwrap(await ctx.projects.getAgentConfig(project.id));
     assert.deepEqual(config, { mode: "follow" });
   });
 
   it("custom 配置 round-trip", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const definition = customDefinition("专属助手");
 
-    const saved = await ctx.projects.updateAgentConfig(project.id, {
+    const saved = unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition,
-    });
+    }));
     assert.equal(saved.mode, "custom");
     assert.equal(saved.definition?.name, "专属助手");
 
-    const loaded = await ctx.projects.getAgentConfig(project.id);
+    const loaded = unwrap(await ctx.projects.getAgentConfig(project.id));
     assert.equal(loaded.mode, "custom");
     assert.equal(loaded.definition?.name, "专属助手");
   });
 
   it("copy 深拷贝 agent_config_json 至新项目", async () => {
     const ctx = getNovelMasterTestContext();
-    const source = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const source = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const definition = customDefinition("可复制助手");
-    await ctx.projects.updateAgentConfig(source.id, {
+    unwrap(await ctx.projects.updateAgentConfig(source.id, {
       mode: "custom",
       definition,
-    });
+    }));
 
-    const copy = await ctx.projects.copy(source.id);
-    const sourceConfig = await ctx.projects.getAgentConfig(source.id);
-    const copyConfig = await ctx.projects.getAgentConfig(copy.id);
+    const copy = unwrap(await ctx.projects.copy(source.id));
+    const sourceConfig = unwrap(await ctx.projects.getAgentConfig(source.id));
+    const copyConfig = unwrap(await ctx.projects.getAgentConfig(copy.id));
 
     assert.equal(copyConfig.mode, "custom");
     assert.equal(copyConfig.definition?.name, "可复制助手");
@@ -65,14 +66,14 @@ describe("ProjectService agent config", () => {
 
   it("非法 patch 拒绝", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
 
     await assert.rejects(
       () =>
         ctx.projects.updateAgentConfig(project.id, {
           mode: "custom",
         }),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (error: unknown) => error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
     );
 
     await assert.rejects(
@@ -81,21 +82,22 @@ describe("ProjectService agent config", () => {
           mode: "custom",
           definition: customDefinition(""),
         }),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA"),
+      (error: unknown) => error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
     );
   });
 
   it("delete 后 getAgentConfig 不可访问", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    await ctx.projects.updateAgentConfig(project.id, {
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    unwrap(await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition("待删"),
-    });
+    }));
 
-    await ctx.projects.delete(project.id);
+    unwrap(await ctx.projects.delete(project.id));
 
-    await assert.rejects(
+    // 错误通道迁移二期：getAgentConfig 改走 Result 通道（Err 透传项目不存在）。
+    await rejectsErr(
       () => ctx.projects.getAgentConfig(project.id),
       (error: unknown) =>
         isAppError(error, "CHAT_NOT_FOUND"),

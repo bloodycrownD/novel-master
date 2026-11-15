@@ -18,10 +18,10 @@
 import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
 
 import {
-  PromptTokenResolveBailedError,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
+  type Interrupt,
 } from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
@@ -92,16 +92,14 @@ export async function loadChatPromptTokenLabel(
 }
 
 /**
- * chip 中途弃权的两类哨兵错误统一判定：build 段（ChatPromptBuildBailedError）
- * 与 resolve 段（PromptTokenResolveBailedError，core 在整串级重活之前抛）。
- * 两处调用点（build / resolve）都必须用本判定收成空串哨兵——漏任何一处，
- * 弃权错误都会逃逸成外层 rejection 并回落 fallback（重算一遍，恰是要避免的）。
+ * chip 中途弃权的哨兵错误判定：build 段（ChatPromptBuildBailedError）。resolve
+ * 段自错误通道迁移二期起不再抛哨兵——core 读口沿 Outcome.cancelled/replaced
+ * 返回，调用点按 kind 收成空串哨兵，不走本判定。build 调用点必须用本判定
+ * 收口——漏了弃权错误会逃逸成外层 rejection 并回落 fallback（重算一遍，
+ * 恰是要避免的）。
  */
 function isChipBailError(error: unknown): boolean {
-  return (
-    error instanceof ChatPromptBuildBailedError ||
-    error instanceof PromptTokenResolveBailedError
-  );
+  return error instanceof ChatPromptBuildBailedError;
 }
 
 /**
@@ -119,6 +117,11 @@ async function loadChatTokenLabelWithFlag(
   // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
   const t0 = Date.now();
   const opt = shouldBail != null ? {shouldBail} : undefined;
+  // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
+  // Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
+  // 恒 null（与不传同义，core 恒不弃权）。
+  const resolveBail = (): Interrupt | null =>
+    shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null;
   let bundle;
   try {
     bundle = await buildSessionPromptInput(runtime, scope, undefined, opt);
@@ -149,7 +152,8 @@ async function loadChatTokenLabelWithFlag(
     return {label: '', upgradeWorthy: false};
   }
   const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-  const savedModelId = definition.model ?? conf.modelId;
+  if (!conf.ok) throw conf.error;
+  const savedModelId = definition.model ?? conf.value.modelId;
   if (!savedModelId) {
     // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
     // countFallback 整串级重活没有弃权点。理由——① 这一分支只统计可见
@@ -170,9 +174,10 @@ async function loadChatTokenLabelWithFlag(
   }
   const models = runtime.providerModels;
   const mode = await resolveTokenCounterModeForModel(models, savedModelId);
-  // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权：core 在驱动调用前
-  // 抛 PromptTokenResolveBailedError，这里收成空串哨兵——不包这段，弃权错误
-  // 会逃到外层 catch 回落 fallback（重算一遍，恰是要避免的竞争）。
+  // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权（r3-chip-1，错误
+  // 通道迁移二期改返回值）：core 在两处整串级重活之前检查 shouldBail，命中沿
+  // Outcome.cancelled/replaced 返回，这里收成空串哨兵——不重试、不回落
+  // fallback（重算一遍恰是要避免的竞争）；其余异常仍走外层 catch。
   let result;
   try {
     // nm-style: keep-local — 三实参（会话 / 大对象 / 选项对象）无法单行，且拆对象会改动调用顺序形态
@@ -191,13 +196,24 @@ async function loadChatTokenLabelWithFlag(
         sessionKkv: runtime.sessionKkv,
         ...(preferEstimate ? {preferEstimate: true} : {}),
         // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
-        // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查它，
-        // 命中抛 PromptTokenResolveBailedError——由本 catch 收成空串哨兵。
-        // 不传时恒不弃权（core 缺省行为），故只在有判据时挂上这个键。
-        ...(shouldBail != null ? {shouldBail} : {}),
+        // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
+        // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
+        shouldBail: resolveBail,
       },
     );
-    result = await resultPromise;
+    const outcome = await resultPromise;
+    if (outcome.kind === 'failed') {
+      // core 读口的已知失败（现无产出路径）：原样上抛，不吞成弃权。
+      throw outcome.error;
+    }
+    if (outcome.kind !== 'completed') {
+      // 中途弃权（run 起步）：core 不再抛哨兵，收成空串哨兵。
+      if (__DEV__) {
+        console.log('[nm-chip] bailed during resolve (run in flight)');
+      }
+      return {label: '', upgradeWorthy: false};
+    }
+    result = outcome.value;
   } catch (error) {
     if (error instanceof PromptCountCancelledError) {
       // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
@@ -205,12 +221,6 @@ async function loadChatTokenLabelWithFlag(
       // 取消白做），也不打 warn（取消不是失败）。
       if (__DEV__) {
         console.log('[nm-chip] cancelled during resolve');
-      }
-      return {label: '', upgradeWorthy: false};
-    }
-    if (isChipBailError(error)) {
-      if (__DEV__) {
-        console.log('[nm-chip] bailed during resolve (run in flight)');
       }
       return {label: '', upgradeWorthy: false};
     }
@@ -591,7 +601,8 @@ async function loadChatPromptTokenLabelFallback(
   try {
     const {definition} = await buildSessionPromptInput(runtime, scope);
     const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-    savedModelId = definition.model ?? conf.modelId;
+    if (!conf.ok) throw conf.error;
+    savedModelId = definition.model ?? conf.value.modelId;
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;

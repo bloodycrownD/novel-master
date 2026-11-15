@@ -142,7 +142,8 @@ export async function runMessage(
       }
       const content = await resolveAppendContent(flags);
       const msg = await rt.messages.append(sessionId, role, content);
-      console.log(msg.id);
+      if (!msg.ok) throw msg.error;
+      console.log(msg.value.id);
       return;
     }
     case "delete": {
@@ -152,7 +153,8 @@ export async function runMessage(
           "Usage: nm message delete [--session <id>] --message <id>",
         );
       }
-      await rt.messages.delete(messageId);
+      const deleted = await rt.messages.delete(messageId);
+      if (!deleted.ok) throw deleted.error;
       return;
     }
     case "fork": {
@@ -163,31 +165,36 @@ export async function runMessage(
         );
       }
       const forked = await rt.messages.fork(sessionId, upTo);
-      console.log(forked.id);
+      if (!forked.ok) throw forked.error;
+      console.log(forked.value.id);
       return;
     }
     case "hide": {
       const messageId = flags.get("message");
       if (typeof messageId === "string") {
-        await rt.messages.hide(messageId);
+        const hidden = await rt.messages.hide(messageId);
+        if (!hidden.ok) throw hidden.error;
         return;
       }
       const list = await rt.messages.listBySession(sessionId);
       const { fromSeq, toSeq } = resolveSeqRange(flags, list);
       const count = await rt.messages.hideRange(sessionId, fromSeq, toSeq);
-      console.log(`Hidden ${count} message(s)`);
+      if (!count.ok) throw count.error;
+      console.log(`Hidden ${count.value} message(s)`);
       return;
     }
     case "show": {
       const messageId = flags.get("message");
       if (typeof messageId === "string") {
-        await rt.messages.show(messageId);
+        const shown = await rt.messages.show(messageId);
+        if (!shown.ok) throw shown.error;
         return;
       }
       const list = await rt.messages.listBySession(sessionId);
       const { fromSeq, toSeq } = resolveSeqRange(flags, list);
       const count = await rt.messages.showRange(sessionId, fromSeq, toSeq);
-      console.log(`Shown ${count} message(s)`);
+      if (!count.ok) throw count.error;
+      console.log(`Shown ${count.value} message(s)`);
       return;
     }
     default:

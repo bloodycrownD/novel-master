@@ -17,6 +17,7 @@
  * @module test/chat/message-plaintext-write
  */
 
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -59,11 +60,11 @@ async function newSession(): Promise<{
   repo: SqliteMessageRepository;
 }> {
   const ctx = getNovelMasterTestContext();
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(
     project.id,
     `S-${testIsolationSuffix()}`
-  );
+  ));
   return { sessionId: session.id, repo: new SqliteMessageRepository(ctx.conn) };
 }
 
@@ -140,7 +141,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
 
     // 编辑：这条行走 updateContent。
     const newContent = textBlocks("编辑后的新正文，应覆盖旧正文");
-    assert.equal(await repo.updateContent(plain.id, newContent), true);
+    assert.equal(unwrap(await repo.updateContent(plain.id, newContent)), true);
 
     // 三列齐置：明文列写新值，两列显式置 NULL。
     const raw = await rawContentColumns(plain.id);

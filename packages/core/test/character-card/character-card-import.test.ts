@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -71,8 +72,8 @@ const SAMPLE_V2 = {
 describe("CharacterCardImportService", () => {
   it("T-C7: 目标 /角色 覆盖且同级 /大纲 保留", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc7-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc7-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -110,8 +111,8 @@ describe("CharacterCardImportService", () => {
   it("T-CARD-GC-RESIDUE: 卡片导入替换后无 ref_count<=0 的 blob 残留行", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-cardgc-${suffix}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-cardgc-${suffix}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -141,8 +142,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-C8: confirmed:false → NOT_CONFIRMED，子树不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc8-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc8-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -170,8 +171,8 @@ describe("CharacterCardImportService", () => {
   // 后来者会按「整事务回滚」的名字误判语义。
   it("G-1/Z5: Phase B insert 失败 → 原始 Error 抛出、半棵新树被补偿删除、旧内容不恢复", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-g1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-g1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -205,8 +206,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-C9: importFromBytes 解析失败 → 子树不变", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc9-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc9-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -238,15 +239,15 @@ describe("CharacterCardImportService", () => {
 
   it("T-C15: 导入成功后已有规则行（自定义 headCount 与 rule_off）不被覆盖", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tc15-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tc15-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.mkdir("/角色");
+    unwrap(await vfs.mkdir("/角色"));
     await vfs.write("/角色/旧.md", "old");
 
     const wt = createWorkplaceService(ctx.conn, scope);
@@ -286,8 +287,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-I1: 导入含多层嵌套目录的角色卡后，前缀下全部目录默认启用并参与文件树裁剪", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-ti1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-ti1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -332,8 +333,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-I4: 补入行的 scope_key 落在 workplace 键空间（session:${sessionId}）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-ti4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-ti4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -363,8 +364,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-I5: 补规则行语句真失败时不影响导入整体成功，导入仍成功且文件完整", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-ti5-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-ti5-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -410,8 +411,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-I7: 导入到根——前缀下子目录补默认启用行、根自身 / 无规则行", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-ti7-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-ti7-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -450,8 +451,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-I8: 补规则行中途失败——已补目录保留、失败之后的目录仍补、导入整体成功", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-ti8-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-ti8-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -517,17 +518,17 @@ describe("CharacterCardImportService", () => {
 
   it("T-C16: fixture PNG 经 importFromBytes 落盘子树", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-tc16-${testIsolationSuffix()}`,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    await vfs.mkdir("/角色");
+    unwrap(await vfs.mkdir("/角色"));
 
     const bytes = buildPngWithTextChara({
       spec: "chara_card_v2",
@@ -553,10 +554,10 @@ describe("CharacterCardImportService", () => {
 
   it("合成树首段为开场/世界书时不因目标 basename 误杀", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-basename-${testIsolationSuffix()}`,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -564,7 +565,7 @@ describe("CharacterCardImportService", () => {
       sessionId: session.id,
     };
     // 目标目录名与合成树首段无关；即使叫「开场」也不应套 ZIP basename 前缀规则
-    await vfs.mkdir("/开场");
+    unwrap(await vfs.mkdir("/开场"));
 
     const svc = createCharacterCardImportService(ctx.conn);
     const tree = parseTree(
@@ -586,10 +587,10 @@ describe("CharacterCardImportService", () => {
 
   it("导入后删无关文件再 capture 不抛 Revision not found", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
+    const project = unwrap(await ctx.projects.create(
       `P-rev-seed-${testIsolationSuffix()}`,
-    );
-    const session = await ctx.sessions.create(project.id);
+    ));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -623,11 +624,11 @@ describe("CharacterCardImportService", () => {
     );
 
     // 删无关文件（模拟用户删 状态栏/开场），保留世界书
-    await vfs.delete("/角色/开场/开场001.md");
+    unwrap(await vfs.delete("/角色/开场/开场001.md"));
 
-    const user = await ctx.messages.append(session.id, "user", {
+    const user = unwrap(await ctx.messages.append(session.id, "user", {
       blocks: [{ type: "text", text: "你好" }],
-    });
+    }));
     await assert.doesNotReject(() =>
       ctx.messageCheckpoint.capture(session.id, project.id, user.id),
     );
@@ -637,9 +638,9 @@ describe("CharacterCardImportService", () => {
       confirmed: true,
       directoryPath: "/角色",
     });
-    const user2 = await ctx.messages.append(session.id, "user", {
+    const user2 = unwrap(await ctx.messages.append(session.id, "user", {
       blocks: [{ type: "text", text: "再问" }],
-    });
+    }));
     await assert.doesNotReject(() =>
       ctx.messageCheckpoint.capture(session.id, project.id, user2.id),
     );
@@ -647,8 +648,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-IC1: session scope 导入后清空 rule_snapshot/file_cache 并失效 token cache", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tic1-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tic1-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -699,11 +700,11 @@ describe("CharacterCardImportService", () => {
       [],
     );
     assert.equal(
-      await ctx.sessionKkv.get(
+      unwrap(await ctx.sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         "queue",
-      ),
+      )),
       "[]",
     );
     assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
@@ -711,9 +712,9 @@ describe("CharacterCardImportService", () => {
 
   it("T-IC3: project scope 导入后 session KKV 与 token cache 均不动", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tic3-${testIsolationSuffix()}`);
+    const project = unwrap(await ctx.projects.create(`P-tic3-${testIsolationSuffix()}`));
     // session 仅用来埋脏数据，验证导入走 project scope 时三件套不触发
-    const session = await ctx.sessions.create(project.id);
+    const session = unwrap(await ctx.sessions.create(project.id));
     const pvfs = ctx.projectVfs(project.id);
 
     await ctx.sessionKkv.set(
@@ -755,8 +756,8 @@ describe("CharacterCardImportService", () => {
 
   it("T-IC4: sessionKkv 清空抛错时导入仍成功不抛（best-effort 吞错）", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-tic4-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-tic4-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -796,8 +797,8 @@ describe("CharacterCardImportService", () => {
 
   it("体积闸门：importFromBytes 输入超上限抛 TOO_LARGE 且零写库", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-toolarge-in-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-toolarge-in-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -830,8 +831,8 @@ describe("CharacterCardImportService", () => {
 
   it("体积闸门：md 树单文件超上限抛 TOO_LARGE 且零写库", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-toolarge-file-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-toolarge-file-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -865,8 +866,8 @@ describe("CharacterCardImportService", () => {
 
   it("体积闸门：md 树条目数超上限抛 TOO_LARGE 且零写库", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-toolarge-count-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-toolarge-count-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
@@ -898,8 +899,8 @@ describe("CharacterCardImportService", () => {
 
   it("体积闸门：md 树总量超上限抛 TOO_LARGE 且零写库", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-toolarge-total-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-toolarge-total-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,

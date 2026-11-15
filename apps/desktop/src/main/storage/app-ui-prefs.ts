@@ -37,16 +37,16 @@ export function createDesktopAppUiPreferences(
 ): DesktopAppUiPreferences {
   return {
     async get(key: string) {
-      try {
-        return await kkv.get(DESKTOP_UI_KKV_MODULE, key);
-      } catch (error) {
-        if (isAppError(error, "KKV_NOT_FOUND")) {
+      const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
+      if (!raw.ok) {
+        if (isAppError(raw.error, "KKV_NOT_FOUND")) {
           return key in DESKTOP_UI_DEFAULTS
             ? DESKTOP_UI_DEFAULTS[key]
             : undefined;
         }
-        throw error;
+        throw raw.error;
       }
+      return raw.value;
     },
     async set(key: string, value: string) {
       await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);

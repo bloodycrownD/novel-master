@@ -24,6 +24,7 @@
  * @module domain/tool/builtin/search/engines/duckduckgo
  */
 
+import { AppError } from "@/errors/app-error.js";
 import {
   engineApiErrorMessage,
   engineFailed,
@@ -105,7 +106,13 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DUCKDUCKGO_TIMEOUT_MS);
   // nm-style: keep-local — add/removeEventListener 必须同一 listener 引用（生命周期不变量），内联会丢移除句柄。
-  const onParentAbort = () => controller.abort();
+  // parentAborted 标志：在途取消判据走监听器置位（与 template-engine 同口径），
+  // 精确区分父级取消与 30s 计时器 abort。
+  let parentAborted = false;
+  const onParentAbort = () => {
+    parentAborted = true;
+    controller.abort();
+  };
   // 父级取消（用户点停止 / 回合中断）立即 aborts 在途请求，别让 fetch 挂满超时。
   signal?.addEventListener("abort", onParentAbort, { once: true });
   try {
@@ -118,6 +125,9 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
       };
       response = await fetch(url.toString(), requestInit);
     } catch (e) {
+      // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
+      // engineTimeoutError 保留超时失败语义（与 template-engine 同口径）。
+      if (parentAborted) throw new AppError("TOOL_CANCELLED", {detail: "Tool cancelled: DuckDuckGo"});
       throw engineTimeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS);
     }
 

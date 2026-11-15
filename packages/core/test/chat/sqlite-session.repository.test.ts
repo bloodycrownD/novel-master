@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -32,8 +33,8 @@ describe("SqliteSessionRepository", () => {
   it("insert → findById / listByProject 读回会话行", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "session-crud");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "session-crud"));
 
     const loaded = await repo.findById(session.id);
     assert.ok(loaded);
@@ -41,15 +42,15 @@ describe("SqliteSessionRepository", () => {
     assert.equal(loaded.title, "session-crud");
     assert.equal(loaded.projectId, project.id);
 
-    const listed = await repo.listByProject(project.id);
+    const listed = unwrap(await repo.listByProject(project.id));
     assert.equal(listed.some((s) => s.id === session.id), true);
   });
 
   it("updateTitle 更新标题", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "before");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "before"));
     const now = Date.now();
 
     assert.equal(await repo.updateTitle(session.id, "after", now), true);
@@ -62,10 +63,10 @@ describe("SqliteSessionRepository", () => {
   it("T-LF1：写 composer_draft_json → 读回 text+attach", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "draft-lf1");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "draft-lf1"));
 
-    assert.equal(await repo.getComposerDraftJson(session.id), null);
+    assert.equal(unwrap(await repo.getComposerDraftJson(session.id)), null);
 
     const draft = {
       text: "杀进程应仍在",
@@ -81,23 +82,23 @@ describe("SqliteSessionRepository", () => {
     };
     const draftJson = serializeComposerDraftJson(draft);
     assert.ok(draftJson != null);
-    assert.equal(await repo.setComposerDraftJson(session.id, draftJson), true);
+    assert.equal(unwrap(await repo.setComposerDraftJson(session.id, draftJson)), true);
 
-    const raw = await repo.getComposerDraftJson(session.id);
+    const raw = unwrap(await repo.getComposerDraftJson(session.id));
     assert.equal(raw, draftJson);
     assert.deepEqual(parseComposerDraftJson(raw), draft);
 
     // 模拟「重启」：新 repo 实例读同一连接
     const repoAfterRestart = new SqliteSessionRepository(ctx.conn);
-    const again = await repoAfterRestart.getComposerDraftJson(session.id);
+    const again = unwrap(await repoAfterRestart.getComposerDraftJson(session.id));
     assert.deepEqual(parseComposerDraftJson(again), draft);
   });
 
   it("T-LF1：clearSession（手动重置/删会话口径）后 composer_draft 仍保留；状态投影空", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "draft-lf1-clear");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "draft-lf1-clear"));
 
     const draft = {
       text: "置位后正文仍在",
@@ -112,10 +113,10 @@ describe("SqliteSessionRepository", () => {
       ],
     };
     assert.equal(
-      await repo.setComposerDraftJson(
+      unwrap(await repo.setComposerDraftJson(
         session.id,
         serializeComposerDraftJson(draft),
-      ),
+      )),
       true,
     );
 
@@ -135,23 +136,23 @@ describe("SqliteSessionRepository", () => {
     await ctx.sessionKkv.clearSession(session.id);
 
     assert.deepEqual(
-      parseComposerDraftJson(await repo.getComposerDraftJson(session.id)),
+      parseComposerDraftJson(unwrap(await repo.getComposerDraftJson(session.id))),
       draft,
     );
     assert.equal(
-      await ctx.sessionKkv.get(
+      unwrap(await ctx.sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_FILE_CACHE,
         "full:/stale.md",
-      ),
+      )),
       null,
     );
     assert.equal(
-      await ctx.sessionKkv.get(
+      unwrap(await ctx.sessionKkv.get(
         session.id,
         SESSION_KKV_DOMAIN_USER_VFS_PENDING,
         USER_VFS_PENDING_QUEUE_KEY,
-      ),
+      )),
       null,
     );
 
@@ -194,7 +195,7 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
     );
 
     const repo = new SqliteSessionRepository(conn);
-    const sessions = await repo.listByProject(projectId);
+    const sessions = unwrap(await repo.listByProject(projectId));
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]!.id, sessionId);
     assert.equal(sessions[0]!.title, "legacy-bootstrap");
@@ -205,8 +206,8 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
   it("CD-4: 含非法附件的草稿经读-改-写往返后正文不丢", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "draft-cd4");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "draft-cd4"));
 
     // 直接写原始列（绕过严格写侧），模拟历史存量行里今天不合法的附件形态
     const poisoned = JSON.stringify({
@@ -222,11 +223,11 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
         },
       ],
     });
-    assert.equal(await repo.setComposerDraftJson(session.id, poisoned), true);
+    assert.equal(unwrap(await repo.setComposerDraftJson(session.id, poisoned)), true);
 
     // 读 → 解析 → 序列化 往返（两端水合 + 后续持久化都走这条路）
     const readBack = parseComposerDraftJson(
-      await repo.getComposerDraftJson(session.id),
+      unwrap(await repo.getComposerDraftJson(session.id)),
     );
     assert.equal(readBack.text, "我写了一半的正文", "读侧不应因坏附件丢正文");
 

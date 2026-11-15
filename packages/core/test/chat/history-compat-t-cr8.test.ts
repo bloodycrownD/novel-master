@@ -2,6 +2,7 @@
  * T-CR8（历史只读兼容）：历史 workplaceChange 气泡「规则:」；
  * 新规则保存不产出规则 chip；prepare 重放旧 workplace 附件不炸。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -72,8 +73,8 @@ describe("history workplaceChange compat (T-CR8)", () => {
 
   it("T-CR8: 新会话规则保存（refreshRuleSnapshot）后投影无规则 chip", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/rule.md", "body");
@@ -95,11 +96,11 @@ describe("history workplaceChange compat (T-CR8)", () => {
       workplace: wt,
     });
 
-    const canon = await sk.get(
+    const canon = unwrap(await sk.get(
       session.id,
       SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
       RULE_SNAPSHOT_CANON_KEY,
-    );
+    ));
     assert.ok(canon != null && canon !== "");
 
     // user ops 投影链已拆除（E-core）：规则快照 canon 存在即代表新规则保存不产生规则 chip
@@ -112,8 +113,8 @@ describe("history workplaceChange compat (T-CR8)", () => {
 
   it("T-CR8: prepare 重放历史 workplace / workplaceChange 附件不炸且产出 action XML", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/hist.md", "hist-body");
     const sk = createSessionKkvService(ctx.conn);

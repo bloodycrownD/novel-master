@@ -65,10 +65,11 @@ export async function loadChatAgentMeta(
       sessionId,
     );
     const sessionConfig = await sessionConfigPromise;
+    if (!sessionConfig.ok) throw sessionConfig.error;
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
-    const savedModelId = definition.model ?? sessionConfig.modelId;
+    const savedModelId = definition.model ?? sessionConfig.value.modelId;
     let modelLabel = '未选择模型';
     if (savedModelId) {
       try {

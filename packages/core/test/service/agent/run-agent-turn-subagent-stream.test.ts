@@ -12,6 +12,7 @@
  * @module test/service/agent/run-agent-turn-subagent-stream.test
  */
 
+import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -251,8 +252,8 @@ async function runTaskTurn(
     textDoneResponse("主代理收到结果"),
   ]);
 
-  const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-  const session = await ctx.sessions.create(project.id, "S-STREAM");
+  const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+  const session = unwrap(await ctx.sessions.create(project.id, "S-STREAM"));
 
   const runtime = makeRuntime(ctx, { modelRequests, preferences });
   runtime.eventBus = realEventBus();
@@ -392,8 +393,8 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
       },
     };
 
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S-S5");
+    const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
+    const session = unwrap(await ctx.sessions.create(project.id, "S-S5"));
 
     // 注入抛普通 Error（非 PreferencesError）的偏好窄切片。
     const runtime = makeRuntime(ctx, {

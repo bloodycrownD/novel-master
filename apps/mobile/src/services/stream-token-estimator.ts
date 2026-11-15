@@ -40,6 +40,9 @@ import {
   mapVendorModelIdToTiktokenModel,
   resolveTokenizerFamily,
 } from '@novel-master/core/provider';
+
+/** core Result 的线上结构（`Result` 本体尚未进 public 面，三期收口时换真类型）。 */
+type ResultWire<T> = {readonly ok: true; readonly value: T} | {readonly ok: false; readonly error: unknown};
 import {getEncodingNameForModel} from 'js-tiktoken/lite';
 // 编码表的**单例缓存下沉到驱动**（stream-metrics-native ④）：本文件原来自己维护
 // 一份 `encodingByCacheKey`，而驱动侧的兜底计数（`count-prompt-llm-input`）也
@@ -77,9 +80,10 @@ const vendorModelHintInFlight = new Set<string>();
 /** 会话/模型仓储窄口（估算器只消费这一小撮读取方法）。 */
 export interface StreamTokenModelHintRuntime {
   readonly sessions: {
+    // ResultWire：core 的 Result 线上结构（`Result` 本体尚未进 public 面，三期收口）。
     getSessionAgentConfig(
       id: string,
-    ): Promise<{agentId: string; modelId?: string | undefined}>;
+    ): Promise<ResultWire<{agentId: string; modelId?: string | undefined}>>;
   };
   readonly agentRegistry: {
     get(agentId: string): Promise<{model?: string | undefined}>;
@@ -179,9 +183,12 @@ export async function resolveStreamTokenVendorModelId(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       sessionId,
     );
-    let savedModelId = sessionConfig.modelId;
+    if (!sessionConfig.ok) throw sessionConfig.error;
+    let savedModelId = sessionConfig.value.modelId;
     if (savedModelId == null || savedModelId.length === 0) {
-      const definition = await runtime.agentRegistry.get(sessionConfig.agentId);
+      const definition = await runtime.agentRegistry.get(
+        sessionConfig.value.agentId,
+      );
       savedModelId = definition.model;
     }
     if (savedModelId == null || savedModelId.length === 0) {

@@ -5,6 +5,7 @@
  * 既有用例都直接调 helper/driver 或手工构造 context，把 agent-runner 里
  * `tools` / `sessionKkv` 两行删掉也不会变红。
  */
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { z } from "zod";
@@ -196,6 +197,13 @@ const defaultRunScope = {
   workspaceModelId: RUN_MODEL_ID,
 };
 
+/** Outcome 收窄：本文件用例只关心 completed 分支（弃权语义在 resolve-current-prompt-tokens.test.ts）。 */
+async function resolveCompleted(...args: Parameters<typeof resolveCurrentPromptTokens>) {
+  const outcome = await resolveCurrentPromptTokens(...args);
+  assert.equal(outcome.kind, "completed", "非弃权路径必须收成 completed 分支");
+  return outcome.value;
+}
+
 describe("AgentRunner session API prompt token cache", () => {
   beforeEach(() => {
     registerNodeTokenizerDriverForTests();
@@ -209,7 +217,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
   it("T-T4: completed 且 pick 有值 → set 后 trigger 与 resolve 同值", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     const model = createMockModel([
       {
@@ -256,7 +264,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     // 跨重启语义：清掉进程内热层（≈ 进程重启）、只留 KKV，读口仍报同一 API 值
     sessionApiPromptTokenCache.clearAll();
-    const afterRestart = await resolveCurrentPromptTokens(
+    const afterRestart = await resolveCompleted(
       SESSION_ID,
       params,
       { sessionKkv }
@@ -265,7 +273,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(afterRestart.tokenCount, 4242);
     assert.equal(afterRestart.estimated, false);
 
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    const resolved = await resolveCompleted(SESSION_ID, params);
     assert.equal(resolved.source, "api");
     assert.equal(resolved.tokenCount, 4242);
 
@@ -295,7 +303,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
   it("T-T4 (persistMessages=false): overlay completed run 不落热层/KKV", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     // 两步 run：step1 tool_use（usage 4000，chokepoint ② 落 tool_results 后）、
     // step2 收尾文本（usage 5000）。观察点用 STEP_COMMITTED 事件而非压缩评估
@@ -380,7 +388,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     const model = createMockModel([
       {
@@ -416,7 +424,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -429,7 +437,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     const model = createMockModel([
       {
@@ -469,7 +477,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -482,7 +490,7 @@ describe("AgentRunner session API prompt token cache", () => {
     await seedPromptTokenEntry(8888);
 
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     const model: ModelRequestService = {
       request: mock.fn(async () => {
@@ -515,7 +523,7 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const resolved = await resolveCompleted(SESSION_ID, {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
@@ -543,7 +551,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
 
   it("两步 run：step2 的压缩评估命中 step1 回锚的 api 基线（含增量），run 末终值带锚点", async () => {
     const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     // step1：tool_use（usage 4000）→ step2：收尾文本（usage 5000）
     const model = createMockModel([
@@ -587,7 +595,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
         toolCtx: mockToolCtx(mockVfs()),
         compactionConditions: {
           async shouldRequestCompaction(s, evaluation) {
-            const resolved = await resolveCurrentPromptTokens(
+            const resolved = await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,
@@ -686,7 +694,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
   it("T-G1a: 重启（clearAll）后第二轮的压缩评估仍用 KKV 里的 api 值", async () => {
     // 第一轮：正常 completed，落下 4242 的 api 值。
     const firstSession = new InMemoryAgentSession();
-    await firstSession.append("user", textBlocks("go"));
+    unwrap(await firstSession.append("user", textBlocks("go")));
     const firstModel = createMockModel([
       {
         assistantText: "done",
@@ -724,7 +732,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     // 第二轮：真实链路（runner 填 sessionKkv → trigger → 读口）必须命中 KKV 的
     // api 值 4242，而不是回退本地估算（本地档远小于 4242）。
     const secondSession = new InMemoryAgentSession();
-    await secondSession.append("user", textBlocks("go again"));
+    unwrap(await secondSession.append("user", textBlocks("go again")));
     const secondModel = createMockModel([
       {
         assistantText: "done",
@@ -763,7 +771,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           // 代理真实 trigger：先按同一 evaluation 读一次口记录读数，再委托给
           // 真 trigger 走它自己的判定——读数与判定走的是同一条链路。
           async shouldRequestCompaction(session, evaluation) {
-            const resolved = await resolveCurrentPromptTokens(
+            const resolved = await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,
@@ -828,7 +836,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         tokenRegistry,
       );
       const session = new InMemoryAgentSession();
-      await session.append("user", textBlocks("go"));
+      unwrap(await session.append("user", textBlocks("go")));
       const model = createMockModel([
         {
           assistantText: "done",
@@ -851,7 +859,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           toolCtx: mockToolCtx(mockVfs()),
           compactionConditions: {
             async shouldRequestCompaction(s, evaluation) {
-              const resolved = await resolveCurrentPromptTokens(
+              const resolved = await resolveCompleted(
                 evaluation.sessionId,
                 {
                   layout: evaluation.layout,
@@ -935,7 +943,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
     // sessionId 三合一（workplaceScope / kkvScope 都指自身）：assemble 的
     // kkvSessionId = session.kkvScopeSessionId，必须与下面预置的 KKV 同键。
     const session = new InMemoryAgentSession(SESSION_ID);
-    await session.append("user", textBlocks("go"));
+    unwrap(await session.append("user", textBlocks("go")));
 
     // 预置规则快照 + file_cache：assemble 走「缓存命中」路径，不需要 workplace
     // 评估也不需要读 VFS——本用例锁的是「指纹有没有传下去」，不是组装本身。
@@ -975,7 +983,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
             evaluatedFingerprints.push(evaluation.ctx.workplaceFingerprint);
             // 与真 trigger 同款消费口径（preferEstimate + tools + sessionKkv）：
             // 指纹若真到了 ctx，这里就会走增量分解并按指纹回填估读缓存。
-            await resolveCurrentPromptTokens(
+            await resolveCompleted(
               evaluation.sessionId,
               {
                 layout: evaluation.layout,

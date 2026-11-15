@@ -1,3 +1,4 @@
+import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -106,7 +107,7 @@ describe("compaction conditions store integrity", () => {
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);
     assert.equal(first?.hideStartDepth, 6);
-    const raw = await kkv.get(MODULE, KEY);
+    const raw = unwrap(await kkv.get(MODULE, KEY));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, 4);
     assert.equal(parsed.hideStartDepth, 6);
