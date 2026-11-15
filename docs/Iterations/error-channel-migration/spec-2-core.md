@@ -20,13 +20,15 @@ date: 2026-11-14
 
 `packages/core/src` 实测 **592 处 `throw` / 120 个文件**：service 264/37、infra 100/31、**domain 211/45**。严格解包 `if (!x.ok) throw x.error` **105 处**（domain 74 / service 31）。
 
-| 类 | 判据 | 处置 | 处数 |
+| 类 | 判据 | 处置 | 处数（二期实测） |
 |---|---|---|---|
-| A 域校验 | 纯函数可判定失败，如 `AGENT_INVALID_SCHEMA`、`TOOL_SEARCH_INVALID_ARGUMENT` | `Result.err(new AppError(...))` | 约 120 |
-| B 业务规则拒绝 | 资源不存在、状态冲突、上限，如 `CHAT_NOT_FOUND`、`AGENT_NOT_FOUND` | `Result.err` / `Outcome.failed` | 约 110 |
-| C 编程错误 | 不变量破坏、不可能分支，如 `INFRA_INVARIANT_VIOLATION`、`Result.revive` 形状违约 | **保留 throw** | **16** |
-| D 平台边界 | 事务回滚、HTTP/SSE、abort 竞速 | **保留 throw** + 适配层转码 | 约 90 |
-| E 控制流信号 | 用户取消、任务被替换 | `Outcome.cancelled` / `Interrupt` / 专用取消码 | 2 哨兵 + 8 处工具取消 |
+| A 域校验 | 纯函数可判定失败，如 `AGENT_INVALID_SCHEMA`、`TOOL_SEARCH_INVALID_ARGUMENT` | `Result.err(new AppError(...))` | 47 处改写（原估约 120） |
+| B 业务规则拒绝 | 资源不存在、状态冲突、上限，如 `CHAT_NOT_FOUND`、`AGENT_NOT_FOUND` | `Result.err` / `Outcome.failed` | 40 处改写（原估约 110；全走 `Result.err` / Result 字面量，`Outcome.failed` 零调用） |
+| C 编程错误 | 不变量破坏、不可能分支，如 `INFRA_INVARIANT_VIOLATION`、`Result.revive` 形状违约 | **保留 throw** | **16**（diff 零删除，硬清单原样保留） |
+| D 平台边界 | 事务回滚、HTTP/SSE、abort 竞速 | **保留 throw** + 适配层转码 | 约 90 保留（解包透传现量 129 处 / 47 文件，含事务回调约 26 处） |
+| E 控制流信号 | 用户取消、任务被替换 | `Outcome.cancelled` / `Interrupt` / 专用取消码 | 2 哨兵已改 `Interrupt`（文件边界收成 `Outcome.cancelled` / `replaced`）+ 工具取消 `TOOL_CANCELLED` 构造 10 点 |
+
+> 二期收口实测（commit `e380dc331`，同口径 `\bthrow\b` 复测 607 处/125 文件 → 536 处/128 文件）：原估 A 约 120 / B 约 110 是 592 处基线的全类计数，二期实际改写 A 47 + B 40 = **87 处**——其余站点按 §2.4（事务/边界解包保留）、§2.5（legacy-vfs 形态不动）、§2.6（cloud-sync 移三期）与两条保留协议留在 throw 通道；E 的 8 处取消形态 1:1 落地，另在 `tool-runner` 在途竞速补 2 个 reject（`:80/:83`），合计 10 个 `TOOL_CANCELLED` 构造点。
 
 **建议保留 throw 的两组协议**（不计入 A/B）：`tool-runner` 的 ToolError 契约（并发协议只有 throw/reject 通道）、`llm-protocol` 的 ProviderError（retry 按 catch + code 分派）。
 
