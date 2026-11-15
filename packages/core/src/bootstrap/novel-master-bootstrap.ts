@@ -408,7 +408,7 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   const applied = await listAppliedSchemaMigrationIds(tx);
 
   if (await hasVfsEntryWithoutContentHash(tx)) {
-    throw new AppError("INFRA_BASELINE_TOO_OLD", BASELINE_TOO_OLD_MESSAGE);
+    throw new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE });
   }
 
   const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
@@ -417,7 +417,7 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   }
 
   if (await detectLegacyShape(tx)) {
-    throw new AppError("INFRA_BASELINE_TOO_OLD", BASELINE_TOO_OLD_MESSAGE);
+    throw new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE });
   }
 }
 

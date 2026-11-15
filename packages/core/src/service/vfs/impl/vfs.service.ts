@@ -158,7 +158,7 @@ export class DefaultVfsService implements InternalVfsService {
 
   async resetHeadToVersion(scopeKey: string, path: string, _version: number): Promise<void> {
     // 无 revision 层：补偿合同依赖 revision，禁止静默 no-op
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}`);
+    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}` });
   }
 
   hardDelete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void> {
@@ -169,11 +169,11 @@ export class DefaultVfsService implements InternalVfsService {
   renamePath(_scopeKey: string, fromLogical: string, _toLogical: string, _options?: { overwrite?: boolean }): Promise<void> {
     // rename 原语依赖事务 + repo + scopeKey，本服务只拿 repo 不在事务里跑；
     // 生产 wiring 走 RevisionAwareVfsService，不会命中此分支。
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", `renamePath is unsupported without revision history: ${fromLogical}`);
+    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePath is unsupported without revision history: ${fromLogical}` });
   }
 
   renamePrefix(_scopeKey: string, oldDirLogical: string, _newDirLogical: string): Promise<void> {
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", `renamePrefix is unsupported without revision history: ${oldDirLogical}`);
+    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePrefix is unsupported without revision history: ${oldDirLogical}` });
   }
 }
 

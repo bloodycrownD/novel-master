@@ -32,7 +32,7 @@ export async function ensureParentDirectories(repo: VfsEntryRepository, scopeKey
     const existing = await repo.findByPath(scopeKey, dirPath);
     if (existing != null) {
       if (existing.entryKind === "file") {
-        return Result.err(new AppError("VFS_NOT_A_DIRECTORY", `Not a directory: ${dirPath}`, { path: dirPath }));
+        return Result.err(new AppError("VFS_NOT_A_DIRECTORY", { detail: `Not a directory: ${dirPath}`, path: dirPath }));
       }
       continue;
     }

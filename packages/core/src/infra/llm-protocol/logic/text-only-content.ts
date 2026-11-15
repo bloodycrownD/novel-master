@@ -16,7 +16,7 @@ export function blocksToTextOnly(blocks: readonly ContentBlock[]): string {
       parts.push(block.text);
       continue;
     }
-    throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", `Provider does not support ${block.type} content blocks; use Anthropic or send text only`);
+    throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: `Provider does not support ${block.type} content blocks; use Anthropic or send text only` });
   }
   return parts.join("\n\n");
 }

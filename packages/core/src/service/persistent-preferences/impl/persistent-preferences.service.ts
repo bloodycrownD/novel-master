@@ -116,7 +116,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     }
     const parsed = parseBoolean(raw);
     if (!parsed.ok) {
-      throw new AppError("PREFERENCES_INVALID_VALUE", `Preference key "${key}" expected boolean, got: ${raw}`, {key, expectedType: "boolean", actualValue: raw});
+      throw new AppError("PREFERENCES_INVALID_VALUE", { detail: `Preference key "${key}" expected boolean, got: ${raw}`, key, expectedType: "boolean", actualValue: raw });
     }
     return parsed.value;
   }

@@ -73,15 +73,15 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     op: UserVfsTurnOp
   ): Promise<UserVfsTurnExecuteResult> {
     if (op.tools.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", "userVfsTurn.op.tools must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "userVfsTurn.op.tools must not be empty"});
     }
     if (op.actionXml.trim() === "") {
-      throw new AppError("CHAT_INVALID_ARGUMENT", "userVfsTurn.op.actionXml must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "userVfsTurn.op.actionXml must not be empty"});
     }
 
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
 
     const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);

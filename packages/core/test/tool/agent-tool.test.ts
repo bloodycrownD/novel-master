@@ -322,11 +322,7 @@ describe("agent 管理工具", () => {
 
   it("T-AG3：upsert 抛 AppError（未注册工具名）→ INVALID_ARGUMENT 且含原因", async () => {
     const registry = fakeAgentRegistry({
-      upsertThrows: () =>
-        new AppError(
-          "AGENT_INVALID_TOOL_POLICY",
-          "工具策略含未注册工具名：nope_tool",
-        ),
+      upsertThrows: () => new AppError("AGENT_INVALID_TOOL_POLICY", { detail: "工具策略含未注册工具名：nope_tool" }),
     });
     const runner = makeRunner();
     await assert.rejects(

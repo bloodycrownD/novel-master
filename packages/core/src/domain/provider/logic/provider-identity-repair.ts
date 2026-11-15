@@ -68,7 +68,7 @@ export function createProviderIdentityRepairOperation(args: { readonly providerR
       if (emptyNames.length === 0 && builtinMissingKey.length === 0) {
         return;
       }
-      throw new AppError("PROVIDER_INVARIANT_VIOLATION", `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]`);
+      throw new AppError("PROVIDER_INVARIANT_VIOLATION", { detail: `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]` });
     },
   };
 }

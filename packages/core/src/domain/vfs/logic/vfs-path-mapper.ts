@@ -53,7 +53,7 @@ function assertNormalizedPathAllowed(normalized: string): void {
 export function resolveLogicalPath(input: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
-    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${String(input)}: path must be a non-empty string`, { path: String(input) }));
+    return Result.err(new AppError("VFS_INVALID_PATH", { detail: `Invalid path ${String(input)}: path must be a non-empty string`, path: String(input) }));
   }
   if (trimmed.startsWith("/")) {
     return normalizePath(trimmed);

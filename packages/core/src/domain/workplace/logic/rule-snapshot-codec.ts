@@ -53,20 +53,20 @@ export function parseRuleSnapshotJson(raw: string): Result<RuleSnapshotEntry[], 
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot is not valid json", { cause }));
+    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", { detail: "rule snapshot is not valid json", ...{ cause } }));
   }
   if (!Array.isArray(parsed)) {
-    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot must be a json array"));
+    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", { detail: "rule snapshot must be a json array" }));
   }
   const entries: RuleSnapshotEntry[] = [];
   for (const item of parsed) {
     if (item == null || typeof item !== "object") {
-      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot entry must be an object"));
+      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", { detail: "rule snapshot entry must be an object" }));
     }
     const path = (item as { path?: unknown }).path;
     const status = (item as { status?: unknown }).status;
     if (typeof path !== "string" || path.length === 0 || typeof status !== "string" || !DISPLAY_STATUSES.has(status)) {
-      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot entry needs a non-empty path and a known display status"));
+      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", { detail: "rule snapshot entry needs a non-empty path and a known display status" }));
     }
     entries.push({ path, status: status as WorkplaceDisplayStatus });
   }
@@ -94,15 +94,15 @@ export function parseFileCachePayload(raw: string): Result<FileCachePayload, Rul
   try {
     parsed = JSON.parse(raw);
   } catch (cause) {
-    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload is not valid json", { cause }));
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", { detail: "file cache payload is not valid json", ...{ cause } }));
   }
   if (parsed == null || typeof parsed !== "object") {
-    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload must be an object"));
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", { detail: "file cache payload must be an object" }));
   }
   const body = (parsed as { body?: unknown }).body;
   const mtimeMs = (parsed as { mtimeMs?: unknown }).mtimeMs;
   if (typeof body !== "string" || typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload must be { body: string, mtimeMs: finite number }"));
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", { detail: "file cache payload must be { body: string, mtimeMs: finite number }" }));
   }
   return Result.ok({ body, mtimeMs });
 }

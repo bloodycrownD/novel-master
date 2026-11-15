@@ -19,7 +19,7 @@ const MODULE = "nm-model-retry";
 const KEY = "policy";
 
 function validatePolicy(input: ModelRetryPolicy): Result<void, AppError<"PROVIDER_INVALID_ARGUMENT">> {
-  const invalid = (message: string) => Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", `Invalid retry policy: ${message}`));
+  const invalid = (message: string) => Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid retry policy: ${message}` }));
   if (!Number.isFinite(input.maxRetries) || input.maxRetries < 0) {
     return invalid("maxRetries must be >= 0");
   }

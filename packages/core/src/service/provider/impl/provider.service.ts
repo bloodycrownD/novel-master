@@ -44,7 +44,7 @@ export interface DefaultProviderServiceDeps {
 function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
   const trimmed = raw.trim();
   if (trimmed === "") {
-    throw new AppError("PROVIDER_INVALID_ARGUMENT", {key: "error.provider.display_name_required"}, providerId != null ? { providerId } : undefined);
+    throw new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: {key: "error.provider.display_name_required"}, ...(providerId != null ? {providerId} : {}) });
   }
   return trimmed;
 }
@@ -66,7 +66,7 @@ export class DefaultProviderService implements ProviderService {
   async get(id: string): Promise<LlmProvider> {
     const p = await this.deps.providers.findById(id);
     if (!p) {
-      throw new AppError("PROVIDER_NOT_FOUND", `Provider not found: ${id}`, { providerId: id });
+      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id });
     }
     return p;
   }
@@ -123,7 +123,7 @@ export class DefaultProviderService implements ProviderService {
   async edit(id: string, patch: EditProviderPatch): Promise<LlmProvider> {
     const provider = await this.get(id);
     if (provider.isBuiltin && patch.protocol !== undefined) {
-      throw new AppError("PROVIDER_BUILTIN_PROVIDER", `Cannot change protocol of built-in provider: ${id}`, { providerId: id });
+      throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id });
     }
 
     // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
@@ -210,7 +210,7 @@ export class DefaultProviderService implements ProviderService {
   async delete(id: string): Promise<void> {
     const provider = await this.get(id);
     if (provider.isBuiltin) {
-      throw new AppError("PROVIDER_BUILTIN_PROVIDER", `Cannot delete built-in provider: ${id}`, { providerId: id });
+      throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id });
     }
 
     // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
@@ -251,7 +251,7 @@ export class DefaultProviderService implements ProviderService {
         // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
         // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
         // 新造码只会让前端拿不到已处理的文案。
-        throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, { providerId: id });
+        throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor: {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, providerId: id });
       }
     }
 

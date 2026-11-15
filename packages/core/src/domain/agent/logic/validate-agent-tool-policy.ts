@@ -25,7 +25,7 @@ export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, regi
   const allow: unknown = tools.allow;
   const deny: unknown = tools.deny;
   if (allow != null && deny != null) {
-    return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", "tools.allow and tools.deny cannot both be set"));
+    return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", { detail: "tools.allow and tools.deny cannot both be set" }));
   }
   for (const [listLabel, names] of [
     ["tools.allow", allow],
@@ -35,11 +35,11 @@ export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, regi
       continue;
     }
     if (!Array.isArray(names)) {
-      return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", `${listLabel} must be an array of tool names`));
+      return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", { detail: `${listLabel} must be an array of tool names` }));
     }
     for (const raw of names) {
       if (typeof raw !== "string") {
-        return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", `${listLabel} must contain only strings`));
+        return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", { detail: `${listLabel} must contain only strings` }));
       }
       const name = normalizeAgentToolPolicyName(raw);
       if (registryNames.has(name)) {
@@ -48,7 +48,7 @@ export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, regi
       const hint = LEGACY_FILE_TOOL_HINTS[name];
       const v2List = FILE_TOOL_NAMES.join(", ");
       const suffix = hint != null ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.` : ` Known V2 tools: ${v2List}.`;
-      return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", `${listLabel} references unknown tool: ${raw}.${suffix}`));
+      return Result.err(new AppError("AGENT_INVALID_TOOL_POLICY", { detail: `${listLabel} references unknown tool: ${raw}.${suffix}` }));
     }
   }
   return Result.ok(undefined);

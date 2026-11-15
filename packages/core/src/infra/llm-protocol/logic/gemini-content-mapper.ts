@@ -215,7 +215,7 @@ export function blocksToGeminiParts(
       case "redacted_thinking":
         break;
       case "image":
-        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", "Gemini outbound messages do not support image blocks in this iteration");
+        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "Gemini outbound messages do not support image blocks in this iteration" });
       default:
         break;
     }

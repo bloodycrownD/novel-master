@@ -110,7 +110,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const memberRows = await queryTemplate<{ offset: number; length: number; format: string; bytes: SqlValue }>(this.conn, this.parser, sql20, { contentHash });
     if (memberRows.length === 0) {
       // 文案被测试与调用方依赖（resolveScanRows 同款），一个字不能改。
-      throw new AppError("VFS_CONTENT_BLOB_MISSING", `vfs_content_blob 缺失: ${contentHash}`, { contentHash });
+      throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${contentHash}`, contentHash });
     }
     const member = memberRows[0]!;
     const packBytes = asUint8Array(member.bytes, "vfs_content_pack.bytes");
@@ -206,7 +206,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     for (const [packId, members] of membersByPack) {
       const pack = packById.get(packId);
       if (pack == null) {
-        throw new AppError("VFS_CONTENT_CORRUPT", `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, { packId });
+        throw new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId });
       }
       const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
       if (!packBytes.ok) throw packBytes.error;
@@ -275,7 +275,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
       return contentHash;
     }
     if (fallbackPlain == null) {
-      throw new AppError("VFS_CONTENT_BLOB_MISSING", `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, { contentHash });
+      throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${contentHash}`, contentHash });
     }
     // 走 put 路径落新行（insert 或复用同 hash 其他行；含 member 抽回）
     return this.put(fallbackPlain);

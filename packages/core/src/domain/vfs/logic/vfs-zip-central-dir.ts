@@ -44,7 +44,7 @@ function readUInt32LE(bytes: Uint8Array, offset: number): number {
 
 function assertNoZip64Marker(value: number, field: string): ZipCentralDirError | null {
   if (value === ZIP_SIZE_ZIP64_MARKER) {
-    return new AppError("VFS_ZIP_INVALID_ARCHIVE", `ZIP64 ${field} not supported`);
+    return new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP64 ${field} not supported` });
   }
   return null;
 }
@@ -65,18 +65,18 @@ function assertNoZip64Marker(value: number, field: string): ZipCentralDirError |
 function readLocalEntryData(bytes: Uint8Array, entry: { localHeaderOffset: number; compressedSize: number; uncompressedSize: number; method: number; entryName: string }): Result<Uint8Array, ZipCentralDirError> {
   const { localHeaderOffset } = entry;
   if (readUInt32LE(bytes, localHeaderOffset) !== LOCAL_FILE_HEADER_SIG) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `invalid local file header at offset ${localHeaderOffset}`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `invalid local file header at offset ${localHeaderOffset}` }));
   }
   const localMethod = readUInt16LE(bytes, localHeaderOffset + 8);
   if (localMethod !== entry.method) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `compression method mismatch for ${entry.entryName}`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `compression method mismatch for ${entry.entryName}` }));
   }
   const fileNameLen = readUInt16LE(bytes, localHeaderOffset + 26);
   const extraLen = readUInt16LE(bytes, localHeaderOffset + 28);
   const dataStart = localHeaderOffset + 30 + fileNameLen + extraLen;
   const dataEnd = dataStart + entry.compressedSize;
   if (dataEnd > bytes.length) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `truncated entry data for ${entry.entryName}`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `truncated entry data for ${entry.entryName}` }));
   }
   const compressed = bytes.subarray(dataStart, dataEnd);
 
@@ -89,18 +89,18 @@ function readLocalEntryData(bytes: Uint8Array, entry: { localHeaderOffset: numbe
   // **动手之前**判过声明值，这里的分支恒不触发，只是重复犯错。
   if (entry.method === ZIP_METHOD_STORE) {
     if (compressed.length !== entry.uncompressedSize) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `STORE size mismatch for ${entry.entryName}: expected ${entry.uncompressedSize}, got ${compressed.length}`));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `STORE size mismatch for ${entry.entryName}: expected ${entry.uncompressedSize}, got ${compressed.length}` }));
     }
     return Result.ok(compressed);
   }
   try {
     const inflated = inflateSync(compressed);
     if (inflated.length !== entry.uncompressedSize) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `DEFLATE size mismatch for ${entry.entryName}: expected ${entry.uncompressedSize}, got ${inflated.length}`));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `DEFLATE size mismatch for ${entry.entryName}: expected ${entry.uncompressedSize}, got ${inflated.length}` }));
     }
     return Result.ok(inflated);
   } catch {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `failed to inflate ${entry.entryName}`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `failed to inflate ${entry.entryName}` }));
   }
 }
 
@@ -119,7 +119,7 @@ function readLocalEntryData(bytes: Uint8Array, entry: { localHeaderOffset: numbe
  */
 export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLimits = DEFAULT_VFS_ZIP_LIMITS): Result<ZipCentralDirEntry[], ZipCentralDirError> {
   if (zipBytes.length < 22) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "ZIP archive too small"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "ZIP archive too small" }));
   }
 
   // EOCD 从尾部向前扫（注释最长 0xffff），找不到即归档不可读。
@@ -133,7 +133,7 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
     }
   }
   if (eocdOffset < 0) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "ZIP end of central directory not found"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "ZIP end of central directory not found" }));
   }
   const totalEntries = readUInt16LE(zipBytes, eocdOffset + 10);
   const centralDirSize = readUInt32LE(zipBytes, eocdOffset + 12);
@@ -146,12 +146,12 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
 
   const centralDirEnd = centralDirOffset + centralDirSize;
   if (centralDirEnd > eocdOffset || centralDirOffset > zipBytes.length) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "invalid central directory bounds"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "invalid central directory bounds" }));
   }
 
   // 条数闸：解压任何一条**之前**。
   if (totalEntries > limits.maxEntryCount) {
-    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP entry count ${totalEntries} exceeds limit ${limits.maxEntryCount}`));
+    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP entry count ${totalEntries} exceeds limit ${limits.maxEntryCount}` }));
   }
 
   const entries: ZipCentralDirEntry[] = [];
@@ -161,10 +161,10 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
 
   for (let i = 0; i < totalEntries; i++) {
     if (offset + 46 > centralDirEnd) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "truncated central directory entry"));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "truncated central directory entry" }));
     }
     if (readUInt32LE(zipBytes, offset) !== CENTRAL_DIR_HEADER_SIG) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "invalid central directory file header"));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "invalid central directory file header" }));
     }
 
     const gpbf = readUInt16LE(zipBytes, offset + 8);
@@ -187,7 +187,7 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
     const nameEnd = nameStart + fileNameLen;
     const entryEnd = nameEnd + extraLen + commentLen;
     if (entryEnd > centralDirEnd) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "truncated central directory entry name"));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "truncated central directory entry name" }));
     }
 
     const rawNameBytes = zipBytes.subarray(nameStart, nameEnd);
@@ -195,16 +195,16 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
     if (!decodedName.ok) return Result.err(decodedName.error);
     const entryName = decodedName.value;
     if ((gpbf & ZIP_GPBF_ENCRYPTED) !== 0) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `encrypted ZIP entry not supported: ${entryName}`));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `encrypted ZIP entry not supported: ${entryName}` }));
     }
     if (method !== ZIP_METHOD_STORE && method !== ZIP_METHOD_DEFLATE) {
-      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `unsupported compression method ${method} for ${entryName}`));
+      return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `unsupported compression method ${method} for ${entryName}` }));
     }
 
     // 体积闸在**动手之前**：先按声明值累加，越限直接返回，一条都不解压。
     declaredBytes += uncompressedSize;
     if (declaredBytes > limits.maxUncompressedBytes) {
-      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP uncompressed size ${declaredBytes} exceeds limit ${limits.maxUncompressedBytes}`));
+      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed size ${declaredBytes} exceeds limit ${limits.maxUncompressedBytes}` }));
     }
 
     const data = readLocalEntryData(zipBytes, { localHeaderOffset, compressedSize, uncompressedSize, method, entryName });
@@ -212,7 +212,7 @@ export function parseZipCentralDirectory(zipBytes: Uint8Array, limits: VfsZipLim
     // 解压后二次确认（防「声明小、实际大」的谎报头把单条内存打穿）。
     actualBytes += data.value.length;
     if (actualBytes > limits.maxUncompressedBytes) {
-      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP uncompressed size ${actualBytes} exceeds limit ${limits.maxUncompressedBytes}`));
+      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed size ${actualBytes} exceeds limit ${limits.maxUncompressedBytes}` }));
     }
 
     entries.push({ entryName, method, flags: gpbf, compressedSize, uncompressedSize, localHeaderOffset, data: data.value });

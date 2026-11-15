@@ -108,7 +108,7 @@ export class DefaultProjectService implements ProjectService {
   async get(id: string): Promise<ChatProject> {
     const project = await this.deps.projects.findById(id);
     if (project == null) {
-      throw new AppError("CHAT_NOT_FOUND", `project not found: ${id}`, { kind: "project", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
     }
     return project;
   }
@@ -116,7 +116,7 @@ export class DefaultProjectService implements ProjectService {
   async create(name: string): Promise<ChatProject> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", "project name must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"});
     }
     const now = Date.now();
     const project: ChatProject = {
@@ -132,7 +132,7 @@ export class DefaultProjectService implements ProjectService {
   async rename(id: string, name: string): Promise<ChatProject> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", "project name must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"});
     }
     const existing = await this.get(id);
     const updatedAtMs = Date.now();
@@ -142,7 +142,7 @@ export class DefaultProjectService implements ProjectService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `project not found: ${id}`, { kind: "project", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
     }
     return { ...existing, name: trimmed, updatedAtMs };
   }
@@ -152,7 +152,7 @@ export class DefaultProjectService implements ProjectService {
       const r = reposFor(tx);
       const project = await r.projects.findById(id);
       if (project == null) {
-        throw new AppError("CHAT_NOT_FOUND", `project not found: ${id}`, { kind: "project", id });
+        throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
       }
       const sessionList = await r.sessions.listByProject(id);
       const sessionKkv = createSessionKkvService(tx);
@@ -203,7 +203,7 @@ export class DefaultProjectService implements ProjectService {
       );
       const deleted = await r.projects.delete(id);
       if (!deleted) {
-        throw new AppError("CHAT_NOT_FOUND", `project not found: ${id}`, { kind: "project", id });
+        throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
       }
     });
     await runDeferredBlobGc(this.deps.conn);
@@ -250,7 +250,7 @@ export class DefaultProjectService implements ProjectService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `project not found: ${id}`, { kind: "project", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
     }
     return validated;
   }

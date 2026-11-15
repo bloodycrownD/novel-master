@@ -52,7 +52,7 @@ export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionR
   const normalized = resolved.value;
   const existing = await entryRepo.findByPath(scopeKey, normalized);
   if (existing?.entryKind === "directory") {
-    return Result.err(new AppError("VFS_IS_DIRECTORY", `Path is a directory: ${normalized}`, { path: normalized }));
+    return Result.err(new AppError("VFS_IS_DIRECTORY", { detail: `Path is a directory: ${normalized}`, path: normalized }));
   }
 
   const mtimeMs = Date.now();

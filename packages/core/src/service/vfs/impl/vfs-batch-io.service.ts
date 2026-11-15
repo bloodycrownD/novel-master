@@ -57,7 +57,7 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
     return;
   }
   if (existing.entryKind === "file") {
-    throw new AppError("VFS_NOT_A_DIRECTORY", `path is a file, not a directory: ${logical}`, { path: logical });
+    throw new AppError("VFS_NOT_A_DIRECTORY", { detail: `path is a file, not a directory: ${logical}`, path: logical });
   }
 }
 

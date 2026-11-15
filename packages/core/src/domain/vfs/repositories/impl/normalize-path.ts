@@ -15,12 +15,12 @@ import { Result } from "@/errors/either.js";
 export function normalizePath(path: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   if (typeof path !== "string" || path.length === 0) {
     const raw = String(path);
-    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${raw}: path must be a non-empty string`, { path: raw }));
+    return Result.err(new AppError("VFS_INVALID_PATH", { detail: `Invalid path ${raw}: path must be a non-empty string`, path: raw }));
   }
 
   const normalized = path.replace(/\\/g, "/");
   if (!normalized.startsWith("/")) {
-    return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${path}: path must start with /`, { path }));
+    return Result.err(new AppError("VFS_INVALID_PATH", { detail: `Invalid path ${path}: path must start with /`, path }));
   }
 
   const segments = normalized.split("/");
@@ -32,7 +32,7 @@ export function normalizePath(path: string): Result<string, AppError<"VFS_INVALI
     }
     if (segment === "..") {
       if (stack.length === 0) {
-        return Result.err(new AppError("VFS_INVALID_PATH", `Invalid path ${path}: path escapes above root`, { path }));
+        return Result.err(new AppError("VFS_INVALID_PATH", { detail: `Invalid path ${path}: path escapes above root`, path }));
       }
       stack.pop();
       continue;

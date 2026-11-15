@@ -76,10 +76,10 @@ export class DefaultPersistentState implements PersistentState {
   setCurrentModelId(id: string): Promise<void> {
     const trimmed = id.trim();
     if (trimmed.includes("/")) {
-      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (legacy path not accepted): ${id}`, { modelId: id });
+      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${id}`, modelId: id });
     }
     if (!isSavedModelUuidFormat(trimmed)) {
-      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (expected UUID): ${id}`, { modelId: id });
+      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id });
     }
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
   }

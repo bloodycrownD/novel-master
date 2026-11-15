@@ -453,7 +453,7 @@ export function postSse(
     const runXhr = (): void => {
       const XhrCtor = getXmlHttpRequestCtor();
       if (XhrCtor == null) {
-        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "XMLHttpRequest is not available in this environment", { providerId }));
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "XMLHttpRequest is not available in this environment", providerId }));
         return;
       }
 
@@ -495,7 +495,7 @@ export function postSse(
       if (signal != null) {
         if (signal.aborted) {
           emitter.dispose();
-          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "Request aborted", { providerId }));
+          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
           return;
         }
         signal.addEventListener(
@@ -542,7 +542,7 @@ export function postSse(
         if (status < 200 || status >= 300) {
           const body = xhr.responseText;
           const snippet = truncateText(body, 500);
-          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", `HTTP ${status}: ${snippet}`, { providerId }));
+          rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${status}: ${snippet}`, providerId }));
           return;
         }
 
@@ -551,12 +551,12 @@ export function postSse(
 
       xhr.onerror = () => {
         emitter.dispose();
-        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "XHR network error", { providerId }));
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "XHR network error", providerId }));
       };
 
       xhr.onabort = () => {
         emitter.dispose();
-        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", "Request aborted", { providerId }));
+        rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
       };
 
       applyXhrHeaders(xhr, init.headers);
@@ -615,7 +615,7 @@ export function postSse(
 
           if (response.body == null) {
             const contentType = response.headers.get("content-type") ?? "none";
-            throw new AppError("PROVIDER_HTTP_ERROR", `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, { providerId });
+            throw new AppError("PROVIDER_HTTP_ERROR", { detail: `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, providerId });
           }
 
           logSse(logTag, "fetch stream start", {

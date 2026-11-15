@@ -82,7 +82,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   async get(agentId: string): Promise<AgentDefinition> {
     const def = await this.deps.repository.get(agentId);
     if (def == null) {
-      throw new AppError("AGENT_NOT_FOUND", `agent not found: ${agentId}`, { agentId });
+      throw new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId});
     }
     return def;
   }
@@ -93,11 +93,11 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (!validation.ok) throw validation.error;
     const trimmedName = defaulted.name.trim();
     if (trimmedName.length === 0) {
-      throw new AppError("AGENT_INVALID_SCHEMA", "agent name must not be empty");
+      throw new AppError("AGENT_INVALID_SCHEMA", {detail: "agent name must not be empty"});
     }
     // 内置 general 是虚拟 agent，禁止用户创建同名
     if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}});
+      throw new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}});
     }
     const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
@@ -112,7 +112,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         otherName = otherId.trim();
       }
       if (otherName.length > 0 && otherName === trimmedName) {
-        throw new AppError("AGENT_DUPLICATE_NAME", {key: "error.agent.duplicate_name"});
+        throw new AppError("AGENT_DUPLICATE_NAME", {descriptor: {key: "error.agent.duplicate_name"}});
       }
     }
 
@@ -129,7 +129,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   async delete(agentId: string): Promise<void> {
     if (!(await this.deps.repository.exists(agentId))) {
-      throw new AppError("AGENT_NOT_FOUND", `agent not found: ${agentId}`, { agentId });
+      throw new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId});
     }
     // built-in general 不可删除（运行时虚拟注入的递归基线）。
     // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
@@ -137,7 +137,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     const wire = await this.deps.repository.getRawWire(agentId);
     const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
     if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}});
+      throw new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}});
     }
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {

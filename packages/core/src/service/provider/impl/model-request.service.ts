@@ -164,17 +164,17 @@ export class DefaultModelRequestService implements ModelRequestService {
   ): Promise<LlmChatResult> {
     const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
     if (!asserted.ok) {
-      throw new AppError("PROVIDER_MODEL_NOT_SAVED", `Model not saved: ${savedModelId}. Fetch and save the model first.`, { modelId: savedModelId });
+      throw new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId });
     }
     const saved = asserted.value;
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
     if (!provider) {
-      throw new AppError("PROVIDER_NOT_FOUND", `Provider not found: ${providerId}`, { providerId });
+      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId });
     }
     const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      throw new AppError("PROVIDER_API_KEY_NOT_SET", apiKeyResult.error.message, { providerId: provider.id });
+      throw new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: provider.id });
     }
     const apiKey = apiKeyResult.value;
     let sampling = options?.sampling;

@@ -50,7 +50,7 @@ function resolvePersistedModelName(
   }
   const trimmed = modelName.trim();
   if (trimmed.length === 0) {
-    throw new AppError("PROVIDER_INVALID_MODEL_NAME", "modelName must not be empty");
+    throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" });
   }
   return trimmed;
 }
@@ -62,7 +62,7 @@ async function requireSavedModel(
 ): Promise<SavedModel> {
   const asserted = await assertSavedModelUuid(savedModelId, savedModels);
   if (!asserted.ok) {
-    throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", asserted.error.message, { modelId: savedModelId });
+    throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: asserted.error.message, modelId: savedModelId });
   }
   return asserted.value;
 }
@@ -80,7 +80,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     const provider = await this.deps.providers.get(providerId);
     const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      throw new AppError("PROVIDER_API_KEY_NOT_SET", apiKeyResult.error.message, { providerId });
+      throw new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId });
     }
     const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
@@ -152,12 +152,12 @@ export class DefaultProviderModelService implements ProviderModelService {
     );
     let nextModelName = existing.modelName;
     if (modelName === null) {
-      throw new AppError("PROVIDER_INVALID_MODEL_NAME", "modelName must not be empty", { modelId: savedModelId });
+      throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId });
     }
     if (modelName !== undefined) {
       const trimmed = modelName.trim();
       if (trimmed.length === 0) {
-        throw new AppError("PROVIDER_INVALID_MODEL_NAME", "modelName must not be empty", { modelId: savedModelId });
+        throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId });
       }
       nextModelName = trimmed;
     }
@@ -177,11 +177,11 @@ export class DefaultProviderModelService implements ProviderModelService {
     );
     const refs = await findSavedModelReferences(this.deps.conn, savedModelId);
     if (refs.length > 0) {
-      throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", `Saved model is in use: ${refs.join(", ")}`, { modelId: savedModelId, providerId: existing.providerId });
+      throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", { detail: `Saved model is in use: ${refs.join(", ")}`, modelId: savedModelId, providerId: existing.providerId });
     }
     const ok = await this.deps.savedModels.deleteById(savedModelId);
     if (!ok) {
-      throw new AppError("PROVIDER_NOT_FOUND", `Saved model not found: ${savedModelId}`, { modelId: savedModelId });
+      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Saved model not found: ${savedModelId}`, modelId: savedModelId });
     }
   }
 
@@ -199,14 +199,14 @@ export class DefaultProviderModelService implements ProviderModelService {
       (!Number.isInteger(patch.contextWindowTokens) ||
         patch.contextWindowTokens <= 0)
     ) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", "contextWindowTokens must be a positive integer", { modelId: savedModelId, providerId: existing.providerId });
+      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "contextWindowTokens must be a positive integer", modelId: savedModelId, providerId: existing.providerId });
     }
 
     if (
       patch.tokenCounterMode != null &&
       !isValidTokenCounterModePref(patch.tokenCounterMode)
     ) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, { modelId: savedModelId, providerId: existing.providerId });
+      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId });
     }
 
     const mergedSettings = applySavedModelSettingsPatch(
@@ -215,7 +215,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     );
     const persistable = assertSavedModelSettingsPersistable(mergedSettings);
     if (!persistable.ok) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", persistable.error.message);
+      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: persistable.error.message });
     }
 
     const updated: SavedModel = {

@@ -35,7 +35,7 @@ export function validateDynamicMacros(content: string, blockLabel: MessageLike):
   } catch (error) {
     // 宏扫描器（infra）对残缺模板会抛 PROMPT_* 形态的 AppError；在本函数内转成领域失败，不穿透。
     const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.scan_failed", params: { block: blockLabel, detail } }, { cause: error }));
+    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.scan_failed", params: { block: blockLabel, detail } }, cause: error }));
   }
   for (const action of actions) {
     if (action.kind === "comment") {
@@ -45,13 +45,13 @@ export function validateDynamicMacros(content: string, blockLabel: MessageLike):
       const top = action.path[0] ?? "";
       if (LEGACY_DOT_MACROS.has(top)) {
         const hint = { key: top === "worktree" ? "error.prompt.invalid_macro.worktree_removed" : "error.prompt.invalid_macro.filetree_alias" };
-        return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.dot_removed", params: { block: blockLabel, macro: top, hint } }));
+        return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.dot_removed", params: { block: blockLabel, macro: top, hint } } }));
       }
-      return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.dot_unsupported", params: { block: blockLabel, path: action.path.join(".") } }));
+      return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.dot_unsupported", params: { block: blockLabel, path: action.path.join(".") } } }));
     }
     const key = action.path[0] ?? "";
     if (!ALLOWED_ROOT_MACROS.has(key)) {
-      return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.unknown", params: { block: blockLabel, key } }));
+      return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.unknown", params: { block: blockLabel, key } } }));
     }
   }
   return Result.ok(undefined);
@@ -62,7 +62,7 @@ export function validateDynamicMacros(content: string, blockLabel: MessageLike):
  */
 export function rejectPersistMacros(content: string, blockLabel: MessageLike): Result<void, PromptMacroError> {
   if (content.includes("{{")) {
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { key: "error.prompt.invalid_macro.persist_forbidden", params: { block: blockLabel } }));
+    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.persist_forbidden", params: { block: blockLabel } } }));
   }
   return Result.ok(undefined);
 }

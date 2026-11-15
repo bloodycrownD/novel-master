@@ -44,7 +44,7 @@ export function zipEntryNameRelativeToDirectory(logical: string, directoryPath: 
   }
   const prefix = `${dir}/`;
   if (!path.startsWith(prefix)) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", `path ${path} is not under directory ${dir}`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: `path ${path} is not under directory ${dir}` }));
   }
   return Result.ok(path.slice(prefix.length));
 }
@@ -59,7 +59,7 @@ export function zipDirectoryEntryNameRelativeToDirectory(logical: string, direct
   const relative = zipEntryNameRelativeToDirectory(logical, directoryPath);
   if (!relative.ok) return relative;
   if (relative.value.length === 0) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", "cannot export target directory itself as a ZIP directory entry"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: "cannot export target directory itself as a ZIP directory entry" }));
   }
   return Result.ok(`${relative.value}/`);
 }
@@ -70,7 +70,7 @@ export function zipDirectoryEntryNameRelativeToDirectory(logical: string, direct
 export function logicalFromZipEntryRelativeToDirectory(entryName: string, directoryPath: string): Result<string, VfsZipPathError> {
   const trimmed = entryName.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
   if (trimmed.length === 0) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", "empty ZIP entry name"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: "empty ZIP entry name" }));
   }
   const dir = resolveZipDirectoryPath(directoryPath);
   return normalizePath(dir === "/" ? `/${trimmed}` : `${dir}/${trimmed}`);
@@ -85,7 +85,7 @@ export function logicalFromZipEntryRelativeToDirectory(entryName: string, direct
 export function logicalFromZipDirectoryEntryRelativeToDirectory(entryName: string, directoryPath: string): Result<string, VfsZipPathError> {
   const withoutSlash = entryName.replace(/\\/g, "/").replace(/\/+$/, "");
   if (withoutSlash.length === 0) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", "empty ZIP directory entry name"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: "empty ZIP directory entry name" }));
   }
   return logicalFromZipEntryRelativeToDirectory(withoutSlash, directoryPath);
 }
@@ -114,7 +114,7 @@ export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, ent
     return first === base;
   });
   if (allMatchBase) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", {key: "error.vfs.zip_root_prefix_suspected", params: {base}}));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { descriptor: { key: "error.vfs.zip_root_prefix_suspected", params: { base } } }));
   }
   return Result.ok(undefined);
 }

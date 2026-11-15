@@ -65,7 +65,7 @@ export async function runPendingSchemaMigrations(
   const seen = new Set<string>();
   for (const migration of SCHEMA_MIGRATIONS) {
     if (seen.has(migration.id)) {
-      throw new AppError("INFRA_INVARIANT_VIOLATION", `重复的 schema migration id: ${migration.id}`);
+      throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: `重复的 schema migration id: ${migration.id}` });
     }
     seen.add(migration.id);
 

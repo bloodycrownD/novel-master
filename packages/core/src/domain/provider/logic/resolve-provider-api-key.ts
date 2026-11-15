@@ -25,7 +25,7 @@ export async function resolveProviderApiKey(provider: Pick<LlmProvider, "id" | "
   if (fallback != null && fallback !== "") {
     return Result.ok(fallback);
   }
-  return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", `API key not set for provider ${provider.id}. Configure it in provider settings.`, { providerId: provider.id }));
+  return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: `API key not set for provider ${provider.id}. Configure it in provider settings.`, providerId: provider.id }));
 }
 
 /** list/UI 是否应把该服务商视为已配置可用 API key。 */

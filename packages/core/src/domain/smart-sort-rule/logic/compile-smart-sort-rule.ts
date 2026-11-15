@@ -38,7 +38,7 @@ type SmartSortRuleLogicError = AppError<"SMART_SORT_RULE_INVALID_ARGUMENT" | "SM
 export function validateSmartSortRuleDraft(fields: SmartSortRuleValidationFields, options?: { ruleId?: string }): Result<void, SmartSortRuleLogicError> {
   const details = { ruleId: options?.ruleId };
   if (fields.name == null || fields.name.length === 0) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "Rule name is required", details));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", {detail: "Rule name is required", ...details}));
   }
   const flagsValid = assertFlagsValid(fields.flags, details);
   if (!flagsValid.ok) {
@@ -48,7 +48,7 @@ export function validateSmartSortRuleDraft(fields: SmartSortRuleValidationFields
     new RegExp(fields.pattern, fields.flags);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_PATTERN", `Invalid regular expression: ${msg}`, details));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_PATTERN", {detail: `Invalid regular expression: ${msg}`, ...details}));
   }
   const captureKind = fields.captureKind ?? "smart";
   if (captureKind !== "smart") {
@@ -64,7 +64,7 @@ export function validateSmartSortRuleDraft(fields: SmartSortRuleValidationFields
     groupCount = null;
   }
   if (groupCount == null || groupCount < 1) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "Pattern must contain at least one capture group (ordinals are extracted from capture groups)", details));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", {detail: "Pattern must contain at least one capture group (ordinals are extracted from capture groups)", ...details}));
   }
   return Result.ok(undefined);
 }
@@ -80,6 +80,6 @@ export function compileSmartSortRule(rule: SmartSortRule): Result<CompiledSmartS
     return Result.ok({ ruleId: rule.ruleId, name: rule.name, regex, captureKind: rule.captureKind });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_PATTERN", `Invalid regular expression in rule ${rule.ruleId}: ${msg}`, { ruleId: rule.ruleId }));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_PATTERN", {detail: `Invalid regular expression in rule ${rule.ruleId}: ${msg}`, ruleId: rule.ruleId}));
   }
 }

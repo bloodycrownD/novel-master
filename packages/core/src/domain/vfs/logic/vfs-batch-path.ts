@@ -47,7 +47,7 @@ export function joinTargetLogicalPath(targetDir: string, relativePath: string): 
   if (!dir.ok) return dir;
   const rel = normalizeBatchRelativePath(relativePath);
   if (rel == null) {
-    return Result.err(new AppError("VFS_INVALID_PATH", `invalid batch relative path: ${relativePath}`, { path: relativePath }));
+    return Result.err(new AppError("VFS_INVALID_PATH", { detail: `invalid batch relative path: ${relativePath}`, path: relativePath }));
   }
   return Result.ok(dir.value === "/" ? `/${rel}` : `${dir.value}/${rel}`);
 }
@@ -73,7 +73,7 @@ export function relativePathUnderAnchor(logical: string, anchor: string): Result
   }
   const prefix = `${root}/`;
   if (!path.startsWith(prefix)) {
-    return Result.err(new AppError("VFS_INVALID_PATH", `path ${path} is not under ${root}`, { path }));
+    return Result.err(new AppError("VFS_INVALID_PATH", { detail: `path ${path} is not under ${root}`, path }));
   }
   return Result.ok(path.slice(prefix.length));
 }

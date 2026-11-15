@@ -17,7 +17,7 @@ type SavedModelSettingsError = AppError<"PROVIDER_INVALID_ARGUMENT">;
 export function savedModelSettingsFromJson(raw: unknown): Result<SavedModelSettings, SavedModelSettingsError> {
   const parsed = savedModelSettingsSchema.safeParse(raw);
   if (!parsed.success) {
-    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", parsed.error.message, { issues: parsed.error.issues }));
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
   }
   return Result.ok(parsed.data);
 }

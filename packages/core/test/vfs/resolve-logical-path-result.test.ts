@@ -83,7 +83,7 @@ describe("resolveLogicalPath（Result 型）", () => {
     assert.equal(result.error.code, 102004);
     assert.equal(result.error.desc, "invalid vfs path");
     assert.equal(result.error.message, "Invalid path : path must be a non-empty string");
-    assert.deepEqual(result.error.details, { path: "" });
+    assert.deepEqual(result.error.details, { path: "", detail: "Invalid path : path must be a non-empty string" });
     assert.equal(result.error.messageKey, undefined);
   });
 
@@ -95,7 +95,7 @@ describe("resolveLogicalPath（Result 型）", () => {
     }
     assert.equal(result.error.key, "VFS_INVALID_PATH");
     assert.equal(result.error.message, "Invalid path /a/../../b: path escapes above root");
-    assert.deepEqual(result.error.details, { path: "/a/../../b" });
+    assert.deepEqual(result.error.details, { path: "/a/../../b", detail: "Invalid path /a/../../b: path escapes above root" });
   });
 
   it("与 HEAD 的 throw 型实现逐值等价：成功串、失败 message、失败 path 三项全同", () => {

@@ -35,6 +35,6 @@ export function resolveSkspNameFromPlatform(
     case "linux":
       return "linux";
     default:
-      throw new AppError("INFRA_UNSUPPORTED_PLATFORM", `Unsupported SKSP platform: ${platform}（暂无对应的 driver）`);
+      throw new AppError("INFRA_UNSUPPORTED_PLATFORM", { detail: `Unsupported SKSP platform: ${platform}（暂无对应的 driver）` });
   }
 }

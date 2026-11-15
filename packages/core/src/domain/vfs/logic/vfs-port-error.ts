@@ -34,9 +34,5 @@ export function vfsPortError(error: LegacyVfsError | VfsPortError): VfsPortError
   if (typeof error.code === "number") {
     return error;
   }
-  return new AppError(VFS_ERROR_KEYS[error.code], error.message, {
-    path: error.path,
-    ...(error.details != null ? { details: error.details } : {}),
-    cause: error,
-  });
+  return new AppError(VFS_ERROR_KEYS[error.code], {detail: error.message, path: error.path, ...(error.details != null ? {details: error.details} : {}), cause: error});
 }

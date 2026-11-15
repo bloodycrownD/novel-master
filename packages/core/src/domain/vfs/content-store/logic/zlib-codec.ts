@@ -55,7 +55,7 @@ export function decompressZlib(compressed: Uint8Array): Result<Uint8Array, VfsCo
   try {
     return Result.ok(tryZlibInflate(compressed) ?? unzlibSync(compressed));
   } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", `zlib 解压失败: ${errorText(error)}`, undefined, { cause: error }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `zlib 解压失败: ${errorText(error)}` }, { cause: error }));
   }
 }
 
@@ -86,7 +86,7 @@ export function asUint8Array(value: unknown, label: string): Result<Uint8Array, 
   if (value instanceof ArrayBuffer) {
     return Result.ok(new Uint8Array(value));
   }
-  return Result.err(new AppError("VFS_CONTENT_CORRUPT", `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`, { label, actualType: Object.prototype.toString.call(value) }));
+  return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`, label, actualType: Object.prototype.toString.call(value) }));
 }
 
 /** base64 文本 → 字节；非法文本返回 `VFS_CONTENT_CORRUPT`（保留底层原因）。 */
@@ -94,7 +94,7 @@ function decodeBase64Text(text: string): Result<Uint8Array, VfsContentError> {
   try {
     return Result.ok(base64ToBytes(text));
   } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", `base64 解码失败: ${errorText(error)}`, undefined, { cause: error }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `base64 解码失败: ${errorText(error)}` }, { cause: error }));
   }
 }
 
@@ -127,7 +127,7 @@ export function decodeCompressedBytes(encoding: string, bytes: unknown, label: s
     if (bytes instanceof Uint8Array || bytes instanceof ArrayBuffer) {
       return decodeBase64Text(new TextDecoder().decode(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)));
     }
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(bytes)}`, { label, actualType: Object.prototype.toString.call(bytes) }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(bytes)}`, label, actualType: Object.prototype.toString.call(bytes) }));
   }
-  return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", `不支持的 blob encoding: ${encoding}`, { encoding, label }));
+  return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 blob encoding: ${encoding}`, encoding, label }));
 }

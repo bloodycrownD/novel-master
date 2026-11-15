@@ -91,7 +91,7 @@ export function __getVfsPackDecodeCountersForTests(): VfsPackDecodeCounters {
  */
 export function encodeZlibConcatPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
   if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", "zlib-concat-v1 组至少需要 1 个成员", { format: VFS_PACK_FORMAT_ZLIB_CONCAT_V1, memberCount: 0 }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "zlib-concat-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_ZLIB_CONCAT_V1, memberCount: 0 }));
   }
   // 拼接顺序即成员顺序，区间 offset 按各成员明文长顺序累计。
   const concat = concatBytes(memberPlains);
@@ -153,7 +153,7 @@ interface FossilSegmentTable {
  */
 export function encodeFossilChainPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
   if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", "fossil-chain-v1 组至少需要 1 个成员", { format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
   }
   const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? compressZlib(plain) : compressZlib(createDelta(memberPlains[index - 1]!, plain))));
   const header = new Uint8Array(4 + 4 * segmentBytes.length);
@@ -184,16 +184,16 @@ export function encodeFossilChainPack(memberPlains: ReadonlyArray<Uint8Array>): 
  */
 export function parseFossilSegmentTable(packBytes: Uint8Array): Result<FossilSegmentTable, VfsContentError> {
   if (packBytes.byteLength < 4) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", "fossil-chain-v1 流过短：连段数头都读不到", { byteLength: packBytes.byteLength }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：连段数头都读不到", byteLength: packBytes.byteLength }));
   }
   const view = new DataView(packBytes.buffer, packBytes.byteOffset, packBytes.byteLength);
   const segmentCount = view.getUint32(0, true);
   if (segmentCount === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", "fossil-chain-v1 段表段数为 0", { byteLength: packBytes.byteLength }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 段表段数为 0", byteLength: packBytes.byteLength }));
   }
   const headerLength = 4 + 4 * segmentCount;
   if (packBytes.byteLength < headerLength) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", "fossil-chain-v1 流过短：段表长度区不完整", { byteLength: packBytes.byteLength, headerLength }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 流过短：段表长度区不完整", byteLength: packBytes.byteLength, headerLength }));
   }
   const segments: VfsPackSpan[] = [];
   let cursor = headerLength;
@@ -203,7 +203,7 @@ export function parseFossilSegmentTable(packBytes: Uint8Array): Result<FossilSeg
     cursor += length;
   }
   if (cursor !== packBytes.byteLength) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", `fossil-chain-v1 段表与流长不符：段数据合计 ${cursor - headerLength}，实际剩余 ${packBytes.byteLength - headerLength}`, { byteLength: packBytes.byteLength, headerLength }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段表与流长不符：段数据合计 ${cursor - headerLength}，实际剩余 ${packBytes.byteLength - headerLength}`, byteLength: packBytes.byteLength, headerLength }));
   }
   return Result.ok({ segmentCount, segments });
 }
@@ -265,11 +265,11 @@ export function decodeFossilChainSpans(packBytes: Uint8Array, spans: ReadonlyArr
     }
     const index = segmentIndexByOffset.get(span.offset);
     if (index == null) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", `fossil-chain-v1 member offset 与段表不符: ${span.offset}`, { offset: span.offset, length: span.length }));
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member offset 与段表不符: ${span.offset}`, offset: span.offset, length: span.length }));
     }
     const segment = table.segments[index]!;
     if (segment.length !== span.length) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", `fossil-chain-v1 member length 与段表不符: ${span.length} != ${segment.length}`, { offset: span.offset, length: span.length, segmentLength: segment.length, segmentIndex: index }));
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 member length 与段表不符: ${span.length} != ${segment.length}`, offset: span.offset, length: span.length, segmentLength: segment.length, segmentIndex: index }));
     }
     memberIndices.push(index);
   }
@@ -300,7 +300,7 @@ export function decodeFossilChainSpans(packBytes: Uint8Array, spans: ReadonlyArr
       return Result.err(segmentError(index, segment, "targetSize", error));
     }
     if (targetSize > FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES) {
-      return Result.err(new AppError("VFS_CONTENT_CORRUPT", `fossil-chain-v1 段 ${index} delta 声明的输出规模 ${targetSize} 字节超过上限 ${FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES} 字节（坏段防御，拒绝 apply）`, { segmentIndex: index, targetSize, limit: FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES }));
+      return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} delta 声明的输出规模 ${targetSize} 字节超过上限 ${FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES} 字节（坏段防御，拒绝 apply）`, segmentIndex: index, targetSize, limit: FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES }));
     }
     try {
       current = applyDelta(current, delta);
@@ -340,7 +340,7 @@ export function decodePackMembers(format: string, packBytes: Uint8Array, spans: 
   if (format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1) {
     return decodeFossilChainSpans(packBytes, spans);
   }
-  return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", `不支持的 vfs_content_pack.format: ${format}`, { format }));
+  return Result.err(new AppError("VFS_CONTENT_UNSUPPORTED_FORMAT", { detail: `不支持的 vfs_content_pack.format: ${format}`, format }));
 }
 
 // ---------------------------------------------------------------------------
@@ -377,12 +377,12 @@ function inflateFossilSegment(packBytes: Uint8Array, segment: VfsPackSpan, index
  *   取详情（`cause` 保底，不依赖它一定被消费）
  */
 function segmentError(index: number, segment: VfsPackSpan, phase: "inflate" | "targetSize" | "applyDelta", error: unknown): AppError<"VFS_CONTENT_CORRUPT"> {
-  return new AppError("VFS_CONTENT_CORRUPT", `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${errorText(error)}`, { segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
+  return new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${errorText(error)}`, segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
 }
 
 function assertSpanWithin(span: VfsPackSpan, limit: number, label: string): Result<void, VfsContentError> {
   if (span.offset < 0 || span.length < 0 || span.offset + span.length > limit) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", `${label} member 区间越界: offset=${span.offset} length=${span.length} 界限=${limit}`, { offset: span.offset, length: span.length, limit }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} member 区间越界: offset=${span.offset} length=${span.length} 界限=${limit}`, offset: span.offset, length: span.length, limit }));
   }
   return Result.ok(undefined);
 }

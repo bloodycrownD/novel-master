@@ -52,7 +52,7 @@ export function assertFlagsValid(flags: string, detail?: { ruleId?: string }): R
   // 重跑一次 safeParse 仅为取 zod issue 文案（保持既有错误消息不变）。
   const checked = flagsSchema.safeParse(flags);
   const issue = checked.success ? undefined : checked.error.issues[0]?.message;
-  return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", `Invalid flags '${flags}': ${issue ?? "invalid"}`, detail));
+  return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: `Invalid flags '${flags}': ${issue ?? "invalid"}`, ...detail }));
 }
 
 /** Create payload: name/pattern 必填，flags 缺省 ''，description 可选。 */
@@ -79,7 +79,7 @@ export interface CreateSmartSortRuleFields {
 export function parseCreateSmartSortRuleInput(raw: unknown): Result<CreateSmartSortRuleFields, SmartSortRuleInputError> {
   const parsed = createSmartSortRuleSchema.safeParse(raw);
   if (!parsed.success) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", parsed.error.message, { issues: parsed.error.issues }));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
   }
   const flags = parsed.data.flags ?? "";
   const flagsValid = assertFlagsValid(flags);
@@ -100,7 +100,7 @@ export function parseCreateSmartSortRuleInput(raw: unknown): Result<CreateSmartS
 export function parseUpdateSmartSortRuleInput(raw: unknown): Result<UpdateSmartSortRuleInput, SmartSortRuleInputError> {
   const parsed = updateSmartSortRuleSchema.safeParse(raw);
   if (!parsed.success) {
-    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", parsed.error.message, { issues: parsed.error.issues }));
+    return Result.err(new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", { detail: parsed.error.message, issues: parsed.error.issues }));
   }
   if (parsed.data.flags !== undefined) {
     const flagsValid = assertFlagsValid(parsed.data.flags);

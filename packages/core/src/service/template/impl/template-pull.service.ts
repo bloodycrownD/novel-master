@@ -27,7 +27,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId });
     }
     await this.conn.transaction(async (tx) => {
       await initializeSessionWorkspace(tx, session.projectId, sessionId, {
@@ -50,7 +50,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId });
     }
     await this.conn.transaction(async (tx) => {
       await pushSessionWorkspace(tx, session.projectId, sessionId);

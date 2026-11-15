@@ -55,7 +55,7 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   }
   const withSlash = `${base}/`;
   if (!fullPath.startsWith(withSlash)) {
-    throw new AppError("VFS_INVARIANT_VIOLATION", `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
+    throw new AppError("VFS_INVARIANT_VIOLATION", {detail: `[invariant] Path ${fullPath} is not under prefix ${prefix}`});
   }
   return fullPath.slice(withSlash.length);
 }
@@ -94,15 +94,15 @@ function wrapImportError(error: unknown, committedShards?: number, failedShard?:
   const base = error instanceof Error ? error.message : "import transaction failed";
   // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
   if (committedShards != null && failedShard != null) {
-    return new AppError("VFS_ZIP_IMPORT_FAILED", {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}});
+    return new AppError("VFS_ZIP_IMPORT_FAILED", {descriptor: {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}});
   }
-  return new AppError("VFS_ZIP_IMPORT_FAILED", base);
+  return new AppError("VFS_ZIP_IMPORT_FAILED", {detail: base});
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
-    throw new AppError("VFS_ZIP_INVALID_PATH", `ZIP target path is a file, not a directory: ${directoryPath}`);
+    throw new AppError("VFS_ZIP_INVALID_PATH", {detail: `ZIP target path is a file, not a directory: ${directoryPath}`});
   }
 }
 
@@ -169,7 +169,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
   async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<void> {
     if (options.confirmed !== true) {
-      throw new AppError("VFS_ZIP_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or mobile confirm dialog)");
+      throw new AppError("VFS_ZIP_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"});
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);

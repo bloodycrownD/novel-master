@@ -48,11 +48,11 @@ export async function copyVfsPath(vfs: VfsService, from: string, to: string, opt
     const entries = await vfs.list(oldDir, { recursive: true });
     const hasDirRow = entries.some((e) => e.kind === "directory" && e.path === oldDir);
     if (entries.length === 0 && !hasDirRow) {
-      return Result.err(new AppError("VFS_NOT_FOUND", `Path not found: ${from}`, { path: from }));
+      return Result.err(new AppError("VFS_NOT_FOUND", { detail: `Path not found: ${from}`, path: from }));
     }
 
     if (!recursive) {
-      return Result.err(new AppError("VFS_IS_DIRECTORY", `Directory copy requires recursive: true: ${from}`, { path: from }));
+      return Result.err(new AppError("VFS_IS_DIRECTORY", { detail: `Directory copy requires recursive: true: ${from}`, path: from }));
     }
 
     const newDir = normalizeDirPath(to);

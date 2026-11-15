@@ -38,16 +38,16 @@ export function matchDepth(depth: number, slice: DepthSlice): boolean {
 export function validateDepthSlice(slice: DepthSlice): Result<void, DepthLogicError> {
   const details = { startDepth: slice.startDepth, endDepth: slice.endDepth };
   if (slice.startDepth == null && slice.endDepth == null) {
-    return Result.err(new AppError("DEPTH_INVALID_SLICE", "depth slice requires at least startDepth or endDepth", details));
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "depth slice requires at least startDepth or endDepth", ...details }));
   }
   if (slice.startDepth != null && (!Number.isInteger(slice.startDepth) || slice.startDepth < 0)) {
-    return Result.err(new AppError("DEPTH_INVALID_SLICE", "startDepth must be a non-negative integer", details));
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be a non-negative integer", ...details }));
   }
   if (slice.endDepth != null && (!Number.isInteger(slice.endDepth) || slice.endDepth < 0)) {
-    return Result.err(new AppError("DEPTH_INVALID_SLICE", "endDepth must be a non-negative integer", details));
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "endDepth must be a non-negative integer", ...details }));
   }
   if (slice.startDepth != null && slice.endDepth != null && slice.startDepth > slice.endDepth) {
-    return Result.err(new AppError("DEPTH_INVALID_SLICE", "startDepth must be <= endDepth", details));
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", { detail: "startDepth must be <= endDepth", ...details }));
   }
   return Result.ok(undefined);
 }

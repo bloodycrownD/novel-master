@@ -35,5 +35,5 @@ export function parseToolArgumentsJson(
   if (parsed.ok) {
     return parsed.value;
   }
-  throw new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})`);
+  throw new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", { detail: `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})` });
 }

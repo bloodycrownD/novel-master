@@ -109,7 +109,7 @@ export class IntegrityRepairRegistry {
     }
       if (this.operations.has(op.name)) {
         const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
-        throw new AppError("INFRA_INVARIANT_VIOLATION", duplicated);
+        throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: duplicated });
       }
     this.operations.set(op.name, op);
     return this;

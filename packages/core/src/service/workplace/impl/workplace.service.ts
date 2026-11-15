@@ -124,7 +124,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
       input.ruleEnabled === false &&
       isWorkplaceRootPath(this.scope, logicalPath)
     ) {
-      throw new AppError("WORKPLACE_ROOT_RULE_LOCKED", "cannot disable rules on root directory");
+      throw new AppError("WORKPLACE_ROOT_RULE_LOCKED", {detail: "cannot disable rules on root directory"});
     }
     const existing = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),

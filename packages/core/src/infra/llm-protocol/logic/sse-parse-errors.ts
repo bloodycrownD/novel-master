@@ -48,6 +48,6 @@ export function assertSseParseSucceededOrThrow(
   protocol: LlmProtocolKind
 ): void {
   if (blocks.length === 0 && diag.malformedLineCount > 0) {
-    throw new AppError("PROVIDER_MALFORMED_SSE", `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)`);
+    throw new AppError("PROVIDER_MALFORMED_SSE", { detail: `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)` });
   }
 }

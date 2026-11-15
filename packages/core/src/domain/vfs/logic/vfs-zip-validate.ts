@@ -33,20 +33,20 @@ function assertZipEntryNameAllowed(entryName: string): VfsZipValidateError | nul
     return null;
   }
   if (entryName.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-    return new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}`);
+    return new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}` });
   }
   if (entryName.includes("\\")) {
-    return new AppError("VFS_ZIP_INVALID_PATH", `backslash in ZIP entry: ${entryName}`);
+    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `backslash in ZIP entry: ${entryName}` });
   }
   if (entryName.includes("..")) {
-    return new AppError("VFS_ZIP_INVALID_PATH", `parent segment in ZIP entry: ${entryName}`);
+    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `parent segment in ZIP entry: ${entryName}` });
   }
   if (WINDOWS_DRIVE_PATH.test(entryName)) {
-    return new AppError("VFS_ZIP_INVALID_PATH", `absolute Windows path in ZIP: ${entryName}`);
+    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `absolute Windows path in ZIP: ${entryName}` });
   }
   const lower = entryName.toLowerCase();
   if (lower.startsWith("projects/") || lower.startsWith("/projects/")) {
-    return new AppError("VFS_ZIP_INVALID_PATH", `cross-domain path prefix in ZIP entry: ${entryName}`);
+    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `cross-domain path prefix in ZIP entry: ${entryName}` });
   }
   return null;
 }
@@ -65,7 +65,7 @@ export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): Result<st
     same = payload[i] === roundTrip[i];
   }
   if (!same) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)`));
+    return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)` }));
   }
   return Result.ok(decoded);
 }
@@ -76,7 +76,7 @@ function assertLogicalAllowed(scope: VfsScope, logical: string, entryName: strin
     return null;
   } catch (error) {
     const message = error instanceof Error ? error.message : "path not allowed for scope";
-    return new AppError("VFS_ZIP_INVALID_PATH", `ZIP entry "${entryName}" → logical "${logical}": ${message}`);
+    return new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP entry "${entryName}" → logical "${logical}": ${message}` });
   }
 }
 
@@ -105,7 +105,7 @@ export function validateVfsZipEntries(scope: VfsScope, entries: ReadonlyMap<stri
       const nameError = assertZipEntryNameAllowed(dirKey);
       if (nameError != null) return Result.err(nameError);
       if (bytes.byteLength > 0) {
-        return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)`));
+        return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)` }));
       }
       if (dirKey.length > 0) {
         relativeNamesForPrefixCheck.push(dirKey);
@@ -140,10 +140,10 @@ export function validateVfsZipEntries(scope: VfsScope, entries: ReadonlyMap<stri
 
   const entryCount = fileEntries.length + directoryLogicals.length;
   if (entryCount > VFS_ZIP_MAX_ENTRY_COUNT) {
-    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries`));
+    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries` }));
   }
   if (totalBytes > VFS_ZIP_MAX_UNCOMPRESSED_BYTES) {
-    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes`));
+    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes` }));
   }
 
   const files = new Map<string, string>();
@@ -151,7 +151,7 @@ export function validateVfsZipEntries(scope: VfsScope, entries: ReadonlyMap<stri
     const logical = logicalFromZipEntryRelativeToDirectory(entryName, targetDir);
     if (!logical.ok) return Result.err(logical.error);
     if (files.has(logical.value) || directoryLogicals.includes(logical.value)) {
-      return Result.err(new AppError("VFS_ZIP_DUPLICATE_PATH", `duplicate logical path: ${logical.value}`));
+      return Result.err(new AppError("VFS_ZIP_DUPLICATE_PATH", { detail: `duplicate logical path: ${logical.value}` }));
     }
     const scopeError = assertLogicalAllowed(scope, logical.value, entryName);
     if (scopeError != null) return Result.err(scopeError);

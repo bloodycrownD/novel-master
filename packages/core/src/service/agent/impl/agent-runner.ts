@@ -470,7 +470,7 @@ export class DefaultAgentRunner implements AgentRunner {
             const messageTranscriptEffects = this.deps.messageTranscriptEffects;
             if (messages == null || messageTranscriptEffects == null) {
               const missingDeps = "compaction requires messages + transcript effects";
-              throw new AppError("INFRA_INVARIANT_VIOLATION", missingDeps);
+              throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: missingDeps });
             }
             const hideStartDepth =
               await this.deps.compactionConditions!.getHideStartDepth();
@@ -787,7 +787,7 @@ export class DefaultAgentRunner implements AgentRunner {
           if (degraded != null) {
             outcomes.push({
               ok: false,
-              error: new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})`),
+              error: new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", { detail: `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})` }),
             });
             continue;
           }

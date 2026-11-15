@@ -67,7 +67,7 @@ class ForkCopySeeder {
         const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
         const missing = hashes.find((h) => !existingBlobs.has(h));
         if (missing != null) {
-          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", `vfs_content_blob 缺失且无可回退明文: ${missing}`));
+          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失且无可回退明文: ${missing}` }));
         }
       }
 

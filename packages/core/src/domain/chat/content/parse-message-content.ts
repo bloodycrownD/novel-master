@@ -28,29 +28,29 @@ type ContentError = AppError<"CHAT_INVALID_ARGUMENT">;
 /** 多处复用的字符串字段校验；失败文案统一带 label/key。 */
 function requireString(obj: Record<string, unknown>, key: string, label: string): Result<string, ContentError> {
   const v = obj[key];
-  return typeof v === "string" && v !== "" ? Result.ok(v) : Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: ${key} must be a non-empty string`));
+  return typeof v === "string" && v !== "" ? Result.ok(v) : Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: ${key} must be a non-empty string` }));
 }
 
 /** Runtime validation for untrusted in-memory {@link MessageContent} before append. */
 export function parseMessageContentValue(value: unknown): Result<MessageContent, ContentError> {
   if (!isRecord(value)) {
-    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "MessageContent must be an object"));
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "MessageContent must be an object" }));
   }
   if ("content" in value || "parts" in value) {
-    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "Legacy message content shape is not supported; use { blocks: [...] }"));
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "Legacy message content shape is not supported; use { blocks: [...] }" }));
   }
   const extraKeys = Object.keys(value).filter((k) => k !== "blocks");
   if (extraKeys.length > 0) {
-    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `MessageContent has unexpected keys: ${extraKeys.join(", ")}`));
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `MessageContent has unexpected keys: ${extraKeys.join(", ")}` }));
   }
   if (!Array.isArray(value.blocks)) {
-    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "MessageContent.blocks must be an array"));
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "MessageContent.blocks must be an array" }));
   }
 
   const blocks: ContentBlock[] = [];
   for (const [index, raw] of value.blocks.entries()) {
     if (!isRecord(raw)) {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `blocks[${index}]: must be an object`));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}]: must be an object` }));
     }
 
     switch (raw.type) {
@@ -65,7 +65,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
       case "image": {
         const source = raw.source;
         if (!isRecord(source)) {
-          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "image block: source must be an object"));
+          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "image block: source must be an object" }));
         }
         if (source.kind === "url") {
           const url = requireString(source, "url", "image url source");
@@ -87,7 +87,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
           blocks.push({ type: "image", source: { kind: "base64", mediaType: mediaType.value, data: data.value } } satisfies ImageBlock);
           continue;
         }
-        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", 'image block: source.kind must be "url" or "base64"'));
+        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: 'image block: source.kind must be "url" or "base64"' }));
       }
       case "tool_use": {
         const id = requireString(raw, "id", `blocks[${index}] tool_use`);
@@ -100,7 +100,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         }
         const input = raw.input;
         if (!isRecord(input)) {
-          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `blocks[${index}] tool_use: input must be an object`));
+          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}] tool_use: input must be an object` }));
         }
         const thinkingSignature = typeof raw.thinkingSignature === "string" && raw.thinkingSignature !== "" ? raw.thinkingSignature : undefined;
         blocks.push({
@@ -120,10 +120,10 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         }
         const content = typeof raw.content === "string" ? raw.content : "";
         if ("ok" in raw && typeof raw.ok !== "boolean") {
-          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: ok must be a boolean`));
+          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: ok must be a boolean` }));
         }
         if ("summary" in raw && typeof raw.summary !== "string") {
-          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: summary must be a string`));
+          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: summary must be a string` }));
         }
         // meta 同 summary/ok 语义：UI-only 旁路字段，允许不存在。
         // 存在时必须是 record；具名称字段类型检查，未知字段静默忽略（向前兼容）。
@@ -131,21 +131,21 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         const metaValue = raw.meta;
         if (metaValue !== undefined) {
           if (!isRecord(metaValue)) {
-            return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: meta must be an object`));
+            return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta must be an object` }));
           }
           if ("subagentSessionId" in metaValue && typeof metaValue.subagentSessionId !== "string") {
-            return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: meta.subagentSessionId must be a string`));
+            return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta.subagentSessionId must be a string` }));
           }
           const subagentSessionId = typeof metaValue.subagentSessionId === "string" && metaValue.subagentSessionId !== "" ? metaValue.subagentSessionId : undefined;
           let skillRef: SkillToolRef | undefined;
           const skillRefValue = metaValue.skillRef;
           if (skillRefValue !== undefined) {
             if (!isRecord(skillRefValue)) {
-              return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: meta.skillRef must be an object`));
+              return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta.skillRef must be an object` }));
             }
             const domain = skillRefValue.domain;
             if (domain !== "global" && domain !== "project") {
-              return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `${label}: meta.skillRef.domain must be "global" or "project"`));
+              return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta.skillRef.domain must be "global" or "project"` }));
             }
             const name = requireString(skillRefValue, "name", `${label} meta.skillRef`);
             if (!name.ok) {
@@ -179,7 +179,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         const text = typeof raw.text === "string" ? raw.text : "";
         const thinkingSignature = typeof raw.thinkingSignature === "string" && raw.thinkingSignature !== "" ? raw.thinkingSignature : undefined;
         if (text === "" && thinkingSignature == null) {
-          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `blocks[${index}] thinking: text or thinkingSignature required`));
+          return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}] thinking: text or thinkingSignature required` }));
         }
         blocks.push({
           type: "thinking",
@@ -202,7 +202,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         continue;
       }
       default:
-        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking|redacted_thinking)`));
+        return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking|redacted_thinking)` }));
     }
   }
   return Result.ok({ blocks });
@@ -214,7 +214,7 @@ export function parseMessageContent(json: string): Result<MessageContent, Conten
   try {
     parsed = JSON.parse(json);
   } catch {
-    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", "Invalid JSON in message content"));
+    return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "Invalid JSON in message content" }));
   }
   return parseMessageContentValue(parsed);
 }

@@ -48,7 +48,7 @@ export function getProtocolAdapter(
   ensureDefaults(fetchFn);
   const adapter = adapters.get(kind);
   if (!adapter) {
-    throw new AppError("INFRA_INVARIANT_VIOLATION", `No LLM protocol adapter for: ${kind}`);
+    throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: `No LLM protocol adapter for: ${kind}` });
   }
   return adapter;
 }

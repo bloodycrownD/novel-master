@@ -53,7 +53,7 @@ export async function runModel(
       }
       const saved = await rt.savedModels.findById(modelId);
       if (saved == null) {
-        throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Saved model not found: ${modelId}`, { modelId });
+        throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Saved model not found: ${modelId}`, modelId });
       }
       const provider = await rt.providers.get(saved.providerId);
       console.log(savedModelDisplayName(saved, provider.displayName));

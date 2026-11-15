@@ -25,14 +25,14 @@ export function isSavedModelUuidFormat(id: string): boolean {
 export async function assertSavedModelUuid(savedModelId: string, savedModels: SavedModelRepository): Promise<Result<SavedModel, SavedModelIdError>> {
   const trimmed = savedModelId.trim();
   if (trimmed.includes("/")) {
-    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (legacy path not accepted): ${savedModelId}`, { modelId: savedModelId }));
+    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${savedModelId}`, modelId: savedModelId }));
   }
   if (!isSavedModelUuidFormat(trimmed)) {
-    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Invalid saved model id (expected UUID): ${savedModelId}`, { modelId: savedModelId }));
+    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${savedModelId}`, modelId: savedModelId }));
   }
   const saved = await savedModels.findById(trimmed);
   if (saved == null) {
-    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Saved model not found: ${savedModelId}`, { modelId: savedModelId }));
+    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Saved model not found: ${savedModelId}`, modelId: savedModelId }));
   }
   return Result.ok(saved);
 }

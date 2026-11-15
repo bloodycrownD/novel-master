@@ -35,7 +35,7 @@ function relativeUnderPrefix(fullPath: string, prefix: string): string {
   }
   const slashSuffix = base === "/" ? base : `${base}/`;
   if (!fullPath.startsWith(slashSuffix)) {
-    throw new AppError("VFS_INVARIANT_VIOLATION", `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
+    throw new AppError("VFS_INVARIANT_VIOLATION", { detail: `[invariant] Path ${fullPath} is not under prefix ${prefix}` });
   }
   return fullPath.slice(slashSuffix.length);
 }

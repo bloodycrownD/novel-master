@@ -93,7 +93,7 @@ export class DefaultSessionService implements SessionService {
   async get(id: string): Promise<ChatSession> {
     const session = await this.deps.sessions.findById(id);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${id}`, { kind: "session", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id});
     }
     return session;
   }
@@ -107,7 +107,7 @@ export class DefaultSessionService implements SessionService {
       agentRegistry: this.deps.agentRegistry,
     });
     if (agentId == null || agentId === "") {
-      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.chat.session_create_agent_missing"});
+      throw new AppError("CHAT_INVALID_ARGUMENT", {descriptor: {key: "error.chat.session_create_agent_missing"}});
     }
     const workspaceModelId = await this.deps.state.getCurrentModelId();
     const config: SessionAgentConfig =
@@ -147,10 +147,10 @@ export class DefaultSessionService implements SessionService {
     // 父 session 校验在事务外读（对齐主 session create 的风格：校验在事务外）。
     const parent = await this.deps.sessions.findById(parentSessionId);
     if (parent == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${parentSessionId}`, { kind: "session", id: parentSessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${parentSessionId}`, kind: "session", id: parentSessionId});
     }
     if (parent.projectId !== projectId) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`);
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`});
     }
     const now = Date.now();
     const session: ChatSession = {
@@ -168,7 +168,7 @@ export class DefaultSessionService implements SessionService {
   async rename(id: string, title: string): Promise<ChatSession> {
     const trimmed = title.trim();
     if (trimmed.length === 0) {
-      throw new AppError("CHAT_INVALID_ARGUMENT", "session title must not be empty");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "session title must not be empty"});
     }
     const existing = await this.get(id);
     const updatedAtMs = Date.now();
@@ -178,7 +178,7 @@ export class DefaultSessionService implements SessionService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${id}`, { kind: "session", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id});
     }
     return { ...existing, title: trimmed, updatedAtMs };
   }
@@ -234,7 +234,7 @@ export class DefaultSessionService implements SessionService {
     );
     const deleted = await r.sessions.delete(session.id);
     if (!deleted) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${session.id}`, { kind: "session", id: session.id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${session.id}`, kind: "session", id: session.id});
     }
   }
 
@@ -270,7 +270,7 @@ export class DefaultSessionService implements SessionService {
     const json = await this.deps.sessions.getSessionAgentConfig(id);
     if (json == null) {
       // migration 后不应有 NULL；这里视为异常，提示运行 session-agent-config-v2。
-      throw new AppError("CHAT_INVALID_ARGUMENT", "session agent config missing, run migration session-agent-config-v2");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "session agent config missing, run migration session-agent-config-v2"});
     }
     return parseStoredSessionAgentConfig(json);
   }
@@ -311,7 +311,7 @@ export class DefaultSessionService implements SessionService {
       updatedAtMs
     );
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${id}`, { kind: "session", id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id});
     }
     // 会话级「切 Agent / 切模型」改变了 prompt 的 system 段与 layout：旧的
     // api 占用按 savedModelId 指纹兜不住 agentId 变更，会以 api 口径（跳掉
@@ -406,7 +406,7 @@ export class DefaultSessionService implements SessionService {
   private async requireProject(projectId: string): Promise<void> {
     const project = await this.deps.projects.findById(projectId);
     if (project == null) {
-      throw new AppError("CHAT_NOT_FOUND", `project not found: ${projectId}`, { kind: "project", id: projectId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${projectId}`, kind: "project", id: projectId});
     }
   }
 }

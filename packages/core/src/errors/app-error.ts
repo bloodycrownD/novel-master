@@ -8,8 +8,7 @@
  *
  * 构造统一走 `new AppError(key, params?, options?)`：params 的成员名与类型由
  * {@link ErrorParamsMap} 编译期校验，`detail` 覆盖动态文案，`descriptor`（或
- * params 里第一个 descriptor 形状的成员）接管该次错误的 messageKey；旧四参
- * 签名 `(key, message?, details?, options?)` 过渡期保留（一期 Step 11 前删除）。
+ * params 里第一个 descriptor 形状的成员）接管该次错误的 messageKey。
  *
  * @module errors/app-error
  */
@@ -33,13 +32,14 @@ export interface AppErrorWire {
 /**
  * 每个 key 的 message 参数形态；未登记 = 无参数（只剩 detail/descriptor 通道）。
  *
- * 字段名与既有 details 的实际命名逐字一致（camelCase，不改名）；可选性只给
- * 真可选的域字段，message 组装必需项必填——缺参会渲染出字面 `{placeholder}`。
+ * 字段名与既有 details 的实际命名逐字一致（camelCase，不改名）；可选性按既有
+ * 调用点实际携带的字段给出（个别既有调用点不带 path，故 `VFS_NOT_FOUND.path`
+ * 放宽为可选），message 组装必需项在能保证时必填——缺参会渲染出字面 `{placeholder}`。
  */
 export interface ErrorParamsMap {
   AGENT_NOT_FOUND: {readonly agentId: string};
   AGENT_INVALID_MODEL: {readonly modelId?: string};
-  VFS_NOT_FOUND: {readonly path: string};
+  VFS_NOT_FOUND: {readonly path?: string; readonly entryId?: number; readonly version?: number; readonly missing?: readonly {readonly entryId: number; readonly version: number}[]; readonly cause?: unknown};
   VFS_REPLACE_NOT_FOUND: {readonly path: string; readonly oldStringLength: number; readonly longestCommonSubstring: string; readonly lcsLength: number; readonly lcsOccurrences: number; readonly oldStringPreview?: string; readonly fileHintPreview?: string};
   VFS_DIRECTORY_NOT_EMPTY: {readonly path: string};
   VFS_INVALID_PATH: {readonly path: string; readonly reason?: string | CoreMessageDescriptor};
@@ -49,21 +49,36 @@ export interface ErrorParamsMap {
   VFS_NOT_A_DIRECTORY: {readonly path: string};
   VFS_PARENT_NOT_FOUND: {readonly path: string};
   VFS_INVALID_PATTERN: {readonly pattern: string};
-  VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: {readonly spec: string};
-  TOOL_SEARCH_TEMPLATE_INVALID: {readonly reason: string};
+  VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: {readonly spec?: string};
+  VFS_CHARACTER_CARD_IMPORT_FAILED: {readonly base?: string};
+  VFS_CONTENT_CORRUPT: {readonly format?: string; readonly memberCount?: number; readonly byteLength?: number; readonly headerLength?: number; readonly offset?: number; readonly length?: number; readonly segmentLength?: number; readonly segmentIndex?: number; readonly targetSize?: number; readonly limit?: number; readonly phase?: string; readonly packId?: number; readonly label?: string; readonly actualType?: string};
+  VFS_CONTENT_UNSUPPORTED_FORMAT: {readonly format?: string; readonly encoding?: string; readonly label?: string};
+  VFS_CONTENT_BLOB_MISSING: {readonly contentHash?: string};
+  VFS_RESTORE_FAILED: {readonly causes?: readonly unknown[]};
+  VFS_ZIP_INVALID_UTF8: {readonly byteLength?: number};
+  TOOL_SEARCH_TEMPLATE_INVALID: {readonly reason?: string};
   TOOL_NOT_FOUND: {readonly toolName: string};
   TOOL_CONFLICT: {readonly toolName: string};
   TOOL_INVALID_ARGUMENT: {readonly toolName: string; readonly issues?: readonly ZodIssue[]};
   TOOL_FAILED: {readonly toolName: string; readonly cause?: unknown};
   TOOL_FORBIDDEN: {readonly toolName: string; readonly path: string};
-  PROVIDER_NOT_FOUND: {readonly providerId: string};
-  PROVIDER_SAVED_MODEL_IN_USE: {readonly modelName: string; readonly blockingRefs: string};
+  PROVIDER_NOT_FOUND: {readonly providerId?: string; readonly modelId?: string};
+  PROVIDER_SAVED_MODEL_IN_USE: {readonly modelName?: string; readonly blockingRefs?: string; readonly modelId?: string; readonly providerId?: string};
+  PROVIDER_API_KEY_NOT_SET: {readonly providerId?: string};
+  PROVIDER_BUILTIN_PROVIDER: {readonly providerId?: string};
+  PROVIDER_MODEL_NOT_SAVED: {readonly modelId?: string};
+  PROVIDER_INVALID_MODEL_NAME: {readonly modelId?: string};
+  PROVIDER_INVALID_SAVED_MODEL_ID: {readonly modelId?: string};
+  PROVIDER_INVALID_ARGUMENT: {readonly modelId?: string; readonly providerId?: string; readonly issues?: readonly ZodIssue[]};
+  PROVIDER_HTTP_ERROR: {readonly providerId?: string};
   CHAT_NOT_FOUND: {readonly kind: string; readonly id: string; readonly messageId?: string; readonly projectId?: string; readonly sessionId?: string};
-  SKILL_INVALID_NAME: {readonly skillName: string; readonly reason: string | CoreMessageDescriptor};
+  CHAT_INVALID_ARGUMENT: {readonly path?: string};
+  CHAT_MESSAGE_CORRUPT: {readonly messageId?: string; readonly field?: string};
+  SKILL_INVALID_NAME: {readonly skillName: string; readonly reason?: string | CoreMessageDescriptor};
   SKILL_INVALID_PATH: {readonly path: string; readonly reason?: string | CoreMessageDescriptor};
   SKILL_MISSING_DOMAIN: {readonly skillName: string};
   SKILL_MISSING_PROJECT_ID: {readonly skillName: string};
-  SKILL_NOT_FOUND: {readonly skillName: string; readonly path?: string};
+  SKILL_NOT_FOUND: {readonly skillName: string; readonly path?: string; readonly domain?: string};
   SKILL_BUILTIN: {readonly skillName: string};
   SKILL_BUILTIN_NAME_RESERVED: {readonly skillName: string};
   SKILL_BUILTIN_RENAME: {readonly skillName: string};
@@ -73,13 +88,20 @@ export interface ErrorParamsMap {
   SESSION_FS_RESTORE_REVISION_MISSING: {readonly logicalPath: string; readonly revisionVersion: number; readonly sessionId?: string; readonly messageId?: string};
   SESSION_FS_ROLLBACK_NO_CHECKPOINT: {readonly messageId?: string; readonly sessionId?: string};
   SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED: {readonly sessionId?: string; readonly messageId?: string; readonly logicalPath?: string};
-  SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED: {readonly missingLogicalPaths: string; readonly sessionId?: string; readonly messageId?: string};
+  SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET: {readonly sessionId?: string; readonly messageId?: string};
+  SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED: {readonly missingLogicalPaths: readonly string[]; readonly sessionId?: string; readonly messageId?: string};
   SESSION_FS_ROLLBACK_CONFLICT: {readonly expectedMessageCount: number; readonly actualMessageCount: number; readonly sessionId?: string; readonly messageId?: string};
   SESSION_FS_ROLLBACK_TAIL_DRIFT: {readonly expectedMessageCount: number; readonly actualMessageCount: number; readonly sessionId?: string; readonly messageId?: string};
   PROMPT_INVALID_YAML: {readonly offset?: number};
   PROMPT_INVALID_BLOCK: {readonly offset?: number};
   PROMPT_UNKNOWN_FIELD: {readonly offset?: number};
   PROMPT_UNSUPPORTED_SYNTAX: {readonly offset?: number};
+  PROMPT_INVALID_MACRO: {readonly cause?: unknown};
+  SMART_SORT_RULE_INVALID_ARGUMENT: {readonly ruleId?: string; readonly issues?: readonly ZodIssue[]};
+  SMART_SORT_RULE_INVALID_PATTERN: {readonly ruleId?: string};
+  SMART_SORT_RULE_NOT_FOUND: {readonly ruleId?: string};
+  SMART_SORT_RULE_CONFLICT: {readonly ruleId?: string};
+  SMART_SORT_RULE_BUILTIN_PROTECTED: {readonly ruleId?: string};
   KKV_NOT_FOUND: {readonly module: string; readonly key: string};
   PREFERENCES_INVALID_VALUE: {readonly key: string; readonly expectedType: string; readonly actualValue: string};
 }
@@ -141,16 +163,9 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
   readonly messageParams?: MessageParams;
   readonly details?: Record<string, unknown>;
 
-  constructor(key: K, params?: ErrorParams<K>, options?: ErrorOptions);
-  /** 过渡期旧签名：message 为字符串时塞进 params.detail，为 descriptor 时作为 descriptor 成员。 */
-  constructor(key: K, message?: string | CoreMessageDescriptor, details?: Record<string, unknown>, options?: ErrorOptions);
-  constructor(key: K, paramsOrMessage?: ErrorParams<K> | string | CoreMessageDescriptor, detailsOrOptions?: Record<string, unknown> | ErrorOptions, legacyOptions?: ErrorOptions) {
-    const legacy = typeof paramsOrMessage === "string" || isCoreMessageDescriptor(paramsOrMessage);
-    const params = (legacy ? {...(typeof paramsOrMessage === "string" ? {detail: paramsOrMessage} : {descriptor: paramsOrMessage}), ...(detailsOrOptions as Record<string, unknown> | undefined)} : paramsOrMessage) as ErrorParams<K> | undefined;
-    const options = (legacy ? legacyOptions : detailsOrOptions) as ErrorOptions | undefined;
+  constructor(key: K, params?: ErrorParams<K>, options?: ErrorOptions) {
     const def: ErrorCodeDef = ErrorCodes[key];
-    // 旧签名的字符串 message 不得从 details 里「捡」descriptor（既有行为：字符串通道不带 messageKey）。
-    const descriptor = typeof paramsOrMessage === "string" ? undefined : firstDescriptorOf(params);
+    const descriptor = firstDescriptorOf(params);
     super(params?.detail ?? def.desc, {cause: (params as {cause?: unknown} | undefined)?.cause ?? options?.cause});
     this.name = key;
     this.key = key;
@@ -160,7 +175,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
     // descriptor 命中时 messageParams 只取 descriptor.params（为空即 undefined，与旧 VfsError
     // wire 一致）；不再回退 toSnakeCase(params)——那会把 descriptor 对象自身当参数透传出去。
     this.messageParams = descriptor != null ? descriptor.params : (params == null ? undefined : toSnakeCase(params as Record<string, unknown>) as MessageParams);
-    this.details = legacy ? detailsOrOptions as Record<string, unknown> | undefined : params as Record<string, unknown> | undefined;
+    this.details = params as Record<string, unknown> | undefined;
   }
 
   toJSON(): AppErrorWire {

@@ -138,7 +138,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
 
 **`cause` 双通道**：`ToolError` 的 cause 现在存在 `Error.cause`（`tool-errors.ts:59-62` 经 `options` 传入），不在 `details`。迁移后构造器把 `params.cause` 同时写进 `Error.cause`（见上面的 `super(..., { cause })`）与 `details.cause`，两条消费路径都不破：`format-ipc-error.ts:112` / mobile `format-error.ts:36` / `format-vfs-error-for-user.ts:53` 读 `error.cause`，`useChatComposerController.ts:676` / `agent-run.service.ts:92` 读 `(err as Error).cause`。
 
-**旧签名重载（Step 2-10 过渡期）**：保留一个兼容重载 `(key, message?: string | CoreMessageDescriptor, details?: Record<string, unknown>, options?: ErrorOptions)`，内部转调新实现（`message` 为字符串时塞进 `params.detail`；为 descriptor 时作为 descriptor 成员）。Step 11 前删除。
+**旧签名重载（Step 2-10 过渡期）**：Step 11 已删除。
 
 7 个类的字符串 code → 新 key 映射：
 
@@ -271,7 +271,7 @@ packages/core/src/errors/
 - Step 9 — phase-guards — blocking: yes — qa: auto：全仓 `instanceof` 改 `isAppError` / `isVfsError` / `isSessionFsError`；core 内约 40 处 `isVfsError(error, "CODE")` 改 `isAppError(error, "VFS_KEY")`；renderer `ConversationPanel.tsx:736-749` 的 `ROLLBACK_*` 分支改新 key（**必须在本期完成**，否则一期末回滚 backfill 弹窗静默失效）；T-G1。
 - Step 10 — phase-format-chains — blocking: yes — qa: auto：三条链删类分支、保留 ToolError cause / Provider 文案 / TdbcError / AgentTurnError / SkspError 分支；`TYPED_ERROR_NAMES` 与 `missingLogicalPaths` 搬家；T-F3。
 - Step 11 — phase-export-surface — blocking: yes — qa: auto：public 面删退役类与工厂重导出（含 `vfs.ts` / `provider.ts` / `prompt.ts`）；`test/package-exports/` 7 个 allowlist 快照 + main-entry 快照更新；T-E1。
-- Step 12 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + core/desktop/mobile/cli 测试 + `check-style.mjs --changed` 三段 PASS + **一期 grep 门**（`grep -rn "extends Error" packages/core/src/errors/ | grep -v "class AppError"` 为空；`grep -rn "return new AppError" packages/core/src/errors/` 仅 `skillNotFoundInDomain`）。
+- Step 12 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + core/desktop/mobile/cli 测试 + `check-style.mjs --changed` 三段 PASS + **一期 grep 门**（`grep -rnE "class +[A-Za-z0-9_]+.*extends +Error" packages/core/src/errors/ | grep -v "class AppError"` 为空——注意必须是这条正则，朴素的 `grep "extends Error"` 会把 `K extends ErrorKey` 这类泛型约束误命中成 2 条；`grep -rn "return new AppError" packages/core/src/errors/` 也为空——`skillNotFoundInDomain` 收官时按 nm-code-style 单点内联进了 `skills.service.ts` 的 `toWriteNotFoundError`）。
 
 依赖：1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12。Step 3 与 4 可互换；Step 4-8 各自独立可提交（都在 Step 2 的新构造器就绪后）。
 

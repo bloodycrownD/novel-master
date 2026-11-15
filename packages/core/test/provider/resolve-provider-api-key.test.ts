@@ -64,7 +64,7 @@ describe("resolveProviderApiKey", () => {
     assert.equal(resolved.ok, false);
     if (!resolved.ok) {
       assert.equal(resolved.error.key, "PROVIDER_API_KEY_NOT_SET");
-      assert.deepEqual(resolved.error.details, { providerId: BUILTIN_PROVIDER_UUID_OPENAI });
+      assert.deepEqual(resolved.error.details, { providerId: BUILTIN_PROVIDER_UUID_OPENAI, detail: `API key not set for provider ${BUILTIN_PROVIDER_UUID_OPENAI}. Configure it in provider settings.` });
     }
   });
 });

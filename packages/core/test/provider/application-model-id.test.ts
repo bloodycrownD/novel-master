@@ -18,7 +18,7 @@ describe("application model id", () => {
     assert.equal(parsed.ok, false);
     if (!parsed.ok) {
       assert.equal(parsed.error.key, "PROVIDER_INVALID_ARGUMENT");
-      assert.deepEqual(parsed.error.details, { modelId: "nope" });
+      assert.deepEqual(parsed.error.details, { modelId: "nope", detail: "Invalid application model id: nope" });
     }
   });
 

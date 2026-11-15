@@ -71,7 +71,7 @@ function toMessageParams(message: ChatMessageData): unknown[] {
 /** 存储行损坏：把底层解析失败收成可区分的 `CHAT_MESSAGE_CORRUPT`。 */
 function corruptMessageRow(row: Row, field: string, cause: unknown): AppError<"CHAT_MESSAGE_CORRUPT"> {
   const detail = cause instanceof Error ? cause.message : String(cause);
-  return new AppError("CHAT_MESSAGE_CORRUPT", `chat_message ${String(row.id)} ${field} 损坏：${detail}`, { messageId: String(row.id), field });
+  return new AppError("CHAT_MESSAGE_CORRUPT", { detail: `chat_message ${String(row.id)} ${field} 损坏：${detail}`, messageId: String(row.id), field });
 }
 
 function rowToMessage(row: Row): ChatMessage {

@@ -108,7 +108,7 @@ export function blocksToOpenAiMessageContent(
         });
         break;
       case "thinking":
-        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", "OpenAI outbound messages must not include thinking blocks; strip them before mapping");
+        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "OpenAI outbound messages must not include thinking blocks; strip them before mapping" });
       default:
         break;
     }

@@ -204,28 +204,33 @@ describe("AppError", () => {
     assert.equal(error.message, ErrorCodes.AGENT_DOOM_LOOP.desc);
   });
 
-  it("保留运行期 message、details 与 cause（旧签名过渡期行为不变）", () => {
+  it("运行期 message、details 与 cause 完整保留（detail 通道 + options.cause）", () => {
     const cause = new Error("boom");
-    const error = new AppError(
-      "AGENT_DOOM_LOOP",
-      'Doom loop: tool "read" invoked 3 times with identical input',
-      { toolName: "read" },
-      { cause }
-    );
+    const error = new AppError("AGENT_DOOM_LOOP", { detail: 'Doom loop: tool "read" invoked 3 times with identical input' }, { cause });
     assert.equal(error.message, 'Doom loop: tool "read" invoked 3 times with identical input');
-    assert.deepEqual(error.details, { toolName: "read" });
+    assert.deepEqual(error.details, { detail: 'Doom loop: tool "read" invoked 3 times with identical input' });
     assert.equal(error.cause, cause);
     assert.equal(error.messageKey, undefined);
   });
 
   it("toJSON 输出跨进程形状", () => {
-    const error = new AppError("AGENT_DOOM_LOOP", "boom", { traceId: "t1" });
+    const error = new AppError("AGENT_DOOM_LOOP", { detail: "boom" });
     assert.deepEqual(error.toJSON(), {
       key: "AGENT_DOOM_LOOP",
       code: ErrorCodes.AGENT_DOOM_LOOP.code,
       desc: ErrorCodes.AGENT_DOOM_LOOP.desc,
       message: "boom",
-      details: { traceId: "t1" },
+      details: { detail: "boom" },
+    });
+    const withTemplate = new AppError("TOOL_NOT_FOUND", { toolName: "read", detail: "boom" });
+    assert.deepEqual(withTemplate.toJSON(), {
+      key: "TOOL_NOT_FOUND",
+      code: ErrorCodes.TOOL_NOT_FOUND.code,
+      desc: ErrorCodes.TOOL_NOT_FOUND.desc,
+      message: "boom",
+      messageKey: "error.tool.not_found",
+      messageParams: { tool_name: "read", detail: "boom" },
+      details: { toolName: "read", detail: "boom" },
     });
   });
 
@@ -277,27 +282,21 @@ describe("AppError", () => {
     new AppError("CHAT_NOT_FOUND", { kind: "session" });
   });
 
-  it("旧签名：descriptor 通道行为不变（messageKey/messageParams 来自 descriptor，details 原样）", () => {
-    const error = new AppError(
-      "SESSION_FS_RESTORE_REVISION_MISSING",
-      { key: "error.session_fs.restore_revision_missing", params: { logical_path: "/docs/a.md", revision_version: 3 } },
-      { logicalPath: "/docs/a.md", revisionVersion: 3 }
-    );
+  it("descriptor 通道：messageKey/messageParams 只取 descriptor，params 原样落 details", () => {
+    const descriptor = { key: "error.session_fs.restore_revision_missing" as const, params: { logical_path: "/docs/a.md", revision_version: 3 } };
+    const error = new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { logicalPath: "/docs/a.md", revisionVersion: 3, descriptor });
     assert.equal(error.messageKey, "error.session_fs.restore_revision_missing");
     assert.deepEqual(error.messageParams, { logical_path: "/docs/a.md", revision_version: 3 });
     assert.equal(error.message, ErrorCodes.SESSION_FS_RESTORE_REVISION_MISSING.desc);
-    assert.deepEqual(error.details, { logicalPath: "/docs/a.md", revisionVersion: 3 });
+    assert.deepEqual(error.details, { logicalPath: "/docs/a.md", revisionVersion: 3, descriptor });
   });
 
-  it("旧签名：字符串 message 不从 details 捡 descriptor；带码表模板时 messageParams 含 detail 与字段", () => {
-    const error = new AppError("AGENT_NOT_FOUND", "agent not found: ag-1", { agentId: "ag-1" });
+  it("detail 通道：message 取 detail；带码表模板时 messageParams 含 detail 与字段", () => {
+    const error = new AppError("AGENT_NOT_FOUND", { agentId: "ag-1", detail: "agent not found: ag-1" });
     assert.equal(error.message, "agent not found: ag-1");
     assert.equal(error.messageKey, "error.agent.not_found");
     assert.deepEqual(error.messageParams, { detail: "agent not found: ag-1", agent_id: "ag-1" });
-    assert.deepEqual(error.details, { agentId: "ag-1" });
-    // details 里 descriptor 形状的成员不改变字符串通道。
-    const withShaped = new AppError("AGENT_DOOM_LOOP", "loop", { payload: { key: "error.agent.not_found" } });
-    assert.equal(withShaped.messageKey, undefined);
+    assert.deepEqual(error.details, { agentId: "ag-1", detail: "agent not found: ag-1" });
   });
 
   it("firstDescriptorOf 契约：descriptor 成员优先，其次第一个 descriptor 形状的顶层成员", () => {

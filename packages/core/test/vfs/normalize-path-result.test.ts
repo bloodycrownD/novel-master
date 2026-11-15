@@ -73,7 +73,7 @@ describe("normalizePath（Result 型）", () => {
     assert.equal(result.error.code, 102004);
     assert.equal(result.error.desc, "invalid vfs path");
     assert.equal(result.error.message, "Invalid path : path must be a non-empty string");
-    assert.deepEqual(result.error.details, { path: "" });
+    assert.deepEqual(result.error.details, { path: "", detail: "Invalid path : path must be a non-empty string" });
     assert.equal(result.error.messageKey, undefined);
   });
 
@@ -82,14 +82,14 @@ describe("normalizePath（Result 型）", () => {
     assert.equal(relative.ok, false);
     if (!relative.ok) {
       assert.equal(relative.error.message, "Invalid path relative: path must start with /");
-      assert.deepEqual(relative.error.details, { path: "relative" });
+      assert.deepEqual(relative.error.details, { path: "relative", detail: "Invalid path relative: path must start with /" });
     }
 
     const escape = normalizePath("/../x");
     assert.equal(escape.ok, false);
     if (!escape.ok) {
       assert.equal(escape.error.message, "Invalid path /../x: path escapes above root");
-      assert.deepEqual(escape.error.details, { path: "/../x" });
+      assert.deepEqual(escape.error.details, { path: "/../x", detail: "Invalid path /../x: path escapes above root" });
     }
   });
 

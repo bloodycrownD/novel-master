@@ -76,10 +76,10 @@ function assertZipArchive(bytes: Uint8Array): void {
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
   if (!hasLocalHeader) {
-    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', `not a ZIP archive (${bytes.length} bytes)`);
+    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `not a ZIP archive (${bytes.length} bytes)` });
   }
   if (findZipEocdOffset(bytes) < 0) {
-    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)`);
+    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)` });
   }
 }
 
@@ -124,9 +124,9 @@ export async function pickZipFileBytes(): Promise<Uint8Array | null> {
     mimeTypes: [types.zip],
     localFileName: 'import.zip',
     buildCopyError: copyError =>
-      new AppError('VFS_ZIP_INVALID_ARCHIVE', copyError ?? 'failed to copy picked ZIP into app cache'),
+      new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: copyError ?? 'failed to copy picked ZIP into app cache' }),
     buildMissingError: fsPath =>
-      new AppError('VFS_ZIP_INVALID_ARCHIVE', `ZIP file not found at ${fsPath}`),
+      new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `ZIP file not found at ${fsPath}` }),
   });
   if (bytes == null) {
     return null;

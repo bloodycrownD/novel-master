@@ -28,20 +28,20 @@ export function parseVfsZip(zipBytes: Uint8Array, limits: VfsZipLimits = DEFAULT
   try {
     raw = unzipSync(zipBytes);
   } catch {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", "failed to read ZIP archive"));
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: "failed to read ZIP archive" }));
   }
 
   // 事后判限：key 数 + 总体积。这条路径**无法增量闸**（`unzipSync` 一次解完整包），
   // 所以只能在事后判；至少不让超限结果**进入**上层（进而落库）。
   const names = Object.keys(raw);
   if (names.length > limits.maxEntryCount) {
-    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP entry count ${names.length} exceeds limit ${limits.maxEntryCount}`));
+    return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP entry count ${names.length} exceeds limit ${limits.maxEntryCount}` }));
   }
   let totalBytes = 0;
   for (const name of names) {
     totalBytes += raw[name]!.length;
     if (totalBytes > limits.maxUncompressedBytes) {
-      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", `ZIP uncompressed size ${totalBytes} exceeds limit ${limits.maxUncompressedBytes}`));
+      return Result.err(new AppError("VFS_ZIP_PAYLOAD_TOO_LARGE", { detail: `ZIP uncompressed size ${totalBytes} exceeds limit ${limits.maxUncompressedBytes}` }));
     }
   }
   return Result.ok(new Map(Object.entries(raw)));

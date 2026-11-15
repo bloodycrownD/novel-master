@@ -33,17 +33,17 @@ export async function importCharacterCard(
     buildTooLargeError: sizeBytes =>
       new AppError(
         'VFS_CHARACTER_CARD_TOO_LARGE',
-        `角色卡文件过大：${sizeBytes} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`,
+        { detail: `角色卡文件过大：${sizeBytes} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入` },
       ),
     buildCopyError: copyError =>
       new AppError(
         'VFS_CHARACTER_CARD_UNRECOGNIZED',
-        copyError ?? '无法读取所选角色卡文件',
+        { detail: copyError ?? '无法读取所选角色卡文件' },
       ),
     buildMissingError: fsPath =>
       new AppError(
         'VFS_CHARACTER_CARD_UNRECOGNIZED',
-        `角色卡文件不存在：${fsPath}`,
+        { detail: `角色卡文件不存在：${fsPath}` },
       ),
   });
   if (bytes == null) {

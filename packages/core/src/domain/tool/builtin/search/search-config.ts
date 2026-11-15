@@ -420,7 +420,7 @@ function validateTemplateForSave(raw: unknown): Result<SearchEngineTemplate, App
   const validated = validateSearchEngineTemplate(raw);
   if (!validated.ok) return validated;
   if (findPlaintextSecrets(validated.value.paramHint).length === 0) return Result.ok(validated.value);
-  return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_secret_detected", params: { field: "paramHint" } }));
+  return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_secret_detected", params: { field: "paramHint" } } }));
 }
 
 /** 实例地址写入值归一：缺省 / 空白 = 清除（null）；非空非法 = err；合法 = 归一地址。 */
@@ -428,15 +428,12 @@ function normalizeBaseUrlForSave(baseUrl: string | undefined): Result<string | n
   if (baseUrl == null || baseUrl.trim().length === 0) return Result.ok(null);
   const normalized = normalizeEngineBaseUrl(baseUrl);
   if (normalized != null) return Result.ok(normalized);
-  return Result.err(new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { key: "error.tool.search_searxng_base_url_invalid" }));
+  return Result.err(new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: { key: "error.tool.search_searxng_base_url_invalid" } }));
 }
 
 /** 引擎未知的统一写路径错误（key `error.tool.search_engine_not_found`）。 */
 function engineNotFound(engineId: string): AppError<"TOOL_SEARCH_INVALID_ARGUMENT"> {
-  return new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {
-    key: "error.tool.search_engine_not_found",
-    params: { engine: engineId },
-  });
+  return new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_engine_not_found", params: {engine: engineId}} });
 }
 
 /**
@@ -493,9 +490,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       if (!state.order.includes(engineId)) throw engineNotFound(engineId);
       const trimmed = apiKey.trim();
       if (trimmed.length === 0)
-        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {
-          key: "error.tool.search_api_key_required",
-        });
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_api_key_required"} });
       await secretStore.set(searchApiKeyRef(engineId), trimmed);
     },
     async clearEngineKey(engineId) {
@@ -509,10 +504,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       const seen = new Set<string>();
       for (const engineId of order) {
         if (!knownIds.has(engineId) || seen.has(engineId))
-          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", {
-            key: "error.tool.search_engine_order_invalid",
-            params: { order: JSON.stringify(order) },
-          });
+          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", { descriptor: {key: "error.tool.search_engine_order_invalid", params: {order: JSON.stringify(order)}} });
         seen.add(engineId);
       }
       await writeKkv(KEY_ENGINE_ORDER_V2, order);
@@ -536,26 +528,17 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
     async createCustomEngine(input) {
       const { def } = input;
       if (!CUSTOM_ENGINE_ID_PATTERN.test(def.id))
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", {
-          key: "error.tool.search_template_invalid",
-          params: { reason: `invalid custom engine id: ${def.id}` },
-        });
+        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `invalid custom engine id: ${def.id}`}} });
       const name = def.name.trim();
       if (name.length === 0)
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", {
-          key: "error.tool.search_template_invalid",
-          params: { reason: "custom engine name is required" },
-        });
+        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} });
       const template = validateTemplateForSave(def.template);
       if (!template.ok) throw template.error;
       const baseUrl = normalizeBaseUrlForSave(input.baseUrl);
       if (!baseUrl.ok) throw baseUrl.error;
       const state = await readEngineState(kkv);
       if (state.customEngines.some((existing) => existing.id === def.id))
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", {
-          key: "error.tool.search_template_invalid",
-          params: { reason: `duplicate custom engine id: ${def.id}` },
-        });
+        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: `duplicate custom engine id: ${def.id}`}} });
       const apiKey = input.apiKey?.trim();
       const customEngine: CustomEngineDef = {
         id: def.id,
@@ -577,10 +560,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       const template = validated.value;
       const name = input.name == null ? (input.template == null ? existing.name : template.name) : input.name.trim();
       if (name.length === 0)
-        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", {
-          key: "error.tool.search_template_invalid",
-          params: { reason: "custom engine name is required" },
-        });
+        throw new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: {key: "error.tool.search_template_invalid", params: {reason: "custom engine name is required"}} });
       // 地址校验必须在任何写入之前（保存路径失败不产生半写状态）。
       const baseUrl = input.baseUrl == null ? undefined : normalizeBaseUrlForSave(input.baseUrl);
       if (baseUrl != null && !baseUrl.ok) throw baseUrl.error;

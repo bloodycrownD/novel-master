@@ -135,7 +135,7 @@ export function engineApiErrorMessage(engine: string, status: number, body: stri
  * search-tool 只读 message 聚合成 ToolError，不按 key 分支。
  */
 export function engineFailed(message: string): AppError<"TOOL_SEARCH_FAILED"> {
-  return new AppError("TOOL_SEARCH_FAILED", message);
+  return new AppError("TOOL_SEARCH_FAILED", { detail: message });
 }
 
 /**
@@ -236,7 +236,7 @@ function unknownPlaceholderIn(text: string): string | null {
  * `error.tool.search_secret_detected`（params 带字段名）。
  */
 export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineTemplate, SearchTemplateValidationError> {
-  const invalid = (reason: string) => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_template_invalid", params: { reason } }));
+  const invalid = (reason: string) => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_template_invalid", params: { reason } } }));
   if (!isRecord(raw)) return invalid("expected an object");
 
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
@@ -316,7 +316,7 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
     })),
   ];
   for (const { field, text } of secretFields) {
-    if (findPlaintextSecrets(text).length > 0) return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { key: "error.tool.search_secret_detected", params: { field } }));
+    if (findPlaintextSecrets(text).length > 0) return Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_secret_detected", params: { field } } }));
   }
 
   return Result.ok({

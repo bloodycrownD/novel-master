@@ -13,7 +13,7 @@ type ProviderLogicError = AppError<"PROVIDER_INVALID_ARGUMENT">;
 export function parseApplicationModelId(modelId: string): Result<{ providerId: string; vendorModelId: string }, ProviderLogicError> {
   const slash = modelId.indexOf("/");
   if (slash <= 0 || slash === modelId.length - 1) {
-    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", `Invalid application model id: ${modelId}`, { modelId }));
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid application model id: ${modelId}`, modelId }));
   }
   return Result.ok({ providerId: modelId.slice(0, slash), vendorModelId: modelId.slice(slash + 1) });
 }

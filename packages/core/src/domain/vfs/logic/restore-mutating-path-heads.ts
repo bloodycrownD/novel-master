@@ -43,7 +43,7 @@ export class MutatingPathRestoreCompositeError extends AppError<"VFS_RESTORE_FAI
   readonly causes: readonly unknown[];
 
   constructor(causes: readonly unknown[]) {
-    super("VFS_RESTORE_FAILED", "mutating path restore failed", { causes });
+    super("VFS_RESTORE_FAILED", { detail: "mutating path restore failed", causes });
     this.name = "MutatingPathRestoreCompositeError";
     this.causes = causes;
   }

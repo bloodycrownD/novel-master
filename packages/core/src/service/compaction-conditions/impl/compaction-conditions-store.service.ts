@@ -73,7 +73,7 @@ function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
 
 function rethrowDecodeError(error: unknown): never {
   if (isAppError(error, "CONFIG_DECODE_INVALID_SCHEMA")) {
-    throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", error.message);
+    throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
   }
   throw error;
 }
@@ -117,7 +117,7 @@ export class DefaultCompactionConditionsStore
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch (error) {
-      throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}`);
+      throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}` });
     }
     if (isV2Document(parsed)) {
       // v2 → v3 → v4 两步迁移：先升到 v3 形态，再补 hideStartDepth 升 v4。

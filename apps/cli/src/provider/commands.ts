@@ -26,12 +26,12 @@ function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string,
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", "Invalid --headers JSON object");
+      throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON object"});
     }
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof v !== "string") {
-        throw new AppError("PROVIDER_INVALID_ARGUMENT", `Header ${k} must be a string`);
+        throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: `Header ${k} must be a string`});
       }
       out[k] = v;
     }
@@ -40,7 +40,7 @@ function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string,
     if (e instanceof AppError) {
       throw e;
     }
-    throw new AppError("PROVIDER_INVALID_ARGUMENT", "Invalid --headers JSON");
+    throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON"});
   }
 }
 
@@ -134,7 +134,7 @@ export async function runProvider(
       if (flags.has("name")) {
         const name = flagString(flags, "name") ?? "";
         if (name.trim() === "") {
-          throw new AppError("PROVIDER_INVALID_ARGUMENT", "displayName 不能为空");
+          throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "displayName 不能为空"});
         }
         patch.displayName = name;
       }

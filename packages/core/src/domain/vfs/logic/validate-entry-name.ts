@@ -60,7 +60,7 @@ export function assertValidVfsEntryName(normalizedPath: string): Result<void, Vf
   const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
   const result = validateVfsEntryName(name);
   if (!result.ok) {
-    return Result.err(new AppError("VFS_INVALID_NAME", result.reason, { path: name }));
+    return Result.err(new AppError("VFS_INVALID_NAME", { descriptor: result.reason, path: name }));
   }
   return Result.ok(undefined);
 }

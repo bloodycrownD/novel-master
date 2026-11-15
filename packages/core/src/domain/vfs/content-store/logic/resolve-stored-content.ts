@@ -55,5 +55,5 @@ async function resolveActiveFilePlainContent(contentStore: VfsContentStore, fiel
     // 迁移窗口 / 遗留行：读旧明文
     return Result.ok(fields.content);
   }
-  return Result.err(new AppError("VFS_CONTENT_CORRUPT", "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL"));
+  return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL" }));
 }

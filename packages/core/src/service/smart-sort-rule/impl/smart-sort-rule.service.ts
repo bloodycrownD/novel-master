@@ -100,7 +100,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         break;
       }
     }
-    if (ruleId == null) throw new AppError("SMART_SORT_RULE_CONFLICT", "Failed to generate a unique rule id");
+    if (ruleId == null) throw new AppError("SMART_SORT_RULE_CONFLICT", {detail: "Failed to generate a unique rule id"});
     const now = Date.now();
     const sortOrder = await this.rules().nextSortOrder();
     const rule: SmartSortRule = {
@@ -149,7 +149,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
   async deleteRule(ruleId: string): Promise<void> {
     const rule = await this.getRuleOrThrow(ruleId);
     if (isBuiltinSmartSortRuleId(rule.ruleId)) {
-      throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, { ruleId });
+      throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", {detail: `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, ruleId});
     }
     await this.rules().delete(rule.ruleId);
   }
@@ -159,7 +159,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     for (const ruleId of ruleIds) {
       const rule = await this.getRuleOrThrow(ruleId);
       if (isBuiltinSmartSortRuleId(rule.ruleId)) {
-        throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, { ruleId });
+        throw new AppError("SMART_SORT_RULE_BUILTIN_PROTECTED", {detail: `Built-in rule cannot be deleted (disable it instead): ${ruleId}`, ruleId});
       }
     }
     // 逐条 delete 包一条事务：中途失败不留半删状态。
@@ -203,9 +203,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       for (const ruleId of ruleIds) {
         const existing = await rules.find(ruleId);
         if (existing == null) {
-          throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-            ruleId,
-          });
+          throw new AppError("SMART_SORT_RULE_NOT_FOUND", {detail: `Rule not found: ${ruleId}`, ruleId});
         }
         if (existing.enabled === enabled) {
           continue;
@@ -226,9 +224,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     const ids = snapshot.map((r) => r.ruleId);
     const from = ids.indexOf(ruleId);
     if (from < 0) {
-      throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-        ruleId,
-      });
+      throw new AppError("SMART_SORT_RULE_NOT_FOUND", {detail: `Rule not found: ${ruleId}`, ruleId});
     }
     let target: number;
     if (to === "top") {
@@ -262,10 +258,10 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     const existingIds = new Set(snapshot.map((r) => r.ruleId));
     const orderedSet = new Set(orderedIds);
     if (orderedSet.size !== orderedIds.length) {
-      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "orderedIds contains duplicates");
+      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", {detail: "orderedIds contains duplicates"});
     }
     if (orderedIds.length !== existingIds.size || [...orderedIds].some((id) => !existingIds.has(id))) {
-      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", "orderedIds must cover exactly the full rule set");
+      throw new AppError("SMART_SORT_RULE_INVALID_ARGUMENT", {detail: "orderedIds must cover exactly the full rule set"});
     }
     return this.deps.conn.transaction(async (tx) => {
       const rules = this.rules(tx);
@@ -284,7 +280,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     const seen = new Set<string>();
     for (const entity of entities) {
       if (seen.has(entity.ruleId)) {
-        throw new AppError("SMART_SORT_RULE_CONFLICT", `Duplicate ruleId in bundle: ${entity.ruleId}`, { ruleId: entity.ruleId });
+        throw new AppError("SMART_SORT_RULE_CONFLICT", {detail: `Duplicate ruleId in bundle: ${entity.ruleId}`, ruleId: entity.ruleId});
       }
       seen.add(entity.ruleId);
       const draft = validateSmartSortRuleDraft(entity, { ruleId: entity.ruleId });
@@ -403,9 +399,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
   private async getRuleOrThrow(ruleId: string): Promise<SmartSortRule> {
     const rule = await this.rules().find(ruleId);
     if (!rule) {
-      throw new AppError("SMART_SORT_RULE_NOT_FOUND", `Rule not found: ${ruleId}`, {
-        ruleId,
-      });
+      throw new AppError("SMART_SORT_RULE_NOT_FOUND", {detail: `Rule not found: ${ruleId}`, ruleId});
     }
     return rule;
   }

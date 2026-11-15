@@ -28,13 +28,13 @@ export function stripLegacyPrompts(raw: unknown): unknown {
   }
   const record = raw as Record<string, unknown>;
   if ("blocks" in record) {
-    throw new AppError("AGENT_INVALID_SCHEMA", "prompts.blocks is removed; use prompts.system / persist / dynamic");
+    throw new AppError("AGENT_INVALID_SCHEMA", { detail: "prompts.blocks is removed; use prompts.system / persist / dynamic" });
   }
   if ("regions" in record) {
-    throw new AppError("AGENT_INVALID_SCHEMA", "prompts.regions is not supported; use prompts.system / persist / dynamic");
+    throw new AppError("AGENT_INVALID_SCHEMA", { detail: "prompts.regions is not supported; use prompts.system / persist / dynamic" });
   }
   if ("chat" in record) {
-    throw new AppError("AGENT_INVALID_SCHEMA", "prompts.chat is not supported; chat is a runtime slot only");
+    throw new AppError("AGENT_INVALID_SCHEMA", { detail: "prompts.chat is not supported; chat is a runtime slot only" });
   }
   const persist = record.persist;
   if (persist == null || typeof persist !== "object" || Array.isArray(persist)) {
@@ -50,11 +50,11 @@ export function stripLegacyAgentWire(raw: unknown): unknown {
   }
   const record = raw as Record<string, unknown>;
   if ("preferredModelId" in record) {
-    throw new AppError("AGENT_INVALID_SCHEMA", "preferredModelId is removed; use optional model: <savedModelId UUID>");
+    throw new AppError("AGENT_INVALID_SCHEMA", { detail: "preferredModelId is removed; use optional model: <savedModelId UUID>" });
   }
   const model = record.model;
   if (model != null && typeof model === "object" && !Array.isArray(model)) {
-    throw new AppError("AGENT_INVALID_SCHEMA", "legacy nested model block is not supported");
+    throw new AppError("AGENT_INVALID_SCHEMA", { detail: "legacy nested model block is not supported" });
   }
   // subagentCallable 已废弃且功能未发布，无旧数据需兼容：strict schema 直接拒绝。
   return raw;

@@ -35,7 +35,7 @@ export async function assertOk(
     body = "";
   }
   const snippet = truncateText(body, 500);
-  throw new AppError("PROVIDER_HTTP_ERROR", `HTTP ${response.status}: ${snippet}`, {providerId});
+  throw new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${response.status}: ${snippet}`, providerId });
 }
 
 /** JSON fetch with error handling. */

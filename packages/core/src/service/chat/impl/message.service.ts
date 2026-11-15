@@ -173,7 +173,7 @@ export class DefaultMessageService implements MessageService {
   async get(id: string): Promise<ChatMessageData> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${id}`, { kind: "message", id, messageId: id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id});
     }
     return message;
   }
@@ -193,7 +193,7 @@ export class DefaultMessageService implements MessageService {
   ): Promise<ChatMessageData> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
     const parsedContent = parseMessageContentValue(content);
     if (!parsedContent.ok) {
@@ -253,12 +253,12 @@ export class DefaultMessageService implements MessageService {
   async delete(id: string): Promise<void> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${id}`, { kind: "message", id, messageId: id });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id});
     }
 
     const session = await this.deps.sessions.findById(message.sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${message.sessionId}`, { kind: "session", id: message.sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${message.sessionId}`, kind: "session", id: message.sessionId});
     }
 
     await this.deps.conn.transaction(async (tx) => {
@@ -269,7 +269,7 @@ export class DefaultMessageService implements MessageService {
 
       const deleted = await messages.delete(id);
       if (!deleted) {
-        throw new AppError("CHAT_NOT_FOUND", `message not found: ${id}`, { kind: "message", id, messageId: id });
+        throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${id}`, kind: "message", id, messageId: id});
       }
 
       // 发生删除即清 backfill 游标：消息删除改变计数口径（count < 游标或圈段
@@ -308,11 +308,11 @@ export class DefaultMessageService implements MessageService {
       const messages = new SqliteMessageRepository(tx);
       const existing = await messages.findById(messageId);
       if (existing == null) {
-        throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+        throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
       }
       const updated = await messages.updateContent(messageId, parsedContent.value);
       if (!updated) {
-        throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+        throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
       }
     });
     const message = await this.get(messageId);
@@ -324,11 +324,11 @@ export class DefaultMessageService implements MessageService {
   async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
     const upTo = await this.deps.messages.findById(upToMessageId);
     if (upTo == null || upTo.sessionId !== sessionId) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${upToMessageId}`, { kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${upToMessageId}`, kind: "message", id: upToMessageId, sessionId, messageId: upToMessageId});
     }
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
     // seedForkCopyParity 吃同一份 toCopy），锚点之后的
@@ -340,7 +340,7 @@ export class DefaultMessageService implements MessageService {
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
       // 没有时直接抛，不为一个必然回滚的动作开事务。
-      throw new AppError("CHAT_INVALID_ARGUMENT", "No messages to fork up to the given id");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "No messages to fork up to the given id"});
     }
     const projectSessions = await this.deps.sessions.listByProject(
       source.projectId
@@ -420,11 +420,11 @@ export class DefaultMessageService implements MessageService {
   async hide(messageId: string): Promise<void> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
     }
     const updated = await this.deps.messages.updateHidden(messageId, true);
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
     }
     await this.invalidatePromptTokens(existing.sessionId);
   }
@@ -432,11 +432,11 @@ export class DefaultMessageService implements MessageService {
   async show(messageId: string): Promise<void> {
     const existing = await this.deps.messages.findById(messageId);
     if (existing == null) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
     }
     const updated = await this.deps.messages.updateHidden(messageId, false);
     if (!updated) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${messageId}`, { kind: "message", id: messageId, messageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${messageId}`, kind: "message", id: messageId, messageId});
     }
     await this.invalidatePromptTokens(existing.sessionId);
   }
@@ -449,7 +449,7 @@ export class DefaultMessageService implements MessageService {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
     const count = await this.deps.messages.updateHiddenRange(
       sessionId,
@@ -471,7 +471,7 @@ export class DefaultMessageService implements MessageService {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
     const count = await this.deps.messages.updateHiddenRange(
       sessionId,
@@ -491,7 +491,7 @@ export class DefaultMessageService implements MessageService {
   ): Promise<void> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", `session not found: ${sessionId}`, { kind: "session", id: sessionId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId});
     }
 
     if (afterMessageId == null) {
@@ -521,7 +521,7 @@ export class DefaultMessageService implements MessageService {
 
     const anchor = await this.deps.messages.findById(afterMessageId);
     if (anchor == null || anchor.sessionId !== sessionId) {
-      throw new AppError("CHAT_NOT_FOUND", `message not found: ${afterMessageId}`, { kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId });
+      throw new AppError("CHAT_NOT_FOUND", {detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId});
     }
 
     // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。

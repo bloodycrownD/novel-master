@@ -578,12 +578,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         // scanContents 这条路径只查 entry_kind='file' 的行，正文从 blob 读。
         const cached = contentMap.get(h);
         if (cached == null) {
-          throw new AppError("VFS_CONTENT_BLOB_MISSING", `vfs_content_blob 缺失: ${h}`, { contentHash: h });
+          throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${h}`, contentHash: h });
         }
         plain = cached;
       } else {
         // content=NULL 且 content_hash=NULL 的 active 文件行视为正文损坏。
-        throw new AppError("VFS_CONTENT_CORRUPT", "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL");
+        throw new AppError("VFS_CONTENT_CORRUPT", { detail: "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL" });
       }
       out.push({
         entryId: Number(row.entry_id),

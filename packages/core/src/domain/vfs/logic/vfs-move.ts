@@ -61,7 +61,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
   }
   try {
     await vfs.read(path);
-    return Result.err(new AppError("VFS_NOT_A_DIRECTORY", `Not a directory: ${path}`, { path }));
+    return Result.err(new AppError("VFS_NOT_A_DIRECTORY", { detail: `Not a directory: ${path}`, path }));
   } catch (readError) {
     if (isVfsError(readError, "IS_DIRECTORY")) {
       return Result.ok(undefined);
@@ -96,7 +96,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
   const normalizedTo = normalizeDirPath(to);
   // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
   if (normalizedFrom !== normalizedTo) {
-    const alreadyExists = (): Result<void, VfsAlreadyExistsError> => Result.err(new AppError("VFS_ALREADY_EXISTS", `Path already exists: ${to}`, { path: to }));
+    const alreadyExists = (): Result<void, VfsAlreadyExistsError> => Result.err(new AppError("VFS_ALREADY_EXISTS", { detail: `Path already exists: ${to}`, path: to }));
     try {
       await vfs.read(to);
       return alreadyExists();
@@ -173,7 +173,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
     throw error;
   }
   if (entries.length === 0) {
-    return Result.err(new AppError("VFS_NOT_FOUND", `Path not found: ${from}`, { path: from }));
+    return Result.err(new AppError("VFS_NOT_FOUND", { detail: `Path not found: ${from}`, path: from }));
   }
   return rename(() => vfs.renamePrefix(from, to));
 }

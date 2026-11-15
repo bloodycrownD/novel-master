@@ -250,7 +250,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const result = await executeTemplate(this.conn, this.parser, sql24, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
       // 记录缺失而非路径缺失，无 path 可挂；走旧签名过渡保 details 一层形态（与旧 VfsError 一致）。
-      throw new AppError("VFS_NOT_FOUND", `Revision not found: entry ${entryId}@${version}`, { entryId, version });
+      throw new AppError("VFS_NOT_FOUND", { detail: `Revision not found: entry ${entryId}@${version}`, entryId, version });
     }
   }
 
@@ -276,7 +276,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       if (missing.length > 0) {
         const first = missing[0]!;
-        throw new AppError("VFS_NOT_FOUND", `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, { missing });
+        throw new AppError("VFS_NOT_FOUND", { detail: `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, missing });
       }
     }
 

@@ -72,7 +72,7 @@ function resolveSkillRelPath(name: string, path: string | undefined): string {
     return resolved.rel;
   }
   const reason: CoreMessageDescriptor = { key: `error.skill.invalid_path.${resolved.reason}` };
-  throw new AppError("SKILL_INVALID_PATH", reason, { path: String(path ?? SKILL_ENTRY_FILE) });
+  throw new AppError("SKILL_INVALID_PATH", { descriptor: reason, path: String(path ?? SKILL_ENTRY_FILE) });
 }
 
 /** 位置 → VFS meta 域 scopeKey（entry/revision 清理用；project 域缺 projectId 时抛错）。 */
@@ -81,7 +81,7 @@ function vfsScopeKeyOfLocation(location: SkillLocation): string {
     return "global:meta";
   }
   if (location.projectId == null || location.projectId.length === 0) {
-    throw new AppError("SKILL_MISSING_PROJECT_ID", {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, { skillName: location.name });
+    throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, skillName: location.name });
   }
   return `project:${location.projectId}:meta`;
 }
@@ -101,14 +101,14 @@ function disabledScopeKeyOfProject(projectId: string): string {
 function assertValidSkillName(name: string): void {
   const reason = validateSkillName(name);
   if (reason != null) {
-    throw new AppError("SKILL_INVALID_NAME", reason, { skillName: name });
+    throw new AppError("SKILL_INVALID_NAME", { descriptor: reason, skillName: name });
   }
 }
 
 /** 技能名不得含 `/`（防路径拼接逃逸；read 等只做该项弱校验）。 */
 function assertNoPathSeparatorInName(name: string): void {
   if (name.includes("/")) {
-    throw new AppError("SKILL_INVALID_NAME", { key: "error.skill.invalid_name.slash" }, { skillName: name });
+    throw new AppError("SKILL_INVALID_NAME", { descriptor: { key: "error.skill.invalid_name.slash" }, skillName: name });
   }
 }
 
@@ -130,7 +130,7 @@ export class SkillsService implements SkillService {
       return this.deps.globalMetaVfs();
     }
     if (projectId == null || projectId.length === 0) {
-      throw new AppError("SKILL_MISSING_PROJECT_ID", {key: "error.skill.missing_project_id", params: {skill_name: ""}}, { skillName: "" });
+      throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: ""}}, skillName: "" });
     }
     return this.deps.projectMetaVfs(projectId);
   }
@@ -213,7 +213,7 @@ export class SkillsService implements SkillService {
     } else {
       hint = {key: "error.skill.not_found_in_domain_hint.probe_failed", params: {other_domain: otherDomain}};
     }
-    return new AppError("SKILL_NOT_FOUND", {key: "error.skill.not_found_in_domain", params: {name, domain, path, hint}}, { skillName: name, path, domain });
+    return new AppError("SKILL_NOT_FOUND", { descriptor: {key: "error.skill.not_found_in_domain", params: {name, domain, path, hint}}, skillName: name, path, domain });
   }
 
   async listSkills(scope: SkillListScope): Promise<SkillListItem[]> {
@@ -334,7 +334,7 @@ export class SkillsService implements SkillService {
         throw error;
       }
     }
-    throw new AppError("SKILL_NOT_FOUND", `Skill file not found: ${name}/${rel}`, { skillName: name, path: rel });
+    throw new AppError("SKILL_NOT_FOUND", { detail: `Skill file not found: ${name}/${rel}`, skillName: name, path: rel });
   }
 
   async writeSkillFile(
@@ -346,7 +346,7 @@ export class SkillsService implements SkillService {
     options?: SkillWriteOptions
   ): Promise<{ version: number }> {
     if (domain == null) {
-      throw new AppError("SKILL_MISSING_DOMAIN", {key: "error.skill.missing_domain", params: {skill_name: name}}, { skillName: name });
+      throw new AppError("SKILL_MISSING_DOMAIN", { descriptor: {key: "error.skill.missing_domain", params: {skill_name: name}}, skillName: name });
     }
     assertValidSkillName(name);
     const rel = resolveSkillRelPath(name, path);
@@ -375,7 +375,7 @@ export class SkillsService implements SkillService {
     projectId?: string
   ): Promise<{ version: number; replacements: number }> {
     if (domain == null) {
-      throw new AppError("SKILL_MISSING_DOMAIN", {key: "error.skill.missing_domain", params: {skill_name: name}}, { skillName: name });
+      throw new AppError("SKILL_MISSING_DOMAIN", { descriptor: {key: "error.skill.missing_domain", params: {skill_name: name}}, skillName: name });
     }
     assertValidSkillName(name);
     const rel = resolveSkillRelPath(name, path);
@@ -415,7 +415,7 @@ export class SkillsService implements SkillService {
       location.domain === "global" &&
       BUILTIN_SKILL_NAMES.has(location.name)
     ) {
-      throw new AppError("SKILL_BUILTIN", {key: "error.skill.builtin_not_deletable", params: {skill_name: location.name}}, { skillName: location.name });
+      throw new AppError("SKILL_BUILTIN", { descriptor: {key: "error.skill.builtin_not_deletable", params: {skill_name: location.name}}, skillName: location.name });
     }
     // VFS 清理用 meta 域 key；负清单行的 scopeKey 仍是 project:{pid}，两者分开取
     const vfsScopeKey = vfsScopeKeyOfLocation(location);
@@ -443,7 +443,7 @@ export class SkillsService implements SkillService {
       const ruleRepo = new SqliteSkillDisabledRuleRepository(tx);
       if (location.domain === "project") {
         if (location.projectId == null || location.projectId.length === 0) {
-          throw new AppError("SKILL_MISSING_PROJECT_ID", {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, { skillName: location.name });
+          throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, skillName: location.name });
         }
         await ruleRepo.remove(
           disabledScopeKeyOfProject(location.projectId),
@@ -495,7 +495,7 @@ export class SkillsService implements SkillService {
       location.domain === "global" &&
       BUILTIN_SKILL_NAMES.has(location.name)
     ) {
-      throw new AppError("SKILL_BUILTIN_RENAME", {key: "error.skill.builtin_rename_forbidden", params: {skill_name: location.name}}, { skillName: location.name });
+      throw new AppError("SKILL_BUILTIN_RENAME", { descriptor: {key: "error.skill.builtin_rename_forbidden", params: {skill_name: location.name}}, skillName: location.name });
     }
     // 校验链 3：目标保留名门（仅改名提交时）：目标名撞内置名且目标目录
     // 不存在（= 新建语义）拒；目录已存在（历史同名副本）由查重门接管
@@ -531,7 +531,7 @@ export class SkillsService implements SkillService {
             newPrefix
           );
           if (conflict) {
-            throw new AppError("SKILL_ALREADY_EXISTS", {key: "error.skill.already_exists", params: {skill_name: newName!}}, { skillName: newName! });
+            throw new AppError("SKILL_ALREADY_EXISTS", { descriptor: {key: "error.skill.already_exists", params: {skill_name: newName!}}, skillName: newName! });
           }
         }
 
@@ -618,7 +618,7 @@ export class SkillsService implements SkillService {
       return;
     }
     if (domain === "project" && (projectId == null || projectId.length === 0)) {
-      throw new AppError("SKILL_MISSING_PROJECT_ID", {key: "error.skill.missing_project_id", params: {skill_name: name}}, { skillName: name });
+      throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: name}}, skillName: name });
     }
     const scopeKey =
       domain === "global" ? "global:meta" : `project:${projectId}:meta`;
@@ -628,7 +628,7 @@ export class SkillsService implements SkillService {
       `${SKILLS_ROOT}/${name}`
     );
     if (!dirExists) {
-      throw new AppError("SKILL_BUILTIN_NAME_RESERVED", {key: "error.skill.builtin_name_reserved", params: {skill_name: name}}, { skillName: name });
+      throw new AppError("SKILL_BUILTIN_NAME_RESERVED", { descriptor: {key: "error.skill.builtin_name_reserved", params: {skill_name: name}}, skillName: name });
     }
   }
 
@@ -651,7 +651,7 @@ export class SkillsService implements SkillService {
     prefix: string
   ): Promise<void> {
     if (!(await this.skillDirExists(entryRepo, scopeKey, prefix))) {
-      throw new AppError("SKILL_NOT_FOUND", `Skill not found: ${prefix.slice(SKILLS_ROOT.length + 1)}`, { skillName: prefix.slice(SKILLS_ROOT.length + 1) });
+      throw new AppError("SKILL_NOT_FOUND", { detail: `Skill not found: ${prefix.slice(SKILLS_ROOT.length + 1)}`, skillName: prefix.slice(SKILLS_ROOT.length + 1) });
     }
   }
 }

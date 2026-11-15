@@ -59,7 +59,7 @@ function createLineMatcher(pattern: string, options?: VfsGrepOptions): Result<Li
     try {
       regex = compileRegex(pattern, caseInsensitive);
     } catch {
-      return Result.err(new AppError("VFS_INVALID_PATTERN", `Invalid regular expression: ${pattern}`, { pattern }));
+      return Result.err(new AppError("VFS_INVALID_PATTERN", { detail: `Invalid regular expression: ${pattern}`, pattern }));
     }
   } else if (mode === "literal") {
     literal = pattern;

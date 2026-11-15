@@ -26,7 +26,7 @@ export function decodeZipEntryName(rawBytes: Uint8Array, gpbf: number): Result<s
     try {
       name = new TextDecoder("utf-8", { fatal: true }).decode(rawBytes);
     } catch {
-      return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", "ZIP entry name is not valid UTF-8", { byteLength: rawBytes.length }));
+      return Result.err(new AppError("VFS_ZIP_INVALID_UTF8", { detail: "ZIP entry name is not valid UTF-8", byteLength: rawBytes.length }));
     }
   } else if (rawBytes.some((byte) => byte >= 0x80)) {
     name = iconv.decode(Buffer.from(rawBytes), "gbk");

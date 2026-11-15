@@ -225,7 +225,7 @@ describe("DefaultModelRequestService retry", () => {
         calls += 1;
         // 黑洞复现实验 r3 实锤形态：用户停止后 onabort 链 reject 的错误
         // 若逃离 adapter 吞错，不得落入「无状态码 → 默认可重试」触发僵尸重发
-        throw new AppError("PROVIDER_HTTP_ERROR", "Request aborted");
+        throw new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted" });
       },
     };
     const svc = new DefaultModelRequestService({
@@ -308,7 +308,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 400: bad request");
+        throw new AppError("PROVIDER_HTTP_ERROR", { detail: "HTTP 400: bad request" });
       },
     };
     const svc = new DefaultModelRequestService({

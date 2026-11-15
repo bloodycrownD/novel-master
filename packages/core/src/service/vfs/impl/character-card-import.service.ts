@@ -65,8 +65,8 @@ function wrapCardImportError(error: unknown, committedShards?: number, failedSha
   const base = error instanceof Error ? error.message : "import transaction failed";
   // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
   return committedShards != null && failedShard != null
-    ? new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {key: "error.vfs.character_card_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}, {base})
-    : new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", base);
+    ? new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {descriptor: {key: "error.vfs.character_card_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}, base})
+    : new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {detail: base});
 }
 
 export type DefaultCharacterCardImportServiceOptions = {
@@ -97,13 +97,13 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
 
   async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<void> {
     if (options.confirmed !== true) {
-      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");
+      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);
     const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
     if (directoryRow != null && directoryRow.entryKind === "file") {
-      throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
+      throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
     }
 
     // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
@@ -112,54 +112,54 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     let totalBytes = 0;
     for (const [relativePath, content] of tree) {
       if (relativePath.length === 0) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", "empty relative path in md tree");
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: "empty relative path in md tree"});
       }
       if (relativePath.startsWith("/")) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `leading slash in md tree path: ${relativePath}`);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `leading slash in md tree path: ${relativePath}`});
       }
       if (relativePath.includes("\\")) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `backslash in md tree path: ${relativePath}`);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `backslash in md tree path: ${relativePath}`});
       }
       if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`});
       }
       if (WINDOWS_DRIVE_PATH.test(relativePath)) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `absolute Windows path in md tree: ${relativePath}`);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `absolute Windows path in md tree: ${relativePath}`});
       }
       for (const segment of relativePath.split("/")) {
         if (segment.length === 0) {
-          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `empty segment in md tree path: ${relativePath}`);
+          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `empty segment in md tree path: ${relativePath}`});
         }
         if (segment === "..") {
-          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `parent segment in md tree path: ${relativePath}`);
+          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `parent segment in md tree path: ${relativePath}`});
         }
       }
 
       let logical: string;
       const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
       if (!logicalResult.ok) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", logicalResult.error.message);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message});
       }
       logical = logicalResult.value;
       try {
         assertLogicalPathAllowed(scope, logical);
       } catch (error) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `md tree "${relativePath}" → logical "${logical}": ${error instanceof Error ? error.message : "path not allowed for scope"}`);
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${error instanceof Error ? error.message : "path not allowed for scope"}`});
       }
 
       const sizeBytes = utf8ByteLength(content);
       if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}});
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}}});
       }
       totalBytes += sizeBytes;
       // 超限即抛，避免对后续条目做无谓的编码累计
       if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}});
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}}});
       }
       files.set(logical, content);
     }
     if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}});
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}}});
     }
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -178,7 +178,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           if (existing == null) {
             await repoTx.insertDirectory(sk, directoryPath);
           } else if (existing.entryKind !== "directory") {
-            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
+            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
           }
         }
       });
@@ -269,12 +269,12 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
   async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<void> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
-      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");
+      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
     }
     // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
     // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
     if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}});
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}});
     }
     const parsed = parseCharacterCardToMdTree(bytes);
     if (!parsed.ok) throw parsed.error;

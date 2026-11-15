@@ -71,7 +71,7 @@ describe("vfsUserMessage", () => {
   });
 
   it("带 messageKey 的错误优先透传 descriptor（INVALID_NAME 迁移路径）", () => {
-    const err = new AppError("VFS_INVALID_NAME", {key: "error.vfs.invalid_name.blank"});
+    const err = new AppError("VFS_INVALID_NAME", { descriptor: { key: "error.vfs.invalid_name.blank" }, path: "" });
     assert.deepEqual(vfsUserMessage(err), {key: "error.vfs.invalid_name.blank"});
   });
 
