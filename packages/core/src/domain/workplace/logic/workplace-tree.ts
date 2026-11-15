@@ -8,7 +8,9 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import type { WorkplaceScope } from "../model/workplace-types.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
 
-/** 逻辑路径的父目录；根目录文件返回 `/`。 */
+/** 逻辑路径的父目录；根目录文件返回 `/`。
+ * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（buildWorkplaceDirSet / directChildDirs 同款），由调用链端点 catch 收口。
+ */
 export function parentDirOf(logicalPath: string): string | null {
   const resolved = normalizePath(logicalPath);
   if (!resolved.ok) throw resolved.error;

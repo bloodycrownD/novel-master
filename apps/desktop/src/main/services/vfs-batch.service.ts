@@ -15,6 +15,7 @@ import {
   type BatchExportSkip,
   type VfsScope,
   } from "@novel-master/core/vfs";
+import { AppError } from "@novel-master/core/agent";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
@@ -400,13 +401,13 @@ export async function stageVfsBatchExport(
   logicalPaths: readonly string[],
 ): Promise<ExportStageResult> {
   if (logicalPaths.length === 0) {
-    throw new Error("没有可导出的路径");
+    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可导出的路径"});
   }
 
   const batch = createVfsBatchIoService(runtime.conn);
   const plan = await batch.planBatchExport(scope, logicalPaths);
   if (plan.files.length === 0 && plan.mkdirPaths.length === 0) {
-    throw new Error("导出内容为空");
+    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "导出内容为空"});
   }
 
   const stagingRoot = join(vfsBatchStagingBase(), randomUUID());
@@ -466,7 +467,7 @@ export function startDragExport(
   filePaths: readonly string[],
 ): void {
   if (filePaths.length === 0) {
-    throw new Error("没有可拖出的文件");
+    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可拖出的文件"});
   }
   const icon = resolveDragIcon();
   // Electron 类型要求 `file`；多文件时同时传 `files`

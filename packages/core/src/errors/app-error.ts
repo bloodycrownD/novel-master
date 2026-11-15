@@ -56,12 +56,17 @@ export interface ErrorParamsMap {
   VFS_CONTENT_BLOB_MISSING: {readonly contentHash?: string};
   VFS_RESTORE_FAILED: {readonly causes?: readonly unknown[]};
   VFS_ZIP_INVALID_UTF8: {readonly byteLength?: number};
+  VFS_SINGLE_FILE_TOO_LARGE: {readonly sizeBytes: number; readonly maxBytes: number};
+  VFS_SINGLE_FILE_READ_FAILED: {readonly reason: string};
+  VFS_SINGLE_FILE_NOT_FOUND: {readonly path: string};
+  VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: {readonly logicalPath: string};
   TOOL_SEARCH_TEMPLATE_INVALID: {readonly reason?: string};
   TOOL_NOT_FOUND: {readonly toolName: string};
   TOOL_CONFLICT: {readonly toolName: string};
   TOOL_INVALID_ARGUMENT: {readonly toolName: string; readonly issues?: readonly ZodIssue[]};
   TOOL_FAILED: {readonly toolName: string; readonly cause?: unknown};
   TOOL_FORBIDDEN: {readonly toolName: string; readonly path: string};
+  TOOL_CANCELLED: {readonly toolName: string; readonly detail?: string};
   PROVIDER_NOT_FOUND: {readonly providerId?: string; readonly modelId?: string};
   PROVIDER_SAVED_MODEL_IN_USE: {readonly modelName?: string; readonly blockingRefs?: string; readonly modelId?: string; readonly providerId?: string};
   PROVIDER_API_KEY_NOT_SET: {readonly providerId?: string};

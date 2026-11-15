@@ -36,13 +36,24 @@ const mockProvidersList = jest.fn();
 const mockListByProvider = jest.fn();
 const mockListRequestUsage = jest.fn();
 
+// 错误通道迁移二期后 usageStats 各端口走 Result（screen 侧 `!ok` 即 throw）；
+// 桩仍按裸值配置，出口统一包成 ok——reject 语义原样透传。
+const wireOk = async (fn: any, ...args: unknown[]) => ({
+  ok: true as const,
+  value: await fn(...args),
+});
+
 const mockRuntime = {
   usageStats: {
-    getSummary: mockGetSummary,
-    getDailyBuckets: mockGetDailyBuckets,
-    getHourlyBuckets: mockGetHourlyBuckets,
-    getModelBreakdown: mockGetModelBreakdown,
-    listRequestUsage: mockListRequestUsage,
+    getSummary: (...args: unknown[]) => wireOk(mockGetSummary, ...args),
+    getDailyBuckets: (...args: unknown[]) =>
+      wireOk(mockGetDailyBuckets, ...args),
+    getHourlyBuckets: (...args: unknown[]) =>
+      wireOk(mockGetHourlyBuckets, ...args),
+    getModelBreakdown: (...args: unknown[]) =>
+      wireOk(mockGetModelBreakdown, ...args),
+    listRequestUsage: (...args: unknown[]) =>
+      wireOk(mockListRequestUsage, ...args),
   },
   providers: {
     list: mockProvidersList,
@@ -809,7 +820,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       nodeText(findByTestId(renderer.root, 'pie-slice-label-p1::gpt-4o')!),
     ).toContain('38%');
     expect(
-      nodeText(findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__')!),
+      nodeText(
+        findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__')!,
+      ),
     ).toContain('24%');
     expect(
       findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),

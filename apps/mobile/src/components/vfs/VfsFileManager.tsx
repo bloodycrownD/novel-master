@@ -51,7 +51,7 @@ import {
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 
-import {isAppError, isVfsError} from '@novel-master/core/vfs';
+import {isAppError} from '@novel-master/core/vfs';
 import {formatVfsErrorForUser} from '../../errors/format-error';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
 import {
@@ -627,10 +627,7 @@ export const VfsFileManager = forwardRef<
           moved += 1;
         } catch (err) {
           skipped += 1;
-          if (
-            isVfsError(err, 'ALREADY_EXISTS') ||
-            isAppError(err, 'VFS_ALREADY_EXISTS')
-          ) {
+          if (isAppError(err, 'VFS_ALREADY_EXISTS')) {
             showToast('目标已存在同名项，已跳过');
           } else {
             showToast(toastMessage('移动失败', err));

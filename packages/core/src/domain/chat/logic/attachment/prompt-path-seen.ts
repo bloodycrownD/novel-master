@@ -14,7 +14,9 @@ export const promptPathSeen = {
         return trimmed.endsWith("/") || trimmed.endsWith("\\");
     },
 
-    /** 落库 / 短提示 XML 用 path：一律带前导 `/`；目录可选保留尾 `/`。 */
+    /** 落库 / 短提示 XML 用 path：一律带前导 `/`；目录可选保留尾 `/`。
+     * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath 失败按仓储边界抛出，由调用链端点 catch 收口。
+     */
     normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): string {
         const keepSlash = options?.keepDirTrailingSlash === true;
         const isDir = this.isDirToken(path);

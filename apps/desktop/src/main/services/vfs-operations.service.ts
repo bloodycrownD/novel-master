@@ -34,6 +34,7 @@ export async function renameVfsFile(
   newPath: string,
 ): Promise<void> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
+  // 解包 throw 边界：失败落唯一调用方 handleVfsRename 的紧邻 catch（formatIpcError）。
   if (!moved.ok) throw moved.error;
 }
 
@@ -43,6 +44,7 @@ export async function renameVfsDirectory(
   newPath: string,
 ): Promise<void> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
+  // 解包 throw 边界：失败落唯一调用方 handleVfsRename 的紧邻 catch（formatIpcError）。
   if (!moved.ok) throw moved.error;
 }
 

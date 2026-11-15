@@ -1,12 +1,16 @@
 /**
  * User-visible error messages for Core domain errors (VFS, chat, provider, tools, agent).
+ *
+ * 分派链 9 条顺序硬写（VFS_* → PROVIDER_* → CLOUD_SYNC_* → 通配），与 desktop
+ * `format-ipc-error` 逐条对齐；desktop 第 1 条 ZodError 是 desktop 独有入口，
+ * mobile 无该分支（T-A4 镜像门对此条豁免）。本函数只产文案字符串，不产 code。
  */
-import {CloudSyncError, TdbcError} from '@novel-master/core';
+import {TdbcError} from '@novel-master/core';
+import {AgentTurnError, isAppError} from '@novel-master/core/agent';
+import {domainOf} from '@novel-master/core/errors';
+import {userMessageOf} from '@novel-master/core/i18n';
+import {vfsUserMessage} from '@novel-master/core/vfs';
 import {coreT} from '@/i18n/core';
-
-import {isAppError} from '@novel-master/core/agent';
-
-import {isVfsError, vfsUserMessage} from '@novel-master/core/vfs';
 
 /** core vfsUserMessage（descriptor）→ 中文 string。 */
 export function formatVfsErrorForUser(error: unknown, scope?: Parameters<typeof vfsUserMessage>[1]): string {
@@ -27,53 +31,55 @@ function readCause(error: Error): unknown {
   return (error as Error & {cause?: unknown}).cause;
 }
 
+/** 错误 → 用户可见中文文案：descriptor 走 catalog（coreT 渲染），未覆盖回退 message。 */
+function visibleMessage(error: unknown, fallback: string): string {
+  const descriptor = userMessageOf(error);
+  return descriptor != null ? coreT(descriptor) : fallback;
+}
+
 /** Formats an error for on-screen display; unwraps known Core error types. */
 export function formatError(error: unknown): string {
-  // mobile 两条硬编码 Provider 文案保留（进 catalog 是三期），类退役后改判 key。
-  if (isAppError(error, 'PROVIDER_API_KEY_NOT_SET')) {
-    return '请先在服务商设置中配置 API Key';
+  // 1. VFS_*：AppError 且 code 落 VFS 域段（102 VFS + 103 VFS_CHARACTER_CARD），
+  //    域判定走 domainOf（spec-3 §3.7），不依赖 key 命名约定。core service 已直抛
+  //    AppError（三期 Step 6 删 legacy mapper），不设历史对象兜底。
+  if (isAppError(error) && (domainOf(error.code) === 'VFS' || domainOf(error.code) === 'VFS_CHARACTER_CARD')) {
+    return formatVfsErrorForUser(error);
   }
-  if (isAppError(error, 'PROVIDER_MODEL_NOT_SAVED')) {
-    return '请先从远程拉取并保存模型';
+  // 2. PROVIDER_*：文案走码表 messageKey + coreT（原两条硬编码中文已进 catalog）。
+  if (isAppError(error) && domainOf(error.code) === 'PROVIDER') {
+    return visibleMessage(error, error.message);
   }
-  // 旧 ToolError 的 cause 解包：类已退役，改判 TOOL_FAILED；cause 双写在
-  // Error.cause 与 details.cause（spec §2.5）。须排在通用 AppError 分支前。
+  // 3. CLOUD_SYNC_*：文案走码表 messageKey / 构造点 descriptor。
+  if (isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC') {
+    return visibleMessage(error, error.message);
+  }
+  // 4. 旧 ToolError 的 VFS cause 解包：类已退役，等价判 TOOL_FAILED；cause 双写在
+  //    Error.cause 与 details.cause（一期 spec §2.5）。VFS cause 透传 vfs 文案。
   if (isAppError(error, 'TOOL_FAILED')) {
     const cause = readCause(error) ?? (error.details as {cause?: unknown} | undefined)?.cause;
-    if (isVfsError(cause)) {
+    if (isAppError(cause) && (domainOf(cause.code) === 'VFS' || domainOf(cause.code) === 'VFS_CHARACTER_CARD')) {
       return formatVfsErrorForUser(cause);
     }
-    const causeText = formatCause(cause);
-    return causeText ? `${error.message}\n${causeText}` : error.message;
+    const fallback = cause instanceof Error ? cause.message : error.message;
+    return visibleMessage(error, fallback);
   }
-  if (isVfsError(error)) {
-    return formatVfsErrorForUser(error);
-  }
-  // AppError 走同一张 VFS 文案表（核心 formatter 已支持 AppError key 收窄），
-  // 非 VFS key 兜底为 `操作失败：{detail}`。
+  // 5. 其余 AppError 通配 → userMessageOf + coreT，未覆盖回退原 message。
   if (isAppError(error)) {
-    return formatVfsErrorForUser(error);
+    return visibleMessage(error, error.message);
   }
-  if (error instanceof CloudSyncError) {
-    return error.message;
-  }
+  // 6. TdbcError：message + cause。
   if (error instanceof TdbcError) {
     const inner = formatCause(readCause(error));
     return inner ? `${error.message}\n${inner}` : error.message;
   }
+  // 7. AgentTurnError（infra 保留类）→ AGENT_RUN_FAILED 语义；message 直读与 desktop 同口径。
+  if (error instanceof AgentTurnError) {
+    return error.message;
+  }
+  // 8. 未知 Error。
   if (error instanceof Error) {
     return error.message;
   }
+  // 9. 非 Error 抛出值。
   return String(error);
-}
-
-/**
- * 暂留兼容，VFS 文案已改走 core 的 `formatVfsErrorForUser`（见
- * `formatError` 内 VFS 分支）——mobile 侧已无 VFS 调用点用它，
- * 保留只为旧 import 路径不炸。等调用点清零后随本文件一起删。
- *
- * @deprecated 请改用 {@link formatError}。
- */
-export function formatVfsError(error: unknown): string {
-  return formatError(error);
 }

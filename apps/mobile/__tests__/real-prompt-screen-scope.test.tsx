@@ -62,12 +62,6 @@ jest.mock('@/services/prompt-preview.service', () => ({
     mockBuildSegments(...(args as [])),
 }));
 
-// AgentRunError 只在 catch 分支做 instanceof；桩掉整条 service 依赖链，
-// 避免把 agent-run 的重依赖树拖进这个纯取值用例。
-jest.mock('@/services/agent-run.service', () => ({
-  AgentRunError: class AgentRunError extends Error {},
-}));
-
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {

@@ -13,6 +13,7 @@
  *   session scope 下 core 会顺带清该会话的提示词缓存（R5）。
  */
 import {
+  AppError,
   createVfsBatchIoService,
   type BatchApplyReport,
   type BatchIngestPlan,
@@ -25,7 +26,6 @@ import {
 } from './document-io';
 import {blobFs} from './rn-file-io';
 import {vfsSingleFileImportPickTypes} from './vfs-single-file-document-pick';
-import {VfsSingleFileError} from '../errors/vfs-single-file-error';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /**
@@ -99,14 +99,9 @@ export async function importVfsSingleFile(
     // 缓存目录里的固定临时名：原件名走 fileName 返回，不靠落盘名反推。
     localFileName: 'import.bin',
     maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES,
-    buildTooLargeError: sizeBytes =>
-      new VfsSingleFileError(
-        `文件过大：${sizeBytes} 字节，超过导入上限 ${VFS_SINGLE_FILE_MAX_INPUT_BYTES} 字节（约 32MB），已拒绝导入`,
-      ),
-    buildCopyError: copyError =>
-      new VfsSingleFileError(copyError ?? '无法读取所选文件'),
-    buildMissingError: fsPath =>
-      new VfsSingleFileError(`所选文件不存在：${fsPath}`),
+    buildTooLargeError: sizeBytes => new AppError('VFS_SINGLE_FILE_TOO_LARGE', {sizeBytes, maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES}),
+    buildCopyError: copyError => new AppError('VFS_SINGLE_FILE_READ_FAILED', {reason: copyError ?? ''}),
+    buildMissingError: fsPath => new AppError('VFS_SINGLE_FILE_NOT_FOUND', {path: fsPath}),
   });
   if (picked == null) {
     return {status: 'cancelled'};
@@ -166,7 +161,7 @@ export async function exportVfsSingleFile(
   const batchIo = createVfsBatchIoService(runtime.conn);
   const plan = await batchIo.planBatchExport(scope, [logicalPath]);
   if (plan.files.length !== 1) {
-    throw new VfsSingleFileError(`导出目标不是单个文件：${logicalPath}`);
+    throw new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath});
   }
 
   const file = plan.files[0]!;

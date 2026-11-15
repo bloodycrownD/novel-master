@@ -127,7 +127,7 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
     } catch (e) {
       // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
       // engineTimeoutError 保留超时失败语义（与 template-engine 同口径）。
-      if (parentAborted) throw new AppError("TOOL_CANCELLED", {detail: "Tool cancelled: DuckDuckGo"});
+      if (parentAborted) throw new AppError("TOOL_CANCELLED", {toolName: "DuckDuckGo"});
       throw engineTimeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS);
     }
 

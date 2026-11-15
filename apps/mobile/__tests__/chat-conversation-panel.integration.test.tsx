@@ -168,9 +168,13 @@ function installMockRuntime(): void {
   Object.assign(mockRuntime, {
     preferences: {getLlmStreamEnabled: jest.fn(async () => true)},
     sessions: {
-      get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-      getComposerDraftJson: jest.fn(async () => null),
-      setComposerDraftJson: jest.fn(async () => true),
+      get: jest.fn(async () => ({
+        ok: true,
+        value: {id: 's1', projectId: 'p1'},
+      })),
+      // 错误通道迁移二期后草稿读写走 Result wire（`!ok` 即 throw）。
+      getComposerDraftJson: jest.fn(async () => ({ok: true, value: null})),
+      setComposerDraftJson: jest.fn(async () => ({ok: true, value: true})),
     },
     sessionStreamUnitManager: {
       startRun: jest.fn(async () => ({ok: true})),
@@ -587,9 +591,7 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
       await flushPromises();
     });
     await act(async () => {
-      tree!.root
-        .findByProps({testID: 'chat-meta-agent-card'})
-        .props.onPress();
+      tree!.root.findByProps({testID: 'chat-meta-agent-card'}).props.onPress();
     });
     // badge 已提示已删，点击只开 picker、不弹「请重新选择」toast
     expect(mockShowToast).not.toHaveBeenCalled();
@@ -604,9 +606,7 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
       await flushPromises();
     });
     await act(async () => {
-      tree!.root
-        .findByProps({testID: 'chat-meta-agent-card'})
-        .props.onPress();
+      tree!.root.findByProps({testID: 'chat-meta-agent-card'}).props.onPress();
     });
     // 未加载锁：只提示加载中，绝不开 picker、绝不出「已删」语义
     expect(mockShowToast).toHaveBeenCalledWith('智能体信息加载中，请稍候再试');
@@ -834,8 +834,9 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     mockContextOverrides.hasWorkspaceModel = true;
     // startRun mock 受理即回调 onUserMessageAppended（真机上是 append 落库后）
     const startRun = jest.fn(async (...args: unknown[]) => {
-      (args[3] as {onUserMessageAppended?: () => void})
-        .onUserMessageAppended?.();
+      (
+        args[3] as {onUserMessageAppended?: () => void}
+      ).onUserMessageAppended?.();
       return {ok: true};
     });
     mockRuntime.sessionStreamUnitManager.startRun = startRun;
@@ -893,9 +894,10 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // DB 侧预置草稿：水化链读到后经 syncFromDraft → 命令式通道进框。
     // 本文件的 ChatConversationWebView mock 从不触发 onReady（webview 链永未
     // ready），composer 链照常完成水化——两链并行、无握手依赖的直接证据。
-    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
-      serializeComposerDraftJson({text: '草稿正文', attachments: []}),
-    );
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
+      ok: true as const,
+      value: serializeComposerDraftJson({text: '草稿正文', attachments: []}),
+    }));
 
     await act(async () => {
       tree = TestRenderer.create(<TestHost />);
@@ -914,13 +916,14 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // 真实下发路径断言（R2 P0-2）：面板 → controller.syncFromDraft → 面板
     // setComposerText → composerRef.setText。controller spy 注入自己的 spy 会
     // 绕过面板箭头、抓不到丢参缺陷，所以必须在这里断言。
-    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
-      serializeComposerDraftJson({
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
+      ok: true as const,
+      value: serializeComposerDraftJson({
         text: '$技能$尾追',
         attachments: [],
         tokenRanges: [{start: 0, end: 4}],
       }),
-    );
+    }));
 
     await act(async () => {
       tree = TestRenderer.create(<TestHost />);
@@ -928,11 +931,9 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     });
 
     expect(mockComposerSetText).toHaveBeenCalledTimes(1);
-    expect(mockComposerSetText).toHaveBeenCalledWith(
-      '$技能$尾追',
-      undefined,
-      [{start: 0, end: 4}],
-    );
+    expect(mockComposerSetText).toHaveBeenCalledWith('$技能$尾追', undefined, [
+      {start: 0, end: 4},
+    ]);
     // 确认态同样进 prop 面（composer 的 tokenRanges = 持久化值，不是兜底扫描
     // 出来的结果——尾追不升格）。
     expect(lastComposerProps().tokenRanges).toEqual([{start: 0, end: 4}]);
@@ -941,13 +942,14 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
   it('F-A5 自愈：持久化旧格式区间（`$技能尾追` + [{0,3}]）→ 丢弃并写回 []', async () => {
     const draftWrite = jest.fn(async () => undefined);
     mockRuntime.sessions.setComposerDraftJson = draftWrite;
-    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
-      serializeComposerDraftJson({
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () => ({
+      ok: true as const,
+      value: serializeComposerDraftJson({
         text: '$技能尾追',
         attachments: [],
         tokenRanges: [{start: 0, end: 3}],
       }),
-    );
+    }));
 
     await act(async () => {
       tree = TestRenderer.create(<TestHost />);

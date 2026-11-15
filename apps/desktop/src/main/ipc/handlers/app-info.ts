@@ -104,7 +104,7 @@ export async function handleAppOpenExternal(
   try {
     const url = req.url?.trim();
     if (!url || !/^https?:\/\//i.test(url)) {
-      return { ok: false, error: { code: "INVALID_URL", message: "无效的链接" } };
+      return { ok: false, error: { code: "IPC_INVALID_URL", message: "无效的链接" } };
     }
     const seams = await getSeams();
     await seams.openExternal(url);

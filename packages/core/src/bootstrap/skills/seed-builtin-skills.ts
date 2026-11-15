@@ -172,6 +172,10 @@ async function writeSeedLedger(conn: TdbcConnection): Promise<void> {
  * createScopedVfsService 另起连接级装配，事务内嵌套冲突）——技能正文
  * 存 VFS（vfs_entry/revision/内容寻址 blob），migration 事务内裸写等于
  * 重实现一遍 VFS 写路径，故升级逻辑挂本 seed 而非 SCHEMA_MIGRATIONS。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：SkillsService 已是 Result 通道，
+ * 本函数把读/写失败原样转回 bootstrap 异常通道；唯一调用方
+ * novel-master-bootstrap 紧邻 try/catch 记日志不阻断启动。
  */
 export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
   // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。

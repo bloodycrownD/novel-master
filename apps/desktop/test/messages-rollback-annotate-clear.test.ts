@@ -6,9 +6,7 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { textBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
-import {
-  handleMessagesRollback,
-} from "../src/main/ipc/handlers/messages.js";
+import { handleMessagesRollback } from "../src/main/ipc/handlers/messages.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
@@ -62,7 +60,8 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     const rt = await getDesktopRuntime();
     const annotateActionXml =
       '<action name="annotate">\n{"path":"/a.md","originalText":"原文","userAnnotation":"批一下"}\n</action>';
-    const msg = await rt.messages.append(
+    // 错误通道迁移二期后 messages.append 走 Result，解包取消息。
+    const appended = await rt.messages.append(
       sessionId,
       "user",
       textBlocks("请看看"),
@@ -77,8 +76,10 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
             action: "annotate",
           },
         ],
-      },
+      }
     );
+    if (!appended.ok) throw appended.error;
+    const msg = appended.value;
 
     // main 进程预置一条未发送批注草稿（renderer 侧另有独立 store，此处只验 main 半边）
     chatAnnotateDraftStore.add(sessionId, {
@@ -124,13 +125,15 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     const userMsg = await rt.messages.append(
       sessionId,
       "user",
-      textBlocks("问一下"),
+      textBlocks("问一下")
     );
-    const assistant = await rt.messages.append(
+    const assistantAppend = await rt.messages.append(
       sessionId,
       "assistant",
-      textBlocks("答一下"),
+      textBlocks("答一下")
     );
+    if (!assistantAppend.ok) throw assistantAppend.error;
+    const assistant = assistantAppend.value;
     void userMsg;
 
     chatAnnotateDraftStore.add(sessionId, {

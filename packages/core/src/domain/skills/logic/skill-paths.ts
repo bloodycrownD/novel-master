@@ -28,6 +28,7 @@ type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { re
  *
  * 纯函数不抛错——service 层包装成 SkillError，tool 层分类器拿失败
  * 结果保守放弃串行化（该调用会被 schema/服务层拒绝）。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath 越根失败按迁移前口径透传（正常技能名不可达，见函数内注释），由调用链端点 catch 收口。
  */
 export function resolveSkillRelPathCore(name: string, path: string | undefined): SkillRelPathResolution {
   // 反斜杠与 normalizePath 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的

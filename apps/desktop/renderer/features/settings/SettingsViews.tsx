@@ -306,7 +306,7 @@ export function DataManagementView() {
         retry({ skipRebootstrap: true });
         toastSettingsSuccess(`已拉取云端数据（rev ${res.data.rev}）`);
         await reloadStatus();
-      } else if (res.error.code === "ALREADY_UP_TO_DATE") {
+      } else if (res.error.code === "CLOUD_SYNC_ALREADY_UP_TO_DATE") {
         showToast(res.error.message);
         await reloadStatus();
       } else {
@@ -327,7 +327,7 @@ export function DataManagementView() {
       if (res.ok) {
         toastSettingsSuccess(`已推送到云端（rev ${res.data.rev}）`);
         await reloadStatus();
-      } else if (res.error.code === "NEED_PULL_FIRST") {
+      } else if (res.error.code === "CLOUD_SYNC_NEED_PULL_FIRST") {
         setConfirmPushOverwrite(true);
       } else {
         toastSettingsError(res.error.message);

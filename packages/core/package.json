@@ -30,6 +30,10 @@
       "types": "./dist/public/compaction.d.ts",
       "import": "./dist/public/compaction.js"
     },
+    "./errors": {
+      "types": "./dist/public/errors.d.ts",
+      "import": "./dist/public/errors.js"
+    },
     "./events": {
       "types": "./dist/public/events.d.ts",
       "import": "./dist/public/events.js"

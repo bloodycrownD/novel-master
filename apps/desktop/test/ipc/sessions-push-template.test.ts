@@ -16,13 +16,12 @@ import { after, beforeEach, describe, it, mock } from "node:test";
 
 import { IPC_CHANNELS } from "../../shared/ipc-types.js";
 
-register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));const { handleSessionsPushTemplate } = await import(
+register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));
+const { handleSessionsPushTemplate } = await import(
   "../../src/main/ipc/handlers/sessions.js"
 );
-const {
-  notifyWorkspaceMutatedToRenderer,
-  setWorkspaceMutatedForwardTarget,
-} = await import("../../src/main/ipc/forward-workspace-mutated.js");
+const { notifyWorkspaceMutatedToRenderer, setWorkspaceMutatedForwardTarget } =
+  await import("../../src/main/ipc/forward-workspace-mutated.js");
 
 /** fake webContents：捕获 send 的 channel + payload。 */
 const sentMessages: { channel: string; payload: unknown }[] = [];
@@ -37,14 +36,22 @@ after(() => {
   setWorkspaceMutatedForwardTarget(() => undefined);
 });
 
-const pushTemplate = mock.fn(async () => {});
+// pushTemplate 同走 Result（handler 侧 `!ok` 即 throw），桩返回 ok wire。
+const pushTemplate = mock.fn(async () => ({
+  ok: true as const,
+  value: undefined,
+}));
+// 错误通道迁移二期后 sessions.get 走 Result（handler 侧 `!ok` 即 throw）。
 const getSession = mock.fn(async (id: string) => ({
-  id,
-  projectId: "p-1",
-  title: null,
-  parentSessionId: null,
-  createdAtMs: 0,
-  updatedAtMs: 0,
+  ok: true as const,
+  value: {
+    id,
+    projectId: "p-1",
+    title: null,
+    parentSessionId: null,
+    createdAtMs: 0,
+    updatedAtMs: 0,
+  },
 }));
 
 beforeEach(() => {

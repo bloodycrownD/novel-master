@@ -24,6 +24,9 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 async function requireSavedModelId(
   rt: NovelMasterRuntime,
   flags: ReadonlyMap<string, string | true>,

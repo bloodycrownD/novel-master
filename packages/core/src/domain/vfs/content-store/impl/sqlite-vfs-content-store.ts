@@ -82,6 +82,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return contentHash;
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：解码 / 解包 `Result` → 领域异常通道转码点（get/getMany/appendPackMemberPlaintexts 同款）——损坏数据按仓储边界抛出，由调用链端点 catch 收口。
+   */
   async get(contentHash: string): Promise<string> {
     // 进程内解压产物层（infra/content-cache）：内容是内容寻址的，同 hash
     // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与

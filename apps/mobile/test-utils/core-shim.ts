@@ -17,7 +17,7 @@ export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
-export {CloudSyncError, isCloudSyncError, CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
+export {CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
 export type {KkvService} from '../../../packages/core/dist/service/kkv/kkv.port.js';
 export {matchDepth, validateDepthSlice} from '../../../packages/core/dist/domain/depth/logic/depth-slice.js';
 export {sortDirPaths, sortFilesForDir} from '../../../packages/core/dist/domain/workplace/logic/workplace-eval.js';

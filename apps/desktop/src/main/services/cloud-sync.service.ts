@@ -10,13 +10,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CloudSyncCoordinator,
-  CloudSyncError,
-  isCloudSyncError,
   normalizePrefix,
   parseCloudSyncStatus,
   statusKey,
   type ObjectStoragePort,
 } from "@novel-master/core";
+import { AppError, isAppError } from "@novel-master/core/agent";
+import { domainOf } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import {
@@ -103,8 +103,8 @@ async function isDatabaseReplacedError(error: unknown): Promise<boolean> {
   return error instanceof DatabaseReplacedError;
 }
 
-function mapStorageError(error: unknown): CloudSyncError {
-  if (isCloudSyncError(error)) {
+function mapStorageError(error: unknown): AppError {
+  if (isAppError(error) && domainOf(error.code) === "CLOUD_SYNC") {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -115,9 +115,7 @@ function mapStorageError(error: unknown): CloudSyncError {
     lower.includes("signaturedoesnotmatch") ||
     lower.includes("403")
   ) {
-    return new CloudSyncError("AUTH", "云存储凭据无效或权限不足", {
-      cause: error,
-    });
+    return new AppError("CLOUD_SYNC_AUTH", {detail: "云存储凭据无效或权限不足"}, {cause: error});
   }
   if (
     lower.includes("network") ||
@@ -125,15 +123,9 @@ function mapStorageError(error: unknown): CloudSyncError {
     lower.includes("econnrefused") ||
     lower.includes("enotfound")
   ) {
-    return new CloudSyncError(
-      "NETWORK",
-      "无法连接云存储，请检查网络与 Endpoint",
-      {
-        cause: error,
-      }
-    );
+    return new AppError("CLOUD_SYNC_NETWORK", {detail: "无法连接云存储，请检查网络与 Endpoint"}, {cause: error});
   }
-  return new CloudSyncError("NETWORK", message, { cause: error });
+  return new AppError("CLOUD_SYNC_NETWORK", {detail: message}, {cause: error});
 }
 
 function buildS3Client(config: S3StorageConfig): S3Client {
@@ -155,7 +147,7 @@ async function buildS3StorageConfigFromStore(
   const publicConfig = await configStore.getPublicConfig();
   const secret = await configStore.getSecretAccessKey();
   if (secret == null || secret.length === 0) {
-    throw new CloudSyncError("NOT_CONFIGURED", "请先配置云存储");
+    throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
   }
   return {
     endpoint: publicConfig.endpoint,
@@ -298,7 +290,7 @@ export class DesktopCloudSyncService {
       });
       return result;
     } catch (error) {
-      if (isCloudSyncError(error) && error.code === "ALREADY_UP_TO_DATE") {
+      if (isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
         // 该错误只可能由 coordinator.pull 抛出，此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
         return { rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false };
@@ -397,7 +389,7 @@ export class DesktopCloudSyncService {
     const publicConfig = await this.configStore.getPublicConfig();
     const secret = await this.configStore.getSecretAccessKey();
     if (secret == null || secret.length === 0) {
-      throw new CloudSyncError("NOT_CONFIGURED", "请先配置云存储");
+      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
     }
     return createS3ObjectStorage({
       endpoint: publicConfig.endpoint,
@@ -431,7 +423,7 @@ export class DesktopCloudSyncService {
       secret == null ||
       secret.length === 0
     ) {
-      throw new CloudSyncError("NOT_CONFIGURED", "请先配置云存储");
+      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
     }
 
     // Node 端注入基于 node:fs/promises 的 FileSystemPort（对应 A-26），

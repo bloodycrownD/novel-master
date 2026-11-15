@@ -57,7 +57,13 @@ interface PrepareUserMessagesForPromptRuntime extends AttachmentHydratorRuntime 
     readonly filetree?: string;
 }
 
-/** 用户消息附件拼装入口。 */
+/**
+ * 用户消息附件拼装入口。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：`expandDynamicMacros` 的失败在
+ * prepare 内原样上抛——prepare 全链（agent-runner turn loop、两端
+ * buildSessionPromptInput）统一走异常通道，由 turn loop / chip 读口 catch 收口。
+ */
 class PromptAssembler {
     async prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<ChatMessageData[]> {
         const seen = promptPathSeen.createSet(runtime.seenPaths);

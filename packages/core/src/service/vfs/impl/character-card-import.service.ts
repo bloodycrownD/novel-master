@@ -4,7 +4,6 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
-import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -172,7 +171,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         if (directoryPath !== "/") {
           const parentCheck = await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`);
-          if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+          if (!parentCheck.ok) throw parentCheck.error;
           const existing = await repoTx.findByPath(sk, directoryPath);
           if (existing == null) {
             await repoTx.insertDirectory(sk, directoryPath);
@@ -206,7 +205,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
-            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+            if (!parentCheck.ok) throw parentCheck.error;
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });
@@ -265,6 +264,9 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     }
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：卡片解析 `Result` → service 异常通道转码点——失败原样上抛，由调用链端点（handler / 屏幕）catch 收口。
+   */
   async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<void> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {

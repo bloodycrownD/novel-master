@@ -11,8 +11,7 @@ import type { VfsGrepMatch, VfsReadResult } from "@/domain/vfs/ports/vfs-service
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -102,6 +101,7 @@ type GlobToolOutput = {
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
  * (global / project / session scope). Mutations append revisions via the revision-aware wrapper.
+  * 解包 throw 边界（错误通道迁移三期门⑦）：工具执行闭包内 `Result` 失败上抛，由 tool-runner 框架级统一收口。
  */
 export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] {
   const read: Tool<{ path: string; offset?: number; limit?: number }, ReadToolOutput, BuiltinToolContext> = {
@@ -442,7 +442,7 @@ async function probeFileAbsentForWrite(ctx: BuiltinToolContext, logicalPath: str
     await ctx.vfs.read(logicalPath);
     return false;
   } catch (error) {
-    if (isVfsError(error, "NOT_FOUND")) {
+    if (isAppError(error, "VFS_NOT_FOUND")) {
       return true;
     }
     log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error });

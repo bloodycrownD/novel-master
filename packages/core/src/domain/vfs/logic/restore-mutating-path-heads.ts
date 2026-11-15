@@ -1,15 +1,13 @@
-// legacy-port: VfsService — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
+// legacy-port: VfsService — 端口直抛 AppError，NOT_FOUND / IS_DIRECTORY / ALREADY_EXISTS 判定走 isAppError。
 /**
  * 突变路径 head 快照与补偿回滚。
  *
  * @module domain/vfs/logic/restore-mutating-path-heads
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
-import { vfsPortError } from "./vfs-port-error.js";
 
 /** 起始 head 快照：路径不存在。 */
 type MutatingPathHeadAbsent = {
@@ -87,7 +85,7 @@ export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: r
         version: read.version,
       });
     } catch (error: unknown) {
-      if (isVfsError(error, "NOT_FOUND")) {
+      if (isAppError(error, "VFS_NOT_FOUND")) {
         try {
           const entries = await vfs.list(path, { recursive: true });
           if (entries.length > 0) {
@@ -96,7 +94,7 @@ export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: r
             snapshots.set(path, { kind: "absent", path });
           }
         } catch (listError: unknown) {
-          if (isVfsError(listError, "NOT_FOUND")) {
+          if (isAppError(listError, "VFS_NOT_FOUND")) {
             snapshots.set(path, { kind: "absent", path });
           } else {
             throw listError;
@@ -104,7 +102,7 @@ export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: r
         }
         continue;
       }
-      if (isVfsError(error, "IS_DIRECTORY")) {
+      if (isAppError(error, "VFS_IS_DIRECTORY")) {
         const entries = await vfs.list(path, { recursive: true });
         snapshots.set(path, captureDirectorySnapshot(path, entries));
         continue;
@@ -124,14 +122,14 @@ async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathH
     try {
       await vfs.hardDelete(snapshot.path, { recursive: true });
     } catch (error: unknown) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
     try {
       await vfs.mkdir(snapshot.path);
     } catch (error: unknown) {
-      if (!isVfsError(error, "ALREADY_EXISTS")) {
+      if (!isAppError(error, "VFS_ALREADY_EXISTS")) {
         throw error;
       }
     }
@@ -144,7 +142,7 @@ async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathH
     const entries = await vfs.list(snapshot.path, { recursive: true });
     currentFilePaths = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
   } catch (error: unknown) {
-    if (!isVfsError(error, "NOT_FOUND")) {
+    if (!isAppError(error, "VFS_NOT_FOUND")) {
       throw error;
     }
   }
@@ -157,7 +155,7 @@ async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathH
     try {
       await vfs.hardDelete(filePath, { recursive: true });
     } catch (error: unknown) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
@@ -186,7 +184,7 @@ export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: Reado
         try {
           await vfs.hardDelete(path, { recursive: true });
         } catch (error: unknown) {
-          if (!isVfsError(error, "NOT_FOUND")) {
+          if (!isAppError(error, "VFS_NOT_FOUND")) {
             throw error;
           }
         }
@@ -198,7 +196,7 @@ export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: Reado
       }
       await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
     } catch (error: unknown) {
-      errors.push(isVfsError(error) ? vfsPortError(error) : error);
+      errors.push(error);
     }
   }
   if (errors.length > 0) {

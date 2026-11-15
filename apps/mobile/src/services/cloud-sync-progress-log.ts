@@ -4,7 +4,9 @@
  *
  * @module services/cloud-sync-progress-log
  */
-import {isCloudSyncError, type ObjectStoragePort} from '@novel-master/core';
+import {type ObjectStoragePort} from '@novel-master/core';
+import {isAppError} from '@novel-master/core/agent';
+import {domainOf} from '@novel-master/core/errors';
 import {
   mapCloudSyncProgressEvent,
   type CloudSyncProgressListener,
@@ -79,7 +81,7 @@ export function createCloudSyncProgress(
   const fail = (error: unknown, detail?: Record<string, unknown>): void => {
     step(`${op}_failed`, {
       error: error instanceof Error ? error.message : String(error),
-      code: isCloudSyncError(error) ? error.code : undefined,
+      key: isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC' ? error.key : undefined,
       ...detail,
     });
   };

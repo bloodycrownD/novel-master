@@ -41,6 +41,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     this.contentStore = contentStore ?? new SqliteVfsContentStore(conn);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath `Result` → 领域异常通道转码点（本仓储各方法同款）——非法路径按仓储边界抛出，经 service 至端点（handler / 屏幕 / CLI）catch 收口。
+   */
   async list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<VfsListEntry[]> {
     const resolved = normalizePath(dir);
     if (!resolved.ok) throw resolved.error;

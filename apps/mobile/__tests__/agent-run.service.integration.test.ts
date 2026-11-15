@@ -23,7 +23,8 @@ function baseRuntime(overrides: Partial<any> = {}) {
     // chat-session-detail-page 起：项目智能体下线，会话独立持有 agentId，
     // resolveAgentForProject 改从 sessions.getSessionAgentConfig 取 agentId。
     sessions: {
-      getSessionAgentConfig: async () => ({agentId: 'a1'}),
+      // 错误通道迁移二期后走 Result（resolveApplicationModelIdForRun `!ok` 即 throw）。
+      getSessionAgentConfig: async () => ({ok: true, value: {agentId: 'a1'}}),
     },
     agentRegistry: {
       listAgentIds: async () => ['a1'],

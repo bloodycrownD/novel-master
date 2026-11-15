@@ -25,6 +25,7 @@ type EnsureDirectoryChainError = AppError<"VFS_NOT_A_DIRECTORY">;
  * 从根往下逐级重建 `logicalPath` 的父目录链（幂等 mkdir，已存在的目录静默
  * 跳过），供回滚 restore 写盘前确保父目录在位——被删文件复活时其父目录
  * 可能已被一并删除。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：入口非法路径按旧实现抛错（不进错误联合），由调用链端点 catch 收口。
  */
 export async function ensureDirectoryChain(vfs: VfsRestorePort, logicalPath: string): Promise<Result<void, EnsureDirectoryChainError>> {
   const normalized = normalizePath(logicalPath);

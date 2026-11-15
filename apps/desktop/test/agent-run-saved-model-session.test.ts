@@ -39,21 +39,34 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
     // 这里先注册一个 agent 并设为 workspace 当前，保证 create 能落库。
     await rt.agentRegistry.upsert("any-agent", definition);
     await rt.state.setCurrentAgentId("any-agent");
-    const project = await rt.projects.create("saved-model-proj");
-    const session = await rt.sessions.create(project.id, "saved-model-s");
+    // 错误通道迁移二期后 create 链走 Result，解包取实体。
+    const projectCreated = await rt.projects.create("saved-model-proj");
+    if (!projectCreated.ok) throw projectCreated.error;
+    const project = projectCreated.value;
+    const sessionCreated = await rt.sessions.create(
+      project.id,
+      "saved-model-s"
+    );
+    if (!sessionCreated.ok) throw sessionCreated.error;
+    const session = sessionCreated.value;
 
     // workspace 层已移除：agent 无 pin 且 session 无 modelId → 无模型可解析，拋 AgentRunError
     await assert.rejects(
       () => resolveDesktopSavedModelId(rt, definition, session.id),
-      (err: unknown) => err instanceof Error,
+      (err: unknown) => err instanceof Error
     );
 
     // session modelId 覆盖 → 命中 sessionModelId（agentId 必填）
-    await rt.sessions.updateSessionAgentConfig(session.id, {
+    const bound = await rt.sessions.updateSessionAgentConfig(session.id, {
       agentId: "any-agent",
       modelId: "session-saved-model",
     });
-    const resolved = await resolveDesktopSavedModelId(rt, definition, session.id);
+    if (!bound.ok) throw bound.error;
+    const resolved = await resolveDesktopSavedModelId(
+      rt,
+      definition,
+      session.id
+    );
     assert.equal(resolved.savedModelId, "session-saved-model");
   });
 });

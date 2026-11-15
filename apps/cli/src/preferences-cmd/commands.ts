@@ -11,7 +11,6 @@ import {
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "@novel-master/core";
-import { isAppError } from "@novel-master/core/agent";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const KNOWN_KEYS = [
@@ -75,26 +74,22 @@ async function setValue(
   key: KnownKey,
   raw: string,
 ): Promise<void> {
-  try {
-    switch (key) {
-      case PREF_KEY_CHAT_LLM_STREAM:
-        await preferences.setLlmStreamEnabled(parseBooleanArg(raw, key));
-        return;
-      case PREF_KEY_CHAT_SUBAGENT_STREAM:
-        await preferences.setSubagentStreamEnabled(parseBooleanArg(raw, key));
-        return;
-      case PREF_KEY_CHAT_THINKING_CONTEXT:
-        await preferences.setThinkingContextEnabled(parseBooleanArg(raw, key));
-        return;
-      case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN:
-        await preferences.setUserVfsUnifiedToolTurn(parseBooleanArg(raw, key));
-        return;
-    }
-  } catch (error) {
-    if (isAppError(error, "PREFERENCES_INVALID_VALUE")) {
-      throw new Error(error.message);
-    }
-    throw error;
+  // PREFERENCES_INVALID_VALUE 无 messageKey（码表 109500），formatCliError 直出
+  // `error.message`——原 catch 转手 `new Error(error.message)` 与直接冒泡输出逐字
+  // 一致且丢 code，删除（错误通道迁移三期）。
+  switch (key) {
+    case PREF_KEY_CHAT_LLM_STREAM:
+      await preferences.setLlmStreamEnabled(parseBooleanArg(raw, key));
+      return;
+    case PREF_KEY_CHAT_SUBAGENT_STREAM:
+      await preferences.setSubagentStreamEnabled(parseBooleanArg(raw, key));
+      return;
+    case PREF_KEY_CHAT_THINKING_CONTEXT:
+      await preferences.setThinkingContextEnabled(parseBooleanArg(raw, key));
+      return;
+    case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN:
+      await preferences.setUserVfsUnifiedToolTurn(parseBooleanArg(raw, key));
+      return;
   }
 }
 

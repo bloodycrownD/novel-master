@@ -27,7 +27,14 @@ export type ExecuteSessionUserVfsOpOptions = {
   readonly skipComposerStatusRefresh?: boolean;
 };
 
-/** 经 userVfsTurn 执行；失败抛错供 toast。默认成功后轻量投影状态条。 */
+/**
+ * 经 userVfsTurn 执行；失败抛错供 toast。默认成功后轻量投影状态条。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：core `executeOp` 返回
+ * `{ok:false, error}`，本函数是 core 返回值通道 → mobile 异常通道的转码点
+ * （mobile service/UI 统一异常口径，UI 事件 catch → formatError → toast；
+ * 与 desktop 同名 service 的「抛错供 IPC 格式化」镜像一致）。
+ */
 export async function executeSessionUserVfsOp(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,

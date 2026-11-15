@@ -391,6 +391,9 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     return Result.ok({ lines, sortedNames });
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：compile `Result` → service 异常通道转码点（本文件其余解包 throw 同款）——失败原样上抛，由调用链端点（handler / 屏幕）catch 收口。
+   */
   async listCompiledRules(): Promise<CompiledSmartSortRule[]> {
     const rules = await this.rules().listOrdered();
     const out: CompiledSmartSortRule[] = [];

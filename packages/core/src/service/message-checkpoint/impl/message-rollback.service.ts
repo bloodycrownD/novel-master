@@ -24,7 +24,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { isSessionFsError } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { userMessageOf } from "@/i18n/error-message.js";
@@ -246,7 +246,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         break;
       } catch (error) {
         // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
-        const isConflict = isSessionFsError(error, "ROLLBACK_CONFLICT");
+        const isConflict = isAppError(error, "SESSION_FS_ROLLBACK_CONFLICT");
         if (!isConflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
           throw error;
         }
@@ -544,7 +544,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     try {
       await vfs.delete(logicalPath);
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }

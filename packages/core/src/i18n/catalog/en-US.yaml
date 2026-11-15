@@ -7,6 +7,10 @@ error:
     not_found: File does not exist or has been deleted.
     zip_not_confirmed: Zip import requires explicit confirmation (CLI --yes or the client confirm dialog).
     zip_external_not_supported: External directory ingest is not supported; provide a zip archive.
+    single_file_too_large: "File too large: {size_bytes} bytes exceeds the import limit of {max_bytes} bytes (~32MB); import rejected."
+    single_file_read_failed: "Unable to read the selected file: {reason}"
+    single_file_not_found: "Selected file does not exist: {path}"
+    single_file_export_target_invalid: "Export target is not a single file: {logical_path}"
   chat:
     not_found: "{kind} not found: {id}"
   infra:
@@ -22,6 +26,7 @@ error:
     conflict: Provider conflict.
     builtin_provider: Builtin provider is protected.
     http_error: Provider request failed.
+    api_key_not_set: Set your API key in the provider settings first.
     model_not_saved: Fetch and save the model first.
     unsupported_content: Unsupported provider content.
     unsupported: Provider operation unsupported.
@@ -45,6 +50,7 @@ error:
     conflict: "Tool already registered: {tool_name}"
     failed: "Tool failed: {tool_name}"
     forbidden: "Tool path outside allowed scope: {tool_name} -> {path}"
+    cancelled: "Tool execution cancelled: {tool_name}"
   cloud_sync:
     push_mutex_timeout:
       push: Push is busy waiting for the sync mutex lock; please try again later.

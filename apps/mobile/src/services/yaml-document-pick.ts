@@ -1,5 +1,7 @@
 import {types} from '@react-native-documents/picker';
 
+import {AppError} from '@novel-master/core/agent';
+
 import {knownTypesForExtension} from './document-io';
 
 const YAML_NAME_RE = /\.ya?ml$/i;
@@ -21,6 +23,6 @@ export function yamlImportPickTypes(): string[] {
 
 export function assertYamlFileName(name: string | null | undefined): void {
   if (name == null || !YAML_NAME_RE.test(name)) {
-    throw new Error('请选择 .yaml 或 .yml 文件');
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '请选择 .yaml 或 .yml 文件'});
   }
 }

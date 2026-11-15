@@ -5,23 +5,16 @@
  */
 
 import type { AppError } from "@/errors/app-error.js";
-import { vfsErrorCodeOf, type LegacyVfsError, type VfsErrorCode, type VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
+import type { ErrorKey } from "@/errors/error-codes.js";
+import type { VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
 import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
 
-type VfsErrorLike = {
-  readonly code: VfsErrorCode;
-  readonly message: string;
-  readonly path?: string;
-  readonly details?: unknown;
-};
-
 // nm-style: keep-local — REPLACE_NOT_FOUND 分支独占 LCS 诊断与预览渲染；
 // 内联会让主 switch 混入 30 行诊断组装，且两处提前返回都依赖 details 收窄。
-function formatReplaceNotFound(error: VfsErrorLike, logicalPath: string): string {
-  const details = error.details as VfsReplaceNotFoundDetails | undefined;
-  const pathLabel = logicalPath || error.path || "unknown path";
+function formatReplaceNotFound(details: VfsReplaceNotFoundDetails | undefined, pathHint: string | undefined, logicalPath: string): string {
+  const pathLabel = logicalPath || pathHint || "unknown path";
 
   if (details == null) {
     return `[REPLACE_NOT_FOUND] Replace string not found in ${pathLabel}`;
@@ -52,41 +45,66 @@ function formatReplaceNotFound(error: VfsErrorLike, logicalPath: string): string
   return out;
 }
 
-/** 将 VFS 域 AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
-/** AppError（key + 平铺 details）与 legacy 手搓对象（顶层 path + code 短码）都收；经 service 端口出来的 VFS 失败是后者。 */
-export function formatVfsErrorForLlm(error: AppError | LegacyVfsError, _scope?: VfsScope): string {
-  const code = vfsErrorCodeOf(error);
-  // VfsError 类退役后 LCS 诊断字段平铺在 AppError details 顶层；legacy 对象的 details 即诊断对象本身。
+/** 其余 VFS key 的 LLM 标签旧短码字面量（key 剥前缀的旧输出零变化，判别不再依赖命名约定）。 */
+const VFS_KEY_TO_LABEL: Partial<Record<ErrorKey, string>> = {
+  VFS_INVALID_PATTERN: "INVALID_PATTERN",
+  VFS_ZIP_INVALID_ARCHIVE: "ZIP_INVALID_ARCHIVE",
+  VFS_ZIP_INVALID_PATH: "ZIP_INVALID_PATH",
+  VFS_ZIP_INVALID_UTF8: "ZIP_INVALID_UTF8",
+  VFS_ZIP_DUPLICATE_PATH: "ZIP_DUPLICATE_PATH",
+  VFS_ZIP_PAYLOAD_TOO_LARGE: "ZIP_PAYLOAD_TOO_LARGE",
+  VFS_ZIP_NOT_CONFIRMED: "ZIP_NOT_CONFIRMED",
+  VFS_ZIP_EXTERNAL_NOT_SUPPORTED: "ZIP_EXTERNAL_NOT_SUPPORTED",
+  VFS_ZIP_IMPORT_FAILED: "ZIP_IMPORT_FAILED",
+  VFS_CONTENT_CORRUPT: "CONTENT_CORRUPT",
+  VFS_CONTENT_UNSUPPORTED_FORMAT: "CONTENT_UNSUPPORTED_FORMAT",
+  VFS_CONTENT_BLOB_MISSING: "CONTENT_BLOB_MISSING",
+  VFS_INVARIANT_VIOLATION: "INVARIANT_VIOLATION",
+  VFS_RESTORE_FAILED: "RESTORE_FAILED",
+  VFS_OPERATION_UNSUPPORTED: "OPERATION_UNSUPPORTED",
+  VFS_SINGLE_FILE_TOO_LARGE: "SINGLE_FILE_TOO_LARGE",
+  VFS_SINGLE_FILE_READ_FAILED: "SINGLE_FILE_READ_FAILED",
+  VFS_SINGLE_FILE_NOT_FOUND: "SINGLE_FILE_NOT_FOUND",
+  VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: "SINGLE_FILE_EXPORT_TARGET_INVALID",
+  VFS_CHARACTER_CARD_UNRECOGNIZED: "CHARACTER_CARD_UNRECOGNIZED",
+  VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: "CHARACTER_CARD_UNSUPPORTED_SPEC",
+  VFS_CHARACTER_CARD_INVALID_PATH: "CHARACTER_CARD_INVALID_PATH",
+  VFS_CHARACTER_CARD_NOT_CONFIRMED: "CHARACTER_CARD_NOT_CONFIRMED",
+  VFS_CHARACTER_CARD_IMPORT_FAILED: "CHARACTER_CARD_IMPORT_FAILED",
+  VFS_CHARACTER_CARD_TOO_LARGE: "CHARACTER_CARD_TOO_LARGE",
+};
+
+/** 将 VFS 域 AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）；LLM 面沿用旧短码标签（`[NOT_FOUND]` 等），判别走 `error.key` 的 switch（穷尽、类型安全），短码只出现在输出模板与标签表的字面量里；非 VFS key 落兜底 message 全文。 */
+export function formatVfsErrorForLlm(error: AppError, _scope?: VfsScope): string {
+  // LCS 诊断字段平铺在 AppError details 顶层（VfsError 类退役后的形状）。
   const details: unknown = error.details;
-  const path = typeof (error as {path?: unknown}).path === "string" ? (error as {path?: unknown}).path as string : typeof details === "object" && details != null && typeof (details as {path?: unknown}).path === "string" ? (details as {path?: unknown}).path as string : undefined;
-  const normalized: VfsErrorLike | null = code == null ? null : { code, message: error.message, path, details };
-  if (normalized == null) {
-    return stripKnownPhysicalPrefixes(error.message);
-  }
-  const logicalPath = normalized.path ?? stripKnownPhysicalPrefixes(normalized.message);
-  switch (normalized.code) {
-    case "NOT_FOUND":
+  const path = typeof details === "object" && details != null && typeof (details as {path?: unknown}).path === "string" ? (details as {path?: unknown}).path as string : undefined;
+  const logicalPath = path ?? stripKnownPhysicalPrefixes(error.message);
+  switch (error.key) {
+    case "VFS_NOT_FOUND":
       return `[NOT_FOUND] Path not found: ${logicalPath}`;
-    case "IS_DIRECTORY":
+    case "VFS_IS_DIRECTORY":
       return `[IS_DIRECTORY] Path is a directory: ${logicalPath}`;
-    case "INVALID_PATH": {
-      const match = normalized.message.match(/^Invalid path [^:]+: (.+)$/);
-      return `[INVALID_PATH] Invalid path ${logicalPath}: ${match?.[1] ?? stripKnownPhysicalPrefixes(normalized.message)}`;
+    case "VFS_INVALID_PATH": {
+      const match = error.message.match(/^Invalid path [^:]+: (.+)$/);
+      return `[INVALID_PATH] Invalid path ${logicalPath}: ${match?.[1] ?? stripKnownPhysicalPrefixes(error.message)}`;
     }
-    case "INVALID_NAME":
+    case "VFS_INVALID_NAME":
       // message 是中文 reason，LLM 面补上 code 前缀与名字定位
-      return `[INVALID_NAME] Invalid entry name ${normalized.path ?? logicalPath}: ${normalized.message}`;
-    case "NOT_A_DIRECTORY":
+      return `[INVALID_NAME] Invalid entry name ${path ?? logicalPath}: ${error.message}`;
+    case "VFS_NOT_A_DIRECTORY":
       return `[NOT_A_DIRECTORY] Not a directory: ${logicalPath}`;
-    case "PARENT_NOT_FOUND":
+    case "VFS_PARENT_NOT_FOUND":
       return `[PARENT_NOT_FOUND] Parent not found: ${logicalPath}`;
-    case "DIRECTORY_NOT_EMPTY":
+    case "VFS_DIRECTORY_NOT_EMPTY":
       return `[DIRECTORY_NOT_EMPTY] Directory not empty: ${logicalPath}`;
-    case "ALREADY_EXISTS":
+    case "VFS_ALREADY_EXISTS":
       return `[ALREADY_EXISTS] Path already exists: ${logicalPath}`;
-    case "REPLACE_NOT_FOUND":
-      return formatReplaceNotFound(normalized, logicalPath);
-    default:
-      return `[${normalized.code}] ${stripKnownPhysicalPrefixes(normalized.message)}`;
+    case "VFS_REPLACE_NOT_FOUND":
+      return formatReplaceNotFound(details as VfsReplaceNotFoundDetails | undefined, path, logicalPath);
+    default: {
+      const label = VFS_KEY_TO_LABEL[error.key];
+      return label != null ? `[${label}] ${stripKnownPhysicalPrefixes(error.message)}` : stripKnownPhysicalPrefixes(error.message);
+    }
   }
 }

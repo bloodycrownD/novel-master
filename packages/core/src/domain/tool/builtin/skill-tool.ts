@@ -287,6 +287,9 @@ action 说明：
       total: z.number().int(),
     }),
   ]),
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：工具执行闭包内 `Result` 失败上抛（readSkillFile/editSkillFile/writeSkillFile 同款），由 tool-runner 框架级统一收口。
+   */
   async run(input, ctx): Promise<SkillToolOutput> {
     const skills = ctx.skills;
     if (skills == null) {

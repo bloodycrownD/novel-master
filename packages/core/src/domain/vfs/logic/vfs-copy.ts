@@ -1,4 +1,4 @@
-// legacy-port: VfsService — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
+// legacy-port: VfsService — 端口直抛 AppError，isVfsError 分支按域段判中后原样进 Result.err。
 /**
  * VFS path copy via {@link VfsService} composition (files and recursive directory trees).
  *
@@ -7,10 +7,10 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError, vfsErrorCodeOf } from "@/errors/vfs-errors.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
 import { mkdirIgnoreExists, normalizeDirPath, remapPathUnderDir } from "./vfs-move.js";
-import { vfsPortError, type VfsPortError } from "./vfs-port-error.js";
+import type { VfsPortError } from "./vfs-port-error.js";
 
 export type CopyVfsPathOptions = {
   readonly recursive?: boolean;
@@ -37,9 +37,8 @@ export async function copyVfsPath(vfs: VfsService, from: string, to: string, opt
     if (!isVfsError(error)) {
       throw error;
     }
-    const code = vfsErrorCodeOf(error);
-    if (code !== "NOT_FOUND" && code !== "IS_DIRECTORY") {
-      return Result.err(vfsPortError(error));
+    if (error.key !== "VFS_NOT_FOUND" && error.key !== "VFS_IS_DIRECTORY") {
+      return Result.err(error as VfsPortError);
     }
   }
 
@@ -71,7 +70,7 @@ export async function copyVfsPath(vfs: VfsService, from: string, to: string, opt
     return Result.ok(undefined);
   } catch (error) {
     if (isVfsError(error)) {
-      return Result.err(vfsPortError(error));
+      return Result.err(error as VfsPortError);
     }
     throw error;
   }

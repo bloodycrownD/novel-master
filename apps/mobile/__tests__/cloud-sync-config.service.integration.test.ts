@@ -4,7 +4,7 @@
  * 选取不触网的 service 路径（未配置 / 配置不完整的短路分支），
  * 验证 service 真实消费 store 从 KKV + SKSP 装载的状态。
  */
-import {AppError} from '@novel-master/core/agent';
+import {AppError, Result} from '@novel-master/core/errors';
 import {
   getCloudSyncStatusView,
   pullCloudSync,
@@ -26,18 +26,23 @@ jest.mock('@aws-sdk/client-s3', () => ({
 
 class InMemoryKkv {
   private map = new Map<string, string>();
-  async get(module: string, key: string): Promise<string> {
+  async get(module: string, key: string) {
     const value = this.map.get(`${module}/${key}`);
     if (value === undefined) {
-      throw new AppError('KKV_NOT_FOUND', 'missing');
+      return Result.err(
+        new AppError('KKV_NOT_FOUND', {
+          detail: `KKV key not found: ${module}/${key}`,
+        }),
+      );
     }
-    return value;
+    return Result.ok(value);
   }
   async set(module: string, key: string, value: string): Promise<void> {
     this.map.set(`${module}/${key}`, value);
   }
-  async delete(module: string, key: string): Promise<void> {
+  async delete(module: string, key: string) {
     this.map.delete(`${module}/${key}`);
+    return Result.ok(undefined);
   }
 }
 
@@ -79,12 +84,12 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
     await expect(
       pullCloudSync(runtime, async () => runtime),
     ).rejects.toMatchObject({
-      name: 'CloudSyncError',
-      code: 'NOT_CONFIGURED',
+      name: 'CLOUD_SYNC_NOT_CONFIGURED',
+      key: 'CLOUD_SYNC_NOT_CONFIGURED',
     });
     await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
-      name: 'CloudSyncError',
-      code: 'NOT_CONFIGURED',
+      name: 'CLOUD_SYNC_NOT_CONFIGURED',
+      key: 'CLOUD_SYNC_NOT_CONFIGURED',
     });
   });
 

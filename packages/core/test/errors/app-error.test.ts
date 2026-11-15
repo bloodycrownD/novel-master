@@ -1,37 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError, firstDescriptorOf, isAppError, toSnakeCase, type ErrorParamsMap } from "../../src/errors/app-error.js";
+import { DOMAIN_RANGES } from "../../src/errors/domain.js";
 import { ErrorCodes } from "../../src/errors/error-codes.js";
 import { CORE_MESSAGE_KEYS, type CoreMessageKey } from "../../src/i18n/keys.js";
 import { CORE_CATALOGS } from "../../src/i18n/generated-catalog.js";
-
-/** 各域保留号段；新增域时先在这里登记，守卫会强制 code 落在段内。 */
-const DOMAIN_RANGES: Record<string, readonly [number, number]> = {
-  AGENT: [101000, 101999],
-  VFS: [102000, 102999],
-  VFS_CHARACTER_CARD: [103000, 103999],
-  TOOL: [104000, 104999],
-  PROVIDER: [105000, 105999],
-  CHAT: [106000, 106999],
-  SKILL: [107000, 107999],
-  COMPACTION_CONDITIONS: [108000, 108499],
-  SMART_SORT_RULE: [108500, 108999],
-  CONFIG: [109000, 109499],
-  PREFERENCES: [109500, 109999],
-  INFRA: [110000, 110999],
-  DEPTH: [111000, 111999],
-  EVENTS: [112000, 112999],
-  FEATURE_FLAGS: [113000, 113999],
-  FORMAT: [114000, 114999],
-  KKV: [115000, 115999],
-  SESSION_FS: [116000, 116999],
-  PROMPT: [117000, 117999],
-  SESSION_KKV: [118000, 118999],
-  SESSION_RUN_STATE: [119000, 119999],
-  USAGE: [120000, 120999],
-  WORKPLACE: [121000, 121999],
-  IPC: [123000, 123999],
-};
 
 /** 取 key 的域：最长已登记前缀 + `_`，覆盖 VFS_CHARACTER_CARD / SMART_SORT_RULE / SESSION_FS 等多段 token；TASK_* 控制流码落在 IPC 段。 */
 function domainOf(key: string): string {
@@ -58,6 +31,10 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   VFS_NOT_A_DIRECTORY: ["path"],
   VFS_PARENT_NOT_FOUND: ["path"],
   VFS_INVALID_PATTERN: ["pattern"],
+  VFS_SINGLE_FILE_TOO_LARGE: ["sizeBytes", "maxBytes"],
+  VFS_SINGLE_FILE_READ_FAILED: ["reason"],
+  VFS_SINGLE_FILE_NOT_FOUND: ["path"],
+  VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: ["logicalPath"],
   VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: ["spec"],
   TOOL_SEARCH_TEMPLATE_INVALID: ["reason"],
   TOOL_NOT_FOUND: ["toolName"],
@@ -65,6 +42,7 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   TOOL_INVALID_ARGUMENT: ["toolName", "issues"],
   TOOL_FAILED: ["toolName", "cause?"],
   TOOL_FORBIDDEN: ["toolName", "path"],
+  TOOL_CANCELLED: ["toolName", "detail?"],
   PROVIDER_NOT_FOUND: ["providerId"],
   PROVIDER_SAVED_MODEL_IN_USE: ["modelName", "blockingRefs"],
   CHAT_NOT_FOUND: ["kind", "id", "messageId?", "projectId?", "sessionId?"],
@@ -121,6 +99,11 @@ const PHASE_NEW_MESSAGE_KEYS = [
   "error.prompt.invalid_block",
   "error.prompt.unknown_field",
   "error.prompt.unsupported_syntax",
+  "error.tool.cancelled",
+  "error.vfs.single_file_too_large",
+  "error.vfs.single_file_read_failed",
+  "error.vfs.single_file_not_found",
+  "error.vfs.single_file_export_target_invalid",
 ] as const;
 
 function paramsOf(template: string): string[] {
@@ -136,7 +119,7 @@ describe("ErrorCodes 注册表", () => {
     for (const [key, { code }] of Object.entries(ErrorCodes)) {
       assert.ok(Number.isInteger(code) && code > 0, `${key} 的 code 必须是正整数`);
       const domain = domainOf(key);
-      const range = DOMAIN_RANGES[domain];
+      const range = (DOMAIN_RANGES as Record<string, readonly [number, number]>)[domain];
       assert.ok(range, `${key} 的域 ${domain} 还没登记号段`);
       assert.ok(code >= range[0] && code <= range[1], `${key} 的 code ${code} 超出 ${domain} 段 ${range[0]}-${range[1]}`);
     }

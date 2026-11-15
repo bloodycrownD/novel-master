@@ -13,6 +13,7 @@
  * @module services/db-maintenance.service
  */
 import {createDbMaintenanceService} from '@novel-master/core';
+import {AppError} from '@novel-master/core/agent';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -42,7 +43,7 @@ export async function getDatabaseMaintenanceStats(
   reclaimableBytes: number;
 }> {
   if (isMobileAgentActive()) {
-    throw new Error('Agent 运行中，请稍后再操作');
+    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'});
   }
   const [fileBytes, stats] = await Promise.all([
     statDatabaseFileBytes(),
@@ -63,7 +64,7 @@ export async function runDatabaseMaintenance(
   runtime: MobileNovelMasterRuntime,
 ): Promise<{beforeBytes: number; afterBytes: number}> {
   if (isMobileAgentActive()) {
-    throw new Error('Agent 运行中，请稍后再操作');
+    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'});
   }
   acquireMobileDbMaintenanceBusy();
   try {

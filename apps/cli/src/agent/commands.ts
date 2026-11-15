@@ -39,6 +39,9 @@ function warnUnsupportedFlag(
     }
 }
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：repo save / 校验的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 async function validateDefinitionForCli(
     rt: NovelMasterRuntime,
     definition: AgentDefinition,

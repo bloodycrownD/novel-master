@@ -19,9 +19,10 @@ import {
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
 
-import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
+import { assembleWorkplaceDisplay, type Outcome } from "@novel-master/core/workplace";
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -115,7 +116,7 @@ export async function runPrompt(
   >,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Outcome<void>> {
   if (subcommand !== "render") {
     throw new Error(
       "Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]",
@@ -143,12 +144,11 @@ export async function runPrompt(
     vfs,
     layout,
   });
-  if (assembled.kind === "failed") {
-    throw assembled.error;
-  }
   if (assembled.kind !== "completed") {
-    // 本调用无 shouldStop 判据，中断分支恒不到（防御性收窄；错误通道迁移二期）。
-    throw new Error("workplace assembly interrupted without shouldStop");
+    // 本调用无 shouldStop 判据，中断分支恒不到；failed 与 cancelled/replaced
+    // 都沿 Outcome 交回 main 边界——failed 汇入 catch 统一出口，中断走
+    // EXIT_CANCELLED（错误通道迁移三期）。
+    return assembled;
   }
   const { workplaceDisplay } = assembled.value;
   // 技能索引预算：与双端预览同模式（probe + resolve 判 skill，D4 联动）。
@@ -191,7 +191,7 @@ export async function runPrompt(
       console.error(
         JSON.stringify(buildCliNoModelTokenDiagnostic(tokenCount)),
       );
-      return;
+      return OUTCOME_COMPLETED;
     }
 
     if (!isSavedModelUuidFormat(savedModelId)) {
@@ -224,4 +224,5 @@ export async function runPrompt(
       }),
     );
   }
+  return OUTCOME_COMPLETED;
 }

@@ -93,9 +93,10 @@ const sampleMessage = (): ChatMessageData => ({
 describe('useChatTabMessageActions set-floor', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 错误通道迁移二期后走 Result（hook 侧 `!ok` 即 throw）。
     mockSetMessageFloorAtMessage.mockResolvedValue({
-      hiddenCount: 1,
-      shownCount: 1,
+      ok: true,
+      value: {hiddenCount: 1, shownCount: 1},
     });
     mockReloadMessages.mockResolvedValue(undefined);
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);

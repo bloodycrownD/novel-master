@@ -20,6 +20,9 @@ const UPDATE_SQL = `UPDATE llm_saved_model SET model_name = #{modelName}, settin
 const DELETE_BY_ID_SQL = "DELETE FROM llm_saved_model WHERE id = #{id}";
 const DELETE_BY_PROVIDER_SQL = "DELETE FROM llm_saved_model WHERE provider_id = #{providerId}";
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：settings 解码 `Result` → 领域异常通道转码点——坏行按仓储边界抛出，由调用链端点 catch 收口。
+ */
 function rowToSaved(row: Row): SavedModel {
   const settings = savedModelSettingsFromJson(JSON.parse(String(row.settings_json)) as unknown);
   if (!settings.ok) throw settings.error;

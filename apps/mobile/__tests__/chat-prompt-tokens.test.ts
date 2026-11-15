@@ -13,7 +13,6 @@ import {
 // jest.mock 拦截后这里拿到的是工厂里的同构类——被测服务的 instanceof 与
 // 测试里 throw 的实例同源（中途弃权用例的观测前提）。
 import {ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
-import {PromptTokenResolveBailedError} from '@novel-master/core/provider';
 import {PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -66,25 +65,22 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 // badge/label 走 `@novel-master/core/common` 取 core 真实现（不被本 mock 覆盖），
 // 因此本套件断言的标签字符串与 desktop 测试同源对拍（token-source-label T-TL4）。
-jest.mock('@novel-master/core/provider', () => {
-  // 与 core 真身同构的 resolve 段弃权错误类（r3-chip-1）：被测服务按
-  // instanceof 识别「resolve 段中途弃权」，mock 工厂必须给同一个类。
-  class PromptTokenResolveBailedError extends Error {
-    constructor() {
-      super('prompt token resolve bailed (run in flight)');
-      this.name = 'PromptTokenResolveBailedError';
+jest.mock('@novel-master/core/provider', () => ({
+  // 错误通道迁移二期：core 读口改走 Outcome（completed/failed/cancelled/replaced），
+  // 不再抛弃权哨兵（PromptTokenResolveBailedError 随之退役，无需在 mock 里复刻）。
+  // 桩仍按裸结果配置，这里统一包成 completed——弃权/失败用 kind 直返或 reject 表达。
+  resolvePromptTokensWithBackfill: async (...args: unknown[]) => {
+    const value = await mockResolvePromptTokensWithBackfill(...args);
+    if (value != null && typeof value === 'object' && 'tokenCount' in value) {
+      return {kind: 'completed' as const, value};
     }
-  }
-  return {
-    resolvePromptTokensWithBackfill: (...args: unknown[]) =>
-      mockResolvePromptTokensWithBackfill(...args),
-    resolveTokenCounterModeForModel: (...args: unknown[]) =>
-      mockResolveTokenCounterModeForModel(...args),
-    serializePromptLlmInput: (...args: unknown[]) =>
-      mockSerializePromptLlmInput(...args),
-    PromptTokenResolveBailedError,
-  };
-});
+    return value;
+  },
+  resolveTokenCounterModeForModel: (...args: unknown[]) =>
+    mockResolveTokenCounterModeForModel(...args),
+  serializePromptLlmInput: (...args: unknown[]) =>
+    mockSerializePromptLlmInput(...args),
+}));
 
 jest.mock('@novel-master/core/prompt', () => ({
   messageBodyTextFromBlocks: () => 'hello',
@@ -128,7 +124,8 @@ function stubRuntime(overrides?: {
       heuristic: {countText: jest.fn().mockReturnValue(1000)},
     },
     sessions: {
-      getSessionAgentConfig: jest.fn().mockResolvedValue({}),
+      // 错误通道迁移后走 Result 通道（生产侧 `!ok` 即 throw）。
+      getSessionAgentConfig: jest.fn().mockResolvedValue({ok: true, value: {}}),
     },
     messages: {listBySession: jest.fn()},
     // 读口会把它透传给 core 的 resolvePromptTokensWithBackfill（跨重启取 API 值）
@@ -214,8 +211,12 @@ describe('chat-prompt-tokens.service', () => {
       // rawMessages 已无实际用途（回填废弃），仅签名兼容保留；mock bundle 不携带时为 undefined
       undefined,
       expect.objectContaining({tokenizerOverride: 'gemma'}),
-      // 第 4 参透传 sessionKkv：读口据此取跨重启的 API 值
-      {sessionKkv: runtime.sessionKkv},
+      // 第 4 参透传 sessionKkv：读口据此取跨重启的 API 值；
+      // 错误通道迁移二期后 options 恒带 shouldBail（无判据时包装为恒 null）。
+      {
+        sessionKkv: runtime.sessionKkv,
+        shouldBail: expect.any(Function),
+      },
     );
   });
 
@@ -277,6 +278,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(callArgs[1]).toBe(rawMessages);
     expect(callArgs[3]).toEqual({
       sessionKkv: expect.objectContaining({get: expect.any(Function)}),
+      shouldBail: expect.any(Function),
     });
   });
 
@@ -912,7 +914,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(upgrades).toEqual([]);
   });
 
-  it('resolve 段弃权错误不逃逸（r3-chip-1）：PromptTokenResolveBailedError → 空串哨兵，绝不走 fallback', async () => {
+  it('resolve 段弃权不逃逸（r3-chip-1）：Outcome replaced → 空串哨兵，绝不走 fallback', async () => {
     // catch 只认 ChatPromptBuildBailedError 时，这个错误会一路逃到
     // startPreciseUpgrade 的 catch / 外层 rejection —— 表现为 unhandled
     // rejection，且首帧回落成「重算一遍」的 fallback（恰是要消灭的竞争）。
@@ -922,9 +924,9 @@ describe('chat-prompt-tokens.service', () => {
       ctx: {workplaceDisplay: '', messages: []},
     });
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
-    mockResolvePromptTokensWithBackfill.mockRejectedValue(
-      new PromptTokenResolveBailedError(),
-    );
+    // 错误通道迁移二期：core 读口不再抛弃权哨兵，改沿 Outcome.cancelled/replaced
+    // 返回；service 收成空串哨兵的语义不变。
+    mockResolvePromptTokensWithBackfill.mockResolvedValue({kind: 'replaced'});
 
     const runtime = stubRuntime({contextWindow: 128_000});
     (runtime.messages.listBySession as jest.Mock).mockResolvedValue([
@@ -975,23 +977,26 @@ describe('chat-prompt-tokens.service', () => {
       undefined,
       {shouldBail},
     );
-    expect(
-      (
-        mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
-          shouldBail?: () => boolean;
-        }
-      ).shouldBail,
-    ).toBe(shouldBail);
+    // 错误通道迁移二期后 service 传的是包装判据（false → null / true → replaced），
+    // 断言行为等价而非函数同一性。
+    const passthrough = (
+      mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
+        shouldBail: () => unknown;
+      }
+    ).shouldBail;
+    expect(passthrough()).toBeNull();
 
-    // ② 不传 → options 里连这个键都不出现（core 缺省「恒不弃权」，
-    // 既有调用面零影响，也别让快照式断言平白多一个 undefined 键）。
+    // ② 不传 → options 仍带 shouldBail 键（包装判据恒 null，与不传同义）；
+    // core 缺省「恒不弃权」，既有调用面零影响。
     mockResolvePromptTokensWithBackfill.mockClear();
     await loadChatPromptTokenLabel(stubRuntime(), {
       projectId: 'p',
       sessionId: 's-bail-absent',
     });
+    // 二期后 options 恒带 shouldBail（无判据时包装为恒 null）。
     expect(mockResolvePromptTokensWithBackfill.mock.calls[0]![3]).toEqual({
       sessionKkv: expect.objectContaining({get: expect.any(Function)}),
+      shouldBail: expect.any(Function),
     });
   });
 

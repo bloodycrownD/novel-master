@@ -64,18 +64,21 @@ const allProjectSessionRows = [
 const topLevelRows = () =>
   allProjectSessionRows.filter(r => r.parentSessionId == null);
 
+// 错误通道迁移二期后 get/listByProject/delete 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     delete: jest.fn(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   sessions: {
-    listByProject: jest.fn(async () => topLevelRows()),
+    listByProject: jest.fn(async () => ({ok: true, value: topLevelRows()})),
     delete: jest.fn(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   state: {
@@ -149,13 +152,16 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     deletedProjectIds.length = 0;
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     mockRuntime.projects.delete.mockImplementation(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     });
-    mockRuntime.sessions.listByProject.mockImplementation(async () =>
-      topLevelRows(),
-    );
+    mockRuntime.sessions.listByProject.mockImplementation(async () => ({
+      ok: true,
+      value: topLevelRows(),
+    }));
   });
 
   it('T-AM1-1 单个删除成功 → forgetSession(id) 恰一次；删除失败 → 零次', async () => {
@@ -187,6 +193,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
         throw new Error('db locked');
       }
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     const api = await mountScope();
     await act(async () => {

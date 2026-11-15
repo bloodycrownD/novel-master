@@ -27,10 +27,8 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
-import { AppError } from "@/errors/app-error.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
-import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
 
 /** 解析结果：物理路径落到的 scope 与域内逻辑路径。 */
@@ -123,9 +121,12 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     this.sessions = new SqliteSessionRepository(conn);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath `Result` → 领域异常通道转码点（本服务各方法同款）——非法路径按边界抛出，由调用链端点 catch 收口。
+   */
   async list(physicalPath: string): Promise<VfsListEntry[]> {
     const resolved = resolveLogicalPath(physicalPath);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
 
     // 物理根：三个域挂载点合成目录行（域内根级文件在各自挂载点下列出）
@@ -169,7 +170,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    */
   async listTree(physicalPath: string): Promise<VfsListEntry[]> {
     const resolved = resolveLogicalPath(physicalPath);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
 
     if (normalized === "/") {
@@ -221,7 +222,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
 
   async read(physicalPath: string): Promise<VfsReadResult> {
     const logicalResult = resolveLogicalPath(physicalPath);
-    if (!logicalResult.ok) throwLegacyVfs(logicalResult.error);
+    if (!logicalResult.ok) throw logicalResult.error;
     const normalized = logicalResult.value;
     const resolved = resolvePhysicalPath(normalized);
     if (resolved == null) {
@@ -234,7 +235,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       );
     } catch (error) {
       // 挂载点根等目录行按「无此文件」归一（本视图 read 只面向文件）
-      if (isVfsError(error, "IS_DIRECTORY")) {
+      if (isAppError(error, "VFS_IS_DIRECTORY")) {
         throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
       }
       throw error;

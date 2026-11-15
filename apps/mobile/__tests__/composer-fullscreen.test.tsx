@@ -36,10 +36,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {NativeChatComposer} from '@/components/chat/NativeChatComposer';
-import {
-  mockCalls,
-  resetMockCalls,
-} from '../test-utils/enriched-markdown-mock';
+import {mockCalls, resetMockCalls} from '../test-utils/enriched-markdown-mock';
 
 // —— mock 前缀变量（jest.mock 工厂只能引用 mock* 前缀标识符）——
 
@@ -76,22 +73,30 @@ const mockRunAgentTurn = jest.fn(
   () => new Promise(() => undefined) as Promise<unknown>,
 );
 
+// 错误通道迁移二期后 projects.get / sessions.* 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: Record<string, any> = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ]),
-    get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-    getComposerDraftJson: jest.fn(async (id: string) =>
-      mockDraftJsonBySession.has(id) ? mockDraftJsonBySession.get(id)! : null,
-    ),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [{id: 's1', title: 'S1', updatedAtMs: 1}],
+    })),
+    get: jest.fn(async () => ({
+      ok: true,
+      value: {id: 's1', projectId: 'p1'},
+    })),
+    getComposerDraftJson: jest.fn(async (id: string) => ({
+      ok: true as const,
+      value: mockDraftJsonBySession.has(id)
+        ? mockDraftJsonBySession.get(id)!
+        : null,
+    })),
     setComposerDraftJson: jest.fn(async (id: string, json: string | null) => {
       mockDraftJsonBySession.set(id, json);
-      return true;
+      return {ok: true as const, value: true};
     }),
   },
   messages: {
@@ -210,9 +215,10 @@ jest.mock('@/runtime/novel-master-context', () => ({
 }));
 
 jest.mock('@/services/chat-agent-meta', () => {
-  const actual = jest.requireActual(
-    '@/services/chat-agent-meta',
-  ) as Record<string, unknown>;
+  const actual = jest.requireActual('@/services/chat-agent-meta') as Record<
+    string,
+    unknown
+  >;
   return {
     ...actual,
     loadChatAgentMeta: jest.fn(async () => ({

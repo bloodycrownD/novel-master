@@ -41,7 +41,9 @@ interface SeedForkCopyParityInput {
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
 class ForkCopySeeder {
-  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；其它仓储异常仍按仓储边界抛出。 */
+  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；其它仓储异常仍按仓储边界抛出。
+   * 解包 throw 边界（错误通道迁移三期门⑦）：mapper 内 normalizePath 失败按仓储边界抛出（「其它仓储异常仍按仓储边界抛出」裁决的落点），事务由调用方回滚。
+   */
   async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
     const entries = new SqliteVfsEntryRepository(tx);
     const contentStore = new SqliteVfsContentStore(tx);

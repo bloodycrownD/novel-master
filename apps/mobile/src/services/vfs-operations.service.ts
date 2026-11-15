@@ -130,6 +130,7 @@ export async function renameVfsFile(
   newPath: string,
 ): Promise<void> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
+  // 解包 throw 边界：失败落调用方 VfsFileManager 的事件 catch（formatError → toast）。
   if (!moved.ok) throw moved.error;
 }
 

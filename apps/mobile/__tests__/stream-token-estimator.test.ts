@@ -49,7 +49,10 @@ function encodeFull(ranks: unknown, text: string): number {
 }
 
 /** 逐 delta 流过估算器，返回末值与耗时统计。 */
-function streamThrough(text: string, chunkChars = 7): {
+function streamThrough(
+  text: string,
+  chunkChars = 7,
+): {
   readonly tokens: number;
   readonly maxPushMs: number;
   readonly warmP99PushMs: number;
@@ -121,9 +124,9 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         2,
       )}ms／均摊 ${result.avgPushMs.toFixed(
         3,
-      )}ms／峰值 ${result.maxPushMs.toFixed(2)}ms，总耗时 ${result.totalMs.toFixed(
-        0,
-      )}ms`,
+      )}ms／峰值 ${result.maxPushMs.toFixed(
+        2,
+      )}ms，总耗时 ${result.totalMs.toFixed(0)}ms`,
     );
     expect(errorRate).toBeLessThanOrEqual(0.01);
     expect(result.medianPushMs).toBeLessThanOrEqual(ASSERT_MEDIAN_PUSH_MS);
@@ -143,9 +146,9 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         2,
       )}ms／均摊 ${result.avgPushMs.toFixed(
         3,
-      )}ms／峰值 ${result.maxPushMs.toFixed(2)}ms，总耗时 ${result.totalMs.toFixed(
-        0,
-      )}ms`,
+      )}ms／峰值 ${result.maxPushMs.toFixed(
+        2,
+      )}ms，总耗时 ${result.totalMs.toFixed(0)}ms`,
     );
     expect(errorRate).toBeLessThanOrEqual(0.03);
     expect(result.medianPushMs).toBeLessThanOrEqual(ASSERT_MEDIAN_PUSH_MS);
@@ -158,7 +161,9 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
     expect(counter).not.toBeNull();
     // 12,000 字符一次涌入（真实 tiktoken 全量 encode 是 88s 量级）。
     const pushStartedAt = performance.now();
-    counter.push('中文测试内容连续书写没有空白也不换行'.repeat(500).slice(0, 12_000));
+    counter.push(
+      '中文测试内容连续书写没有空白也不换行'.repeat(500).slice(0, 12_000),
+    );
     void counter.tokens;
     const elapsed = performance.now() - pushStartedAt;
     console.log(`[②无空白串] 12,000 字符单次 push ${elapsed.toFixed(1)}ms`);
@@ -186,9 +191,7 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
       'o200k_base',
     );
     expect(resolveStreamTokenEncodingName('gpt-4')).toBe('cl100k_base');
-    expect(resolveStreamTokenEncodingName('gpt-3.5-turbo')).toBe(
-      'cl100k_base',
-    );
+    expect(resolveStreamTokenEncodingName('gpt-3.5-turbo')).toBe('cl100k_base');
     // 非 tiktoken 家族（claude/qwen/glm/gemini）本轮统一按 cl100k 估算。
     expect(resolveStreamTokenEncodingName('claude-3-5-sonnet')).toBe(
       'cl100k_base',
@@ -202,7 +205,11 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
   it('会话估算器：仓储解析出的 vendorModelId 决定编码（o200k 家族走 o200k 表）', async () => {
     const runtime: StreamTokenModelHintRuntime = {
       sessions: {
-        getSessionAgentConfig: async () => ({agentId: 'a1'}),
+        // 错误通道迁移二期后走 Result 线上结构（生产侧 `!ok` 即 throw → 兜底 cl100k）。
+        getSessionAgentConfig: async () => ({
+          ok: true as const,
+          value: {agentId: 'a1'},
+        }),
       },
       agentRegistry: {
         get: async () => ({model: 'saved-1'}),
@@ -237,7 +244,10 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         getSavedById: async () => null,
       },
     };
-    const counter = createSessionStreamTokenEstimator(runtime, 'session-broken');
+    const counter = createSessionStreamTokenEstimator(
+      runtime,
+      'session-broken',
+    );
     expect(counter).not.toBeNull();
     counter!.push('a b c');
     expect(counter!.tokens).toBeGreaterThan(0);
@@ -260,11 +270,16 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
   /** 造一个仓储口径 runtime；`setVendorModelId` 用于模拟「用户在会话内换模型」。 */
   function createRuntime(initialVendorModelId: string): {
     readonly runtime: StreamTokenModelHintRuntime;
-    readonly getSessionAgentConfig: jest.Mock<() => Promise<{agentId: string}>>;
+    readonly getSessionAgentConfig: jest.Mock<
+      () => Promise<{ok: true; value: {agentId: string}}>
+    >;
     readonly setVendorModelId: (id: string) => void;
   } {
     let vendorModelId = initialVendorModelId;
-    const getSessionAgentConfig = jest.fn(async () => ({agentId: 'a1'}));
+    const getSessionAgentConfig = jest.fn(async () => ({
+      ok: true as const,
+      value: {agentId: 'a1'},
+    }));
     const runtime: StreamTokenModelHintRuntime = {
       sessions: {getSessionAgentConfig},
       agentRegistry: {get: async () => ({model: 'saved-1'})},

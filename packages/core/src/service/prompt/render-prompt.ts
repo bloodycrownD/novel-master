@@ -256,6 +256,10 @@ function appendWorkplacePairSegmentsIfPresent(
 /**
  * 三区 layout 单次遍历：system → skills 索引（若预算非空）→ workplace 双段（若开启）
  * → persist 文本 → chat → dynamic。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：dynamic 宏展开失败原样上抛——
+ * 拼装链（agent-runner turn loop、两端 buildSessionPromptInput）统一异常通道，
+ * 由 turn loop / chip 读口 catch 收口（与 prompt-assembler.prepare 同款）。
  */
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
@@ -348,6 +352,9 @@ export async function buildPromptAssemblyFromLayout(
 
 /**
  * 构建 LLM 输入：system 字段 + persist 合成消息 + chat + dynamic。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：同 {@link buildPromptAssemblyFromLayout}，
+ * dynamic 宏展开失败沿拼装链异常通道上抛，turn loop / chip 读口 catch 收口。
  */
 export async function buildPromptLlmInputFromLayout(
   layout: AgentPromptLayout,

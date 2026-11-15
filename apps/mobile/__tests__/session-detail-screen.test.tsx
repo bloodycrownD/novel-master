@@ -236,7 +236,10 @@ describe('T-M2 SessionDetailScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
     mockLoadChatAgentMeta.mockResolvedValue(meta());
   });
 
@@ -334,7 +337,9 @@ describe('T-M2 SessionDetailScreen', () => {
     ).toBe('false');
     // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).not.toHaveBeenCalledWith('智能体已被删除，请重新选择');
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      '智能体已被删除，请重新选择',
+    );
   });
 
   // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
@@ -440,7 +445,10 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
     mockLoadChatAgentMeta.mockResolvedValue(meta());
   });
 
@@ -556,7 +564,10 @@ describe('T-MO1 SessionDetailScreen 查看提示词入口', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '我的会话'},
+    });
     mockLoadChatAgentMeta.mockResolvedValue(meta());
   });
 
@@ -589,7 +600,10 @@ describe('T-KB4 SessionDetailScreen Android 键盘避让', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSessionsGet.mockResolvedValue({id: 's1', title: '会话'});
+    mockSessionsGet.mockResolvedValue({
+      ok: true,
+      value: {id: 's1', title: '会话'},
+    });
     mockLoadChatAgentMeta.mockResolvedValue(meta());
   });
 

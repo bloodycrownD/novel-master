@@ -65,7 +65,7 @@ export class ToolRunner<Ctx = unknown> {
       // 直接拒绝。竞速（下方）只让调用方 reject，不会阻止已启动的 work——写类
       // 工具副作用照常落盘；runParallel 的 worker 在 abort 后仍会从队列取下一
       // 个 call，靠这一道保证 abort 后不再发起新的 tool.run。
-      if (signal?.aborted) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`});
+      if (signal?.aborted) throw new AppError("TOOL_CANCELLED", {toolName: name});
       // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
       // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
@@ -77,10 +77,10 @@ export class ToolRunner<Ctx = unknown> {
       } else {
         const racing = new Promise<unknown>((resolve, reject) => {
           if (signal.aborted) {
-            reject(new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`}));
+            reject(new AppError("TOOL_CANCELLED", {toolName: name}));
             return;
           }
-          const onAbort = () => reject(new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${name}`}));
+          const onAbort = () => reject(new AppError("TOOL_CANCELLED", {toolName: name}));
           signal.addEventListener("abort", onAbort, { once: true });
           work.then(
             (value) => {

@@ -62,6 +62,7 @@ export async function selectWorkspaceAgent(
  *
  * 会话始终独立持有 agentId（core 已移除 workspace 回退层），
  * currentId 直接取 `sessionConfig.agentId`。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛——core Result → 端内异常通道转码边界，调用方屏幕 catch → formatError → toast 收口。
  */
 export async function loadSessionAgentPickerRows(
   runtime: MobileNovelMasterRuntime,

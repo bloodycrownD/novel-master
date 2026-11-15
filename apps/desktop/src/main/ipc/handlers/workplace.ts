@@ -40,19 +40,6 @@ function toIpcFillPolicy(
   return undefined;
 }
 
-async function loadWorkplaceRows(
-  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
-  req: WorkplaceBuildListRowsRequest,
-): Promise<WorkplaceListRowDto[]> {
-  const scope = resolveVfsScopeFromRequest(req);
-  if (scope.kind === "session") {
-    const wt = getWorkplaceForScope(rt, scope);
-    return wt.buildListRows();
-  }
-  const wt = getWorkplaceForScope(rt, scope);
-  return wt.buildListRows();
-}
-
 /**
  * 规则保存后：evaluate→写 rule_snapshot canon→clear file_cache。
  * workplace 差集 suggest 已废止。
@@ -84,8 +71,10 @@ export async function handleWorkplaceBuildListRows(
 ): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const rows = await loadWorkplaceRows(rt, req);
-    return { ok: true, data: rows };
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const wt = getWorkplaceForScope(rt, scopeRes.data);
+    return { ok: true, data: await wt.buildListRows() };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -96,7 +85,9 @@ export async function handleWorkplaceSetDirRule(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const wt = getWorkplaceForScope(rt, scope);
     await wt.setDirRule({
       logicalPath: req.logicalPath,
@@ -120,7 +111,9 @@ export async function handleWorkplaceSetFileRule(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const wt = getWorkplaceForScope(rt, scope);
     await wt.setFileRule({
       logicalPath: req.logicalPath,
@@ -139,7 +132,9 @@ export async function handleWorkplaceGetDirRule(
 ): Promise<IpcResult<WorkplaceSetDirRuleRequest | null>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const wt = getWorkplaceForScope(rt, scope);
     const rule = await wt.getDirRule(req.logicalPath);
     if (rule == null) {

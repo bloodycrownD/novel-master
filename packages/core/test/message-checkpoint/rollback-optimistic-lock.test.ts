@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import type { TdbcConnection } from "@novel-master/core";
-import { isSessionFsError } from "@novel-master/core/session-fs";
+import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

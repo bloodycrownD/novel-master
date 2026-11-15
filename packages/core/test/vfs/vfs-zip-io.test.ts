@@ -138,7 +138,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
 
     const still = await vfs.read("/keep.md");
@@ -301,7 +301,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
     assert.equal(deleteReached, false);
   });
@@ -323,7 +323,7 @@ describe("VfsZipIoService", () => {
     });
     await assert.rejects(
       () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipWithParent, { confirmed: true }),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
   });
@@ -522,7 +522,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_UTF8"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8")
     );
 
     assert.equal((await vfs.read("/a/stay.txt")).content, "stay-a");
@@ -557,7 +557,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -594,7 +594,7 @@ describe("VfsZipIoService", () => {
           ),
           { confirmed: true, directoryPath: "/a" }
         ),
-      (e: unknown) => (e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_PATH"
+      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH")
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -614,8 +614,8 @@ describe("VfsZipIoService", () => {
     await vfs.write("/note.md", "note");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    // export 分支抛 AppError（mapper 对该 key 无映射原样透传），import 分支经 throwLegacyVfsZip 翻 legacy 旧形态，两形态都要认。
-    const assertInvalidPath = (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH") || ((e as {name?: unknown; code?: unknown}).name === "VfsZipError" && (e as {name?: unknown; code?: unknown}).code === "INVALID_PATH");
+    // export / import 两分支都直抛 AppError，按 key 断言。
+    const assertInvalidPath = (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_PATH");
 
     await assert.rejects(() => zipSvc.export(scope, { directoryPath: "/note.md" }), assertInvalidPath);
     await assert.rejects(

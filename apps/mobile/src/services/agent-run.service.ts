@@ -21,8 +21,6 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export type AgentRunScope = AgentTurnScope;
 
-export {AgentTurnError as AgentRunError};
-
 function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   return fn().catch(error => {
     if (error instanceof AgentRunResolveError) {

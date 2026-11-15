@@ -81,6 +81,8 @@ export async function buildRealPromptPreviewTurns(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
+  // 解包 throw 边界：失败落唯一调用方 handlePromptRealPreview 的紧邻 catch
+  // （formatIpcError）；本函数其余 await 链仍是 throw 面，不单点改 Result。
   if (!sessionConfig.ok) throw sessionConfig.error;
   const thinking = await resolvePreviewThinkingContext({
     preferences: runtime.preferences,

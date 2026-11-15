@@ -119,6 +119,11 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return parsed.value;
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → service 异常通道
+   * 转码点——`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样上抛，由本
+   * service 公共 API 的调用链端点（handler / 屏幕）catch 收口。
+   */
   private async getRaw(key: string): Promise<string | undefined> {
     const raw = await this.kkv.get(PREFERENCES_MODULE, key);
     if (!raw.ok) {
@@ -130,6 +135,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return raw.value;
   }
 
+  /** 解包 throw 边界（同 {@link PersistentPreferencesService.getRaw}）：`KKV_NOT_FOUND` 幂等忽略。 */
   private async deletePref(key: string): Promise<void> {
     const deleted = await this.kkv.delete(PREFERENCES_MODULE, key);
     if (!deleted.ok) {

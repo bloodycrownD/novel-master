@@ -149,7 +149,7 @@ export function PreviewPane() {
         setContent(result.data.content);
         setSavedContent(result.data.content);
         setFileMissing(false);
-      } else if (result.error.code === "NOT_FOUND") {
+      } else if (result.error.code === "VFS_NOT_FOUND") {
         setFileMissing(true);
       }
     } finally {

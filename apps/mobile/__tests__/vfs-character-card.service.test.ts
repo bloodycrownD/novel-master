@@ -129,10 +129,10 @@ describe('vfs-character-card.service', () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);
-    const cardErr = new AppError(
-      'VFS_CHARACTER_CARD_UNRECOGNIZED',
-      '无法识别为角色卡',
-    );
+    // 旧签名（key, message）已退役：新签名（key, params），文案走 params.detail。
+    const cardErr = new AppError('VFS_CHARACTER_CARD_UNRECOGNIZED', {
+      detail: '无法识别为角色卡',
+    });
     mockImportFromBytes.mockRejectedValue(cardErr);
 
     await expect(

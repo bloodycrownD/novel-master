@@ -1,4 +1,4 @@
-import {AppError} from '@novel-master/core/agent';
+import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {
   APP_UI_DEFAULTS,
@@ -21,9 +21,13 @@ function createMemoryKkv(): KkvService {
     async get(module: string, key: string) {
       const v = data.get(compound(module, key));
       if (v === undefined) {
-        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
+        return Result.err(
+          new AppError('KKV_NOT_FOUND', {
+            detail: `KKV key not found: ${module}/${key}`,
+          }),
+        );
       }
-      return v;
+      return Result.ok(v);
     },
     async set(module: string, key: string, value: string) {
       data.set(compound(module, key), value);
@@ -31,9 +35,14 @@ function createMemoryKkv(): KkvService {
     async delete(module: string, key: string) {
       const k = compound(module, key);
       if (!data.has(k)) {
-        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
+        return Result.err(
+          new AppError('KKV_NOT_FOUND', {
+            detail: `KKV key not found: ${module}/${key}`,
+          }),
+        );
       }
       data.delete(k);
+      return Result.ok(undefined);
     },
   };
 }
@@ -51,14 +60,8 @@ describe('createAppUiPreferences', () => {
     const prefs = createAppUiPreferences(kkv);
     await prefs.set(APP_UI_KEY_THEME, 'dark');
     await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toBe('dark');
-    await expect(kkv.get(APP_UI_KKV_MODULE, APP_UI_KEY_THEME)).resolves.toBe(
-      'dark',
-    );
-  });
-
-  it('delete is idempotent for missing keys', async () => {
-    const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(prefs.delete(APP_UI_KEY_THEME)).resolves.toBeUndefined();
+    const raw = await kkv.get(APP_UI_KKV_MODULE, APP_UI_KEY_THEME);
+    expect(raw).toEqual({ok: true, value: 'dark'});
   });
 
   it('returns undefined for unknown keys', async () => {

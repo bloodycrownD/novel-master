@@ -52,7 +52,11 @@ function mockRuntime(overrides: {
       getAgentConfig: jest.fn(async () => agentConfig),
     },
     sessions: {
-      getSessionAgentConfig: jest.fn(async () => sessionAgentConfig),
+      // 错误通道迁移后 getSessionAgentConfig 走 Result 通道（core/生产侧 `!ok` 即 throw）。
+      getSessionAgentConfig: jest.fn(async () => ({
+        ok: true as const,
+        value: sessionAgentConfig,
+      })),
       updateSessionAgentConfig: jest.fn(async () => sessionAgentConfig),
     },
     providerModels: {
@@ -109,12 +113,16 @@ describe('loadChatAgentMeta', () => {
     // 此时若外层那次 getSessionAgentConfig 也已发起（共 2 次调用），
     // 即证明两路并行（串行版会等 resolveAgentForProject 完成后才发起
     // 外层调用，此刻只会是 1 次）。
-    let resolveConfig!: (value: {agentId: string; modelId?: string}) => void;
-    const configPromise = new Promise<{agentId: string; modelId?: string}>(
-      resolve => {
-        resolveConfig = resolve;
-      },
-    );
+    let resolveConfig!: (value: {
+      ok: true;
+      value: {agentId: string; modelId?: string};
+    }) => void;
+    const configPromise = new Promise<{
+      ok: true;
+      value: {agentId: string; modelId?: string};
+    }>(resolve => {
+      resolveConfig = resolve;
+    });
     const runtime: any = mockRuntime({
       sessionAgentConfig: {agentId: 'default', modelId: 'openai:gpt-4'},
     });
@@ -128,7 +136,10 @@ describe('loadChatAgentMeta', () => {
 
     // 放行后输出与串行版一致：session 来源、agent 名称、savedModelId
     // （session.modelId 兜底）→ 模型标签、modelSource 跟随会话。
-    resolveConfig({agentId: 'default', modelId: 'openai:gpt-4'});
+    resolveConfig({
+      ok: true,
+      value: {agentId: 'default', modelId: 'openai:gpt-4'},
+    });
     const meta = await metaPromise;
     expect(meta).toEqual({
       source: 'session',
@@ -165,7 +176,7 @@ describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
   it('CHAT_INVALID_ARGUMENT（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
     const runtime: any = mockRuntime({});
     runtime.sessions.getSessionAgentConfig = jest.fn(async () => {
-      throw new AppError('CHAT_INVALID_ARGUMENT', 'session 配置缺失');
+      throw new AppError('CHAT_INVALID_ARGUMENT', {detail: 'session 配置缺失'});
     });
     await expect(
       loadChatAgentMeta(runtime, 'proj-1', 'sess-1'),

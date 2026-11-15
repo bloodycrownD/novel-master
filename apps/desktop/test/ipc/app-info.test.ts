@@ -71,7 +71,8 @@ describe("app-info ipc handlers", () => {
     if (result.ok) {
       return;
     }
-    assert.equal(result.error.code, "Error");
+    // 错误通道迁移三期：未知 Error 统一落 INFRA_UNEXPECTED_ERROR（name 不进 code）。
+    assert.equal(result.error.code, "INFRA_UNEXPECTED_ERROR");
     assert.equal(result.error.message, "Network unavailable");
   });
 
@@ -81,7 +82,7 @@ describe("app-info ipc handlers", () => {
     if (result.ok) {
       return;
     }
-    assert.equal(result.error.code, "INVALID_URL");
+    assert.equal(result.error.code, "IPC_INVALID_URL");
     assert.equal(result.error.message, "无效的链接");
   });
 

@@ -10,6 +10,7 @@ import {
   type WorkplaceService,
 } from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
+import {AppError} from '@novel-master/core/agent';
 import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
 
 function workplaceRootLogicalPath(_scope: VfsScope): string {
@@ -43,7 +44,7 @@ export async function setDirRuleEnabled(
   enabled: boolean,
 ): Promise<void> {
   if (!enabled && isWorkplaceRootPath(workplace.scope, logicalPath)) {
-    throw new Error('根目录规则不可关闭');
+    throw new AppError('WORKPLACE_ROOT_RULE_LOCKED', {detail: '根目录规则不可关闭'});
   }
   await workplace.setDirRule({
     logicalPath,

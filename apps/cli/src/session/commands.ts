@@ -4,7 +4,9 @@
  * @module session/commands
  */
 
+import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { resolveSessionUseId } from "../config/resolve-entity.js";
+import type { Outcome } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runGlob } from "../vfs/commands/glob.js";
@@ -44,11 +46,14 @@ type SessionDeps = Pick<
   | "workplace"
 >;
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：repo 读 / 删 / 复制的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 export async function runSession(
   deps: SessionDeps,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -59,7 +64,7 @@ export async function runSession(
       for (const s of list.value) {
         console.log(`${s.id}\t${s.title ?? ""}`);
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "create": {
       const projectId = await deps.scope.resolveProjectId(flags);
@@ -71,7 +76,7 @@ export async function runSession(
       await deps.state.setCurrentProjectId(projectId);
       await deps.state.setCurrentSessionId(s.value.id);
       console.log(s.value.id);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "use": {
       const currentProjectId = await deps.state.getCurrentProjectId();
@@ -85,7 +90,7 @@ export async function runSession(
       // Set current project and session
       await deps.state.setCurrentProjectId(session.value.projectId);
       await deps.state.setCurrentSessionId(id);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "current": {
       const id = await deps.state.getCurrentSessionId();
@@ -97,7 +102,7 @@ export async function runSession(
       const s = await deps.sessions.get(id);
       if (!s.ok) throw s.error;
       console.log(`${s.value.id}\t${s.value.title ?? ""}`);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "delete": {
       const sessionId = await deps.scope.resolveSessionId(flags);
@@ -108,30 +113,29 @@ export async function runSession(
       if (currentSessionId === sessionId) {
         await deps.state.resetCurrentSessionId();
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "copy": {
       const sessionId = await deps.scope.resolveSessionId(flags);
       const copy = await deps.sessions.copy(sessionId);
       if (!copy.ok) throw copy.error;
       console.log(copy.value.id);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "vfs": {
       const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
       await runSessionVfs(deps, vfsRest);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "workplace":
-      await runSessionWorkplace(deps, args);
-      return;
+      return runSessionWorkplace(deps, args);
     case "template": {
       const templateSub = args[0];
       if (templateSub == null) {
         throw new Error("Usage: nm session template pull ...");
       }
       await runSessionTemplate(deps, templateSub, args.slice(1));
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "rollback": {
       const messageId = flags.get("message");
@@ -142,7 +146,7 @@ export async function runSession(
       }
       const { projectId, sessionId } = await deps.scope.resolveProjectSession(flags);
       await deps.sessionFs.rollbackToMessage(sessionId, projectId, messageId);
-      return;
+      return OUTCOME_COMPLETED;
     }
     default:
       throw new Error(

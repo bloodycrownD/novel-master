@@ -1,4 +1,4 @@
-import {CloudSyncError} from '@novel-master/core';
+import {AppError} from '@novel-master/core';
 import {
   pullCloudSync,
   pushCloudSync,
@@ -184,7 +184,7 @@ describe('testCloudSyncConnection', () => {
     mockListObjects.mockRejectedValue(sdkError);
 
     await expect(testCloudSyncConnection(runtime)).rejects.toMatchObject({
-      code: 'NETWORK',
+      key: 'CLOUD_SYNC_NETWORK',
       message: '云存储连接失败，请检查网络与配置',
     });
   });
@@ -259,7 +259,7 @@ describe('pullCloudSync', () => {
 
   it('ALREADY_UP_TO_DATE 时不调用 onRebootstrap 且记账走旧 runtime', async () => {
     mockCoordinatorPull.mockRejectedValue(
-      new CloudSyncError('ALREADY_UP_TO_DATE', '本地已是最新，无需拉取'),
+      new AppError('CLOUD_SYNC_ALREADY_UP_TO_DATE', {detail: '本地已是最新，无需拉取'}),
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 
@@ -303,7 +303,7 @@ describe('pullCloudSync', () => {
     await expect(
       pullCloudSync(runtime, jest.fn(async () => freshRuntime)),
     ).rejects.toMatchObject({
-      code: 'NOT_CONFIGURED',
+      key: 'CLOUD_SYNC_NOT_CONFIGURED',
     });
   });
 
@@ -372,11 +372,11 @@ describe('pushCloudSync', () => {
 
   it('NEED_PULL_FIRST 时向上抛出', async () => {
     mockCoordinatorPush.mockRejectedValue(
-      new CloudSyncError('NEED_PULL_FIRST', '云端有更新，请先拉取'),
+      new AppError('CLOUD_SYNC_NEED_PULL_FIRST', {detail: '云端有更新，请先拉取'}),
     );
 
     await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
-      code: 'NEED_PULL_FIRST',
+      key: 'CLOUD_SYNC_NEED_PULL_FIRST',
     });
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,

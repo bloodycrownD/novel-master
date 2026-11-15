@@ -16,6 +16,7 @@ type VfsZipPathError = AppError<"VFS_ZIP_INVALID_PATH" | "VFS_INVALID_PATH">;
  * 规范化 ZIP 目标目录；缺省或空串 → `/`。
  *
  * @throws AppError<"VFS_INVALID_PATH"> 目标目录非法（保持原抛错时机）
+  * 解包 throw 边界（错误通道迁移三期门⑦）：路径归一化失败按迁移前形态上抛，由调用链端点 catch 收口。
  */
 export function resolveZipDirectoryPath(directoryPath?: string): string {
   if (directoryPath == null || directoryPath.trim() === "") {

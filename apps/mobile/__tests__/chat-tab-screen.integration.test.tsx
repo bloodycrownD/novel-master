@@ -88,26 +88,31 @@ const mockRunAgentTurn = jest.fn(
   () => new Promise(() => undefined) as Promise<unknown>,
 );
 
+// 错误通道迁移二期后 projects.get / sessions.* 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     create: jest.fn(),
     rename: jest.fn(),
     delete: jest.fn(),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ]),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [{id: 's1', title: 'S1', updatedAtMs: 1}],
+    })),
     create: jest.fn(),
     rename: jest.fn(),
     copy: jest.fn(),
     delete: jest.fn(),
     // composer controller 的草稿水化 / 落库窄口（webview 分支会真挂 controller）。
-    get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-    getComposerDraftJson: jest.fn(async () => null),
-    setComposerDraftJson: jest.fn(async () => true),
+    get: jest.fn(async () => ({
+      ok: true,
+      value: {id: 's1', projectId: 'p1'},
+    })),
+    getComposerDraftJson: jest.fn(async () => ({ok: true, value: null})),
+    setComposerDraftJson: jest.fn(async () => ({ok: true, value: true})),
   },
   messages: {
     listBySession: jest.fn(async () => [{id: 'legacy', seq: 999}]),
@@ -445,9 +450,9 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.messages.listBySessionTail.mockClear();
     mockRuntime.messages.listBySessionPage.mockClear();
     // tail 默认实现每用例重置（个别用例会覆盖成「多取一条」形态）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(
-      async () => [mockTailMessage],
-    );
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
+      mockTailMessage,
+    ]);
     // 每用例重建 eventBus 与 manager（与 Provider retry 重建同形：先 dispose）。
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
@@ -546,10 +551,10 @@ describe('ChatTabScreen integration', () => {
 
     await requestLoadOlder(tree!.root);
 
-    expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith(
-      's1',
-      {limit: 40, beforeSeq: 2},
-    );
+    expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith('s1', {
+      limit: 40,
+      beforeSeq: 2,
+    });
     expect(mockLoadPage).not.toHaveBeenCalled();
   });
 
@@ -664,10 +669,12 @@ describe('ChatTabScreen integration', () => {
       .filter(r => r.ok)
       .map(
         r =>
-          (r as {
-            ok: true;
-            message: {type: string; payload: Record<string, unknown>};
-          }).message,
+          (
+            r as {
+              ok: true;
+              message: {type: string; payload: Record<string, unknown>};
+            }
+          ).message,
       );
     const types = decoded.map(message => message.type);
     expect(types).toContain('sessionSnapshot');
@@ -827,7 +834,9 @@ describe('ChatTabScreen integration', () => {
   it('子视图切换：sessions 视图下 ChatConversationPanel 不渲染，进会话后才渲染', async () => {
     // 回滚 SPA 化后的判据：`chatSubview === 'conversation'` 才挂对话面板，
     // 会话列表面板恒渲染（靠 visible 收起）。
-    const {ChatConversationPanel} = require('../src/screens/tabs/chat-tab/ChatConversationPanel');
+    const {
+      ChatConversationPanel,
+    } = require('../src/screens/tabs/chat-tab/ChatConversationPanel');
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();

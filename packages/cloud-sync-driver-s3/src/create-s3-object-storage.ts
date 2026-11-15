@@ -6,7 +6,8 @@ import {
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
-import { CloudSyncError, type ObjectStorageHeadResult, type ObjectStoragePort } from "@novel-master/core";
+import { AppError } from "@novel-master/core/agent";
+import type { ObjectStorageHeadResult, ObjectStoragePort } from "@novel-master/core";
 import type { S3StorageConfig } from "./s3-config.js";
 import type { FileSystemPort } from "./ports/file-system.port.js";
 
@@ -72,16 +73,16 @@ function assertConditionalPutPreconditions(
 ): void {
   if (options?.ifMatch != null) {
     if (!head.exists || head.etag !== options.ifMatch) {
-      throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试");
+      throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
     }
   }
   if (options?.ifNoneMatch != null) {
     if (options.ifNoneMatch === "*") {
       if (head.exists) {
-        throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试");
+        throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
       }
     } else if (head.exists && head.etag === options.ifNoneMatch) {
-      throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试");
+      throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
     }
   }
 }
@@ -135,19 +136,13 @@ export function createS3ObjectStorage(
   const fileSystem = deps?.fileSystem;
   const readLocalFile = (path: string): Promise<Uint8Array> => {
     if (fileSystem == null) {
-      throw new CloudSyncError(
-        "NOT_CONFIGURED",
-        "未注入 FileSystemPort，无法读取本地文件（A-26）",
-      );
+      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法读取本地文件（A-26）"});
     }
     return fileSystem.readFile(path);
   };
   const writeLocalFile = (path: string, bytes: Uint8Array): Promise<void> => {
     if (fileSystem == null) {
-      throw new CloudSyncError(
-        "NOT_CONFIGURED",
-        "未注入 FileSystemPort，无法写入本地文件（A-26）",
-      );
+      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法写入本地文件（A-26）"});
     }
     return fileSystem.writeFile(path, bytes);
   };
@@ -214,9 +209,7 @@ export function createS3ObjectStorage(
         return { etag };
       } catch (error) {
         if (isPreconditionFailedError(error)) {
-          throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试", {
-            cause: error,
-          });
+          throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}, {cause: error});
         }
         throw error;
       }

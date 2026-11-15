@@ -100,6 +100,11 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_AGENT_ID);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → service 异常通道
+   * 转码点——`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样上抛，由本
+   * service 公共 API 的调用链端点（handler / 屏幕）catch 收口。
+   */
   private async get(key: string): Promise<string | undefined> {
     const raw = await this.kkv.get(MODULE, key);
     if (!raw.ok) {

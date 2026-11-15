@@ -23,7 +23,7 @@ import {
   pushCloudSync,
   type CloudSyncProgressUiState,
 } from '@/services/cloud-sync.service';
-import {isCloudSyncError} from '@novel-master/core';
+import {isAppError} from '@novel-master/core/agent';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Route = RouteProp<RootStackParamList, 'CloudSyncProgress'>;
@@ -144,8 +144,7 @@ export function CloudSyncProgressScreen() {
         }
         if (
           op === 'push' &&
-          isCloudSyncError(error) &&
-          error.code === 'NEED_PULL_FIRST' &&
+          isAppError(error, 'CLOUD_SYNC_NEED_PULL_FIRST') &&
           !forceOverwriteRemote
         ) {
           runningRef.current = false;

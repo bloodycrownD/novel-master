@@ -20,8 +20,9 @@ export async function handleAppUiGet(
   try {
     const rt = await getDesktopRuntime();
     const appUi = createDesktopAppUiPreferences(rt.kkv);
-    const value = await appUi.get(req.key);
-    return { ok: true, data: value };
+    const raw = await appUi.get(req.key);
+    if (!raw.ok) return { ok: false, error: formatIpcError(raw.error) };
+    return { ok: true, data: raw.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -36,7 +37,7 @@ export async function handleAppUiSet(
     if (req.key === DESKTOP_UI_KEY_THEME && req.value !== "light" && req.value !== "dark") {
       return {
         ok: false,
-        error: { code: "INVALID_ARGUMENT", message: "theme must be light or dark" },
+        error: { code: "IPC_INVALID_ARGUMENT", message: "theme must be light or dark" },
       };
     }
     await appUi.set(req.key, req.value);

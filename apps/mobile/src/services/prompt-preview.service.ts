@@ -57,6 +57,7 @@ async function budgetSkillsIndex(
  * 按「轮」聚合的真实提示词（R4）：模板段各占一轮、真用户输入开一轮、
  * 其余 assistant 文本/thinking/工具段归入同一 assistant 轮。轮摘要口径在
  * core 侧钉死，本地不再二次加工。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛——core Result → 端内异常通道转码边界（desktop 同名文件已在波 5a-3 白名单，本文件为其双端镜像），调用链 catch → formatError → toast 收口。
  */
 export async function buildRealPromptPreviewTurns(
   runtime: MobileNovelMasterRuntime,

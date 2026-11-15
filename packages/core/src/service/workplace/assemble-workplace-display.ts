@@ -120,6 +120,7 @@ export interface AssembleWorkplaceDisplayOptions {
  * 5. 错误通道迁移二期：`shouldStop` 命中 → `cancelled` / `replaced`（中断不
  *    伪装成错误）；`resolveLogicalPath` 失败 → `failed`（决定权交上层）。
  *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛，由调用链端点 catch 收口。
  */
 export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: "session" }>, deps: AssembleWorkplaceDisplayDeps, options?: AssembleWorkplaceDisplayOptions): Promise<Outcome<AssembleWorkplaceDisplayResult>> {
   if (!layoutHasWorkplace(deps.layout)) {

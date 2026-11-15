@@ -219,7 +219,11 @@ apps/cli/src/cli-errors.ts                      # 两链合一 + EXIT_CANCELLED
 - Step 5 — phase-cli — blocking: yes — qa: auto：`cli-errors` 两链合一 + `EXIT_CANCELLED`；`main.ts` cancelled 管线；134 处 throw 处置；T-A7。
 - Step 6 — phase-public-exports — blocking: yes — qa: auto：新增 `public/errors.ts`；errors 相关导出面按 3.3 规则逐符号裁决（以 Step 开工时的 grep 实际输出为清单，结果写进提交说明）；`package.json` 加子路径；删 `legacy-vfs-error.ts`；`public-subpath-allowlist.test.ts` + 16 个快照更新 + 新建 `errors` 快照；T-A8。
 - Step 7 — phase-mirror-diff — blocking: yes — qa: auto：17 对镜像 service 逐字 diff；已知差异（desktop `createLogger` / mobile `__DEV__`、`skipComposerStatusRefresh`、`PromptCountCancelledError`）列入白名单；T-A9。
-- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + 三端测试 + `check-style` 三段 + **三期 grep 门**：① 全仓 `throw new AppError` 命中 ⊆ 二期白名单（spec-2 §2.3 的 16 处 + 26 处事务回调）∪ **apps 边界白名单**（Step 1 开工前先 `grep -rn "throw new AppError" apps/` 生成文件清单，作为本次提交的附件冻存，后续期次不变）；② `packages/{core,apps}/src` 内 `instanceof (Vfs|Tool|Provider|SessionFs|VfsZip|Prompt|ConfigDecode)Error` 为空（一期已清 core 7 处与 apps 全量，本期只需确认无回潮）；③ `grep -rn "isVfsError([^)]*, *\"" packages/core/src/errors packages/core/src/domain packages/core/src/service apps/*/src` **带字符串短码实参**的调用为零（双形态守卫本身保留，不算命中——门只抓 `isVfsError(x, "NOT_FOUND")` 这种旧短码实参）。**已知不达标点**：`apps/desktop/src/main/ipc/handlers/physical.ts:87` 就是 `isVfsError(err, "NOT_FOUND")`，一期只认领 core 内部，**本期的 Step 2 必须顺手改成 `isAppError(err, "VFS_NOT_FOUND")`**，否则门永红；④ `grep -rn "IpcErrorPayload" apps/desktop | grep "code:"` 抽查取值全为 ErrorKey。
+- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + 三端测试 + `check-style` 三段 + **三期 grep 门**：① 全仓 `throw new AppError` 命中 ⊆ 二期白名单（spec-2 §2.3 的 16 处 + 26 处事务回调）∪ **apps 边界白名单**（Step 1 开工前先 `grep -rn "throw new AppError" apps/` 生成文件清单，作为本次提交的附件冻存，后续期次不变）；② `packages/{core,apps}/src` 内 `instanceof (Vfs|Tool|Provider|SessionFs|VfsZip|Prompt|ConfigDecode)Error` 为空（一期已清 core 7 处与 apps 全量，本期只需确认无回潮）；③ `grep -rn "isVfsError([^)]*, *\"" packages/core/src/errors packages/core/src/domain packages/core/src/service apps/*/src` **带字符串短码实参**的调用为零（双形态守卫本身保留，不算命中——门只抓 `isVfsError(x, "NOT_FOUND")` 这种旧短码实参）。**已知不达标点**：`apps/desktop/src/main/ipc/handlers/physical.ts:87` 就是 `isVfsError(err, "NOT_FOUND")`，一期只认领 core 内部，**本期的 Step 2 必须顺手改成 `isAppError(err, "VFS_NOT_FOUND")`**，否则门永红；④ `grep -rn "IpcErrorPayload" apps/desktop | grep "code:"` 抽查取值全为 ErrorKey。⑥ `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（§3.7 的第二套码清零）。
+⑤ 全仓 `grep -rnE "class +[A-Za-z0-9_]+.*extends +Error" packages/*/src apps/*/src`（排除 `class AppError`）的输出，必须与 §3.6 的保留白名单**逐字一致**——多一个少一个都算门红，新增类必须先在 §3.6 登记。
+⑥ `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（§3.7 的第二套码清零）。
+⑦ `node scripts/check-unwrap-throw.mjs` 必须 exit 0（解包 throw 全落在「同函数有 catch」的边界位置或白名单内，判据见该脚本头部注释）。
+⑧ `grep -rnE '(key|name)\.startsWith\("(VFS|SESSION_FS|TOOL|PROVIDER|CHAT|SKILL|AGENT|KKV|CONFIG|CLOUD_SYNC|COMPACTION)_' packages/*/src apps/*/src` 应为空（域判定只走 `domainOf(code)`，不再用 key 前缀）。
 
 依赖：1 → 2 → 3 → 4 → 5 → 6 → 7 → 8。Step 6 依赖 1-5 全部完成（public 撤导出需 apps 已改认 key）。
 
@@ -236,6 +240,90 @@ apps/cli/src/cli-errors.ts                      # 两链合一 + EXIT_CANCELLED
 - T-A7 — blocking: yes — cli 两链合一后对 8 类错误输出与基线快照一致；`EXIT_CANCELLED=130` 在 `Outcome.cancelled` 与 `TOOL_CANCELLED` 两条路径命中；`SkspError` 输出不变。
 - T-A8 — blocking: yes — public：8 个保留符号可导入；3 仅测试 + 30 零消费者符号不再导出；`public-subpath-allowlist.test.ts` + 16 个快照绿；`Result`/`Outcome` 可从 `@novel-master/core/errors` 导入。
 - T-A9 — blocking: yes — 17 对镜像 service 逐字 diff，除已知白名单差异外零差异。
+
+### 3.6 剩余 Error 子类的三分法裁决（2026-11-15 补充）
+
+一期退役了 `errors/` 下 7 个类，但全仓还有 20 个 `extends Error`。其中 6 个已在本期各 Step 认领（`CloudSyncError` → Step 1 退役；`AgentTurnError`、`SkspError`、`TdbcError` 作为 infra 保留；`VfsSingleFileError` → Step 3 退役；`PromptCountCancelledError` → Step 7 镜像白名单）。剩余 14 个此前在三份文档里出现次数为 0，本节按总纲三分法逐行定性——**这是一张必须被执行和复核的表，不是参考**。
+
+| 类 | 引用数 | 裁决 | 理由 |
+|---|---|---|---|
+| `AgentRunResolveError` | 26 | **迁 `AppError`** | B 类业务错误（agent 解析失败），apps 4 处 `instanceof` 已捕获，改判 `isAppError` |
+| `LlmStreamTimeoutError` | 10 | **迁 `AppError`** | 超时是用户可见的业务失败，该有码与 i18n，不该是裸类 |
+| `VfsScopeError` | 8 | **迁 `AppError`** | desktop IPC 边界的参数错误，A 类域校验 |
+| `LocalizedYamlError` | 3 | **迁 `AppError`** | 转 `CONFIG_DECODE_INVALID_SCHEMA`（一期已有该码），原始细节走 `params.detail` |
+| `AttachmentPathArgumentError` | 3 | **迁 `AppError`** | 附件路径参数校验，A 类 |
+| `PushAgentMutexAcquireError` | 10 | **迁 `AppError`（已裁决，B1 已执行）** | 唯一 catch 点（改造前 `cloud-sync-coordinator.ts:256`，旧类在原文件共 2 处引用）把超时翻成用户可见 i18n 文案 `error.cloud_sync.push_mutex_timeout.*`，命中判据的 B 类分支；旧类已删，锁超时改抛 `AGENT_BUSY`（`push-agent-mutex.ts:86`，码表 `error-codes.ts:62`＝101012），coordinator 以 `isAppError(error, "AGENT_BUSY")` 接住转 `CLOUD_SYNC_PUSH_MUTEX_TIMEOUT`（`cloud-sync-coordinator.ts:251-252`，码表 `error-codes.ts:209`＝122006）；全仓生产代码零残留（仅 spec 与历史 CR 文档留名） |
+| `DatabaseReplacedError` | 22 | **保留（控制流）** | DB 被替换的流程标记，带 `providerTablesRestored` 字段，用途是 catch 时类型收窄 |
+| `ChatPromptBuildBailedError` | 18 | **保留（控制流）** | 取消信号，应按 `Interrupt` 处理 |
+| `CoordinatedWriteRollbackError` | 5 | **保留（控制流）** | 回滚标记，无消息型语义 |
+| `NativeSseAbortError` | 9 | **保留（控制流）** | abort 信号，native 边界 |
+| `TokenizerError` | 15 | **保留（第三方）** | native bridge 边界，适配层转码 |
+| `NativeSseTransportError` | 10 | **保留（第三方）** | native transport 边界 |
+| `SqlTemplateError` | 33 | **保留（infra）** | SQL 模板编译期错误，infra 内部，不外泄到用户 |
+| `ProviderTableSnapshotError` | 27 | **保留（infra）** | db-backup 快照内部错误 |
+
+**`PushAgentMutexAcquireError` 的裁决判据**：读它的全部 catch 点。若存在「给用户提示另一个任务正在运行」的分支 → 属 B 类业务规则拒绝，迁 `AppError`；若全部 catch 都只是退避重试或降级跳过 → 属控制流，保留。裁决结果连同证据行号写进 Step 1 的提交说明。
+
+**保留类不等于永远不动**：控制流类应在后续迭代收敛到 `Outcome` / `Interrupt`；第三方类由适配层转码、原类型不出边界。本期只要求「有明确裁决、有白名单、有 grep 门」，不要求消灭。
+
+**本期顺带补的一条码表欠账**：`TOOL_CANCELLED` 在 `ErrorParamsMap` 里没有条目、catalog 里没有模板，二期 8 处工具取消只好把工具名塞进 `detail` 字符串。Step 1 补 `ErrorParamsMap` 的 `TOOL_CANCELLED: { toolName: string; detail?: string }` 与 `error.tool.cancelled` 双语模板，把 8 处构造改成 `{ toolName }`。
+
+### 3.7 legacy 短码类型的收尾
+
+一期裁决保留 `VfsErrorCode` / `SessionFsErrorCode` 两个字符串短码联合，理由是 legacy mapper 与守卫第二实参需要它们。三期把 `legacy-vfs-error.ts` 删掉、apps 改认 key 之后，这两套短码就没有生产消费者了——**本期末必须收干净，不留第二套码**。
+
+| 类型 / 符号 | 位置 | 处置 |
+|---|---|---|
+| `VfsErrorCode` | `errors/vfs-errors.ts:17` | 门③ 清零后删类型；`isVfsError` 的第二参一并删掉 |
+| `VfsErrorKey` | `errors/vfs-errors.ts` | 与 `VfsErrorCode` 同批删 |
+| `LegacyVfsError` | `errors/vfs-errors.ts:47` | 随 `legacy-vfs-error.ts` 一起删 |
+| `isVfsError` | `errors/vfs-errors.ts:54` | 收成单参形态（只判 AppError 的 `VFS_*`），或直接退化成 `isAppError` 的别名 |
+| `SessionFsErrorCode` | `errors/session-fs-errors.ts:16` | 6 处 `isSessionFsError(e, "短码")` 改成 `isAppError(e, "SESSION_FS_*")`，然后删类型 |
+| `isSessionFsError` | `errors/session-fs-errors.ts:46` | **保留**但收成单参（apps 的 `useChatTabMessageActions` 有生产消费） |
+
+**半撤状态的证据**：`public/session-fs.ts:8` 的注释已经写着「SessionFsErrorCode 已撤（全仓零消费者）」，但 `errors/session-fs-errors.ts:16` 仍在 export 并在 `isSessionFsError` 的第二参活着。这种"公开面撤了、内部还在用"的状态是最容易漏的一种，收口时必须按本表逐行核。
+
+**域判定改用 code 段范围（同批）**：`matchesVfsError` 现在判的是 `candidate.name.startsWith("VFS_")`，这是为了兼容 legacy 手搓对象——那种对象只有 `name === "VfsError"` 加字符串 code，没有数字 code。legacy 形态删除后，AppError 的 `code` 必定有值（`this.code = ErrorCodes[key].code`，DDDSSS 的 DDD 就是域），应该改判段范围：
+
+| 域 | 段 | 判定 |
+|---|---|---|
+| VFS（含 VFS_ZIP_* / VFS_CONTENT_* / VFS_SINGLE_FILE_*） | 102 | `code >= 102000 && code < 103000` |
+| VFS_CHARACTER_CARD | 103 | `code >= 103000 && code < 104000` |
+| SESSION_FS | 116 | `code >= 116000 && code < 117000` |
+
+段表已在 `error-codes.ts:14-21` 与 `test/errors/app-error.test.ts` 的 `DOMAIN_RANGES` 里，**不要新造第二份**，判定直接引用它。
+
+收益不止是快：**域判定不再依赖 key 的命名约定**。现在 `isVfsError` 依赖「VFS 相关 key 必须以 `VFS_` 开头」这条隐式约定，`VFS_CHARACTER_CARD_*` 恰好满足，但只要将来出现一个语义属 VFS、前缀却不同的 key，name 判定就静默漏掉，而 code 段判定不会——因为段号是码表登记时就定死的。
+
+顺带说明这层守卫该收敛到什么形态：`isVfsError` / `isSessionFsError` 这类**按域分的守卫**本质是「`isAppError` + 域判定」的组合。本期先保持函数名（apps 有生产消费），内部改成 `isAppError(e) && inDomain(e.code, "VFS")`；把 20 个域守卫真正收成一个，是后续迭代的事，本期不做。
+
+**域判定必须收成一处 `domainOf`**：现在有 **10 处**用 `key.startsWith("XXX_")` 判域——
+
+| 位置 | 判据 |
+|---|---|
+| `domain/tool/logic/format-tool-output.ts:308` | `TOOL_` |
+| `domain/tool/logic/format-tool-output.ts:323` | `VFS_` |
+| `domain/vfs/logic/format-vfs-error-for-llm.ts:58` | `VFS_` 且 `slice("VFS_".length)` 还原短码 |
+| `domain/vfs/logic/format-vfs-error-for-user.ts:53` | `TOOL_` |
+| `service/provider/impl/model-request.service.ts:94` | `PROVIDER_` |
+| `apps/desktop/src/main/ipc/format-ipc-error.ts:63/70/74/82` | `VFS_` / `PROVIDER_` / `CLOUD_SYNC_` |
+| `apps/desktop/src/main/services/cloud-sync.service.ts:106` | `CLOUD_SYNC_` |
+
+这些全是**域分派**，而域是 `code` 的前三位——码表登记时就定死的语义，不是 key 的命名约定。key 改个名字、加个新前缀，`startsWith` 就**静默漏判**（不报错，只走兜底），段号不会。
+
+本期收成一个函数：
+
+```ts
+// packages/core/src/errors/domain.ts
+export type ErrorDomain = "AGENT" | "VFS" | "VFS_CHARACTER_CARD" | "TOOL" | "PROVIDER" | "CHAT" | "SKILL" | "SORT" | "CONFIG" | "PREFERENCES" | "INFRA" | "SESSION_FS" | "PROMPT" | "CLOUD_SYNC" | "IPC" | ...;
+export function domainOf(code: number): ErrorDomain;   // 唯一实现，按 DOMAIN_RANGES 判段
+```
+
+10 处改成 `switch (domainOf(err.code))` 或 `domainOf(err.code) === "VFS"`。加新域只改段表与 `domainOf` 一处。
+
+`format-vfs-error-for-llm.ts` 那个 `slice("VFS_".length)` 还原短码的写法一并去掉：**判别用 `error.key`（switch 穷尽、类型安全），展示短码只出现在输出模板的字面量里**。
+
+**验收**：本期结束时 `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（类型定义本身一并消失）；`isSessionFsError(` 与 `isVfsError(` 的调用不再有字符串实参。
 
 ## 风险与回滚方案
 

@@ -8,6 +8,7 @@ import { PACKAGE_NAME } from "@novel-master/core";
 
 
 import { type VfsService } from "@novel-master/core/vfs";
+import { type Outcome } from "@novel-master/core/workplace";
 import { runPreferences } from "./preferences-cmd/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
@@ -22,6 +23,8 @@ import { runSortRule } from "./sort-rule/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
+  CANCELLED_MESSAGE,
+  EXIT_CANCELLED,
   EXIT_USAGE,
   exitCodeForError,
   formatCliError,
@@ -63,7 +66,12 @@ async function runVfs(argv: string[]): Promise<number> {
   if (subcommand === "workplace") {
     const rt = await createNovelMasterRuntime(argv);
     try {
-      await runVfsWorkplace(rt, subArgs);
+      const outcome = await runVfsWorkplace(rt, subArgs);
+      if (outcome.kind === "cancelled" || outcome.kind === "replaced") {
+        console.error(CANCELLED_MESSAGE);
+        return EXIT_CANCELLED;
+      }
+      if (outcome.kind === "failed") throw outcome.error;
       return 0;
     } finally {
       await rt.conn.close();
@@ -115,8 +123,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     try {
       return await runVfs(args.slice(1));
     } catch (error) {
+      const code = exitCodeForError(error);
+      if (code === EXIT_CANCELLED) {
+        console.error(CANCELLED_MESSAGE);
+        return EXIT_CANCELLED;
+      }
       console.error(formatCliError(error));
-      return exitCodeForError(error);
+      return code;
     }
   }
 
@@ -140,6 +153,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         console.error(`Usage: novel-master ${top} <subcommand> ...`);
         return EXIT_USAGE;
       }
+      // cancelled 管线（spec-3 §3.5）：产中断的命令链（prompt / session / project
+      // 的 workplace display）沿 Outcome 交回本边界判；其余命令保持 void。
+      // failed 同沿 Outcome 交回本边界，unwrap 汇入下方 catch 统一出口（错误通道迁移三期）。
+      let outcome: Outcome<void> | undefined;
       switch (top) {
         case "preferences":
           await runPreferences(rt.preferences, sub, rest);
@@ -155,17 +172,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
               rest,
             );
           } else {
-            await runProject(rt, sub, rest);
+            outcome = await runProject(rt, sub, rest);
           }
           break;
         case "session":
-          await runSession(rt, sub, rest);
+          outcome = await runSession(rt, sub, rest);
           break;
         case "message":
           await runMessage(rt, sub, rest);
           break;
         case "prompt":
-          await runPrompt(rt, sub, rest);
+          outcome = await runPrompt(rt, sub, rest);
           break;
         case "provider":
           await runProvider(rt, sub, rest);
@@ -183,10 +200,23 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           await runSortRule(rt, sub, rest);
           break;
       }
+      if (outcome != null) {
+        if (outcome.kind === "cancelled" || outcome.kind === "replaced") {
+          console.error(CANCELLED_MESSAGE);
+          return EXIT_CANCELLED;
+        }
+        // 与 runVfs 边界同款：failed unwrap 后交给下方 catch（exitCodeForError + formatCliError）。
+        if (outcome.kind === "failed") throw outcome.error;
+      }
       return 0;
     } catch (error) {
+      const code = exitCodeForError(error);
+      if (code === EXIT_CANCELLED) {
+        console.error(CANCELLED_MESSAGE);
+        return EXIT_CANCELLED;
+      }
       console.error(formatCliError(error));
-      return exitCodeForError(error);
+      return code;
     } finally {
       await rt.conn.close();
     }

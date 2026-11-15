@@ -233,5 +233,12 @@ module.exports = {
       repoRoot,
       'packages/core/dist/presentation/chat/$1',
     ),
+    // 错误通道三期新增的 public/errors 子入口（AppError / Result / Outcome）：
+    // 同其它 core 子路径直连 dist 真实文件，exports 只声明 import 条件，
+    // Jest 的 require 解析不到，漏写会让 format-error 等套件解析失败。
+    '^@novel-master/core/errors$': path.join(
+      repoRoot,
+      'packages/core/dist/public/errors.js',
+    ),
   },
 };

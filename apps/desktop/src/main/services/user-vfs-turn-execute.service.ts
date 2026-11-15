@@ -28,6 +28,10 @@ export async function executeSessionUserVfsOp(
 ): Promise<void> {
   const result = await rt.userVfsTurn.executeOp(sessionId, op);
   if (!result.ok) {
+    // 解包 throw 边界：失败抛错供 IPC 格式化——4 个调用点落在 handlers/vfs.ts
+    // 各 handler 的紧邻 try/catch（formatIpcError）；vfs-batch 侧经 core
+    // BatchIngestWriter（Promise<void>）最终落 handleVfsBatchIngestFromPaths
+    // 的 catch。总纲 §1.1 点名的生产接线边界（desktop+mobile 同名镜像）。
     throw result.error;
   }
   const attachments = await projectComposerStatusForSession(rt, sessionId);

@@ -17,7 +17,11 @@ function mockRuntime(sessionAgentConfig: {agentId: string; modelId?: string}) {
       })),
     },
     sessions: {
-      getSessionAgentConfig: jest.fn(async () => sessionAgentConfig),
+      // 错误通道迁移后 getSessionAgentConfig 走 Result 通道（生产侧 `!ok` 即 throw）。
+      getSessionAgentConfig: jest.fn(async () => ({
+        ok: true as const,
+        value: sessionAgentConfig,
+      })),
       updateSessionAgentConfig: jest.fn(async () => sessionAgentConfig),
     },
   };

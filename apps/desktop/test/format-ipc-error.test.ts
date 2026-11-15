@@ -8,33 +8,57 @@ import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
 
 describe("formatIpcError", () => {
   it("透传 SESSION_FS_ROLLBACK_NO_CHECKPOINT AppError（code 即 key，中文经 coreT 渲染）", () => {
-    const err = new AppError("SESSION_FS_ROLLBACK_NO_CHECKPOINT", {messageId: "msg-1", sessionId: "sess-1"});
+    const err = new AppError("SESSION_FS_ROLLBACK_NO_CHECKPOINT", {
+      messageId: "msg-1",
+      sessionId: "sess-1",
+    });
     const payload = formatIpcError(err);
     assert.equal(payload.code, "SESSION_FS_ROLLBACK_NO_CHECKPOINT");
     assert.equal(payload.message, "该消息无回滚点");
   });
 
   it("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED：descriptor 通道走 coreT，code 即 key", () => {
-    const err = new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", {key: "error.session_fs.vfs_restore_failed", params: {detail: "revision 缺失"}}, {sessionId: "sess-1", messageId: "msg-1"});
+    // descriptor 走 params.descriptor 通道（message-rollback.service 同构；直接把
+    // descriptor 当 params 会让 messageParams 变成 toSnakeCase(整包) 而丢插值）。
+    const err = new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", {
+      descriptor: {
+        key: "error.session_fs.vfs_restore_failed",
+        params: { detail: "revision 缺失" },
+      },
+      sessionId: "sess-1",
+      messageId: "msg-1",
+    });
     const payload = formatIpcError(err);
     assert.equal(payload.code, "SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED");
     assert.equal(payload.message, "工作区无法恢复：revision 缺失");
   });
 
   it("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED：missingLogicalPaths 改从 details 提取", () => {
-    const err = new AppError("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED", {key: "error.session_fs.rollback_revision_backfill_required", params: {missing_logical_paths: "/chapter-1.md, /notes/b.md"}}, {missingLogicalPaths: ["/chapter-1.md", "/notes/b.md"], sessionId: "sess-1", messageId: "msg-1"});
+    // descriptor 走 params.descriptor 通道（同上；missingLogicalPaths 留在 params 供 details 透传）。
+    const err = new AppError("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED", {
+      descriptor: {
+        key: "error.session_fs.rollback_revision_backfill_required",
+        params: { missing_logical_paths: "/chapter-1.md, /notes/b.md" },
+      },
+      missingLogicalPaths: ["/chapter-1.md", "/notes/b.md"],
+      sessionId: "sess-1",
+      messageId: "msg-1",
+    });
     const payload = formatIpcError(err);
-    assert.equal(payload.code, "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED");
+    assert.equal(
+      payload.code,
+      "SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED"
+    );
     // descriptor 迁移后 Error.message 是英文 desc；中文经 coreT 渲染。
     assert.equal(
       payload.message,
-      "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md",
+      "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md"
     );
     const descriptor = userMessageOf(err);
     assert.ok(descriptor != null);
     assert.equal(
       coreT(descriptor),
-      "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md",
+      "回滚所需 revision 缺失，需确认使用最新内容修复：/chapter-1.md, /notes/b.md"
     );
     assert.deepEqual(payload.missingLogicalPaths, [
       "/chapter-1.md",
@@ -42,25 +66,32 @@ describe("formatIpcError", () => {
     ]);
   });
 
-  it("TOOL_FAILED 包 VFS AppError：解包 cause 并翻回旧 short code", () => {
-    const cause = new AppError("VFS_ALREADY_EXISTS", {path: "/x.md", detail: "Version conflict"});
-    const err = new AppError("TOOL_FAILED", {toolName: "write", cause, detail: "Tool failed: write"});
+  it("TOOL_FAILED 包 VFS AppError：解包 cause 并透传 VFS_ 前缀 key", () => {
+    const cause = new AppError("VFS_ALREADY_EXISTS", {
+      path: "/x.md",
+      detail: "Version conflict",
+    });
+    const err = new AppError("TOOL_FAILED", {
+      toolName: "write",
+      cause,
+      detail: "Tool failed: write",
+    });
     const payload = formatIpcError(err);
-    assert.equal(payload.code, "ALREADY_EXISTS");
+    assert.equal(payload.code, "VFS_ALREADY_EXISTS");
     assert.equal(payload.message, "名称不能重复");
   });
 
-  it("maps AgentTurnError to AGENT_RUN_ERROR", () => {
+  it("maps AgentTurnError to AGENT_RUN_FAILED", () => {
     const err = new AgentTurnError("消息不能为空");
     const payload = formatIpcError(err);
-    assert.equal(payload.code, "AGENT_RUN_ERROR");
+    assert.equal(payload.code, "AGENT_RUN_FAILED");
     assert.equal(payload.message, "消息不能为空");
   });
 
   it("透出 AppError.key（勿落成 Error.name）", () => {
     const err = new AppError(
       "VFS_CHARACTER_CARD_UNRECOGNIZED",
-      "无法识别为角色卡",
+      "无法识别为角色卡"
     );
     const payload = formatIpcError(err);
     assert.equal(payload.code, "VFS_CHARACTER_CARD_UNRECOGNIZED");

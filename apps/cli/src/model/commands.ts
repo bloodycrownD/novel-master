@@ -26,6 +26,9 @@ function flagString(
 
 // nm-style: keep-local — CLI 子命令分发 handler：main.ts 按 domain 单点分发，
 // 内联会把 model 域整个 subcommand switch 搬进分发器，破坏 main 的路由结构。
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 export async function runModel(
   rt: NovelMasterRuntime,
   subcommand: string,

@@ -40,13 +40,13 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 }));
 
 /**
- * toastMessage 的真形态是「标题：错误详情」。这里保留标题前缀（真实实现见
- * src/errors/toast-message.ts），失败链才能断言到「导入失败」这类标题文案。
+ * toastMessage 用真实现：错误文案已迁 messageKey/catalog（VfsSingleFileError
+ * 退役后 err.message 是英文 desc），`err.message` 直拼的假实现会和生产的
+ * formatError 渲染分叉。
  */
-jest.mock('../src/errors/toast-message', () => ({
-  toastMessage: (title: string, err: unknown) =>
-    err instanceof Error ? `${title}：${err.message}` : title,
-}));
+jest.mock('../src/errors/toast-message', () =>
+  jest.requireActual('../src/errors/toast-message'),
+);
 
 jest.mock('../src/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
@@ -164,7 +164,7 @@ import {
   exportVfsSingleFile,
   importVfsSingleFile,
 } from '../src/services/vfs-single-file.service';
-import {VfsSingleFileError} from '../src/errors/vfs-single-file-error';
+import {AppError} from '@novel-master/core/vfs';
 
 const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
@@ -694,9 +694,7 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
   it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     mockFn(importVfsSingleFile).mockRejectedValue(
-      new VfsSingleFileError(
-        '文件过大：34000000 字节，超过导入上限 33554432 字节（约 32MB），已拒绝导入',
-      ),
+      new AppError('VFS_SINGLE_FILE_TOO_LARGE', {sizeBytes: 34000000, maxBytes: 33554432}),
     );
 
     await renderAndSettle(renderSessionVfm());

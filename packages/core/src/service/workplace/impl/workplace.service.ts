@@ -74,6 +74,7 @@ interface WorkplaceServiceDeps {
  * - 目录规则路径 P：VFS 目录行仍在（dirPathSet），或前缀 `P/` 下仍有 live
  *   文件（文件隐含父目录存在）；
  * - 文件规则路径 P：文件本身仍在（fileSet）。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（setDirRule / getDirRule / setFileRule / deleteRulesUnderLogicalPrefix / loadContextMetadata 同款），输入来自已归一化的规则与请求，失败经端点（handler / 屏幕）catch 收口。
  */
 function filterGhostConfiguredPaths(input: {
   readonly dirRulePaths: ReadonlySet<string>;

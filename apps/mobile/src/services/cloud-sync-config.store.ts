@@ -84,6 +84,14 @@ function parseRev(raw: string | undefined): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+/**
+ * KKV 读适配：`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样 throw。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → 端内异常通道的
+ * 转码点；getCloudSyncConfig 是唯一中间层，CloudSyncConfigScreen 的
+ * load/save 紧邻 catch 提示（desktop 同名 store 同形态，handler catch →
+ * IpcResult）。
+ */
 async function kkvGet(
   kkv: KkvService,
   key: string,

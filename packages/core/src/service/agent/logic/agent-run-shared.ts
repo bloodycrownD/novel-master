@@ -108,6 +108,7 @@ export async function resolveCurrentAgentDefinition(
  * workspace 层已移除：不再从 state.getCurrentModelId() 回退。返回的
  * `workspaceModelId` 仅用于下游压缩评估等消费方，由 state 读取后透传，
  * 不参与 savedModelId 解析优先级。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛——Result → agent run 异常通道转码点，由 agent turn loop / 调用端点 catch 收口。
  */
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,

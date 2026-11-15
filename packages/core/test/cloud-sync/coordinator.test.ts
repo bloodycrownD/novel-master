@@ -4,13 +4,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CloudSyncCoordinator } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
-import { CloudSyncError } from "../../src/infra/cloud-sync/errors/cloud-sync-errors.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { statusKey, snapshotKey } from "../../src/infra/cloud-sync/logic/paths.js";
 import { buildLease } from "../../src/infra/cloud-sync/logic/lock.js";
-import {
-  PushAgentMutex,
-  PushAgentMutexAcquireError,
-} from "../../src/infra/cloud-sync/logic/push-agent-mutex.js";
+import { PushAgentMutex } from "../../src/infra/cloud-sync/logic/push-agent-mutex.js";
 import type { CloudSyncStatus } from "../../src/infra/cloud-sync/model/cloud-sync-status.js";
 import type { DbSyncPort } from "../../src/infra/cloud-sync/ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../../src/infra/cloud-sync/ports/object-storage.port.js";
@@ -77,7 +74,7 @@ function createStorage(initial?: {
     async put(key, body, options) {
       if (key === statusKey(PREFIX)) {
         if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-          throw new CloudSyncError("LOCK_CONTENTION", "etag 不匹配");
+          throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"});
         }
         const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
         currentStatus = parsed;
@@ -244,8 +241,7 @@ describe("CloudSyncCoordinator.pull", () => {
     await assert.rejects(
       () => coordinator.pull({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "ALREADY_UP_TO_DATE");
+        assert.ok(isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
         return true;
       },
     );
@@ -283,8 +279,7 @@ describe("CloudSyncCoordinator.pull 守卫 (S-CS-03)", () => {
     await assert.rejects(
       () => coordinator.pull({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "AGENT_ACTIVE");
+        assert.ok(isAppError(error, "CLOUD_SYNC_AGENT_ACTIVE"));
         return true;
       },
     );
@@ -319,8 +314,7 @@ describe("CloudSyncCoordinator.pull 守卫 (S-CS-03)", () => {
     await assert.rejects(
       () => coordinator.pull({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "AGENT_ACTIVE");
+        assert.ok(isAppError(error, "CLOUD_SYNC_AGENT_ACTIVE"));
         return true;
       },
     );
@@ -405,9 +399,8 @@ describe("CloudSyncCoordinator.pull 守卫 (S-CS-03)", () => {
     await assert.rejects(
       () => coordinator.pull({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
         // 一次「什么都不会发生」的 no-op pull 不该因为 agent 在跑而被拒。
-        assert.equal(error.code, "ALREADY_UP_TO_DATE");
+        assert.ok(isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE"));
         return true;
       },
     );
@@ -427,8 +420,7 @@ describe("CloudSyncCoordinator.push", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "NEED_PULL_FIRST");
+        assert.ok(isAppError(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
         return true;
       },
     );
@@ -452,8 +444,7 @@ describe("CloudSyncCoordinator.push", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "LOCK_HELD_BY_OTHER");
+        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
         return true;
       },
     );
@@ -540,7 +531,7 @@ describe("CloudSyncCoordinator.push", () => {
       async put(key, body, options) {
         if (key === statusKey(PREFIX)) {
           if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-            throw new CloudSyncError("LOCK_CONTENTION", "etag 不匹配");
+            throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"});
           }
           const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
           currentStatus = parsed;
@@ -637,8 +628,7 @@ describe("S-CS-09 final status 重读判定", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 2 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "NEED_PULL_FIRST");
+        assert.ok(isAppError(error, "CLOUD_SYNC_NEED_PULL_FIRST"));
         return true;
       },
     );
@@ -676,8 +666,7 @@ describe("S-CS-09 final status 重读判定", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 2 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "LOCK_HELD_BY_OTHER");
+        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
         return true;
       },
     );
@@ -808,8 +797,7 @@ describe("CloudSyncCoordinator.push 互斥锁 (A-21)", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "PUSH_MUTEX_TIMEOUT");
+        assert.ok(isAppError(error, "CLOUD_SYNC_PUSH_MUTEX_TIMEOUT"));
         return true;
       },
     );
@@ -885,8 +873,7 @@ describe("CloudSyncCoordinator.push 互斥锁 (A-21)", () => {
     await assert.rejects(
       () => coordinator.push({ lastSyncedRev: 1 }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "AGENT_ACTIVE");
+        assert.ok(isAppError(error, "CLOUD_SYNC_AGENT_ACTIVE"));
         return true;
       },
     );
@@ -927,14 +914,13 @@ describe("PushAgentMutex 单元", () => {
     assert.equal(m.isHeld(), false);
   });
 
-  it("超时抛 PushAgentMutexAcquireError", async () => {
+  it("超时 reject AGENT_BUSY AppError", async () => {
     const m = new PushAgentMutex();
     await m.acquire({ timeoutMs: 1000 });
     await assert.rejects(
       () => m.acquire({ timeoutMs: 20 }),
       (error: unknown) => {
-        assert.ok(error instanceof PushAgentMutexAcquireError);
-        assert.equal(error.code, "TIMEOUT");
+        assert.ok(isAppError(error, "AGENT_BUSY"));
         return true;
       },
     );

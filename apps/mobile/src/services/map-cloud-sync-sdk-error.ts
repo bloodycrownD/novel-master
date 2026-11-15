@@ -1,10 +1,11 @@
 /**
- * AWS SDK / Smithy 原始错误 → 用户可读 {@link CloudSyncError}。
+ * AWS SDK / Smithy 原始错误 → 用户可读 `CLOUD_SYNC_*` AppError。
  * 规则对齐 Desktop `mapStorageError`，并扩展 Smithy 错误名与反序列化兜底。
  *
  * @module services/map-cloud-sync-sdk-error
  */
-import {CloudSyncError, isCloudSyncError} from '@novel-master/core';
+import {AppError, isAppError} from '@novel-master/core/agent';
+import {domainOf} from '@novel-master/core/errors';
 
 const AUTH_MESSAGE = '云存储凭据无效或权限不足';
 const BUCKET_MESSAGE = '无法访问该存储桶，请检查 Bucket 名称';
@@ -125,11 +126,11 @@ function isTechnicalFallbackError(name: string, lowerMessage: string): boolean {
 }
 
 /**
- * 将 AWS SDK / Smithy 抛出的未知错误映射为 {@link CloudSyncError}。
- * 已有 {@link CloudSyncError}（如 `NOT_CONFIGURED`）原样透传。
+ * 将 AWS SDK / Smithy 抛出的未知错误映射为 `CLOUD_SYNC_*` AppError。
+ * 已有 `CLOUD_SYNC_*` AppError（如 `CLOUD_SYNC_NOT_CONFIGURED`）原样透传。
  */
-export function mapCloudSyncSdkError(error: unknown): CloudSyncError {
-  if (isCloudSyncError(error)) {
+export function mapCloudSyncSdkError(error: unknown): AppError {
+  if (isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC') {
     return error;
   }
 
@@ -139,30 +140,30 @@ export function mapCloudSyncSdkError(error: unknown): CloudSyncError {
   const httpStatusCode = readHttpStatusCode(error);
 
   if (isPathStyleForbiddenError(name, lowerMessage)) {
-    return new CloudSyncError('NETWORK', PATH_STYLE_MESSAGE, {cause: error});
+    return new AppError('CLOUD_SYNC_NETWORK', {detail: PATH_STYLE_MESSAGE}, {cause: error});
   }
 
   // 判定放在 auth / bucket / connection 之前：这些原生异常里也可能带
   // 「配置不全」的措辞，但对用户而言根因就是配置。
   if (isNotConfiguredMessage(message)) {
-    return new CloudSyncError('NOT_CONFIGURED', message, {cause: error});
+    return new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: message}, {cause: error});
   }
 
   if (isAuthError(name, lowerMessage, httpStatusCode)) {
-    return new CloudSyncError('AUTH', AUTH_MESSAGE, {cause: error});
+    return new AppError('CLOUD_SYNC_AUTH', {detail: AUTH_MESSAGE}, {cause: error});
   }
 
   if (isBucketError(name, lowerMessage, httpStatusCode)) {
-    return new CloudSyncError('NETWORK', BUCKET_MESSAGE, {cause: error});
+    return new AppError('CLOUD_SYNC_NETWORK', {detail: BUCKET_MESSAGE}, {cause: error});
   }
 
   if (isConnectionError(lowerMessage)) {
-    return new CloudSyncError('NETWORK', CONNECTION_MESSAGE, {cause: error});
+    return new AppError('CLOUD_SYNC_NETWORK', {detail: CONNECTION_MESSAGE}, {cause: error});
   }
 
   if (isTechnicalFallbackError(name, lowerMessage)) {
-    return new CloudSyncError('NETWORK', FALLBACK_MESSAGE, {cause: error});
+    return new AppError('CLOUD_SYNC_NETWORK', {detail: FALLBACK_MESSAGE}, {cause: error});
   }
 
-  return new CloudSyncError('NETWORK', FALLBACK_MESSAGE, {cause: error});
+  return new AppError('CLOUD_SYNC_NETWORK', {detail: FALLBACK_MESSAGE}, {cause: error});
 }

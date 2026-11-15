@@ -194,7 +194,7 @@ ${engineSection}
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
       // 拦一道，避免取消后仍去尝试链上剩余引擎。
-      if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${SEARCH_TOOL_NAME}`});
+      if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
       if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
@@ -206,7 +206,7 @@ ${engineSection}
         break;
       } catch (e) {
         // 用户取消：不是引擎失败，立即终止、不走降级链（重读 ctx.signal：局部 signal 已被上面的检查收窄）。
-        if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${SEARCH_TOOL_NAME}`});
+        if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
         const msg = e instanceof Error ? e.message : String(e);
         const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
         const code = msg.match(/error (\d{3})/i)?.[1];

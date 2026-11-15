@@ -36,7 +36,9 @@ export async function resolveProviderId(
   );
 }
 
-/** Unwraps the Result-based saved-model lookup at the CLI boundary. */
+/** Unwraps the Result-based saved-model lookup at the CLI boundary.
+ * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 async function requireSavedModelId(savedModelId: string, savedModels: ProviderServiceBundle["savedModelRepo"]): Promise<string> {
   const saved = await assertSavedModelUuid(savedModelId, savedModels);
   if (!saved.ok) throw saved.error;

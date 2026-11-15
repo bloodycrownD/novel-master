@@ -203,7 +203,7 @@ test("saveDirRule（非 VFS 动作）失败保持原文案，不走中文映射"
     assert.equal(channel, IPC_CHANNELS.WORKPLACE_SET_DIR_RULE);
     return {
       ok: false,
-      error: { code: "VALIDATION", message: "规则保存失败原文案" },
+      error: { code: "INFRA_UNEXPECTED_ERROR", message: "规则保存失败原文案" },
     };
   });
   try {

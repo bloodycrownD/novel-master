@@ -101,6 +101,9 @@ async function kkvGet(
     if (isAppError(raw.error, "KKV_NOT_FOUND")) {
       return undefined;
     }
+    // 解包 throw 边界：非 NOT_FOUND 的 KKV 读失败沿 CloudSyncConfigStore →
+    // DesktopCloudSyncService（全部 await 直传、零分支）→ handlers/cloud-sync.ts
+    // 各 handler 的紧邻 catch（formatIpcError）收口。
     throw raw.error;
   }
   return raw.value;

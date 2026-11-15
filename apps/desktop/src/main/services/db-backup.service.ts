@@ -19,6 +19,7 @@ import {
   type ProviderTableSnapshot,
   type TdbcConnection,
 } from "@novel-master/core";
+import { AppError } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   checkpointDesktopDatabase,
@@ -110,11 +111,11 @@ function backupFileName(): string {
 
 function assertSqliteFile(bytes: Uint8Array): void {
   if (bytes.length < 16) {
-    throw new Error("文件过小，不是有效的数据库备份");
+    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "文件过小，不是有效的数据库备份"});
   }
   const header = String.fromCharCode(...bytes.subarray(0, 16));
   if (!header.startsWith(SQLITE_MAGIC)) {
-    throw new Error("不是有效的 SQLite 数据库备份");
+    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "不是有效的 SQLite 数据库备份"});
   }
 }
 
@@ -261,10 +262,7 @@ async function replaceLiveDatabase(
     }
     if (rollbackError != null) {
       rollbackFailed = true;
-      throw new Error(
-        `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}`,
-        { cause: [error, rollbackError] },
-      );
+      throw new AppError("INFRA_UNEXPECTED_ERROR", {detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}`}, {cause: [error, rollbackError]});
     }
     throw error;
   } finally {
@@ -337,7 +335,7 @@ export async function exportDatabaseBackup(
   parentWindow?: BrowserWindow | null,
 ): Promise<"saved" | "cancelled"> {
   if (isDesktopAgentActive()) {
-    throw new Error("Agent 运行中，请稍后再导出数据库");
+    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导出数据库"});
   }
 
   const fileName = backupFileName();
@@ -368,7 +366,7 @@ export async function importDatabaseBackup(
   parentWindow?: BrowserWindow | null,
 ): Promise<"imported" | "cancelled"> {
   if (isDesktopAgentActive()) {
-    throw new Error("Agent 运行中，请稍后再导入数据库");
+    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导入数据库"});
   }
 
   const win = parentWindow ?? undefined;

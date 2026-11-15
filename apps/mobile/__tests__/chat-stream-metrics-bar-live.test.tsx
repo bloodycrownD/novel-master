@@ -374,27 +374,31 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       partialThinking: '',
       pendingChildren: [],
     });
+    // 错误通道迁移二期后走 Result（sheet 侧 `!ok` 即 throw）。
     mockGetSessionUsageDetail.mockResolvedValue({
-      last: {
-        seq: 3,
-        modelName: 'claude-x',
-        provider: 'anthropic',
-        promptTokens: 100,
-        completionTokens: 40,
-        cacheReadTokens: 2048,
-        cacheCreationTokens: null,
-        atMs: 1,
+      ok: true,
+      value: {
+        last: {
+          seq: 3,
+          modelName: 'claude-x',
+          provider: 'anthropic',
+          promptTokens: 100,
+          completionTokens: 40,
+          cacheReadTokens: 2048,
+          cacheCreationTokens: null,
+          atMs: 1,
+        },
+        totals: {
+          promptTokens: 300,
+          completionTokens: 80,
+          cacheReadTokens: 2048,
+          cacheCreationTokens: 512,
+          billedInputTokens: 2860,
+          assistantRows: 3,
+        },
+        visibleMessageCount: 5,
+        toolUseCount: 2,
       },
-      totals: {
-        promptTokens: 300,
-        completionTokens: 80,
-        cacheReadTokens: 2048,
-        cacheCreationTokens: 512,
-        billedInputTokens: 2860,
-        assistantRows: 3,
-      },
-      visibleMessageCount: 5,
-      toolUseCount: 2,
     });
 
     let tree!: TestRenderer.ReactTestRenderer;

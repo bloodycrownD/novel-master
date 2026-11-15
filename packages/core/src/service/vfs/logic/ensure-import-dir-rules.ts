@@ -34,6 +34,7 @@ const log = createLogger("vfs.import-dir-rules");
  *
  * nm-style: keep-local — 默认规则行构造契约（等价性注记）由单测 3 处直接构造期望行，
  * 内联会丢注记且须改测试。
+  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（backfillMissingDirRules 同款），输入来自已入库路径，失败沿调用链至端点 catch 收口。
  */
 export function buildDefaultDirRule(
   scopeKey: string,

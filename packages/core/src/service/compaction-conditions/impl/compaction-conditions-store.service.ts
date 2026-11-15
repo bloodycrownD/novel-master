@@ -149,6 +149,11 @@ export class DefaultCompactionConditionsStore
     }
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → service 异常通道
+   * 转码点——`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样上抛，由本
+   * service 公共 API 的调用链端点（handler / 屏幕）catch 收口。
+   */
   private async getRaw(): Promise<string | undefined> {
     const raw = await this.kkv.get(MODULE, KEY_POLICY);
     if (!raw.ok) {

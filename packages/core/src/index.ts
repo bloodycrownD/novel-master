@@ -67,8 +67,6 @@ export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } fr
  * 跨端云同步：协调器、租约锁与 status schema。
  */
 export {
-  CloudSyncError,
-  isCloudSyncError,
   CloudSyncCoordinator,
   parseCloudSyncStatus,
   EMPTY_CLOUD_SYNC_STATUS,
@@ -82,7 +80,6 @@ export {
   snapshotKey,
 } from "./infra/cloud-sync/index.js";
 export type {
-  CloudSyncErrorCode,
   ObjectStorageHeadResult,
   ObjectStoragePort,
   DbSyncPort,

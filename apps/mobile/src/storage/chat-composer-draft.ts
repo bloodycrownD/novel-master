@@ -82,7 +82,9 @@ type ComposerDraftPersistence = {
   setComposerDraftJson(id: string, draftJson: string | null): Promise<ResultWire<boolean>>;
 };
 
-/** 仅持久 text+tokenRanges（状态条不进列；attach 恒空）。 */
+/** 仅持久 text+tokenRanges（状态条不进列；attach 恒空）。
+ * 解包 throw 边界（错误通道迁移三期门⑦）：ComposerDraftPersistence 的 `Result` 失败原样上抛（readComposerDraft 同款）——持久层 Result → 端内异常通道转码边界，UI 调用链 catch → formatError → toast 收口。
+ */
 async function persistAttachTextDraft(
   sessions: ComposerDraftPersistence,
   sessionId: string,

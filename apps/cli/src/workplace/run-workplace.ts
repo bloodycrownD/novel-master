@@ -18,12 +18,14 @@ import {
   assembleWorkplaceDisplay,
   type FillPolicy,
   type InclusionMode,
+  type Outcome,
   type SortField,
   type SortOrder,
   type WorkplaceService,
 } from "@novel-master/core/workplace";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { VfsService } from "@novel-master/core/vfs";
+import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 /**
@@ -41,7 +43,7 @@ export async function runWorkplace(
   service: WorkplaceService,
   args: readonly string[],
   assemble?: WorkplaceDisplayAssembleContext,
-): Promise<void> {
+): Promise<Outcome<void>> {
   const { positional, flags } = parseCliArgs(args);
   const sub = positional[0];
   const rest = positional.slice(1);
@@ -59,17 +61,18 @@ export async function runWorkplace(
           );
         }
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "display": {
       const text = await resolveWorkplaceDisplay(service, assemble);
-      if (text.length > 0) {
-        process.stdout.write(text);
-        if (!text.endsWith("\n")) {
+      if (text.kind !== "completed") return text;
+      if (text.value.length > 0) {
+        process.stdout.write(text.value);
+        if (!text.value.endsWith("\n")) {
           process.stdout.write("\n");
         }
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "dir": {
       const logicalPath = rest[0];
@@ -96,7 +99,7 @@ export async function runWorkplace(
         tailCount: tailRaw != null ? parseCount(tailRaw, "tail") : undefined,
         fillPolicy: parseFillPolicy(fillRaw),
       });
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "file": {
       const logicalPath = rest[0];
@@ -110,7 +113,7 @@ export async function runWorkplace(
         logicalPath,
         inclusionMode: parseInclusionMode(modeRaw),
       });
-      return;
+      return OUTCOME_COMPLETED;
     }
     default:
       throw new Error(
@@ -121,14 +124,17 @@ export async function runWorkplace(
 
 /**
  * Session → assemble（聊天同源）；否则 → live materialize（调试盘面）。
+ * failed 与 cancelled / replaced 都沿 Outcome 交回调用方：failed 由 main 边界
+ * unwrap 汇入 catch 统一出口，中断走 EXIT_CANCELLED（本调用无 shouldStop 判据，
+ * 中断分支恒不到，但类型与管线保留——错误通道迁移三期）。
  */
 async function resolveWorkplaceDisplay(
   service: WorkplaceService,
   assemble: WorkplaceDisplayAssembleContext | undefined,
-): Promise<string> {
+): Promise<Outcome<string>> {
   if (assemble == null) {
     // 调试 live materialize：无 session kkv，与 Agent 常驻前缀不同源。
-    return service.renderDisplay();
+    return { kind: "completed", value: await service.renderDisplay() };
   }
   const scope = {
     kind: "session" as const,
@@ -142,14 +148,12 @@ async function resolveWorkplaceDisplay(
     vfs: assemble.vfs,
     layout: { workplace: "on" },
   });
-  if (assembled.kind === "failed") {
-    throw assembled.error;
-  }
+  // failed 与 cancelled/replaced 同走 Outcome 通道：failed 交 main 边界 unwrap
+  // 汇入 catch 统一出口，中断走 EXIT_CANCELLED（错误通道迁移三期）。
   if (assembled.kind !== "completed") {
-    // 本调用无 shouldStop 判据，中断分支恒不到（防御性收窄；错误通道迁移二期）。
-    throw new Error("workplace assembly interrupted without shouldStop");
+    return assembled;
   }
-  return assembled.value.workplaceDisplay;
+  return { kind: "completed", value: assembled.value.workplaceDisplay };
 }
 
 function parseSortField(value: string | true | undefined): SortField | undefined {

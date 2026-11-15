@@ -13,18 +13,10 @@
 
 import { isAppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import { isVfsError, type VfsErrorCode } from "@/errors/vfs-errors.js";
-import { isCloudSyncError, type CloudSyncErrorCode } from "@/infra/cloud-sync/errors/cloud-sync-errors.js";
 import type { MessageParams } from "@/common/i18n.js";
 import { CORE_MESSAGE_KEYS, type CoreMessageDescriptor, type CoreMessageKey } from "./keys.js";
 
 const KNOWN_KEYS: ReadonlySet<string> = new Set<string>(CORE_MESSAGE_KEYS);
-
-const USER_VISIBLE_VFS_CODES = ["NOT_FOUND", "REPLACE_NOT_FOUND", "ALREADY_EXISTS"] as const satisfies readonly VfsErrorCode[];
-const VFS_CODE_TO_MESSAGE = {NOT_FOUND: "error.vfs.not_found", REPLACE_NOT_FOUND: "error.vfs.replace_not_found", ALREADY_EXISTS: "error.vfs.already_exists"} as const satisfies Record<(typeof USER_VISIBLE_VFS_CODES)[number], CoreMessageKey>;
-
-const USER_VISIBLE_CLOUD_SYNC_CODES = ["ALREADY_UP_TO_DATE", "SNAPSHOT_MISSING", "CHECKSUM_MISMATCH", "NOT_CONFIGURED"] as const satisfies readonly CloudSyncErrorCode[];
-const CLOUD_SYNC_CODE_TO_MESSAGE = {ALREADY_UP_TO_DATE: "error.cloud_sync.already_up_to_date", SNAPSHOT_MISSING: "error.cloud_sync.snapshot_missing", CHECKSUM_MISMATCH: "error.cloud_sync.download_checksum_mismatch", NOT_CONFIGURED: "error.cloud_sync.not_configured"} as const satisfies Record<(typeof USER_VISIBLE_CLOUD_SYNC_CODES)[number], CoreMessageKey>;
 
 const USER_VISIBLE_APP_CODES = ["AGENT_DUPLICATE_NAME", "SESSION_FS_INVALID_ROLLBACK_OPTIONS"] as const satisfies readonly ErrorKey[];
 const APP_CODE_TO_MESSAGE = {AGENT_DUPLICATE_NAME: "error.agent.duplicate_name", SESSION_FS_INVALID_ROLLBACK_OPTIONS: "error.session_fs.invalid_rollback_options"} as const satisfies Record<(typeof USER_VISIBLE_APP_CODES)[number], CoreMessageKey>;
@@ -57,12 +49,6 @@ function userMessageOfVisited(error: unknown, seen: Set<unknown>): CoreMessageDe
     if (fromCause != null) {
       return fromCause;
     }
-  }
-  if (isVfsError(error)) {
-    return codeMessageOrNull(VFS_CODE_TO_MESSAGE, error.code);
-  }
-  if (isCloudSyncError(error)) {
-    return codeMessageOrNull(CLOUD_SYNC_CODE_TO_MESSAGE, error.code);
   }
   if (isAppError(error)) {
     return codeMessageOrNull(APP_CODE_TO_MESSAGE, error.key);

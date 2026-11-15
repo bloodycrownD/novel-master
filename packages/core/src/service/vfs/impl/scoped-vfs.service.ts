@@ -16,7 +16,6 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 import { matchGlob } from "../glob-match.js";
-import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import type {
   VfsGrepMatch,
   VfsGrepOptions,
@@ -46,37 +45,40 @@ export class ScopedVfsService implements VfsService {
     options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]> {
     const resolvedDir = resolveLogicalPath(dir);
-    if (!resolvedDir.ok) throwLegacyVfs(resolvedDir.error);
+    if (!resolvedDir.ok) throw resolvedDir.error;
     const logicalDir = resolvedDir.value;
     const allowedDir = validateLogicalPath(this.scope, logicalDir);
-    if (!allowedDir.ok) throwLegacyVfs(allowedDir.error);
+    if (!allowedDir.ok) throw allowedDir.error;
     return this.inner.list(this.scopeKeyStr, logicalDir, options);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath / scope 校验 `Result` → 领域异常通道转码点（本服务各方法同款）——非法路径按边界抛出，由调用链端点 catch 收口。
+   */
   async mkdir(path: string): Promise<void> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.mkdir(this.scopeKeyStr, logical);
   }
 
   async read(path: string): Promise<VfsReadResult> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.read(this.scopeKeyStr, logical);
   }
 
   async findContentSize(path: string): Promise<VfsContentSize | null> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.findContentSize(this.scopeKeyStr, logical);
   }
 
@@ -85,10 +87,10 @@ export class ScopedVfsService implements VfsService {
     content: string
   ): Promise<{ version: number }> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.write(this.scopeKeyStr, logical, content);
   }
 
@@ -99,10 +101,10 @@ export class ScopedVfsService implements VfsService {
     options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.replace(
       this.scopeKeyStr,
       logical,
@@ -117,10 +119,10 @@ export class ScopedVfsService implements VfsService {
     let logicalCwd: string | undefined;
     if (cwd != null) {
       const resolved = resolveLogicalPath(cwd);
-      if (!resolved.ok) throwLegacyVfs(resolved.error);
+      if (!resolved.ok) throw resolved.error;
       logicalCwd = resolved.value;
       const allowedCwd = validateLogicalPath(this.scope, logicalCwd);
-      if (!allowedCwd.ok) throwLegacyVfs(allowedCwd.error);
+      if (!allowedCwd.ok) throw allowedCwd.error;
     }
     return this.inner.glob(this.scopeKeyStr, pattern, { cwd: logicalCwd });
   }
@@ -133,10 +135,10 @@ export class ScopedVfsService implements VfsService {
     let logicalPrefix: string | undefined;
     if (prefix != null) {
       const resolved = resolveLogicalPath(prefix);
-      if (!resolved.ok) throwLegacyVfs(resolved.error);
+      if (!resolved.ok) throw resolved.error;
       logicalPrefix = resolved.value;
       const allowedPrefix = validateLogicalPath(this.scope, logicalPrefix);
-      if (!allowedPrefix.ok) throwLegacyVfs(allowedPrefix.error);
+      if (!allowedPrefix.ok) throw allowedPrefix.error;
     }
     const { pathGlob, ...innerOptions } = options ?? {};
     const matches = await this.inner.grep(this.scopeKeyStr, pattern, {
@@ -150,19 +152,19 @@ export class ScopedVfsService implements VfsService {
 
   async delete(path: string, options?: { recursive?: boolean }): Promise<void> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.delete(this.scopeKeyStr, logical, options);
   }
 
   async resetHeadToVersion(path: string, version: number): Promise<void> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.resetHeadToVersion(this.scopeKeyStr, logical, version);
   }
 
@@ -171,10 +173,10 @@ export class ScopedVfsService implements VfsService {
     options?: { recursive?: boolean }
   ): Promise<void> {
     const resolved = resolveLogicalPath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const logical = resolved.value;
     const allowed = validateLogicalPath(this.scope, logical);
-    if (!allowed.ok) throwLegacyVfs(allowed.error);
+    if (!allowed.ok) throw allowed.error;
     return this.inner.hardDelete(this.scopeKeyStr, logical, options);
   }
 
@@ -184,15 +186,15 @@ export class ScopedVfsService implements VfsService {
     options?: { overwrite?: boolean }
   ): Promise<void> {
     const resolvedFrom = resolveLogicalPath(from);
-    if (!resolvedFrom.ok) throwLegacyVfs(resolvedFrom.error);
+    if (!resolvedFrom.ok) throw resolvedFrom.error;
     const logicalFrom = resolvedFrom.value;
     const resolvedTo = resolveLogicalPath(to);
-    if (!resolvedTo.ok) throwLegacyVfs(resolvedTo.error);
+    if (!resolvedTo.ok) throw resolvedTo.error;
     const logicalTo = resolvedTo.value;
     const allowedFrom = validateLogicalPath(this.scope, logicalFrom);
-    if (!allowedFrom.ok) throwLegacyVfs(allowedFrom.error);
+    if (!allowedFrom.ok) throw allowedFrom.error;
     const allowedTo = validateLogicalPath(this.scope, logicalTo);
-    if (!allowedTo.ok) throwLegacyVfs(allowedTo.error);
+    if (!allowedTo.ok) throw allowedTo.error;
     return this.inner.renamePath(
       this.scopeKeyStr,
       logicalFrom,
@@ -203,15 +205,15 @@ export class ScopedVfsService implements VfsService {
 
   async renamePrefix(oldDir: string, newDir: string): Promise<void> {
     const resolvedOld = resolveLogicalPath(oldDir);
-    if (!resolvedOld.ok) throwLegacyVfs(resolvedOld.error);
+    if (!resolvedOld.ok) throw resolvedOld.error;
     const logicalOld = resolvedOld.value;
     const resolvedNew = resolveLogicalPath(newDir);
-    if (!resolvedNew.ok) throwLegacyVfs(resolvedNew.error);
+    if (!resolvedNew.ok) throw resolvedNew.error;
     const logicalNew = resolvedNew.value;
     const allowedOld = validateLogicalPath(this.scope, logicalOld);
-    if (!allowedOld.ok) throwLegacyVfs(allowedOld.error);
+    if (!allowedOld.ok) throw allowedOld.error;
     const allowedNew = validateLogicalPath(this.scope, logicalNew);
-    if (!allowedNew.ok) throwLegacyVfs(allowedNew.error);
+    if (!allowedNew.ok) throw allowedNew.error;
     return this.inner.renamePrefix(this.scopeKeyStr, logicalOld, logicalNew);
   }
 }

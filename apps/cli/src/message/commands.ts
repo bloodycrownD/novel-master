@@ -63,6 +63,9 @@ function resolveSeqRange(
   throw new Error(`Usage: ${BATCH_RANGE_USAGE}`);
 }
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：解析的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 async function resolveAppendContent(
   flags: ReadonlyMap<string, string | true>,
 ): Promise<ReturnType<typeof textBlocks>> {

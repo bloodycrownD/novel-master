@@ -6,6 +6,7 @@
  * buildUserVfs*Op 编排逻辑全部真实执行。
  */
 import type {UserVfsTurnOp} from '@novel-master/core/chat';
+import {AppError} from '@novel-master/core/errors';
 import type {VfsListEntry, VfsScope, VfsService} from '@novel-master/core/vfs';
 import {
   createVfsDirectory,
@@ -22,12 +23,9 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 type FakeEntry = {path: string; kind: 'file' | 'directory'};
 
 /** 类已退役：FakeVfs 抛 legacy mapper 手搓旧形态对象（name + 字符串短码）。 */
-type LegacyVfsError = Error & {code: string; path?: string};
-
-function notFound(path: string): LegacyVfsError {
-  return Object.assign(new Error(`Path not found: ${path}`), {
-    name: 'VfsError',
-    code: 'NOT_FOUND',
+function notFound(path: string): AppError {
+  return new AppError('VFS_NOT_FOUND', {
+    detail: `Path not found: ${path}`,
     path,
   });
 }
@@ -45,9 +43,8 @@ class FakeVfs {
       return {path, content, version: 1, mtimeMs: 0};
     }
     if (this.dirs.has(path)) {
-      throw Object.assign(new Error(`Path is a directory: ${path}`), {
-        name: 'VfsError',
-        code: 'IS_DIRECTORY',
+      throw new AppError('VFS_IS_DIRECTORY', {
+        detail: `Path is a directory: ${path}`,
         path,
       });
     }
@@ -265,7 +262,7 @@ describe('vfs-operations 批量删除部分失败', () => {
       failure = error;
     }
 
-    expect(failure).toMatchObject({name: 'VfsError', code: 'NOT_FOUND'});
+    expect(failure).toMatchObject({name: 'VFS_NOT_FOUND'});
     expect(vfs.files.has('/x.md')).toBe(false);
     expect(vfs.files.get('/a.md')).toBe('content-a');
     expect(vfs.files.get('/y.md')).toBe('y');
@@ -291,7 +288,8 @@ describe('vfs-operations 批量删除部分失败', () => {
           useUserVfsTurn: false,
         },
       ),
-    ).rejects.toMatchObject({code: 'NOT_FOUND'});
+      // 错误通道迁移后失败载荷是 AppError（name=key、code=段号数字）。
+    ).rejects.toMatchObject({name: 'VFS_NOT_FOUND'});
     expect(deleteRulesCalls).toEqual([]);
 
     await deleteScopedVfsEntry(

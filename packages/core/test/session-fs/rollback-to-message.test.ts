@@ -2,7 +2,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { isSessionFsError } from "@novel-master/core/session-fs";
+import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";

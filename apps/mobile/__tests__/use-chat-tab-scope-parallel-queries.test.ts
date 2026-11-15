@@ -166,8 +166,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
   describe('reloadLists', () => {
     it('get 与 listByProject 并行发起（发起时间交叠），结果与串行版等价', async () => {
-      const {runtime, pendingProjectGet, pendingSessionsList} =
-        buildRuntime();
+      const {runtime, pendingProjectGet, pendingSessionsList} = buildRuntime();
       const scope = await mountScopeHarness(runtime, {
         projectId: 'p1',
         sessionId: 's1',
@@ -183,10 +182,12 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       expect(pendingSessionsList).toHaveLength(1);
 
       await act(async () => {
-        pendingProjectGet[0].resolve({id: 'p1', name: 'P1'});
-        pendingSessionsList[0].resolve([
-          {id: 's1', title: 'S1', updatedAtMs: 1},
-        ]);
+        // 错误通道迁移二期后 get/listByProject 走 Result wire。
+        pendingProjectGet[0].resolve({ok: true, value: {id: 'p1', name: 'P1'}});
+        pendingSessionsList[0].resolve({
+          ok: true,
+          value: [{id: 's1', title: 'S1', updatedAtMs: 1}],
+        });
         await flushMicrotasks();
       });
 
@@ -197,8 +198,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
     });
 
     it('失败语义保持：get 失败不阻断 sessions；listByProject 失败向外抛且不覆盖 sessions', async () => {
-      const {runtime, pendingProjectGet, pendingSessionsList} =
-        buildRuntime();
+      const {runtime, pendingProjectGet, pendingSessionsList} = buildRuntime();
       const scope = await mountScopeHarness(runtime, {
         projectId: 'p1',
         sessionId: 's1',
@@ -206,23 +206,34 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
       // 第一轮成功，sessions 落两条。
       await act(async () => {
-        pendingProjectGet[0].resolve({id: 'p1', name: 'P1'});
-        pendingSessionsList[0].resolve([
-          {id: 's1', title: 'S1', updatedAtMs: 1},
-          {id: 's2', title: 'S2', updatedAtMs: 2},
-        ]);
+        pendingProjectGet[0].resolve({ok: true, value: {id: 'p1', name: 'P1'}});
+        pendingSessionsList[0].resolve({
+          ok: true,
+          value: [
+            {id: 's1', title: 'S1', updatedAtMs: 1},
+            {id: 's2', title: 'S2', updatedAtMs: 2},
+          ],
+        });
         await flushMicrotasks();
       });
       expect(scope.api().sessions).toHaveLength(2);
 
       // get 失败轮：meta 置 undefined、sessions 照常刷新（原语义）。
       await act(async () => {
-        void scope.api().reloadLists().catch(() => undefined);
+        void scope
+          .api()
+          .reloadLists()
+          .catch(() => undefined);
         await flushMicrotasks(3);
-        pendingProjectGet[1].reject(new Error('get failed'));
-        pendingSessionsList[1].resolve([
-          {id: 's3', title: 'S3', updatedAtMs: 3},
-        ]);
+        // 错误通道迁移二期后「get 失败」是已知失败走 Result.err（未知异常才 reject）。
+        pendingProjectGet[1].resolve({
+          ok: false,
+          error: new Error('get failed'),
+        });
+        pendingSessionsList[1].resolve({
+          ok: true,
+          value: [{id: 's3', title: 'S3', updatedAtMs: 3}],
+        });
         await flushMicrotasks();
       });
       expect(scope.api().currentProject).toBeUndefined();
@@ -240,7 +251,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
             caught = error;
           });
         await flushMicrotasks(3);
-        pendingProjectGet[2].resolve({id: 'p1', name: 'P1'});
+        pendingProjectGet[2].resolve({ok: true, value: {id: 'p1', name: 'P1'}});
         pendingSessionsList[2].reject(new Error('list failed'));
         await reloading;
         await flushMicrotasks();
@@ -301,8 +312,14 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
       // 模拟首屏三处触发在同一挂载周期内重入：在途时连调两次。
       await act(async () => {
-        void scope.api().refreshChatMeta().catch(() => undefined);
-        void scope.api().refreshChatMeta().catch(() => undefined);
+        void scope
+          .api()
+          .refreshChatMeta()
+          .catch(() => undefined);
+        void scope
+          .api()
+          .refreshChatMeta()
+          .catch(() => undefined);
         await flushMicrotasks();
       });
       // 同参在途复用：与挂载那次合并，仍只有一轮查询。
@@ -377,7 +394,10 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       // 第二轮（重新聚焦触发）meta 查询失败：回落未加载锁定态。
       harnessShowToast.mockClear();
       await act(async () => {
-        void scope.api().refreshChatMeta().catch(() => undefined);
+        void scope
+          .api()
+          .refreshChatMeta()
+          .catch(() => undefined);
         await flushMicrotasks(3);
         pendingModelId[1].resolve('openai/gpt-4o-mini');
         pendingMeta[1].reject(new Error('chat config broken'));

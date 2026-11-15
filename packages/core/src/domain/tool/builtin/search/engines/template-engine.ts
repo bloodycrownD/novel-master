@@ -94,7 +94,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
   // 父 signal 已 abort（取消先于请求）：直接取消、不发起请求——已 aborted 的
   // signal 再注册监听器不会补发回调（WHATWG 语义），不早退会空挂满 30s 超时
   //（照 curl-tool / tool-runner 的取消早退先例）。
-  if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${template.name}`});
+  if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: template.name});
   const engine = resolved.engine;
   const numResults = normalizeMaxResults(opts.maxResults);
   const values: TemplatePlaceholderValues = {
@@ -195,7 +195,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
       // engineTimeoutError 保留超时失败语义（search-tool 的 catch 是降级边界，
       // 取消靠 search-tool 重判 signal 终止链降级）。
-      if (parentAborted) throw new AppError("TOOL_CANCELLED", {detail: `Tool cancelled: ${template.name}`});
+      if (parentAborted) throw new AppError("TOOL_CANCELLED", {toolName: template.name});
       throw engineTimeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS);
     }
 

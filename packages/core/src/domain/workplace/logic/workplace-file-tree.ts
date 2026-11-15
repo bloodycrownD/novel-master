@@ -36,6 +36,9 @@ export interface RenderWorkplaceFileTreeForMacroParams extends RenderWorkplaceFi
 
 type TreeEntry = { readonly kind: "dir" | "file"; readonly path: string };
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（sortedChildren 同款），输入来自已归一化的树规则，失败沿调用链至端点 catch 收口。
+ */
 function entryName(entry: TreeEntry): string {
   const resolved = normalizePath(entry.path);
   if (!resolved.ok) throw resolved.error;

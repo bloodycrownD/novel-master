@@ -165,7 +165,7 @@ export async function handleUsageStatsQuery(
       if (rangeError != null) {
         return {
           ok: false,
-          error: { code: "ERROR", message: rangeError },
+          error: { code: "INFRA_UNEXPECTED_ERROR", message: rangeError },
         };
       }
     }
@@ -235,7 +235,7 @@ export async function handleUsageStatsQuery(
         return {
           ok: false,
           error: {
-            code: "ERROR",
+            code: "INFRA_UNEXPECTED_ERROR",
             message: `未知的 usageStats 查询 kind: ${String(exhaustive)}`,
           },
         };

@@ -33,7 +33,10 @@ describe("createDesktopNovelMasterRuntime", () => {
   it("bootstraps SQLite and supports project.create smoke", async () => {
     const runtime = await createDesktopNovelMasterRuntime();
     assert.ok(runtime.dbPath);
-    const project = await runtime.projects.create("Desktop test");
+    // 错误通道迁移二期后 projects.create 走 Result，解包取实体。
+    const created = await runtime.projects.create("Desktop test");
+    if (!created.ok) throw created.error;
+    const project = created.value;
     assert.ok(project.id);
     assert.equal(project.name, "Desktop test");
     await resetDesktopRuntimeForTest();

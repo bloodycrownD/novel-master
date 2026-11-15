@@ -145,25 +145,26 @@ function makeStubUsageStats(
 ): {
   usageStats: unknown;
 } {
+  // 错误通道迁移二期后除 listModels 外各方法走 Result（handler 侧 `!ok` 即 throw）。
   const usageStats = {
     getSummary: async (filter: unknown) => {
       calls.push({ method: "getSummary", args: [filter] });
       if (summaryError) {
         throw summaryError;
       }
-      return SUMMARY;
+      return { ok: true as const, value: SUMMARY };
     },
     getDailyBuckets: async (filter: unknown) => {
       calls.push({ method: "getDailyBuckets", args: [filter] });
-      return BUCKETS;
+      return { ok: true as const, value: BUCKETS };
     },
     getHourlyBuckets: async (dayLocalDate: string, filter: unknown) => {
       calls.push({ method: "getHourlyBuckets", args: [dayLocalDate, filter] });
-      return BUCKETS;
+      return { ok: true as const, value: BUCKETS };
     },
     getModelBreakdown: async (filter: unknown) => {
       calls.push({ method: "getModelBreakdown", args: [filter] });
-      return modelRows ?? MODEL_ROWS;
+      return { ok: true as const, value: modelRows ?? MODEL_ROWS };
     },
     listModels: async () => {
       calls.push({ method: "listModels", args: [] });
@@ -171,11 +172,11 @@ function makeStubUsageStats(
     },
     listRequestUsage: async (filter: unknown, page: unknown) => {
       calls.push({ method: "listRequestUsage", args: [filter, page] });
-      return REQUEST_PAGE;
+      return { ok: true as const, value: REQUEST_PAGE };
     },
     getSessionUsageDetail: async (sessionId: string) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return SESSION_DETAIL;
+      return { ok: true as const, value: SESSION_DETAIL };
     },
   };
   return { usageStats };
@@ -227,9 +228,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     assert.deepEqual(calls, [
       {
         method: "getSummary",
-        args: [
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-        ],
+        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
       },
     ]);
   });
@@ -257,7 +256,10 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "daily",
-      filter: { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
+      filter: {
+        range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+        model: null,
+      },
     });
     assert.equal(res.ok, true);
     if (!res.ok) {
@@ -268,7 +270,10 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       {
         method: "getDailyBuckets",
         args: [
-          { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
+          {
+            range: { fromDay: "2026-08-01", toDay: "2026-08-30" },
+            model: null,
+          },
         ],
       },
     ]);
@@ -373,9 +378,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     assert.deepEqual(calls, [
       {
         method: "getModelBreakdown",
-        args: [
-          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
-        ],
+        args: [{ range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
       },
     ]);
   });
@@ -395,7 +398,10 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "requests",
-      filter: { range: { fromDay: "2026-08-24", toDay: "2026-08-30" }, model: "gpt-4o" },
+      filter: {
+        range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+        model: "gpt-4o",
+      },
       offset: 50,
       limit: 100,
     });
@@ -448,7 +454,9 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     }
     const summary = summaryRes.data;
     assert.equal(
-      typeof summary === "object" && summary != null && "avgFirstTokenMs" in summary,
+      typeof summary === "object" &&
+        summary != null &&
+        "avgFirstTokenMs" in summary,
       true
     );
     if (
@@ -489,20 +497,32 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     if (res.ok) {
       return;
     }
-    assert.equal(res.error.code, "ERROR");
+    assert.equal(res.error.code, "INFRA_UNEXPECTED_ERROR");
     assert.ok(res.error.message.includes("fromDay 不能晚于 toDay"));
     assert.equal(calls.length, 0, "校验失败不应转发 service");
   });
 
   it("区间校验：非法格式与溢出日历日（02-30）在 IPC 边界拒绝", async () => {
     const calls = installStubRuntime();
-    const badCases: Array<{ range: { fromDay: string; toDay: string }; hint: string }> = [
+    const badCases: Array<{
+      range: { fromDay: string; toDay: string };
+      hint: string;
+    }> = [
       { range: { fromDay: "2026/08/24", toDay: "2026-08-30" }, hint: "格式" },
-      { range: { fromDay: "2026-02-30", toDay: "2026-03-01" }, hint: "合法日期" },
-      { range: { fromDay: "2026-08-24", toDay: "2026-13-01" }, hint: "合法日期" },
+      {
+        range: { fromDay: "2026-02-30", toDay: "2026-03-01" },
+        hint: "合法日期",
+      },
+      {
+        range: { fromDay: "2026-08-24", toDay: "2026-13-01" },
+        hint: "合法日期",
+      },
     ];
     for (const { range, hint } of badCases) {
-      const res = await handleUsageStatsQuery({ kind: "summary", filter: { range } });
+      const res = await handleUsageStatsQuery({
+        kind: "summary",
+        filter: { range },
+      });
       assert.equal(res.ok, false, `区间 ${JSON.stringify(range)} 应被拒绝`);
       if (!res.ok) {
         assert.ok(res.error.message.includes(hint));
@@ -541,9 +561,8 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
       return {
-        last: null,
-        visibleMessageCount: 0,
-        toolUseCount: 0,
+        ok: true as const,
+        value: { last: null, visibleMessageCount: 0, toolUseCount: 0 },
       };
     };
     const res = await handleUsageStatsQuery({
@@ -574,7 +593,9 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       sessionId: string
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      throw new AppError("CHAT_INVALID_ARGUMENT", "sessionId 须提供");
+      throw new AppError("CHAT_INVALID_ARGUMENT", {
+        detail: "sessionId 须提供",
+      });
     };
     const res = await handleUsageStatsQuery({
       kind: "sessionDetail",
@@ -585,14 +606,15 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       return;
     }
     assert.equal(res.error.code, "CHAT_INVALID_ARGUMENT");
-    assert.deepEqual(calls, [
-      { method: "getSessionUsageDetail", args: [""] },
-    ]);
+    assert.deepEqual(calls, [{ method: "getSessionUsageDetail", args: [""] }]);
   });
 
   it("service 抛 CHAT_INVALID_ARGUMENT 时返回 IpcResult error 形态（key/message 透传）", async () => {
-    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）。
-    const chatError = new AppError("CHAT_INVALID_ARGUMENT", "自然日区间不合法");
+    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）；
+    // 旧（key, message）签名已退役，文案走 params.detail。
+    const chatError = new AppError("CHAT_INVALID_ARGUMENT", {
+      detail: "自然日区间不合法",
+    });
     const calls = installStubRuntime(chatError);
     const res = await handleUsageStatsQuery({
       kind: "summary",

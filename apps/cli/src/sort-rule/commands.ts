@@ -57,6 +57,9 @@ function parseMoveTarget(value: string): SmartSortRuleMoveTarget {
   );
 }
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：规则读 / 删 / 编译的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 export async function runSortRule(
   rt: NovelMasterRuntime,
   subcommand: string,

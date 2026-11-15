@@ -7,7 +7,7 @@ import {
   writeChatComposerDraft,
   writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
-import { chatAnnotateDraftStore } from '@novel-master/core/chat';
+import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
@@ -135,8 +135,14 @@ describe('chat-composer-draft', () => {
       ],
     });
     const sessions = {
-      getComposerDraftJson: jest.fn(async () => raw),
-      setComposerDraftJson: jest.fn(async () => true),
+      getComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: raw,
+      })),
+      setComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: true,
+      })),
     };
 
     const hydrated = await hydrateChatComposerDraftFromDb('s-cd5', sessions);
@@ -161,11 +167,16 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
   it('T-CA2: 带 ranges 写→读 roundtrip（缓存 / DB JSON / 水化逐字段相等）', async () => {
     let stored: string | null = null;
     const sessions = {
-      getComposerDraftJson: jest.fn(async () => stored),
-      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
-        stored = json;
-        return true;
-      }),
+      getComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: stored,
+      })),
+      setComposerDraftJson: jest.fn(
+        async (_id: string, json: string | null) => {
+          stored = json;
+          return {ok: true as const, value: true};
+        },
+      ),
     };
     const ranges = [
       {start: 0, end: 3},
@@ -201,11 +212,16 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
   it('T-CA2: 无 ranges（undefined）→ JSON 与缓存对象都没有 tokenRanges 自有键', async () => {
     let stored: string | null = null;
     const sessions = {
-      getComposerDraftJson: jest.fn(async () => stored),
-      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
-        stored = json;
-        return true;
-      }),
+      getComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: stored,
+      })),
+      setComposerDraftJson: jest.fn(
+        async (_id: string, json: string | null) => {
+          stored = json;
+          return {ok: true as const, value: true};
+        },
+      ),
     };
 
     // 三参调用（既有形态，零改动）：undefined 原样透传，不臆造 `[]`。
@@ -240,11 +256,16 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
   it('T-CA2: 空数组 []（确认无胶囊）roundtrip 保留，不退化为 undefined', async () => {
     let stored: string | null = null;
     const sessions = {
-      getComposerDraftJson: jest.fn(async () => stored),
-      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
-        stored = json;
-        return true;
-      }),
+      getComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: stored,
+      })),
+      setComposerDraftJson: jest.fn(
+        async (_id: string, json: string | null) => {
+          stored = json;
+          return {ok: true as const, value: true};
+        },
+      ),
     };
 
     writeChatComposerDraftState(
@@ -323,7 +344,6 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
   });
 });
 
-
 describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
   it('setComposerDraftJson reject：warn 有日志、无 unhandled rejection、内存缓存不受影响', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -333,7 +353,10 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
     };
     process.on('unhandledRejection', onUnhandled);
     const sessions = {
-      getComposerDraftJson: jest.fn(async () => null),
+      getComposerDraftJson: jest.fn(async () => ({
+        ok: true as const,
+        value: null,
+      })),
       setComposerDraftJson: jest.fn(async () => {
         throw new Error('db locked');
       }),

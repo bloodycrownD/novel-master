@@ -45,22 +45,28 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
 const deletedSessionIds: string[] = [];
 const deletedProjectIds: string[] = [];
 
+// 错误通道迁移二期后 get/listByProject/delete 走 Result（hook 侧 `!ok` 即 throw）。
 const mockRuntime: any = {
   projects: {
     list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
-    get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
+    get: jest.fn(async () => ({ok: true, value: {id: 'p1', name: 'P1'}})),
     delete: jest.fn(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-      {id: 's2', title: 'S2', updatedAtMs: 2},
-      {id: 's3', title: 'S3', updatedAtMs: 3},
-    ]),
+    listByProject: jest.fn(async () => ({
+      ok: true,
+      value: [
+        {id: 's1', title: 'S1', updatedAtMs: 1},
+        {id: 's2', title: 'S2', updatedAtMs: 2},
+        {id: 's3', title: 'S3', updatedAtMs: 3},
+      ],
+    })),
     delete: jest.fn(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     }),
   },
   state: {
@@ -111,9 +117,11 @@ describe('useChatTabScope 批量删除中途失败', () => {
     clearAllTranscriptScrollSnapshots();
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
+      return {ok: true, value: undefined};
     });
     mockRuntime.projects.delete.mockImplementation(async (id: string) => {
       deletedProjectIds.push(id);
+      return {ok: true, value: undefined};
     });
   });
 
@@ -152,6 +160,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
           throw new Error('db locked');
         }
         deletedSessionIds.push(id);
+        return {ok: true, value: undefined};
       });
       const api = mountScope();
 
@@ -182,6 +191,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
           throw new Error('fs busy');
         }
         deletedProjectIds.push(id);
+        return {ok: true, value: undefined};
       });
       const api = mountScope();
       const listCallsBefore = mockRuntime.projects.list.mock.calls.length;
@@ -240,6 +250,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
           throw new Error('fs busy');
         }
         deletedProjectIds.push(id);
+        return {ok: true, value: undefined};
       });
       const p1Key = sessionViewCacheKey('p1', 's1');
       const p2Key = sessionViewCacheKey('p2', 's2');

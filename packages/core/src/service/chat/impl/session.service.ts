@@ -421,6 +421,7 @@ export class DefaultSessionService implements SessionService {
       );
       await r.messages.batchInsert(copyMessages);
       const seeded = await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages });
+      // 解包 throw 边界（事务回调）：seed 失败靠抛错回滚（总纲 §五例外 2），异常穿出 transaction 由调用链端点 catch 收口。
       if (!seeded.ok) throw seeded.error;
       return copy;
     });

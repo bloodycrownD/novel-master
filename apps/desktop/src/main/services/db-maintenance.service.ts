@@ -5,6 +5,7 @@
  */
 import { stat } from "node:fs/promises";
 import { createDbMaintenanceService } from "@novel-master/core";
+import { AppError } from "@novel-master/core/agent";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
@@ -44,7 +45,7 @@ export async function runDbMaintenance(): Promise<{
   afterBytes: number;
 }> {
   if (isDesktopAgentActive()) {
-    throw new Error("Agent 运行中，请稍后再操作");
+    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再操作"});
   }
   if (isDesktopCloudSyncBusy()) {
     throw new Error("云同步进行中，请稍后再操作");

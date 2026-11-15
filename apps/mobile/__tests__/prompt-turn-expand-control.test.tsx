@@ -59,10 +59,6 @@ jest.mock('@/services/prompt-preview.service', () => ({
     mockBuildTurns(...(args as [])),
 }));
 
-jest.mock('@/services/agent-run.service', () => ({
-  AgentRunError: class AgentRunError extends Error {},
-}));
-
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {

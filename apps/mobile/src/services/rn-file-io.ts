@@ -6,6 +6,8 @@
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
+import {AppError} from '@novel-master/core/agent';
+
 export {base64ToBytes, bytesToBase64} from '@novel-master/core/common';
 
 /** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
@@ -44,7 +46,7 @@ export function blobFs(): typeof ReactNativeBlobUtil.fs {
   };
   const fs = anyMod.fs ?? anyMod.default?.fs;
   if (fs == null) {
-    throw new Error('react-native-blob-util.fs unavailable');
+    throw new AppError('INFRA_INVARIANT_VIOLATION', {detail: 'react-native-blob-util.fs unavailable'});
   }
   return fs;
 }

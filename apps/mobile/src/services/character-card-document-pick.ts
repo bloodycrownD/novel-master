@@ -1,5 +1,7 @@
 import {types} from '@react-native-documents/picker';
 
+import {AppError} from '@novel-master/core/agent';
+
 import {knownTypesForExtension} from './document-io';
 
 const CHARACTER_CARD_NAME_RE = /\.(png|json)$/i;
@@ -23,6 +25,6 @@ export function assertCharacterCardFileName(
   name: string | null | undefined,
 ): void {
   if (name == null || !CHARACTER_CARD_NAME_RE.test(name)) {
-    throw new Error('请选择 .png 或 .json 文件');
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '请选择 .png 或 .json 文件'});
   }
 }

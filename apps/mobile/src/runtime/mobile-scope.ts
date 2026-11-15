@@ -13,6 +13,7 @@ export interface MobileScopeSnapshot {
 
 /**
  * Loads persisted pointers and reconciles against project/session lists.
+  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛（switchToProject 同款）——core Result → 端内异常通道转码边界，UI 调用链 catch → formatError → toast 收口。
  */
 export async function loadMobileScope(
   runtime: MobileNovelMasterRuntime,

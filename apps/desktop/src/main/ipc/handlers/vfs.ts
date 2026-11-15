@@ -121,7 +121,9 @@ export async function handleVfsRead(
 ): Promise<IpcResult<VfsReadResultDto>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const vfs = getVfsForScope(rt, scope);
     const result = await vfs.read(req.path);
     return {
@@ -142,7 +144,9 @@ export async function handleVfsWrite(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const vfs = getVfsForScope(rt, scope);
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
@@ -180,7 +184,9 @@ export async function handleVfsMkdir(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       await executeSessionUserVfsOp(
@@ -206,7 +212,9 @@ export async function handleVfsDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const recursive = req.recursive ?? true;
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
@@ -235,7 +243,9 @@ export async function handleVfsRename(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       // kind 必须在 execute 之前判定：execute 后旧路径已消失，parent list 查不到。
@@ -286,7 +296,9 @@ export async function handleVfsZipExport(
 ): Promise<IpcResult<VfsZipExportResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const result = await exportVfsZipWithDialog(
       rt,
       scope,
@@ -304,7 +316,9 @@ export async function handleVfsZipImport(
 ): Promise<IpcResult<VfsZipImportResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const result = await importVfsZipWithDialog(
       rt,
       scope,
@@ -338,7 +352,9 @@ export async function handleVfsZipImportBytes(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     await importVfsZipBytes(rt, scope, {
       bytes: req.bytes,
       confirmed: req.confirmed === true,
@@ -356,7 +372,9 @@ export async function handleVfsCharacterCardImport(
 ): Promise<IpcResult<VfsCharacterCardImportResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const result = await importCharacterCardWithDialog(
       rt,
       scope,
@@ -394,7 +412,9 @@ export async function handleVfsFileExport(
 ): Promise<IpcResult<VfsFileExportResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const result = await exportVfsFileWithDialog(
       rt,
       scope,
@@ -412,7 +432,9 @@ export async function handleVfsBatchIngestFromPaths(
 ): Promise<IpcResult<VfsBatchIngestFromPathsResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const outcome = await ingestVfsFromHostPaths(rt, scope, {
       targetDir: req.targetDir,
       hostPaths: req.hostPaths,
@@ -434,7 +456,9 @@ export async function handleVfsBatchExportStage(
 ): Promise<IpcResult<VfsBatchExportStageResult>> {
   try {
     const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
+    const scopeRes = resolveVfsScopeFromRequest(req);
+    if (!scopeRes.ok) return scopeRes;
+    const scope = scopeRes.data;
     const staged = await stageVfsBatchExport(rt, scope, req.logicalPaths);
     return { ok: true, data: staged };
   } catch (err) {

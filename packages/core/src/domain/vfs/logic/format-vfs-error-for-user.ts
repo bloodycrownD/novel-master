@@ -8,8 +8,8 @@
  */
 
 import { isAppError } from "@/errors/app-error.js";
+import { domainOf } from "@/errors/domain.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import { isVfsError, type VfsErrorCode } from "@/errors/vfs-errors.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { CORE_MESSAGE_KEYS } from "@/i18n/keys.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
@@ -21,12 +21,13 @@ type IpcLikeError = {
 };
 
 type VfsErrorLike = {
-  readonly code: VfsErrorCode;
+  readonly code: string;
   readonly message: string;
   readonly path?: string;
 };
 
-const APP_ERROR_TO_VFS_CODE: Partial<Record<ErrorKey, VfsErrorCode>> = {
+/** ErrorKey → LLM/文案表用的旧短码字面量（switch 标签不变，用户可见输出逐字不变）。 */
+const APP_ERROR_TO_VFS_CODE: Partial<Record<ErrorKey, string>> = {
   VFS_NOT_FOUND: "NOT_FOUND",
   VFS_REPLACE_NOT_FOUND: "REPLACE_NOT_FOUND",
   VFS_DIRECTORY_NOT_EMPTY: "DIRECTORY_NOT_EMPTY",
@@ -49,8 +50,8 @@ function operationFailed(detail: string): CoreMessageDescriptor {
  * 终端用户可见 VFS 文案 descriptor；与 formatVfsErrorForLlm 分离。
  */
 export function vfsUserMessage(error: unknown, _scope?: VfsScope): CoreMessageDescriptor {
-  // 旧 ToolError 的 cause 解包（类已退役，等价判 TOOL_ 前缀 AppError；cause 双写在 Error.cause 与 details.cause）。
-  if (isAppError(error) && error.key.startsWith("TOOL_")) {
+  // 旧 ToolError 的 cause 解包（类已退役，等价判 TOOL 域段；cause 双写在 Error.cause 与 details.cause）。
+  if (isAppError(error) && domainOf(error.code) === "TOOL") {
     const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
     if (cause != null) {
       return vfsUserMessage(cause, _scope);
@@ -72,12 +73,9 @@ export function vfsUserMessage(error: unknown, _scope?: VfsScope): CoreMessageDe
     if (shape == null) {
       return operationFailed(error.message);
     }
-  } else if (isVfsError(error)) {
-    // legacy 手搓旧形态对象（legacy-vfs-error mapper 产物）。
-    shape = { code: error.code, message: error.message, path: error.path };
   } else if (typeof error === "object" && error !== null && "code" in error && "message" in error && typeof (error as IpcLikeError).code === "string" && typeof (error as IpcLikeError).message === "string") {
     // IPC 边界只留下 code/message：直接组 shape 走同一张文案表。
-    shape = { code: (error as IpcLikeError).code as VfsErrorCode, message: (error as IpcLikeError).message, path: undefined };
+    shape = { code: (error as IpcLikeError).code, message: (error as IpcLikeError).message, path: undefined };
   } else if (error instanceof Error) {
     return operationFailed(error.message);
   } else {

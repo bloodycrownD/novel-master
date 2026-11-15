@@ -381,27 +381,31 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
       partialThinking: '',
       pendingChildren: [],
     });
+    // 错误通道迁移二期后走 Result（sheet 侧 `!ok` 即 throw）。
     mockGetSessionUsageDetail.mockResolvedValue({
-      last: {
-        seq: 2,
-        modelName: 'gpt-x',
-        provider: 'openai',
-        promptTokens: 50,
-        completionTokens: 20,
-        cacheReadTokens: null,
-        cacheCreationTokens: null,
-        atMs: 1,
+      ok: true,
+      value: {
+        last: {
+          seq: 2,
+          modelName: 'gpt-x',
+          provider: 'openai',
+          promptTokens: 50,
+          completionTokens: 20,
+          cacheReadTokens: null,
+          cacheCreationTokens: null,
+          atMs: 1,
+        },
+        totals: {
+          promptTokens: 80,
+          completionTokens: 30,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          billedInputTokens: 80,
+          assistantRows: 2,
+        },
+        visibleMessageCount: 3,
+        toolUseCount: 1,
       },
-      totals: {
-        promptTokens: 80,
-        completionTokens: 30,
-        cacheReadTokens: 0,
-        cacheCreationTokens: 0,
-        billedInputTokens: 80,
-        assistantRows: 2,
-      },
-      visibleMessageCount: 3,
-      toolUseCount: 1,
     });
 
     let tree!: TestRenderer.ReactTestRenderer;

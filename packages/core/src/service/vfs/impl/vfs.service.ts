@@ -8,7 +8,6 @@
  * @module service/vfs/impl/vfs.service
  */
 
-import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import { AppError } from "@/errors/app-error.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { isStorageRootParent, parentDir } from "@/domain/vfs/logic/parent-dir.js";
@@ -28,9 +27,12 @@ import { grepContents } from "@/domain/vfs/logic/vfs-grep.js";
 export class DefaultVfsService implements InternalVfsService {
   constructor(private readonly repo: VfsEntryRepository) {}
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath / 名称校验 `Result` → 领域异常通道转码点（本服务各方法同款）——非法路径按边界抛出，经 apps 至端点（handler / 屏幕 / CLI）catch 收口。
+   */
   async list(scopeKey: string, dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<VfsListEntry[]> {
     const resolved = normalizePath(dir);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     const entries = await this.repo.list(scopeKey, normalized, options);
     if (normalized !== "/" && !isStorageRootParent(normalized)) {
@@ -45,13 +47,13 @@ export class DefaultVfsService implements InternalVfsService {
 
   async mkdir(scopeKey: string, path: string): Promise<void> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     if (normalized === "/") {
       throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot mkdir root", detail: `Invalid path ${path}: cannot mkdir root`});
     }
     const nameCheck = assertValidVfsEntryName(normalized);
-    if (!nameCheck.ok) throwLegacyVfs(nameCheck.error);
+    if (!nameCheck.ok) throw nameCheck.error;
 
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing != null) {
@@ -94,7 +96,7 @@ export class DefaultVfsService implements InternalVfsService {
 
   async write(scopeKey: string, path: string, content: string): Promise<{ version: number }> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing?.entryKind === "directory") {
@@ -103,9 +105,9 @@ export class DefaultVfsService implements InternalVfsService {
     if (existing == null) {
       // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
       const nameCheck = assertValidVfsEntryName(normalized);
-      if (!nameCheck.ok) throwLegacyVfs(nameCheck.error);
+      if (!nameCheck.ok) throw nameCheck.error;
       const parentCheck = await ensureParentDirectories(this.repo, scopeKey, normalized);
-      if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+      if (!parentCheck.ok) throw parentCheck.error;
       return this.repo.insert(scopeKey, normalized, content);
     }
     return this.repo.update(scopeKey, normalized, content, existing.version + 1);
@@ -114,7 +116,7 @@ export class DefaultVfsService implements InternalVfsService {
   async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<{ version: number; replacements: number }> {
     const current = await this.read(scopeKey, path);
     const computed = computeReplaceResult(path, current.content, oldString, newString, options);
-    if (!computed.ok) throwLegacyVfs(computed.error);
+    if (!computed.ok) throw computed.error;
     const { nextContent, replacements } = computed.value;
 
     const result = await this.repo.update(scopeKey, path, nextContent, current.version + 1);
@@ -140,13 +142,13 @@ export class DefaultVfsService implements InternalVfsService {
     const rows = await this.repo.scanContents(scopeKey, options?.pathPrefix);
     const filtered = options?.pathGlob != null ? rows.filter((row) => matchGlob(options.pathGlob!, row.path)) : rows;
     const matches = grepContents(filtered, pattern, options);
-    if (!matches.ok) throwLegacyVfs(matches.error);
+    if (!matches.ok) throw matches.error;
     return matches.value;
   }
 
   async delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     if (normalized === "/") {
       throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`});

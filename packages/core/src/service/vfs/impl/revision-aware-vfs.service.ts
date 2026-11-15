@@ -9,7 +9,6 @@
  * @module service/vfs/impl/revision-aware-vfs.service
  */
 
-import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -55,20 +54,23 @@ export class RevisionAwareVfsService implements InternalVfsService {
     return this.inner.findContentSize(scopeKey, path);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath / 名称校验 `Result` → 领域异常通道转码点（本服务各方法同款）——非法路径按边界抛出，经 apps 至端点（handler / 屏幕 / CLI）catch 收口。
+   */
   async write(scopeKey: string, path: string, content: string): Promise<{ version: number }> {
     const result = await runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
       return writeWithRevision(entryRepo, revisionRepo, scopeKey, path, content);
     });
-    if (!result.ok) throwLegacyVfs(result.error);
+    if (!result.ok) throw result.error;
     return result.value;
   }
 
   async replace(scopeKey: string, path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<{ version: number; replacements: number }> {
     const current = await this.read(scopeKey, path);
     const computed = computeReplaceResult(path, current.content, oldString, newString, options);
-    if (!computed.ok) throwLegacyVfs(computed.error);
+    if (!computed.ok) throw computed.error;
     const { nextContent, replacements } = computed.value;
 
     const result = await this.write(scopeKey, path, nextContent);
@@ -85,7 +87,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   async delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     if (normalized === "/") {
       throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`});
@@ -100,7 +102,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   async resetHeadToVersion(scopeKey: string, path: string, version: number): Promise<void> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     await runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
@@ -125,7 +127,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
       // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
       const contentHash = await contentStore.put(rev.content);
       const parentCheck = await ensureParentDirectories(entryRepo, scopeKey, normalized);
-      if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+      if (!parentCheck.ok) throw parentCheck.error;
       const oldVersion = existing?.entryKind === "file" ? existing.version : null;
       await entryRepo.setHeadContentHash(scopeKey, normalized, {
         version: rev.version,
@@ -142,7 +144,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   async hardDelete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throwLegacyVfs(resolved.error);
+    if (!resolved.ok) throw resolved.error;
     const normalized = resolved.value;
     if (normalized === "/") {
       throw new AppError("VFS_INVALID_PATH", {path, reason: "cannot hardDelete root", detail: `Invalid path ${path}: cannot hardDelete root`});
@@ -176,13 +178,13 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   async renamePath(scopeKey: string, fromLogical: string, toLogical: string, _options?: { overwrite?: boolean }): Promise<void> {
     const resolvedFrom = normalizePath(fromLogical);
-    if (!resolvedFrom.ok) throwLegacyVfs(resolvedFrom.error);
+    if (!resolvedFrom.ok) throw resolvedFrom.error;
     const normalizedFrom = resolvedFrom.value;
     const resolvedTo = normalizePath(toLogical);
-    if (!resolvedTo.ok) throwLegacyVfs(resolvedTo.error);
+    if (!resolvedTo.ok) throw resolvedTo.error;
     const normalizedTo = resolvedTo.value;
     const nameCheck = assertValidVfsEntryName(normalizedTo);
-    if (!nameCheck.ok) throwLegacyVfs(nameCheck.error);
+    if (!nameCheck.ok) throw nameCheck.error;
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       await renameVfsEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
@@ -191,13 +193,13 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   async renamePrefix(scopeKey: string, oldDirLogical: string, newDirLogical: string): Promise<void> {
     const resolvedOld = normalizePath(oldDirLogical);
-    if (!resolvedOld.ok) throwLegacyVfs(resolvedOld.error);
+    if (!resolvedOld.ok) throw resolvedOld.error;
     const normalizedOld = resolvedOld.value;
     const resolvedNew = normalizePath(newDirLogical);
-    if (!resolvedNew.ok) throwLegacyVfs(resolvedNew.error);
+    if (!resolvedNew.ok) throw resolvedNew.error;
     const normalizedNew = resolvedNew.value;
     const nameCheck = assertValidVfsEntryName(normalizedNew);
-    if (!nameCheck.ok) throwLegacyVfs(nameCheck.error);
+    if (!nameCheck.ok) throw nameCheck.error;
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       await renameVfsDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);

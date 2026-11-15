@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { domainOf } from "@/errors/domain.js";
 import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
@@ -91,7 +92,7 @@ function isRetryableError(error: unknown): boolean {
   if (error instanceof LlmStreamTimeoutError) {
     return error.phase === "first-chunk";
   }
-  if (!(error instanceof AppError) || !error.key.startsWith("PROVIDER_")) {
+  if (!(error instanceof AppError) || domainOf(error.code) !== "PROVIDER") {
     // Unknown transport/runtime failures are treated as transient once.
     return true;
   }

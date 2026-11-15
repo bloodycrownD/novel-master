@@ -1,16 +1,16 @@
-// legacy-port: VfsService / VfsRestorePort — phase 2 端口统一后残余 isVfsError 判别随 legacy 形态守卫一起收敛。
+// legacy-port: VfsService / VfsRestorePort — 端口直抛 AppError，isVfsError 分支按域段判中后原样进 Result.err。
 /**
  * VFS path move/rename via {@link VfsService} composition (files and directory trees).
  *
  * @module domain/vfs/logic/vfs-move
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError, vfsErrorCodeOf } from "@/errors/vfs-errors.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
-import { vfsPortError, type VfsPortError } from "./vfs-port-error.js";
+import type { VfsPortError } from "./vfs-port-error.js";
 
 /** mkdirIgnoreExistingDirectory 的失败载荷。 */
 type VfsNotADirectoryError = AppError<"VFS_NOT_A_DIRECTORY">;
@@ -55,7 +55,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.mkdir(path);
     return Result.ok(undefined);
   } catch (error) {
-    if (!isVfsError(error, "ALREADY_EXISTS")) {
+    if (!isAppError(error, "VFS_ALREADY_EXISTS")) {
       throw error;
     }
   }
@@ -63,7 +63,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.read(path);
     return Result.err(new AppError("VFS_NOT_A_DIRECTORY", { detail: `Not a directory: ${path}`, path }));
   } catch (readError) {
-    if (isVfsError(readError, "IS_DIRECTORY")) {
+    if (isAppError(readError, "VFS_IS_DIRECTORY")) {
       return Result.ok(undefined);
     }
     throw readError;
@@ -75,7 +75,7 @@ export async function mkdirIgnoreExists(vfs: VfsService, path: string): Promise<
   try {
     await vfs.mkdir(path);
   } catch (error) {
-    if (error instanceof AppError ? error.key === "VFS_ALREADY_EXISTS" : isVfsError(error, "ALREADY_EXISTS")) {
+    if (isAppError(error, "VFS_ALREADY_EXISTS")) {
       return;
     }
     throw error;
@@ -101,10 +101,10 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       await vfs.read(to);
       return alreadyExists();
     } catch (error) {
-      if (isVfsError(error, "IS_DIRECTORY")) {
+      if (isAppError(error, "VFS_IS_DIRECTORY")) {
         return alreadyExists();
       }
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
@@ -113,7 +113,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       const hasDirRow = targetEntries.some((e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo);
       if (targetEntries.length > 0 || hasDirRow) return alreadyExists();
     } catch (error) {
-      if (!isVfsError(error, "NOT_FOUND")) {
+      if (!isAppError(error, "VFS_NOT_FOUND")) {
         throw error;
       }
     }
@@ -125,7 +125,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       return Result.ok(undefined);
     } catch (error) {
       if (isVfsError(error)) {
-        return Result.err(vfsPortError(error));
+        return Result.err(error as VfsPortError);
       }
       throw error;
     }
@@ -140,12 +140,11 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
     if (!isVfsError(error)) {
       throw error;
     }
-    const code = vfsErrorCodeOf(error);
     // IS_DIRECTORY：from 有 directory 行（空目录也是真实目录），直接判为目录移动，
     // 不依赖子项列表——list 只返回子项、不含目录自身行，空目录下列表恒空。
-    if (code === "IS_DIRECTORY") {
+    if (error.key === "VFS_IS_DIRECTORY") {
       sawDirectoryRow = true;
-    } else if (code !== "NOT_FOUND") {
+    } else if (error.key !== "VFS_NOT_FOUND") {
       throw error;
     }
   }
@@ -168,7 +167,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
     entries = await vfs.list(normalizeDirPath(from), { recursive: true });
   } catch (error) {
     if (isVfsError(error)) {
-      return Result.err(vfsPortError(error));
+      return Result.err(error as VfsPortError);
     }
     throw error;
   }

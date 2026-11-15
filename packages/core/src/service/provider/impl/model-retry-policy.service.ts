@@ -70,6 +70,11 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     }
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：校验失败（`validatePolicy` 的
+   * `Result.err`）转回 service 异常通道，由 settings 链端点（handler / 屏幕）
+   * catch 提示；`clearPolicy` 的 KKV 解包同此口径。
+   */
   async setPolicy(policy: ModelRetryPolicy): Promise<void> {
     const valid = validatePolicy(policy);
     if (!valid.ok) {
@@ -79,6 +84,7 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     await this.kkv.set(MODULE, KEY, JSON.stringify(policy));
   }
 
+  /** 解包 throw 边界（同 {@link ModelRetryPolicyService.setPolicy}）：`KKV_NOT_FOUND` 幂等忽略。 */
   async clearPolicy(): Promise<void> {
     const deleted = await this.kkv.delete(MODULE, KEY);
     if (!deleted.ok) {

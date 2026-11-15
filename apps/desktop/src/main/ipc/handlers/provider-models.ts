@@ -150,7 +150,7 @@ export async function handleProviderModelsDeleteSaved(
         return {
           ok: false,
           error: {
-            code: "PROVIDER_MISMATCH",
+            code: "PROVIDER_MODEL_MISMATCH",
             message: "模型不属于当前服务商",
           },
         };

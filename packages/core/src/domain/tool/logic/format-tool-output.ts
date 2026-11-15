@@ -14,6 +14,7 @@
 import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { isAppError } from "@/errors/app-error.js";
+import { domainOf } from "@/errors/domain.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
@@ -305,7 +306,7 @@ export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorF
   // buildToolResultBlock 因此不产出 summary，UI 卡片不弹错误文案。
   if (isAppError(error, "TOOL_CANCELLED")) return "工具调用已取消";
   let message: string;
-  if (isAppError(error) && error.key.startsWith("TOOL_")) {
+  if (isAppError(error) && domainOf(error.code) === "TOOL") {
     if (error.key === "TOOL_INVALID_ARGUMENT" && error.details != null && "issues" in error.details) {
       const issues = error.details.issues as readonly ZodIssue[];
       const summary = issues.map((i) => i.message).join("; ");
@@ -315,13 +316,12 @@ export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorF
       if (cause != null) {
         // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
         // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
-        // VFS 失败经 service 端口出的是 legacy 手搓形态（throwLegacyVfs），须用
-        // 双形态守卫判别并经 vfsPortError 翻回 AppError 再进文案表。
+        // VFS 失败经 service 端口出的是 AppError，按 code 域段判别（isVfsError 内部即 domainOf 段判定）。
         let unwrapped: unknown = cause;
         while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
           unwrapped = unwrapped.cause;
         }
-        const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : isAppError(cause) && cause.key.startsWith("VFS_") ? cause : undefined;
+        const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : undefined;
         if (vfsError != null) {
           message = formatVfsErrorForLlm(vfsError, options?.vfsScope);
         } else if (isAppError(cause)) {

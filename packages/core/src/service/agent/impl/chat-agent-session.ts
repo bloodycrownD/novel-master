@@ -56,6 +56,9 @@ export class ChatAgentSession implements AgentSession {
     return appended.value;
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：消息仓储 `Result` → agent 会话异常通道转码点（truncateAfterMessage 等同款）——失败原样上抛，由 agent turn loop 框架级统一收口。
+   */
   async hideRange(fromSeq: number, toSeq: number): Promise<number> {
     const hidden = await this.messages.hideRange(this.sessionId, fromSeq, toSeq);
     if (!hidden.ok) throw hidden.error;

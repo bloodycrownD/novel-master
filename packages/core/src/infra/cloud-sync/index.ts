@@ -4,12 +4,6 @@
  * @module infra/cloud-sync
  */
 
-export {
-  CloudSyncError,
-  isCloudSyncError,
-} from "./errors/cloud-sync-errors.js";
-export type { CloudSyncErrorCode } from "./errors/cloud-sync-errors.js";
-
 export type {
   ObjectStorageHeadResult,
   ObjectStoragePort,

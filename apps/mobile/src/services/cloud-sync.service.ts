@@ -5,12 +5,11 @@
  */
 import {
   CloudSyncCoordinator,
-  CloudSyncError,
-  isCloudSyncError,
   normalizePrefix,
   parseCloudSyncStatus,
   statusKey,
 } from '@novel-master/core';
+import {AppError, isAppError} from '@novel-master/core/agent';
 import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
 import {
   createCloudSyncProgress,
@@ -108,7 +107,7 @@ function buildS3Client(config: S3StorageConfig): S3Client {
   return createRnS3Client(config);
 }
 
-function mapSdkError(error: unknown): CloudSyncError {
+function mapSdkError(error: unknown): AppError {
   return mapCloudSyncSdkError(error);
 }
 
@@ -131,9 +130,7 @@ async function readRemoteRev(
     const parsed = JSON.parse(decodeUtf8Bytes(body));
     return parseCloudSyncStatus(parsed).rev;
   } catch (error) {
-    throw new CloudSyncError('INVALID_STATUS', '云端状态文件无法解析', {
-      cause: error,
-    });
+    throw new AppError('CLOUD_SYNC_INVALID_STATUS', {detail: '云端状态文件无法解析'}, {cause: error});
   }
 }
 
@@ -338,7 +335,7 @@ export async function pullCloudSync(
 ): Promise<CloudSyncPullOutcome> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.configured) {
-    throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
+    throw new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'});
   }
 
   if (syncBusy) {
@@ -408,7 +405,7 @@ export async function pullCloudSync(
     progress.done({rev: result.rev});
     return {rev: result.rev, alreadyUpToDate: false};
   } catch (error) {
-    if (isCloudSyncError(error) && error.code === 'ALREADY_UP_TO_DATE') {
+    if (isAppError(error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
       // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
       // 本行在 catch 块内部，记账一旦抛错会**从 catch 里再抛**出去 ⇒ 直接跳过
       // 下面的 `progress?.fail` 与 `mapSdkError`，把「已是最新」这个正常语义
@@ -462,7 +459,7 @@ export async function pushCloudSync(
 ): Promise<{rev: number}> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.configured) {
-    throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
+    throw new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'});
   }
 
   if (syncBusy) {

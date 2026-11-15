@@ -4,16 +4,21 @@
  * @module project/commands
  */
 
+import type { Outcome } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveProjectUseId } from "../config/resolve-entity.js";
+import { OUTCOME_COMPLETED } from "../cli-errors.js";
 import { runProjectWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：repo 写 / 删 / 复制的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ */
 export async function runProject(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -22,7 +27,7 @@ export async function runProject(
       for (const p of list) {
         console.log(`${p.id}\t${p.name}`);
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "create": {
       const nameFlag = flags.get("name");
@@ -33,14 +38,14 @@ export async function runProject(
       await rt.state.setCurrentProjectId(p.value.id);
       await rt.state.resetCurrentSessionId();
       console.log(p.value.id);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "use": {
       const id = await resolveProjectUseId(rt.projects, flags);
       // Set current project and clear session
       await rt.state.setCurrentProjectId(id);
       await rt.state.resetCurrentSessionId();
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "current": {
       const id = await rt.state.getCurrentProjectId();
@@ -52,7 +57,7 @@ export async function runProject(
       const p = await rt.projects.get(id);
       if (!p.ok) throw p.error;
       console.log(`${p.value.id}\t${p.value.name}`);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "delete": {
       const id = await rt.scope.resolveProjectId(flags);
@@ -64,18 +69,17 @@ export async function runProject(
         await rt.state.resetCurrentProjectId();
         await rt.state.resetCurrentSessionId();
       }
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "copy": {
       const id = await rt.scope.resolveProjectId(flags);
       const copy = await rt.projects.copy(id);
       if (!copy.ok) throw copy.error;
       console.log(copy.value.id);
-      return;
+      return OUTCOME_COMPLETED;
     }
     case "workplace":
-      await runProjectWorkplace(rt, args);
-      return;
+      return runProjectWorkplace(rt, args);
     default:
       throw new Error(
         "Usage: nm project <list|create|use|current|delete|copy|vfs|workplace> ...",

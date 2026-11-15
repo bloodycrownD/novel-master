@@ -13,8 +13,9 @@ export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-to
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";
 export { AppError, isAppError } from "../errors/app-error.js";
-export { ErrorCodes } from "../errors/error-codes.js";
-export type { ErrorKey, ErrorNumber } from "../errors/error-codes.js";
+// ErrorCodes / ErrorNumber 已撤（apps 全树零消费者，core 测试走 src 相对路径）；
+// ErrorKey 保留：desktop ipc-types.ts 收窄 code 取值空间后是真实消费者。全集见 public/errors。
+export type { ErrorKey } from "../errors/error-codes.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,

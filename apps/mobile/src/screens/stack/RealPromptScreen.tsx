@@ -30,7 +30,6 @@ import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {buildRealPromptPreviewTurns} from '@/services/prompt-preview.service';
-import {AgentRunError} from '@/services/agent-run.service';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {RootStackParamList} from '@/navigation/types';
 
@@ -147,12 +146,7 @@ export function RealPromptScreen() {
       if (requestId !== requestIdRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
       }
-      const message =
-        err instanceof AgentRunError
-          ? err.message
-          : err instanceof Error
-          ? err.message
-          : String(err);
+      const message = err instanceof Error ? err.message : String(err);
       setError(message);
       setTurns([]);
     } finally {

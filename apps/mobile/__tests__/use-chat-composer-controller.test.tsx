@@ -51,7 +51,7 @@ jest.mock('../src/components/chat/native-composer/token-ranges', () => {
 });
 
 const mockStartRun = jest.fn(
-  (..._args: unknown[]) => ({ok: true}) as {ok: boolean; error?: string},
+  (..._args: unknown[]) => ({ok: true} as {ok: boolean; error?: string}),
 );
 const mockStopRun = jest.fn();
 
@@ -61,10 +61,12 @@ jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-import { useChatComposerController } from '../src/components/chat/useChatComposerController';
+import {useChatComposerController} from '../src/components/chat/useChatComposerController';
 
 type ChatComposerController = ReturnType<typeof useChatComposerController>;
-type UseChatComposerControllerOptions = Parameters<typeof useChatComposerController>[0];
+type UseChatComposerControllerOptions = Parameters<
+  typeof useChatComposerController
+>[0];
 import {
   applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
@@ -72,10 +74,8 @@ import {
   writeChatComposerDraft,
   writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
-import {
-  scanTokensToRanges,
-} from '../src/components/chat/native-composer/token-ranges';
-import { chatAnnotateDraftStore } from '@novel-master/core/chat';
+import {scanTokensToRanges} from '../src/components/chat/native-composer/token-ranges';
+import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 
 /** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
 const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
@@ -153,16 +153,19 @@ beforeEach(() => {
   Object.assign(mockRuntime, {
     preferences: {getLlmStreamEnabled: jest.fn(async () => true)},
     sessions: {
-      get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
-      getComposerDraftJson: jest.fn(
-        async (id: string) => mockDraftDb.get(id) ?? null,
-      ),
-      setComposerDraftJson: jest.fn(
-        async (id: string, json: string | null) => {
-          mockDraftDb.set(id, json);
-          return true;
-        },
-      ),
+      get: jest.fn(async () => ({
+        ok: true,
+        value: {id: 's1', projectId: 'p1'},
+      })),
+      // 错误通道迁移二期后草稿读写走 Result wire（`!ok` 即 throw）。
+      getComposerDraftJson: jest.fn(async (id: string) => ({
+        ok: true as const,
+        value: mockDraftDb.get(id) ?? null,
+      })),
+      setComposerDraftJson: jest.fn(async (id: string, json: string | null) => {
+        mockDraftDb.set(id, json);
+        return {ok: true as const, value: true};
+      }),
     },
     sessionStreamUnitManager: {
       startRun: mockStartRun,
@@ -208,8 +211,9 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(args[0]).toBe('s1');
     expect(args[1]).toBe('p1');
     expect(args[2]).toBe('');
-    expect((args[3] as {allowResumeWithoutInput: boolean})
-      .allowResumeWithoutInput).toBe(true);
+    expect(
+      (args[3] as {allowResumeWithoutInput: boolean}).allowResumeWithoutInput,
+    ).toBe(true);
   });
 
   it('有正文：正常发送（content 为 trim 后正文，allowResume=false）', async () => {
@@ -225,8 +229,9 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(mockStartRun).toHaveBeenCalledTimes(1);
     const args = mockStartRun.mock.calls[0]!;
     expect(args[2]).toBe('你好');
-    expect((args[3] as {allowResumeWithoutInput: boolean})
-      .allowResumeWithoutInput).toBe(false);
+    expect(
+      (args[3] as {allowResumeWithoutInput: boolean}).allowResumeWithoutInput,
+    ).toBe(false);
   });
 
   it('T-CA9 ①: 贴邻两颗技能 $A$$B$ → 区间扫描两颗都进 attachments，掩码区间同步透传', async () => {
@@ -296,7 +301,11 @@ describe('useChatComposerController · send 三分支路由', () => {
     const args = mockStartRun.mock.calls[0]!;
     expect(args[2]).toBe('@docs/a.md@$写作$');
     const options = args[3] as {
-      attachments?: readonly {action?: string; path?: string; skillName?: string}[];
+      attachments?: readonly {
+        action?: string;
+        path?: string;
+        skillName?: string;
+      }[];
       excludedScanRanges?: unknown;
     };
     const attachments = options.attachments ?? [];
@@ -1113,9 +1122,9 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
     const payload = readDbPayload('s1');
     expect(payload.text).toBe('$技$尾追');
     expect(payload.tokenRanges).toEqual([]);
-    expect(
-      Object.prototype.hasOwnProperty.call(payload, 'tokenRanges'),
-    ).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(payload, 'tokenRanges')).toBe(
+      true,
+    );
   });
 
   it('T-CA4: Picker 插入落库 payload 带登记区间', async () => {

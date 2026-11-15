@@ -5,7 +5,7 @@
  * 损坏的布尔/rev 字符串与缺失 key 的回退行为；与 cloud-sync.service 的非 mock
  * 集成用例见 cloud-sync-config.service.integration.test.ts。
  */
-import {AppError} from '@novel-master/core/agent';
+import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core';
 import {
   CLOUD_SYNC_KKV_MODULE,
@@ -35,28 +35,31 @@ class InMemoryKkv implements KkvService {
       .map(slot => slot.slice(module.length + 1));
   }
 
-  async get(module: string, key: string): Promise<string> {
+  async get(module: string, key: string) {
     const value = this.map.get(this.slot(module, key));
     if (value === undefined) {
-      throw new AppError('KKV_NOT_FOUND', `KKV key not found: ${module}/${key}`, {
-        module,
-        key,
-      });
+      return Result.err(
+        new AppError('KKV_NOT_FOUND', {
+          detail: `KKV key not found: ${module}/${key}`,
+        }),
+      );
     }
-    return value;
+    return Result.ok(value);
   }
 
   async set(module: string, key: string, value: string): Promise<void> {
     this.map.set(this.slot(module, key), value);
   }
 
-  async delete(module: string, key: string): Promise<void> {
+  async delete(module: string, key: string) {
     if (!this.map.delete(this.slot(module, key))) {
-      throw new AppError('KKV_NOT_FOUND', `KKV key not found: ${module}/${key}`, {
-        module,
-        key,
-      });
+      return Result.err(
+        new AppError('KKV_NOT_FOUND', {
+          detail: `KKV key not found: ${module}/${key}`,
+        }),
+      );
     }
+    return Result.ok(undefined);
   }
 
   /** 直接注入原始字符串（构造损坏/部分缺失状态）。 */
@@ -243,7 +246,7 @@ describe('cloud-sync-config.store 容错', () => {
 
   it('KKV 非 NOT_FOUND 错误原样抛出', async () => {
     const failing = {
-      get: () => Promise.reject(new Error( 'disk on fire')),
+      get: () => Promise.reject(new Error('disk on fire')),
     } as never;
     const broken = {
       kkv: failing,

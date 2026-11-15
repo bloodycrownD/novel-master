@@ -5,7 +5,6 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { throwLegacyVfs, throwLegacyVfsZip } from "./legacy-vfs-error.js";
 import { AppError } from "@/errors/app-error.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
@@ -60,13 +59,16 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   return fullPath.slice(withSlash.length);
 }
 
+/**
+ * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath / 命名 `Result` → service 异常通道转码点——失败原样上抛，由调用链端点 catch 收口。
+ */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
     return;
   }
   const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
-  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+  if (!parentCheck.ok) throw parentCheck.error;
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
     await repo.insertDirectory(sk, logical);
@@ -78,17 +80,17 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
 }
 
 /**
- * 导入失败的错误包装：保留测试钩子直抛与 legacy VfsZipError 形态（`name` 手搓对象）原形，
- * 其余包成 `VFS_ZIP_IMPORT_FAILED`，并在消息里带上分片进度（已提交 N 片 / 失败在第 K 片）。
+ * 导入失败的错误包装：保留测试钩子直抛原形，其余（含事务内业务 AppError 与
+ * 驱动层裸 Error）包成 `VFS_ZIP_IMPORT_FAILED`，并在消息里带上分片进度
+ * （已提交 N 片 / 失败在第 K 片）。与 character-card 的 wrapCardImportError
+ * 不同：这里业务错不透传——事务内的 parentCheck 失败历来也落 IMPORT_FAILED
+ * （旧 mapper 产物 name="VfsError" 同样被包），口径不变。
  *
  * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
  * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
  */
 function wrapImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
   if (error instanceof Error && error.message === "test import failure") {
-    return error;
-  }
-  if (error instanceof Error && error.name === "VfsZipError") {
     return error;
   }
   const base = error instanceof Error ? error.message : "import transaction failed";
@@ -142,7 +144,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     for (const row of rows) {
       // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
       const entryNameResult = zipEntryNameRelativeToDirectory(row.path, directoryPath);
-      if (!entryNameResult.ok) throwLegacyVfsZip(entryNameResult.error);
+      if (!entryNameResult.ok) throw entryNameResult.error;
       const entryName = entryNameResult.value;
       if (entryName.length === 0) {
         continue;
@@ -160,7 +162,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         continue;
       }
       const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
-      if (!directoryNameResult.ok) throwLegacyVfsZip(directoryNameResult.error);
+      if (!directoryNameResult.ok) throw directoryNameResult.error;
       directoryZipNames.push(directoryNameResult.value);
     }
 
@@ -176,10 +178,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
 
     const rawEntriesResult = parseVfsZip(zipBytes);
-    if (!rawEntriesResult.ok) throwLegacyVfsZip(rawEntriesResult.error);
+    if (!rawEntriesResult.ok) throw rawEntriesResult.error;
     // Phase A：路径/UTF-8/带域根前缀判定 — 任何 delete 之前
     const validated = validateVfsZipEntries(scope, rawEntriesResult.value, directoryPath);
-    if (!validated.ok) throwLegacyVfsZip(validated.error);
+    if (!validated.ok) throw validated.error;
     const { files, directories } = validated.value;
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -239,7 +241,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
-            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+            if (!parentCheck.ok) throw parentCheck.error;
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });

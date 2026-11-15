@@ -57,16 +57,17 @@ function createHarness(options?: {readonly skipHydrate?: boolean}) {
     register: jest.fn(),
     unregister: jest.fn(),
   };
+  // 错误通道迁移二期后 sessions/projects 的 get 走 Result（服务侧 `!ok` 即 throw）。
   const sessions = {
     get: jest.fn(async (sessionId: string) => ({
-      id: sessionId,
-      title: `会话-${sessionId}`,
+      ok: true as const,
+      value: {id: sessionId, title: `会话-${sessionId}`},
     })),
   };
   const projects = {
     get: jest.fn(async (projectId: string) => ({
-      id: projectId,
-      name: `项目-${projectId}`,
+      ok: true as const,
+      value: {id: projectId, name: `项目-${projectId}`},
     })),
   };
   const runAgentTurn = jest.fn(
@@ -292,10 +293,17 @@ describe('SessionStreamUnitManager', () => {
         eventBus,
         abortRegistry,
         sessions: {
-          get: jest.fn(async (id: string) => ({id, title: `会话-${id}`})),
+          // 错误通道迁移二期后走 Result（服务侧 `!ok` 即 throw）。
+          get: jest.fn(async (id: string) => ({
+            ok: true as const,
+            value: {id, title: `会话-${id}`},
+          })),
         },
         projects: {
-          get: jest.fn(async (id: string) => ({id, name: `项目-${id}`})),
+          get: jest.fn(async (id: string) => ({
+            ok: true as const,
+            value: {id, name: `项目-${id}`},
+          })),
         },
       } as never,
       runAgentTurn: runAgentTurn as never,
@@ -911,8 +919,15 @@ describe('SessionStreamUnitManager', () => {
       });
 
       // 标签两查询挂起（手动 resolve）：制造「查询长时间未完成」窗口
-      let resolveTitle!: (value: {id: string; title: string}) => void;
-      let resolveProject!: (value: {id: string; name: string}) => void;
+      // （错误通道迁移二期后 get 走 Result，resolve 值带 wire 包装）
+      let resolveTitle!: (value: {
+        ok: true;
+        value: {id: string; title: string};
+      }) => void;
+      let resolveProject!: (value: {
+        ok: true;
+        value: {id: string; name: string};
+      }) => void;
       h.sessions.get.mockImplementation(
         () =>
           new Promise(resolve => {
@@ -948,8 +963,8 @@ describe('SessionStreamUnitManager', () => {
       expect(notifee.displayNotification).not.toHaveBeenCalled();
 
       // 查回标签：第二段带标签调用经 labelsVersion 同 id 原位刷新
-      resolveTitle({id: 'a', title: '会话-a'});
-      resolveProject({id: 'p', name: '项目-p'});
+      resolveTitle({ok: true, value: {id: 'a', title: '会话-a'}});
+      resolveProject({ok: true, value: {id: 'p', name: '项目-p'}});
       await flushAsync();
 
       expect(notifee.displayNotification).toHaveBeenCalledTimes(1);

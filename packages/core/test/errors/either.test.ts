@@ -15,11 +15,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result, type ResultWire } from "../../src/errors/either.js";
 import { isVfsError } from "../../src/errors/vfs-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 
-// vfsNotFound 工厂已退役（统一 new AppError）；本文件只是把带 name/code/path 的
-// 错误对象当 Result 载体用，本地按 legacy 手搓形态造同款对象（字段面与旧工厂一致）。
-function vfsNotFound(path: string): Error & { code: string; path: string } {
-  return Object.assign(new Error(`Path not found: ${path}`), {name: "VfsError", code: "NOT_FOUND", path});
+// vfsNotFound 工厂已退役（统一 new AppError）；本文件只是把 VFS 错误当 Result
+// 载体用，本地按现行唯一形态构造（legacy 手搓形态的守卫分支已随 mapper 删除）。
+function vfsNotFound(path: string): AppError<"VFS_NOT_FOUND"> {
+  return new AppError("VFS_NOT_FOUND", {path});
 }
 
 describe("either 对象风格：构造与分支收窄", () => {
@@ -39,13 +40,13 @@ describe("either 对象风格：构造与分支收窄", () => {
     }
   });
 
-  it("Result.err 保持传入对象本身（不包装不复制，code 依赖原对象）", () => {
+  it("Result.err 保持传入对象本身（不包装不复制，key 依赖原对象）", () => {
     const cause = vfsNotFound("/docs/a.md");
     const r = Result.err(cause);
     assert.ok(!r.ok);
     if (!r.ok) {
-      assert.equal(r.error, cause, "error 必须是原对象，包装会丢掉 VfsError.code");
-      assert.equal(r.error.code, "NOT_FOUND");
+      assert.equal(r.error, cause, "error 必须是原对象，包装会丢掉 AppError.key");
+      assert.equal(r.error.key, "VFS_NOT_FOUND");
     }
   });
 });
@@ -219,10 +220,10 @@ describe("either 对象风格：跨进程序列化往返", () => {
     const wire = Result.err(vfsNotFound("/x")).toJSON();
     assert.ok(!wire.ok);
     if (!wire.ok) {
-      const error = wire.error as { name?: string; message?: string; code?: string };
-      assert.equal(error.name, "VfsError");
-      assert.equal(error.code, "NOT_FOUND");
-      assert.match(error.message ?? "", /Path not found/);
+      const error = wire.error as { name?: string; message?: string; code?: number };
+      assert.equal(error.name, "VFS_NOT_FOUND");
+      assert.equal(error.code, 102001);
+      assert.match(error.message ?? "", /vfs path or revision not found/);
     }
     const okWire = Result.ok(5).toJSON();
     assert.ok(okWire.ok);
@@ -246,8 +247,8 @@ describe("either 对象风格：跨进程序列化往返", () => {
         true,
         "revive 后 name/code 已回填，结构守卫必须照常可用"
       );
-      assert.equal((revived.error as { code?: string }).code, "NOT_FOUND");
-      assert.equal((revived.error as { path?: string }).path, "/docs/a.md");
+      assert.equal((revived.error as { key?: string }).key, "VFS_NOT_FOUND");
+      assert.equal((revived.error as { details?: { path?: string } }).details?.path, "/docs/a.md");
     }
     assert.equal(revived.unwrapOr(-1), -1, "revive 产物必须带方法");
 

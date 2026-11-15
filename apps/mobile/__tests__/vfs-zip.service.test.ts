@@ -92,7 +92,10 @@ describe('vfs-zip.service', () => {
     mockStat.mockReset();
     mockUnlink.mockReset();
     mockParseVfsZip.mockReset();
-    mockProjectsGet.mockReset().mockResolvedValue({id: 'p', name: '我的项目'});
+    // 错误通道迁移二期后 projects.get 走 Result（服务侧 `!ok` 即 throw → 回退 workspace.zip）。
+    mockProjectsGet
+      .mockReset()
+      .mockResolvedValue({ok: true, value: {id: 'p', name: '我的项目'}});
     mockCreateVfsZipIoService.mockReturnValue({
       export: mockExport,
       import: mockImport,

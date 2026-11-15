@@ -16,10 +16,7 @@ import type {
   SkillsUpdateInfoRequest,
   SkillsWriteRequest,
 } from "../../../../shared/ipc-types.js";
-import type {
-  SkillListScope,
-  SkillLocation,
-} from "@novel-master/core/skills";
+import type { SkillListScope, SkillLocation } from "@novel-master/core/skills";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
@@ -33,14 +30,12 @@ function toSkillLocation(ref: SkillRefDto): SkillLocation {
 }
 
 export async function handleSkillsList(
-  req: SkillsListRequest,
+  req: SkillsListRequest
 ): Promise<IpcResult<SkillListItemDto[]>> {
   try {
     const rt = await getDesktopRuntime();
     const scope: SkillListScope =
-      req.domain === "global"
-        ? "global"
-        : { projectId: req.projectId ?? "" };
+      req.domain === "global" ? "global" : { projectId: req.projectId ?? "" };
     const items = await rt.skills().listSkills(scope);
     return {
       ok: true,
@@ -61,7 +56,7 @@ export async function handleSkillsList(
 }
 
 export async function handleSkillsEffective(
-  req: SkillsEffectiveRequest,
+  req: SkillsEffectiveRequest
 ): Promise<IpcResult<EffectiveSkillDto[]>> {
   try {
     const rt = await getDesktopRuntime();
@@ -87,16 +82,13 @@ export async function handleSkillsEffective(
 }
 
 export async function handleSkillsRead(
-  req: SkillsReadRequest,
+  req: SkillsReadRequest
 ): Promise<IpcResult<SkillsReadResponse>> {
   try {
     const rt = await getDesktopRuntime();
-    const file = await rt.skills().readSkillFile(
-      req.domain,
-      req.name,
-      req.path,
-      req.projectId,
-    );
+    const file = await rt
+      .skills()
+      .readSkillFile(req.domain, req.name, req.path, req.projectId);
     if (!file.ok) throw file.error;
     return {
       ok: true,
@@ -114,17 +106,19 @@ export async function handleSkillsRead(
 }
 
 export async function handleSkillsWrite(
-  req: SkillsWriteRequest,
+  req: SkillsWriteRequest
 ): Promise<IpcResult<{ version: number }>> {
   try {
     const rt = await getDesktopRuntime();
-    const result = await rt.skills().writeSkillFile(
-      req.domain,
-      req.name,
-      req.path,
-      req.content,
-      req.projectId,
-    );
+    const result = await rt
+      .skills()
+      .writeSkillFile(
+        req.domain,
+        req.name,
+        req.path,
+        req.content,
+        req.projectId
+      );
     if (!result.ok) throw result.error;
     return { ok: true, data: result.value };
   } catch (err) {
@@ -133,11 +127,15 @@ export async function handleSkillsWrite(
 }
 
 export async function handleSkillsToggle(
-  req: SkillsToggleRequest,
+  req: SkillsToggleRequest
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.skills().setDisabled(req.projectId, req.name, req.disabled);
+    // 解包 throw 边界（同上）：setDisabled 已走 Result。
+    const toggled = await rt
+      .skills()
+      .setDisabled(req.projectId, req.name, req.disabled);
+    if (!toggled.ok) throw toggled.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -145,11 +143,13 @@ export async function handleSkillsToggle(
 }
 
 export async function handleSkillsDelete(
-  req: SkillsDeleteRequest,
+  req: SkillsDeleteRequest
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.skills().deleteSkill(toSkillLocation(req));
+    // 解包 throw 边界（同上）：deleteSkill 已走 Result。
+    const deleted = await rt.skills().deleteSkill(toSkillLocation(req));
+    if (!deleted.ok) throw deleted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -158,17 +158,15 @@ export async function handleSkillsDelete(
 
 /** 新建前保留名校验（D2② 门独立暴露）：拒绝时 message 已是中文文案。 */
 export async function handleSkillsAssertCreateName(
-  req: SkillsAssertCreateNameRequest,
+  req: SkillsAssertCreateNameRequest
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt
+    // 解包 throw 边界（错误通道迁移三期门⑦）：core 校验改回 Result，err 原样上抛进 formatIpcError。
+    const asserted = await rt
       .skills()
-      .assertSkillNameNotReservedForCreate(
-        req.domain,
-        req.name,
-        req.projectId,
-      );
+      .assertSkillNameNotReservedForCreate(req.domain, req.name, req.projectId);
+    if (!asserted.ok) throw asserted.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -177,14 +175,16 @@ export async function handleSkillsAssertCreateName(
 
 /** 编辑技能信息（重命名 + 描述同一提交）：错误码与中文文案透传。 */
 export async function handleSkillsUpdateInfo(
-  req: SkillsUpdateInfoRequest,
+  req: SkillsUpdateInfoRequest
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.skills().updateSkillInfo(toSkillLocation(req), {
+    // 解包 throw 边界（同上）：updateSkillInfo 已走 Result。
+    const updated = await rt.skills().updateSkillInfo(toSkillLocation(req), {
       ...(req.newName != null ? { newName: req.newName } : {}),
       ...(req.description != null ? { description: req.description } : {}),
     });
+    if (!updated.ok) throw updated.error;
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

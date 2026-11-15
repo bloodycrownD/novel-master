@@ -11,14 +11,14 @@
  *
  * 新增码只能追加，数值不得复用或改号。
  *
- * 预分配段位（不建空 key，登记在 test/errors/app-error.test.ts 的 DOMAIN_RANGES）：
- * 101 AGENT / 102 VFS（含 VFS_ZIP_*、VFS_CONTENT_*）/ 103 VFS_CHARACTER_CARD /
+ * 预分配段位（不建空 key，号段表 DOMAIN_RANGES 登记在 errors/domain.ts，test/errors/app-error.test.ts 引用同一份）：
+ * 101 AGENT / 102 VFS（含 VFS_ZIP_*、VFS_CONTENT_*、VFS_SINGLE_FILE_*）/ 103 VFS_CHARACTER_CARD /
  * 104 TOOL / 105 PROVIDER / 106 CHAT / 107 SKILL / 108 COMPACTION_CONDITIONS 001-499 +
  * SMART_SORT_RULE 500-999 / 109 CONFIG 001-499 + PREFERENCES 500-999 / 110 INFRA /
  * 111 DEPTH / 112 EVENTS / 113 FEATURE_FLAGS / 114 FORMAT / 115 KKV /
  * 116 SESSION_FS / 117 PROMPT / 118 SESSION_KKV / 119 SESSION_RUN_STATE /
- * 120 USAGE / 121 WORKPLACE / 123 IPC（TASK_CANCELLED / TASK_REPLACED，
- * 控制流码 TOOL_CANCELLED 落 104 段；122 CLOUD_SYNC 三期迁入时再登记）。
+ * 120 USAGE / 121 WORKPLACE / 122 CLOUD_SYNC（三期 CloudSyncError 退役迁入）/
+ * 123 IPC（TASK_CANCELLED / TASK_REPLACED 与 handler 直构码；控制流码 TOOL_CANCELLED 落 104 段）。
  *
  * messageKey 是该码的缺省用户文案模板（i18n 契约 key，见 i18n/keys.ts 与
  * catalog/*.yaml，三处缺一即红）：descriptor 通道优先于它，动态诊断文案走
@@ -57,6 +57,10 @@ export const ErrorCodes = {
   AGENT_IN_USE: {code: 101008, desc: "agent in use"},
   AGENT_DUPLICATE_NAME: {code: 101009, desc: "duplicate agent name", messageKey: "error.agent.duplicate_name"},
   AGENT_BUILTIN_PROTECTED: {code: 101010, desc: "builtin agent protected"},
+  // 101 AGENT 011-013：运行期控制（三期 handler 直构码迁入）。
+  AGENT_RUN_FAILED: {code: 101011, desc: "agent run failed"},
+  AGENT_BUSY: {code: 101012, desc: "agent busy"},
+  AGENT_RUN_IN_FLIGHT: {code: 101013, desc: "agent run in flight"},
 
   // 102 VFS 001-999：vfs 路径、zip、content-store 与端口失败。
   VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found", messageKey: "error.vfs.not_found"},
@@ -83,6 +87,11 @@ export const ErrorCodes = {
   VFS_ZIP_NOT_CONFIRMED: {code: 102023, desc: "zip import not confirmed", messageKey: "error.vfs.zip_not_confirmed"},
   VFS_ZIP_EXTERNAL_NOT_SUPPORTED: {code: 102024, desc: "external directory ingest unsupported", messageKey: "error.vfs.zip_external_not_supported"},
   VFS_ZIP_IMPORT_FAILED: {code: 102025, desc: "zip import failed"},
+  // 102 VFS 026-029：mobile 单文件导入/导出（三期 VfsSingleFileError 退役预登记）。
+  VFS_SINGLE_FILE_TOO_LARGE: {code: 102026, desc: "single-file import payload too large", messageKey: "error.vfs.single_file_too_large"},
+  VFS_SINGLE_FILE_READ_FAILED: {code: 102027, desc: "single-file import read failed", messageKey: "error.vfs.single_file_read_failed"},
+  VFS_SINGLE_FILE_NOT_FOUND: {code: 102028, desc: "picked file not found on disk", messageKey: "error.vfs.single_file_not_found"},
+  VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: {code: 102029, desc: "export target is not a single file", messageKey: "error.vfs.single_file_export_target_invalid"},
 
   // 104 TOOL 001-999：工具入参（phase 2 logic）、搜索配置/引擎失败与工具取消。
   TOOL_INVALID_ARGUMENT: {code: 104001, desc: "invalid tool argument"},
@@ -93,12 +102,12 @@ export const ErrorCodes = {
   TOOL_CONFLICT: {code: 104006, desc: "tool already registered", messageKey: "error.tool.conflict"},
   TOOL_FAILED: {code: 104007, desc: "tool execution failed", messageKey: "error.tool.failed"},
   TOOL_FORBIDDEN: {code: 104008, desc: "tool path outside allowed scope", messageKey: "error.tool.forbidden"},
-  TOOL_CANCELLED: {code: 104009, desc: "tool execution cancelled"},
+  TOOL_CANCELLED: {code: 104009, desc: "tool execution cancelled", messageKey: "error.tool.cancelled"},
 
   // 105 PROVIDER 001-999：provider logic/model 的入参、模型 id 与密钥校验。
   PROVIDER_INVALID_ARGUMENT: {code: 105001, desc: "invalid provider argument"},
   PROVIDER_INVALID_SAVED_MODEL_ID: {code: 105002, desc: "invalid saved model id"},
-  PROVIDER_API_KEY_NOT_SET: {code: 105003, desc: "provider api key not set"},
+  PROVIDER_API_KEY_NOT_SET: {code: 105003, desc: "provider api key not set", messageKey: "error.provider.api_key_not_set"},
   PROVIDER_INVARIANT_VIOLATION: {code: 105004, desc: "provider invariant violation"},
   PROVIDER_NOT_FOUND: {code: 105005, desc: "provider not found", messageKey: "error.provider.not_found"},
   PROVIDER_CONFLICT: {code: 105006, desc: "provider conflict", messageKey: "error.provider.conflict"},
@@ -112,6 +121,8 @@ export const ErrorCodes = {
   PROVIDER_MIGRATION_ORPHAN_POINTER: {code: 105014, desc: "migration left an orphan pointer", messageKey: "error.provider.migration_orphan_pointer"},
   PROVIDER_SAVED_MODEL_IN_USE: {code: 105015, desc: "saved model in use", messageKey: "error.provider.saved_model_in_use"},
   PROVIDER_INVALID_MODEL_NAME: {code: 105016, desc: "invalid provider model name", messageKey: "error.provider.invalid_model_name"},
+  // 105 PROVIDER 017：handler 直构码（三期迁入）。
+  PROVIDER_MODEL_MISMATCH: {code: 105017, desc: "provider model mismatch"},
 
   // 106 CHAT 002-999：消息行/元数据损坏（001 为历史保留）。
   CHAT_MESSAGE_CORRUPT: {code: 106002, desc: "chat message row corrupt"},
@@ -147,6 +158,9 @@ export const ErrorCodes = {
   INFRA_BASELINE_TOO_OLD: {code: 110001, desc: "database baseline too old"},
   INFRA_UNSUPPORTED_PLATFORM: {code: 110002, desc: "unsupported platform for sksp driver"},
   INFRA_INVARIANT_VIOLATION: {code: 110003, desc: "internal invariant violated (assembly/programming error)"},
+  // 110 INFRA 004-005：IPC 边界兜底（三期迁入；message 是边界格式化的动态文案，不配模板）。
+  INFRA_VALIDATION_FAILED: {code: 110004, desc: "request validation failed"},
+  INFRA_UNEXPECTED_ERROR: {code: 110005, desc: "unexpected internal error"},
 
   // 114 FORMAT 001-999：外部 wire 版本串格式校验。
   FORMAT_INVALID_VERSION: {code: 114001, desc: "invalid version string"},
@@ -186,9 +200,28 @@ export const ErrorCodes = {
   WORKPLACE_INVALID_RULE_ROW: {code: 121004, desc: "invalid workplace rule row"},
   WORKPLACE_ROOT_RULE_LOCKED: {code: 121005, desc: "root directory rules cannot be disabled"},
 
-  // 123 IPC 001-999：跨进程控制流码（总纲 §四：cancelled/replaced 平级，不算用户可见错误）。
+  // 122 CLOUD_SYNC 001-999：云同步协调器与 S3 驱动（三期 CloudSyncError 退役迁入，枚举序号即迁移顺序）。
+  CLOUD_SYNC_NOT_CONFIGURED: {code: 122001, desc: "cloud sync not configured", messageKey: "error.cloud_sync.not_configured"},
+  CLOUD_SYNC_NEED_PULL_FIRST: {code: 122002, desc: "remote is ahead; pull first"},
+  CLOUD_SYNC_LOCK_HELD_BY_OTHER: {code: 122003, desc: "cloud sync lock held by another device", messageKey: "error.cloud_sync.lock_held_by_other"},
+  CLOUD_SYNC_LOCK_CONTENTION: {code: 122004, desc: "cloud sync lock contention", messageKey: "error.cloud_sync.lock_contention"},
+  CLOUD_SYNC_AGENT_ACTIVE: {code: 122005, desc: "agent active during cloud sync"},
+  CLOUD_SYNC_PUSH_MUTEX_TIMEOUT: {code: 122006, desc: "push/agent mutex acquire timed out"},
+  CLOUD_SYNC_ALREADY_UP_TO_DATE: {code: 122007, desc: "local already up to date", messageKey: "error.cloud_sync.already_up_to_date"},
+  CLOUD_SYNC_INVALID_STATUS: {code: 122008, desc: "remote status.json invalid"},
+  CLOUD_SYNC_SNAPSHOT_MISSING: {code: 122009, desc: "remote snapshot missing", messageKey: "error.cloud_sync.snapshot_missing"},
+  CLOUD_SYNC_CHECKSUM_MISMATCH: {code: 122010, desc: "downloaded snapshot checksum mismatch", messageKey: "error.cloud_sync.download_checksum_mismatch"},
+  CLOUD_SYNC_NETWORK: {code: 122011, desc: "cloud storage network error"},
+  CLOUD_SYNC_AUTH: {code: 122012, desc: "cloud storage auth error"},
+
+  // 123 IPC 001-999：跨进程控制流码（总纲 §四：cancelled/replaced 平级，不算用户可见错误）
+  // 与 handler 直构码（003-006 三期迁入）。
   TASK_CANCELLED: {code: 123001, desc: "task cancelled"},
   TASK_REPLACED: {code: 123002, desc: "task replaced by a newer run"},
+  IPC_INVALID_URL: {code: 123003, desc: "invalid external url"},
+  IPC_INVALID_MENU: {code: 123004, desc: "unknown menu id"},
+  IPC_NO_WINDOW: {code: 123005, desc: "no available window"},
+  IPC_INVALID_ARGUMENT: {code: 123006, desc: "invalid ipc argument"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

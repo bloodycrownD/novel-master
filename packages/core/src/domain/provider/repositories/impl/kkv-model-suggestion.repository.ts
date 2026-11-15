@@ -54,6 +54,11 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
     await this.writeCache(providerId, { schemaVersion: 1, models: [...byId.values()] });
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → 领域异常通道
+   * 转码点——`KKV_NOT_FOUND` 幂等忽略，其余失败原样上抛，由消费方
+   * provider.service 的调用链端点（handler / 屏幕）catch 收口。
+   */
   async deleteByProvider(providerId: string): Promise<void> {
     const deleted = await this.kkv.delete(MODULE, providerId);
     if (!deleted.ok) {
@@ -62,6 +67,7 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
     }
   }
 
+  /** 解包 throw 边界（同 {@link KkvModelSuggestionRepository.deleteByProvider}）：`KKV_NOT_FOUND` 归一为空缓存。 */
   private async readCache(providerId: string): Promise<ModelSuggestionCache> {
     const raw = await this.kkv.get(MODULE, providerId);
     if (!raw.ok) {

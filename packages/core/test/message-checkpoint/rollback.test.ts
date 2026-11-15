@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createCharacterCardImportService } from "@novel-master/core/vfs";
 
-import { isSessionFsError } from "@novel-master/core/session-fs";
+import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

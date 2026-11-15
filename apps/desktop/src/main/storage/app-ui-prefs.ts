@@ -3,7 +3,8 @@
  *
  * @module storage/app-ui-prefs
  */
-import { isAppError } from "@novel-master/core/agent";
+import { isAppError, type AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 
 export const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
@@ -28,7 +29,7 @@ export const DESKTOP_UI_DEFAULTS: Record<string, string> = {
 };
 
 export interface DesktopAppUiPreferences {
-  get(key: string): Promise<string | undefined>;
+  get(key: string): Promise<Result<string | undefined, AppError>>;
   set(key: string, value: string): Promise<void>;
 }
 
@@ -36,17 +37,15 @@ export function createDesktopAppUiPreferences(
   kkv: KkvService,
 ): DesktopAppUiPreferences {
   return {
-    async get(key: string) {
+    async get(key: string): Promise<Result<string | undefined, AppError>> {
       const raw = await kkv.get(DESKTOP_UI_KKV_MODULE, key);
       if (!raw.ok) {
         if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-          return key in DESKTOP_UI_DEFAULTS
-            ? DESKTOP_UI_DEFAULTS[key]
-            : undefined;
+          return Result.ok(key in DESKTOP_UI_DEFAULTS ? DESKTOP_UI_DEFAULTS[key] : undefined);
         }
-        throw raw.error;
+        return raw;
       }
-      return raw.value;
+      return raw;
     },
     async set(key: string, value: string) {
       await kkv.set(DESKTOP_UI_KKV_MODULE, key, value);

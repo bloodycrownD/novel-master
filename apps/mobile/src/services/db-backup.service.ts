@@ -19,6 +19,7 @@ import {
   scrubProviderTablesInDatabase,
   type TdbcConnection,
 } from '@novel-master/core';
+import {AppError} from '@novel-master/core/agent';
 import {
   checkpointMobileDatabase,
   closeMobileConnection,
@@ -48,11 +49,11 @@ function backupFileName(): string {
 
 function assertSqliteFile(bytes: Uint8Array): void {
   if (bytes.length < 16) {
-    throw new Error('文件过小，不是有效的数据库备份');
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'});
   }
   const header = String.fromCharCode(...bytes.subarray(0, 16));
   if (!header.startsWith(SQLITE_MAGIC)) {
-    throw new Error('不是有效的 SQLite 数据库备份');
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'});
   }
 }
 
@@ -99,11 +100,11 @@ async function assertSqliteBackupAtPath(srcPath: string): Promise<void> {
   const fs = blobFs();
   const exists = await fs.exists(srcPath);
   if (!exists) {
-    throw new Error(`数据库文件不存在: ${srcPath}`);
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: `数据库文件不存在: ${srcPath}`});
   }
   const info = await fs.stat(srcPath);
   if (Number(info.size) < 16) {
-    throw new Error('文件过小，不是有效的数据库备份');
+    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'});
   }
 }
 
@@ -226,12 +227,7 @@ export async function importDatabaseBackupFromPath(
         }
       }
       if (rollbackError != null) {
-        throw new Error(
-          `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(
-            rollbackError,
-          )}（原始错误：${errorDetail(error)}）`,
-          {cause: [error, rollbackError]},
-        );
+        throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}（原始错误：${errorDetail(error)}）`}, {cause: [error, rollbackError]});
       }
       throw error;
     }
@@ -273,7 +269,7 @@ export async function exportDatabaseBackup(
   runtime: MobileNovelMasterRuntime,
 ): Promise<'saved' | 'cancelled'> {
   if (isMobileAgentActive()) {
-    throw new Error('Agent 运行中，请稍后再导出数据库');
+    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'});
   }
 
   // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
@@ -301,7 +297,7 @@ export async function importDatabaseBackup(
   onRebootstrap: () => void,
 ): Promise<void> {
   if (isMobileAgentActive()) {
-    throw new Error('Agent 运行中，请稍后再导入数据库');
+    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'});
   }
 
   // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整

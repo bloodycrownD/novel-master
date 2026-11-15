@@ -25,7 +25,6 @@ import {
 } from "../src/main/ipc/handlers/physical.js";
 import {
   resolveVfsScopeFromRequest,
-  VfsScopeError,
 } from "../src/main/ipc/resolve-vfs-scope.js";
 import {
   setupDesktopDbTestEnv,
@@ -252,14 +251,14 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("无写通道：physical 域不解析为单 scope，写 handler 全部拒绝", async () => {
-    // scope 解析层显式分流：physical 抛 VfsScopeError（而非误落任何域）
-    assert.throws(
-      () =>
-        resolveVfsScopeFromRequest({
-          workspaceScope: "physical",
-        }),
-      VfsScopeError,
-    );
+    // scope 解析层显式分流：physical 走失败返回值（而非误落任何域）
+    const physicalScope = resolveVfsScopeFromRequest({
+      workspaceScope: "physical",
+    });
+    assert.equal(physicalScope.ok, false);
+    if (!physicalScope.ok) {
+      assert.equal(physicalScope.error.code, "IPC_INVALID_ARGUMENT");
+    }
 
     // 写 handler 经 resolve 后对 physical 返回失败（不落库）
     const write = await handleVfsWrite({

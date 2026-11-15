@@ -1,29 +1,22 @@
 /**
- * VFS 错误的结构守卫与 legacy 短码类型。
+ * VFS 域守卫与 edit REPLACE_NOT_FOUND 的 LCS 诊断字段类型。
  *
- * `VfsError` 类已退役（统一 `new AppError("VFS_*", params)` 构造），本文件保留三样：
- * - {@link VfsErrorCode} 字符串短码联合：legacy-vfs-error mapper 手搓旧形态对象、
- *   apps/CLI 的 `name + code` 消费仍走它；与 AppError 的 `VFS_*` key 是两套，不合并。
+ * `VfsError` / `VfsZipError` 类与旧字符串短码联合已退役，构造统一
+ * `new AppError("VFS_*", params)`；legacy 手搓形态的唯一生产者
+ * `service/vfs/impl/legacy-vfs-error` mapper 已随三期 Step 6 删除，legacy
+ * 分支一并撤除（总纲 §7.2-3）。本文件保留两样：
  * - {@link VfsReplaceNotFoundDetails}：edit REPLACE_NOT_FOUND 的 LCS 诊断字段类型。
- * - {@link isVfsError} 双形态守卫：AppError（`name` 以 `VFS_` 开头且 `code` 为数字）
- *   与 legacy 手搓对象（`name === "VfsError"` + 字符串短码）都能判中，沿 cause 链
- *   回溯。带短码实参时两种形态都精确匹配（AppError 按 `VFS_<短码>` 对 name——
- *   `this.name = key`；legacy 按字符串 code），与 {@link isSessionFsError} 同构。
+ * - {@link isVfsError} 域守卫：AppError 且数字码落在 VFS 域段（码表登记的
+ *   102 VFS 段含 VFS_ZIP_* / VFS_CONTENT_* / VFS_SINGLE_FILE_*，103
+ *   VFS_CHARACTER_CARD 段），沿 cause 链回溯。域判定走 domainOf
+ *   （errors/domain.ts 的段表，全仓唯一一份），按段号而非 key 命名约定——
+ *   语义属 VFS、前缀不同的 key 不会静默漏判。
  *
  * @module errors/vfs-errors
  */
 
-/** VFS 域字符串短码（legacy mapper 形态与结构守卫的实参用，非 AppError key）。 */
-export type VfsErrorCode =
-  | "NOT_FOUND"
-  | "REPLACE_NOT_FOUND"
-  | "DIRECTORY_NOT_EMPTY"
-  | "INVALID_PATH"
-  | "INVALID_NAME"
-  | "IS_DIRECTORY"
-  | "ALREADY_EXISTS"
-  | "NOT_A_DIRECTORY"
-  | "PARENT_NOT_FOUND";
+import { isAppError, type AppError } from "@/errors/app-error.js";
+import { domainOf } from "@/errors/domain.js";
 
 /**
  * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
@@ -43,53 +36,11 @@ export type VfsReplaceNotFoundDetails = {
   readonly fileHintPreview?: string;
 };
 
-/** {@link isVfsError} 判中后的结构形状；AppError 形态下 `path` 缺省在 `details.path`。 */
-export type LegacyVfsError = Error & {
-  readonly code: VfsErrorCode;
-  readonly path?: string;
-  readonly details?: unknown;
-};
-
-/** 双形态结构守卫（src/dist 双模块实例下 instanceof 会 false negative，不走 instanceof）。 */
-export function isVfsError(
-  error: unknown,
-  code?: VfsErrorCode
-): error is LegacyVfsError {
-  if (matchesVfsError(error, code)) {
-    return true;
-  }
-  if (typeof error === "object" && error !== null && "cause" in error) {
-    return matchesVfsError((error as { cause: unknown }).cause, code);
-  }
-  return false;
+/** 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯一层。 */
+export function isVfsError(error: unknown): error is AppError {
+  return inVfsSegment(error) || (typeof error === "object" && error !== null && "cause" in error && inVfsSegment((error as {cause: unknown}).cause));
 }
 
-/** 从 {@link isVfsError} 判中的错误里读 VFS 短码：AppError 形态由 name（= key）去 `VFS_` 前缀反推，legacy 形态读字符串 `code`；非 VFS 错误返回 undefined。 */
-export function vfsErrorCodeOf(error: unknown): VfsErrorCode | undefined {
-  if (typeof error !== "object" || error === null) {
-    return undefined;
-  }
-  const candidate = error as { name?: unknown; code?: unknown };
-  if (typeof candidate.name === "string" && candidate.name.startsWith("VFS_") && typeof candidate.code === "number") {
-    return candidate.name.slice("VFS_".length) as VfsErrorCode;
-  }
-  if (candidate.name === "VfsError" && typeof candidate.code === "string") {
-    return candidate.code as VfsErrorCode;
-  }
-  return undefined;
-}
-
-function matchesVfsError(
-  error: unknown,
-  code?: VfsErrorCode
-): error is LegacyVfsError {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-  const candidate = error as { name?: unknown; code?: unknown };
-  const modern = typeof candidate.name === "string" && candidate.name.startsWith("VFS_") && typeof candidate.code === "number";
-  if (modern) {
-    return code === undefined || candidate.name === `VFS_${code}`;
-  }
-  return candidate.name === "VfsError" && typeof candidate.code === "string" && (code === undefined || candidate.code === code);
+function inVfsSegment(error: unknown): error is AppError {
+  return isAppError(error) && (domainOf(error.code) === "VFS" || domainOf(error.code) === "VFS_CHARACTER_CARD");
 }

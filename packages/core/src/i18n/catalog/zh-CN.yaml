@@ -127,6 +127,7 @@ error:
     conflict: 服务商操作冲突
     builtin_provider: 内置服务商不可修改
     http_error: 服务商请求失败
+    api_key_not_set: 请先在服务商设置中配置 API Key
     model_not_saved: 请先从远程拉取并保存模型
     unsupported_content: 服务商返回了不支持的内容
     unsupported: 当前服务商不支持该操作
@@ -195,6 +196,7 @@ error:
     conflict: 工具已注册：{tool_name}
     failed: 工具执行失败：{tool_name}
     forbidden: 工具路径不在允许范围：{tool_name} -> {path}
+    cancelled: 工具执行已取消：{tool_name}
   # —— usage：统计入参校验（{field} 是入参标签原文，如 dayLocalDate / range.fromDay）——
   usage:
     invalid_day_format: "{field} 须为 YYYY-MM-DD 格式，收到：{value}"
@@ -231,6 +233,10 @@ error:
     zip_import_failed:
       with_progress: （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
     batch_ingest_partial: "{reason}（已提交 {committed} 片，失败在第 {failed_shard} 片）"
+    single_file_too_large: "文件过大：{size_bytes} 字节，超过导入上限 {max_bytes} 字节（约 32MB），已拒绝导入"
+    single_file_read_failed: 无法读取所选文件：{reason}
+    single_file_not_found: 所选文件不存在：{path}
+    single_file_export_target_invalid: 导出目标不是单个文件：{logical_path}
 label:
   # —— agent：存储配置失效面板与列表（invalid_title 与 config_invalid 同文不同语境，分立 key）；custom_attach 是 customAttach 块标签 ——
   agent:

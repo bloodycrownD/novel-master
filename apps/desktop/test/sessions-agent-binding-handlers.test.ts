@@ -279,9 +279,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
         "main",
         "ipc",
         "handlers",
-        "prompt.ts",
+        "prompt.ts"
       ),
-      "utf8",
+      "utf8"
     );
     assert.match(promptSrc, /if \(error instanceof AgentRunResolveError\)/);
     assert.match(promptSrc, /throw error;/);
@@ -299,12 +299,14 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
  */
 async function verifyBindingCommitted(
   sessionId: string,
-  expectedAgentId: string,
+  expectedAgentId: string
 ): Promise<void> {
   const { getDesktopRuntime } = await import(
     "../src/main/runtime/desktop-runtime-singleton.js"
   );
   const rt = await getDesktopRuntime();
+  // 错误通道迁移二期后 getSessionAgentConfig 走 Result，解包取配置。
   const read = await rt.sessions.getSessionAgentConfig(sessionId);
-  assert.equal(read.agentId, expectedAgentId);
+  if (!read.ok) throw read.error;
+  assert.equal(read.value.agentId, expectedAgentId);
 }

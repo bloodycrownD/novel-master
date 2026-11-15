@@ -7,6 +7,7 @@
  * 不另抄一份以免与 core 校验口径漂移。
  */
 import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
+import type { ErrorKey } from "@novel-master/core/agent";
 
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: "nm:bootstrap/status",
@@ -214,7 +215,8 @@ export const IPC_CHANNELS = {
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 
 export type IpcErrorPayload = {
-  readonly code: string;
+  /** 取值空间收敛为 core 码表 key（ErrorKey）；旧 handler 私有短码已全部迁入码表。 */
+  readonly code: ErrorKey;
   readonly message: string;
   /** revision 缺失需回补时，丢失快照的逻辑路径列表。 */
   readonly missingLogicalPaths?: readonly string[];

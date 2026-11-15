@@ -153,7 +153,12 @@ export function normalizeEngineBaseUrl(value: string): string | null {
   }
 }
 
-/** KKV 删除：NOT_FOUND 忽略（幂等清除）。 */
+/**
+ * KKV 删除：NOT_FOUND 忽略（幂等清除）。
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → 工具域异常通道
+ * 转码点，其余失败原样上抛，由 tool-runner 统一 catch 收成 tool error block。
+ */
 async function kkvDelete(kkv: KkvService, key: string): Promise<void> {
   const deleted = await kkv.delete(SEARCH_KKV_MODULE, key);
   if (!deleted.ok) {
@@ -174,6 +179,7 @@ function parseJson(raw: string | undefined): unknown {
 
 /** KKV 读取容错：NOT_FOUND 归一化为 undefined（缺省视同未配置），其余错误照常抛。 */
 async function readStateKey(kkv: KkvService, key: string): Promise<string | undefined> {
+  // 解包 throw 边界（错误通道迁移三期门⑦）：同 kkvDelete，工具域异常通道转码点。
   const raw = await kkv.get(SEARCH_KKV_MODULE, key);
   if (!raw.ok) {
     if (isAppError(raw.error, "KKV_NOT_FOUND")) return undefined;

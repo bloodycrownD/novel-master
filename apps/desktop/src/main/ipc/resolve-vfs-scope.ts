@@ -4,54 +4,39 @@
  * @module ipc/resolve-vfs-scope
  */
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
-import type { VfsScopeRequest } from "../../../shared/ipc-types.js";
+import type { IpcResult, VfsScopeRequest } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
-export class VfsScopeError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "VfsScopeError";
-  }
-}
-
-/** Resolves IPC workspace panel to Core VFS scope. */
-export function resolveVfsScopeFromRequest(req: VfsScopeRequest): VfsScope {
+/**
+ * Resolves IPC workspace panel to Core VFS scope.
+ *
+ * scope 参数校验（A 类域校验）走返回值通道，不再 throw：失败即
+ * `{ok:false, error:{code:IPC_INVALID_ARGUMENT}}` 直构 wire payload（code 是
+ * ErrorKey，message 保留原文），handler 侧 `if (!res.ok) return res;` 透传。
+ */
+export function resolveVfsScopeFromRequest(req: VfsScopeRequest): IpcResult<VfsScope> {
   switch (req.workspaceScope) {
     case "global":
-      return { kind: "global" };
+      return { ok: true, data: { kind: "global" } };
     case "global-meta":
       // 技能存储重定位后的全局 meta 域（逻辑前缀 /meta/skills/）
-      return { kind: "global-meta" };
+      return { ok: true, data: { kind: "global-meta" } };
     case "project-meta":
-      if (req.projectId == null || req.projectId === "") {
-        throw new VfsScopeError("缺少 projectId");
-      }
-      return { kind: "project-meta", projectId: req.projectId };
+      if (req.projectId == null || req.projectId === "") return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: "缺少 projectId" } };
+      return { ok: true, data: { kind: "project-meta", projectId: req.projectId } };
     case "session":
-      if (req.projectId == null || req.projectId === "") {
-        throw new VfsScopeError("缺少 projectId");
-      }
-      return { kind: "project", projectId: req.projectId };
+      if (req.projectId == null || req.projectId === "") return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: "缺少 projectId" } };
+      return { ok: true, data: { kind: "project", projectId: req.projectId } };
     case "chat":
-      if (req.projectId == null || req.projectId === "") {
-        throw new VfsScopeError("缺少 projectId");
-      }
-      if (req.sessionId == null || req.sessionId === "") {
-        throw new VfsScopeError("缺少 sessionId");
-      }
-      return {
-        kind: "session",
-        projectId: req.projectId,
-        sessionId: req.sessionId,
-      };
+      if (req.projectId == null || req.projectId === "") return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: "缺少 projectId" } };
+      if (req.sessionId == null || req.sessionId === "") return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: "缺少 sessionId" } };
+      return { ok: true, data: { kind: "session", projectId: req.projectId, sessionId: req.sessionId } };
     case "physical":
       // 物理树是跨域拼接的只读浏览域，不解析为单 scope：
       // 浏览走 getPhysicalVfs（仅 list/read）；写通道在此显式拒绝。
-      throw new VfsScopeError(
-        "physical 为只读物理树浏览域，不提供单 scope VFS 读写",
-      );
+      return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: "physical 为只读物理树浏览域，不提供单 scope VFS 读写" } };
     default:
-      throw new VfsScopeError(`未知 workspaceScope: ${String(req.workspaceScope)}`);
+      return { ok: false, error: { code: "IPC_INVALID_ARGUMENT", message: `未知 workspaceScope: ${String(req.workspaceScope)}` } };
   }
 }
 

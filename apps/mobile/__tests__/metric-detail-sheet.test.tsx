@@ -93,7 +93,7 @@ const DETAIL: SessionUsageDetail = {
 
 /** 渲染 sheet 并 flush 异步取数，返回文案全集与 unmount。 */
 async function renderSheet(
-  props: Partial<React.ComponentProps<typeof MetricDetailSheet>> = {}
+  props: Partial<React.ComponentProps<typeof MetricDetailSheet>> = {},
 ): Promise<{texts: string[]; tree: TestRenderer.ReactTestRenderer}> {
   let tree!: TestRenderer.ReactTestRenderer;
   await act(async () => {
@@ -104,7 +104,7 @@ async function renderSheet(
         contextTokenLabel="远程 = 24k / 128k (19%)"
         onClose={jest.fn()}
         {...props}
-      />
+      />,
     );
   });
   const texts = tree.root
@@ -119,7 +119,8 @@ async function renderSheet(
 
 describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
   it('visible 翻真时按 sessionId 自取一次，渲染最近请求段（cache_creation 缺失出「—」）', async () => {
-    mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
+    // 错误通道迁移二期后走 Result（`!ok` 即 throw）。
+    mockGetSessionUsageDetail.mockResolvedValue({ok: true, value: DETAIL});
     const {texts} = await renderSheet();
     expect(mockGetSessionUsageDetail).toHaveBeenCalledWith('s1');
     expect(mockGetSessionUsageDetail).toHaveBeenCalledTimes(1);
@@ -135,7 +136,8 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
   });
 
   it('会话累计段：可见消息数 / 工具调用 + 口径脚注（累计输入输出已移除）', async () => {
-    mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
+    // 错误通道迁移二期后走 Result（`!ok` 即 throw）。
+    mockGetSessionUsageDetail.mockResolvedValue({ok: true, value: DETAIL});
     const {texts} = await renderSheet();
     const line = texts.join('');
     expect(line).toContain('消息数（可见）11');
@@ -149,16 +151,16 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
   });
 
   it('「上下文占用」行直渲染传入读数（与 chip 同源，不取新数）', async () => {
-    mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
+    // 错误通道迁移二期后走 Result（`!ok` 即 throw）。
+    mockGetSessionUsageDetail.mockResolvedValue({ok: true, value: DETAIL});
     const {texts} = await renderSheet();
     expect(texts.join('')).toContain('上下文占用远程 = 24k / 128k (19%)');
   });
 
   it('空态：last 为 null 出占位行，contextTokenLabel 缺省出「—」', async () => {
     mockGetSessionUsageDetail.mockResolvedValue({
-      last: null,
-      visibleMessageCount: 0,
-      toolUseCount: 0,
+      ok: true,
+      value: {last: null, visibleMessageCount: 0, toolUseCount: 0},
     });
     const {texts} = await renderSheet({contextTokenLabel: undefined});
     const line = texts.join('');
@@ -170,18 +172,14 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
     let resolveDetail: (d: SessionUsageDetail) => void = () => undefined;
     mockGetSessionUsageDetail.mockImplementation(
       () =>
-        new Promise<SessionUsageDetail>(resolve => {
+        new Promise<{ok: true; value: SessionUsageDetail}>(resolve => {
           resolveDetail = resolve;
-        })
+        }),
     );
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
-        <MetricDetailSheet
-          visible
-          sessionId="s1"
-          onClose={jest.fn()}
-        />
+        <MetricDetailSheet visible sessionId="s1" onClose={jest.fn()} />,
       );
     });
     const pendingTexts = tree.root
@@ -189,7 +187,7 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
       .map(node => String(node.props.children));
     expect(pendingTexts.join()).toContain('加载中');
     await act(async () => {
-      resolveDetail(DETAIL);
+      resolveDetail({ok: true, value: DETAIL});
     });
     const readyTexts = tree.root
       .findAllByType(Text)
@@ -202,7 +200,11 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
-        <MetricDetailSheet visible={false} sessionId="s1" onClose={jest.fn()} />
+        <MetricDetailSheet
+          visible={false}
+          sessionId="s1"
+          onClose={jest.fn()}
+        />,
       );
     });
     expect(mockGetSessionUsageDetail).not.toHaveBeenCalled();
@@ -212,13 +214,14 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
   });
 
   it('sheet 触发：指标条 Pressable onPress 打开 sheet（Bar → Sheet 装配）；弹窗开关不改指标条 metrics props', async () => {
-    mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
+    // 错误通道迁移二期后走 Result（`!ok` 即 throw）。
+    mockGetSessionUsageDetail.mockResolvedValue({ok: true, value: DETAIL});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<TriggerHarness />);
     });
     const pressables = tree.root.findAll(
-      node => node.props?.accessibilityRole === 'button' && node.props?.onPress
+      node => node.props?.accessibilityRole === 'button' && node.props?.onPress,
     );
     expect(pressables.length).toBeGreaterThan(0);
     await act(async () => {
@@ -241,10 +244,7 @@ function TriggerHarness() {
   const [open, setOpen] = React.useState(false);
   return (
     <>
-      <ChatStreamMetricsBar
-        metrics={METRICS}
-        onPress={() => setOpen(true)}
-      />
+      <ChatStreamMetricsBar metrics={METRICS} onPress={() => setOpen(true)} />
       <MetricDetailSheet
         visible={open}
         sessionId="s1"

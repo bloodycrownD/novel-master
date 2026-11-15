@@ -1,6 +1,5 @@
 [
   "CloudSyncCoordinator",
-  "CloudSyncError",
   "DB_BACKUP_PROVIDER_TABLES",
   "DEFAULT_LEASE_SECONDS",
   "EMPTY_CLOUD_SYNC_STATUS",
@@ -51,7 +50,6 @@
   "evaluateTest",
   "executeTemplate",
   "getDriver",
-  "isCloudSyncError",
   "isEffectiveLock",
   "isMutatingFileToolName",
   "isMutatingFsCommand",

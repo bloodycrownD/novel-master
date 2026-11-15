@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { CloudSyncError } from "../errors/cloud-sync-errors.js";
+import { AppError } from "@/errors/app-error.js";
 
 /** 租约锁 */
 export type CloudSyncLock = {
@@ -55,14 +55,12 @@ export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
 };
 
 /**
- * 解析并校验 status.json 载荷；失败抛出 {@link CloudSyncError} `INVALID_STATUS`。
+ * 解析并校验 status.json 载荷；失败抛出 `CLOUD_SYNC_INVALID_STATUS`。
  */
 export function parseCloudSyncStatus(raw: unknown): CloudSyncStatus {
   const result = cloudSyncStatusSchema.safeParse(raw);
   if (!result.success) {
-    throw new CloudSyncError("INVALID_STATUS", {key: "error.cloud_sync.invalid_status.schema_invalid"}, {
-      cause: result.error,
-    });
+    throw new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.schema_invalid"}}, {cause: result.error});
   }
   return result.data;
 }

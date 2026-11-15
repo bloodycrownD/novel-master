@@ -150,6 +150,9 @@ function isSessionNotFound(error: unknown): boolean {
  * @returns 校验通过的子会话 id（= 请求的 id 原样）。
  * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
  * @throws 非 `NOT_FOUND` 的 `sessions.get` 错误原样上抛
+ *
+ * 解包 throw 边界（错误通道迁移三期门⑦）：infra 故障与业务失败分流后原样
+ * 上抛，由 tool-runner 的统一 catch 收成 tool error block，不落业务文案。
  */
 async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<string> {
   const sessionResult = await subagent.sessions.get(sessionId);

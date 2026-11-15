@@ -429,6 +429,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return Number(result.changes);
   }
 
+  /**
+   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath `Result` → 领域异常通道转码点——非法路径按仓储边界抛出，由调用链端点 catch 收口。
+   */
   private async rowToRevision(row: Row): Promise<VfsRevision> {
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";

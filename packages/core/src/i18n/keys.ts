@@ -162,6 +162,7 @@ const ERROR_MESSAGE_KEYS = [
   "error.provider.conflict",
   "error.provider.builtin_provider",
   "error.provider.http_error",
+  "error.provider.api_key_not_set",
   "error.provider.model_not_saved",
   "error.provider.unsupported_content",
   "error.provider.unsupported",
@@ -222,6 +223,7 @@ const ERROR_MESSAGE_KEYS = [
   "error.tool.conflict",
   "error.tool.failed",
   "error.tool.forbidden",
+  "error.tool.cancelled",
   // usage：统计入参校验
   "error.usage.invalid_day_format",
   "error.usage.invalid_day",
@@ -252,6 +254,10 @@ const ERROR_MESSAGE_KEYS = [
   "error.vfs.character_card_import_failed.with_progress",
   "error.vfs.zip_import_failed.with_progress",
   "error.vfs.batch_ingest_partial",
+  "error.vfs.single_file_too_large",
+  "error.vfs.single_file_read_failed",
+  "error.vfs.single_file_not_found",
+  "error.vfs.single_file_export_target_invalid",
 ] as const;
 
 /** 展示标签 key（B 桶 68 处去重后的全量清单）。 */

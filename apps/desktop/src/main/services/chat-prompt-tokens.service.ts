@@ -230,6 +230,8 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
+  // 解包 throw 边界：装配失败沿读口既有 catch 收口——resilient（bail→null、
+  // 其余→fallback）、暖机链 .catch、终态钩子 .catch（chat-prompt-tokens 三处）。
   if (!sessionConfig.ok) throw sessionConfig.error;
   const savedModelId = definition.model ?? sessionConfig.value.modelId;
 

@@ -108,7 +108,10 @@ export async function buildSessionPromptInput(
     },
   );
   if (assembled.kind === "failed") {
-    // 组装内的已知失败（如路径解析）：与旧 throw 同路径上抛，不吞成弃权。
+    // 解包 throw 边界：组装内的已知失败（如路径解析）与旧 throw 同路径上抛，
+    // 不吞成弃权；收口在 token 读口三处既有 catch（chat-prompt-tokens 的
+    // resilient / 暖机链 / 终态钩子）与 preview 的 handlePromptRealPreview
+    // catch。哨兵类 ChatPromptBuildBailedError 见 spec-3 §3.6（控制流保留）。
     throw assembled.error;
   }
   if (assembled.kind !== "completed") {

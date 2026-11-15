@@ -129,6 +129,9 @@ export async function buildSessionPromptInput(
   );
   if (assembled.kind === 'failed') {
     // 组装内的已知失败（如路径解析）：与旧 throw 同路径上抛，不吞成弃权。
+    // 解包 throw 边界（错误通道迁移三期门⑦）：build 链整体是异常通道
+    // （bail 哨兵同走 throw），chip 读口 chat-prompt-tokens 紧邻 catch 收成
+    // null 哨兵；desktop 同名 service 同形态。
     throw assembled.error;
   }
   if (assembled.kind !== 'completed') {
