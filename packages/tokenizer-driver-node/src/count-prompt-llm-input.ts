@@ -157,8 +157,8 @@ async function resolveVendorModelId(
 ): Promise<string> {
   if (params.savedModels != null) {
     const saved = await params.savedModels.findById(params.savedModelId.trim());
-    if (saved != null) {
-      return saved.vendorModelId;
+    if (saved.ok && saved.value != null) {
+      return saved.value.vendorModelId;
     }
   }
   return params.savedModelId;

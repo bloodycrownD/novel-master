@@ -52,14 +52,11 @@ export function StorageConfigScreen() {
   const [dbReclaimBytes, setDbReclaimBytes] = useState<number | null>(null);
 
   const refreshCloudConfigured = useCallback(async () => {
-    try {
-      // 仅取本地 configured 布尔值，走 kkv 本地读取，不触发 S3 网络往返；
-      // 远端同步状态（rev/建议拉取等）由 CloudSyncStorageScreen 负责。
-      const status = await getCloudSyncLocalStatus(runtime);
-      setCloudConfigured(status.configured);
-    } catch {
-      setCloudConfigured(false);
-    }
+    // 仅取本地 configured 布尔值，走 kkv 本地读取，不触发 S3 网络往返；
+    // 远端同步状态（rev/建议拉取等）由 CloudSyncStorageScreen 负责。
+    // 读失败（错误通道迁移四期：Result）与旧 catch 同款按未配置呈现。
+    const status = await getCloudSyncLocalStatus(runtime);
+    setCloudConfigured(status.ok && status.value.configured);
   }, [runtime]);
 
   const refreshMaintenanceStats = useCallback(async () => {

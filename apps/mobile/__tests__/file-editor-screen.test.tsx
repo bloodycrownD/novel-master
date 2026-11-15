@@ -14,7 +14,7 @@ const mockRead = jest.fn(async () => ({
   mtimeMs: 1_700_000_000_000,
 }));
 
-const mockWrite = jest.fn(async () => undefined);
+const mockWrite = jest.fn(async () => ({ok: true as const, value: {version: 1}}));
 
 const mockRuntime = {
   globalVfs: () => ({read: mockRead, write: mockWrite}),
@@ -270,9 +270,12 @@ describe('FileEditorScreen', () => {
     mockRouteParams.path = '/notes/readme.md';
     mockRouteParams.scopeKind = 'global';
     mockRead.mockResolvedValue({
-      content: '# Hello\n\nworld',
-      version: 1,
-      mtimeMs: 1_700_000_000_000,
+      ok: true,
+      value: {
+        content: '# Hello\n\nworld',
+        version: 1,
+        mtimeMs: 1_700_000_000_000,
+      },
     });
   });
 
@@ -503,7 +506,7 @@ describe('FileEditorScreen', () => {
       sessionSaveVfsFile: jest.Mock;
     };
     featureFlags.userVfsUnifiedToolTurnFlag.isEnabled.mockReturnValue(true);
-    vfsOps.sessionSaveVfsFile.mockResolvedValue(undefined);
+    vfsOps.sessionSaveVfsFile.mockResolvedValue({ok: true, value: undefined});
 
     // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
     const spy = jest.fn();

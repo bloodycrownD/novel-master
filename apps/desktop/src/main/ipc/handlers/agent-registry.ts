@@ -20,6 +20,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import * as yamlIo from "../../services/agent-yaml.service.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 import { BrowserWindow } from "electron";
 
@@ -119,8 +120,7 @@ export async function handleAgentRegistryUpsert(req: AgentRegistryUpsertRequest)
     registerBuiltinTools(probe);
     const def = req.definition as Parameters<typeof rt.agentRegistry.upsert>[1];
     const opts = { registeredToolNames: probe.list() };
-    await rt.agentRegistry.upsert(req.agentId, def, opts);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.agentRegistry.upsert(req.agentId, def, opts));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -133,7 +133,8 @@ export async function handleAgentRegistryUpdate(req: AgentRegistryUpdateRequest)
     registerBuiltinTools(probe);
     const patch = req.patch as Parameters<typeof rt.agentRegistry.update>[1];
     const opts = { registeredToolNames: probe.list() };
-    await rt.agentRegistry.update(req.agentId, patch, opts);
+    const updated = await rt.agentRegistry.update(req.agentId, patch, opts);
+    if (!updated.ok) return ipcErr(formatIpcError(updated.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -178,7 +179,8 @@ export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBl
       prompts: configForms.layoutFromFormInput(defaultPrompts),
     };
     const opts = { registeredToolNames: probe.list() };
-    await rt.agentRegistry.upsert(agentId, definition, opts);
+    const saved = await rt.agentRegistry.upsert(agentId, definition, opts);
+    if (!saved.ok) return { ok: false, error: formatIpcError(saved.error) };
     return { ok: true, data: { agentId } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

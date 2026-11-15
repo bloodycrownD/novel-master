@@ -130,6 +130,7 @@ function makeFakeRuntime() {
             savedModels.delete(id);
           }
         }
+        return {ok: true as const, value: undefined};
       }),
     },
     providerModels: {
@@ -140,8 +141,14 @@ function makeFakeRuntime() {
       }),
     },
     state: {
-      getCurrentProviderId: jest.fn(async () => state.currentProviderId),
-      getCurrentModelId: jest.fn(async () => state.currentModelId),
+      getCurrentProviderId: jest.fn(async () => ({
+        ok: true as const,
+        value: state.currentProviderId,
+      })),
+      getCurrentModelId: jest.fn(async () => ({
+        ok: true as const,
+        value: state.currentModelId,
+      })),
       resetCurrentProviderId: jest.fn(async () => {
         callOrder.push('resetCurrentProviderId');
         state.currentProviderId = undefined;

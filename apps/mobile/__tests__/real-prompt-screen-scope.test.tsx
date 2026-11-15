@@ -18,7 +18,10 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {RealPromptScreen} from '@/screens/stack/RealPromptScreen';
 
-const mockBuildSegments = jest.fn(async () => [] as unknown[]);
+const mockBuildSegments = jest.fn(async () => ({
+  ok: true as const,
+  value: [] as unknown[],
+}));
 /**
  * 最近一次注册的 useFocusEffect 回调（focus 桩自己登记，供 T-PR1 手动模拟
  * 「聚焦回流」）。只留最新一个：render 期间可能重复登记，模拟回流只需最新。
@@ -241,7 +244,7 @@ describe('RealPromptScreen scope 取值（AM-3）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
-    mockBuildSegments.mockResolvedValue([]);
+    mockBuildSegments.mockResolvedValue({ok: true, value: []});
     setRouteParams(undefined);
   });
 
@@ -278,13 +281,14 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
     setRouteParams({projectId: 'pA', sessionId: 'sA'});
-    mockBuildSegments.mockResolvedValue([]);
+    mockBuildSegments.mockResolvedValue({ok: true, value: []});
   });
 
   it('T-PR1 挂载只取一次、聚焦回流再取一次（useFocusEffect 单通道不双跑）', async () => {
-    mockBuildSegments.mockResolvedValueOnce([
-      {id: 'turn-old', kind: 'assistant', cards: []},
-    ]);
+    mockBuildSegments.mockResolvedValueOnce({
+      ok: true,
+      value: [{id: 'turn-old', kind: 'assistant', cards: []}],
+    });
     // 第二轮挂住不落定：只有取数在途时才看得见「静默档」——非静默档会在
     // refocus 瞬间把整列表换成全屏 spinner，等取数回来又换回来，事后断言
     // 什么都看不见（这条断言的全部价值就在这个在途窗口里）。
@@ -302,7 +306,7 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     // 否则「每读一张子卡返回一次闪一次转圈」。
     expect(hasPromptList(tree)).toBe(true);
 
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
     expect(hasPromptList(tree)).toBe(true);
@@ -318,12 +322,12 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     expect(mockBuildSegments).toHaveBeenCalledTimes(2);
 
     // 新一轮先落定 → 屏上先显示新数据。
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
 
     // 旧请求此刻才回来（无中止点，取数耗时不定）——不能覆盖新一轮结果。
-    first.resolve([{id: 'turn-stale', kind: 'assistant', cards: []}]);
+    first.resolve({ok: true, value: [{id: 'turn-stale', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
   });
@@ -337,7 +341,7 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     await refocus();
     expect(mockBuildSegments).toHaveBeenCalledTimes(2);
 
-    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    second.resolve({ok: true, value: [{id: 'turn-new', kind: 'assistant', cards: []}]});
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
 

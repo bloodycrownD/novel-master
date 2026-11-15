@@ -15,6 +15,7 @@ import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/charac
 import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_INPUT_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES, CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
 import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { utf8ByteLength } from "@/common/encoding.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
@@ -99,9 +100,13 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
     }
 
-    const directoryPath = resolveZipDirectoryPath(options.directoryPath);
+    const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+    if (!directoryPathResult.ok) throw wrapCardImportError(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
     const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
-    if (directoryRow != null && directoryRow.entryKind === "file") {
+    // wrap 对 AppError 直通：repo 查询失败原样上抛，由调用链端点 catch 收口。
+    if (!directoryRow.ok) throw wrapCardImportError(directoryRow.error);
+    if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
       throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
     }
 
@@ -171,11 +176,14 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         if (directoryPath !== "/") {
           const parentCheck = await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`);
+          // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
           if (!parentCheck.ok) throw parentCheck.error;
           const existing = await repoTx.findByPath(sk, directoryPath);
-          if (existing == null) {
-            await repoTx.insertDirectory(sk, directoryPath);
-          } else if (existing.entryKind !== "directory") {
+          if (!existing.ok) throw existing.error;
+          if (existing.value == null) {
+            const inserted = await repoTx.insertDirectory(sk, directoryPath);
+            if (!inserted.ok) throw inserted.error;
+          } else if (existing.value.entryKind !== "directory") {
             throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
           }
         }
@@ -205,6 +213,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
+            // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
             if (!parentCheck.ok) throw parentCheck.error;
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
@@ -265,9 +274,10 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
   }
 
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：卡片解析 `Result` → service 异常通道转码点——失败原样上抛，由调用链端点（handler / 屏幕）catch 收口。
+   * 便捷：bytes → 解析 → import；解析失败走返回值通道（错误通道迁移四期），零写库。
+   * confirmed / 体积闸门与 import 事务链仍按边界抛出，由调用链端点 catch 收口。
    */
-  async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<void> {
+  async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
       throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
@@ -278,7 +288,8 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}});
     }
     const parsed = parseCharacterCardToMdTree(bytes);
-    if (!parsed.ok) throw parsed.error;
+    if (!parsed.ok) return Result.err(parsed.error);
     await this.import(scope, parsed.value, options);
+    return Result.ok(undefined);
   }
 }

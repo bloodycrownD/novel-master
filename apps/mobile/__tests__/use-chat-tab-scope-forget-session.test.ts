@@ -82,7 +82,10 @@ const mockRuntime: any = {
     }),
   },
   state: {
-    getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
+    getCurrentModelId: jest.fn(async () => ({
+      ok: true as const,
+      value: 'openai/gpt-4o-mini',
+    })),
   },
   sessionVfs: jest.fn(() => ({})),
   workplace: jest.fn(() => ({})),
@@ -177,7 +180,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     // 失败路径不得误清：delete 抛错 ⇒ forget 零次（否则会清掉还活着的会话状态）
     mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
     mockRuntime.sessions.delete.mockImplementation(async () => {
-      throw new Error('db locked');
+      return {ok: false as const, error: new Error('db locked')};
     });
     await act(async () => {
       await api.handleDeleteSession('s10');
@@ -190,7 +193,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
   it('T-AM1-2 批量删除部分成功 → 只 forget 已删成功的，失败及其后的不清', async () => {
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       if (id === 's2') {
-        throw new Error('db locked');
+        return {ok: false as const, error: new Error('db locked')};
       }
       deletedSessionIds.push(id);
       return {ok: true, value: undefined};
@@ -224,7 +227,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
     // projects.delete 抛错 ⇒ 一个都不许清
     mockRuntime.sessionStreamUnitManager.forgetSession.mockClear();
     mockRuntime.projects.delete.mockImplementation(async () => {
-      throw new Error('fs busy');
+      return {ok: false as const, error: new Error('fs busy')};
     });
     await act(async () => {
       await api.handleDeleteProjects(['p1']);

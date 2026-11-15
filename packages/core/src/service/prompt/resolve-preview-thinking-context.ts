@@ -51,14 +51,17 @@ export async function resolvePreviewThinkingContext(
 ): Promise<ResolvedPreviewThinkingContext> {
   const { preferences, savedModels, providers, agentModelId, sessionModelId } =
     input;
-  const enabled = await preferences.getThinkingContextEnabled();
+  const enabledPref = await preferences.getThinkingContextEnabled();
+  if (!enabledPref.ok) throw enabledPref.error;
+  const enabled = enabledPref.value;
   const savedModelId = agentModelId ?? sessionModelId;
   let requestThinkingEnabled = true;
   if (savedModelId != null && savedModelId !== "") {
     const saved = await savedModels.findById(savedModelId);
-    if (saved != null) {
+    if (!saved.ok) throw saved.error;
+    if (saved.value != null) {
       requestThinkingEnabled =
-        saved.settings.generation.thinkingLevel !== "off";
+        saved.value.settings.generation.thinkingLevel !== "off";
     }
   }
   const protocol =

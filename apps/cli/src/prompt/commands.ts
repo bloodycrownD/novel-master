@@ -132,8 +132,12 @@ export async function runPrompt(
   }
 
   const source = await readFile(path, "utf8");
-  const layout = loadAgentPromptLayoutFromYaml(source);
-  const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
+  const layoutResult = loadAgentPromptLayoutFromYaml(source);
+  if (!layoutResult.ok) return { kind: "failed", error: layoutResult.error };
+  const layout = layoutResult.value;
+  const resolvedScope = await rt.scope.resolveProjectSession(flags);
+  if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
+  const { projectId, sessionId } = resolvedScope.value;
   const allMessages = await rt.messages.listBySession(sessionId);
   const messages = allMessages.filter((m) => !m.hidden);
   const wtScope = { kind: "session" as const, projectId, sessionId };
@@ -170,7 +174,9 @@ export async function runPrompt(
     if (typeof modelFlag === "string") {
       savedModelId = modelFlag;
     } else {
-      savedModelId = (await rt.state.getCurrentModelId()) ?? undefined;
+      const currentModel = await rt.state.getCurrentModelId();
+      if (!currentModel.ok) return { kind: "failed", error: currentModel.error };
+      savedModelId = currentModel.value ?? undefined;
     }
 
     if (savedModelId == null) {

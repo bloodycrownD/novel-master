@@ -69,10 +69,18 @@ function makeRuntime() {
   return {runtime, secretStore};
 }
 
+
+/** 错误通道迁移四期：status view 已知失败沿 Result 上行；测试只走成功路径。 */
+async function getStatusViewOrThrow(rt: MobileNovelMasterRuntime) {
+  const r = await getCloudSyncStatusView(rt);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
 describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
   it('未配置时 getCloudSyncStatusView 短路返回且不触网', async () => {
     const {runtime} = makeRuntime();
-    const view = await getCloudSyncStatusView(runtime);
+    const view = await getStatusViewOrThrow(runtime);
     expect(view.configured).toBe(false);
     expect(view.remoteRev).toBe(0);
     expect(view.suggestPull).toBe(false);
@@ -81,16 +89,16 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
 
   it('未配置时 pullCloudSync / pushCloudSync 抛 NOT_CONFIGURED', async () => {
     const {runtime} = makeRuntime();
-    await expect(
-      pullCloudSync(runtime, async () => runtime),
-    ).rejects.toMatchObject({
-      name: 'CLOUD_SYNC_NOT_CONFIGURED',
-      key: 'CLOUD_SYNC_NOT_CONFIGURED',
-    });
-    await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
-      name: 'CLOUD_SYNC_NOT_CONFIGURED',
-      key: 'CLOUD_SYNC_NOT_CONFIGURED',
-    });
+    const pullDenied = await pullCloudSync(runtime, async () => runtime);
+    expect(pullDenied.ok).toBe(false);
+    if (!pullDenied.ok) {
+      expect(pullDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
+    }
+    const pushDenied = await pushCloudSync(runtime, undefined);
+    expect(pushDenied.ok).toBe(false);
+    if (!pushDenied.ok) {
+      expect(pushDenied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
+    }
   });
 
   it('service 真实消费 store 写入的配置：SK 缺失即视为未配置', async () => {
@@ -105,14 +113,14 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
       forcePathStyle: false,
     });
     // 配置完整 → configured；远端 rev 读取因 S3 拒绝而回退 0（service 的 catch 兕底）
-    const configuredView = await getCloudSyncStatusView(runtime);
+    const configuredView = await getStatusViewOrThrow(runtime);
     expect(configuredView.configured).toBe(true);
     expect(configuredView.remoteRev).toBe(0);
 
     // SK 被清除后（如用户手动清库），store 装载的 configured 回落 false，
     // service 走未配置短路而不触网
     await secretStore.delete(CLOUD_SYNC_SECRET_REF);
-    const view = await getCloudSyncStatusView(runtime);
+    const view = await getStatusViewOrThrow(runtime);
     expect(view.configured).toBe(false);
     expect(view.remoteRev).toBe(0);
   });

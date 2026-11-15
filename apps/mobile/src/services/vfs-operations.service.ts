@@ -16,6 +16,7 @@ import {
   readUserVfsSaveBaseline,
   remapPathUnderDir,
 } from '@novel-master/core/vfs';
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {
   executeSessionUserVfsOp,
@@ -37,8 +38,8 @@ export async function sessionCreateVfsFile(
   sessionId: string,
   path: string,
   content = '',
-): Promise<void> {
-  await executeSessionUserVfsOp(
+): Promise<Result<void, unknown>> {
+  return executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsCreateFileOp(path, content),
@@ -59,9 +60,9 @@ export async function sessionCreateVfsDirectory(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
   dirPath: string,
-): Promise<void> {
+): Promise<Result<void, unknown>> {
   const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  await executeSessionUserVfsOp(
+  return executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsMkdirOp(normalized),
@@ -83,8 +84,8 @@ export async function sessionDeleteVfsEntry(
   sessionId: string,
   path: string,
   options?: {recursive?: boolean},
-): Promise<void> {
-  await executeSessionUserVfsOp(
+): Promise<Result<void, unknown>> {
+  return executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsDeleteOp(path, options?.recursive ?? true),
@@ -111,16 +112,26 @@ export async function deleteScopedVfsEntry(
     useUserVfsTurn: boolean;
     sessionId?: string;
   },
-): Promise<void> {
+): Promise<Result<void, unknown>> {
   const recursive = options.recursive ?? true;
   if (options.useUserVfsTurn && options.sessionId != null) {
-    await sessionDeleteVfsEntry(runtime, options.sessionId, path, {
-      recursive,
-    });
+    const deleted = await sessionDeleteVfsEntry(
+      runtime,
+      options.sessionId,
+      path,
+      {
+        recursive,
+      },
+    );
+    if (!deleted.ok) return deleted;
   } else {
-    await deleteVfsEntry(vfs, path, {recursive});
+    // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
+    // （deleteVfsEntry 的 void 包装不检查返回值，这里必须自判）。
+    const deleted = await vfs.delete(path, {recursive});
+    if (!deleted.ok) return Result.err(deleted.error);
   }
   await cleanupWorktreeAfterVfsDelete(runtime, scope, path);
+  return Result.ok(undefined);
 }
 
 /** Rename a file or directory (delegates to Core move logic). */
@@ -128,10 +139,11 @@ export async function renameVfsFile(
   vfs: VfsService,
   oldPath: string,
   newPath: string,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 解包 throw 边界：失败落调用方 VfsFileManager 的事件 catch（formatError → toast）。
-  if (!moved.ok) throw moved.error;
+  // 失败沿 Result 接力（错误通道迁移四期）：调用方 VfsFileManager 收口 formatError → toast。
+  if (!moved.ok) return moved;
+  return Result.ok(undefined);
 }
 
 /** 会话 scope：重命名文件经 userVfsTurn。 */
@@ -141,8 +153,8 @@ export async function sessionRenameVfsFile(
   oldPath: string,
   newPath: string,
   options?: ExecuteSessionUserVfsOpOptions,
-): Promise<void> {
-  await executeSessionUserVfsOp(
+): Promise<Result<void, unknown>> {
+  return executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsRenameOp(oldPath, newPath),
@@ -164,8 +176,10 @@ export async function sessionSaveVfsFile(
   path: string,
   content: string,
   lastKnownContent?: string | null,
-): Promise<void> {
-  const baseline = await readUserVfsSaveBaseline(vfs, path);
+): Promise<Result<void, unknown>> {
+  const baselineResult = await readUserVfsSaveBaseline(vfs, path);
+  if (!baselineResult.ok) return Result.err(baselineResult.error);
+  const baseline = baselineResult.value;
   if (
     lastKnownContent != null &&
     baseline != null &&
@@ -180,9 +194,9 @@ export async function sessionSaveVfsFile(
     content,
   );
   if (op == null) {
-    return;
+    return Result.ok(undefined);
   }
-  await executeSessionUserVfsOp(runtime, sessionId, op);
+  return executeSessionUserVfsOp(runtime, sessionId, op);
 }
 
 export {remapPathUnderDir};

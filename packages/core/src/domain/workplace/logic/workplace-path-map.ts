@@ -5,22 +5,24 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * Maps a project template logical path to session scope (identity after unified root).
-  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（mapSessionWorkplacePathToProject 同款），由调用链端点 catch 收口。
+  * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（mapSessionWorkplacePathToProject 同款），决定权交给调用方。
  */
-export function mapProjectWorkplacePathToSession(logical: string): string {
+export function mapProjectWorkplacePathToSession(logical: string): Result<string, AppError> {
   const resolved = normalizePath(logical);
-  if (!resolved.ok) throw resolved.error;
-  return resolved.value;
+  if (!resolved.ok) return Result.err(resolved.error);
+  return Result.ok(resolved.value);
 }
 
 /**
  * Maps a session logical path back to project template scope (identity).
  */
-export function mapSessionWorkplacePathToProject(logical: string): string {
+export function mapSessionWorkplacePathToProject(logical: string): Result<string, AppError> {
   const resolved = normalizePath(logical);
-  if (!resolved.ok) throw resolved.error;
-  return resolved.value;
+  if (!resolved.ok) return Result.err(resolved.error);
+  return Result.ok(resolved.value);
 }

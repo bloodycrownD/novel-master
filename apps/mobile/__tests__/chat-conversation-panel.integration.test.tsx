@@ -166,7 +166,9 @@ import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
  */
 function installMockRuntime(): void {
   Object.assign(mockRuntime, {
-    preferences: {getLlmStreamEnabled: jest.fn(async () => true)},
+    preferences: {
+      getLlmStreamEnabled: jest.fn(async () => ({ok: true as const, value: true})),
+    },
     sessions: {
       get: jest.fn(async () => ({
         ok: true,

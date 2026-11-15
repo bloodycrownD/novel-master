@@ -22,7 +22,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
-type ForkCopySeedError = AppError<"VFS_CONTENT_BLOB_MISSING">;
+type ForkCopySeedError = AppError;
 
 /** {@link ForkCopySeeder.seed} 入参。 */
 interface SeedForkCopyParityInput {
@@ -41,9 +41,7 @@ interface SeedForkCopyParityInput {
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
 class ForkCopySeeder {
-  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；其它仓储异常仍按仓储边界抛出。
-   * 解包 throw 边界（错误通道迁移三期门⑦）：mapper 内 normalizePath 失败按仓储边界抛出（「其它仓储异常仍按仓储边界抛出」裁决的落点），事务由调用方回滚。
-   */
+  /** 缺 blob 是可恢复失败（事务由调用方回滚），返回 `Err`；copyScope 的失败（含 mapper 路径非法）同样经 `Err` 透传，由事务回调解包抛出触发回滚（总纲 §五例外 2）。 */
   async seed(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<Result<void, ForkCopySeedError>> {
     const entries = new SqliteVfsEntryRepository(tx);
     const contentStore = new SqliteVfsContentStore(tx);
@@ -58,8 +56,9 @@ class ForkCopySeeder {
 
     // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
     // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
-    const fileMetas = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
-    const metaByEntryId = new Map(fileMetas.map((m) => [m.entryId, m]));
+    const scanned = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
+    if (!scanned.ok) return Result.err(scanned.error);
+    const metaByEntryId = new Map(scanned.value.map((m) => [m.entryId, m]));
 
     if (heads.length > 0) {
       // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
@@ -103,11 +102,10 @@ class ForkCopySeeder {
 
     const sourceScope = workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId });
     const targetScope = workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId });
-    await workplace.copyScope(sourceScope, targetScope, (p) => {
-      const normalized = normalizePath(p);
-      if (!normalized.ok) throw normalized.error;
-      return normalized.value;
-    });
+    const copied = await workplace.copyScope(sourceScope, targetScope, (p) => normalizePath(p));
+    if (!copied.ok) {
+      return Result.err(copied.error);
+    }
 
     if (heads.length === 0 || newMessages.length === 0) {
       return Result.ok(undefined);

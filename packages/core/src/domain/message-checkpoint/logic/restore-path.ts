@@ -32,12 +32,13 @@ import type { RestorePathError, RestorePathOutcome, RestorePathPrefetch } from "
 
 export type { RestorePathOutcome, RestorePathPrefetch } from "./restore-path-model.js";
 
-async function resolveEntryId(entryRepo: VfsEntryRepository, scopeKeyStr: string, logicalPath: string, prefetch?: RestorePathPrefetch): Promise<number | null> {
+async function resolveEntryId(entryRepo: VfsEntryRepository, scopeKeyStr: string, logicalPath: string, prefetch?: RestorePathPrefetch): Promise<Result<number | null, AppError>> {
   if (prefetch?.entryIdByPath != null) {
-    return prefetch.entryIdByPath.get(logicalPath) ?? null;
+    return Result.ok(prefetch.entryIdByPath.get(logicalPath) ?? null);
   }
   const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-  return entry?.entryId ?? null;
+  if (!entry.ok) return Result.err(entry.error);
+  return Result.ok(entry.value?.entryId ?? null);
 }
 
 /** 解析 checkpoint 记录的旧 entryId：prefetch 优先，其次显式参数。 */
@@ -67,7 +68,9 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
   // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
   let entryId: number | null = null;
   if (entryRepo != null) {
-    entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+    const resolved = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+    if (!resolved.ok) return Result.err(resolved.error);
+    entryId = resolved.value;
   }
 
   if (entryRepo != null && cpEntryId != null && entryId != null && cpEntryId !== entryId) {
@@ -89,17 +92,19 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
       return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
     }
     if (meta.status === "deleted") {
-      try {
-        await vfs.delete(logicalPath);
-      } catch (error) {
-        if (!isAppError(error, "VFS_NOT_FOUND")) {
-          throw error;
-        }
+      const removed = await vfs.delete(logicalPath);
+      if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+        return Result.err(removed.error);
       }
       return Result.ok("deleted");
     }
     if (meta.contentHash != null && meta.contentHash.length > 0) {
-      const liveHash = prefetch?.liveHashByPath != null ? prefetch.liveHashByPath.get(logicalPath) ?? null : await entryRepo.findContentHash(scopeKeyStr, logicalPath);
+      let liveHash: string | null = prefetch?.liveHashByPath?.get(logicalPath) ?? null;
+      if (prefetch?.liveHashByPath == null) {
+        const hash = await entryRepo.findContentHash(scopeKeyStr, logicalPath);
+        if (!hash.ok) return Result.err(hash.error);
+        liveHash = hash.value;
+      }
       if (liveHash != null && liveHash === meta.contentHash) {
         return Result.ok("skipped_same_content_hash");
       }
@@ -117,17 +122,15 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
   }
 
   const rev = await revisionRepo.findByEntryAndVersion(entryId, version);
-  if (rev == null) {
+  if (!rev.ok) return Result.err(rev.error);
+  if (rev.value == null) {
     return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
   }
 
-  if (rev.status === "deleted") {
-    try {
-      await vfs.delete(logicalPath);
-    } catch (error) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
-        throw error;
-      }
+  if (rev.value.status === "deleted") {
+    const removed = await vfs.delete(logicalPath);
+    if (!removed.ok && !isAppError(removed.error, "VFS_NOT_FOUND")) {
+      return Result.err(removed.error);
     }
     return Result.ok("deleted");
   }
@@ -137,10 +140,11 @@ export async function restorePathToRevision(vfs: VfsRestorePort, revisionRepo: V
     return Result.err(ensured.error);
   }
   // find* 已按 ContentStore 解出明文；禁止再用 ?? "" 把未解 NULL 当空串。
-  if (rev.content == null) {
+  if (rev.value.content == null) {
     return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", { descriptor: { key: "error.session_fs.restore_revision_missing", params: { logical_path: logicalPath, revision_version: version } }, logicalPath, revisionVersion: version }));
   }
-  await vfs.resetHeadToVersion(logicalPath, version);
+  const reset = await vfs.resetHeadToVersion(logicalPath, version);
+  if (!reset.ok) return Result.err(reset.error);
   return Result.ok("restored");
 }
 
@@ -160,7 +164,9 @@ export async function restorePathToRevisionWithBackfill(vfs: VfsRestorePort, rev
   }
 
   const scopeKeyStr = scopeKey(scope);
-  const entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+  const resolvedId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+  if (!resolvedId.ok) return Result.err(resolvedId.error);
+  const entryId = resolvedId.value;
   const cpEntryId = resolveCheckpointEntryId(logicalPath, prefetch, checkpointEntryId);
   const contentStore = new SqliteVfsContentStore(tx);
   // backfill 寻址：live entry 优先，entry 已删时用 checkpoint 旧 entryId——
@@ -172,9 +178,10 @@ export async function restorePathToRevisionWithBackfill(vfs: VfsRestorePort, rev
   const diverged = cpEntryId != null && entryId != null && cpEntryId !== entryId;
   const backfillEntryId = diverged ? cpEntryId : entryId ?? cpEntryId;
   const backfilled = await backfillMissingRevisionIfNeeded({ revisionRepo, entryRepo, contentStore }, scopeKeyStr, logicalPath, backfillEntryId, version);
+  if (!backfilled.ok) return Result.err(backfilled.error);
   const outcome = await restorePathToRevision(vfs, revisionRepo, scope, logicalPath, version, liveHeadByPath, entryRepo, prefetch, checkpointEntryId, contentStore);
   if (!outcome.ok) {
     return Result.err(outcome.error);
   }
-  return Result.ok({ backfilled, outcome: outcome.value });
+  return Result.ok({ backfilled: backfilled.value, outcome: outcome.value });
 }

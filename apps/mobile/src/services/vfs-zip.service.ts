@@ -10,6 +10,7 @@ import {
   type VfsScope,
   type VfsZipImportOptions,
 } from '@novel-master/core/vfs';
+import {Result} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, pickAndReadBytes} from './document-io';
 import {blobFs, bytesToBase64} from './rn-file-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -41,7 +42,10 @@ async function resolveWorkspaceZipName(
   }
   try {
     const project = await runtime.projects.get(projectId);
-    if (!project.ok) throw project.error;
+    // 解析失败回退备用名，不阻断导出（错误通道迁移四期：Result 失败同款兜底）。
+    if (!project.ok) {
+      return WORKSPACE_FALLBACK_ZIP_NAME;
+    }
     return `${project.value.name}.zip`;
   } catch {
     return WORKSPACE_FALLBACK_ZIP_NAME;
@@ -95,13 +99,15 @@ export async function exportVfsZip(
     readonly directoryPath?: string;
     readonly fileName?: string;
   } = {},
-): Promise<'saved' | 'cancelled'> {
+): Promise<Result<'saved' | 'cancelled', AppError>> {
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, {directoryPath});
+  const exported = await zipSvc.export(scope, {directoryPath});
+  if (!exported.ok) return Result.err(exported.error);
+  const bytes = exported.value;
   assertZipArchive(bytes);
 
   const base = zipBaseNameFromPath(directoryPath);
@@ -111,12 +117,14 @@ export async function exportVfsZip(
       ? `${base}.zip`
       : await resolveWorkspaceZipName(runtime, scope));
 
-  return exportBytesViaDocumentPicker({
-    fileName: zipName,
-    mimeType: 'application/zip',
-    write: tmpPath =>
-      blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64'),
-  });
+  return Result.ok(
+    await exportBytesViaDocumentPicker({
+      fileName: zipName,
+      mimeType: 'application/zip',
+      write: tmpPath =>
+        blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64'),
+    }),
+  );
 }
 
 /** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
@@ -142,10 +150,10 @@ export async function importVfsZip(
   options: Pick<VfsZipImportOptions, 'confirmed'> & {
     readonly directoryPath?: string;
   },
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const zipBytes = await pickZipFileBytes();
   if (zipBytes == null) {
-    return;
+    return Result.ok(undefined);
   }
 
   const directoryPath =
@@ -153,7 +161,7 @@ export async function importVfsZip(
       ? '/'
       : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  await zipSvc.import(scope, zipBytes, {
+  return zipSvc.import(scope, zipBytes, {
     confirmed: options.confirmed,
     directoryPath,
   });

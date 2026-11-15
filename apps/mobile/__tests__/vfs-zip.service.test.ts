@@ -100,7 +100,7 @@ describe('vfs-zip.service', () => {
       export: mockExport,
       import: mockImport,
     });
-    mockExport.mockResolvedValue(VALID_ZIP_BYTES);
+    mockExport.mockResolvedValue({ok: true, value: VALID_ZIP_BYTES});
     mockSaveDocuments.mockResolvedValue([
       {uri: 'content://saved', name: 'x.zip', error: null},
     ]);
@@ -135,8 +135,8 @@ describe('vfs-zip.service', () => {
   });
 
   it('writes cache zip then opens save-as dialog', async () => {
-    const result = await exportVfsZip(runtime, scope);
-    expect(result).toBe('saved');
+    const exported = await exportVfsZip(runtime, scope);
+    expect(exported).toEqual({ok: true, value: 'saved'});
     expect(mockWriteFile).toHaveBeenCalledWith(
       '/cache/我的项目.zip',
       expect.any(String),
@@ -170,8 +170,8 @@ describe('vfs-zip.service', () => {
 
   it('returns cancelled when save-as dialog dismissed', async () => {
     mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
-    const result = await exportVfsZip(runtime, scope);
-    expect(result).toBe('cancelled');
+    const exported = await exportVfsZip(runtime, scope);
+    expect(exported).toEqual({ok: true, value: 'cancelled'});
   });
 
   it('import rejects truncated ZIP missing EOCD', async () => {

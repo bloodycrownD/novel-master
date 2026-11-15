@@ -8,8 +8,8 @@
  */
 
 import {TdbcError} from "../infra/tdbc/errors.js";
-import type {MessageParams} from "./i18n.js";
-import type {CoreMessageDescriptor, CoreMessageKey} from "../i18n/keys.js";
+import {AppError} from "../errors/app-error.js";
+import type {CoreMessageDescriptor} from "../i18n/keys.js";
 import {resolveLocalizedMessage} from "../i18n/localized-message.js";
 
 /**
@@ -29,34 +29,23 @@ export function errorText(error: unknown): string {
 }
 
 /**
- * normalizeYamlError 的 descriptor 通道产品：`message` 取 key 原文，
- * `messageKey`/`messageParams` 供边界 `userMessageOf` + translator 翻译。
- */
-class LocalizedYamlError extends Error {
-    readonly messageKey: CoreMessageKey;
-    readonly messageParams: MessageParams;
-
-    constructor(descriptor: CoreMessageDescriptor) {
-        super(resolveLocalizedMessage(descriptor).text);
-        this.name = "LocalizedYamlError";
-        this.messageKey = descriptor.key;
-        this.messageParams = descriptor.params ?? {};
-    }
-}
-
-/**
  * 把任意错误归一成 `Error`，并在前面拼上业务 fallback 文案。
  *
  * 跨端 YAML 导入导出都会用这个函数把 decode / 落库阶段的异常统一包装，
  * 这样调用方拿到的永远是带上下文提示的 Error，不用各自再判一次类型。
  *
- * fallback 传 descriptor 时走 i18n 通道（spec §5 G1.9）：原错误文本经
- * {@link errorText} 进 `{reason}` 参数，不做字符串拼接；传 string 时保持
- * 旧的 `fallback：message` 拼接（apps 侧自有 fallback 文案仍走这条通道）。
+ * fallback 传 descriptor 时走 i18n 通道（spec §5 G1.9）：产品为
+ * `AppError("CONFIG_DECODE_INVALID_SCHEMA")`，fallback descriptor（reason 参数
+ * 已混入，经 {@link errorText} 取原错误文本，不做字符串拼接）经 params.descriptor
+ * 接管 messageKey/messageParams，detail 承载同一份翻译文本作 message——
+ * `userMessageOf` 与直接读 `message` 两条消费路径都保持旧 LocalizedYamlError 的
+ * 文案；传 string 时保持旧的 `fallback：message` 拼接（apps 侧自有 fallback
+ * 文案仍走这条通道）。
  */
 export function normalizeYamlError(error: unknown, fallback: string | CoreMessageDescriptor): Error {
     if (typeof fallback !== "string") {
-        return new LocalizedYamlError({key: fallback.key, params: {...fallback.params, reason: errorText(error)}});
+        const descriptor = {key: fallback.key, params: {...fallback.params, reason: errorText(error)}};
+        return new AppError("CONFIG_DECODE_INVALID_SCHEMA", {descriptor, detail: resolveLocalizedMessage(descriptor).text});
     }
     if (error instanceof Error) {
         return new Error(`${fallback}：${error.message}`);

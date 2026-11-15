@@ -61,14 +61,16 @@ export function AboutScreen() {
 
   const refresh = useCallback(async () => {
     if (!appUi) return;
+    // 读偏好失败按「无记录」呈现（错误通道迁移四期：reader 走 Result），
+    // 与旧异常通道 `void refresh()` 丢弃 rejection 的可见结果一致。
     const [auto, status, remote] = await Promise.all([
       readUpdatesAutoCheck(appUi),
       readLastCheckStatus(appUi),
       readLastCheckRemoteVersion(appUi),
     ]);
     setAutoCheck(auto);
-    setLastStatus(status);
-    setLastRemote(remote);
+    setLastStatus(status.ok ? status.value : undefined);
+    setLastRemote(remote.ok ? remote.value : undefined);
   }, [appUi]);
 
   useEffect(() => {

@@ -75,8 +75,8 @@ describe("handleVfsDelete", () => {
     const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
     assert.deepEqual(keysAfter, keysBefore);
 
-    await assert.rejects(
-      () => rt.sessionVfs(projectId, sessionId).read("/gone.md"),
-    );
+    // 错误通道迁移四期：read 已知失败沿 Result.err（不再 reject）。
+    const missing = await rt.sessionVfs(projectId, sessionId).read("/gone.md");
+    assert.equal(missing.ok, false);
   });
 });

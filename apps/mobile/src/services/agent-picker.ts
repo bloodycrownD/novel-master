@@ -1,6 +1,7 @@
 /**
  * Agent picker data + selection (shared by AgentPickerModal).
  */
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export const AGENT_PICKER_EMPTY_MESSAGE =
@@ -10,6 +11,11 @@ export interface AgentPickerRow {
   readonly agentId: string;
   readonly label: string;
 }
+
+export type AgentPickerRows = {
+  rows: AgentPickerRow[];
+  currentId: string | undefined;
+};
 
 async function loadAgentRows(
   runtime: MobileNovelMasterRuntime,
@@ -32,13 +38,15 @@ async function loadAgentRows(
   return rows;
 }
 
+/** 失败沿 `Result.err` 接力（错误通道迁移四期），调用方弹窗 formatError 收口。 */
 export async function loadAgentPickerRows(
   runtime: MobileNovelMasterRuntime,
-): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
+): Promise<Result<AgentPickerRows, AppError>> {
   const explicitId = await runtime.state.getCurrentAgentId();
-  const currentId = explicitId ?? undefined;
+  if (!explicitId.ok) return Result.err(explicitId.error);
+  const currentId = explicitId.value ?? undefined;
   const rows = await loadAgentRows(runtime);
-  return {rows, currentId};
+  return Result.ok({rows, currentId});
 }
 
 export function isAgentPickerRowSelected(
@@ -62,17 +70,17 @@ export async function selectWorkspaceAgent(
  *
  * 会话始终独立持有 agentId（core 已移除 workspace 回退层），
  * currentId 直接取 `sessionConfig.agentId`。
-  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛——core Result → 端内异常通道转码边界，调用方屏幕 catch → formatError → toast 收口。
+ * 失败沿 `Result.err` 接力（错误通道迁移四期），调用方弹窗 formatError 收口。
  */
 export async function loadSessionAgentPickerRows(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
-): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
+): Promise<Result<AgentPickerRows, AppError>> {
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
-  if (!sessionConfig.ok) throw sessionConfig.error;
+  if (!sessionConfig.ok) return Result.err(sessionConfig.error);
   const currentId = sessionConfig.value.agentId;
   const rows = await loadAgentRows(runtime);
-  return {rows, currentId};
+  return Result.ok({rows, currentId});
 }
 
 /**

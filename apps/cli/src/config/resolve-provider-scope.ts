@@ -5,6 +5,7 @@
  */
 
 import type { PersistentState } from "@novel-master/core";
+import { type AppError, Result } from "@novel-master/core/errors";
 import {
   assertSavedModelUuid,
   type ProviderServiceBundle,
@@ -22,14 +23,15 @@ function flagString(
 export async function resolveProviderId(
   flags: ReadonlyMap<string, string | true>,
   state: PersistentState,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const fromFlag = flagString(flags, "providerId");
   if (fromFlag != null) {
-    return fromFlag;
+    return Result.ok(fromFlag);
   }
   const fromState = await state.getCurrentProviderId();
-  if (fromState != null && fromState !== "") {
-    return fromState;
+  if (!fromState.ok) return Result.err(fromState.error);
+  if (fromState.value != null && fromState.value !== "") {
+    return Result.ok(fromState.value);
   }
   throw new Error(
     "Missing --providerId <uuid> (or run: nm provider use --providerId <uuid>)",
@@ -37,12 +39,12 @@ export async function resolveProviderId(
 }
 
 /** Unwraps the Result-based saved-model lookup at the CLI boundary.
- * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * 解包改接力（错误通道迁移四期）：saved-model 查询的 `Result` 失败沿返回值交给上层，由 main.ts 统一出口收口。
  */
-async function requireSavedModelId(savedModelId: string, savedModels: ProviderServiceBundle["savedModelRepo"]): Promise<string> {
+async function requireSavedModelId(savedModelId: string, savedModels: ProviderServiceBundle["savedModelRepo"]): Promise<Result<string, AppError>> {
   const saved = await assertSavedModelUuid(savedModelId, savedModels);
-  if (!saved.ok) throw saved.error;
-  return saved.value.id;
+  if (!saved.ok) return Result.err(saved.error);
+  return Result.ok(saved.value.id);
 }
 
 /** Resolves saved model UUID: flag > state > error. */
@@ -50,14 +52,15 @@ export async function resolveModelId(
   flags: ReadonlyMap<string, string | true>,
   state: PersistentState,
   savedModels: ProviderServiceBundle["savedModelRepo"],
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const fromFlag = flagString(flags, "modelId");
   if (fromFlag != null) {
     return requireSavedModelId(fromFlag, savedModels);
   }
   const fromState = await state.getCurrentModelId();
-  if (fromState != null && fromState !== "") {
-    return requireSavedModelId(fromState, savedModels);
+  if (!fromState.ok) return Result.err(fromState.error);
+  if (fromState.value != null && fromState.value !== "") {
+    return requireSavedModelId(fromState.value, savedModels);
   }
   throw new Error(
     "Missing --modelId <uuid> (or run: nm model use --modelId <uuid>)",

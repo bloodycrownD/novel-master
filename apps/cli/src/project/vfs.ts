@@ -8,6 +8,7 @@ import { type TdbcConnection } from "@novel-master/core";
 
 
 import { type VfsService } from "@novel-master/core/vfs";
+import { type AppError, type Result } from "@novel-master/core/errors";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runExportZip } from "../vfs/commands/export-zip.js";
 import { runImportCharacterCard } from "../vfs/commands/import-character-card.js";
@@ -23,7 +24,7 @@ import { parseCliArgs } from "../vfs/parse-args.js";
 
 const PROJECT_VFS_COMMANDS: Record<
   string,
-  (vfs: VfsService, args: readonly string[]) => Promise<void>
+  (vfs: VfsService, args: readonly string[]) => Promise<Result<void, AppError>>
 > = {
   list: runList,
   mkdir: runMkdir,
@@ -35,41 +36,41 @@ const PROJECT_VFS_COMMANDS: Record<
   delete: runDelete,
 };
 
+/**
+ * vfs 子命令的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
+ */
 export async function runProjectVfs(
   conn: TdbcConnection,
   projectVfs: (projectId: string) => VfsService,
   projectId: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
   const { positional } = parseCliArgs(vfsRest);
   const sub = positional[0];
   if (sub === "export-zip") {
     const idx = vfsRest.indexOf(sub);
-    await runExportZip(
+    return runExportZip(
       conn,
       { kind: "project", projectId },
       vfsRest.slice(idx + 1),
     );
-    return;
   }
   if (sub === "import-zip") {
     const idx = vfsRest.indexOf(sub);
-    await runImportZip(
+    return runImportZip(
       conn,
       { kind: "project", projectId },
       vfsRest.slice(idx + 1),
     );
-    return;
   }
   if (sub === "import-character-card") {
     const idx = vfsRest.indexOf(sub);
-    await runImportCharacterCard(
+    return runImportCharacterCard(
       conn,
       { kind: "project", projectId },
       vfsRest.slice(idx + 1),
     );
-    return;
   }
   if (sub == null || !(sub in PROJECT_VFS_COMMANDS)) {
     throw new Error(
@@ -78,5 +79,5 @@ export async function runProjectVfs(
   }
   const vfs = projectVfs(projectId);
   const idx = vfsRest.indexOf(sub);
-  await PROJECT_VFS_COMMANDS[sub]!(vfs, vfsRest.slice(idx + 1));
+  return PROJECT_VFS_COMMANDS[sub]!(vfs, vfsRest.slice(idx + 1));
 }

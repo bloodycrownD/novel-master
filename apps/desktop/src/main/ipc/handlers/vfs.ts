@@ -32,6 +32,8 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
+import { type AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 
 import {
   buildUserVfsDeleteOp,
@@ -76,6 +78,7 @@ import {
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { createLogger } from "@novel-master/core/log";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 
@@ -104,16 +107,20 @@ function parentOfLogicalPath(logicalPath: string): string {
 async function findEntryKindBeforeRename(
   vfs: Awaited<ReturnType<typeof getVfsForScope>>,
   oldPath: string,
-): Promise<"directory" | "file" | undefined> {
+): Promise<Result<"directory" | "file" | undefined, AppError>> {
   const siblings = await vfs.list(parentOfLogicalPath(oldPath));
-  return siblings.find((e) => e.path === oldPath)?.kind;
+  // 已知失败沿 Result 上行（错误通道迁移四期），调用方 handleVfsRename 转码。
+  if (!siblings.ok) return Result.err(siblings.error);
+  return Result.ok(siblings.value.find((e) => e.path === oldPath)?.kind);
 }
 
 async function readBaselineContent(
   vfs: Awaited<ReturnType<typeof getVfsForScope>>,
   path: string,
-): Promise<string | null> {
-  return readUserVfsSaveBaseline(vfs, path);
+): Promise<Result<string | null, AppError>> {
+  const baseline = await readUserVfsSaveBaseline(vfs, path);
+  if (!baseline.ok) return Result.err(baseline.error);
+  return Result.ok(baseline.value);
 }
 
 export async function handleVfsRead(
@@ -126,12 +133,13 @@ export async function handleVfsRead(
     const scope = scopeRes.data;
     const vfs = getVfsForScope(rt, scope);
     const result = await vfs.read(req.path);
+    if (!result.ok) return ipcErr(formatIpcError(result.error));
     return {
       ok: true,
       data: {
-        content: result.content,
-        version: result.version,
-        mtimeMs: result.mtimeMs,
+        content: result.value.content,
+        version: result.value.version,
+        mtimeMs: result.value.mtimeMs,
       },
     };
   } catch (err) {
@@ -150,7 +158,9 @@ export async function handleVfsWrite(
     const vfs = getVfsForScope(rt, scope);
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
-      const baseline = await readBaselineContent(vfs, req.path);
+      const baselineRes = await readBaselineContent(vfs, req.path);
+      if (!baselineRes.ok) return ipcErr(formatIpcError(baselineRes.error));
+      const baseline = baselineRes.value;
       if (
         req.lastKnownContent != null &&
         baseline != null &&
@@ -165,7 +175,8 @@ export async function handleVfsWrite(
         req.content,
       );
       if (op != null) {
-        await executeSessionUserVfsOp(rt, scope.sessionId, op);
+        const exec = await executeSessionUserVfsOp(rt, scope.sessionId, op);
+        if (!exec.ok) return ipcErr(formatIpcError(exec.error));
       }
       pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
@@ -189,11 +200,12 @@ export async function handleVfsMkdir(
     const scope = scopeRes.data;
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
-      await executeSessionUserVfsOp(
+      const exec = await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
         buildUserVfsMkdirOp(req.path),
       );
+      if (!exec.ok) return ipcErr(formatIpcError(exec.error));
       pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
     }
@@ -218,11 +230,12 @@ export async function handleVfsDelete(
     const recursive = req.recursive ?? true;
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
-      await executeSessionUserVfsOp(
+      const exec = await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
         buildUserVfsDeleteOp(req.path, recursive),
       );
+      if (!exec.ok) return ipcErr(formatIpcError(exec.error));
     } else {
       const vfs = getVfsForScope(rt, scope);
       await deleteVfsEntry(vfs, req.path, { recursive });
@@ -249,18 +262,20 @@ export async function handleVfsRename(
 
     if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       // kind 必须在 execute 之前判定：execute 后旧路径已消失，parent list 查不到。
-      const kindBeforeExecute = await findEntryKindBeforeRename(
+      const kindRes = await findEntryKindBeforeRename(
         getVfsForScope(rt, scope),
         req.oldPath,
       );
-      await executeSessionUserVfsOp(
+      if (!kindRes.ok) return ipcErr(formatIpcError(kindRes.error));
+      const exec = await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
         buildUserVfsRenameOp(req.oldPath, req.newPath),
       );
+      if (!exec.ok) return ipcErr(formatIpcError(exec.error));
       // 目录 rename 后迁移 workplace 规则（对齐 mobile 的 migrateWorkplaceDirRename
       // 口径）；文件不迁移规则，与 mobile 一致。
-      if (kindBeforeExecute === "directory") {
+      if (kindRes.value === "directory") {
         await getWorkplaceForScope(rt, scope).renameRulesUnderLogicalPrefix(
           req.oldPath,
           req.newPath,
@@ -271,9 +286,12 @@ export async function handleVfsRename(
     }
 
     const vfs = getVfsForScope(rt, scope);
-    const kind = await findEntryKindBeforeRename(vfs, req.oldPath);
+    const kindRes = await findEntryKindBeforeRename(vfs, req.oldPath);
+    if (!kindRes.ok) return ipcErr(formatIpcError(kindRes.error));
+    const kind = kindRes.value;
     if (kind === "directory") {
-      await renameVfsDirectory(vfs, req.oldPath, req.newPath);
+      const movedDir = await renameVfsDirectory(vfs, req.oldPath, req.newPath);
+      if (!movedDir.ok) return ipcErr(formatIpcError(movedDir.error));
       // 目录 rename 后迁移 workplace 规则（排布对齐 handleVfsDelete 的规则
       // 清理）：不迁移的话残留规则会把旧路径整链渲染成幽灵目录，对它再操作
       // 报 NOT_FOUND。
@@ -282,7 +300,8 @@ export async function handleVfsRename(
         req.newPath,
       );
     } else {
-      await renameVfsFile(vfs, req.oldPath, req.newPath);
+      const movedFile = await renameVfsFile(vfs, req.oldPath, req.newPath);
+      if (!movedFile.ok) return ipcErr(formatIpcError(movedFile.error));
     }
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
@@ -299,13 +318,14 @@ export async function handleVfsZipExport(
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
-    const result = await exportVfsZipWithDialog(
-      rt,
-      scope,
-      { directoryPath: req.directoryPath, fileName: req.fileName },
-      focusedWindow(),
+    return toIpcResult(
+      await exportVfsZipWithDialog(
+        rt,
+        scope,
+        { directoryPath: req.directoryPath, fileName: req.fileName },
+        focusedWindow(),
+      ),
     );
-    return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -415,13 +435,14 @@ export async function handleVfsFileExport(
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
-    const result = await exportVfsFileWithDialog(
-      rt,
-      scope,
-      { logicalPath: req.logicalPath },
-      focusedWindow(),
+    return toIpcResult(
+      await exportVfsFileWithDialog(
+        rt,
+        scope,
+        { logicalPath: req.logicalPath },
+        focusedWindow(),
+      ),
     );
-    return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -435,11 +456,15 @@ export async function handleVfsBatchIngestFromPaths(
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
-    const outcome = await ingestVfsFromHostPaths(rt, scope, {
+    const ingested = await ingestVfsFromHostPaths(rt, scope, {
       targetDir: req.targetDir,
       hostPaths: req.hostPaths,
       overwriteConfirmed: req.overwriteConfirmed === true,
     });
+    // plan/apply 的已知失败沿 Result 到达，就地转码（错误通道迁移四期）；
+    // writer 协议内的部分失败不落 err（core 聚合进 report.failed）。
+    if (!ingested.ok) return ipcErr(formatIpcError(ingested.error));
+    const outcome = ingested.value;
     if (outcome.status === "applied") {
       pushWorkspaceMutated(req);
     }
@@ -459,8 +484,7 @@ export async function handleVfsBatchExportStage(
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
-    const staged = await stageVfsBatchExport(rt, scope, req.logicalPaths);
-    return { ok: true, data: staged };
+    return toIpcResult(await stageVfsBatchExport(rt, scope, req.logicalPaths));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

@@ -31,7 +31,7 @@ function stubRuntime(): MobileNovelMasterRuntime {
 describe('runManualCompaction（r3-orc-1）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetHideStartDepth.mockResolvedValue(3);
+    mockGetHideStartDepth.mockResolvedValue({ok: true, value: 3});
     mockRunCompaction.mockResolvedValue({ok: true});
   });
 

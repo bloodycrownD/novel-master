@@ -183,7 +183,10 @@ export async function resolveStreamTokenVendorModelId(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       sessionId,
     );
-    if (!sessionConfig.ok) throw sessionConfig.error;
+    // 失败 → null（错误通道迁移四期：与旧 catch 同款兜底，不抛）。
+    if (!sessionConfig.ok) {
+      return null;
+    }
     let savedModelId = sessionConfig.value.modelId;
     if (savedModelId == null || savedModelId.length === 0) {
       const definition = await runtime.agentRegistry.get(

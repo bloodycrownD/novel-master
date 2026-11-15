@@ -1,11 +1,11 @@
-// legacy-port: VfsService — 端口直抛 AppError，NOT_FOUND / IS_DIRECTORY / ALREADY_EXISTS 判定走 isAppError。
 /**
  * 突变路径 head 快照与补偿回滚。
  *
  * @module domain/vfs/logic/restore-mutating-path-heads
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 
@@ -73,78 +73,66 @@ function captureDirectorySnapshot(path: string, entries: readonly VfsListEntry[]
 /**
  * 读取 mutating paths 当前 head，供 executeOp 失败时回滚。
  */
-export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: readonly string[]): Promise<Map<string, MutatingPathHeadSnapshot>> {
+export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: readonly string[]): Promise<Result<Map<string, MutatingPathHeadSnapshot>, AppError>> {
   const snapshots = new Map<string, MutatingPathHeadSnapshot>();
   for (const path of paths) {
-    try {
-      const read = await vfs.read(path);
+    const read = await vfs.read(path);
+    if (read.ok) {
       snapshots.set(path, {
         kind: "present",
         path,
-        content: read.content,
-        version: read.version,
+        content: read.value.content,
+        version: read.value.version,
       });
-    } catch (error: unknown) {
-      if (isAppError(error, "VFS_NOT_FOUND")) {
-        try {
-          const entries = await vfs.list(path, { recursive: true });
-          if (entries.length > 0) {
-            snapshots.set(path, captureDirectorySnapshot(path, entries));
-          } else {
-            snapshots.set(path, { kind: "absent", path });
-          }
-        } catch (listError: unknown) {
-          if (isAppError(listError, "VFS_NOT_FOUND")) {
-            snapshots.set(path, { kind: "absent", path });
-          } else {
-            throw listError;
-          }
-        }
-        continue;
-      }
-      if (isAppError(error, "VFS_IS_DIRECTORY")) {
-        const entries = await vfs.list(path, { recursive: true });
-        snapshots.set(path, captureDirectorySnapshot(path, entries));
-        continue;
-      }
-      throw error;
+      continue;
     }
+    // IS_DIRECTORY：路径有 directory 行（空目录也是真实目录），采集子树文件 head。
+    if (read.error.key === "VFS_IS_DIRECTORY") {
+      const entries = await vfs.list(path, { recursive: true });
+      if (!entries.ok) return Result.err(entries.error);
+      snapshots.set(path, captureDirectorySnapshot(path, entries.value));
+      continue;
+    }
+    if (read.error.key !== "VFS_NOT_FOUND") {
+      return Result.err(read.error);
+    }
+    const entries = await vfs.list(path, { recursive: true });
+    if (entries.ok) {
+      if (entries.value.length > 0) {
+        snapshots.set(path, captureDirectorySnapshot(path, entries.value));
+      } else {
+        snapshots.set(path, { kind: "absent", path });
+      }
+      continue;
+    }
+    if (entries.error.key !== "VFS_NOT_FOUND") {
+      return Result.err(entries.error);
+    }
+    snapshots.set(path, { kind: "absent", path });
   }
-  return snapshots;
+  return Result.ok(snapshots);
 }
 
 /**
  * directory 补偿：快照外 hardDelete + 快照内 resetHead（禁 write 注水）。
  */
-async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathHeadDirectory): Promise<void> {
+async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathHeadDirectory): Promise<Result<void, AppError>> {
   // 空目录：硬清 D 下残留文件/子树后，确保目录存在
   if (snapshot.files.length === 0) {
-    try {
-      await vfs.hardDelete(snapshot.path, { recursive: true });
-    } catch (error: unknown) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
-        throw error;
-      }
-    }
-    try {
-      await vfs.mkdir(snapshot.path);
-    } catch (error: unknown) {
-      if (!isAppError(error, "VFS_ALREADY_EXISTS")) {
-        throw error;
-      }
-    }
-    return;
+    const wiped = await vfs.hardDelete(snapshot.path, { recursive: true });
+    if (!wiped.ok && wiped.error.key !== "VFS_NOT_FOUND") return Result.err(wiped.error);
+    const made = await vfs.mkdir(snapshot.path);
+    if (!made.ok && made.error.key !== "VFS_ALREADY_EXISTS") return Result.err(made.error);
+    return Result.ok(undefined);
   }
 
   // list 遇 NOT_FOUND ≡ 无快照外文件
   let currentFilePaths: string[] = [];
-  try {
-    const entries = await vfs.list(snapshot.path, { recursive: true });
-    currentFilePaths = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
-  } catch (error: unknown) {
-    if (!isAppError(error, "VFS_NOT_FOUND")) {
-      throw error;
-    }
+  const listed = await vfs.list(snapshot.path, { recursive: true });
+  if (listed.ok) {
+    currentFilePaths = listed.value.filter((entry) => entry.kind === "file").map((entry) => entry.path);
+  } else if (listed.error.key !== "VFS_NOT_FOUND") {
+    return Result.err(listed.error);
   }
 
   const snapshotPaths = new Set(snapshot.files.map((file) => file.path));
@@ -152,54 +140,46 @@ async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathH
     if (snapshotPaths.has(filePath)) {
       continue;
     }
-    try {
-      await vfs.hardDelete(filePath, { recursive: true });
-    } catch (error: unknown) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
-        throw error;
-      }
-    }
+    const wiped = await vfs.hardDelete(filePath, { recursive: true });
+    if (!wiped.ok && wiped.error.key !== "VFS_NOT_FOUND") return Result.err(wiped.error);
   }
 
   // 快照内只用 version 拨回
   for (const file of snapshot.files) {
-    await vfs.resetHeadToVersion(file.path, file.version);
+    const reset = await vfs.resetHeadToVersion(file.path, file.version);
+    if (!reset.ok) return Result.err(reset.error);
   }
+  return Result.ok(undefined);
 }
 
 /**
  * 将给定 paths 恢复为 snapshots 中记录的起始 head。
  *
- * @remarks 走 resetHeadToVersion / hardDelete 补偿原语，禁止 write 注水。
+ * @remarks 走 resetHeadToVersion / hardDelete 补偿原语，禁止 write 注水；
+ *   多路径失败聚合成 `VFS_RESTORE_FAILED`（保留 CompositeError 的多 cause 语义）。
  */
-export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: ReadonlyMap<string, MutatingPathHeadSnapshot>, paths: readonly string[]): Promise<void> {
+export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: ReadonlyMap<string, MutatingPathHeadSnapshot>, paths: readonly string[]): Promise<Result<void, AppError>> {
   const errors: unknown[] = [];
   for (const path of paths) {
     const snapshot = snapshots.get(path);
     if (snapshot == null) {
       continue;
     }
-    try {
-      if (snapshot.kind === "absent") {
-        try {
-          await vfs.hardDelete(path, { recursive: true });
-        } catch (error: unknown) {
-          if (!isAppError(error, "VFS_NOT_FOUND")) {
-            throw error;
-          }
-        }
-        continue;
-      }
-      if (snapshot.kind === "directory") {
-        await restoreDirectorySnapshot(vfs, snapshot);
-        continue;
-      }
-      await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
-    } catch (error: unknown) {
-      errors.push(error);
+    if (snapshot.kind === "absent") {
+      const wiped = await vfs.hardDelete(path, { recursive: true });
+      if (!wiped.ok && wiped.error.key !== "VFS_NOT_FOUND") errors.push(wiped.error);
+      continue;
     }
+    if (snapshot.kind === "directory") {
+      const restored = await restoreDirectorySnapshot(vfs, snapshot);
+      if (!restored.ok) errors.push(restored.error);
+      continue;
+    }
+    const reset = await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
+    if (!reset.ok) errors.push(reset.error);
   }
   if (errors.length > 0) {
-    throw new MutatingPathRestoreCompositeError(errors);
+    return Result.err(new MutatingPathRestoreCompositeError(errors));
   }
+  return Result.ok(undefined);
 }

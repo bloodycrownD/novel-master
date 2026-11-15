@@ -157,7 +157,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('第二个 delete reject：toast 提示、批选仍退出、第一个已删不复活', async () => {
       mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
         if (id === 's2') {
-          throw new Error('db locked');
+          return {ok: false as const, error: new Error('db locked')};
         }
         deletedSessionIds.push(id);
         return {ok: true, value: undefined};
@@ -188,7 +188,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('中途 reject：toast 提示、finally 刷新仍执行', async () => {
       mockRuntime.projects.delete.mockImplementation(async (id: string) => {
         if (id === 'p2') {
-          throw new Error('fs busy');
+          return {ok: false as const, error: new Error('fs busy')};
         }
         deletedProjectIds.push(id);
         return {ok: true, value: undefined};
@@ -247,7 +247,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('中途 reject：已删项目缓存已清、未删项目缓存保留', async () => {
       mockRuntime.projects.delete.mockImplementation(async (id: string) => {
         if (id === 'p2') {
-          throw new Error('fs busy');
+          return {ok: false as const, error: new Error('fs busy')};
         }
         deletedProjectIds.push(id);
         return {ok: true, value: undefined};

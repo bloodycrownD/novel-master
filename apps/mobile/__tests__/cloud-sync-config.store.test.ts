@@ -112,10 +112,24 @@ function validInput(): CloudSyncConfigInput {
   };
 }
 
+
+/** 错误通道迁移四期：读口已知失败沿 Result 上行；测试只走成功路径——err 直接炸出。 */
+async function getConfigOrThrow(rt: MobileNovelMasterRuntime) {
+  const r = await getCloudSyncConfig(rt);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
+async function getLocalStatusOrThrow(rt: MobileNovelMasterRuntime) {
+  const r = await getCloudSyncLocalStatus(rt);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
 describe('cloud-sync-config.store 默认配置装载', () => {
   it('空 KKV 时 getCloudSyncConfig 返回默认值', async () => {
     const {runtime} = makeRuntime();
-    const config = await getCloudSyncConfig(runtime);
+    const config = await getConfigOrThrow(runtime);
     expect(config).toEqual({
       endpoint: '',
       bucket: '',
@@ -131,7 +145,7 @@ describe('cloud-sync-config.store 默认配置装载', () => {
 
   it('空 KKV 时 getCloudSyncLocalStatus 未配置且 rev 归零', async () => {
     const {runtime} = makeRuntime();
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await getLocalStatusOrThrow(runtime);
     expect(status.configured).toBe(false);
     expect(status.deviceId).toBe('');
     expect(status.lastSyncedRev).toBe(0);
@@ -143,7 +157,9 @@ describe('cloud-sync-config.store 默认配置装载', () => {
 describe('cloud-sync-config.store KKV 持久化往返', () => {
   it('setCloudSyncConfig 写入后读回：trim、前缀归一化、SK 只进 secretStore', async () => {
     const {runtime, kkv, secretStore} = makeRuntime();
-    const config = await setCloudSyncConfig(runtime, validInput());
+    const setResult = await setCloudSyncConfig(runtime, validInput());
+    if (!setResult.ok) throw setResult.error;
+    const config = setResult.value;
 
     expect(config).toEqual({
       endpoint: 'https://s3.example.com',
@@ -167,7 +183,7 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
     }
 
     // 再次读回与首次返回一致，且 deviceId 稳定
-    const again = await getCloudSyncConfig(runtime);
+    const again = await getConfigOrThrow(runtime);
     expect(again).toEqual(config);
   });
 
@@ -175,10 +191,12 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
     const {runtime, kkv} = makeRuntime();
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'deviceId', 'dev-fixed');
 
-    const config = await setCloudSyncConfig(runtime, {
+    const setResult = await setCloudSyncConfig(runtime, {
       ...validInput(),
       pathPrefix: '   ',
     });
+    if (!setResult.ok) throw setResult.error;
+    const config = setResult.value;
     expect(config.pathPrefix).toBe(DEFAULT_CLOUD_SYNC_PATH_PREFIX);
     expect(config.deviceId).toBe('dev-fixed');
   });
@@ -190,7 +208,7 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
       lastPullAt: '2026-08-30T01:00:00Z',
       lastPullResult: 'success',
     });
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await getLocalStatusOrThrow(runtime);
     expect(status.lastSyncedRev).toBe(7);
     expect(status.lastPullAt).toBe('2026-08-30T01:00:00Z');
     expect(status.lastPullResult).toBe('success');
@@ -200,7 +218,7 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
   it('配置完整时 configured 为 true', async () => {
     const {runtime} = makeRuntime();
     await setCloudSyncConfig(runtime, validInput());
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await getLocalStatusOrThrow(runtime);
     expect(status.configured).toBe(true);
     expect(status.deviceId).not.toBe('');
   });
@@ -212,9 +230,9 @@ describe('cloud-sync-config.store 容错', () => {
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'forcePathStyle', 'garbage');
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'lastSyncedRev', 'not-a-number');
 
-    const config = await getCloudSyncConfig(runtime);
+    const config = await getConfigOrThrow(runtime);
     expect(config.forcePathStyle).toBe(false);
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await getLocalStatusOrThrow(runtime);
     expect(status.lastSyncedRev).toBe(0);
   });
 
@@ -223,11 +241,11 @@ describe('cloud-sync-config.store 容错', () => {
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'forcePathStyle', '1');
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'lastSyncedRev', '42abc');
 
-    expect((await getCloudSyncConfig(runtime)).forcePathStyle).toBe(true);
-    expect((await getCloudSyncLocalStatus(runtime)).lastSyncedRev).toBe(42);
+    expect((await getConfigOrThrow(runtime)).forcePathStyle).toBe(true);
+    expect((await getLocalStatusOrThrow(runtime)).lastSyncedRev).toBe(42);
 
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'lastSyncedRev', '-5');
-    expect((await getCloudSyncLocalStatus(runtime)).lastSyncedRev).toBe(0);
+    expect((await getLocalStatusOrThrow(runtime)).lastSyncedRev).toBe(0);
   });
 
   it('字段部分缺失时逐字段回退，configured 仍为 false', async () => {
@@ -235,12 +253,12 @@ describe('cloud-sync-config.store 容错', () => {
     // 只有 endpoint，缺 bucket / accessKeyId / SK / deviceId
     kkv.inject(CLOUD_SYNC_KKV_MODULE, 'endpoint', 'https://s3.example.com');
 
-    const config = await getCloudSyncConfig(runtime);
+    const config = await getConfigOrThrow(runtime);
     expect(config.endpoint).toBe('https://s3.example.com');
     expect(config.bucket).toBe('');
     expect(config.pathPrefix).toBe(DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
-    const status = await getCloudSyncLocalStatus(runtime);
+    const status = await getLocalStatusOrThrow(runtime);
     expect(status.configured).toBe(false);
   });
 
@@ -284,15 +302,19 @@ describe('cloud-sync-config.store 容错', () => {
 describe('cloud-sync-config.store buildS3StorageConfig / readCloudSyncSecretKey', () => {
   it('未配置完整时抛错', async () => {
     const {runtime} = makeRuntime();
-    await expect(buildS3StorageConfig(runtime)).rejects.toThrow(
-      '请先完成云存储配置',
-    );
+    const denied = await buildS3StorageConfig(runtime);
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) {
+      expect(denied.error.message).toBe('请先完成云存储配置');
+    }
   });
 
   it('已存配置组装 S3StorageConfig，SK 从 SKSP 读取', async () => {
     const {runtime} = makeRuntime();
     await setCloudSyncConfig(runtime, validInput());
-    const s3 = await buildS3StorageConfig(runtime);
+    const s3Result = await buildS3StorageConfig(runtime);
+    if (!s3Result.ok) throw s3Result.error;
+    const s3 = s3Result.value;
     expect(s3).toEqual({
       endpoint: 'https://s3.example.com',
       bucket: 'my-bucket',
@@ -306,11 +328,13 @@ describe('cloud-sync-config.store buildS3StorageConfig / readCloudSyncSecretKey'
   it('overrides 优先于已存配置（可临时换 SK 测试连接）', async () => {
     const {runtime} = makeRuntime();
     await setCloudSyncConfig(runtime, validInput());
-    const s3 = await buildS3StorageConfig(runtime, {
+    const s3Result = await buildS3StorageConfig(runtime, {
       endpoint: 'https://other.example.com',
       secretAccessKey: 'SK-tmp',
       forcePathStyle: false,
     });
+    if (!s3Result.ok) throw s3Result.error;
+    const s3 = s3Result.value;
     expect(s3.endpoint).toBe('https://other.example.com');
     expect(s3.secretAccessKey).toBe('SK-tmp');
     expect(s3.forcePathStyle).toBe(false);

@@ -173,7 +173,7 @@ describe('ModelPickerModal 错误处理', () => {
   beforeEach(() => {
     mockList.mockReset().mockResolvedValue(PROVIDERS);
     mockSavedList.mockReset().mockResolvedValue(SAVED);
-    mockGetCurrentModelId.mockReset().mockResolvedValue('m1');
+    mockGetCurrentModelId.mockReset().mockResolvedValue({ok: true, value: 'm1'});
     mockSetCurrentModelId.mockReset().mockResolvedValue(undefined);
     mockShowToast.mockReset();
   });

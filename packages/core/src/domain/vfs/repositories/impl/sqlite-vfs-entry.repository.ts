@@ -10,6 +10,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
@@ -42,11 +43,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath `Result` → 领域异常通道转码点（本仓储各方法同款）——非法路径按仓储边界抛出，经 service 至端点（handler / 屏幕 / CLI）catch 收口。
+   * 路径归一化失败与已知失败走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，调用方逐层接力）。
    */
-  async list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<VfsListEntry[]> {
+  async list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<Result<VfsListEntry[], AppError>> {
     const resolved = normalizePath(dir);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalizedDir = resolved.value;
     const pattern = childLikePattern(normalizedDir);
     const sql27 = "SELECT path, entry_kind, head_version FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND path LIKE #{pattern} ESCAPE '\\'";
@@ -85,46 +86,46 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
-    return entries;
+    return Result.ok(entries);
   }
 
-  async findByPath(scopeKey: string, path: string): Promise<VfsEntry | null> {
+  async findByPath(scopeKey: string, path: string): Promise<Result<VfsEntry | null, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql28 = "SELECT entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind\n       FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate(this.conn, this.parser, sql28, { scopeKey, path: normalized });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
-    return this.rowToEntry(rows[0]!);
+    return await this.rowToEntry(rows[0]!);
   }
 
-  async findContentHash(scopeKey: string, path: string): Promise<string | null> {
+  async findContentHash(scopeKey: string, path: string): Promise<Result<string | null, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql29 = "SELECT content_hash, entry_kind FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate<{ content_hash: string | null; entry_kind: string }>(this.conn, this.parser, sql29, { scopeKey, path: normalized });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
     const row = rows[0]!;
     if (row.entry_kind === "directory") {
-      return null;
+      return Result.ok(null);
     }
-    return nullableText(row.content_hash);
+    return Result.ok(nullableText(row.content_hash));
   }
 
-  async findContentHashesByPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Map<string, string | null>> {
+  async findContentHashesByPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<Map<string, string | null>, AppError>> {
     const result = new Map<string, string | null>();
     if (paths.length === 0) {
-      return result;
+      return Result.ok(result);
     }
     const normalizedValues: string[] = [];
     for (const path of paths) {
       const resolved = normalizePath(path);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       normalizedValues.push(resolved.value);
     }
     const normalized = [...new Set(normalizedValues)];
@@ -155,23 +156,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         result.set(path, null);
       }
     }
-    return result;
+    return Result.ok(result);
   }
 
-  async findContentSizeByPath(scopeKey: string, path: string): Promise<VfsContentSize | null> {
+  async findContentSizeByPath(scopeKey: string, path: string): Promise<Result<VfsContentSize | null, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）；
     // mtime 随行带回供占位块渲染真实时间（CR-1：避免 1970 假时间戳入提示词）
     const sql31 = "SELECT length(content) AS inline_chars, content_hash, entry_kind, mtime_ms\n       FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate<{ inline_chars: number | null; content_hash: string | null; entry_kind: string; mtime_ms: number }>(this.conn, this.parser, sql31, { scopeKey, path: normalized });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
     const row = rows[0]!;
     if (row.entry_kind === "directory") {
-      return null;
+      return Result.ok(null);
     }
     // 与 resolveActiveFilePlainContent 的解正文顺序对齐：content_hash 优先，
     // 遗留明文兜底，保证探测到的大小与真实读取路径周源一致
@@ -180,11 +181,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const sql15 = "SELECT byte_len FROM vfs_content_blob\n         WHERE content_hash = #{contentHash}";
       const blobRows = await queryTemplate<{ byte_len: number }>(this.conn, this.parser, sql15, { contentHash });
       if (blobRows.length > 0) {
-        return {
+        return Result.ok({
           kind: "blobCompressedBytes",
           size: Number(blobRows[0]!.byte_len),
           mtimeMs: Number(row.mtime_ms),
-        };
+        });
       }
       // blob 行缺失 → 回退 member.compressed_byte_len。该列恒为从被替换 blob 行
       // 原样复制的 byte_len（两 format 同口径，fossil 组严禁记 delta 长度），故
@@ -192,63 +193,64 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const sql16 = "SELECT compressed_byte_len FROM vfs_content_pack_member\n         WHERE content_hash = #{contentHash}";
       const memberRows = await queryTemplate<{ compressed_byte_len: number }>(this.conn, this.parser, sql16, { contentHash });
       if (memberRows.length === 0) {
-        return null;
+        return Result.ok(null);
       }
-      return {
+      return Result.ok({
         kind: "blobCompressedBytes",
         size: Number(memberRows[0]!.compressed_byte_len),
         mtimeMs: Number(row.mtime_ms),
-      };
+      });
     }
     const inlineChars = row.inline_chars;
     if (inlineChars != null) {
-      return {
+      return Result.ok({
         kind: "inlineChars",
         size: Number(inlineChars),
         mtimeMs: Number(row.mtime_ms),
-      };
+      });
     }
-    return null;
+    return Result.ok(null);
   }
 
-  async insert(scopeKey: string, path: string, content: string): Promise<{ version: number }> {
+  async insert(scopeKey: string, path: string, content: string): Promise<Result<{ version: number }, AppError>> {
     return this.insertAtVersion(scopeKey, path, content, 1);
   }
 
-  async insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<{ version: number }> {
+  async insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<Result<{ version: number }, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
     const version = 1;
     const sql32 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')";
     await executeTemplate(this.conn, this.parser, sql32, { scopeKey, path: normalized, contentHash, version, mtimeMs });
-    return { version };
+    return Result.ok({ version });
   }
 
-  async insertAtVersion(scopeKey: string, path: string, content: string, version: number): Promise<{ version: number }> {
+  async insertAtVersion(scopeKey: string, path: string, content: string, version: number): Promise<Result<{ version: number }, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
     const contentHash = await this.contentStore.put(content);
     const sql33 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')";
     await executeTemplate(this.conn, this.parser, sql33, { scopeKey, path: normalized, contentHash, version, mtimeMs });
-    return { version };
+    return Result.ok({ version });
   }
 
-  async insertDirectory(scopeKey: string, path: string): Promise<void> {
+  async insertDirectory(scopeKey: string, path: string): Promise<Result<void, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
     const sql34 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, NULL, 1, #{mtimeMs}, 'directory')";
     await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: normalized, mtimeMs });
+    return Result.ok(undefined);
   }
 
-  async reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<void> {
+  async reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<Result<void, AppError>> {
     const resolved = normalizePath(input.path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql35 = "INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')";
     await executeTemplate(this.conn, this.parser, sql35, {
@@ -259,41 +261,42 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       headVersion: input.headVersion,
       mtimeMs: input.mtimeMs,
     });
+    return Result.ok(undefined);
   }
 
-  async update(scopeKey: string, path: string, content: string, nextVersion: number): Promise<{ version: number }> {
+  async update(scopeKey: string, path: string, content: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
     const contentHash = await this.contentStore.put(content);
     return this.applyContentHashUpdate(scopeKey, path, contentHash, nextVersion);
   }
 
-  async updateWithContentHash(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<{ version: number }> {
+  async updateWithContentHash(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
     return this.applyContentHashUpdate(scopeKey, path, contentHash, nextVersion);
   }
 
-  private async applyContentHashUpdate(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<{ version: number }> {
+  private async applyContentHashUpdate(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const mtimeMs = Date.now();
 
     const sql36 = "UPDATE vfs_entry\n       SET content = NULL,\n           content_hash = #{contentHash},\n           head_version = #{nextVersion},\n           mtime_ms = #{mtimeMs}\n       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'";
     const result = await executeTemplate(this.conn, this.parser, sql36, { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized });
     if (result.changes === 0) {
-      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
     }
 
     const sql17 = "SELECT head_version FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const rows = await queryTemplate<{ head_version: number }>(this.conn, this.parser, sql17, { scopeKey, path: normalized });
-    return { version: Number(rows[0]!.head_version) };
+    return Result.ok({ version: Number(rows[0]!.head_version) });
   }
 
   async setHeadContentHash(scopeKey: string, path: string, input: {
       version: number;
       contentHash: string;
       mtimeMs: number;
-    }): Promise<void> {
+    }): Promise<Result<void, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const sql37 = "SELECT entry_id FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
     const existing = await queryTemplate<{ entry_id: number }>(this.conn, this.parser, sql37, { scopeKey, path: normalized });
@@ -307,7 +310,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         version: input.version,
         mtimeMs: input.mtimeMs,
       });
-      return;
+      return Result.ok(undefined);
     }
 
     const sql19 = "INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)\n       VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')";
@@ -318,11 +321,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       version: input.version,
       mtimeMs: input.mtimeMs,
     });
+    return Result.ok(undefined);
   }
 
-  async delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<number> {
+  async delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<Result<number, AppError>> {
     const resolved = normalizePath(path);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const pattern = childLikePattern(normalized);
 
@@ -330,38 +334,40 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const sql20 = "SELECT 1 FROM vfs_entry\n         WHERE scope_key = #{scopeKey}\n           AND path LIKE #{pattern} ESCAPE '\\'\n           AND path <> #{path}\n         LIMIT 1";
       const childRows = await queryTemplate(this.conn, this.parser, sql20, { scopeKey, pattern, path: normalized });
       if (childRows.length > 0) {
-        throw new AppError("VFS_DIRECTORY_NOT_EMPTY", {path: normalized, detail: `Directory not empty: ${normalized}`});
+        return Result.err(new AppError("VFS_DIRECTORY_NOT_EMPTY", {path: normalized, detail: `Directory not empty: ${normalized}`}));
       }
 
       const result = await executeTemplate(this.conn, this.parser, `DELETE FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`, { scopeKey, path: normalized });
       if (result.changes === 0) {
-        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+        return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
       }
-      return result.changes;
+      return Result.ok(result.changes);
     }
 
     const sql21 = "DELETE FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const result = await executeTemplate(this.conn, this.parser, sql21, { scopeKey, path: normalized, pattern });
     if (result.changes === 0) {
-      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
     }
-    return result.changes;
+    return Result.ok(result.changes);
   }
 
-  async deleteRecursiveIfAny(scopeKey: string, prefix: string): Promise<number> {
+  async deleteRecursiveIfAny(scopeKey: string, prefix: string): Promise<Result<number, AppError>> {
     // 先探测：prefix 下无任何 entry 时静默返回 0，避免 recursive:true 分支的 vfsNotFound。
     const base = normalizePrefix(prefix);
     const entries = await this.listEntriesUnderPrefix(scopeKey, base);
     if (entries.length === 0) {
-      return 0;
+      return Result.ok(0);
     }
-    // base 为空串时 normalizePath 会抛 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
+    // base 为空串时 normalizePath 会判 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
     // 都匹配 "/%"（即全部以 / 开头的路径），语义等价，这里用 "/" 替代空串。
     const deletePath = base === "" ? "/" : base;
     // delete() 现在透出 changes（实际删除行数），比之前返回探测命中数更准——
     // 探测与删除在同一 scope+prefix 内，两者通常一致，但用真实 changes 避免「探测与删除之间
     // 出现并发写入」这类极端情况下的偏差。
-    return await this.delete(scopeKey, deletePath, { recursive: true });
+    const deleted = await this.delete(scopeKey, deletePath, { recursive: true });
+    if (!deleted.ok) return deleted;
+    return Result.ok(deleted.value);
   }
 
   async listAllPaths(scopeKey: string): Promise<string[]> {
@@ -441,11 +447,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async scanContents(scopeKey: string, pathPrefix?: string): Promise<
-    ReadonlyArray<{
-      entryId: number;
-      path: string;
-      content: string;
-    }>
+    Result<
+      ReadonlyArray<{
+        entryId: number;
+        path: string;
+        content: string;
+      }>,
+      AppError
+    >
   > {
     if (pathPrefix == null) {
       const sql45 = "SELECT entry_id, path, content_hash FROM vfs_entry\n         WHERE scope_key = #{scopeKey} AND entry_kind = 'file'";
@@ -454,7 +463,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
 
     const resolved = normalizePath(pathPrefix);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
     const pattern = childLikePattern(base);
     const sql46 = "SELECT entry_id, path, content_hash FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
@@ -463,50 +472,53 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async scanFileEntriesWithMeta(scopeKey: string, pathPrefix?: string): Promise<
-    ReadonlyArray<{
-      entryId: number;
-      path: string;
-      contentHash: string | null;
-      headVersion: number;
-      mtimeMs: number;
-    }>
+    Result<
+      ReadonlyArray<{
+        entryId: number;
+        path: string;
+        contentHash: string | null;
+        headVersion: number;
+        mtimeMs: number;
+      }>,
+      AppError
+    >
   > {
     if (pathPrefix == null) {
-      const sql47 = "SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry\n         WHERE scope_key = #{scopeKey} AND entry_kind = 'file'";
+      const sql47 = "SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND entry_kind = 'file'";
       const rows = await queryTemplate<{ entry_id: number; path: string; content_hash: string | null; head_version: number; mtime_ms: number }>(this.conn, this.parser, sql47, { scopeKey });
-      return rows.map((r) => ({
+      return Result.ok(rows.map((r) => ({
         entryId: r.entry_id,
         path: r.path,
         contentHash: nullableText(r.content_hash),
         headVersion: r.head_version,
         mtimeMs: r.mtime_ms,
-      }));
+      })));
     }
 
     const resolved = normalizePath(pathPrefix);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
     const pattern = childLikePattern(base);
     const sql48 = "SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const rows = await queryTemplate<{ entry_id: number; path: string; content_hash: string | null; head_version: number; mtime_ms: number }>(this.conn, this.parser, sql48, { scopeKey, path: base, pattern });
-    return rows.map((r) => ({
+    return Result.ok(rows.map((r) => ({
       entryId: r.entry_id,
       path: r.path,
       contentHash: nullableText(r.content_hash),
       headVersion: r.head_version,
       mtimeMs: r.mtime_ms,
-    }));
+    })));
   }
 
-  async findExistingPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Set<string>> {
+  async findExistingPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<Set<string>, AppError>> {
     const result = new Set<string>();
     if (paths.length === 0) {
-      return result;
+      return Result.ok(result);
     }
     const normalizedValues: string[] = [];
     for (const p of paths) {
       const resolved = normalizePath(p);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       normalizedValues.push(resolved.value);
     }
     const normalized = [...new Set(normalizedValues)];
@@ -526,43 +538,45 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         result.add(String(row.path));
       }
     }
-    return result;
+    return Result.ok(result);
   }
 
   async batchInsertFileEntriesWithHash(scopeKey: string, entries: ReadonlyArray<{
       path: string;
       contentHash: string;
       mtimeMs: number;
-    }>): Promise<void> {
-    if (entries.length === 0) return;
+    }>): Promise<Result<void, AppError>> {
+    if (entries.length === 0) return Result.ok(undefined);
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
     const paramsList: unknown[][] = [];
     for (const e of entries) {
       const resolved = normalizePath(e.path);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([scopeKey, resolved.value, e.contentHash, e.mtimeMs]);
     }
     await this.conn.batch(sql, paramsList);
+    return Result.ok(undefined);
   }
 
-  async batchInsertDirectoryEntries(scopeKey: string, paths: ReadonlyArray<string>): Promise<void> {
-    if (paths.length === 0) return;
+  async batchInsertDirectoryEntries(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<void, AppError>> {
+    if (paths.length === 0) return Result.ok(undefined);
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
     const now = Date.now();
     const paramsList: unknown[][] = [];
     for (const p of paths) {
       const resolved = normalizePath(p);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([scopeKey, resolved.value, now]);
     }
     await this.conn.batch(sql, paramsList);
+    return Result.ok(undefined);
   }
 
   private async resolveScanRows(rows: ReadonlyArray<{
       entry_id: number;
       path: string;
       content_hash: string | null;
-    }>): Promise<ReadonlyArray<{ entryId: number; path: string; content: string }>> {
+    }>): Promise<Result<ReadonlyArray<{ entryId: number; path: string; content: string }>, AppError>> {
     // 先收集所有非空 content_hash，一次 getMany 批量读取，避免逐条 get 的 N+1。
     const hashes = new Set<string>();
     for (const row of rows) {
@@ -571,7 +585,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         hashes.add(h);
       }
     }
-    const contentMap = hashes.size > 0 ? await this.contentStore.getMany([...hashes]) : new Map<string, string>();
+    let contentMap = new Map<string, string>();
+    if (hashes.size > 0) {
+      const loaded = await this.contentStore.getMany([...hashes]);
+      if (!loaded.ok) return Result.err(loaded.error);
+      contentMap = loaded.value;
+    }
 
     const out: Array<{ entryId: number; path: string; content: string }> = [];
     for (const row of rows) {
@@ -581,12 +600,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         // scanContents 这条路径只查 entry_kind='file' 的行，正文从 blob 读。
         const cached = contentMap.get(h);
         if (cached == null) {
-          throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${h}`, contentHash: h });
+          return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${h}`, contentHash: h }));
         }
         plain = cached;
       } else {
         // content=NULL 且 content_hash=NULL 的 active 文件行视为正文损坏。
-        throw new AppError("VFS_CONTENT_CORRUPT", { detail: "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL" });
+        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL" }));
       }
       out.push({
         entryId: Number(row.entry_id),
@@ -594,22 +613,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         content: plain,
       });
     }
-    return out;
+    return Result.ok(out);
   }
 
-  async renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<void> {
+  async renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
     const oldResolved = normalizePath(oldPath);
-    if (!oldResolved.ok) throw oldResolved.error;
+    if (!oldResolved.ok) return Result.err(oldResolved.error);
     const newResolved = normalizePath(newPath);
-    if (!newResolved.ok) throw newResolved.error;
+    if (!newResolved.ok) return Result.err(newResolved.error);
     const oldNorm = oldResolved.value;
     const newNorm = newResolved.value;
     const parser = this.parser;
     const sql49 = "UPDATE vfs_entry SET path = #{newPath}\n       WHERE scope_key = #{scopeKey} AND path = #{oldPath}";
     const result = await executeTemplate(tx, parser, sql49, { scopeKey, oldPath: oldNorm, newPath: newNorm });
     if (result.changes === 0) {
-      throw new AppError("VFS_NOT_FOUND", {path: oldNorm, detail: `Path not found: ${oldNorm}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: oldNorm, detail: `Path not found: ${oldNorm}`}));
     }
+    return Result.ok(undefined);
   }
 
   async renamePrefixInScope(tx: TdbcConnection, scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
@@ -641,13 +661,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
   }
 
-  private async rowToEntry(row: Row): Promise<VfsEntry> {
+  private async rowToEntry(row: Row): Promise<Result<VfsEntry, AppError>> {
     const kindRaw = row.entry_kind;
     const entryKind: VfsEntryKind = kindRaw === "directory" ? "directory" : "file";
     const headVersion = Number(row.head_version);
     const resolved = await resolveEntryPlainContent(this.contentStore, { entryKind, content: nullableText(row.content), contentHash: nullableText(row.content_hash) });
-    if (!resolved.ok) throw resolved.error;
-    return {
+    if (!resolved.ok) return Result.err(resolved.error);
+    return Result.ok({
       entryId: Number(row.entry_id),
       scopeKey: String(row.scope_key),
       path: String(row.path),
@@ -655,6 +675,6 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       version: headVersion,
       mtimeMs: Number(row.mtime_ms),
       entryKind,
-    };
+    });
   }
 }

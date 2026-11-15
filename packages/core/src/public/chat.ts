@@ -46,7 +46,7 @@ export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js"
 export { formatStatusChipLabel, formatStatusChipLabelFromAttachment } from "../presentation/chat/attachment-chip.js";
 export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
 export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
-export { attachmentScanner, AttachmentPathArgumentError } from "../domain/chat/logic/attachment/attachment-scanner.js";
+export { attachmentScanner } from "../domain/chat/logic/attachment/attachment-scanner.js";
 export type {
   ContentBlock,
   TextBlock,

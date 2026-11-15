@@ -4,7 +4,7 @@
  * @module service/provider/impl/model-request.service
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { domainOf } from "@/errors/domain.js";
 import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
@@ -31,7 +31,6 @@ import {
   createAbortError,
   isAbortLikeError,
 } from "@/infra/llm-protocol/logic/request-abort.js";
-import { LlmStreamTimeoutError } from "@/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 
 export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -89,8 +88,8 @@ function isRetryableError(error: unknown): boolean {
   // 已有部分输出）不重试，避免重复输出/重复计费。本分支必须置于下方
   // 「非 PROVIDER_* AppError 默认 true」之前——否则 idle 超时会被当未知瞬时错误
   // 误判为可重试。
-  if (error instanceof LlmStreamTimeoutError) {
-    return error.phase === "first-chunk";
+  if (isAppError(error, "PROVIDER_STREAM_TIMEOUT")) {
+    return error.details?.phase === "first-chunk";
   }
   if (!(error instanceof AppError) || domainOf(error.code) !== "PROVIDER") {
     // Unknown transport/runtime failures are treated as transient once.
@@ -201,10 +200,14 @@ export class DefaultModelRequestService implements ModelRequestService {
 
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
     const adapter = resolveAdapter(provider.protocol);
-    const policy =
-      (await this.deps.retryPolicies?.getPolicy()) ??
-      this.deps.retryPolicy ??
-      DEFAULT_RETRY_POLICY;
+    let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    if (this.deps.retryPolicies != null) {
+      const fetched = await this.deps.retryPolicies.getPolicy();
+      if (!fetched.ok) throw fetched.error;
+      if (fetched.value != null) {
+        policy = fetched.value;
+      }
+    }
     let attempt = 0;
     // 「本 attempt 是否已产出」闩锁：只看错误形态的重试判定会让「已流式吐了半段
     // 文本、随后传输层断掉」的请求再发一次 attempt ⇒ 同一段文本在屏幕上出现两遍、

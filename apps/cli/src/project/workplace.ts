@@ -17,7 +17,9 @@ export async function runProjectWorkplace(
   args: readonly string[],
 ): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
-  const projectId = await rt.scope.resolveProjectId(flags);
+  const resolvedProject = await rt.scope.resolveProjectId(flags);
+  if (!resolvedProject.ok) return { kind: "failed", error: resolvedProject.error };
+  const projectId = resolvedProject.value;
   const wt = rt.workplace({ kind: "project", projectId });
   const rest = args[0] === "workplace" ? args.slice(1) : args;
   return runWorkplace(wt, rest);

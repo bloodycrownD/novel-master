@@ -110,8 +110,8 @@ async function mountScopeHarness(options?: {
     state: {
       getCurrentModelId:
         options?.modelId != null
-          ? jest.fn(async () => options.modelId)
-          : jest.fn(() => createDeferred<string>().promise),
+          ? jest.fn(async () => ({ok: true as const, value: options.modelId}))
+          : jest.fn(() => createDeferred<never>().promise),
     },
     abortRegistry: {
       has: jest.fn(options?.abortHas ?? (() => false)),
@@ -272,10 +272,13 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     // 本用例需要 meta 真实落地（tokenLabel 写入面）：放行 loadChatAgentMeta，
     // 退出本文件其余用例的「meta 挂起」约定（其余用例在 beforeEach 重挂挂起）。
     loadChatAgentMetaMock.mockResolvedValue({
-      tokenLabel: '',
-      modelName: 'gpt-4o',
-      agentName: 'a',
-      projectName: 'p',
+      ok: true,
+      value: {
+        tokenLabel: '',
+        modelName: 'gpt-4o',
+        agentName: 'a',
+        projectName: 'p',
+      },
     });
     harness = await mountScopeHarness({modelId: 'gpt-4o'});
 
@@ -294,7 +297,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
             onUpgrade as (label: string) => void,
           );
         }
-        return '1K tokens · 预估';
+        return {ok: true as const, value: '1K tokens · 预估'};
       },
     );
 
@@ -335,10 +338,13 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
 
   it('切会话立即清 chip（r4-app-2/4）：s1 旧数字真落地过，切会话一帧不漏，在途读数被身份闸丢弃', async () => {
     loadChatAgentMetaMock.mockResolvedValue({
-      tokenLabel: '',
-      modelName: 'gpt-4o',
-      agentName: 'a',
-      projectName: 'p',
+      ok: true,
+      value: {
+        tokenLabel: '',
+        modelName: 'gpt-4o',
+        agentName: 'a',
+        projectName: 'p',
+      },
     });
     harness = await mountScopeHarness({modelId: 'gpt-4o'});
 
@@ -370,14 +376,17 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
 
     // s1 的在途读数现在才回来：身份闸丢弃，s2 保持加载态。
     await act(async () => {
-      pendingS1.resolve('glm = 69k / 128k (54%)');
+      pendingS1.resolve({ok: true as const, value: 'glm = 69k / 128k (54%)'});
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.tokenLabel).toBe('…');
 
     // s2 自己的刷新照常落地新数字（Once：不污染后续用例的默认实现——
     // clearAllMocks 只清调用记录不清 implementation）。
-    loadLabelMock.mockImplementationOnce(async () => 'gpt = 24k / 128k (19%)');
+    loadLabelMock.mockImplementationOnce(async () => ({
+      ok: true as const,
+      value: 'gpt = 24k / 128k (19%)',
+    }));
     await act(async () => {
       void harness!.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(1200);
@@ -425,7 +434,7 @@ describe('useChatTabScope 精确升级的会话身份弃权与延迟收口（cr2
         if (options?.shouldBailPrecise != null) {
           bailBySession.set(scope.sessionId, options.shouldBailPrecise);
         }
-        return '1K tokens · 预估';
+        return {ok: true as const, value: '1K tokens · 预估'};
       },
     );
 
@@ -518,7 +527,7 @@ describe('useChatTabScope refreshChatMeta 会话身份闸（r4-app-1）', () => 
     });
     expect(metaBySession.has('s2')).toBe(true);
     await act(async () => {
-      metaBySession.get('s2')!.resolve(buildMeta('Agent-S2', 'Model-S2'));
+      metaBySession.get('s2')!.resolve({ok: true, value: buildMeta('Agent-S2', 'Model-S2')});
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
@@ -526,7 +535,7 @@ describe('useChatTabScope refreshChatMeta 会话身份闸（r4-app-1）', () => 
 
     // s1 的 meta 现在才落定：身份闸丢弃——新会话的字段一个都不许被覆盖。
     await act(async () => {
-      metaBySession.get('s1')!.resolve(buildMeta('Agent-S1', 'Model-S1'));
+      metaBySession.get('s1')!.resolve({ok: true, value: buildMeta('Agent-S1', 'Model-S1')});
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
@@ -542,7 +551,7 @@ describe('useChatTabScope refreshChatMeta 会话身份闸（r4-app-1）', () => 
       await flushMicrotasks();
     });
     await act(async () => {
-      metaBySession.get('s2')!.resolve(buildMeta('Agent-S2', 'Model-S2'));
+      metaBySession.get('s2')!.resolve({ok: true, value: buildMeta('Agent-S2', 'Model-S2')});
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
@@ -669,10 +678,13 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
     // ——估算读数先返回，`gpt ≈` 就把上一轮精确的 `deepseek =` 写掉。写回闸补的
     // 就是这一刀，入口闸的用例（上两条）覆盖不到它。
     loadChatAgentMetaMock.mockResolvedValue({
-      tokenLabel: '',
-      modelName: 'deepseek-chat',
-      agentName: 'a',
-      projectName: 'p',
+      ok: true,
+      value: {
+        tokenLabel: '',
+        modelName: 'deepseek-chat',
+        agentName: 'a',
+        projectName: 'p',
+      },
     });
     const abortState = {inFlight: false};
     harness = await mountScopeHarness({
@@ -681,7 +693,10 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
     });
 
     // 第一轮精确标签落地（hasLabel 置位）。
-    loadLabelMock.mockResolvedValueOnce('10K tokens · deepseek');
+    loadLabelMock.mockResolvedValueOnce({
+      ok: true as const,
+      value: '10K tokens · deepseek',
+    });
     await act(async () => {
       void harness.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(1200);
@@ -702,7 +717,7 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
     // run 在此之后才注册，读数随后以估算档返回：写回闸必须拦住。
     abortState.inFlight = true;
     await act(async () => {
-      pending.resolve('30K tokens · gpt ≈');
+      pending.resolve({ok: true as const, value: '30K tokens · gpt ≈'});
       await flushMicrotasks();
     });
     expect(harness.api().agentMeta?.tokenLabel).toBe('10K tokens · deepseek');
@@ -711,10 +726,13 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
   it('中途弃权（服务返回空串哨兵）：chip 保留旧标签，不清空', async () => {
     // meta 真实落地（tokenLabel 写入面可断言）——同 B-1 用例的退出挂起约定。
     loadChatAgentMetaMock.mockResolvedValue({
-      tokenLabel: '',
-      modelName: 'gpt-4o',
-      agentName: 'a',
-      projectName: 'p',
+      ok: true,
+      value: {
+        tokenLabel: '',
+        modelName: 'gpt-4o',
+        agentName: 'a',
+        projectName: 'p',
+      },
     });
     harness = await mountScopeHarness({modelId: 'gpt-4o'});
 

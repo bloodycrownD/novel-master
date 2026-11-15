@@ -52,19 +52,23 @@ async function getValue(
   switch (key) {
     case PREF_KEY_CHAT_LLM_STREAM: {
       const enabled = await preferences.getLlmStreamEnabled();
-      return enabled ? "true" : "false";
+      if (!enabled.ok) throw enabled.error;
+      return enabled.value ? "true" : "false";
     }
     case PREF_KEY_CHAT_SUBAGENT_STREAM: {
       const enabled = await preferences.getSubagentStreamEnabled();
-      return enabled ? "true" : "false";
+      if (!enabled.ok) throw enabled.error;
+      return enabled.value ? "true" : "false";
     }
     case PREF_KEY_CHAT_THINKING_CONTEXT: {
       const enabled = await preferences.getThinkingContextEnabled();
-      return enabled ? "true" : "false";
+      if (!enabled.ok) throw enabled.error;
+      return enabled.value ? "true" : "false";
     }
     case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN: {
       const vfsEnabled = await preferences.getUserVfsUnifiedToolTurn();
-      return vfsEnabled ? "true" : "false";
+      if (!vfsEnabled.ok) throw vfsEnabled.error;
+      return vfsEnabled.value ? "true" : "false";
     }
   }
 }
@@ -98,18 +102,26 @@ async function resetValue(
   key: KnownKey,
 ): Promise<void> {
   switch (key) {
-    case PREF_KEY_CHAT_LLM_STREAM:
-      await preferences.resetLlmStreamEnabled();
+    case PREF_KEY_CHAT_LLM_STREAM: {
+      const reset = await preferences.resetLlmStreamEnabled();
+      if (!reset.ok) throw reset.error;
       return;
-    case PREF_KEY_CHAT_SUBAGENT_STREAM:
-      await preferences.resetSubagentStreamEnabled();
+    }
+    case PREF_KEY_CHAT_SUBAGENT_STREAM: {
+      const reset = await preferences.resetSubagentStreamEnabled();
+      if (!reset.ok) throw reset.error;
       return;
-    case PREF_KEY_CHAT_THINKING_CONTEXT:
-      await preferences.resetThinkingContextEnabled();
+    }
+    case PREF_KEY_CHAT_THINKING_CONTEXT: {
+      const reset = await preferences.resetThinkingContextEnabled();
+      if (!reset.ok) throw reset.error;
       return;
-    case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN:
-      await preferences.resetUserVfsUnifiedToolTurn();
+    }
+    case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN: {
+      const reset = await preferences.resetUserVfsUnifiedToolTurn();
+      if (!reset.ok) throw reset.error;
       return;
+    }
   }
 }
 

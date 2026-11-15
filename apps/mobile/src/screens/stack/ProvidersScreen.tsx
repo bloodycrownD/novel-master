@@ -25,6 +25,7 @@ import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '../../hooks/useFocusListReload';
+import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
@@ -79,28 +80,37 @@ export function ProvidersScreen() {
   // 把 currentModelId 当软指针（不参与 SAVED_MODEL_IN_USE 前置拒绝）的另一半契约，
   // cli / desktop / mobile 三调用方必须一致，改任一方须同步复核另外两方。
   const deleteProviderOne = useCallback(
-    async (providerId: string) => {
-      const currentModelId = await runtime.state.getCurrentModelId();
+    async (providerId: string): Promise<Result<void, AppError>> => {
+      const currentModel = await runtime.state.getCurrentModelId();
+      if (!currentModel.ok) return Result.err(currentModel.error);
+      const currentModelId = currentModel.value;
       let clearCurrentModel = false;
       if (currentModelId) {
         const saved = await runtime.providerModels.getSavedById(currentModelId);
         clearCurrentModel = saved?.providerId === providerId;
       }
-      await runtime.providers.delete(providerId);
-      const currentProviderId = await runtime.state.getCurrentProviderId();
-      if (currentProviderId === providerId) {
+      const deleted = await runtime.providers.delete(providerId);
+      if (!deleted.ok) return deleted;
+      const currentProvider = await runtime.state.getCurrentProviderId();
+      if (!currentProvider.ok) return Result.err(currentProvider.error);
+      if (currentProvider.value === providerId) {
         await runtime.state.resetCurrentProviderId();
       }
       if (clearCurrentModel) {
         await runtime.state.resetCurrentModelId();
       }
+      return Result.ok(undefined);
     },
     [runtime],
   );
 
   const deleteProviders = async (providerIds: string[]) => {
     for (const providerId of providerIds) {
-      await deleteProviderOne(providerId);
+      const deleted = await deleteProviderOne(providerId);
+      if (!deleted.ok) {
+        showToast(toastMessage('删除失败', deleted.error));
+        return;
+      }
     }
     await reload();
   };

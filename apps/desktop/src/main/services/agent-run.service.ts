@@ -3,9 +3,11 @@
  *
  * @module services/agent-run
  */
-import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
+import { AGENT_RUN_RESOLVE_KEYS, AgentTurnError, isAppError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
 import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
+import type { AppError } from "@novel-master/core/agent";
+import type { Result } from "@novel-master/core/errors";
 import { createLogger } from "@novel-master/core/log";
 import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -18,7 +20,7 @@ export { AgentTurnError as AgentRunError };
 
 function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   return fn().catch((error) => {
-    if (error instanceof AgentRunResolveError) {
+    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
       throw new AgentTurnError(error.message);
     }
     throw error;
@@ -59,7 +61,7 @@ export async function runAgentTurn(
     readonly signal?: AbortSignal;
     readonly onUserMessageAppended?: () => void | Promise<void>;
   },
-): Promise<AgentRunResult> {
+): Promise<Result<AgentRunResult, AppError>> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
     onAfterResolveModel: async (ctx) => {

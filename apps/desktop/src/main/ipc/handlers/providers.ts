@@ -11,6 +11,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 
 export async function handleProvidersList(): Promise<
   IpcResult<ProviderListItemDto[]>
@@ -68,7 +69,8 @@ export async function handleProvidersCreate(
   try {
     const rt = await getDesktopRuntime();
     const created = await rt.providers.create(req);
-    return { ok: true, data: { providerId: created.id } };
+    if (!created.ok) return ipcErr(formatIpcError(created.error));
+    return { ok: true, data: { providerId: created.value.id } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -80,7 +82,8 @@ export async function handleProvidersEdit(
   try {
     const rt = await getDesktopRuntime();
     const { providerId, ...patch } = req;
-    await rt.providers.edit(providerId, patch);
+    const edited = await rt.providers.edit(providerId, patch);
+    if (!edited.ok) return ipcErr(formatIpcError(edited.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -98,15 +101,19 @@ export async function handleProvidersDelete(
     // 该顺序是 core `DefaultProviderService.delete` 里「currentModelId 是软指针、
     // 不参与 SAVED_MODEL_IN_USE 前置拒绝」这条契约的另一半，三调用方
     // （cli/desktop/mobile）必须保持一致，改动任一方须同步复核另外两方。
-    const currentModelId = await rt.state.getCurrentModelId();
+    const currentModel = await rt.state.getCurrentModelId();
+    if (!currentModel.ok) return ipcErr(formatIpcError(currentModel.error));
+    const currentModelId = currentModel.value;
     let clearCurrentModel = false;
     if (currentModelId != null && currentModelId !== "") {
       const saved = await rt.providerModels.getSavedById(currentModelId);
       clearCurrentModel = saved?.providerId === req.providerId;
     }
-    await rt.providers.delete(req.providerId);
-    const currentProviderId = await rt.state.getCurrentProviderId();
-    if (currentProviderId === req.providerId) {
+    const deleted = await rt.providers.delete(req.providerId);
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
+    const currentProvider = await rt.state.getCurrentProviderId();
+    if (!currentProvider.ok) return ipcErr(formatIpcError(currentProvider.error));
+    if (currentProvider.value === req.providerId) {
       await rt.state.resetCurrentProviderId();
     }
     if (clearCurrentModel) {

@@ -101,8 +101,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const state = createPersistentState(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
-  const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
-  userVfsUnifiedToolTurnFlag.refresh(userVfsUnifiedToolTurnEnabled);
+  const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
+  if (!unifiedTurnPref.ok) throw unifiedTurnPref.error;
+  userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
   const smartSortRule = createSmartSortRuleService(conn);
 
   const skspName = getPlatformSkspName();

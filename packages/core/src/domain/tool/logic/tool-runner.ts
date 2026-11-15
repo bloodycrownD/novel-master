@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -22,6 +23,17 @@ const DEFAULT_PARALLEL_CONCURRENCY = 8;
 
 /** runner 直通的业务错误 key（原 ToolError 5 码 + 取消控制流码）；TOOL_SEARCH_* 等域内细分码仍包装为 TOOL_FAILED。 */
 const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_CONFLICT", "TOOL_INVALID_ARGUMENT", "TOOL_FAILED", "TOOL_FORBIDDEN", "TOOL_CANCELLED"]);
+
+/**
+ * 工具失败归一化：TOOL_* 族直通，其余包成 TOOL_FAILED（cause 带原错误）。
+ * 工具闭包的 Err 返回值与未知异常共用这一条出口，模型可见错误不变。
+ */
+function normalizeToolFailure(name: string, e: unknown): unknown {
+  // 工具内部抛的 ToolError 族 AppError（5 码，key 在 name 上、code 是数字）直通；
+  // 用形状判定：跨 duplicate module 实例（src / dist）instanceof 会漏。
+  if (typeof e === "object" && e !== null && typeof (e as { name?: unknown }).name === "string" && TOOL_PASSTHROUGH_KEYS.has((e as { name: string }).name) && typeof (e as { code?: unknown }).code === "number") return e;
+  return new AppError("TOOL_FAILED", {toolName: name, cause: e, detail: `Tool failed: ${name}`});
+}
 
 /**
  * Executes tools from a registry with schema validation and consistent errors.
@@ -71,11 +83,11 @@ export class ToolRunner<Ctx = unknown> {
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
       // 工具内部仍应把 ctx.signal 传给 fetch / 子进程，让底层资源尽早释放。
       const work = tool.run(parsedIn.data, ctx);
-      let out: unknown;
+      let out: Result<unknown, AppError>;
       if (signal == null) {
         out = await work;
       } else {
-        const racing = new Promise<unknown>((resolve, reject) => {
+        const racing = new Promise<Result<unknown, AppError>>((resolve, reject) => {
           if (signal.aborted) {
             reject(new AppError("TOOL_CANCELLED", {toolName: name}));
             return;
@@ -96,20 +108,21 @@ export class ToolRunner<Ctx = unknown> {
         out = await racing;
       }
 
+      // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
+      // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），模型可见错误不变。
+      if (!out.ok) throw normalizeToolFailure(name, out.error);
+
       if (tool.outputSchema) {
-        const parsedOut = tool.outputSchema.safeParse(out);
+        const parsedOut = tool.outputSchema.safeParse(out.value);
         if (!parsedOut.success) {
           throw new AppError("TOOL_FAILED", {toolName: name, cause: parsedOut.error, detail: `Tool failed: ${name}`});
         }
         return parsedOut.data as Output;
       }
 
-      return out as Output;
+      return out.value as Output;
     } catch (e: unknown) {
-      // 工具内部抛的 ToolError 族 AppError（5 码，key 在 name 上、code 是数字）直通；
-      // 用形状判定：跨 duplicate module 实例（src / dist）instanceof 会漏。
-      if (typeof e === "object" && e !== null && typeof (e as { name?: unknown }).name === "string" && TOOL_PASSTHROUGH_KEYS.has((e as { name: string }).name) && typeof (e as { code?: unknown }).code === "number") throw e;
-      throw new AppError("TOOL_FAILED", {toolName: name, cause: e, detail: `Tool failed: ${name}`});
+      throw normalizeToolFailure(name, e);
     }
   }
 

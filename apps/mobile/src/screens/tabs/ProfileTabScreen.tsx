@@ -75,7 +75,13 @@ export function ProfileTabScreen() {
   }, [runtime]);
 
   const refreshModelLabel = useCallback(async () => {
-    const currentId = await runtime.state.getCurrentModelId();
+    const currentModel = await runtime.state.getCurrentModelId();
+    // 读取失败回退占位（错误通道迁移四期：与焦点 .catch 同款收场）。
+    if (!currentModel.ok) {
+      setModelLabel('—');
+      return;
+    }
+    const currentId = currentModel.value;
     if (!currentId) {
       setModelLabel('—');
       return;

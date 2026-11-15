@@ -27,6 +27,7 @@ import {
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
   type SetDirRuleInput,
+  type WorkplaceDirRule,
   type WorkplaceListRow,
   type WorkplaceService,
   } from '@novel-master/core/workplace';
@@ -52,6 +53,7 @@ import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 
 import {isAppError} from '@novel-master/core/vfs';
+import {Result, AppError} from '@novel-master/core/errors';
 import {formatVfsErrorForUser} from '../../errors/format-error';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
 import {
@@ -360,10 +362,15 @@ export const VfsFileManager = forwardRef<
   scopeRef.current = scope;
 
   const fetchWorktreeRows = useCallback(async (): Promise<
-    WorkplaceListRow[]
+    Result<WorkplaceListRow[], AppError>
   > => {
     const worktreeSvc = workplaceRef.current;
-    return (await worktreeSvc?.buildListRows()) ?? [];
+    if (worktreeSvc == null) {
+      return Result.ok([]);
+    }
+    const built = await worktreeSvc.buildListRows();
+    if (!built.ok) return Result.err(built.error);
+    return Result.ok(built.value);
   }, []);
 
   const applyWorktreeRowsToVisibleList = useCallback(
@@ -374,9 +381,13 @@ export const VfsFileManager = forwardRef<
     [currentPath],
   );
 
-  const refreshVisibleRowsFromWorktree = useCallback(async () => {
+  const refreshVisibleRowsFromWorktree = useCallback(async (): Promise<
+    Result<void, AppError>
+  > => {
     const allRows = await fetchWorktreeRows();
-    applyWorktreeRowsToVisibleList(allRows);
+    if (!allRows.ok) return Result.err(allRows.error);
+    applyWorktreeRowsToVisibleList(allRows.value);
+    return Result.ok(undefined);
   }, [fetchWorktreeRows, applyWorktreeRowsToVisibleList]);
 
   const reload = useCallback(async () => {
@@ -388,16 +399,36 @@ export const VfsFileManager = forwardRef<
     const worktreeSvc = workplaceRef.current;
     setLoading(true);
     try {
-      const [listEntries, allRows, dirRule] = await Promise.all([
+      const [listResult, allRowsResult, dirRuleResult] = await Promise.all([
         vfsSvc.list(currentPath),
         fetchWorktreeRows(),
         worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null),
       ]);
+      // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走下方 catch。
+      if (!listResult.ok) {
+        showToast(toastMessage('加载失败', listResult.error));
+        return;
+      }
+      const listEntries = listResult.value;
+      let dirRule: WorkplaceDirRule | undefined;
+      if (dirRuleResult != null) {
+        if (!dirRuleResult.ok) {
+          showToast(toastMessage('加载失败', dirRuleResult.error));
+          return;
+        }
+        dirRule = dirRuleResult.value;
+      }
+      const allRows = allRowsResult.ok ? allRowsResult.value : [];
       // 智能排序目录才拉预编译规则（懒加载；其它排序方式零额外查表）。
-      const smartRules =
+      const compiledRules =
         (dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField) === 'smart'
           ? await runtime.smartSortRule.listCompiledRules()
           : undefined;
+      if (compiledRules != null && !compiledRules.ok) {
+        showToast(toastMessage('加载失败', compiledRules.error));
+        return;
+      }
+      const smartRules = compiledRules?.value;
       // 面包屑名字缓存：记录带 label 的合成目录行（项目/会话名）。
       for (const entry of listEntries) {
         if (entry.label != null) {
@@ -526,11 +557,21 @@ export const VfsFileManager = forwardRef<
           void (async () => {
             try {
               for (const path of paths) {
-                await deleteScopedVfsEntry(runtime, scope, writableVfs, path, {
-                  recursive: true,
-                  useUserVfsTurn,
-                  sessionId,
-                });
+                const deleted = await deleteScopedVfsEntry(
+                  runtime,
+                  scope,
+                  writableVfs,
+                  path,
+                  {
+                    recursive: true,
+                    useUserVfsTurn,
+                    sessionId,
+                  },
+                );
+                if (!deleted.ok) {
+                  showToast(toastMessage('删除失败', deleted.error));
+                  return;
+                }
               }
               vfsBatch.exit();
               await reloadVfsListOnly();
@@ -588,17 +629,37 @@ export const VfsFileManager = forwardRef<
           const renameOpts = useUserVfsTurn
             ? {skipComposerStatusRefresh: true as const}
             : undefined;
+          const moveFailed = (err: unknown): void => {
+            skipped += 1;
+            if (isAppError(err, 'VFS_ALREADY_EXISTS')) {
+              showToast('目标已存在同名项，已跳过');
+            } else {
+              showToast(toastMessage('移动失败', err));
+            }
+          };
           if (isDir) {
             if (useUserVfsTurn) {
-              await sessionRenameVfsDirectory(
+              const renamed = await sessionRenameVfsDirectory(
                 runtime,
                 sessionId!,
                 sourcePath,
                 newPath,
                 renameOpts,
               );
+              if (!renamed.ok) {
+                moveFailed(renamed.error);
+                continue;
+              }
             } else {
-              await renameVfsDirectory(writableVfs, sourcePath, newPath);
+              const renamed = await renameVfsDirectory(
+                writableVfs,
+                sourcePath,
+                newPath,
+              );
+              if (!renamed.ok) {
+                moveFailed(renamed.error);
+                continue;
+              }
             }
             if (workplace != null) {
               await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
@@ -613,15 +674,27 @@ export const VfsFileManager = forwardRef<
             }
           } else {
             if (useUserVfsTurn) {
-              await sessionRenameVfsFile(
+              const renamed = await sessionRenameVfsFile(
                 runtime,
                 sessionId!,
                 sourcePath,
                 newPath,
                 renameOpts,
               );
+              if (!renamed.ok) {
+                moveFailed(renamed.error);
+                continue;
+              }
             } else {
-              await renameVfsFile(writableVfs, sourcePath, newPath);
+              const renamed = await renameVfsFile(
+                writableVfs,
+                sourcePath,
+                newPath,
+              );
+              if (!renamed.ok) {
+                moveFailed(renamed.error);
+                continue;
+              }
             }
           }
           moved += 1;
@@ -762,7 +835,11 @@ export const VfsFileManager = forwardRef<
         }
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
-          await refreshVisibleRowsFromWorktree();
+          const refreshed = await refreshVisibleRowsFromWorktree();
+          if (!refreshed.ok) {
+            showToast(toastMessage('操作失败', refreshed.error));
+            return;
+          }
           if (sessionId != null) {
             try {
               await refreshRuleSnapshotAfterRuleChange(
@@ -829,28 +906,58 @@ export const VfsFileManager = forwardRef<
             const parent = parentLogicalPath(menuPath) ?? root;
             const newPath =
               parent === '/' ? `/${trimmed}` : `${parent}/${trimmed}`;
+            const renameFailed = (err: unknown): void => {
+              // WHY: 重命名失败的文案统一走 core formatVfsErrorForUser
+              // 的 code 文案表（ALREADY_EXISTS → 名称不能重复），与
+              // desktop 收敛到同一份映射，不再本地分支。
+              showToast(formatVfsErrorForUser(err));
+            };
             try {
               if (menuRow.kind === 'file') {
                 if (useUserVfsTurn) {
-                  await sessionRenameVfsFile(
+                  const renamed = await sessionRenameVfsFile(
                     runtime,
                     sessionId!,
                     menuPath,
                     newPath,
                   );
+                  if (!renamed.ok) {
+                    renameFailed(renamed.error);
+                    return;
+                  }
                 } else {
-                  await renameVfsFile(writableVfs, menuPath, newPath);
+                  const renamed = await renameVfsFile(
+                    writableVfs,
+                    menuPath,
+                    newPath,
+                  );
+                  if (!renamed.ok) {
+                    renameFailed(renamed.error);
+                    return;
+                  }
                 }
               } else {
                 if (useUserVfsTurn) {
-                  await sessionRenameVfsDirectory(
+                  const renamed = await sessionRenameVfsDirectory(
                     runtime,
                     sessionId!,
                     menuPath,
                     newPath,
                   );
+                  if (!renamed.ok) {
+                    renameFailed(renamed.error);
+                    return;
+                  }
                 } else {
-                  await renameVfsDirectory(writableVfs, menuPath, newPath);
+                  const renamed = await renameVfsDirectory(
+                    writableVfs,
+                    menuPath,
+                    newPath,
+                  );
+                  if (!renamed.ok) {
+                    renameFailed(renamed.error);
+                    return;
+                  }
                 }
                 if (workplace != null) {
                   await migrateWorkplaceDirRename(workplace, menuPath, newPath);
@@ -886,7 +993,7 @@ export const VfsFileManager = forwardRef<
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
-                await deleteScopedVfsEntry(
+                const deleted = await deleteScopedVfsEntry(
                   runtime,
                   scope,
                   writableVfs,
@@ -897,6 +1004,10 @@ export const VfsFileManager = forwardRef<
                     sessionId,
                   },
                 );
+                if (!deleted.ok) {
+                  showToast(toastMessage('删除失败', deleted.error));
+                  return;
+                }
                 await reloadVfsListOnly();
               };
               runDelete().catch(err =>
@@ -947,10 +1058,14 @@ export const VfsFileManager = forwardRef<
           void (async () => {
             try {
               if (kind === 'zip') {
-                await importVfsZip(runtime, scope, {
+                const imported = await importVfsZip(runtime, scope, {
                   confirmed: true,
                   directoryPath: targetPath,
                 });
+                if (!imported.ok) {
+                  showToast(toastMessage('导入失败', imported.error));
+                  return;
+                }
               } else {
                 await importCharacterCard(runtime, scope, {
                   confirmed: true,
@@ -975,9 +1090,14 @@ export const VfsFileManager = forwardRef<
    */
   const runImportFile = async (targetPath: string) => {
     try {
-      const result = await importVfsSingleFile(runtime, scope, {
+      const imported = await importVfsSingleFile(runtime, scope, {
         targetDir: targetPath,
       });
+      if (!imported.ok) {
+        showToast(toastMessage('导入失败', imported.error));
+        return;
+      }
+      const result = imported.value;
       if (result.status === 'cancelled') {
         return;
       }
@@ -995,8 +1115,12 @@ export const VfsFileManager = forwardRef<
                 void (async () => {
                   try {
                     const applied = await confirm();
+                    if (!applied.ok) {
+                      showToast(toastMessage('导入失败', applied.error));
+                      return;
+                    }
                     await reloadVfsListOnly();
-                    showToast(singleFileImportToast(applied.skippedBinary));
+                    showToast(singleFileImportToast(applied.value.skippedBinary));
                   } catch (err) {
                     showToast(toastMessage('导入失败', err));
                   }
@@ -1052,7 +1176,11 @@ export const VfsFileManager = forwardRef<
         : exportVfsSingleFile(runtime, scope, targetPath);
     task
       .then(result => {
-        if (result === 'saved') {
+        if (!result.ok) {
+          showToast(toastMessage('导出失败', result.error));
+          return;
+        }
+        if (result.value === 'saved') {
           showToast(
             kind === 'zip' ? 'ZIP 已保存到所选位置' : '文件已保存到所选位置',
           );
@@ -1076,7 +1204,11 @@ export const VfsFileManager = forwardRef<
           const path =
             currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
-            await sessionCreateVfsFile(runtime, sessionId!, path);
+            const created = await sessionCreateVfsFile(runtime, sessionId!, path);
+            if (!created.ok) {
+              showToast(toastMessage('失败', created.error));
+              return;
+            }
           } else {
             await createVfsFile(writableVfs, path);
           }
@@ -1098,7 +1230,15 @@ export const VfsFileManager = forwardRef<
           const path =
             currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
-            await sessionCreateVfsDirectory(runtime, sessionId!, path);
+            const created = await sessionCreateVfsDirectory(
+              runtime,
+              sessionId!,
+              path,
+            );
+            if (!created.ok) {
+              showToast(toastMessage('失败', created.error));
+              return;
+            }
           } else {
             await createVfsDirectory(writableVfs, path);
           }
@@ -1118,7 +1258,12 @@ export const VfsFileManager = forwardRef<
       }
       void (async () => {
         try {
-          const existing = await workplace.getDirRule(currentPath);
+          const existingRule = await workplace.getDirRule(currentPath);
+          if (!existingRule.ok) {
+            showToast(toastMessage('加载规则失败', existingRule.error));
+            return;
+          }
+          const existing = existingRule.value;
           const listRow = worktreeRows.find(
             r => r.path === currentPath && r.kind === 'dir',
           );

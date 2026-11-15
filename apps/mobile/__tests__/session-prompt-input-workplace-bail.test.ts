@@ -128,11 +128,13 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
         fingerprint: 'fp-abc',
       },
     });
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       makeStubRuntime(),
       {projectId: 'p', sessionId: 's'},
       workplaceDefinition(),
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
     expect(bundle.ctx.workplaceFingerprint).toBe('fp-abc');
   });
 });

@@ -4,6 +4,8 @@
  * @module service/chat/create-chat-services
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -34,8 +36,8 @@ export interface ChatServiceBundle {
  */
 export interface ChatServicesSessionDeps {
   readonly state: {
-    getCurrentAgentId(): Promise<string | null | undefined>;
-    getCurrentModelId(): Promise<string | null | undefined>;
+    getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
+    getCurrentModelId(): Promise<Result<string | undefined, AppError>>;
   };
   readonly agentRegistry: {
     listAgentIds(): Promise<readonly string[]>;
@@ -137,8 +139,8 @@ export function createUsageStatsService(
 function _stubSessionDeps(): ChatServicesSessionDeps {
   return {
     state: {
-      getCurrentAgentId: async () => undefined,
-      getCurrentModelId: async () => undefined,
+      getCurrentAgentId: async () => Result.ok(undefined),
+      getCurrentModelId: async () => Result.ok(undefined),
     },
     agentRegistry: {
       listAgentIds: async () => [],

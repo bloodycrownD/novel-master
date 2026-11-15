@@ -50,22 +50,29 @@ function createMemoryKkv(): KkvService {
 describe('createAppUiPreferences', () => {
   it('returns default theme when key is missing', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toBe(
-      APP_UI_DEFAULTS[APP_UI_KEY_THEME],
-    );
+    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toEqual({
+      ok: true,
+      value: APP_UI_DEFAULTS[APP_UI_KEY_THEME],
+    });
   });
 
   it('round-trips set and get', async () => {
     const kkv = createMemoryKkv();
     const prefs = createAppUiPreferences(kkv);
     await prefs.set(APP_UI_KEY_THEME, 'dark');
-    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toBe('dark');
+    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toEqual({
+      ok: true,
+      value: 'dark',
+    });
     const raw = await kkv.get(APP_UI_KKV_MODULE, APP_UI_KEY_THEME);
     expect(raw).toEqual({ok: true, value: 'dark'});
   });
 
   it('returns undefined for unknown keys', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(prefs.get('unknown-key')).resolves.toBeUndefined();
+    await expect(prefs.get('unknown-key')).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
   });
 });

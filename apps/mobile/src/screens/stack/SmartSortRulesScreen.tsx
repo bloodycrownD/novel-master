@@ -161,7 +161,7 @@ export function SmartSortRulesScreen() {
     deleteOne: useCallback(
       async (ruleId: string) => {
         // builtin- 由 service 整体拒绝；这里逐条走 deleteRule 保持部分成功语义。
-        await runtime.smartSortRule.deleteRule(ruleId);
+        return runtime.smartSortRule.deleteRule(ruleId);
       },
       [runtime],
     ),
@@ -214,12 +214,16 @@ export function SmartSortRulesScreen() {
                 text: '导入',
                 onPress: () => {
                   importSmartSortRuleYaml(runtime)
-                    .then(async count => {
-                      if (count == null) {
+                    .then(async imported => {
+                      if (!imported.ok) {
+                        showToast(toastMessage('导入失败', imported.error));
+                        return;
+                      }
+                      if (imported.value == null) {
                         return;
                       }
                       await reload({silent: true});
-                      showToast(`已导入 ${count} 条规则`);
+                      showToast(`已导入 ${imported.value} 条规则`);
                     })
                     .catch(error =>
                       showToast(toastMessage('导入失败', error)),

@@ -183,17 +183,21 @@ const fixedListRows = [
   },
 ];
 
-const buildListRows = jest.fn(async () => fixedListRows);
+const buildListRows = jest.fn(async () => ({
+  ok: true as const,
+  value: fixedListRows,
+}));
 // reload 现以 vfs.list() 为权威源（worktree 仅作元数据补丁）：
 // 不在 vfs.list 结果里的路径会被当孤儿残留过滤掉，因此 list 需返回
 // /note.md 的 VFS 条目，行才会渲染出行菜单按钮。
 // 显式标注返回类型：菜单收敛用例需要 mock 出目录行。
 type ListEntry = {path: string; kind: 'file' | 'directory'};
-const list = jest.fn(
-  async (): Promise<ListEntry[]> => [{path: '/note.md', kind: 'file'}],
-);
-const getDirRule = jest.fn(async () => null);
-const setDirRule = jest.fn(async () => undefined);
+const list = jest.fn(async (): Promise<{ok: true; value: ListEntry[]}> => ({
+  ok: true,
+  value: [{path: '/note.md', kind: 'file'}],
+}));
+const getDirRule = jest.fn(async () => ({ok: true as const, value: null}));
+const setDirRule = jest.fn(async () => ({ok: true as const, value: undefined}));
 
 const mockRuntime = {
   workplace: jest.fn(),
@@ -266,12 +270,12 @@ function renderSessionVfmWithoutWorkplace() {
 function resetMenuServiceMocks() {
   mockFn(importVfsZip).mockReset();
   mockFn(exportVfsZip).mockReset();
-  mockFn(exportVfsZip).mockResolvedValue('saved');
+  mockFn(exportVfsZip).mockResolvedValue({ok: true, value: 'saved'});
   mockFn(importCharacterCard).mockReset();
   mockFn(importCharacterCard).mockResolvedValue(undefined);
   mockFn(importVfsSingleFile).mockReset();
   mockFn(exportVfsSingleFile).mockReset();
-  mockFn(exportVfsSingleFile).mockResolvedValue('saved');
+  mockFn(exportVfsSingleFile).mockResolvedValue({ok: true, value: 'saved'});
 }
 
 describe('VfsFileManager session list (no BlockStore capture)', () => {
@@ -292,9 +296,12 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
     capturedDismissOverlays = undefined;
     (cycleFileInclusion as jest.Mock).mockReset();
     (cycleFileInclusion as jest.Mock).mockResolvedValue('show');
-    buildListRows.mockResolvedValue(fixedListRows);
+    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
     // 复位各用例可能改过的 list 返回值（默认只有 /note.md 文件行）。
-    list.mockResolvedValue([{path: '/note.md', kind: 'file'}]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [{path: '/note.md', kind: 'file'} as ListEntry],
+    });
     resetMenuServiceMocks();
   });
 
@@ -404,8 +411,11 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     capturedMoreMenu = undefined;
     capturedImportSheet = undefined;
     capturedDismissOverlays = undefined;
-    list.mockResolvedValue([{path: '/note.md', kind: 'file'}]);
-    buildListRows.mockResolvedValue(fixedListRows);
+    list.mockResolvedValue({
+      ok: true,
+      value: [{path: '/note.md', kind: 'file'} as ListEntry],
+    });
+    buildListRows.mockResolvedValue({ok: true, value: fixedListRows});
     resetMenuServiceMocks();
   });
 
@@ -452,10 +462,13 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
   }
 
   it('T-MM1：dir 行菜单与 more 菜单都是「导入」「导出」，旧三项已退役', async () => {
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
     await renderAndSettle(renderSessionVfm());
 
     await openRowMenu('sub');
@@ -527,10 +540,13 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
   it('T-MM2：dir 行「导出」走 ZIP 导出服务（directoryPath=目录路径）', async () => {
     // 目录行才有 /sub 可导出：list 须先 mock 出该目录行（同 T-MM1）。
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
     await renderAndSettle(renderSessionVfm());
     await openRowMenu('sub');
 
@@ -617,21 +633,30 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
   it('T-MM4：dir 行「导入」→ sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const confirmMock = jest.fn(async () => ({
-      status: 'applied' as const,
-      report: {},
-      skippedBinary: ['/blob.png'],
+      ok: true as const,
+      value: {
+        status: 'applied' as const,
+        report: {},
+        skippedBinary: ['/blob.png'],
+      },
     }));
     mockFn(importVfsSingleFile).mockResolvedValue({
-      status: 'needs-confirm',
-      conflictCount: 2,
-      fileName: 'note.md',
-      confirm: confirmMock,
+      ok: true,
+      value: {
+        status: 'needs-confirm',
+        conflictCount: 2,
+        fileName: 'note.md',
+        confirm: confirmMock,
+      },
     });
     // 目录行才有「导入」入口（file 行菜单不含 import），须先 mock 出 /sub 目录行。
-    list.mockResolvedValue([
-      {path: '/sub', kind: 'directory'},
-      {path: '/note.md', kind: 'file'},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/sub', kind: 'directory'} as ListEntry,
+        {path: '/note.md', kind: 'file'} as ListEntry,
+      ],
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openRowMenu('sub');
@@ -674,7 +699,10 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
   it('T-MM4：单文件导入 picker 取消静默（无 Alert 无 toast）', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(importVfsSingleFile).mockResolvedValue({status: 'cancelled'});
+    mockFn(importVfsSingleFile).mockResolvedValue({
+      ok: true,
+      value: {status: 'cancelled'},
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openMoreMenu();
@@ -693,9 +721,13 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
   it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    mockFn(importVfsSingleFile).mockRejectedValue(
-      new AppError('VFS_SINGLE_FILE_TOO_LARGE', {sizeBytes: 34000000, maxBytes: 33554432}),
-    );
+    mockFn(importVfsSingleFile).mockResolvedValue({
+      ok: false,
+      error: new AppError('VFS_SINGLE_FILE_TOO_LARGE', {
+        sizeBytes: 34000000,
+        maxBytes: 33554432,
+      }),
+    });
 
     await renderAndSettle(renderSessionVfm());
     await openMoreMenu();

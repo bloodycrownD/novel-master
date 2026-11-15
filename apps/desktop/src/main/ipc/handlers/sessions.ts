@@ -20,6 +20,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import { notifyWorkspaceMutatedToRenderer } from "../forward-workspace-mutated.js";
 import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
@@ -47,7 +48,7 @@ export async function handleSessionsListByProject(
   try {
     const rt = await getDesktopRuntime();
     const sessions = await rt.sessions.listByProject(req.projectId);
-    if (!sessions.ok) throw sessions.error;
+    if (!sessions.ok) return ipcErr(formatIpcError(sessions.error));
     return { ok: true, data: sessions.value.map(toDto) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -60,7 +61,7 @@ export async function handleSessionsCreate(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.create(req.projectId, req.title);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     return { ok: true, data: toDto(session.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -73,7 +74,7 @@ export async function handleSessionsRename(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.rename(req.id, req.title);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     return { ok: true, data: toDto(session.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -86,7 +87,7 @@ export async function handleSessionsDelete(
   try {
     const rt = await getDesktopRuntime();
     const deleted = await rt.sessions.delete(req.id);
-    if (!deleted.ok) throw deleted.error;
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -99,7 +100,7 @@ export async function handleSessionsPullTemplate(
   try {
     const rt = await getDesktopRuntime();
     const pulled = await rt.sessions.pullTemplate(req.sessionId);
-    if (!pulled.ok) throw pulled.error;
+    if (!pulled.ok) return ipcErr(formatIpcError(pulled.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -121,9 +122,9 @@ export async function handleSessionsPushTemplate(
   try {
     const rt = await getDesktopRuntime();
     const pushed = await rt.sessions.pushTemplate(req.sessionId);
-    if (!pushed.ok) throw pushed.error;
+    if (!pushed.ok) return ipcErr(formatIpcError(pushed.error));
     const session = await rt.sessions.get(req.sessionId);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     notifyWorkspaceMutatedToRenderer({
       workspaceScope: "session",
       projectId: session.value.projectId,
@@ -140,7 +141,7 @@ export async function handleSessionsGetComposerDraft(
   try {
     const rt = await getDesktopRuntime();
     const draftJson = await rt.sessions.getComposerDraftJson(req.sessionId);
-    if (!draftJson.ok) throw draftJson.error;
+    if (!draftJson.ok) return ipcErr(formatIpcError(draftJson.error));
     return { ok: true, data: draftJson.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -156,7 +157,7 @@ export async function handleSessionsSetComposerDraft(
       req.sessionId,
       req.draftJson,
     );
-    if (!saved.ok) throw saved.error;
+    if (!saved.ok) return ipcErr(formatIpcError(saved.error));
     return { ok: true, data: saved.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -198,9 +199,10 @@ export async function handleSessionsSetAgentBinding(
     let agentId = req.agentId;
     if (agentId == null) {
       const fromState = await rt.state.getCurrentAgentId();
+      if (!fromState.ok) return ipcErr(formatIpcError(fromState.error));
       agentId =
-        fromState && fromState !== ""
-          ? fromState
+        fromState.value && fromState.value !== ""
+          ? fromState.value
           : (await rt.agentRegistry.listAgentIds())[0];
       if (agentId == null || agentId === "") {
         return {
@@ -217,7 +219,7 @@ export async function handleSessionsSetAgentBinding(
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
       agentId,
     });
-    if (!config.ok) throw config.error;
+    if (!config.ok) return ipcErr(formatIpcError(config.error));
     return { ok: true, data: config.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -243,7 +245,7 @@ export async function handleSessionsSetModelOverride(
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
       modelId: req.modelId,
     });
-    if (!config.ok) throw config.error;
+    if (!config.ok) return ipcErr(formatIpcError(config.error));
     return { ok: true, data: config.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

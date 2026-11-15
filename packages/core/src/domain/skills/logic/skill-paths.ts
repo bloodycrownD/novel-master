@@ -8,6 +8,7 @@
  * @module domain/skills/logic/skill-paths
  */
 
+import type { AppError } from "@/errors/app-error.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** 两域技能的逻辑根前缀。 */
@@ -19,16 +20,18 @@ export const SKILL_ENTRY_FILE = "SKILL.md";
 /** 相对路径解析失败原因（service 层据此映射报错文案）。 */
 type SkillRelPathInvalidReason = "empty" | "dotdot" | "escape";
 
-/** {@link resolveSkillRelPathCore} 结果：ok 时带相对技能目录的归一化路径。 */
-type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { readonly ok: false; readonly reason: SkillRelPathInvalidReason };
+/** {@link resolveSkillRelPathCore} 结果：ok 时带相对技能目录的归一化路径；`cross_root` 携带底层 AppError 原样透传（正常技能名不可达）。 */
+type SkillRelPathResolution =
+  | { readonly ok: true; readonly rel: string }
+  | { readonly ok: false; readonly reason: SkillRelPathInvalidReason }
+  | { readonly ok: false; readonly reason: "cross_root"; readonly error: AppError };
 
 /**
  * 把技能内相对路径解析为受控形态：缺省 SKILL.md，禁 `..` 段，
  * 归一化后必须仍在 `/meta/skills/{name}/` 内。
  *
- * 纯函数不抛错——service 层包装成 SkillError，tool 层分类器拿失败
+ * 纯函数不抛错——service 层包装成 AppError，tool 层分类器拿失败
  * 结果保守放弃串行化（该调用会被 schema/服务层拒绝）。
-  * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath 越根失败按迁移前口径透传（正常技能名不可达，见函数内注释），由调用链端点 catch 收口。
  */
 export function resolveSkillRelPathCore(name: string, path: string | undefined): SkillRelPathResolution {
   // 反斜杠与 normalizePath 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的
@@ -44,10 +47,10 @@ export function resolveSkillRelPathCore(name: string, path: string | undefined):
   }
   const dirPrefix = `${SKILLS_ROOT}/${name}/`;
   // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，normalizePath
-  // 的 Err（越过根）在正常技能名下不可达；仍按迁移前的抛错口径透传，时机不变。
+  // 的 Err（越过根）在正常技能名下不可达；仍按迁移前的透传口径携带原错误，时机不变。
   // 剩余失败只有“归一化后跑到技能目录外”。
   const logical = resolveLogicalPath(`${dirPrefix}${raw}`);
-  if (!logical.ok) throw logical.error;
+  if (!logical.ok) return { ok: false, reason: "cross_root", error: logical.error };
   if (!logical.value.startsWith(dirPrefix)) {
     return { ok: false, reason: "escape" };
   }

@@ -56,24 +56,23 @@ export function CloudSyncConfigScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const config = await getCloudSyncConfig(runtime);
-      setSecretKeySet(config.secretKeySet);
+    const config = await getCloudSyncConfig(runtime);
+    if (config.ok) {
+      setSecretKeySet(config.value.secretKeySet);
       setForm({
-        endpoint: config.endpoint,
-        bucket: config.bucket,
-        region: config.region,
-        pathPrefix: config.pathPrefix || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
-        accessKeyId: config.accessKeyId,
+        endpoint: config.value.endpoint,
+        bucket: config.value.bucket,
+        region: config.value.region,
+        pathPrefix: config.value.pathPrefix || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
+        accessKeyId: config.value.accessKeyId,
         secretAccessKey: '',
-        forcePathStyle: config.forcePathStyle,
-        deviceLabel: config.deviceLabel ?? '',
+        forcePathStyle: config.value.forcePathStyle,
+        deviceLabel: config.value.deviceLabel ?? '',
       });
-    } catch (error) {
-      showToast(toastMessage('加载云同步配置失败', error));
-    } finally {
-      setLoading(false);
+    } else {
+      showToast(toastMessage('加载云同步配置失败', config.error));
     }
+    setLoading(false);
   }, [runtime, showToast]);
 
   useEffect(() => {
@@ -97,7 +96,11 @@ export function CloudSyncConfigScreen() {
     }
     setTesting(true);
     try {
-      await testCloudSyncConnection(runtime, toInput());
+      const tested = await testCloudSyncConnection(runtime, toInput());
+      if (!tested.ok) {
+        showToast(toastMessage('连接失败', tested.error));
+        return;
+      }
       showToast('连接成功');
     } catch (error) {
       showToast(toastMessage('连接失败', error));
@@ -127,7 +130,11 @@ export function CloudSyncConfigScreen() {
         }
         input.secretAccessKey = existing;
       }
-      await setCloudSyncConfig(runtime, input);
+      const saved = await setCloudSyncConfig(runtime, input);
+      if (!saved.ok) {
+        showToast(toastMessage('保存失败', saved.error));
+        return;
+      }
       setSecretKeySet(true);
       setForm(prev => ({...prev, secretAccessKey: ''}));
       showToast('配置已保存');

@@ -6,12 +6,9 @@
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
-import type { AppError } from "@/errors/app-error.js";
-import { isAppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
+import type { ErrorKey } from "@/errors/error-codes.js";
 import type { Result } from "@/errors/either.js";
-import type { MessageParams } from "@/common/i18n.js";
-import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
-import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 
 /**
  * Agent run 共享的最小 runtime 表面。
@@ -22,8 +19,8 @@ import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
  */
 export interface AgentRunRuntimePort {
   readonly state: {
-    getCurrentAgentId(): Promise<string | null | undefined>;
-    getCurrentModelId(): Promise<string | null | undefined>;
+    getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
+    getCurrentModelId(): Promise<Result<string | undefined, AppError>>;
   };
   readonly agentRegistry: {
     listAgentIds(): Promise<readonly string[]>;
@@ -34,26 +31,26 @@ export interface AgentRunRuntimePort {
   };
 }
 
-export class AgentRunResolveError extends Error {
-  readonly messageKey?: CoreMessageKey;
-  readonly messageParams?: MessageParams;
-
-  constructor(message: string | CoreMessageDescriptor) {
-    const localized = resolveLocalizedMessage(message);
-    super(localized.text);
-    this.name = "AgentRunResolveError";
-    this.messageKey = localized.messageKey;
-    this.messageParams = localized.messageParams;
-  }
-}
+/**
+ * agent run resolve 链的失败形态（AgentRunResolveError 退役后的判别集合）：
+ * 核心侧 {@link resolveCurrentAgentDefinition} / {@link resolveApplicationModelIdForRun} /
+ * `resolveAgentForProject` 与双端 mapResolveError、meta 归一 catch 共用同一口径。
+ */
+export const AGENT_RUN_RESOLVE_KEYS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
+  "AGENT_NOT_CONFIGURED",
+  "AGENT_NOT_FOUND",
+  "AGENT_MODEL_NOT_SET",
+  "AGENT_REFERENCED_NOT_FOUND",
+]);
 
 /** Resolves current agent id from state or registry fallback. */
 export async function resolveCurrentAgentId(
   runtime: AgentRunRuntimePort
 ): Promise<string | undefined> {
   const fromState = await runtime.state.getCurrentAgentId();
-  if (fromState != null && fromState !== "") {
-    return fromState;
+  if (!fromState.ok) throw fromState.error;
+  if (fromState.value != null && fromState.value !== "") {
+    return fromState.value;
   }
   const ids = await runtime.agentRegistry.listAgentIds();
   return ids[0];
@@ -67,15 +64,16 @@ export async function resolveCurrentAgentId(
  */
 export async function resolveWorkspaceAgentForNewSession(deps: {
   readonly state: {
-    getCurrentAgentId(): Promise<string | null | undefined>;
+    getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
   };
   readonly agentRegistry: {
     listAgentIds(): Promise<readonly string[]>;
   };
 }): Promise<string | undefined> {
   const fromState = await deps.state.getCurrentAgentId();
-  if (fromState != null && fromState !== "") {
-    return fromState;
+  if (!fromState.ok) throw fromState.error;
+  if (fromState.value != null && fromState.value !== "") {
+    return fromState.value;
   }
   const ids = await deps.agentRegistry.listAgentIds();
   return ids[0];
@@ -87,16 +85,14 @@ export async function resolveCurrentAgentDefinition(
 ): Promise<{ agentId: string; definition: AgentDefinition }> {
   const agentId = await resolveCurrentAgentId(runtime);
   if (agentId == null || agentId === "") {
-    throw new AgentRunResolveError(
-      {key: "error.agent.not_configured"}
-    );
+    throw new AppError("AGENT_NOT_CONFIGURED");
   }
   try {
     const definition = await runtime.agentRegistry.get(agentId);
     return { agentId, definition };
   } catch (error) {
     if (isAppError(error, "AGENT_NOT_FOUND")) {
-      throw new AgentRunResolveError({key: "error.agent.not_found", params: {agent_id: agentId}});
+      throw new AppError("AGENT_NOT_FOUND", {agentId});
     }
     throw error;
   }
@@ -115,7 +111,9 @@ export async function resolveApplicationModelIdForRun(
   definition: AgentDefinition,
   sessionId?: string
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
+  const currentModel = await runtime.state.getCurrentModelId();
+  if (!currentModel.ok) throw currentModel.error;
+  const workspaceModelId = currentModel.value ?? "";
   let sessionModelId: string | undefined;
   if (sessionId != null && sessionId !== "") {
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
@@ -127,9 +125,7 @@ export async function resolveApplicationModelIdForRun(
   }
   const resolved = definition.model ?? sessionModelId;
   if (resolved == null || resolved === "") {
-    throw new AgentRunResolveError(
-      {key: "error.agent.model_not_set"}
-    );
+    throw new AppError("AGENT_MODEL_NOT_SET");
   }
   return { savedModelId: resolved, workspaceModelId };
 }

@@ -33,6 +33,7 @@ import type {
   SessionFsRollbackRequest,
 } from '../../../../shared/ipc-types.js';
 import { formatIpcError } from '../format-ipc-error.js';
+import { ipcErr } from '../ipc-result.js';
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
 import { notifyComposerStatusAfterFloorOrCompaction, notifyComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
 
@@ -106,7 +107,7 @@ export async function handleMessagesAppend(
       req.role,
       textBlocks(req.text),
     );
-    if (!msg.ok) throw msg.error;
+    if (!msg.ok) return ipcErr(formatIpcError(msg.error));
     return { ok: true, data: toDto(msg.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -142,10 +143,10 @@ export async function handleMessagesEdit(
   try {
     const rt = await getDesktopRuntime();
     const existing = await rt.messages.get(req.messageId);
-    if (!existing.ok) throw existing.error;
+    if (!existing.ok) return ipcErr(formatIpcError(existing.error));
     const merged = applyTextEditToMessageContent(existing.value.content, req.text);
     const msg = await rt.messages.updateContent(req.messageId, merged);
-    if (!msg.ok) throw msg.error;
+    if (!msg.ok) return ipcErr(formatIpcError(msg.error));
     return { ok: true, data: toDto(msg.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -158,16 +159,16 @@ export async function handleMessagesHide(
   try {
     const rt = await getDesktopRuntime();
     const msg = await rt.messages.get(req.messageId);
-    if (!msg.ok) throw msg.error;
+    if (!msg.ok) return ipcErr(formatIpcError(msg.error));
     const session = await rt.sessions.get(msg.value.sessionId);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     const hidden = await rt.messageTranscriptEffects.hideMessagesInRange(
       session.value.projectId,
       msg.value.sessionId,
       msg.value.seq,
       msg.value.seq,
     );
-    if (!hidden.ok) throw hidden.error;
+    if (!hidden.ok) return ipcErr(formatIpcError(hidden.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -180,16 +181,16 @@ export async function handleMessagesShow(
   try {
     const rt = await getDesktopRuntime();
     const msg = await rt.messages.get(req.messageId);
-    if (!msg.ok) throw msg.error;
+    if (!msg.ok) return ipcErr(formatIpcError(msg.error));
     const session = await rt.sessions.get(msg.value.sessionId);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     const shown = await rt.messageTranscriptEffects.showMessagesInRange(
       session.value.projectId,
       msg.value.sessionId,
       msg.value.seq,
       msg.value.seq,
     );
-    if (!shown.ok) throw shown.error;
+    if (!shown.ok) return ipcErr(formatIpcError(shown.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -202,14 +203,14 @@ export async function handleMessagesHideRange(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.get(req.sessionId);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     const count = await rt.messageTranscriptEffects.hideMessagesInRange(
       session.value.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
     );
-    if (!count.ok) throw count.error;
+    if (!count.ok) return ipcErr(formatIpcError(count.error));
     return { ok: true, data: { count: count.value } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -222,14 +223,14 @@ export async function handleMessagesShowRange(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.get(req.sessionId);
-    if (!session.ok) throw session.error;
+    if (!session.ok) return ipcErr(formatIpcError(session.error));
     const count = await rt.messageTranscriptEffects.showMessagesInRange(
       session.value.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
     );
-    if (!count.ok) throw count.error;
+    if (!count.ok) return ipcErr(formatIpcError(count.error));
     return { ok: true, data: { count: count.value } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -258,7 +259,7 @@ export async function handleMessagesDelete(
   try {
     const rt = await getDesktopRuntime();
     const deleted = await rt.messages.delete(req.messageId);
-    if (!deleted.ok) throw deleted.error;
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -295,7 +296,7 @@ export async function handleMessagesSetFloor(
       req.messageId,
     );
     // 置位：project∪annotate；禁止终态强制 []
-    if (!result.ok) throw result.error;
+    if (!result.ok) return ipcErr(formatIpcError(result.error));
     await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
     return { ok: true, data: result.value };
   } catch (err) {
@@ -309,7 +310,7 @@ export async function handleMessagesFork(
   try {
     const rt = await getDesktopRuntime();
     const forked = await rt.messages.fork(req.sessionId, req.messageId);
-    if (!forked.ok) throw forked.error;
+    if (!forked.ok) return ipcErr(formatIpcError(forked.error));
     return { ok: true, data: toSessionDto(forked.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

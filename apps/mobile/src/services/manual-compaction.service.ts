@@ -72,22 +72,33 @@ export async function runManualCompaction(
   // `null` 表示「压缩本体明确返回失败」（无错误详情）；`{error}` 表示抛错。
   let failure: {readonly error: unknown} | null = null;
   try {
-    const hideStartDepth =
+    const hiddenDepth =
       await runtime.compactionConditionEvaluator.getHideStartDepth();
-    const result = await runCompaction(
-      {
-        sessionKkv: runtime.sessionKkv,
-        messages: runtime.messages,
-        messageTranscriptEffects: runtime.messageTranscriptEffects,
-      },
-      // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
-      // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
-      // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
-      // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
-      // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
-      {sessionId, projectId, hideStartDepth, trigger: 'manual'},
-    );
-    ok = result.ok;
+    if (!hiddenDepth.ok) {
+      // 读深度失败（错误通道迁移四期）：与抛错出口同收场（error 非空），
+      // UI 尾巴按「压缩链抛错」口径处理。
+      failure = {error: hiddenDepth.error};
+    } else {
+      const result = await runCompaction(
+        {
+          sessionKkv: runtime.sessionKkv,
+          messages: runtime.messages,
+          messageTranscriptEffects: runtime.messageTranscriptEffects,
+        },
+        // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
+        // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
+        // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
+        // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
+        // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
+        {
+          sessionId,
+          projectId,
+          hideStartDepth: hiddenDepth.value,
+          trigger: 'manual',
+        },
+      );
+      ok = result.ok;
+    }
   } catch (error) {
     failure = {error};
   }

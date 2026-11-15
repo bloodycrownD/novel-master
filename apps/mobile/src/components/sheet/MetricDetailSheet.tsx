@@ -69,8 +69,15 @@ export function MetricDetailSheet({
       .getSessionUsageDetail(sessionId)
       .then(result => {
         if (!cancelled) {
-          if (!result.ok) throw result.error;
-          setDetail(result.value);
+          // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走异常通道。
+          setError(
+            result.ok
+              ? null
+              : result.error instanceof Error
+                ? result.error.message
+                : String(result.error),
+          );
+          setDetail(result.ok ? result.value : null);
           setLoading(false);
         }
       })

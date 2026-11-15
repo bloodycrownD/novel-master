@@ -92,8 +92,8 @@ describe('useAutoUpdateCheck', () => {
     mockReadDismissedVersion.mockClear();
     mockWriteDismissedVersion.mockClear();
     mockReadUpdatesAutoCheck.mockResolvedValue(true);
-    mockReadSnoozeUntil.mockResolvedValue(undefined);
-    mockReadDismissedVersion.mockResolvedValue(undefined);
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: undefined});
+    mockReadDismissedVersion.mockResolvedValue({ok: true, value: undefined});
     mockPersistUpdateCheckResult.mockResolvedValue(undefined);
     mockPersistFailedUpdateCheck.mockResolvedValue(undefined);
     mockWriteSnoozeUntil.mockResolvedValue(undefined);
@@ -121,7 +121,7 @@ describe('useAutoUpdateCheck', () => {
 
   it('does not show modal while snooze is active but still checks', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue(future);
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -205,7 +205,7 @@ describe('useAutoUpdateCheck', () => {
 
   it('update-available still shows toast while snooze is active', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mockReadSnoozeUntil.mockResolvedValue(future);
+    mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
     mockCheckForUpdates.mockResolvedValue({
       status: 'update-available',
       remoteVersion: '9.9.9',
@@ -227,8 +227,12 @@ describe('useAutoUpdateCheck', () => {
     );
   });
 
-  it('B-5: readUpdatesAutoCheck reject 被兑住，走失败持久化与错误弹窗', async () => {
-    mockReadUpdatesAutoCheck.mockRejectedValue(new Error('pref boom'));
+  it('B-5: 偏好读失败（Result.err）被兑住，走失败持久化与错误弹窗', async () => {
+    // 错误通道迁移四期：auto-check/snooze 读失败不再走 reject，改为 Result.err
+    // ——读 auto-check 失败回退默认（true，继续检查）；读 snooze 失败未知静音
+    // 状态，按「读偏好失败」终端收口（fail 路径）。
+    mockReadUpdatesAutoCheck.mockResolvedValue({ok: true, value: true});
+    mockReadSnoozeUntil.mockResolvedValue({ok: false, error: new Error('pref boom')});
 
     act(() => {
       TestRenderer.create(<TestHost />);

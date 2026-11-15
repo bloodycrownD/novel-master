@@ -6,7 +6,8 @@
  * Boundary: per-model counter mode comes from
  * {@link resolveTokenCounterModeForModel} → `resolveCurrentPromptTokens`（API 优先，否则本地）。
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
- * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
+ * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} reports
+ * `Result.err`（错误通道迁移四期；bail 哨兵仍走 throw，见同文件 isChipBailError）。
  *
  * stream-metrics-native ④：两处「拿不到模型 / 构建失败」的早退路径原本走
  * `runtime.tokenCounters.heuristic.countText`（`ceil(字符数 / 3.35)`）。该折算
@@ -32,11 +33,13 @@ import {
   cancelSessionNativeCounts,
   PromptCountCancelledError,
 } from '@novel-master/tokenizer-driver-rn/android-native-bridge';
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
 // 对拍 core 真实现而非 mock 行为）。
 import {formatContextUsageLabel} from '@novel-master/core/common';
+import {createLogger} from '@novel-master/core/log';
 import {formatTokenSourceBadge} from '@novel-master/core/common';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 import {ChatPromptBuildBailedError} from './session-prompt-input.service';
@@ -74,6 +77,13 @@ type TokenLabelResult = {
   contextWindow?: number;
 };
 
+/** 一帧标签读数：`label === ''` 是「中途弃权」哨兵（hook 对空串不写 meta）。 */
+type TokenLabelFrame = {
+  label: string;
+  upgradeWorthy: boolean;
+  savedModelId?: string;
+};
+
 function formatLabel(r: TokenLabelResult): string {
   const badge = formatTokenSourceBadge(r.source, r.counterKind, r.estimated);
   return formatContextUsageLabel(r.tokenCount, r.contextWindow, badge);
@@ -87,8 +97,10 @@ function formatLabel(r: TokenLabelResult): string {
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<string> {
-  return (await loadChatTokenLabelWithFlag(runtime, scope, false)).label;
+): Promise<Result<string, AppError>> {
+  return (await loadChatTokenLabelWithFlag(runtime, scope, false)).map(
+    frame => frame.label,
+  );
 }
 
 /**
@@ -112,7 +124,7 @@ async function loadChatTokenLabelWithFlag(
   scope: SessionPromptScope,
   preferEstimate: boolean,
   shouldBail?: () => boolean,
-): Promise<{label: string; upgradeWorthy: boolean; savedModelId?: string}> {
+): Promise<Result<TokenLabelFrame, AppError>> {
   // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
   // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
   const t0 = Date.now();
@@ -132,11 +144,16 @@ async function loadChatTokenLabelWithFlag(
       if (__DEV__) {
         console.log('[nm-chip] bailed (run in flight)');
       }
-      return {label: '', upgradeWorthy: false};
+      return Result.ok({label: '', upgradeWorthy: false});
     }
     throw error;
   }
-  const {definition, layout, ctx, rawMessages} = bundle;
+  if (!bundle.ok) {
+    // build 链已知失败（错误通道迁移四期）：沿 Result 通道上抛，调用方
+    // resilient 按 !ok 回落 fallback（与旧异常通道同终端）。
+    return Result.err(bundle.error);
+  }
+  const {definition, layout, ctx, rawMessages} = bundle.value;
   if (__DEV__) {
     const msg = `[nm-chip] build ${Date.now() - t0}ms est=${preferEstimate}`;
     console.log(msg);
@@ -149,10 +166,10 @@ async function loadChatTokenLabelWithFlag(
     if (__DEV__) {
       console.log('[nm-chip] bailed at build/resolve boundary');
     }
-    return {label: '', upgradeWorthy: false};
+    return Result.ok({label: '', upgradeWorthy: false});
   }
   const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-  if (!conf.ok) throw conf.error;
+  if (!conf.ok) return Result.err(conf.error);
   const savedModelId = definition.model ?? conf.value.modelId;
   if (!savedModelId) {
     // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
@@ -162,7 +179,7 @@ async function loadChatTokenLabelWithFlag(
     // 但会让「无 bail 分支」这个例外从注释升格成需要长期维护的分支。
     const serialized = await serializePromptLlmInput(layout, ctx);
     const count = countFallback(runtime, serialized);
-    return {
+    return Result.ok({
       label: formatLabel({
         tokenCount: count,
         estimated: true,
@@ -170,7 +187,7 @@ async function loadChatTokenLabelWithFlag(
         source: 'local',
       }),
       upgradeWorthy: false,
-    };
+    });
   }
   const models = runtime.providerModels;
   const mode = await resolveTokenCounterModeForModel(models, savedModelId);
@@ -190,7 +207,12 @@ async function loadChatTokenLabelWithFlag(
         savedModelId,
         registry: runtime.tokenCounters,
         tokenizerOverride: mode,
-        savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
+        savedModels: {
+          findById: async id => {
+            const saved = await runtime.providerModels.getSavedById(id);
+            return Result.ok(saved);
+          },
+        },
       },
       {
         sessionKkv: runtime.sessionKkv,
@@ -203,15 +225,15 @@ async function loadChatTokenLabelWithFlag(
     );
     const outcome = await resultPromise;
     if (outcome.kind === 'failed') {
-      // core 读口的已知失败（现无产出路径）：原样上抛，不吞成弃权。
-      throw outcome.error;
+      // core 读口的已知失败（现无产出路径）：沿 Result 通道上抛，不吞成弃权。
+      return Result.err(outcome.error);
     }
     if (outcome.kind !== 'completed') {
       // 中途弃权（run 起步）：core 不再抛哨兵，收成空串哨兵。
       if (__DEV__) {
         console.log('[nm-chip] bailed during resolve (run in flight)');
       }
-      return {label: '', upgradeWorthy: false};
+      return Result.ok({label: '', upgradeWorthy: false});
     }
     result = outcome.value;
   } catch (error) {
@@ -222,7 +244,7 @@ async function loadChatTokenLabelWithFlag(
       if (__DEV__) {
         console.log('[nm-chip] cancelled during resolve');
       }
-      return {label: '', upgradeWorthy: false};
+      return Result.ok({label: '', upgradeWorthy: false});
     }
     throw error;
   }
@@ -231,13 +253,13 @@ async function loadChatTokenLabelWithFlag(
     const msg = `[nm-chip] resolve ${Date.now() - t0}ms est=${preferEstimate}`;
     console.log(msg);
   }
-  return {
+  return Result.ok({
     label: formatLabel({...result, contextWindow: cw ?? undefined}),
     upgradeWorthy: result.source === 'local' && result.estimated,
     // 模型身份随首帧带出：升级轮用它区分「切模型」（旧轮读数必被丢弃，可取消）
     // 与「同模型的内容变化」（旧轮仍值得跑完，靠补跑槽收敛）。
     savedModelId,
-  };
+  });
 }
 
 /**
@@ -252,6 +274,9 @@ const preciseUpgradeInflight = new Map<
   string,
   {round: number; savedModelId: string}
 >();
+
+/** 读数链路开发期留痕（错误通道迁移四期新增两处 Result 失败留痕走 logger，不占裸 console 基线）。 */
+const upgradeLog = createLogger('chat.prompt-tokens');
 
 /** 轮次号自增源：只在 `loadChatPromptTokenLabelResilient` 构造请求时消费。 */
 let preciseUpgradeRoundSeq = 0;
@@ -459,13 +484,22 @@ async function runPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
       shouldBail,
     );
     const precise = await precisePromise;
+    if (!precise.ok) {
+      // 升级失败保持首帧估算标签（错误通道迁移四期：与旧 catch 同款留痕，
+      // cr-fix-spec-r2 full/I-1——静默失败会让 chip 永停估算档且无从排查）。
+      upgradeLog.warn('prompt token precise upgrade failed', {
+        sessionId,
+        error: precise.error,
+      });
+      return;
+    }
     if (
       // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
-      precise.label !== '' &&
+      precise.value.label !== '' &&
       sessionRefreshGen.get(sessionId) === gen &&
-      precise.label !== request.baselineLabel
+      precise.value.label !== request.baselineLabel
     ) {
-      request.onPreciseUpgrade(precise.label);
+      request.onPreciseUpgrade(precise.value.label);
     }
   } catch (error) {
     // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
@@ -517,21 +551,30 @@ export async function loadChatPromptTokenLabelResilient(
      */
     readonly shouldBailPrecise?: () => boolean;
   },
-): Promise<string> {
-  let first: {label: string; upgradeWorthy: boolean; savedModelId?: string};
+): Promise<Result<string, AppError>> {
+  let first: Result<TokenLabelFrame, AppError>;
   const bail = options?.shouldBail;
   try {
     first = await loadChatTokenLabelWithFlag(runtime, scope, true, bail);
+    if (!first.ok) {
+      // 首帧已知失败（错误通道迁移四期）：与未知异常同款回落 fallback。
+      upgradeLog.warn('prompt count failed, message fallback', {
+        sessionId: scope.sessionId,
+        error: first.error,
+      });
+      return loadChatPromptTokenLabelFallback(runtime, scope);
+    }
   } catch (error) {
     if (__DEV__) {
       console.warn('[nm/chat] prompt count failed, message fallback', error);
     }
     return loadChatPromptTokenLabelFallback(runtime, scope);
   }
+  const frame = first.value;
   // 中途弃权（run 已起步）：返回空串哨兵——hook 侧对空串不写 meta（保留
   // 旧标签）、不推进代数（本轮没有产生新首帧，旧升级轮的新鲜度闸不受影响）。
-  if (first.label === '') {
-    return '';
+  if (frame.label === '') {
+    return Result.ok('');
   }
   const sessionId = scope.sessionId;
   const gen = (sessionRefreshGen.get(sessionId) ?? 0) + 1;
@@ -542,11 +585,11 @@ export async function loadChatPromptTokenLabelResilient(
   // 可兑现，用户连点 15 次无效）。run 在途时跳过升级（chip 保持估算档），run
   // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
   const runInFlight = runtime.abortRegistry.has(sessionId);
-  if (first.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
+  if (frame.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
     const request: UpgradeRequest = {
       runtime,
       scope,
-      baselineLabel: first.label,
+      baselineLabel: frame.label,
       onPreciseUpgrade,
       // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
       // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
@@ -555,7 +598,7 @@ export async function loadChatPromptTokenLabelResilient(
         runtime.abortRegistry.has(scope.sessionId) ||
         options?.shouldBailPrecise?.() === true,
       round: ++preciseUpgradeRoundSeq,
-      savedModelId: first.savedModelId ?? '',
+      savedModelId: frame.savedModelId ?? '',
     };
     const inFlight = preciseUpgradeInflight.get(sessionId);
     if (inFlight != null && inFlight.savedModelId !== request.savedModelId) {
@@ -579,16 +622,21 @@ export async function loadChatPromptTokenLabelResilient(
       startPreciseUpgrade(sessionId, request);
     }
   }
-  return first.label;
+  return Result.ok(frame.label);
 }
 
-/** Message-only heuristic when full prompt build fails (still useful in meta bar). */
+/** Message-only heuristic when full prompt build fails (still useful in meta bar).
+ *
+ * 失败通道（错误通道迁移四期）：读模型 / 读会话配置的已知失败沿 `Result.err`
+ * 接力给调用方（resilient 原样透传，hook 收成清标签）；build 段的 bail 哨兵
+ * 与未知异常仍走 reject，由调用方 catch 收口。
+ */
 // nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
 // catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
 async function loadChatPromptTokenLabelFallback(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const all = await runtime.messages.listBySession(scope.sessionId);
   const visible = all.filter(m => !m.hidden);
   const bodyText = messageBodyTextFromBlocks;
@@ -596,13 +644,22 @@ async function loadChatPromptTokenLabelFallback(
   const serialized = lines.join('\n\n');
   const count = countFallback(runtime, serialized);
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
+  const currentModel = await runtime.state.getCurrentModelId();
+  if (!currentModel.ok) return Result.err(currentModel.error);
+  const workspaceModelId = currentModel.value ?? '';
   let savedModelId: string | undefined;
   try {
-    const {definition} = await buildSessionPromptInput(runtime, scope);
-    const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
-    if (!conf.ok) throw conf.error;
-    savedModelId = definition.model ?? conf.value.modelId;
+    const built = await buildSessionPromptInput(runtime, scope);
+    if (!built.ok) {
+      savedModelId = workspaceModelId || undefined;
+    } else {
+      const conf = await runtime.sessions.getSessionAgentConfig(
+        scope.sessionId,
+      );
+      savedModelId = conf.ok
+        ? built.value.definition.model ?? conf.value.modelId
+        : workspaceModelId || undefined;
+    }
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;
@@ -618,11 +675,13 @@ async function loadChatPromptTokenLabelFallback(
     }
   }
 
-  return formatLabel({
-    tokenCount: count,
-    estimated: true,
-    counterKind: 'heuristic',
-    source: 'local',
-    contextWindow,
-  });
+  return Result.ok(
+    formatLabel({
+      tokenCount: count,
+      estimated: true,
+      counterKind: 'heuristic',
+      source: 'local',
+      contextWindow,
+    }),
+  );
 }

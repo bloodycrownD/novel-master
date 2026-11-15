@@ -26,6 +26,7 @@ import type {
   UsageStatsSummaryDto,
 } from "../../../../shared/ipc-types.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 
 /**
@@ -175,7 +176,7 @@ export async function handleUsageStatsQuery(
     switch (req.kind) {
       case "summary": {
         const summary = await svc.getSummary(filter);
-        if (!summary.ok) throw summary.error;
+        if (!summary.ok) return ipcErr(formatIpcError(summary.error));
         return {
           ok: true,
           data: toSummaryDto(summary.value),
@@ -183,7 +184,7 @@ export async function handleUsageStatsQuery(
       }
       case "daily": {
         const buckets = await svc.getDailyBuckets(filter);
-        if (!buckets.ok) throw buckets.error;
+        if (!buckets.ok) return ipcErr(formatIpcError(buckets.error));
         return {
           ok: true,
           data: buckets.value.map(toBucketDto),
@@ -192,7 +193,7 @@ export async function handleUsageStatsQuery(
       case "hourly": {
         // dayLocalDate 缺失时传空串，由服务层日期校验拒绝并落入 IpcResult error
         const buckets = await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter);
-        if (!buckets.ok) throw buckets.error;
+        if (!buckets.ok) return ipcErr(formatIpcError(buckets.error));
         return {
           ok: true,
           data: buckets.value.map(toBucketDto),
@@ -200,7 +201,7 @@ export async function handleUsageStatsQuery(
       }
       case "modelBreakdown": {
         const rows = await svc.getModelBreakdown(filter);
-        if (!rows.ok) throw rows.error;
+        if (!rows.ok) return ipcErr(formatIpcError(rows.error));
         return {
           ok: true,
           data: toModelRowDtos(rows.value),
@@ -214,7 +215,7 @@ export async function handleUsageStatsQuery(
           offset: req.offset ?? 0,
           limit: req.limit ?? 50,
         });
-        if (!page.ok) throw page.error;
+        if (!page.ok) return ipcErr(formatIpcError(page.error));
         return {
           ok: true,
           data: { rows: page.value.rows.map(toRequestRowDto), total: page.value.total },
@@ -224,7 +225,7 @@ export async function handleUsageStatsQuery(
         // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
         // sessionId 缺失传空串，由服务层 CHAT_INVALID_ARGUMENT 拒绝并落入 error。
         const detail = await svc.getSessionUsageDetail(req.sessionId ?? "");
-        if (!detail.ok) throw detail.error;
+        if (!detail.ok) return ipcErr(formatIpcError(detail.error));
         return {
           ok: true,
           data: toSessionDetailDto(detail.value),

@@ -13,18 +13,15 @@ import { normalizePath } from "../repositories/impl/normalize-path.js";
 type VfsZipPathError = AppError<"VFS_ZIP_INVALID_PATH" | "VFS_INVALID_PATH">;
 
 /**
- * 规范化 ZIP 目标目录；缺省或空串 → `/`。
- *
- * @throws AppError<"VFS_INVALID_PATH"> 目标目录非法（保持原抛错时机）
-  * 解包 throw 边界（错误通道迁移三期门⑦）：路径归一化失败按迁移前形态上抛，由调用链端点 catch 收口。
+ * 规范化 ZIP 目标目录；缺省或空串 → `/`。目标目录非法走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，决定权交给上层）。
  */
-export function resolveZipDirectoryPath(directoryPath?: string): string {
+export function resolveZipDirectoryPath(directoryPath?: string): Result<string, AppError<"VFS_INVALID_PATH">> {
   if (directoryPath == null || directoryPath.trim() === "") {
-    return "/";
+    return Result.ok("/");
   }
   const resolved = resolveLogicalPath(directoryPath);
-  if (!resolved.ok) throw resolved.error;
-  return resolved.value;
+  if (!resolved.ok) return resolved;
+  return Result.ok(resolved.value);
 }
 
 /**
@@ -32,7 +29,9 @@ export function resolveZipDirectoryPath(directoryPath?: string): string {
  * 目标目录自身返回空串（调用方应跳过）。
  */
 export function zipEntryNameRelativeToDirectory(logical: string, directoryPath: string): Result<string, VfsZipPathError> {
-  const dir = resolveZipDirectoryPath(directoryPath);
+  const dirResult = resolveZipDirectoryPath(directoryPath);
+  if (!dirResult.ok) return Result.err(dirResult.error);
+  const dir = dirResult.value;
   const resolved = resolveLogicalPath(logical);
   if (!resolved.ok) return Result.err(resolved.error);
   const path = resolved.value;
@@ -73,8 +72,9 @@ export function logicalFromZipEntryRelativeToDirectory(entryName: string, direct
   if (trimmed.length === 0) {
     return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: "empty ZIP entry name" }));
   }
-  const dir = resolveZipDirectoryPath(directoryPath);
-  return normalizePath(dir === "/" ? `/${trimmed}` : `${dir}/${trimmed}`);
+  const dirResult = resolveZipDirectoryPath(directoryPath);
+  if (!dirResult.ok) return Result.err(dirResult.error);
+  return normalizePath(dirResult.value === "/" ? `/${trimmed}` : `${dirResult.value}/${trimmed}`);
 }
 
 /**
@@ -99,7 +99,9 @@ export function logicalFromZipDirectoryEntryRelativeToDirectory(entryName: strin
  * validator 单点调用；内联会把判定与错误口径塞回 validateVfsZipEntries 主循环。
  */
 export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, entryNames: readonly string[]): Result<void, VfsZipPathError> {
-  const dir = resolveZipDirectoryPath(directoryPath);
+  const dirResult = resolveZipDirectoryPath(directoryPath);
+  if (!dirResult.ok) return Result.err(dirResult.error);
+  const dir = dirResult.value;
   if (dir === "/") {
     return Result.ok(undefined);
   }

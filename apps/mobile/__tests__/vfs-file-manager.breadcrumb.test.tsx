@@ -112,7 +112,10 @@ const listByPath: Record<
     {path: '/projects/p1/sessions/s9', kind: 'directory', label: '第三章草稿'},
   ],
 };
-const list = jest.fn(async (path: string) => listByPath[path] ?? []);
+const list = jest.fn(async (path: string) => ({
+  ok: true as const,
+  value: listByPath[path] ?? [],
+}));
 
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));

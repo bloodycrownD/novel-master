@@ -8,9 +8,11 @@ import {readFile} from "node:fs/promises";
 import {registerBuiltinTools, ToolRegistry} from "@novel-master/core";
 
 import {isAppError, type AgentDefinition, runAgentTurn, validateAgentDefinition,} from "@novel-master/core/agent";
+import { type AppError, Result } from "@novel-master/core/errors";
 
 import {assertSavedModelUuid, type LlmStreamEvent} from "@novel-master/core/provider";
 import type {NovelMasterRuntime} from "../runtime.js";
+import {RESULT_OK} from "../cli-errors.js";
 import {buildMinimalDefinition} from "../config/build-minimal-definition.js";
 import {loadAgentFromConfig} from "../config/load-agent-config-file.js";
 import {loadAgentPromptLayoutFromYaml} from "../config/load-agent-prompt-layout.js";
@@ -40,22 +42,25 @@ function warnUnsupportedFlag(
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：repo save / 校验的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * 校验的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
+ * `assertSavedModel` 回调同样沿 `Result` 回传（core 契约已放宽为 void | Result 双通道）。
  */
 async function validateDefinitionForCli(
     rt: NovelMasterRuntime,
     definition: AgentDefinition,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
     const toolProbe = new ToolRegistry();
     registerBuiltinTools(toolProbe);
     const validation = await validateAgentDefinition(definition, {
         assertSavedModel: async (savedModelId) => {
             const saved = await assertSavedModelUuid(savedModelId, rt.savedModels);
-            if (!saved.ok) throw saved.error;
+            if (!saved.ok) return Result.err(saved.error);
+            return Result.ok(undefined);
         },
         registeredToolNames: toolProbe.list(),
     });
-    if (!validation.ok) throw validation.error;
+    if (!validation.ok) return validation;
+    return RESULT_OK;
 }
 
 /**
@@ -65,13 +70,13 @@ async function validateDefinitionForCli(
 async function tryResolveDefinitionFromFlags(
     rt: NovelMasterRuntime,
     flags: ReadonlyMap<string, string | true>,
-): Promise<AgentDefinition | undefined> {
+): Promise<Result<AgentDefinition | undefined, AppError>> {
     const agentConfigPath = flagString(flags, "agent-config");
     const agentId = flagString(flags, "agent-id");
     const promptPath = flagString(flags, "prompt-path");
 
     if (agentConfigPath == null && agentId == null && promptPath == null) {
-        return undefined;
+        return Result.ok(undefined);
     }
 
     let definition: AgentDefinition;
@@ -91,32 +96,38 @@ async function tryResolveDefinitionFromFlags(
     } else if (promptPath != null) {
         const source = await readFile(promptPath, "utf8");
         const layout = loadAgentPromptLayoutFromYaml(source);
-        definition = buildMinimalDefinition({layout});
+        if (!layout.ok) return Result.err(layout.error);
+        definition = buildMinimalDefinition({layout: layout.value});
     } else {
-        return undefined;
+        return Result.ok(undefined);
     }
 
-    await validateDefinitionForCli(rt, definition);
-    return definition;
+    const validated = await validateDefinitionForCli(rt, definition);
+    if (!validated.ok) return Result.err(validated.error);
+    return Result.ok(definition);
 }
 
 export async function runAgent(
     rt: NovelMasterRuntime,
     subcommand: string,
     args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
     const {flags} = parseCliArgs(args);
 
     switch (subcommand) {
         case "list":
         case "show":
         case "create":
-        case "delete":
-            await runAgentRegistryCommand(rt, subcommand, args);
-            return;
+        case "delete": {
+            const done = await runAgentRegistryCommand(rt, subcommand, args);
+            if (!done.ok) return done;
+            return RESULT_OK;
+        }
         case "run":
         case "continue": {
-            const {projectId, sessionId} = await rt.scope.resolveProjectSession(flags);
+            const scopeIds = await rt.scope.resolveProjectSession(flags);
+            if (!scopeIds.ok) return Result.err(scopeIds.error);
+            const {projectId, sessionId} = scopeIds.value;
             const content = flagString(flags, "content");
             const noStream = flags.get("no-stream") === true;
 
@@ -151,18 +162,22 @@ export async function runAgent(
             // --save 路径：解析 + 校验 definition，写入 agent registry（project custom 不走这里）。
             // 已知限制（Phase 0 兑底）：不带 --save 的 transient definition 覆盖不再支持，
             // definitionFromFlags 不再注入运行时。
-            const definitionFromFlags = shouldSave
-                ? await tryResolveDefinitionFromFlags(rt, flags)
-                : undefined;
+            let definitionFromFlags: AgentDefinition | undefined;
+            if (shouldSave) {
+                const resolvedDefinition = await tryResolveDefinitionFromFlags(rt, flags);
+                if (!resolvedDefinition.ok) return Result.err(resolvedDefinition.error);
+                definitionFromFlags = resolvedDefinition.value;
+            }
             if (shouldSave) {
                 if (definitionFromFlags == null) {
                     throw new Error("--save requires --agent-config <path>");
                 }
-                await rt.agentRegistry.upsert(
+                const saved = await rt.agentRegistry.upsert(
                     agentId!,
                     definitionFromFlags,
                     createRegistryValidateOptions(rt),
                 );
+                if (!saved.ok) return Result.err(saved.error);
             }
 
             // 已知限制（Phase 0 兑底）：transient definition 覆盖已降级；options 仅保留
@@ -204,12 +219,14 @@ export async function runAgent(
                 }
             }
 
-            const result = await runAgentTurn(
+            const outcome = await runAgentTurn(
                 rt,
                 {projectId, sessionId},
                 content ?? "",
                 options,
             );
+            if (!outcome.ok) return Result.err(outcome.error);
+            const result = outcome.value;
 
             if (!noStream) {
                 process.stdout.write("\n");
@@ -225,7 +242,7 @@ export async function runAgent(
                     }),
                 );
             }
-            return;
+            return RESULT_OK;
         }
         default:
             throw new Error(

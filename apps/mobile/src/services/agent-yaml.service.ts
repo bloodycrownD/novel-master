@@ -5,6 +5,7 @@ import {
   validateAgentDefinition,
   type AgentDefinition,
 } from '@novel-master/core/agent';
+import {Result} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
@@ -32,20 +33,27 @@ export async function exportAgentYaml(
   return exportYamlFile(yaml, `${agentId}.agent.yaml`);
 }
 
+/** 校验失败套「YAML 无效」前缀沿 Result 接力（错误通道迁移四期）；decode/upsert 的平台异常仍走 reject。 */
 export async function importAgentYaml(
   runtime: MobileNovelMasterRuntime,
   agentId: string,
-): Promise<void> {
-  await importYamlFile(async yaml => {
+): Promise<Result<void, Error>> {
+  return importYamlFile(async yaml => {
     try {
       const def = decodeAgentYamlText(yaml);
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
       const validation = await validateAgentDefinition(def, {registeredToolNames: probe.list()});
-      if (!validation.ok) throw validation.error;
-      await runtime.agentRegistry.upsert(agentId, def, {
+      if (!validation.ok) {
+        return Result.err(normalizeYamlError(validation.error, 'Agent YAML 无效'));
+      }
+      const saved = await runtime.agentRegistry.upsert(agentId, def, {
         registeredToolNames: probe.list(),
       });
+      if (!saved.ok) {
+        return Result.err(normalizeYamlError(saved.error, 'Agent YAML 无效'));
+      }
+      return Result.ok(undefined);
     } catch (error) {
       throw normalizeYamlError(error, 'Agent YAML 无效');
     }

@@ -6,18 +6,19 @@
  * useChatTabScope.openChatLink 与 SubagentSessionScreen 各自接线完成。
  *
  * 探测原语：VfsService 无 stat、read 拉全文代价大、glob 有转义问题，
- * 故用 `list(parent)` 单层列举比对 basename——父目录不存在时 list 抛错，
- * 一律按不存在处理。仅 `kind === 'file'` 命中（目录目标 no-op）。
+ * 故用 `list(parent)` 单层列举比对 basename——父目录不存在时 list 走
+ * `Result.err`，一律按不存在处理。仅 `kind === 'file'` 命中（目录目标 no-op）。
  *
  * @module screens/tabs/chat-tab/chat-link-nav
  */
 
 import {chatLinkResolver} from '@novel-master/core/chat';
+import type {AppError, Result} from '@novel-master/core/errors';
 import type {VfsListEntry} from '@novel-master/core/vfs';
 
 /** 探测所需的最小 VFS 面（VfsService.list 的结构子集，测试可直传 stub）。 */
 export type ChatLinkProbeVfs = {
-  list(dir: string): Promise<readonly VfsListEntry[]>;
+  list(dir: string): Promise<Result<readonly VfsListEntry[], AppError>>;
 };
 
 /** 链接点击的执行意图：应用内打开文件 / 外跳系统浏览器 / 路径未命中 / 无动作。 */
@@ -67,13 +68,12 @@ async function probeFileIn(
   }
   const slash = normalizedPath.lastIndexOf('/');
   const parentDir = slash <= 0 ? '/' : normalizedPath.slice(0, slash);
-  try {
-    const entries = await vfs.list(parentDir);
-    return entries.some(
-      entry => entry.path === normalizedPath && entry.kind === 'file',
-    );
-  } catch {
-    // 父目录 NOT_FOUND 及一切探测异常按不存在处理
+  const listed = await vfs.list(parentDir);
+  if (!listed.ok) {
+    // 父目录 NOT_FOUND 及一切探测失败按不存在处理
     return false;
   }
+  return listed.value.some(
+    entry => entry.path === normalizedPath && entry.kind === 'file',
+  );
 }

@@ -71,7 +71,7 @@ jest.mock('@/services/model-display-label', () => ({
 
 describe('loadChatAgentMeta', () => {
   it('project follow + session.agentId → session，展示会话引用 Agent 名称', async () => {
-    const meta = await loadChatAgentMeta(
+    const loaded = await loadChatAgentMeta(
       mockRuntime({
         agentConfig: {mode: 'follow'},
         sessionAgentConfig: {agentId: 'default'},
@@ -79,6 +79,8 @@ describe('loadChatAgentMeta', () => {
       'proj-1',
       'sess-1',
     );
+    if (!loaded.ok) throw loaded.error;
+    const meta = loaded.value;
     expect(meta.source).toBe('session');
     expect(meta.agentName).toBe('全局助手');
     expect(meta.agentId).toBe('default');
@@ -89,7 +91,7 @@ describe('loadChatAgentMeta', () => {
   it('modelSource=agent-pin：agent definition 自带 model 压制一切', async () => {
     const pinned = buildDefaultAgentDefinitionPreservingName('带 pin 助手');
     pinned.model = 'openai:pinned-model';
-    const meta = await loadChatAgentMeta(
+    const loaded = await loadChatAgentMeta(
       mockRuntime({
         agentConfig: {mode: 'follow'},
         currentAgentId: 'pinned-agent',
@@ -103,8 +105,9 @@ describe('loadChatAgentMeta', () => {
       'proj-1',
       'sess-1',
     );
-    expect(meta.hasDedicatedModel).toBe(true);
-    expect(meta.modelSource).toBe('agent-pin');
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value.hasDedicatedModel).toBe(true);
+    expect(loaded.value.modelSource).toBe('agent-pin');
   });
 
   it('T-C1：resolveAgentForProject 与 getSessionAgentConfig 并行发起，输出与串行版等价', async () => {
@@ -140,8 +143,9 @@ describe('loadChatAgentMeta', () => {
       ok: true,
       value: {agentId: 'default', modelId: 'openai:gpt-4'},
     });
-    const meta = await metaPromise;
-    expect(meta).toEqual({
+    const loaded = await metaPromise;
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value).toEqual({
       source: 'session',
       agentId: 'default',
       agentName: '全局助手',
@@ -154,17 +158,19 @@ describe('loadChatAgentMeta', () => {
 });
 
 // ── au/C-orch-2（cr-fix-spec 条目 9，方向 b）：错误归一口径 ─────────────────
-// 「已删待重选」（source='none'）仅覆盖 AgentRunResolveError 成因；ChatError
+// 「已删待重选」（source='none'）仅覆盖 agent 解析失败成因；ChatError
 // 等其它异常原样上抛，由调用方走「锁定 + 错误文案」报错态——错误成因绝不
 // 冒充「已被删除」（与 desktop prompt handler 的内层 catch 口径一致）。
 describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
-  it('AgentRunResolveError（agentId 指向已删 agent）归一 source=none 待重选 meta（既有口径不回归）', async () => {
+  it('agent 解析失败（AGENT_REFERENCED_NOT_FOUND）归一 source=none 待重选 meta（既有口径不回归）', async () => {
     const runtime: any = mockRuntime({});
-    // registry.get 抛错会被 resolveAgentForProject 归一为 AgentRunResolveError。
+    // registry.get 抛错会被 resolveAgentForProject 归一为 AGENT_REFERENCED_NOT_FOUND。
     runtime.agentRegistry.get = jest.fn(async () => {
       throw new Error('AGENT_NOT_FOUND');
     });
-    const meta = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    const loaded = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    if (!loaded.ok) throw loaded.error;
+    const meta = loaded.value;
     expect(meta.source).toBe('none');
     expect(meta.agentId).toBeUndefined();
     expect(meta.agentName).toBe('未配置 Agent');
@@ -200,7 +206,7 @@ describe('isAgentLocked / isModelLocked 拆分（none 态智能体卡放开待�
     hasDedicatedModel: false,
     modelSource: 'session',
   };
-  // loadChatAgentMeta 在 AgentRunResolveError 时归一回填的 none meta
+  // loadChatAgentMeta 在 agent 解析失败时归一回填的 none meta
   const noneMeta: ChatAgentMeta = {
     source: 'none',
     agentId: undefined,

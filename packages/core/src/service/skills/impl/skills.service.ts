@@ -71,6 +71,9 @@ function resolveSkillRelPath(name: string, path: string | undefined): Result<str
   if (resolved.ok) {
     return Result.ok(resolved.rel);
   }
+  if (resolved.reason === "cross_root") {
+    return Result.err(resolved.error);
+  }
   const reason: CoreMessageDescriptor = { key: `error.skill.invalid_path.${resolved.reason}` };
   return Result.err(new AppError("SKILL_INVALID_PATH", { descriptor: reason, path: String(path ?? SKILL_ENTRY_FILE) }));
 }
@@ -201,15 +204,16 @@ export class SkillsService implements SkillService {
 
   async listSkills(scope: SkillListScope): Promise<SkillListItem[]> {
     const { vfs, domain } = this.vfsForScope(scope);
+    const listed = await vfs.list(SKILLS_ROOT, { recursive: true });
     let entries: VfsListEntry[];
-    try {
-      entries = await vfs.list(SKILLS_ROOT, { recursive: true });
-    } catch (error) {
+    if (listed.ok) {
+      entries = listed.value;
+    } else {
       // 技能根目录尚不存在 = 无技能（write 首个 SKILL.md 时才会建目录行）
-      if (isAppError(error, "VFS_NOT_FOUND")) {
+      if (isAppError(listed.error, "VFS_NOT_FOUND")) {
         return [];
       }
-      throw error;
+      throw listed.error;
     }
 
     const rootPrefix = `${SKILLS_ROOT}/`;
@@ -246,7 +250,9 @@ export class SkillsService implements SkillService {
     let source: string | null = null;
     if (files.includes(SKILL_ENTRY_FILE)) {
       const read = await vfs.read(`${SKILLS_ROOT}/${name}/${SKILL_ENTRY_FILE}`);
-      source = read.content;
+      if (read.ok) {
+        source = read.value.content;
+      }
     }
     if (source == null) {
       return {
@@ -289,21 +295,20 @@ export class SkillsService implements SkillService {
       const vfsRes = this.vfsForDomain(candidate, projectId);
       if (!vfsRes.ok) return Result.err(vfsRes.error);
       const vfs = vfsRes.value;
-      try {
-        const result = await vfs.read(`${SKILLS_ROOT}/${name}/${relPath}`);
+      const result = await vfs.read(`${SKILLS_ROOT}/${name}/${relPath}`);
+      if (result.ok) {
         return Result.ok({
           domain: candidate,
           name,
           path: relPath,
-          content: result.content,
-          version: result.version,
+          content: result.value.content,
+          version: result.value.version,
         });
-      } catch (error) {
-        if (isAppError(error, "VFS_NOT_FOUND")) {
-          continue;
-        }
-        throw error;
       }
+      if (isAppError(result.error, "VFS_NOT_FOUND")) {
+        continue;
+      }
+      return Result.err(result.error);
     }
     return Result.err(new AppError("SKILL_NOT_FOUND", { detail: `Skill file not found: ${name}/${relPath}`, skillName: name, path: relPath }));
   }
@@ -329,11 +334,11 @@ export class SkillsService implements SkillService {
     }
     // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md。
     // 版本比对已从 VFS 底层移除：last-write-wins。
-    try {
-      return Result.ok(await vfs.write(`${SKILLS_ROOT}/${name}/${rel.value}`, content));
-    } catch (error) {
-      return Result.err(await this.toWriteNotFoundError(error, name, rel.value, domain, projectId));
+    const written = await vfs.write(`${SKILLS_ROOT}/${name}/${rel.value}`, content);
+    if (written.ok) {
+      return Result.ok(written.value);
     }
+    return Result.err(await this.toWriteNotFoundError(written.error, name, rel.value, domain, projectId));
   }
 
   async editSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, match: SkillEditMatch, projectId?: string): Promise<Result<{ version: number; replacements: number }, AppError>> {
@@ -349,11 +354,11 @@ export class SkillsService implements SkillService {
     const vfs = vfsRes.value;
     // replace 底层走 compute-replace-result（normalize-for-match 定位），
     // 与 edit 工具同一套匹配语义
-    try {
-      return Result.ok(await vfs.replace(`${SKILLS_ROOT}/${name}/${rel.value}`, match.oldString, match.newString, { replaceAll: match.replaceAll }));
-    } catch (error) {
-      return Result.err(await this.toWriteNotFoundError(error, name, rel.value, domain, projectId));
+    const replaced = await vfs.replace(`${SKILLS_ROOT}/${name}/${rel.value}`, match.oldString, match.newString, { replaceAll: match.replaceAll });
+    if (replaced.ok) {
+      return Result.ok(replaced.value);
     }
+    return Result.err(await this.toWriteNotFoundError(replaced.error, name, rel.value, domain, projectId));
   }
 
   async setDisabled(projectId: string, name: string, disabled: boolean): Promise<Result<void, AppError>> {
@@ -486,7 +491,8 @@ export class SkillsService implements SkillService {
         // 校验链 5：目录迁移（entry_id / revision 历史自动跟随；
         // renamePrefix 无目标存在检查，由上一步事务内查重保证）
         if (renaming) {
-          await vfs.renamePrefix(oldPrefix, newPrefix);
+          const renamed = await vfs.renamePrefix(oldPrefix, newPrefix);
+          if (!renamed.ok) throw renamed.error;
         }
 
         // 校验链 6：front matter 同步——解析成功才重写（bump version +
@@ -494,15 +500,15 @@ export class SkillsService implements SkillService {
         // 「治好」无效技能的行为歧义
         const entryPath = `${newPrefix}/${SKILL_ENTRY_FILE}`;
         let source: string | null = null;
-        try {
-          source = (await vfs.read(entryPath)).content;
-        } catch (error) {
-          if (!isAppError(error, "VFS_NOT_FOUND")) {
-            throw error;
-          }
+        const entryRead = await vfs.read(entryPath);
+        if (entryRead.ok) {
+          source = entryRead.value.content;
+        } else if (!isAppError(entryRead.error, "VFS_NOT_FOUND")) {
+          throw entryRead.error;
         }
         if (source != null && parseSkillFrontMatter(source).valid) {
-          await vfs.write(entryPath, withSkillFrontMatterValues(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
+          const written = await vfs.write(entryPath, withSkillFrontMatterValues(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
+          if (!written.ok) throw written.error;
         }
 
         // 校验链 7：负清单迁移（仅改名时）——project 域迁本项目单行；

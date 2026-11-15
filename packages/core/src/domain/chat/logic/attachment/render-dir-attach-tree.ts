@@ -55,13 +55,12 @@ class DirAttachTreeRenderer {
             rootLine = base.length > 0 ? `${base}/` : "/";
         }
 
-        let entries: Awaited<ReturnType<VfsService["list"]>>;
-        try {
-            entries = await deps.vfs.list(normalizedRoot, {recursive: false});
-        } catch {
+        const listed = await deps.vfs.list(normalizedRoot, {recursive: false});
+        if (!listed.ok) {
             // 目录不存在时仍输出根行，便于 prompt 侧感知路径
             return rootLine;
         }
+        const entries = listed.value;
 
         const dirs: ChildEntry[] = [];
         const files: ChildEntry[] = [];

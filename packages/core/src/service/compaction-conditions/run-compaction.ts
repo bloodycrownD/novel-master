@@ -86,7 +86,9 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
     const stubAll = headers.map((header) => ({ id: header.id, sessionId: header.sessionId, seq: header.seq, role: header.role, content: { blocks: [] }, provider: null, raw: null, createdAtMs: header.createdAtMs, hidden: header.hidden }));
     const visible = stubAll.filter((m) => !m.hidden);
     const ids = messageIdsInSlice(visible, slice);
-    if (!ids.ok) throw ids.error;
+    // 错误通道迁移四期：切片失败不再借 throw 走下方 catch，直接按本函数
+    // 既有失败形态返回（行为与原「抛出即被相邻 catch 吞成 ok:false」逐位等价）。
+    if (!ids.ok) return { ok: false };
     if (ids.value.length > 0) {
       const idSet = new Set(ids.value);
       const minSeq = Math.min(...visible.filter((m) => idSet.has(m.id)).map((m) => m.seq));

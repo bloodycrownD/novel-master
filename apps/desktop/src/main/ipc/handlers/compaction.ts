@@ -30,6 +30,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { notifyComposerStatusAfterFloorOrCompaction } from "../../services/notify-composer-status-after-kkv-clear.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import { isDesktopSessionRunInFlight } from "./agent.js";
 
 export async function handleCompactionManual(
@@ -56,8 +57,9 @@ export async function handleCompactionManual(
       messages: rt.messages,
       messageTranscriptEffects: rt.messageTranscriptEffects,
     };
-    const hideStartDepth =
-      await rt.compactionConditionEvaluator.getHideStartDepth();
+    const hiddenDepth = await rt.compactionConditionEvaluator.getHideStartDepth();
+    if (!hiddenDepth.ok) return ipcErr(formatIpcError(hiddenDepth.error));
+    const hideStartDepth = hiddenDepth.value;
     const result = await runCompaction(deps, {
       sessionId: req.sessionId,
       projectId: req.projectId,

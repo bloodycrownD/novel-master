@@ -156,7 +156,7 @@ const TURN_B: PromptPreviewTurn = {
 async function renderScreen(
   turns: PromptPreviewTurn[] = [TURN],
 ): Promise<TestRenderer.ReactTestRenderer> {
-  mockBuildTurns.mockResolvedValue(turns);
+  mockBuildTurns.mockResolvedValue({ok: true, value: turns});
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
     tree = TestRenderer.create(<RealPromptScreen />);
@@ -239,7 +239,7 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFocus.handler = undefined;
-    mockBuildTurns.mockResolvedValue([TURN]);
+    mockBuildTurns.mockResolvedValue({ok: true, value: [TURN]});
     // 模块级单例复位：残留正文会让下一条用例读到上一轮的数据。
     takePromptTurnDetail();
   });

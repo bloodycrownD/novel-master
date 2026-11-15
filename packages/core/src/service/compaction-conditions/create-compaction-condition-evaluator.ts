@@ -17,6 +17,8 @@ import {
   type CompactionConditions,
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { ProviderModelService } from "@/service/provider/provider-model.port.js";
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
@@ -30,12 +32,12 @@ export interface CompactionConditionEvaluator {
   shouldRequestCompaction(
     session: AgentSession,
     evaluation: CompactionEvaluationContext
-  ): Promise<boolean>;
+  ): Promise<Result<boolean, AppError>>;
   /**
    * 当前持久化配置的 hide-message 起始深度；
    * 未配置或无文档时回落到 {@link DEFAULT_HIDE_START_DEPTH}。
    */
-  getHideStartDepth(): Promise<number>;
+  getHideStartDepth(): Promise<Result<number, AppError>>;
 }
 
 export interface CreateCompactionConditionEvaluatorDeps {
@@ -82,18 +84,20 @@ export function createCompactionConditionEvaluator(
   return {
     async shouldRequestCompaction(session, evaluation) {
       const conditions = await deps.conditionsStore.getConditions();
-      if (conditions == null || !conditions.enabled) {
-        return false;
+      if (!conditions.ok) return Result.err(conditions.error);
+      if (conditions.value == null || !conditions.value.enabled) {
+        return Result.ok(false);
       }
-      const trigger = triggersFromConditions(conditions, deps);
+      const trigger = triggersFromConditions(conditions.value, deps);
       if (trigger == null) {
-        return false;
+        return Result.ok(false);
       }
-      return trigger.shouldTrigger(session, evaluation);
+      return Result.ok(await trigger.shouldTrigger(session, evaluation));
     },
     async getHideStartDepth() {
       const conditions = await deps.conditionsStore.getConditions();
-      return conditions?.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH;
+      if (!conditions.ok) return Result.err(conditions.error);
+      return Result.ok(conditions.value?.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH);
     },
   };
 }

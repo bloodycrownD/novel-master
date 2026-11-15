@@ -209,9 +209,11 @@ export class DefaultAgentRunner implements AgentRunner {
 
     // assistant 落库的 model_name 来源（vendorModelId）；每 run 查一次即可。
     // saved model 可能已被删除（悬空引用）：查不到时降级不传该字段。
-    const savedModelForAppend = await this.deps.savedModels.findById(
+    const savedModelFound = await this.deps.savedModels.findById(
       options.savedModelId
     );
+    if (!savedModelFound.ok) throw savedModelFound.error;
+    const savedModelForAppend = savedModelFound.value;
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
     // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
@@ -219,20 +221,22 @@ export class DefaultAgentRunner implements AgentRunner {
     // 回退 false（跟随默认关，与旧版「思考不进上下文」行为一致、无兼容风险）
     // 并记标签日志；GUI 无自愈入口，用户重置偏好后自然恢复。
     let thinkingContextEnabled = false;
-    try {
-      thinkingContextEnabled =
-        (await this.deps.preferences?.getThinkingContextEnabled()) ?? false;
-    } catch (error) {
-      if (!isAppError(error, "PREFERENCES_INVALID_VALUE")) {
-        throw error;
+    if (this.deps.preferences != null) {
+      const pref = await this.deps.preferences.getThinkingContextEnabled();
+      if (!pref.ok) {
+        if (!isAppError(pref.error, "PREFERENCES_INVALID_VALUE")) {
+          throw pref.error;
+        }
+        log.error("thinking_context_pref_read_failed", {
+          stage: "thinking_context_pref",
+          key: "chat.thinkingContext",
+          code: pref.error.key,
+          fallback: false,
+          error: pref.error,
+        });
+      } else {
+        thinkingContextEnabled = pref.value;
       }
-      log.error("thinking_context_pref_read_failed", {
-        stage: "thinking_context_pref",
-        key: "chat.thinkingContext",
-        code: error.key,
-        fallback: false,
-        error,
-      });
     }
 
     // 档位前置门快照：与 model-request.service 的 thinking 解析同口径
@@ -313,7 +317,12 @@ export class DefaultAgentRunner implements AgentRunner {
         macroParts.push(...macroLayout.dynamic.map((block) => block.content));
       }
       const wantsTree = macroParts.join("\n").includes("$filetree");
-      const turnFiletree = wantsTree ? await wt.renderFileTree() : undefined;
+      let turnFiletree: string | undefined;
+      if (wantsTree) {
+        const rendered = await wt.renderFileTree();
+        if (!rendered.ok) throw rendered.error;
+        turnFiletree = rendered.value;
+      }
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
           await handleAbort("loop_start");
@@ -395,7 +404,9 @@ export class DefaultAgentRunner implements AgentRunner {
           skills: this.deps.skills?.(),
           projectId,
         };
-        visible = await promptAssembler.prepare(visible, prepareRuntime);
+        const prepared = await promptAssembler.prepare(visible, prepareRuntime);
+        if (!prepared.ok) throw prepared.error;
+        visible = prepared.value;
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
           break;
@@ -447,8 +458,7 @@ export class DefaultAgentRunner implements AgentRunner {
         );
 
         if (persistMessages && this.deps.compactionConditions != null) {
-          const shouldCompact =
-            await this.deps.compactionConditions.shouldRequestCompaction(
+          const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(
               this.deps.session,
               {
                 sessionId,
@@ -468,6 +478,8 @@ export class DefaultAgentRunner implements AgentRunner {
                 visibleMessageCount,
               }
             );
+          if (!evaluated.ok) throw evaluated.error;
+          const shouldCompact = evaluated.value;
           if (signal?.aborted) {
             await handleAbort("after_compaction_eval");
             break;
@@ -482,8 +494,9 @@ export class DefaultAgentRunner implements AgentRunner {
               const missingDeps = "compaction requires messages + transcript effects";
               throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: missingDeps });
             }
-            const hideStartDepth =
-              await this.deps.compactionConditions!.getHideStartDepth();
+            const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
+            if (!hiddenDepth.ok) throw hiddenDepth.error;
+            const hideStartDepth = hiddenDepth.value;
             await runCompaction(
               {
                 sessionKkv: this.deps.sessionKkv,

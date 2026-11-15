@@ -17,16 +17,26 @@ import fs from 'fs';
 import path from 'path';
 
 // ── SessionDetailScreen 依赖 mock（jest.mock 会被 babel 提升到 import 之前） ──
-const mockSessionsGet = jest.fn(async () => ({id: 's1', title: '我的会话'}));
+const mockSessionsGet = jest.fn(async () => ({
+  ok: true as const,
+  value: {id: 's1', title: '我的会话'},
+}));
 const mockSessionsRename = jest.fn(async () => undefined);
 const mockSessionsGetSessionAgentConfig = jest.fn(async () => ({
-  agentId: 'workspace-agent',
+  ok: true as const,
+  value: {agentId: 'workspace-agent'},
 }));
 const mockSessionsUpdateSessionAgentConfig = jest.fn(async () => ({
   agentId: 'workspace-agent',
 }));
-const mockStateGetCurrentAgentId = jest.fn(async () => 'workspace-agent');
-const mockStateGetCurrentModelId = jest.fn(async () => 'model-ws');
+const mockStateGetCurrentAgentId = jest.fn(async () => ({
+  ok: true as const,
+  value: 'workspace-agent',
+}));
+const mockStateGetCurrentModelId = jest.fn(async () => ({
+  ok: true as const,
+  value: 'model-ws',
+}));
 const mockStateSetCurrentModelId = jest.fn(async () => undefined);
 const mockStateSetCurrentAgentId = jest.fn(async () => undefined);
 // 技能汇总：两条有效（一条禁用）+ 一条无效，验证 n/m 剔除无效口径
@@ -240,7 +250,7 @@ describe('T-M2 SessionDetailScreen', () => {
       ok: true,
       value: {id: 's1', title: '我的会话'},
     });
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   it('渲染聊天名 / agent / model 卡片（不再有来源标签）', async () => {
@@ -289,9 +299,10 @@ describe('T-M2 SessionDetailScreen', () => {
   });
 
   it('agent pin（modelSource=agent-pin）时点击大模型卡片不进 picker，弹锁定提示', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(
-      meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
-    );
+    mockLoadChatAgentMeta.mockResolvedValue({
+      ok: true,
+      value: meta({modelSource: 'agent-pin', hasDedicatedModel: true}),
+    });
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -309,7 +320,7 @@ describe('T-M2 SessionDetailScreen', () => {
   // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
   it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
     // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'none'}));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'none'})});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -345,7 +356,7 @@ describe('T-M2 SessionDetailScreen', () => {
   // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
   // 详情页弹错误提示并停留在加载态（卡片不渲染，自然不可点）。
   it('loadChatAgentMeta reject 时弹加载失败提示，卡片不渲染', async () => {
-    mockLoadChatAgentMeta.mockRejectedValue(new Error('boom'));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: false, error: new Error('boom')});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -359,7 +370,7 @@ describe('T-M2 SessionDetailScreen', () => {
   });
 
   it('session 时智能体可切换（不锁、不弹提示）', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'session'}));
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta({source: 'session'})});
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -449,7 +460,7 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
       ok: true,
       value: {id: 's1', title: '我的会话'},
     });
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   it('改名成功后 emit session-renamed，payload 含 sessionId 与新标题', async () => {
@@ -568,7 +579,7 @@ describe('T-MO1 SessionDetailScreen 查看提示词入口', () => {
       ok: true,
       value: {id: 's1', title: '我的会话'},
     });
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
@@ -604,7 +615,7 @@ describe('T-KB4 SessionDetailScreen Android 键盘避让', () => {
       ok: true,
       value: {id: 's1', title: '会话'},
     });
-    mockLoadChatAgentMeta.mockResolvedValue(meta());
+    mockLoadChatAgentMeta.mockResolvedValue({ok: true, value: meta()});
   });
 
   afterEach(() => {

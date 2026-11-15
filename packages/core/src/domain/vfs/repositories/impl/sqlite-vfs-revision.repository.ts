@@ -18,6 +18,7 @@ import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-s
 import type { VfsRevision, VfsRevisionStatus } from "../../model/vfs-revision.js";
 import type { VfsRevisionAppendInput, VfsRevisionPointerMeta, VfsRevisionRepository } from "../vfs-revision.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
 
@@ -84,13 +85,13 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return result;
   }
 
-  async findByEntryAndVersion(entryId: number, version: number): Promise<VfsRevision | null> {
+  async findByEntryAndVersion(entryId: number, version: number): Promise<Result<VfsRevision | null, AppError>> {
     const sql53 = "SELECT entry_id, version, content_hash, status, mtime_ms\n       FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
     const rows = await queryTemplate(this.conn, this.parser, sql53, { entryId, version });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
-    return this.rowToRevision(rows[0]!);
+    return await this.rowToRevision(rows[0]!);
   }
 
   async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
@@ -430,19 +431,19 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   }
 
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath `Result` → 领域异常通道转码点——非法路径按仓储边界抛出，由调用链端点 catch 收口。
+   * 正文解出失败走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，决定权交给上层）。
    */
-  private async rowToRevision(row: Row): Promise<VfsRevision> {
+  private async rowToRevision(row: Row): Promise<Result<VfsRevision, AppError>> {
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
     const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: nullableText(row.content_hash) });
-    if (!resolved.ok) throw resolved.error;
-    return {
+    if (!resolved.ok) return Result.err(resolved.error);
+    return Result.ok({
       entryId: Number(row.entry_id),
       version: Number(row.version),
       content: resolved.value,
       status,
       mtimeMs: Number(row.mtime_ms),
-    };
+    });
   }
 }

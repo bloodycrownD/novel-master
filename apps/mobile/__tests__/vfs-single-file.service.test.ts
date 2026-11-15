@@ -116,11 +116,14 @@ describe('vfs-single-file.service', () => {
     mockExists.mockResolvedValue(true);
     mockReadFile.mockResolvedValue(FILE_BYTES_BASE64);
     mockStat.mockResolvedValue({path: '/cache/import.bin', size: 12});
-    mockPlanBatchIngest.mockResolvedValue(plan());
+    mockPlanBatchIngest.mockResolvedValue({ok: true, value: plan()});
     mockApplyBatchIngest.mockResolvedValue({
-      written: ['/角色/资料.md'],
-      skipped: [],
-      failed: [],
+      ok: true,
+      value: {
+        written: ['/角色/资料.md'],
+        skipped: [],
+        failed: [],
+      },
     });
     mockWriteFile.mockResolvedValue(undefined);
     mockSaveDocuments.mockResolvedValue([
@@ -131,13 +134,16 @@ describe('vfs-single-file.service', () => {
 
   // T-MF1
   it('导入：plan 单条目（relativePath=fileName，targetDir 透传），冲突先返回确认请求', async () => {
-    mockPlanBatchIngest.mockResolvedValue(
-      plan({conflicts: [{logicalPath: '/角色/资料.md', reason: 'exists'}]}),
-    );
+    mockPlanBatchIngest.mockResolvedValue({
+      ok: true,
+      value: plan({conflicts: [{logicalPath: '/角色/资料.md', reason: 'exists'}]}),
+    });
 
     const result = await importVfsSingleFile(runtime, scope, {
       targetDir: '/角色',
     });
+    if (!result.ok) throw result.error;
+    const resultValue = result.value;
 
     expect(mockCreateVfsBatchIoService).toHaveBeenCalledWith(runtime.conn);
     expect(mockPlanBatchIngest).toHaveBeenCalledWith(
@@ -153,15 +159,17 @@ describe('vfs-single-file.service', () => {
     );
     // 冲突未确认前绝不落库
     expect(mockApplyBatchIngest).not.toHaveBeenCalled();
-    expect(result.status).toBe('needs-confirm');
-    if (result.status !== 'needs-confirm') {
+    expect(resultValue.status).toBe('needs-confirm');
+    if (resultValue.status !== 'needs-confirm') {
       throw new Error('expected needs-confirm');
     }
-    expect(result.conflictCount).toBe(1);
-    expect(result.fileName).toBe('资料.md');
+    expect(resultValue.conflictCount).toBe(1);
+    expect(resultValue.fileName).toBe('资料.md');
 
     // 确认后复用同一份 plan 落库（overwriteConfirmed: true）
-    const applied = await result.confirm();
+    const appliedResult = await resultValue.confirm();
+    if (!appliedResult.ok) throw appliedResult.error;
+    const applied = appliedResult.value;
     expect(mockApplyBatchIngest).toHaveBeenCalledWith(
       scope,
       '/角色',
@@ -176,6 +184,8 @@ describe('vfs-single-file.service', () => {
 
   it('导入：无冲突时直接 apply（overwriteConfirmed: true）', async () => {
     const result = await importVfsSingleFile(runtime, scope);
+    if (!result.ok) throw result.error;
+    const resultValue = result.value;
 
     expect(mockPlanBatchIngest).toHaveBeenCalledWith(
       scope,
@@ -188,16 +198,15 @@ describe('vfs-single-file.service', () => {
       expect.anything(),
       {overwriteConfirmed: true},
     );
-    expect(result).toMatchObject({status: 'applied', skippedBinary: []});
+    expect(resultValue).toMatchObject({status: 'applied', skippedBinary: []});
   });
 
   // T-MF2
   it('picker 取消静默返回 cancelled 且不触达 core', async () => {
     mockPick.mockResolvedValue([]);
 
-    const result = await importVfsSingleFile(runtime, scope);
-
-    expect(result).toEqual({status: 'cancelled'});
+    const cancelledResult = await importVfsSingleFile(runtime, scope);
+    expect(cancelledResult).toEqual({ok: true, value: {status: 'cancelled'}});
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
     expect(mockCreateVfsBatchIoService).not.toHaveBeenCalled();
     expect(mockPlanBatchIngest).not.toHaveBeenCalled();
@@ -227,34 +236,41 @@ describe('vfs-single-file.service', () => {
 
   // T-MF3
   it('非 UTF-8 文件被 core 判跳过：结果带回 skippedBinary 供 UI 明示', async () => {
-    mockPlanBatchIngest.mockResolvedValue(
-      plan({writes: [], skippedBinary: ['a.png']}),
-    );
+    mockPlanBatchIngest.mockResolvedValue({
+      ok: true,
+      value: plan({writes: [], skippedBinary: ['a.png']}),
+    });
     mockApplyBatchIngest.mockResolvedValue({
-      written: [],
-      skipped: ['a.png'],
-      failed: [],
+      ok: true,
+      value: {written: [], skipped: ['a.png'], failed: []},
     });
 
     const result = await importVfsSingleFile(runtime, scope);
+    if (!result.ok) throw result.error;
+    const resultValue = result.value;
 
-    expect(result.status).toBe('applied');
-    if (result.status !== 'applied') {
+    expect(resultValue.status).toBe('applied');
+    if (resultValue.status !== 'applied') {
       throw new Error('expected applied');
     }
-    expect(result.skippedBinary).toEqual(['a.png']);
-    expect(result.report.written).toEqual([]);
+    expect(resultValue.skippedBinary).toEqual(['a.png']);
+    expect(resultValue.report.written).toEqual([]);
   });
 
   // T-MF4
   it('导出：planBatchExport 单元素 → fileName=basename、MIME 兜底 text/plain、utf8 写盘', async () => {
     mockPlanBatchExport.mockResolvedValue({
-      files: [{relativePath: '资料.md', content: '正文内容'}],
-      mkdirPaths: [],
-      skipped: [],
+      ok: true,
+      value: {
+        files: [{relativePath: '资料.md', content: '正文内容'}],
+        mkdirPaths: [],
+        skipped: [],
+      },
     });
 
-    const result = await exportVfsSingleFile(runtime, scope, '/角色/资料.md');
+    const exportResult = await exportVfsSingleFile(runtime, scope, '/角色/资料.md');
+    if (!exportResult.ok) throw exportResult.error;
+    const result = exportResult.value;
 
     expect(mockPlanBatchExport).toHaveBeenCalledWith(scope, ['/角色/资料.md']);
     expect(mockWriteFile).toHaveBeenCalledWith(
@@ -275,12 +291,15 @@ describe('vfs-single-file.service', () => {
 
   it('导出：files 不等于 1（误传目录）报错且不写盘', async () => {
     mockPlanBatchExport.mockResolvedValue({
-      files: [
-        {relativePath: 'a.md', content: 'a'},
-        {relativePath: 'b.md', content: 'b'},
-      ],
-      mkdirPaths: [],
-      skipped: [],
+      ok: true,
+      value: {
+        files: [
+          {relativePath: 'a.md', content: 'a'},
+          {relativePath: 'b.md', content: 'b'},
+        ],
+        mkdirPaths: [],
+        skipped: [],
+      },
     });
 
     const failure = await exportVfsSingleFile(runtime, scope, '/角色').then(
@@ -295,15 +314,17 @@ describe('vfs-single-file.service', () => {
 
   it('导出：用户取消保存返回 cancelled', async () => {
     mockPlanBatchExport.mockResolvedValue({
-      files: [{relativePath: '资料.md', content: '正文内容'}],
-      mkdirPaths: [],
-      skipped: [],
+      ok: true,
+      value: {
+        files: [{relativePath: '资料.md', content: '正文内容'}],
+        mkdirPaths: [],
+        skipped: [],
+      },
     });
     mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
 
-    await expect(
-      exportVfsSingleFile(runtime, scope, '/角色/资料.md'),
-    ).resolves.toBe('cancelled');
+    const cancelled = await exportVfsSingleFile(runtime, scope, '/角色/资料.md');
+    expect(cancelled).toEqual({ok: true, value: 'cancelled'});
   });
 
   // T-MF5

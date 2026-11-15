@@ -6,6 +6,7 @@
  */
 import {parseText, stringifyText} from '@novel-master/core';
 import {normalizeSmartSortImportError} from '@novel-master/core/common';
+import {Result} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {exportYamlFile, importYamlFile} from './yaml-shared';
@@ -29,17 +30,20 @@ export async function exportSmartSortRuleYaml(
  */
 export async function importSmartSortRuleYaml(
     runtime: MobileNovelMasterRuntime,
-): Promise<number | null> {
+): Promise<Result<number | null, Error>> {
     let count: number | null = null;
-    await importYamlFile(async yaml => {
+    const result = await importYamlFile(async yaml => {
         try {
             const raw = parseText(yaml, 'yaml');
             const rules = await runtime.smartSortRule.importRules(raw);
-            if (!rules.ok) throw rules.error;
+            if (!rules.ok) return Result.err(normalizeSmartSortImportError(rules.error));
             count = rules.value.length;
+            return Result.ok(undefined);
         } catch (error) {
+            // 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据在 core。
             throw normalizeSmartSortImportError(error);
         }
     });
-    return count;
+    if (!result.ok) return Result.err(result.error);
+    return Result.ok(count);
 }

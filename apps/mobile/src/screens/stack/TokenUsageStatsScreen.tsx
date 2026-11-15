@@ -137,9 +137,27 @@ export function TokenUsageStatsScreen() {
         usage.getDailyBuckets(filter),
         usage.getModelBreakdown(filter),
       ]);
-      if (!nextSummary.ok) throw nextSummary.error;
-      if (!nextBuckets.ok) throw nextBuckets.error;
-      if (!nextRows.ok) throw nextRows.error;
+      // 已知失败走 Result 收口（错误通道迁移四期），与 catch 同终端。
+      const failLoad = (err: unknown): void => {
+        if (seq !== reloadSeqRef.current) {
+          return; // 过期请求的报错不覆盖新一轮状态。
+        }
+        const message = toastMessage('加载统计失败', err);
+        setLoadError(message);
+        showToast(message);
+      };
+      if (!nextSummary.ok) {
+        failLoad(nextSummary.error);
+        return;
+      }
+      if (!nextBuckets.ok) {
+        failLoad(nextBuckets.error);
+        return;
+      }
+      if (!nextRows.ok) {
+        failLoad(nextRows.error);
+        return;
+      }
       if (seq !== reloadSeqRef.current) {
         return; // 过期响应：新一轮查询已在途，丢弃本轮结果。
       }
@@ -192,7 +210,15 @@ export function TokenUsageStatsScreen() {
           offset: page * REQUESTS_PAGE_SIZE,
           limit: REQUESTS_PAGE_SIZE,
         });
-        if (!result.ok) throw result.error;
+        if (!result.ok) {
+          if (seq === reqSeqRef.current) {
+            // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
+            // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
+            reqDirtyRef.current = false;
+            showToast(toastMessage('加载流水失败', result.error));
+          }
+          return;
+        }
         if (seq !== reqSeqRef.current) {
           return;
         }
@@ -244,7 +270,14 @@ export function TokenUsageStatsScreen() {
         labels[p.id] = p.displayName;
         providerEntries.push({id: p.id, label: p.displayName});
         const saved = await runtime.savedModelRepo.listByProvider(p.id);
-        for (const m of saved) {
+        if (!saved.ok) {
+          // 读取失败回退空选项（错误通道迁移四期：与旧 catch 同款兜底）。
+          setCombos([]);
+          setProviderLabels({});
+          setProviders([]);
+          return;
+        }
+        for (const m of saved.value) {
           options.push({
             providerId: p.id,
             providerLabel: p.displayName,
@@ -288,8 +321,11 @@ export function TokenUsageStatsScreen() {
       .getHourlyBuckets(selectedDay, filter)
       .then(buckets => {
         if (!cancelled) {
-          if (!buckets.ok) throw buckets.error;
-          setHourlyBuckets(buckets.value);
+          if (buckets.ok) {
+            setHourlyBuckets(buckets.value);
+          } else {
+            showToast(toastMessage('加载小时分布失败', buckets.error));
+          }
         }
       })
       .catch(err => {

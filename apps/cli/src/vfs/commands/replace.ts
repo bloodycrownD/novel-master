@@ -1,10 +1,12 @@
 import { type VfsService } from "@novel-master/core/vfs";
+import { type AppError, Result } from "@novel-master/core/errors";
+import { RESULT_OK } from "../../cli-errors.js";
 import { parseCliArgs } from "../parse-args.js";
 
 export async function runReplace(
   vfs: VfsService,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { positional, flags } = parseCliArgs(args);
   const path = positional[0];
   const oldFromFlag = flags.get("old");
@@ -30,5 +32,7 @@ export async function runReplace(
   const result = await vfs.replace(path, oldString, newString, {
     replaceAll: flags.has("all"),
   });
-  console.log(`${result.version}\t${result.replacements}`);
+  if (!result.ok) return Result.err(result.error);
+  console.log(`${result.value.version}\t${result.value.replacements}`);
+  return RESULT_OK;
 }

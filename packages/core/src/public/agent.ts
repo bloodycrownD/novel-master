@@ -45,7 +45,7 @@ export {
   resolveCurrentAgentId,
   resolveCurrentAgentDefinition,
   resolveApplicationModelIdForRun,
-  AgentRunResolveError,
+  AGENT_RUN_RESOLVE_KEYS,
 } from "../service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "../service/agent/logic/agent-run-shared.js";
 export { resolveAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";

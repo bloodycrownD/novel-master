@@ -2,8 +2,9 @@
  * Mobile agent run — thin wrapper over core {@link runAgentTurn}.
  */
 import {
-  AgentRunResolveError,
+  AGENT_RUN_RESOLVE_KEYS,
   AgentTurnError,
+  isAppError,
   resolveApplicationModelIdForRun,
   resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
   resolveCurrentAgentId as resolveCoreAgentId,
@@ -12,6 +13,7 @@ import {
   type AgentRunResult,
   type AgentTurnScope,
 } from '@novel-master/core/agent';
+import type {AppError, Result} from '@novel-master/core/errors';
 import type {
   ComposerDraftTokenRange,
   MessageAttachment,
@@ -23,7 +25,7 @@ export type AgentRunScope = AgentTurnScope;
 
 function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   return fn().catch(error => {
-    if (error instanceof AgentRunResolveError) {
+    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
       throw new AgentTurnError(error.message);
     }
     throw error;
@@ -75,7 +77,7 @@ export async function runAgentTurn(
     readonly signal?: AbortSignal;
     readonly onUserMessageAppended?: () => void | Promise<void>;
   },
-): Promise<AgentRunResult> {
+): Promise<Result<AgentRunResult, AppError>> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
     onRunFailed: ctx => {

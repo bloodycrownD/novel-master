@@ -56,6 +56,18 @@ import {
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
+/**
+ * 错误通道迁移四期：读口已知失败沿 `Result` 上行，本套件只走成功路径——
+ * err 直接炸出（红即修复信号），value 的 null 哨兵（抑制/弃权）交由各用例自判。
+ */
+async function loadStatsOrThrow(
+  ...args: Parameters<typeof loadChatPromptTokenStats>
+): Promise<NonNullable<Awaited<ReturnType<typeof loadChatPromptTokenStats>>["value"]>> {
+  const stats = await loadChatPromptTokenStats(...args);
+  if (!stats.ok) throw stats.error;
+  return stats.value;
+}
+
 describe("chat-prompt-tokens.service", () => {
   let tempDir: string;
   let projectId: string;
@@ -163,7 +175,7 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStats(rt, {
+    const stats = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
@@ -194,7 +206,7 @@ describe("chat-prompt-tokens.service", () => {
     const rt = await getDesktopRuntime();
     // 首帧：preferEstimate 且 L1 冷 → 廉价估算即回（gpt ≈），服务侧安排
     // 后台暖机（家族真分词器 + L1 写入）。
-    const first = await loadChatPromptTokenStats(rt, {
+    const first = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
@@ -215,7 +227,7 @@ describe("chat-prompt-tokens.service", () => {
 
     // 且 L1 已暖：renderer 若自己再问一次（消息/step 事件触发的常规刷新）
     // 同样直读精确档，两条路径不打架。
-    const second = await loadChatPromptTokenStats(rt, {
+    const second = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
@@ -316,7 +328,7 @@ describe("chat-prompt-tokens.service", () => {
       const scope = { projectId: projectId, sessionId: coldSessionId };
 
       // 冷会话 ⇒ 首帧走廉价估算档（gpt ≈），并顺带排一次后台暖机。
-      const first = await loadChatPromptTokenStats(probe.rt, scope);
+      const first = await loadStatsOrThrow(probe.rt, scope);
       assert.equal(first.estimated, true, "冷会话首帧应仍是估算档（前提）");
       assert.equal(probe.listCalls(), 1, "首帧恰好跑一次 build（前提）");
 
@@ -335,7 +347,7 @@ describe("chat-prompt-tokens.service", () => {
 
       // 反面对照：后续自己再问一口仍是精确档（说明「少跑的那趟」没把读数搞丢），
       // 而这一次读口自己那一趟 build 照跑 —— 探针确实在数。
-      const second = await loadChatPromptTokenStats(probe.rt, scope);
+      const second = await loadStatsOrThrow(probe.rt, scope);
       assert.equal(second.estimated, false);
       assert.equal(second.counterKind, "tiktoken");
       assert.equal(probe.listCalls(), 2, "后续这次读口应恰好再跑一次 build");
@@ -392,7 +404,7 @@ describe("chat-prompt-tokens.service", () => {
       }) as typeof rt;
 
       const scope = { projectId: projectId, sessionId: coldSessionId };
-      const first = await loadChatPromptTokenStats(gatedRt, scope);
+      const first = await loadStatsOrThrow(gatedRt, scope);
       assert.equal(first.estimated, true, "冷会话首帧应仍是估算档（前提）");
       assert.ok(
         configReads >= 2,
@@ -461,15 +473,15 @@ describe("chat-prompt-tokens.service", () => {
       },
     });
     assert.equal(upserted.ok, true);
-    await loadChatPromptTokenStats(rt, {
+    await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
     });
-    let precise: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+    let precise: Awaited<ReturnType<typeof loadStatsOrThrow>> | null =
       null;
     for (let i = 0; i < 20 && precise == null; i++) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      const next = await loadChatPromptTokenStats(rt, {
+      const next = await loadStatsOrThrow(rt, {
         projectId,
         sessionId,
       });
@@ -488,7 +500,7 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(cleared.ok, true);
 
     try {
-      const stats = await loadChatPromptTokenStats(rt, {
+      const stats = await loadStatsOrThrow(rt, {
         projectId,
         sessionId,
       });
@@ -609,8 +621,8 @@ describe("chat-prompt-tokens.service", () => {
 
       // 两个请求同帧连发（间隔远小于 300ms）：共享 trailing 窗口的同一次执行。
       const [a, b] = await Promise.all([
-        loadChatPromptTokenStats(rt, scope),
-        loadChatPromptTokenStats(rt, scope),
+        loadStatsOrThrow(rt, scope),
+        loadStatsOrThrow(rt, scope),
       ]);
 
       assert.equal(
@@ -628,7 +640,7 @@ describe("chat-prompt-tokens.service", () => {
       const scope = { projectId, sessionId };
 
       const results = await Promise.all(
-        Array.from({ length: 5 }, () => loadChatPromptTokenStats(rt, scope)),
+        Array.from({ length: 5 }, () => loadStatsOrThrow(rt, scope)),
       );
 
       assert.equal(
@@ -646,7 +658,7 @@ describe("chat-prompt-tokens.service", () => {
       const scope = { projectId, sessionId };
 
       // 单次触发：防抖是 trailing 而非 leading——窗口内（<300ms）不执行。
-      const first = loadChatPromptTokenStats(rt, scope);
+      const first = loadStatsOrThrow(rt, scope);
       await sleep(150);
       assert.equal(
         chatPromptTokenDebounceExecCountForTests(sessionId),
@@ -663,7 +675,7 @@ describe("chat-prompt-tokens.service", () => {
       assert.equal(stats.source, "local");
 
       // 空闲后的再次触发不被吞：又产生一次计算（每一击最终都有计算）。
-      await loadChatPromptTokenStats(rt, scope);
+      await loadStatsOrThrow(rt, scope);
       assert.equal(
         chatPromptTokenDebounceExecCountForTests(sessionId),
         2,

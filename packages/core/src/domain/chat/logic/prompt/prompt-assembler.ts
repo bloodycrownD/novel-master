@@ -27,6 +27,8 @@ import {ChatMessage} from "../message/chat-message.js";
 import type {ChatMessageData} from "../../model/message.js";
 import {AttachBudget} from "../attachment/attach-budget.js";
 import {AttachmentHydrator, type AttachmentHydratorRuntime} from "./attachment-hydrator.js";
+import {AppError} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
 
 /** 与 `domain/tool/builtin/skill-tool.ts` 注册名同字符串（方向 B 扫描用）。 */
 const SKILL_TOOL_NAME = "skill";
@@ -60,12 +62,11 @@ interface PrepareUserMessagesForPromptRuntime extends AttachmentHydratorRuntime 
 /**
  * 用户消息附件拼装入口。
  *
- * 解包 throw 边界（错误通道迁移三期门⑦）：`expandDynamicMacros` 的失败在
- * prepare 内原样上抛——prepare 全链（agent-runner turn loop、两端
- * buildSessionPromptInput）统一走异常通道，由 turn loop / chip 读口 catch 收口。
+ * 宏展开失败（`PROMPT_INVALID_MACRO`）走返回值通道，由调用方接力决定
+ * （错误通道迁移四期门：throw x.error 清零）——prepare 不再原样上抛。
  */
 class PromptAssembler {
-    async prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<ChatMessageData[]> {
+    async prepare(messages: readonly ChatMessageData[], runtime: PrepareUserMessagesForPromptRuntime): Promise<Result<ChatMessageData[], AppError>> {
         const seen = promptPathSeen.createSet(runtime.seenPaths);
         const attachBudget = new AttachBudget();
         const workplaceSeen = promptPathSeen.createSet(runtime.workplaceSeenPaths ?? runtime.seenPaths);
@@ -86,7 +87,7 @@ class PromptAssembler {
         const macroContext = {now: runtime.now, workplace: runtime.workplace, filetree: runtime.filetree};
         const extraInfoResolved = hasExtraInfo ? await expandDynamicMacros(extraInfoRaw, macroContext) : undefined;
         if (extraInfoResolved !== undefined && !extraInfoResolved.ok) {
-            throw extraInfoResolved.error;
+            return Result.err(extraInfoResolved.error);
         }
         const resolvedRuntime = extraInfoResolved === undefined ? runtime : {...runtime, extraInfo: extraInfoResolved.value};
         // extra info 只对最新一条非隐藏 user 输入消息生效。
@@ -114,7 +115,7 @@ class PromptAssembler {
             }
             out.push(await hydrator.hydrateMessage(message, i === latestUserInputIndex));
         }
-        return out;
+        return Result.ok(out);
     }
 }
 

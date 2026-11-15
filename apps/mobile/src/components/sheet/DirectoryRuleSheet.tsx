@@ -1,6 +1,7 @@
 /**
  * Directory inclusion rule form → {@link WorkplaceService.setDirRule}.
  */
+import {AppError, Result} from '@novel-master/core/errors';
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   Pressable,
@@ -128,8 +129,8 @@ export function DirectoryRuleSheet({
 
   // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前 sortField 高亮。
   const loadSortFields = useCallback(async (): Promise<
-    PickerListLoadResult<{value: SortField; label: string}>
-  > => ({rows: SORT_FIELDS, selectedId: sortField}), [sortField]);
+    Result<PickerListLoadResult<{value: SortField; label: string}>, AppError>
+  > => Result.ok({rows: SORT_FIELDS, selectedId: sortField}), [sortField]);
 
   const sheetContent = (
     <>

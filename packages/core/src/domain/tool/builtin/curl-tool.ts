@@ -32,6 +32,7 @@ import { z } from "zod";
 
 import { utf8ByteLength } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
@@ -338,7 +339,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       const declaredValue = Number(response.headers.get("content-length") ?? NaN);
       const declaredLength = Number.isFinite(declaredValue) && declaredValue >= 0 ? declaredValue : null;
       if (declaredLength != null && declaredLength > CURL_MAX_RESPONSE_BYTES) {
-        return {
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -347,7 +348,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: `[response too large, not downloaded]\n\nOutput truncated (original ${declaredLength} bytes).`,
           truncated: true,
           originalBytes: declaredLength,
-        };
+        });
       }
 
       // 非文本 Content-Type：contentType 响应头阶段即已知，无需下载正文——
@@ -357,7 +358,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
       const textualSubtype = TEXTUAL_CONTENT_TYPE_HINTS.some((hint) => lowerContentType.includes(hint));
       if (!textualMain && !textualSubtype) {
         const binaryBytes = declaredLength;
-        return {
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -366,7 +367,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: binaryBytes != null ? `[binary content, ${binaryBytes} bytes, not shown]` : `[binary content, unknown size, not shown]`,
           truncated: false,
           originalBytes: binaryBytes ?? 0,
-        };
+        });
       }
 
       try {
@@ -391,7 +392,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           log.debug("超预算落盘失败，降级字节截断", { error });
         }
         if (sink != null) {
-          return {
+          return Result.ok({
             url: normalizedUrl,
             finalUrl,
             method,
@@ -402,10 +403,10 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
             originalBytes,
             savedPath: sink.savedPath,
             message: sink.message,
-          };
+          });
         }
         const kept = truncateToByteBudget(text, TOOL_OUTPUT_MAX_BYTES);
-        return {
+        return Result.ok({
           url: normalizedUrl,
           finalUrl,
           method,
@@ -414,10 +415,10 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
           body: `${kept}\n\nOutput truncated (original ${originalBytes} bytes).`,
           truncated: true,
           originalBytes,
-        };
+        });
       }
 
-      return {
+      return Result.ok({
         url: normalizedUrl,
         finalUrl,
         method,
@@ -426,7 +427,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         body: text,
         truncated: false,
         originalBytes,
-      };
+      });
     } finally {
       // 请求整体结束（成功、失败或提前 return）后清计时器，防悬挂。
       clearTimeout(timer);

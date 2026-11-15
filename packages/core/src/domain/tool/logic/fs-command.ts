@@ -10,7 +10,8 @@
 import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
 import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
 
@@ -139,63 +140,68 @@ function formatLsOutput(entries: readonly VfsListEntry[]): FsLsOutput {
 }
 
 /** `rm` 未带 `-r` 时，若目标是目录则自动递归删除（兼容 Agent 常见用法）。 */
-async function rmRecursiveWhenTargetIsDirectory(vfs: VfsService, path: string, recursive: boolean): Promise<boolean> {
+async function rmRecursiveWhenTargetIsDirectory(vfs: VfsService, path: string, recursive: boolean): Promise<Result<boolean, AppError>> {
   if (recursive) {
-    return true;
+    return Result.ok(true);
   }
-  try {
-    await vfs.read(path);
-    return false;
-  } catch (error: unknown) {
-    if (isAppError(error, "VFS_IS_DIRECTORY")) {
-      return true;
-    }
-    if (isAppError(error, "VFS_NOT_FOUND")) {
-      try {
-        const entries = await vfs.list(path);
-        return entries.length > 0;
-      } catch (listError: unknown) {
-        if (isAppError(listError, "VFS_NOT_FOUND")) {
-          return false;
-        }
-        throw listError;
-      }
-    }
-    throw error;
+  const read = await vfs.read(path);
+  if (read.ok) {
+    return Result.ok(false);
   }
+  if (read.error.key === "VFS_IS_DIRECTORY") {
+    return Result.ok(true);
+  }
+  if (read.error.key !== "VFS_NOT_FOUND") {
+    return Result.err(read.error);
+  }
+  const entries = await vfs.list(path);
+  if (entries.ok) {
+    return Result.ok(entries.value.length > 0);
+  }
+  if (entries.error.key === "VFS_NOT_FOUND") {
+    return Result.ok(false);
+  }
+  return Result.err(entries.error);
 }
 
 /** Executes a parsed fs command against the injected VFS instance.
- * 解包 throw 边界（错误通道迁移三期门⑦）：move/copy 的 `Result` 失败上抛，由调用方工具闭包 → tool-runner 框架级统一收口。
+ * 已知失败走返回值通道（四期门⑦）：VFS `Result` 失败原样接力，由调用方工具闭包 → tool-runner 框架级统一收口。
  */
-export async function executeFsCommand(vfs: VfsService, parsed: FsCommand): Promise<FsCommandResult> {
+export async function executeFsCommand(vfs: VfsService, parsed: FsCommand): Promise<Result<FsCommandResult, AppError>> {
   switch (parsed.kind) {
     case "rm": {
-      const recursive = await rmRecursiveWhenTargetIsDirectory(vfs, parsed.path, parsed.recursive);
-      await vfs.delete(parsed.path, { recursive });
-      return { ok: true as const };
+      const recursiveWhenDirectory = await rmRecursiveWhenTargetIsDirectory(vfs, parsed.path, parsed.recursive);
+      if (!recursiveWhenDirectory.ok) return Result.err(recursiveWhenDirectory.error);
+      const deleted = await vfs.delete(parsed.path, { recursive: recursiveWhenDirectory.value });
+      if (!deleted.ok) return Result.err(deleted.error);
+      return Result.ok({ ok: true as const });
     }
-    case "rmdir":
+    case "rmdir": {
       // WHY: rmdir maps to non-recursive delete — VFS rejects non-empty directories.
-      await vfs.delete(parsed.path, { recursive: false });
-      return { ok: true as const };
+      const deleted = await vfs.delete(parsed.path, { recursive: false });
+      if (!deleted.ok) return Result.err(deleted.error);
+      return Result.ok({ ok: true as const });
+    }
     case "mv": {
       const moved = await moveVfsPath(vfs, parsed.from, parsed.to);
-      if (!moved.ok) throw moved.error;
-      return { ok: true as const };
+      if (!moved.ok) return Result.err(moved.error);
+      return Result.ok({ ok: true as const });
     }
     case "cp": {
       const copied = await copyVfsPath(vfs, parsed.from, parsed.to, { recursive: parsed.recursive });
-      if (!copied.ok) throw copied.error;
-      return { ok: true as const };
+      if (!copied.ok) return Result.err(copied.error);
+      return Result.ok({ ok: true as const });
     }
-    case "mkdir":
-      await vfs.mkdir(parsed.path);
-      return { ok: true as const };
+    case "mkdir": {
+      const made = await vfs.mkdir(parsed.path);
+      if (!made.ok) return Result.err(made.error);
+      return Result.ok({ ok: true as const });
+    }
     case "ls": {
       const listOptions = { recursive: parsed.recursive };
       const entries = await vfs.list(parsed.dir, listOptions);
-      return formatLsOutput(entries);
+      if (!entries.ok) return Result.err(entries.error);
+      return Result.ok(formatLsOutput(entries.value));
     }
   }
 }

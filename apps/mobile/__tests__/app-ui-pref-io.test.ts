@@ -5,7 +5,7 @@ import {
 } from '@/storage/app-ui-pref-io';
 import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 
-type GetResult = string | undefined;
+type GetResult = { ok: true; value: string | undefined } | { ok: false; error: unknown };
 
 function appUiWithGet(
   get: jest.Mock<Promise<GetResult>, [string]>,
@@ -22,7 +22,7 @@ const ALLOWED = ['legacy-rn', 'webview'] as const;
 
 describe('app-ui-pref-io readEnumPref', () => {
   it('returns the stored value when it is in the allowed list', async () => {
-    const get = jest.fn(async () => 'legacy-rn');
+    const get = jest.fn(async () => ({ok: true, value: 'legacy-rn'}));
     await expect(
       readEnumPref(
         appUiWithGet(get),
@@ -35,7 +35,7 @@ describe('app-ui-pref-io readEnumPref', () => {
   });
 
   it('falls back to default on invalid stored value', async () => {
-    const get = jest.fn(async () => 'nope');
+    const get = jest.fn(async () => ({ok: true, value: 'nope'}));
     await expect(
       readEnumPref(
         appUiWithGet(get),
@@ -47,9 +47,10 @@ describe('app-ui-pref-io readEnumPref', () => {
   });
 
   it('falls back to default when appUi.get rejects', async () => {
-    const get = jest.fn(async () => {
-      throw new Error('kkv boom');
-    });
+    const get = jest.fn(async () => ({
+      ok: false,
+      error: new Error('kkv boom'),
+    }));
     await expect(
       readEnumPref(
         appUiWithGet(get),
@@ -61,7 +62,7 @@ describe('app-ui-pref-io readEnumPref', () => {
   });
 
   it('falls back to default without touching KKV when appUi is null', async () => {
-    const get = jest.fn(async () => 'legacy-rn');
+    const get = jest.fn(async () => ({ok: true, value: 'legacy-rn'}));
     await expect(
       readEnumPref(null, 'chatTranscriptEngine', ALLOWED, 'webview'),
     ).resolves.toBe('webview');
@@ -74,23 +75,24 @@ describe('app-ui-pref-io readBoolPref', () => {
     ['true', true],
     ['false', false],
   ])('parses stored %s', async (raw, expected) => {
-    const get = jest.fn(async () => raw);
+    const get = jest.fn(async () => ({ok: true, value: raw as string}));
     await expect(
       readBoolPref(appUiWithGet(get), 'chatRichText', false),
     ).resolves.toBe(expected);
   });
 
   it('falls back to default on invalid stored value', async () => {
-    const get = jest.fn(async () => 'yes');
+    const get = jest.fn(async () => ({ok: true, value: 'yes'}));
     await expect(
       readBoolPref(appUiWithGet(get), 'chatRichText', false),
     ).resolves.toBe(false);
   });
 
   it('falls back to default when appUi.get rejects', async () => {
-    const get = jest.fn(async () => {
-      throw new Error('kkv boom');
-    });
+    const get = jest.fn(async () => ({
+      ok: false,
+      error: new Error('kkv boom'),
+    }));
     await expect(
       readBoolPref(appUiWithGet(get), 'chatStreamBatchEnabled', true),
     ).resolves.toBe(true);

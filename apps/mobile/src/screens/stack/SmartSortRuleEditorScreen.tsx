@@ -17,6 +17,7 @@
  * 捕获数字三档下拉（D13）：智能数字/固定最大/固定最小，PickerListModal
  * 值行模式（照 DirectoryRuleSheet）；固定档命中即哨兵元组、忽略捕获组。
  */
+import {Result, AppError} from '@novel-master/core/errors';
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {
@@ -303,18 +304,16 @@ export function SmartSortRuleEditorScreen() {
     if (!fields) {
       return;
     }
-    try {
-      // 保存前走同一校验（非法正则/flags/捕获组——smart 档才强制捕获组），
-      // 提示语与测试一致。
-      const draftCheck = validateSmartSortRuleDraft({
-        name: fields.name,
-        pattern: fields.pattern,
-        flags: fields.flags,
-        captureKind: fields.captureKind,
-      });
-      if (!draftCheck.ok) throw draftCheck.error;
-    } catch (error) {
-      showToast(toastMessage('无法保存', error));
+    // 保存前走同一校验（非法正则/flags/捕获组——smart 档才强制捕获组），
+    // 提示语与测试一致；校验失败走 Result 收口（错误通道迁移四期）。
+    const draftCheck = validateSmartSortRuleDraft({
+      name: fields.name,
+      pattern: fields.pattern,
+      flags: fields.flags,
+      captureKind: fields.captureKind,
+    });
+    if (!draftCheck.ok) {
+      showToast(toastMessage('无法保存', draftCheck.error));
       return;
     }
     setSaving(true);
@@ -346,11 +345,15 @@ export function SmartSortRuleEditorScreen() {
   // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前档位高亮。
   const loadCaptureKinds = useCallback(
     async (): Promise<
-      PickerListLoadResult<{
-        value: SmartSortCaptureKind;
-        label: string;
-      }>
-    > => ({rows: [...CAPTURE_KIND_OPTIONS], selectedId: draft.captureKind}),
+      Result<
+        PickerListLoadResult<{
+          value: SmartSortCaptureKind;
+          label: string;
+        }>,
+        AppError
+      >
+    > =>
+      Result.ok({rows: [...CAPTURE_KIND_OPTIONS], selectedId: draft.captureKind}),
     [draft.captureKind],
   );
 

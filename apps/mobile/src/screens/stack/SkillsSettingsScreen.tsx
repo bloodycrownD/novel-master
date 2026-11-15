@@ -196,7 +196,7 @@ export function SkillsSettingsScreen() {
     },
     deleteOne: useCallback(
       async (t: SkillRow) => {
-        await runtime.skills().deleteSkill({
+        return runtime.skills().deleteSkill({
           domain: t.domain,
           name: t.name,
           ...(t.domain === 'project' && t.projectId != null
@@ -224,11 +224,15 @@ export function SkillsSettingsScreen() {
     }
     setZipBusy(true);
     try {
-      const result = await exportVfsZip(runtime, zipScopeFor(skill), {
+      const exported = await exportVfsZip(runtime, zipScopeFor(skill), {
         directoryPath: `/meta/skills/${skill.name}`,
         fileName: `${skill.name}.zip`,
       });
-      if (result === 'saved') {
+      if (!exported.ok) {
+        showToast(toastMessage('导出失败', exported.error));
+        return;
+      }
+      if (exported.value === 'saved') {
         showToast('ZIP 已保存到所选位置');
       }
     } catch (error) {

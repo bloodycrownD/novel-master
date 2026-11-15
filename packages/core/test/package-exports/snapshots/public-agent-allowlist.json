@@ -1,5 +1,5 @@
 [
-  "AgentRunResolveError",
+  "AGENT_RUN_RESOLVE_KEYS",
   "AgentTurnError",
   "AppError",
   "ChatAgentSession",

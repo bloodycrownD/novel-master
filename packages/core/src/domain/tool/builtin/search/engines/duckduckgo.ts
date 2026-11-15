@@ -25,6 +25,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import {
   engineApiErrorMessage,
   engineFailed,
@@ -96,8 +97,11 @@ function findAnchorByClass(blockHtml: string, className: string): AnchorMatch | 
 /**
  * DuckDuckGo 搜索适配器：无任何凭据依赖（`_resolved` 仅保持与模板执行器
  * 统一的签名，dispatch 统一按 id 路由）；超时 30s；maxResults 客户端截断。
+ *
+ * 已知失败走返回值通道（四期门⑦）：引擎失败收 `Result.err`；未知异常
+ * （非 abort 的 fetch 错误）仍抛，search-tool 的降级 catch 收口。
  */
-export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetch: FetchFn, signal?: AbortSignal): Promise<SearchResponse> {
+export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
   const numResults = normalizeMaxResults(options.maxResults);
 
   const url = new URL(DUCKDUCKGO_SEARCH_URL);
@@ -127,11 +131,11 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
     } catch (e) {
       // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
       // engineTimeoutError 保留超时失败语义（与 template-engine 同口径）。
-      if (parentAborted) throw new AppError("TOOL_CANCELLED", {toolName: "DuckDuckGo"});
+      if (parentAborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: "DuckDuckGo"}));
       throw engineTimeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS);
     }
 
-    if (!response.ok) throw engineFailed(engineApiErrorMessage("DuckDuckGo", response.status, await response.text()));
+    if (!response.ok) return Result.err(engineFailed(engineApiErrorMessage("DuckDuckGo", response.status, await response.text())));
 
     const html = await response.text();
     // 按 `.result` 块分块（DOM `querySelectorAll(".result")` 的正则等价）：class token 含裸
@@ -185,8 +189,8 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
       });
       if (results.length >= numResults) break;
     }
-    if (parseableResults === 0) throw engineFailed("DuckDuckGo returned no parseable results (invalid response)");
-    return { engine: "duckduckgo", results };
+    if (parseableResults === 0) return Result.err(engineFailed("DuckDuckGo returned no parseable results (invalid response)"));
+    return Result.ok({ engine: "duckduckgo", results });
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onParentAbort);

@@ -6,6 +6,7 @@
 
 import { textBlocks } from "@novel-master/core/chat";
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 
 import {
   assertSavedModelUuid,
@@ -13,6 +14,7 @@ import {
 } from "@novel-master/core/provider";
 
 import type { NovelMasterRuntime } from "../runtime.js";
+import { RESULT_OK } from "../cli-errors.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -27,13 +29,13 @@ function flagString(
 // nm-style: keep-local — CLI 子命令分发 handler：main.ts 按 domain 单点分发，
 // 内联会把 model 域整个 subcommand switch 搬进分发器，破坏 main 的路由结构。
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * repo 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function runModel(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -43,24 +45,27 @@ export async function runModel(
         throw new Error("Usage: nm model use --modelId <uuid>");
       }
       const saved = await assertSavedModelUuid(modelId, rt.savedModels);
-      if (!saved.ok) throw saved.error;
+      if (!saved.ok) return Result.err(saved.error);
       await rt.state.setCurrentModelId(saved.value.id);
-      return;
+      return RESULT_OK;
     }
     case "current": {
-      const modelId = await rt.state.getCurrentModelId();
+      const currentModel = await rt.state.getCurrentModelId();
+      if (!currentModel.ok) return Result.err(currentModel.error);
+      const modelId = currentModel.value;
       if (modelId == null || modelId === "") {
         throw new Error(
           "No current model (run: nm model use --modelId <uuid>)",
         );
       }
       const saved = await rt.savedModels.findById(modelId);
-      if (saved == null) {
+      if (!saved.ok) return Result.err(saved.error);
+      if (saved.value == null) {
         throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Saved model not found: ${modelId}`, modelId });
       }
-      const provider = await rt.providers.get(saved.providerId);
-      console.log(savedModelDisplayName(saved, provider.displayName));
-      return;
+      const provider = await rt.providers.get(saved.value.providerId);
+      console.log(savedModelDisplayName(saved.value, provider.displayName));
+      return RESULT_OK;
     }
     case "list": {
       const providers = await rt.providers.list();
@@ -72,7 +77,7 @@ export async function runModel(
           );
         }
       }
-      return;
+      return RESULT_OK;
     }
     case "request": {
       const content = flagString(flags, "content");
@@ -81,7 +86,9 @@ export async function runModel(
           "Usage: nm model request --content <text> [--session <id>] [--modelId <uuid>] [--raw]",
         );
       }
-      const modelId = await resolveModelId(flags, rt.state, rt.savedModels);
+      const resolvedModel = await resolveModelId(flags, rt.state, rt.savedModels);
+      if (!resolvedModel.ok) return Result.err(resolvedModel.error);
+      const modelId = resolvedModel.value;
       const sessionId = flagString(flags, "session");
 
       if (sessionId != null) {
@@ -102,7 +109,7 @@ export async function runModel(
         } else {
           console.log(result.assistantText);
         }
-        return;
+        return RESULT_OK;
       }
 
       const result = await rt.modelRequests.request(modelId, content);
@@ -111,7 +118,7 @@ export async function runModel(
       } else {
         console.log(result.assistantText);
       }
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error("Usage: nm model <use|current|list|request> ...");

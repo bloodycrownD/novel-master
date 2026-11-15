@@ -288,14 +288,18 @@ export async function readCliState(dbPath: string): Promise<CliState> {
   try {
     const state = createPersistentState(conn);
     const currentProjectId = await state.getCurrentProjectId();
+    if (!currentProjectId.ok) throw currentProjectId.error;
     const currentSessionId = await state.getCurrentSessionId();
+    if (!currentSessionId.ok) throw currentSessionId.error;
     const currentProviderId = await state.getCurrentProviderId();
+    if (!currentProviderId.ok) throw currentProviderId.error;
     const currentModelId = await state.getCurrentModelId();
+    if (!currentModelId.ok) throw currentModelId.error;
     return {
-      currentProjectId: currentProjectId || undefined,
-      currentSessionId: currentSessionId || undefined,
-      currentProviderId: currentProviderId || undefined,
-      currentModelId: currentModelId || undefined,
+      currentProjectId: currentProjectId.value || undefined,
+      currentSessionId: currentSessionId.value || undefined,
+      currentProviderId: currentProviderId.value || undefined,
+      currentModelId: currentModelId.value || undefined,
     };
   } finally {
     await conn.close();

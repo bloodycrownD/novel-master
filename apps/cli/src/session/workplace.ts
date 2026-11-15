@@ -22,7 +22,9 @@ export async function runSessionWorkplace(
   args: readonly string[],
 ): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
-  const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
+  const resolvedScope = await rt.scope.resolveProjectSession(flags);
+  if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
+  const { projectId, sessionId } = resolvedScope.value;
   const wt = rt.workplace({ kind: "session", projectId, sessionId });
   const rest = args[0] === "workplace" ? args.slice(1) : args;
   return runWorkplace(wt, rest, {

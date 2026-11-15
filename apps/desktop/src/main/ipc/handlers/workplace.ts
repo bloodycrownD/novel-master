@@ -22,6 +22,7 @@ import {
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 
 function toIpcFillPolicy(
@@ -74,7 +75,9 @@ export async function handleWorkplaceBuildListRows(
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const wt = getWorkplaceForScope(rt, scopeRes.data);
-    return { ok: true, data: await wt.buildListRows() };
+    const rows = await wt.buildListRows();
+    if (!rows.ok) return ipcErr(formatIpcError(rows.error));
+    return { ok: true, data: rows.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -137,7 +140,8 @@ export async function handleWorkplaceGetDirRule(
     const scope = scopeRes.data;
     const wt = getWorkplaceForScope(rt, scope);
     const rule = await wt.getDirRule(req.logicalPath);
-    if (rule == null) {
+    if (!rule.ok) return ipcErr(formatIpcError(rule.error));
+    if (rule.value == null) {
       return { ok: true, data: null };
     }
     return {
@@ -146,13 +150,13 @@ export async function handleWorkplaceGetDirRule(
         workspaceScope: req.workspaceScope,
         projectId: req.projectId,
         sessionId: req.sessionId,
-        logicalPath: rule.logicalPath,
-        ruleEnabled: rule.ruleEnabled,
-        sortField: rule.sortField,
-        sortOrder: rule.sortOrder,
-        headCount: rule.headCount,
-        tailCount: rule.tailCount,
-        fillPolicy: toIpcFillPolicy(rule.fillPolicy),
+        logicalPath: rule.value.logicalPath,
+        ruleEnabled: rule.value.ruleEnabled,
+        sortField: rule.value.sortField,
+        sortOrder: rule.value.sortOrder,
+        headCount: rule.value.headCount,
+        tailCount: rule.value.tailCount,
+        fillPolicy: toIpcFillPolicy(rule.value.fillPolicy),
       },
     };
   } catch (err) {

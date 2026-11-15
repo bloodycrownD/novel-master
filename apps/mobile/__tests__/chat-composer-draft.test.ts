@@ -145,7 +145,9 @@ describe('chat-composer-draft', () => {
       })),
     };
 
-    const hydrated = await hydrateChatComposerDraftFromDb('s-cd5', sessions);
+    const hydratedResult = await hydrateChatComposerDraftFromDb('s-cd5', sessions);
+    if (!hydratedResult.ok) throw hydratedResult.error;
+    const hydrated = hydratedResult.value;
 
     // 断言写成「等于具体那个非空字符串」：写「非空」在返回空串时恒红、
     // 在返回 undefined 时恒绿，两种退化都测不出牙齿。
@@ -199,11 +201,12 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
       tokenRanges: ranges,
     });
 
-    const hydrated = await hydrateChatComposerDraftFromDb(
+    const hydratedResult = await hydrateChatComposerDraftFromDb(
       's-ca2-storage',
       sessions,
     );
-    expect(hydrated.tokenRanges).toEqual(ranges);
+    if (!hydratedResult.ok) throw hydratedResult.error;
+    expect(hydratedResult.value.tokenRanges).toEqual(ranges);
     expect(readChatComposerDraftState('s-ca2-storage').tokenRanges).toEqual(
       ranges,
     );
@@ -238,13 +241,14 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     );
 
     // 旧 JSON 水化：parse 不写自有键，缓存条目同样没有。
-    const hydrated = await hydrateChatComposerDraftFromDb(
+    const undefResult = await hydrateChatComposerDraftFromDb(
       's-ca2-undef',
       sessions,
     );
-    expect(Object.prototype.hasOwnProperty.call(hydrated, 'tokenRanges')).toBe(
-      false,
-    );
+    if (!undefResult.ok) throw undefResult.error;
+    expect(
+      Object.prototype.hasOwnProperty.call(undefResult.value, 'tokenRanges'),
+    ).toBe(false);
     expect(
       Object.prototype.hasOwnProperty.call(
         readChatComposerDraftState('s-ca2-undef'),
@@ -278,11 +282,12 @@ describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
     const payload = JSON.parse(stored!) as Record<string, unknown>;
     expect(payload.tokenRanges).toEqual([]);
 
-    const hydrated = await hydrateChatComposerDraftFromDb(
+    const emptyResult = await hydrateChatComposerDraftFromDb(
       's-ca2-empty',
       sessions,
     );
-    expect(hydrated.tokenRanges).toEqual([]);
+    if (!emptyResult.ok) throw emptyResult.error;
+    expect(emptyResult.value.tokenRanges).toEqual([]);
   });
 
   it('T-CA2/P0-2: applyComposerStatusAttachmentsReplace 保留 prev.tokenRanges（[] 不被投影链抹掉）', () => {

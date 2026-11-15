@@ -16,6 +16,7 @@ import {
   type VfsScope,
   } from "@novel-master/core/vfs";
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
@@ -125,6 +126,14 @@ export async function collectHostPathEntries(
   return entries;
 }
 
+/**
+ * BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）。
+ *
+ * ⚠️ 本回调协议**只有 throw 通道**（core 定义 `Promise<void>`，无 Result 形参位；
+ * core `applyBatchIngestWithWriter` 逐项 try/catch 聚合进 `Report.failed`），故
+ * `executeSessionUserVfsOp` 的已知失败在此解包转 throw——总纲 §五「平台强制穿透」
+ * 例外，错误通道迁移四期点名保留。
+ */
 function createSessionBatchWriter(
   runtime: DesktopNovelMasterRuntime,
   sessionId: string,
@@ -132,20 +141,24 @@ function createSessionBatchWriter(
 ): BatchIngestWriter {
   return {
     async mkdir(logicalPath: string): Promise<void> {
-      await executeSessionUserVfsOp(
+      const r = await executeSessionUserVfsOp(
         runtime,
         sessionId,
         buildUserVfsMkdirOp(logicalPath),
       );
+      if (!r.ok) throw r.error;
     },
     async writeFile(logicalPath: string, content: string): Promise<void> {
-      const baseline = await readUserVfsSaveBaseline(vfs, logicalPath);
+      const baselineResult = await readUserVfsSaveBaseline(vfs, logicalPath);
+      if (!baselineResult.ok) throw baselineResult.error;
+      const baseline = baselineResult.value;
       if (baseline == null) {
-        await executeSessionUserVfsOp(
+        const r = await executeSessionUserVfsOp(
           runtime,
           sessionId,
           buildUserVfsCreateFileOp(logicalPath, content),
         );
+        if (!r.ok) throw r.error;
         return;
       }
       const op = buildUserVfsSaveOp(
@@ -155,7 +168,8 @@ function createSessionBatchWriter(
         content,
       );
       if (op != null) {
-        await executeSessionUserVfsOp(runtime, sessionId, op);
+        const r = await executeSessionUserVfsOp(runtime, sessionId, op);
+        if (!r.ok) throw r.error;
       }
     },
   };
@@ -184,29 +198,32 @@ export async function ingestVfsFromHostPaths(
     readonly hostPaths: readonly string[];
     readonly overwriteConfirmed: boolean;
   },
-): Promise<BatchIngestFromPathsOutcome> {
+): Promise<Result<BatchIngestFromPathsOutcome, AppError>> {
   const targetDir = resolveTargetDir(options.targetDir);
   if (options.hostPaths.length === 0) {
-    return {
+    return Result.ok({
       status: "applied",
       report: { written: [], skipped: [], failed: [] },
       skippedBinary: [],
-    };
+    });
   }
 
   const rawEntries = await collectHostPathEntries(options.hostPaths);
   const batch = createVfsBatchIoService(runtime.conn);
-  const plan = await batch.planBatchIngest(scope, targetDir, rawEntries);
+  const planned = await batch.planBatchIngest(scope, targetDir, rawEntries);
+  // 失败沿 Result 返回，由唯一调用方 handleVfsBatchIngestFromPaths 转码。
+  if (!planned.ok) return Result.err(planned.error);
+  const plan = planned.value;
 
   if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
-    return {
+    return Result.ok({
       status: "needs_confirm",
       conflicts: plan.conflicts.map((c) => ({
         logicalPath: c.logicalPath,
         reason: c.reason,
       })),
       skippedBinary: [...plan.skippedBinary],
-    };
+    });
   }
 
   const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
@@ -215,27 +232,31 @@ export async function ingestVfsFromHostPaths(
   if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
     const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
     const writer = createSessionBatchWriter(runtime, scope.sessionId, vfs);
-    report = await batch.applyBatchIngestWithWriter(
+    const appliedWithWriter = await batch.applyBatchIngestWithWriter(
       scope,
       targetDir,
       plan,
       applyOptions,
       writer,
     );
+    if (!appliedWithWriter.ok) return Result.err(appliedWithWriter.error);
+    report = appliedWithWriter.value;
   } else {
-    report = await batch.applyBatchIngest(
+    const applied = await batch.applyBatchIngest(
       scope,
       targetDir,
       plan,
       applyOptions,
     );
+    if (!applied.ok) return Result.err(applied.error);
+    report = applied.value;
   }
 
-  return {
+  return Result.ok({
     status: "applied",
     report,
     skippedBinary: [...plan.skippedBinary],
-  };
+  });
 }
 
 /**
@@ -300,9 +321,12 @@ export async function exportVfsFileWithDialog(
   scope: VfsScope,
   options: { readonly logicalPath: string },
   parentWindow?: BrowserWindow | null,
-): Promise<"saved" | "cancelled"> {
+): Promise<Result<"saved" | "cancelled", AppError>> {
   const batch = createVfsBatchIoService(runtime.conn);
-  const plan = await batch.planBatchExport(scope, [options.logicalPath]);
+  const planned = await batch.planBatchExport(scope, [options.logicalPath]);
+  // 失败沿 Result 返回，由唯一调用方 handleVfsFileExport 转码。
+  if (!planned.ok) return Result.err(planned.error);
+  const plan = planned.value;
   if (plan.files.length !== 1) {
     throw new Error(
       `只能导出单个文件（收到 ${plan.files.length} 个条目）：${options.logicalPath}`,
@@ -319,10 +343,10 @@ export async function exportVfsFileWithDialog(
     ? await dialog.showSaveDialog(win, { defaultPath: base })
     : await dialog.showSaveDialog({ defaultPath: base });
   if (result.canceled || result.filePath == null) {
-    return "cancelled";
+    return Result.ok("cancelled");
   }
   await writeFile(result.filePath, file.content, "utf8");
-  return "saved";
+  return Result.ok("saved");
 }
 
 export type ExportStageResult = {
@@ -399,13 +423,16 @@ export async function stageVfsBatchExport(
   runtime: DesktopNovelMasterRuntime,
   scope: VfsScope,
   logicalPaths: readonly string[],
-): Promise<ExportStageResult> {
+): Promise<Result<ExportStageResult, AppError>> {
   if (logicalPaths.length === 0) {
     throw new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可导出的路径"});
   }
 
   const batch = createVfsBatchIoService(runtime.conn);
-  const plan = await batch.planBatchExport(scope, logicalPaths);
+  const planned = await batch.planBatchExport(scope, logicalPaths);
+  // 失败沿 Result 返回，由唯一调用方 handleVfsBatchExportStage 转码。
+  if (!planned.ok) return Result.err(planned.error);
+  const plan = planned.value;
   if (plan.files.length === 0 && plan.mkdirPaths.length === 0) {
     throw new AppError("INFRA_VALIDATION_FAILED", {detail: "导出内容为空"});
   }
@@ -450,11 +477,11 @@ export async function stageVfsBatchExport(
     if (skipped.length > 0) {
       log.warn(`导出跳过 ${skipped.length} 项（相对路径碰撞）`, { skipped: skipped.map((s) => s.logicalPath) });
     }
-    return {
+    return Result.ok({
       stagingRoot,
       filePaths,
       ...(skipped.length > 0 ? { skipped } : {}),
-    };
+    });
   } catch (err) {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
     throw err;

@@ -121,7 +121,14 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
     setError(undefined);
     try {
       const wt = runtime.workplace(workplaceScope);
-      setRows(await wt.buildListRows());
+      const built = await wt.buildListRows();
+      // 已知失败走 Result 收口（错误通道迁移四期）；未知异常仍走异常通道。
+      if (built.ok) {
+        setRows(built.value);
+      } else {
+        setError(formatError(built.error));
+        setRows([]);
+      }
     } catch (err) {
       setError(formatError(err));
       setRows([]);
@@ -194,9 +201,15 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       confirmPickDirectory();
       return;
     }
-    props.onConfirm(
-      composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles),
+    const tokens = composerAtPath.tokensFromPickerSelection(
+      selectedDirs,
+      selectedFiles,
     );
+    if (!tokens.ok) {
+      setError(formatError(tokens.error));
+      return;
+    }
+    props.onConfirm(tokens.value);
     onClose();
   };
 

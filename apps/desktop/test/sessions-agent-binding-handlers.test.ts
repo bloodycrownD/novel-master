@@ -223,10 +223,10 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
   });
 
   // au/C-orch-2（cr-fix-spec 条目 9，方向 b）：归一口径与 mobile 对齐——
-  // AgentRunResolveError（agentId 指向已删 agent）→ ok:true + source='none'
+  // agent 解析失败（AGENT_REFERENCED_NOT_FOUND）→ ok:true + source='none'
   // （待重选）；ChatError 等其它异常 → 外层 catch 包 ok:false（报错态，
   // 由 SessionDetailDrawer 的失败 toast 兜底，绝不冒充「已被删除」）。
-  it("T-C2：已删 agent → AgentRunResolveError 归一 source='none' 待重选；其它异常落外层 ok:false", async () => {
+  it("T-C2：已删 agent → AGENT_REFERENCED_NOT_FOUND 归一 source='none' 待重选；其它异常落外层 ok:false", async () => {
     const project = await handleProjectsCreate({ name: "归一口径" });
     assert.equal(project.ok, true);
     if (!project.ok) {
@@ -256,7 +256,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     await verifyBindingCommitted(sessionId, "agent-gone");
 
     // 删除绑定的 agent：registry 取不到 → resolveAgentForProject 抛
-    // AgentRunResolveError → handler 内层 catch 归一为 source='none'。
+    // AGENT_REFERENCED_NOT_FOUND → handler 内层 catch 归一为 source='none'。
     await rt.agentRegistry.delete("agent-gone");
     const meta = await handlePromptAgentMeta({
       projectId: project.data.id,
@@ -269,7 +269,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       assert.equal(meta.data.hasDedicatedModel, false);
     }
 
-    // 源码口径断言：内层 catch 只归一 AgentRunResolveError，其余 rethrow
+    // 源码口径断言：内层 catch 只归一 AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败，其余 rethrow
     // （ChatError 落外层 catch → ok:false，与 mobile loadChatAgentMeta 对称）。
     const promptSrc = readFileSync(
       join(
@@ -283,7 +283,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       ),
       "utf8"
     );
-    assert.match(promptSrc, /if \(error instanceof AgentRunResolveError\)/);
+    assert.match(promptSrc, /if \(isAppError\(error\) && AGENT_RUN_RESOLVE_KEYS\.has\(error\.key\)\)/);
     assert.match(promptSrc, /throw error;/);
     assert.doesNotMatch(promptSrc, /ChatError/);
   });

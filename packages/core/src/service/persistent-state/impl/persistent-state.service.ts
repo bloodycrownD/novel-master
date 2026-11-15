@@ -6,6 +6,7 @@
 
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -33,7 +34,7 @@ export class DefaultPersistentState implements PersistentState {
     private readonly sessionKkv?: SessionKkvService | null
   ) {}
 
-  getCurrentProjectId(): Promise<string | undefined> {
+  getCurrentProjectId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_PROJECT_ID);
   }
 
@@ -45,7 +46,7 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_PROJECT_ID);
   }
 
-  getCurrentSessionId(): Promise<string | undefined> {
+  getCurrentSessionId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_SESSION_ID);
   }
 
@@ -57,7 +58,7 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_SESSION_ID);
   }
 
-  getCurrentProviderId(): Promise<string | undefined> {
+  getCurrentProviderId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_PROVIDER_ID);
   }
 
@@ -69,18 +70,14 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_PROVIDER_ID);
   }
 
-  getCurrentModelId(): Promise<string | undefined> {
+  getCurrentModelId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_MODEL_ID);
   }
 
-  setCurrentModelId(id: string): Promise<void> {
+  async setCurrentModelId(id: string): Promise<Result<void, AppError>> {
     const trimmed = id.trim();
-    if (trimmed.includes("/")) {
-      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${id}`, modelId: id });
-    }
-    if (!isSavedModelUuidFormat(trimmed)) {
-      throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id });
-    }
+    if (trimmed.includes("/")) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${id}`, modelId: id }));
+    if (!isSavedModelUuidFormat(trimmed)) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id }));
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
   }
 
@@ -88,11 +85,11 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_MODEL_ID);
   }
 
-  getCurrentAgentId(): Promise<string | undefined> {
+  getCurrentAgentId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_AGENT_ID);
   }
 
-  setCurrentAgentId(id: string): Promise<void> {
+  setCurrentAgentId(id: string): Promise<Result<void, AppError>> {
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_AGENT_ID, id);
   }
 
@@ -100,20 +97,11 @@ export class DefaultPersistentState implements PersistentState {
     return this.reset(KEY_CURRENT_AGENT_ID);
   }
 
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → service 异常通道
-   * 转码点——`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样上抛，由本
-   * service 公共 API 的调用链端点（handler / 屏幕）catch 收口。
-   */
-  private async get(key: string): Promise<string | undefined> {
+  /** `KKV_NOT_FOUND` 归一为 `undefined`，其余 KKV 失败经 `Result.err` 原样接力。 */
+  private async get(key: string): Promise<Result<string | undefined, AppError>> {
     const raw = await this.kkv.get(MODULE, key);
-    if (!raw.ok) {
-      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-        return undefined;
-      }
-      throw raw.error;
-    }
-    return raw.value;
+    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    return Result.ok(raw.ok ? raw.value : undefined);
   }
 
   private async set(key: string, value: string): Promise<void> {
@@ -126,15 +114,14 @@ export class DefaultPersistentState implements PersistentState {
    * 双删（进程内热层 + session KKV 行）：只清热层的话，重启后 KKV 里的
    * 旧模型占用会被读回，按 api 口径参与阈值判定（跳掉 heuristic 安全系数）。
    */
-  private async setAndInvalidatePromptTokenCache(
-    key: string,
-    value: string
-  ): Promise<void> {
+  private async setAndInvalidatePromptTokenCache(key: string, value: string): Promise<Result<void, AppError>> {
     await this.set(key, value);
     const sessionId = await this.getCurrentSessionId();
-    if (sessionId != null) {
-      await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId);
+    if (!sessionId.ok) return Result.err(sessionId.error);
+    if (sessionId.value != null) {
+      await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId.value);
     }
+    return Result.ok(undefined);
   }
 
   private async reset(key: string): Promise<void> {

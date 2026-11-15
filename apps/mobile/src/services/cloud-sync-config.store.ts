@@ -5,6 +5,7 @@
  */
 import {normalizePrefix} from '@novel-master/core';
 import {isAppError} from '@novel-master/core/agent';
+import {Result, AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {type SecretStore} from '@novel-master/core/provider';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
@@ -85,25 +86,21 @@ function parseRev(raw: string | undefined): number {
 }
 
 /**
- * KKV 读适配：`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样 throw。
- *
- * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → 端内异常通道的
- * 转码点；getCloudSyncConfig 是唯一中间层，CloudSyncConfigScreen 的
- * load/save 紧邻 catch 提示（desktop 同名 store 同形态，handler catch →
- * IpcResult）。
+ * KKV 读适配：`KKV_NOT_FOUND` 归一为 `undefined`（Ok），其余失败沿
+ * `Result.err` 接力（错误通道迁移四期）。
  */
 async function kkvGet(
   kkv: KkvService,
   key: string,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
   if (!raw.ok) {
     if (isAppError(raw.error, 'KKV_NOT_FOUND')) {
-      return undefined;
+      return Result.ok(undefined);
     }
-    throw raw.error;
+    return Result.err(raw.error);
   }
-  return raw.value;
+  return Result.ok(raw.value);
 }
 
 async function kkvSet(
@@ -161,10 +158,10 @@ function validateConfigInput(input: CloudSyncConfigInput): void {
   }
 }
 
-/** 读取对外配置；未配置时 endpoint 等为空串。 */
+/** 读取对外配置；未配置时 endpoint 等为空串。失败沿 `Result.err` 接力。 */
 export async function getCloudSyncConfig(
   runtime: MobileNovelMasterRuntime,
-): Promise<CloudSyncConfigPublic> {
+): Promise<Result<CloudSyncConfigPublic, AppError>> {
   const {kkv, secretStore} = runtime;
   const [
     endpoint,
@@ -185,27 +182,36 @@ export async function getCloudSyncConfig(
     kkvGet(kkv, KEY_DEVICE_ID),
     kkvGet(kkv, KEY_DEVICE_LABEL),
   ]);
+  if (!endpoint.ok) return Result.err(endpoint.error);
+  if (!bucket.ok) return Result.err(bucket.error);
+  if (!region.ok) return Result.err(region.error);
+  if (!pathPrefix.ok) return Result.err(pathPrefix.error);
+  if (!accessKeyId.ok) return Result.err(accessKeyId.error);
+  if (!forcePathStyle.ok) return Result.err(forcePathStyle.error);
+  if (!deviceId.ok) return Result.err(deviceId.error);
+  if (!deviceLabel.ok) return Result.err(deviceLabel.error);
 
   const secretKeySet = await secretStore.has(CLOUD_SYNC_SECRET_REF);
 
-  return {
-    endpoint: endpoint ?? '',
-    bucket: bucket ?? '',
-    region: region ?? '',
-    pathPrefix: pathPrefix ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
-    accessKeyId: accessKeyId ?? '',
-    forcePathStyle: parseBool(forcePathStyle, false),
-    deviceId: deviceId ?? '',
-    deviceLabel: deviceLabel?.trim() || undefined,
+  return Result.ok({
+    endpoint: endpoint.value ?? '',
+    bucket: bucket.value ?? '',
+    region: region.value ?? '',
+    pathPrefix: pathPrefix.value ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
+    accessKeyId: accessKeyId.value ?? '',
+    forcePathStyle: parseBool(forcePathStyle.value, false),
+    deviceId: deviceId.value ?? '',
+    deviceLabel: deviceLabel.value?.trim() || undefined,
     secretKeySet,
-  };
+  });
 }
 
-/** 读取本机同步状态字段。 */
+/** 读取本机同步状态字段。失败沿 `Result.err` 接力。 */
 export async function getCloudSyncLocalStatus(
   runtime: MobileNovelMasterRuntime,
-): Promise<CloudSyncLocalStatus> {
+): Promise<Result<CloudSyncLocalStatus, AppError>> {
   const config = await getCloudSyncConfig(runtime);
+  if (!config.ok) return Result.err(config.error);
   const {kkv} = runtime;
   const [
     lastSyncedRev,
@@ -220,34 +226,41 @@ export async function getCloudSyncLocalStatus(
     kkvGet(kkv, KEY_LAST_PULL_RESULT),
     kkvGet(kkv, KEY_LAST_PUSH_RESULT),
   ]);
+  if (!lastSyncedRev.ok) return Result.err(lastSyncedRev.error);
+  if (!lastPullAt.ok) return Result.err(lastPullAt.error);
+  if (!lastPushAt.ok) return Result.err(lastPushAt.error);
+  if (!lastPullResult.ok) return Result.err(lastPullResult.error);
+  if (!lastPushResult.ok) return Result.err(lastPushResult.error);
 
   const configured =
-    config.endpoint.trim().length > 0 &&
-    config.bucket.trim().length > 0 &&
-    config.accessKeyId.trim().length > 0 &&
-    config.secretKeySet &&
-    config.deviceId.trim().length > 0;
+    config.value.endpoint.trim().length > 0 &&
+    config.value.bucket.trim().length > 0 &&
+    config.value.accessKeyId.trim().length > 0 &&
+    config.value.secretKeySet &&
+    config.value.deviceId.trim().length > 0;
 
-  return {
+  return Result.ok({
     configured,
-    deviceId: config.deviceId,
-    lastSyncedRev: parseRev(lastSyncedRev),
-    lastPullAt: lastPullAt ?? undefined,
-    lastPushAt: lastPushAt ?? undefined,
-    lastPullResult: lastPullResult ?? undefined,
-    lastPushResult: lastPushResult ?? undefined,
-  };
+    deviceId: config.value.deviceId,
+    lastSyncedRev: parseRev(lastSyncedRev.value),
+    lastPullAt: lastPullAt.value ?? undefined,
+    lastPushAt: lastPushAt.value ?? undefined,
+    lastPullResult: lastPullResult.value ?? undefined,
+    lastPushResult: lastPushResult.value ?? undefined,
+  });
 }
 
-/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。 */
+/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。已知失败沿 `Result.err` 上行，校验非空仍走异常（校验本就 reject，屏幕 catch 提示）。 */
 export async function setCloudSyncConfig(
   runtime: MobileNovelMasterRuntime,
   input: CloudSyncConfigInput,
-): Promise<CloudSyncConfigPublic> {
+): Promise<Result<CloudSyncConfigPublic, AppError>> {
   validateConfigInput(input);
   const {kkv, secretStore} = runtime;
 
-  let deviceId = (await kkvGet(kkv, KEY_DEVICE_ID))?.trim() ?? '';
+  const existingDeviceId = await kkvGet(kkv, KEY_DEVICE_ID);
+  if (!existingDeviceId.ok) return Result.err(existingDeviceId.error);
+  let deviceId = existingDeviceId.value?.trim() ?? '';
   if (!deviceId) {
     deviceId = generateCloudSyncDeviceId();
   }
@@ -313,30 +326,34 @@ export async function readCloudSyncSecretKey(
   return secretStore.get(CLOUD_SYNC_SECRET_REF);
 }
 
-/** 由已存配置组装 S3 驱动配置；未配置完整时抛错。 */
+/** 由已存配置组装 S3 驱动配置；未配置完整收 `CLOUD_SYNC_NOT_CONFIGURED`（desktop 镜像同款），读失败沿 `Result.err` 上行。 */
 export async function buildS3StorageConfig(
   runtime: MobileNovelMasterRuntime,
   overrides?: Partial<CloudSyncConfigInput>,
-): Promise<S3StorageConfig> {
+): Promise<Result<S3StorageConfig, AppError>> {
   const config = await getCloudSyncConfig(runtime);
+  if (!config.ok) return Result.err(config.error);
   const secretKey =
     overrides?.secretAccessKey?.trim() ||
     (await readCloudSyncSecretKey(runtime.secretStore));
   if (
-    !config.endpoint.trim() ||
-    !config.bucket.trim() ||
-    !config.accessKeyId.trim() ||
+    !config.value.endpoint.trim() ||
+    !config.value.bucket.trim() ||
+    !config.value.accessKeyId.trim() ||
     !secretKey
   ) {
-    throw new Error('请先完成云存储配置');
+    return Result.err(
+      new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先完成云存储配置'}),
+    );
   }
 
-  return {
-    endpoint: overrides?.endpoint?.trim() || config.endpoint.trim(),
-    bucket: overrides?.bucket?.trim() || config.bucket.trim(),
-    region: overrides?.region?.trim() ?? config.region.trim(),
-    accessKeyId: overrides?.accessKeyId?.trim() || config.accessKeyId.trim(),
+  return Result.ok({
+    endpoint: overrides?.endpoint?.trim() || config.value.endpoint.trim(),
+    bucket: overrides?.bucket?.trim() || config.value.bucket.trim(),
+    region: overrides?.region?.trim() ?? config.value.region.trim(),
+    accessKeyId:
+      overrides?.accessKeyId?.trim() || config.value.accessKeyId.trim(),
     secretAccessKey: secretKey,
-    forcePathStyle: overrides?.forcePathStyle ?? config.forcePathStyle,
-  };
+    forcePathStyle: overrides?.forcePathStyle ?? config.value.forcePathStyle,
+  });
 }

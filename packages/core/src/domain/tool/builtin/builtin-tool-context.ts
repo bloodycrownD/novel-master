@@ -52,7 +52,8 @@ export interface BuiltinToolSubagentContext {
   readonly messages: MessageService;
   readonly sessions: SessionService;
   /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
-  readonly createChildSession: (title: string) => Promise<string>;
+  /** 四期门⑦：子会话创建的已知失败沿 Result 回传给 task 工具闭包。 */
+  readonly createChildSession: (title: string) => Promise<Result<string, AppError>>;
   /**
    * 直接父会话 id（**直接父**口径，spec D2）：主装配点填 `scope.sessionId`、
    * 子装配点填 `childSessionId`。`task` 的 `sessionId` 续用参数据此校验归属
@@ -73,9 +74,10 @@ export interface BuiltinToolSubagentContext {
    * 返回值 {@link AgentRunResult} 不带文本——`task` 工具跑完后自己
    * `messages.listBySession(childSessionId)` 取末条 assistant text。
    */
-  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<AgentRunResult>;
+  /** 四期门⑦：子 run 的已知失败沿 Result 回传给 task 工具闭包（未知异常仍 reject）。 */
+  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<Result<AgentRunResult, AppError>>;
   /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
-  readonly resolveChildModelId: (def: AgentDefinition) => ResolveChildModelIdResult;
+  readonly resolveChildModelId: (def: AgentDefinition) => Result<ResolveChildModelIdResult, AppError>;
   /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
   readonly depth: number;
   /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
@@ -143,7 +145,7 @@ export interface BuiltinToolAgentsContext {
   /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
   readonly registeredToolNames: readonly string[];
   /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
-  readonly assertSavedModel?: (savedModelId: string) => void | Promise<void>;
+  readonly assertSavedModel?: (savedModelId: string) => void | Result<void, AppError> | Promise<void | Result<void, AppError>>;
 }
 
 /**
@@ -170,7 +172,7 @@ export interface BuiltinToolSearchContext {
    * 空数组，工具回落中性配置指引文案）。无效引擎名返回
    * `Result.err(TOOL_SEARCH_INVALID_ARGUMENT)`（工具侧解包进 ToolError 通道）。
    */
-  readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError<"TOOL_SEARCH_INVALID_ARGUMENT">>>;
+  readonly resolveEngineChain: (inputEngine?: string) => Promise<Result<ResolvedEngineConfig[], AppError>>;
   /**
    * 装配期描述快照：`id` / `name` / `paramHint`（paramHint 不限长，装配期
    * 原样透传——v3 起已废除「保存拒绝 + 装配期截断 500」双道限长）。空数组

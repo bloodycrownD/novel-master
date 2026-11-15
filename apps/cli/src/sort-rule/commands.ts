@@ -16,7 +16,9 @@ import {
   type SmartSortRuleMoveTarget,
   type UpdateSmartSortRuleInput,
 } from "@novel-master/core/smart-sort-rule";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { RESULT_OK } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 function flagString(
@@ -58,13 +60,13 @@ function parseMoveTarget(value: string): SmartSortRuleMoveTarget {
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：规则读 / 删 / 编译的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * 规则读 / 删 / 编译的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function runSortRule(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { positional, flags } = parseCliArgs(args);
   const svc = rt.smartSortRule;
 
@@ -80,7 +82,7 @@ export async function runSortRule(
           `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.captureKind}\t${r.flags}\t${r.name}\t${r.pattern}`,
         );
       }
-      return;
+      return RESULT_OK;
     }
     case "create": {
       const name = flagString(flags, "name");
@@ -105,9 +107,9 @@ export async function runSortRule(
             }
           : {}),
       });
-      if (!rule.ok) throw rule.error;
+      if (!rule.ok) return Result.err(rule.error);
       console.log(rule.value.ruleId);
-      return;
+      return RESULT_OK;
     }
     case "update": {
       const ruleId = flagString(flags, "id");
@@ -129,9 +131,9 @@ export async function runSortRule(
         );
       }
       const rule = await svc.updateRule(ruleId, patch);
-      if (!rule.ok) throw rule.error;
+      if (!rule.ok) return Result.err(rule.error);
       console.log(rule.value.ruleId);
-      return;
+      return RESULT_OK;
     }
     case "remove": {
       const ruleId = flagString(flags, "id");
@@ -144,8 +146,8 @@ export async function runSortRule(
         );
       }
       const deleted = await svc.deleteRule(ruleId);
-      if (!deleted.ok) throw deleted.error;
-      return;
+      if (!deleted.ok) return Result.err(deleted.error);
+      return RESULT_OK;
     }
     case "enable":
     case "disable": {
@@ -154,8 +156,8 @@ export async function runSortRule(
         throw new Error(`Usage: nm sort-rule ${subcommand} --id <ruleId>`);
       }
       const set = await svc.setEnabled(ruleId, subcommand === "enable");
-      if (!set.ok) throw set.error;
-      return;
+      if (!set.ok) return Result.err(set.error);
+      return RESULT_OK;
     }
     case "move": {
       const ruleId = flagString(flags, "id");
@@ -166,11 +168,11 @@ export async function runSortRule(
         );
       }
       const rules = await svc.moveRule(ruleId, parseMoveTarget(to));
-      if (!rules.ok) throw rules.error;
+      if (!rules.ok) return Result.err(rules.error);
       for (const r of rules.value) {
         console.log(`${r.sortOrder}\t${r.ruleId}`);
       }
-      return;
+      return RESULT_OK;
     }
     case "export": {
       const file = flagString(flags, "file");
@@ -181,7 +183,7 @@ export async function runSortRule(
       const text = stringifyText(doc, formatFromPath(file));
       await writeFile(file, text, "utf8");
       console.log(doc.rules.length);
-      return;
+      return RESULT_OK;
     }
     case "import": {
       const file = flagString(flags, "file");
@@ -191,16 +193,16 @@ export async function runSortRule(
       const source = await readFile(file, "utf8");
       const raw = parseText(source, formatFromPath(file));
       const rules = await svc.importRules(raw);
-      if (!rules.ok) throw rules.error;
+      if (!rules.ok) return Result.err(rules.error);
       console.log(rules.value.length);
-      return;
+      return RESULT_OK;
     }
     case "test": {
       if (positional.length === 0) {
         throw new Error("Usage: nm sort-rule test <name>...");
       }
       const result = await svc.previewSort(positional);
-      if (!result.ok) throw result.error;
+      if (!result.ok) return Result.err(result.error);
       for (const line of result.value.lines) {
         // 序号元组显示：null → '-'；其余经 core 单源 formatSortTupleForDisplay
         // 格式化（C-3）：固定档哨兵 "(固定最小,)"/"(固定最大,)"，smart "(1,)"
@@ -214,7 +216,7 @@ export async function runSortRule(
         console.log(name);
       }
       console.log("# asc");
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error(

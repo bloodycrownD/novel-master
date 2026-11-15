@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { type VfsService } from "@novel-master/core/vfs";
+import { type AppError, Result } from "@novel-master/core/errors";
+import { RESULT_OK } from "../../cli-errors.js";
 import { parseCliArgs } from "../parse-args.js";
 
 export async function runWrite(
   vfs: VfsService,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { positional, flags } = parseCliArgs(args);
   const path = positional[0];
   if (path == null) {
@@ -28,7 +30,9 @@ export async function runWrite(
         : await readStdin();
 
   const result = await vfs.write(path, content);
-  console.log(result.version);
+  if (!result.ok) return Result.err(result.error);
+  console.log(result.value.version);
+  return RESULT_OK;
 }
 
 async function readStdin(): Promise<string> {

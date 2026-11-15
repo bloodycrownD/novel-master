@@ -253,7 +253,7 @@ type RunAgentTurnFn = (
   scope: {projectId: string; sessionId: string},
   content: string,
   options?: SessionStreamStartOptions,
-) => Promise<unknown>;
+) => Promise<unknown> | Promise<{ok: false; error: unknown}> | Promise<{ok: true; value: {stopReason?: unknown}}>
 
 /** startRun 的 options 契约（供 ChatComposer.executeRun 等 UI 侧消费）。 */
 interface SessionStreamStartOptions {
@@ -1438,8 +1438,10 @@ export class SessionStreamUnitManager {
         (async () => {
           try {
             const session = await this.runtime.sessions.get(sessionId);
-            if (!session.ok) throw session.error;
-            const title = session.value?.title ?? undefined;
+            // 名字取不到不阻塞保活（错误通道迁移四期：Result 失败同款兜底）
+            const title = session.ok
+              ? session.value?.title ?? undefined
+              : undefined;
             timingLog('keepalive: session title fetched');
             return title;
           } catch {
@@ -1450,8 +1452,10 @@ export class SessionStreamUnitManager {
         (async () => {
           try {
             const project = await this.runtime.projects.get(projectId);
-            if (!project.ok) throw project.error;
-            const name = project.value?.name ?? undefined;
+            // 同上
+            const name = project.ok
+              ? project.value?.name ?? undefined
+              : undefined;
             timingLog('keepalive: project name fetched');
             return name;
           } catch {
@@ -1479,6 +1483,25 @@ export class SessionStreamUnitManager {
       onUserMessageAppended: options?.onUserMessageAppended,
     })
       .then(result => {
+        // 已知失败沿 Result.err 到达（四期门⑦）：终态事件已由 core 补发，此处走
+        // 与 catch 同款的兜底收尾（事件已 settled 时 finishRun 幂等拦截）。
+        const failure =
+          (result as {ok?: unknown} | null | undefined)?.ok === false
+            ? (result as {error: unknown}).error
+            : undefined;
+        if (failure != null) {
+          const current = this.units.get(sessionId);
+          if (
+            current === unit &&
+            current.getRunId() == null &&
+            !isSessionStreamUnitSettled(current.getStatus())
+          ) {
+            this.uiBridge?.onError(
+              failure instanceof Error ? failure.message : String(failure),
+            );
+          }
+          return;
+        }
         // 前奏期停止（2026-09-30）：core 在检查点命中 abort 时以合成 cancelled
         // 结果收尾（stepsExecuted=0、无模型请求）。
         //
@@ -1771,8 +1794,8 @@ export class SessionStreamUnitManager {
       let sessionTitle: string | null | undefined;
       try {
         const session = await this.runtime.sessions.get(sessionId);
-        if (!session.ok) throw session.error;
-        sessionTitle = session.value?.title;
+        // 会话名取不到不阻塞通知（错误通道迁移四期：Result 失败同款兜底）
+        sessionTitle = session.ok ? session.value?.title : undefined;
       } catch {
         // 会话名取不到不阻塞通知
       }

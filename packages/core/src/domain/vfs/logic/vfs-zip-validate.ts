@@ -83,7 +83,9 @@ function assertLogicalAllowed(scope: VfsScope, logical: string, entryName: strin
  * @param directoryPath - 导入目标目录（缺省 `/`）；entry 相对该目录。
  */
 export function validateVfsZipEntries(scope: VfsScope, entries: ReadonlyMap<string, Uint8Array>, directoryPath?: string): Result<VfsZipValidatedPayload, VfsZipValidateError> {
-  const targetDir = resolveZipDirectoryPath(directoryPath);
+  const dirResult = resolveZipDirectoryPath(directoryPath);
+  if (!dirResult.ok) return Result.err(dirResult.error);
+  const targetDir = dirResult.value;
   const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
   const directoryEntries: string[] = [];
   /** 用于「带域根前缀」判定的相对路径（已去 leading `/`、目录去 trailing `/`） */

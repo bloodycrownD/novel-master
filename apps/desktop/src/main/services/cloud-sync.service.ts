@@ -16,7 +16,7 @@ import {
   type ObjectStoragePort,
 } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
-import { domainOf } from "@novel-master/core/errors";
+import { domainOf, Result } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import {
@@ -143,20 +143,22 @@ function buildS3Client(config: S3StorageConfig): S3Client {
 
 async function buildS3StorageConfigFromStore(
   configStore: CloudSyncConfigStore
-): Promise<S3StorageConfig> {
+): Promise<Result<S3StorageConfig, AppError>> {
   const publicConfig = await configStore.getPublicConfig();
+  // 已知失败沿 Result 上行（错误通道迁移四期）。
+  if (!publicConfig.ok) return Result.err(publicConfig.error);
   const secret = await configStore.getSecretAccessKey();
   if (secret == null || secret.length === 0) {
-    throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
+    return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"}));
   }
-  return {
-    endpoint: publicConfig.endpoint,
-    region: publicConfig.region,
-    bucket: publicConfig.bucket,
-    accessKeyId: publicConfig.accessKeyId,
+  return Result.ok({
+    endpoint: publicConfig.value.endpoint,
+    region: publicConfig.value.region,
+    bucket: publicConfig.value.bucket,
+    accessKeyId: publicConfig.value.accessKeyId,
     secretAccessKey: secret,
-    forcePathStyle: publicConfig.forcePathStyle,
-  };
+    forcePathStyle: publicConfig.value.forcePathStyle,
+  });
 }
 export class DesktopCloudSyncService {
   /**
@@ -181,7 +183,7 @@ export class DesktopCloudSyncService {
     );
   }
 
-  async getConfig(): Promise<CloudSyncConfigDto> {
+  async getConfig(): Promise<Result<CloudSyncConfigDto, AppError>> {
     return this.configStore.getConfig();
   }
 
@@ -190,70 +192,78 @@ export class DesktopCloudSyncService {
     return this.runtimeIdentity === runtime;
   }
 
-  async setConfig(input: CloudSyncSetConfigInput): Promise<void> {
-    await this.configStore.setConfig(input);
+  async setConfig(input: CloudSyncSetConfigInput): Promise<Result<void, AppError>> {
+    return this.configStore.setConfig(input);
   }
 
   async setEnabled(enabled: boolean): Promise<void> {
     await this.configStore.setEnabled(enabled);
   }
 
-  async testConnection(): Promise<void> {
+  async testConnection(): Promise<Result<void, AppError>> {
     const s3Config = await buildS3StorageConfigFromStore(this.configStore);
-    const client = buildS3Client(s3Config);
+    if (!s3Config.ok) return Result.err(s3Config.error);
+    const client = buildS3Client(s3Config.value);
     const publicConfig = await this.configStore.getPublicConfig();
-    const pathPrefix = normalizePrefix(publicConfig.pathPrefix);
+    if (!publicConfig.ok) return Result.err(publicConfig.error);
+    const pathPrefix = normalizePrefix(publicConfig.value.pathPrefix);
 
     try {
-      await client.send(new HeadBucketCommand({ Bucket: s3Config.bucket }));
+      await client.send(new HeadBucketCommand({ Bucket: s3Config.value.bucket }));
     } catch (headError) {
       try {
         await client.send(
           new ListObjectsV2Command({
-            Bucket: s3Config.bucket,
+            Bucket: s3Config.value.bucket,
             Prefix: pathPrefix,
             MaxKeys: 1,
           })
         );
       } catch (listError) {
+        // 存储侧故障（未知通道，core CloudSyncError 体系）原样抛给 handler catch。
         throw mapStorageError(listError ?? headError);
       }
     }
+    return Result.ok(undefined);
   }
-  async getLocalStatus(): Promise<CloudSyncLocalStatusDto> {
+  async getLocalStatus(): Promise<Result<CloudSyncLocalStatusDto, AppError>> {
     const config = await this.configStore.getConfig();
+    if (!config.ok) return Result.err(config.error);
     const meta = await this.configStore.getLocalMeta();
+    if (!meta.ok) return Result.err(meta.error);
     const secret = await this.configStore.getSecretAccessKey();
-    const configured = isConfigured(config, secret);
+    const configured = isConfigured(config.value, secret);
     const agentActive = isDesktopAgentActive();
 
     let remoteRev: number | undefined;
     if (configured) {
       try {
-        remoteRev = await this.readRemoteRev();
+        const remote = await this.readRemoteRev();
+        // 已知失败与旧 throw→catch 同路径收成 undefined（错误通道迁移四期）。
+        remoteRev = remote.ok ? remote.value : undefined;
       } catch {
         remoteRev = undefined;
       }
     }
 
-    const lastSyncedRev = meta.lastSyncedRev;
+    const lastSyncedRev = meta.value.lastSyncedRev;
     const suggestsPull = remoteRev != null && remoteRev > lastSyncedRev;
 
-    return {
+    return Result.ok({
       configured,
-      deviceId: config.deviceId || undefined,
-      deviceLabel: config.deviceLabel || undefined,
+      deviceId: config.value.deviceId || undefined,
+      deviceLabel: config.value.deviceLabel || undefined,
       lastSyncedRev,
       remoteRev,
-      lastPullAt: meta.lastPullAt || undefined,
-      lastPushAt: meta.lastPushAt || undefined,
-      lastPullResult: meta.lastPullResult || undefined,
-      lastPushResult: meta.lastPushResult || undefined,
+      lastPullAt: meta.value.lastPullAt || undefined,
+      lastPushAt: meta.value.lastPushAt || undefined,
+      lastPullResult: meta.value.lastPullResult || undefined,
+      lastPushResult: meta.value.lastPushResult || undefined,
       suggestsPull,
       syncBusy,
       agentActive,
       maintenanceBusy: isDesktopDbMaintenanceBusy(),
-    };
+    });
   }
 
   /**
@@ -270,7 +280,7 @@ export class DesktopCloudSyncService {
    * 此时旧 runtime 仍是活的，记账句柄有效。该早返回对象的
    * `databaseReplaced` 恒为 `false`。
    */
-  async pull(): Promise<{ rev: number; databaseReplaced: boolean }> {
+  async pull(): Promise<Result<{ rev: number; databaseReplaced: boolean }, AppError>> {
     if (syncBusy) {
       throw new Error("云同步进行中，请稍后再试");
     }
@@ -279,21 +289,36 @@ export class DesktopCloudSyncService {
     let exportTempPath: string | undefined;
     let importTempPath: string | undefined;
     try {
-      // getLocalMeta 的读取必须在 try 内（对齐 push() 写法）：若留在
-      // try 外，抛错时 syncBusy 永不复位，数据清理守卫会被连带锁死。
-      meta = await this.configStore.getLocalMeta();
+      // getLocalMeta 的读取必须紧跟置位（对齐 push() 写法）：已知失败走下面的
+      // 内联记账分支（与旧 catch 失败分支同款），syncBusy 由 finally 复位。
+      const metaResult = await this.configStore.getLocalMeta();
+      if (!metaResult.ok) {
+        // KKV 读失败（已知，错误通道迁移四期沿 Result 上行）：此刻不可能发生
+        // 换库（coordinator 尚未运行），与旧 catch 的非换代分支同款记账。
+        await this.configStore
+          .recordPull(false, metaResult.error.message)
+          .catch(() => undefined);
+        return Result.err(metaResult.error);
+      }
+      meta = metaResult.value;
       const built = await this.buildCoordinator(storageOverrideForTest);
-      exportTempPath = built.exportTempPath;
-      importTempPath = built.importTempPath;
-      const result = await built.coordinator.pull({
+      if (!built.ok) {
+        await this.configStore
+          .recordPull(false, built.error.message)
+          .catch(() => undefined);
+        return Result.err(built.error);
+      }
+      exportTempPath = built.value.exportTempPath;
+      importTempPath = built.value.importTempPath;
+      const result = await built.value.coordinator.pull({
         lastSyncedRev: meta.lastSyncedRev,
       });
-      return result;
+      return Result.ok(result);
     } catch (error) {
       if (isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
         // 该错误只可能由 coordinator.pull 抛出，此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
-        return { rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false };
+        return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
       }
       const detail = error instanceof Error ? error.message : String(error);
       // ⚠️ `DatabaseReplacedError` 这一支**不做 recordPull**（CR cloudsync P2-1）。
@@ -307,6 +332,8 @@ export class DesktopCloudSyncService {
       if (!(await isDatabaseReplacedError(error))) {
         await this.configStore.recordPull(false, detail).catch(() => undefined);
       }
+      // coordinator 侧故障（core CloudSyncError 体系，三期保留 throw 协议）与
+      // 未知的运行期异常：沿未知通道抛给 handler catch（错误通道迁移四期不动）。
       throw error;
     } finally {
       syncBusy = false;
@@ -339,7 +366,7 @@ export class DesktopCloudSyncService {
 
   async push(options?: {
     forceOverwriteRemote?: boolean;
-  }): Promise<{ rev: number }> {
+  }): Promise<Result<{ rev: number }, AppError>> {
     if (syncBusy) {
       throw new Error("云同步进行中，请稍后再试");
     }
@@ -348,19 +375,34 @@ export class DesktopCloudSyncService {
     let importTempPath: string | undefined;
     try {
       const built = await this.buildCoordinator();
-      exportTempPath = built.exportTempPath;
-      importTempPath = built.importTempPath;
+      if (!built.ok) {
+        // 未配置等已知失败：与旧 catch 失败分支同款记账后沿 Result 上行
+        // （错误通道迁移四期）。
+        await this.configStore
+          .recordPush(false, built.error.message)
+          .catch(() => undefined);
+        return Result.err(built.error);
+      }
+      exportTempPath = built.value.exportTempPath;
+      importTempPath = built.value.importTempPath;
       const meta = await this.configStore.getLocalMeta();
-      const result = await built.coordinator.push({
-        lastSyncedRev: meta.lastSyncedRev,
+      if (!meta.ok) {
+        await this.configStore
+          .recordPush(false, meta.error.message)
+          .catch(() => undefined);
+        return Result.err(meta.error);
+      }
+      const result = await built.value.coordinator.push({
+        lastSyncedRev: meta.value.lastSyncedRev,
         forceOverwriteRemote: options?.forceOverwriteRemote,
       });
       await this.configStore.setLastSyncedRev(result.rev);
       await this.configStore.recordPush(true, `已推送至 rev ${result.rev}`);
-      return result;
+      return Result.ok(result);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.configStore.recordPush(false, detail).catch(() => undefined);
+      // coordinator 侧故障（core CloudSyncError 体系）与未知异常：未知通道原样抛。
       throw error;
     } finally {
       syncBusy = false;
@@ -372,33 +414,40 @@ export class DesktopCloudSyncService {
       }
     }
   }
-  private async readRemoteRev(): Promise<number> {
+  private async readRemoteRev(): Promise<Result<number, AppError>> {
     const storage = await this.buildStorage();
+    if (!storage.ok) return Result.err(storage.error);
     const publicConfig = await this.configStore.getPublicConfig();
-    const key = statusKey(publicConfig.pathPrefix);
-    const head = await storage.head(key);
+    if (!publicConfig.ok) return Result.err(publicConfig.error);
+    const key = statusKey(publicConfig.value.pathPrefix);
+    const head = await storage.value.head(key);
     if (!head.exists) {
-      return 0;
+      return Result.ok(0);
     }
-    const { body } = await storage.get(key);
+    const { body } = await storage.value.get(key);
     const parsed = JSON.parse(new TextDecoder().decode(body));
-    return parseCloudSyncStatus(parsed).rev;
+    return Result.ok(parseCloudSyncStatus(parsed).rev);
   }
 
-  private async buildStorage() {
+  private async buildStorage(): Promise<
+    Result<ReturnType<typeof createS3ObjectStorage>, AppError>
+  > {
     const publicConfig = await this.configStore.getPublicConfig();
+    if (!publicConfig.ok) return Result.err(publicConfig.error);
     const secret = await this.configStore.getSecretAccessKey();
     if (secret == null || secret.length === 0) {
-      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
+      return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"}));
     }
-    return createS3ObjectStorage({
-      endpoint: publicConfig.endpoint,
-      region: publicConfig.region,
-      bucket: publicConfig.bucket,
-      accessKeyId: publicConfig.accessKeyId,
-      secretAccessKey: secret,
-      forcePathStyle: publicConfig.forcePathStyle,
-    });
+    return Result.ok(
+      createS3ObjectStorage({
+        endpoint: publicConfig.value.endpoint,
+        region: publicConfig.value.region,
+        bucket: publicConfig.value.bucket,
+        accessKeyId: publicConfig.value.accessKeyId,
+        secretAccessKey: secret,
+        forcePathStyle: publicConfig.value.forcePathStyle,
+      }),
+    );
   }
 
   /**
@@ -408,22 +457,28 @@ export class DesktopCloudSyncService {
    *   node:test 零 mock 设施，没有可注入的 S3 客户端缝，不加这个参数就做不出
    *   「真库 + 内存远端」的端到端断言。
    */
-  private async buildCoordinator(storageOverride?: ObjectStoragePort): Promise<{
-    coordinator: CloudSyncCoordinator;
-    exportTempPath: string;
-    importTempPath: string;
-  }> {
+  private async buildCoordinator(storageOverride?: ObjectStoragePort): Promise<
+    Result<
+      {
+        coordinator: CloudSyncCoordinator;
+        exportTempPath: string;
+        importTempPath: string;
+      },
+      AppError
+    >
+  > {
     const publicConfig = await this.configStore.getPublicConfig();
+    if (!publicConfig.ok) return Result.err(publicConfig.error);
     const secret = await this.configStore.getSecretAccessKey();
     if (
-      publicConfig.endpoint.trim().length === 0 ||
-      publicConfig.bucket.trim().length === 0 ||
-      publicConfig.accessKeyId.trim().length === 0 ||
-      publicConfig.deviceId.trim().length === 0 ||
+      publicConfig.value.endpoint.trim().length === 0 ||
+      publicConfig.value.bucket.trim().length === 0 ||
+      publicConfig.value.accessKeyId.trim().length === 0 ||
+      publicConfig.value.deviceId.trim().length === 0 ||
       secret == null ||
       secret.length === 0
     ) {
-      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"});
+      return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "请先配置云存储"}));
     }
 
     // Node 端注入基于 node:fs/promises 的 FileSystemPort（对应 A-26），
@@ -436,12 +491,12 @@ export class DesktopCloudSyncService {
       storageOverride ??
       createS3ObjectStorage(
         {
-          endpoint: publicConfig.endpoint,
-          region: publicConfig.region,
-          bucket: publicConfig.bucket,
-          accessKeyId: publicConfig.accessKeyId,
+          endpoint: publicConfig.value.endpoint,
+          region: publicConfig.value.region,
+          bucket: publicConfig.value.bucket,
+          accessKeyId: publicConfig.value.accessKeyId,
           secretAccessKey: secret,
-          forcePathStyle: publicConfig.forcePathStyle,
+          forcePathStyle: publicConfig.value.forcePathStyle,
         },
         { fileSystem: nodeFileSystem }
       );
@@ -481,12 +536,12 @@ export class DesktopCloudSyncService {
       },
     };
 
-    return {
+    return Result.ok({
       coordinator: new CloudSyncCoordinator({
         storage,
         dbSync,
-        pathPrefix: publicConfig.pathPrefix,
-        deviceId: publicConfig.deviceId,
+        pathPrefix: publicConfig.value.pathPrefix,
+        deviceId: publicConfig.value.deviceId,
         exportTempPath,
         importTempPath,
         computeSha256Hex,
@@ -499,7 +554,7 @@ export class DesktopCloudSyncService {
       }),
       exportTempPath,
       importTempPath,
-    };
+    });
   }
 }
 /**

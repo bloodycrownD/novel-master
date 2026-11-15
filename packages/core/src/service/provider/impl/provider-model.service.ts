@@ -73,7 +73,9 @@ export class DefaultProviderModelService implements ProviderModelService {
 
   async suggestList(providerId: string): Promise<ModelSuggestion[]> {
     await this.deps.providers.get(providerId);
-    return this.deps.suggestions.listByProvider(providerId);
+    const listed = await this.deps.suggestions.listByProvider(providerId);
+    if (!listed.ok) throw listed.error;
+    return listed.value;
   }
 
   async fetch(providerId: string): Promise<void> {
@@ -139,7 +141,9 @@ export class DefaultProviderModelService implements ProviderModelService {
 
   async savedList(providerId: string): Promise<SavedModel[]> {
     await this.deps.providers.get(providerId);
-    return this.deps.savedModels.listByProvider(providerId);
+    const listed = await this.deps.savedModels.listByProvider(providerId);
+    if (!listed.ok) throw listed.error;
+    return listed.value;
   }
 
   async editSaved(
@@ -240,7 +244,9 @@ export class DefaultProviderModelService implements ProviderModelService {
   }
 
   async getSavedById(savedModelId: string): Promise<SavedModel | null> {
-    return this.deps.savedModels.findById(savedModelId);
+    const saved = await this.deps.savedModels.findById(savedModelId);
+    if (!saved.ok) throw saved.error;
+    return saved.value;
   }
 
   async getContextWindow(savedModelId: string): Promise<number | null> {

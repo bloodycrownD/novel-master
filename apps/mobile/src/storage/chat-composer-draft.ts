@@ -10,9 +10,7 @@ import {
   type ComposerDraftTokenRange,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-
-/** core Result 的线上结构（`Result` 本体尚未进 public 面，三期收口时换真类型）。 */
-type ResultWire<T> = {readonly ok: true; readonly value: T} | {readonly ok: false; readonly error: unknown};
+import {Result, AppError} from '@novel-master/core/errors';
 
 export type ChatComposerDraft = {
   readonly text: string;
@@ -77,19 +75,20 @@ export function readChatComposerDraftState(
 }
 
 type ComposerDraftPersistence = {
-  // ResultWire：core 的 Result 线上结构（`Result` 本体尚未进 public 面，三期收口）。
-  getComposerDraftJson(id: string): Promise<ResultWire<string | null>>;
-  setComposerDraftJson(id: string, draftJson: string | null): Promise<ResultWire<boolean>>;
+  getComposerDraftJson(id: string): Promise<Result<string | null, AppError>>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<Result<boolean, AppError>>;
 };
 
 /** 仅持久 text+tokenRanges（状态条不进列；attach 恒空）。
- * 解包 throw 边界（错误通道迁移三期门⑦）：ComposerDraftPersistence 的 `Result` 失败原样上抛（readComposerDraft 同款）——持久层 Result → 端内异常通道转码边界，UI 调用链 catch → formatError → toast 收口。
+ * 失败通道（错误通道迁移四期）：持久层 `Result` 失败沿返回值接力（hydrate 同款）——
+ * 调用方 writeChatComposerDraft / writeChatComposerDraftState fire-and-forget，
+ * 失败走 warnPersistFailure 告警。
  */
 async function persistAttachTextDraft(
   sessions: ComposerDraftPersistence,
   sessionId: string,
   draft: ChatComposerDraft,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   // draft attach 恒空；仅持久正文（含 `@路径`）+ 确认胶囊区间。
   const json = serializeComposerDraftJson({
     text: draft.text,
@@ -98,7 +97,8 @@ async function persistAttachTextDraft(
     tokenRanges: draft.tokenRanges,
   });
   const saved = await sessions.setComposerDraftJson(sessionId, json);
-  if (!saved.ok) throw saved.error;
+  if (!saved.ok) return Result.err(saved.error);
+  return Result.ok(undefined);
 }
 
 /**
@@ -135,9 +135,11 @@ export function writeChatComposerDraft(
   const next = buildDraft(text, attachments, tokenRanges);
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next).catch(
-      warnPersistFailure,
-    );
+    void persistAttachTextDraft(sessions, sessionId, next)
+      .then(r => {
+        if (!r.ok) warnPersistFailure(r.error);
+      })
+      .catch(warnPersistFailure);
   }
 }
 
@@ -165,9 +167,11 @@ export function writeChatComposerDraftState(
   const next = buildDraft(draft.text, draft.attachments, draft.tokenRanges);
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next).catch(
-      warnPersistFailure,
-    );
+    void persistAttachTextDraft(sessions, sessionId, next)
+      .then(r => {
+        if (!r.ok) warnPersistFailure(r.error);
+      })
+      .catch(warnPersistFailure);
   }
 }
 
@@ -194,15 +198,18 @@ export function clearChatComposerDraft(
  * 从 DB 水化缓存（text+tokenRanges）；再与现有状态条合并进 UI 缓存。
  * 调用方随后应 `projectComposerStatusForSession` 整表替换状态条。
  *
+ * 失败通道（错误通道迁移四期）：持久层 `Result` 失败沿返回值接力，调用方
+ * （useChatComposerController 水化 effect）失败沿用内存缓存初值。
+ *
  * tokenRanges 缺失/非法（core parse 已降级为 undefined）→ 缓存条目同样不带该键，
  * 由 controller 走「旧草稿兜底扫描一次」。
  */
 export async function hydrateChatComposerDraftFromDb(
   sessionId: string,
   sessions: ComposerDraftPersistence,
-): Promise<ChatComposerDraft> {
+): Promise<Result<ChatComposerDraft, AppError>> {
   const raw = await sessions.getComposerDraftJson(sessionId);
-  if (!raw.ok) throw raw.error;
+  if (!raw.ok) return Result.err(raw.error);
   const parsed = parseComposerDraftJson(raw.value);
   const prev = bySession.get(sessionId);
   const statusOnly =
@@ -218,11 +225,11 @@ export async function hydrateChatComposerDraftFromDb(
   if (!next.text && next.attachments.length === 0) {
     bySession.delete(sessionId);
     notifyDraftListeners(sessionId);
-    return EMPTY;
+    return Result.ok(EMPTY);
   }
   bySession.set(sessionId, next);
   notifyDraftListeners(sessionId);
-  return next;
+  return Result.ok(next);
 }
 
 /**

@@ -5,7 +5,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { normalizePrefix } from "@novel-master/core";
-import { isAppError } from "@novel-master/core/agent";
+import { isAppError, type AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
 
@@ -80,13 +81,20 @@ export type CloudSyncLocalMeta = {
   lastPushResult: string;
 };
 
+/**
+ * 读侧四个方法（getConfig / setConfig / getPublicConfig / getLocalMeta）经
+ * `readPublicConfig` 走 KKV 读取，已知失败沿 `Result` 上行（错误通道迁移四期），
+ * 由 DesktopCloudSyncService 内联记账后交给 handlers/cloud-sync.ts 转码；写侧
+ * 方法（setEnabled / setLastSyncedRev / recordPull / recordPush）与密钥读取
+ * 不经 `readPublicConfig`，维持原形态。
+ */
 export interface CloudSyncConfigStore {
-  getConfig(): Promise<CloudSyncConfigDto>;
-  setConfig(input: CloudSyncSetConfigInput): Promise<void>;
+  getConfig(): Promise<Result<CloudSyncConfigDto, AppError>>;
+  setConfig(input: CloudSyncSetConfigInput): Promise<Result<void, AppError>>;
   setEnabled(enabled: boolean): Promise<void>;
-  getPublicConfig(): Promise<CloudSyncPublicConfig>;
+  getPublicConfig(): Promise<Result<CloudSyncPublicConfig, AppError>>;
   getSecretAccessKey(): Promise<string | null>;
-  getLocalMeta(): Promise<CloudSyncLocalMeta>;
+  getLocalMeta(): Promise<Result<CloudSyncLocalMeta, AppError>>;
   setLastSyncedRev(rev: number): Promise<void>;
   recordPull(success: boolean, detail: string): Promise<void>;
   recordPush(success: boolean, detail: string): Promise<void>;
@@ -95,18 +103,18 @@ export interface CloudSyncConfigStore {
 async function kkvGet(
   kkv: KkvService,
   key: string,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
   if (!raw.ok) {
     if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-      return undefined;
+      return Result.ok(undefined);
     }
-    // 解包 throw 边界：非 NOT_FOUND 的 KKV 读失败沿 CloudSyncConfigStore →
-    // DesktopCloudSyncService（全部 await 直传、零分支）→ handlers/cloud-sync.ts
-    // 各 handler 的紧邻 catch（formatIpcError）收口。
-    throw raw.error;
+    // 非 NOT_FOUND 的 KKV 读失败沿 Result 上行（错误通道迁移四期）：
+    // readPublicConfig 聚合 → store 方法 → DesktopCloudSyncService 记账 →
+    // handlers/cloud-sync.ts 转码收口。
+    return Result.err(raw.error);
   }
-  return raw.value;
+  return Result.ok(raw.value);
 }
 
 function parseBool(value: string | undefined): boolean {
@@ -135,23 +143,9 @@ export function createCloudSyncConfigStore(
   kkv: KkvService,
   secretStore: SecretStore,
 ): CloudSyncConfigStore {
-  async function readPublicConfig(): Promise<CloudSyncPublicConfig> {
-    const [
-      endpoint,
-      bucket,
-      region,
-      pathPrefix,
-      accessKeyId,
-      forcePathStyle,
-      deviceId,
-      deviceLabel,
-      enabledRaw,
-      lastSyncedRev,
-      lastPullAt,
-      lastPushAt,
-      lastPullResult,
-      lastPushResult,
-    ] = await Promise.all([
+  /** 14 个 KKV 键一次并行读齐；任一已知失败整包 err（错误通道迁移四期）。 */
+  async function readPublicConfig(): Promise<Result<CloudSyncPublicConfig, AppError>> {
+    const results = await Promise.all([
       kkvGet(kkv, CLOUD_SYNC_KEY_ENDPOINT),
       kkvGet(kkv, CLOUD_SYNC_KEY_BUCKET),
       kkvGet(kkv, CLOUD_SYNC_KEY_REGION),
@@ -167,8 +161,27 @@ export function createCloudSyncConfigStore(
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PULL_RESULT),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_RESULT),
     ]);
+    for (const r of results) {
+      if (!r.ok) return Result.err(r.error);
+    }
+    const [
+      endpoint,
+      bucket,
+      region,
+      pathPrefix,
+      accessKeyId,
+      forcePathStyle,
+      deviceId,
+      deviceLabel,
+      enabledRaw,
+      lastSyncedRev,
+      lastPullAt,
+      lastPushAt,
+      lastPullResult,
+      lastPushResult,
+    ] = results.map((r) => (r.ok ? r.value : undefined));
 
-    return {
+    return Result.ok({
       endpoint: endpoint ?? "",
       bucket: bucket ?? "",
       region: region ?? "",
@@ -183,25 +196,26 @@ export function createCloudSyncConfigStore(
       lastPushAt: lastPushAt ?? "",
       lastPullResult: lastPullResult ?? "",
       lastPushResult: lastPushResult ?? "",
-    };
+    });
   }
 
   return {
     async getConfig() {
       const publicConfig = await readPublicConfig();
+      if (!publicConfig.ok) return Result.err(publicConfig.error);
       const hasSecretKey = await secretStore.has(CLOUD_SYNC_SKSP_SECRET_REF);
-      return {
-        endpoint: publicConfig.endpoint,
-        bucket: publicConfig.bucket,
-        region: publicConfig.region,
-        pathPrefix: publicConfig.pathPrefix,
-        accessKeyId: publicConfig.accessKeyId,
-        forcePathStyle: publicConfig.forcePathStyle,
-        deviceId: publicConfig.deviceId,
-        deviceLabel: publicConfig.deviceLabel,
+      return Result.ok({
+        endpoint: publicConfig.value.endpoint,
+        bucket: publicConfig.value.bucket,
+        region: publicConfig.value.region,
+        pathPrefix: publicConfig.value.pathPrefix,
+        accessKeyId: publicConfig.value.accessKeyId,
+        forcePathStyle: publicConfig.value.forcePathStyle,
+        deviceId: publicConfig.value.deviceId,
+        deviceLabel: publicConfig.value.deviceLabel,
         hasSecretKey,
-        enabled: resolveEnabledFlag(publicConfig.enabledRaw),
-      };
+        enabled: resolveEnabledFlag(publicConfig.value.enabledRaw),
+      });
     },
 
     async setEnabled(enabled: boolean) {
@@ -218,6 +232,7 @@ export function createCloudSyncConfigStore(
       assertNonEmpty("Access Key", input.accessKeyId);
 
       const existing = await readPublicConfig();
+      if (!existing.ok) return Result.err(existing.error);
       const hasSecret = await secretStore.has(CLOUD_SYNC_SKSP_SECRET_REF);
       const secret = input.secretAccessKey?.trim() ?? "";
       if (!hasSecret && secret.length === 0) {
@@ -225,7 +240,9 @@ export function createCloudSyncConfigStore(
       }
 
       const deviceId =
-        existing.deviceId.trim().length > 0 ? existing.deviceId : randomUUID();
+        existing.value.deviceId.trim().length > 0
+          ? existing.value.deviceId
+          : randomUUID();
 
       const normalizedPrefix = normalizePrefix(
         input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
@@ -254,7 +271,7 @@ export function createCloudSyncConfigStore(
         kkv.set(
           CLOUD_SYNC_KKV_MODULE,
           CLOUD_SYNC_KEY_DEVICE_LABEL,
-          (input.deviceLabel ?? existing.deviceLabel).trim(),
+          (input.deviceLabel ?? existing.value.deviceLabel).trim(),
         ),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENABLED, "true"),
       ]);
@@ -262,6 +279,7 @@ export function createCloudSyncConfigStore(
       if (secret.length > 0) {
         await secretStore.set(CLOUD_SYNC_SKSP_SECRET_REF, secret);
       }
+      return Result.ok(undefined);
     },
 
     async getPublicConfig() {
@@ -274,13 +292,14 @@ export function createCloudSyncConfigStore(
 
     async getLocalMeta() {
       const cfg = await readPublicConfig();
-      return {
-        lastSyncedRev: cfg.lastSyncedRev,
-        lastPullAt: cfg.lastPullAt,
-        lastPushAt: cfg.lastPushAt,
-        lastPullResult: cfg.lastPullResult,
-        lastPushResult: cfg.lastPushResult,
-      };
+      if (!cfg.ok) return Result.err(cfg.error);
+      return Result.ok({
+        lastSyncedRev: cfg.value.lastSyncedRev,
+        lastPullAt: cfg.value.lastPullAt,
+        lastPushAt: cfg.value.lastPushAt,
+        lastPullResult: cfg.value.lastPullResult,
+        lastPushResult: cfg.value.lastPushResult,
+      });
     },
 
     async setLastSyncedRev(rev) {

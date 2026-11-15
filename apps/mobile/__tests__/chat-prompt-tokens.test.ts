@@ -102,6 +102,20 @@ jest.mock('@/services/session-prompt-input.service', () => {
   };
 });
 
+
+/** 错误通道迁移四期：label 读口已知失败沿 Result 上行；测试断言面保持裸值，err 直接炸出。 */
+async function loadLabelOrThrow(...args: Parameters<typeof loadChatPromptTokenLabel>) {
+  const r = await loadChatPromptTokenLabel(...args);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
+async function loadResilientOrThrow(...args: Parameters<typeof loadChatPromptTokenLabelResilient>) {
+  const r = await loadChatPromptTokenLabelResilient(...args);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
 function stubRuntime(overrides?: {
   tokenCounterMode?: string;
   contextWindow?: number | null;
@@ -110,7 +124,10 @@ function stubRuntime(overrides?: {
 }): MobileNovelMasterRuntime {
   return {
     state: {
-      getCurrentModelId: jest.fn().mockResolvedValue('openai/gpt-4o'),
+      getCurrentModelId: jest.fn().mockResolvedValue({
+        ok: true,
+        value: 'openai/gpt-4o',
+      }),
     },
     providerModels: {
       getContextWindow: jest
@@ -127,7 +144,7 @@ function stubRuntime(overrides?: {
       // 错误通道迁移后走 Result 通道（生产侧 `!ok` 即 throw）。
       getSessionAgentConfig: jest.fn().mockResolvedValue({ok: true, value: {}}),
     },
-    messages: {listBySession: jest.fn()},
+    messages: {listBySession: jest.fn(async () => [])},
     // 读口会把它透传给 core 的 resolvePromptTokensWithBackfill（跨重启取 API 值）
     sessionKkv: {
       get: jest.fn().mockResolvedValue(null),
@@ -186,11 +203,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('loadChatPromptTokenLabel 家族精确档：gemma = 24k / 128k (19%)', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -200,7 +217,7 @@ describe('chat-prompt-tokens.service', () => {
     });
 
     const runtime = stubRuntime();
-    const label = await loadChatPromptTokenLabel(runtime, {
+    const label = await loadLabelOrThrow(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -221,11 +238,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('T-T9: source===api ⇒ label 记号「远程 =」且无估算符', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -234,7 +251,7 @@ describe('chat-prompt-tokens.service', () => {
       source: 'api',
     });
 
-    const label = await loadChatPromptTokenLabel(stubRuntime(), {
+    const label = await loadLabelOrThrow(stubRuntime(), {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -252,12 +269,12 @@ describe('chat-prompt-tokens.service', () => {
         hidden: false,
       },
     ];
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
       rawMessages,
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -266,7 +283,7 @@ describe('chat-prompt-tokens.service', () => {
       source: 'api',
     });
 
-    await loadChatPromptTokenLabel(stubRuntime(), {
+    await loadLabelOrThrow(stubRuntime(), {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -283,14 +300,14 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('无模型早退：改走 cl100k 真计数，label 记号 gpt ≈', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
 
     const runtime = stubRuntime();
-    const label = await loadChatPromptTokenLabel(runtime, {
+    const label = await loadLabelOrThrow(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -309,7 +326,10 @@ describe('chat-prompt-tokens.service', () => {
       new Error('prompt build failed'),
     );
     const runtime = stubRuntime({contextWindow: null});
-    (runtime.state.getCurrentModelId as jest.Mock).mockResolvedValue('');
+    (runtime.state.getCurrentModelId as jest.Mock).mockResolvedValue({
+      ok: true,
+      value: '',
+    });
     (runtime.messages.listBySession as jest.Mock).mockResolvedValue([
       {
         role: 'user',
@@ -318,7 +338,7 @@ describe('chat-prompt-tokens.service', () => {
       },
     ]);
 
-    const label = await loadChatPromptTokenLabelResilient(runtime, {
+    const label = await loadResilientOrThrow(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -332,14 +352,14 @@ describe('chat-prompt-tokens.service', () => {
 
   it('兜底：真分词器不可用（编码表建不起来）时才退回 heuristic.countText', async () => {
     mockCountTextWithDefaultEncoding.mockReturnValueOnce(null as never);
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
 
     const runtime = stubRuntime();
-    const label = await loadChatPromptTokenLabel(runtime, {
+    const label = await loadLabelOrThrow(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
@@ -364,11 +384,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('两阶段：首帧估算即回 + 后台精确升级回调（切模型后不再干等原生计数）', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -394,7 +414,7 @@ describe('chat-prompt-tokens.service', () => {
 
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
-    const first = await loadChatPromptTokenLabelResilient(
+    const first = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-two-phase'},
       label => {
@@ -423,11 +443,11 @@ describe('chat-prompt-tokens.service', () => {
     __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
-      mockBuildSessionPromptInput.mockResolvedValue({
+      mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
         definition: {model: 'zai/glm-4.6'},
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
-      });
+      }});
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -452,7 +472,7 @@ describe('chat-prompt-tokens.service', () => {
       );
       const runtime = stubRuntime({contextWindow: 128_000});
       const upgrades: string[] = [];
-      const first = await loadChatPromptTokenLabelResilient(
+      const first = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-delay'},
         label => {
@@ -480,11 +500,11 @@ describe('chat-prompt-tokens.service', () => {
     __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
-      mockBuildSessionPromptInput.mockResolvedValue({
+      mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
         definition: {model: 'zai/glm-4.6'},
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
-      });
+      }});
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -511,7 +531,7 @@ describe('chat-prompt-tokens.service', () => {
       const runtime = stubRuntime({contextWindow: 128_000});
       const upgrades: string[] = [];
       let viewOnConversation = true;
-      const first = await loadChatPromptTokenLabelResilient(
+      const first = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-bail'},
         label => {
@@ -538,11 +558,11 @@ describe('chat-prompt-tokens.service', () => {
     __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
     jest.useFakeTimers();
     try {
-      mockBuildSessionPromptInput.mockResolvedValue({
+      mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
         definition: {model: 'zai/glm-4.6'},
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
-      });
+      }});
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -569,7 +589,7 @@ describe('chat-prompt-tokens.service', () => {
       const upgrades: string[] = [];
       const inConversation = true;
       let shownSessionId = 's-identity';
-      const first = await loadChatPromptTokenLabelResilient(
+      const first = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-identity'},
         label => {
@@ -612,7 +632,7 @@ describe('chat-prompt-tokens.service', () => {
       );
       const runtime = stubRuntime({contextWindow: 128_000});
       const upgrades: string[] = [];
-      const first = await loadChatPromptTokenLabelResilient(
+      const first = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-cancel'},
         l => upgrades.push(l),
@@ -630,7 +650,7 @@ describe('chat-prompt-tokens.service', () => {
 
       // 同会话再次刷新并越窗：第二轮升级确实发生——计数从 2 次（两次首帧）
       // 走到 3 次（+ 一轮精确），回调拿到精确标签。
-      const second = await loadChatPromptTokenLabelResilient(
+      const second = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-cancel'},
         l => upgrades.push(l),
@@ -653,11 +673,11 @@ describe('chat-prompt-tokens.service', () => {
     // 那轮自己的 finally 仍是 inflight/补跑槽的唯一清理点。若外部代摘 inflight，
     // 本条末段的新一轮升级永远进不了 runPreciseUpgrade（必红）。
     __setPreciseUpgradeDelayForTests(0);
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     // 精确轮（无 preferEstimate 的那次）挂起，直到取消落地才以取消错收场——
     // 复刻真链路：cancelCount 下发 → Kotlin 检查点命中 → reject → 桥翻成
@@ -696,7 +716,7 @@ describe('chat-prompt-tokens.service', () => {
     const scope = {projectId: 'p', sessionId: 's-cancel-inflight'};
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const first = await loadChatPromptTokenLabelResilient(runtime, scope, l =>
+      const first = await loadResilientOrThrow(runtime, scope, l =>
         upgrades.push(l),
       );
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
@@ -720,7 +740,7 @@ describe('chat-prompt-tokens.service', () => {
 
       // 关键：会话没被楔死。取消后再刷新一轮，精确升级照常跑起来并回调。
       cancelled = true;
-      const second = await loadChatPromptTokenLabelResilient(
+      const second = await loadResilientOrThrow(
         runtime,
         scope,
         l => upgrades.push(l),
@@ -735,11 +755,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('T-TC5 取消收口：resolve 段抛取消错时走 bail 同款收口（空串、无 [chat] prompt token warn）', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
 
     const runtime = stubRuntime({contextWindow: 128_000});
@@ -750,7 +770,7 @@ describe('chat-prompt-tokens.service', () => {
       mockResolvePromptTokensWithBackfill.mockRejectedValue(
         new PromptCountCancelledError(),
       );
-      const label = await loadChatPromptTokenLabel(runtime, {
+      const label = await loadLabelOrThrow(runtime, {
         projectId: 'p',
         sessionId: 's-cancel-label',
       });
@@ -763,7 +783,7 @@ describe('chat-prompt-tokens.service', () => {
       mockTwoPhaseResolve(() =>
         Promise.reject(new PromptCountCancelledError()),
       );
-      const first = await loadChatPromptTokenLabelResilient(
+      const first = await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-cancel-upgrade'},
         l => upgrades.push(l),
@@ -779,11 +799,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('run 在途抑制：abortRegistry.has 为真时跳过精确升级，run 结束后的刷新补上（2026-09-30 停止失灵病灶）', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -815,7 +835,7 @@ describe('chat-prompt-tokens.service', () => {
     );
 
     const upgrades: string[] = [];
-    const first = await loadChatPromptTokenLabelResilient(
+    const first = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-inflight'},
       label => {
@@ -834,7 +854,7 @@ describe('chat-prompt-tokens.service', () => {
     // run 结束后的刷新（真实链路：onSettled → transcript 变化触发）：门放开，
     // 升级照常补上
     runInFlight = false;
-    const second = await loadChatPromptTokenLabelResilient(
+    const second = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-inflight'},
       label => {
@@ -857,7 +877,7 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
 
     const upgrades: string[] = [];
-    const label = await loadChatPromptTokenLabelResilient(
+    const label = await loadResilientOrThrow(
       stubRuntime({contextWindow: 128_000}),
       {projectId: 'p', sessionId: 's-bail'},
       l => {
@@ -879,16 +899,16 @@ describe('chat-prompt-tokens.service', () => {
     // build 段的分段 bail 只管得到 build 段内部；最后一段 bail 到 resolve 派发
     // 之间还夹着 getSessionAgentConfig / resolveSavedModelId / 计数模式解析三次
     // IO，run 起步的窗口正落在这里——没有这道检查点就等于「进得去停不下」。
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
 
     let bailed = false;
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
-    const label = await loadChatPromptTokenLabelResilient(
+    const label = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-boundary-bail'},
       l => {
@@ -918,11 +938,11 @@ describe('chat-prompt-tokens.service', () => {
     // catch 只认 ChatPromptBuildBailedError 时，这个错误会一路逃到
     // startPreciseUpgrade 的 catch / 外层 rejection —— 表现为 unhandled
     // rejection，且首帧回落成「重算一遍」的 fallback（恰是要消灭的竞争）。
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     // 错误通道迁移二期：core 读口不再抛弃权哨兵，改沿 Outcome.cancelled/replaced
     // 返回；service 收成空串哨兵的语义不变。
@@ -938,7 +958,7 @@ describe('chat-prompt-tokens.service', () => {
     ]);
 
     const upgrades: string[] = [];
-    const label = await loadChatPromptTokenLabelResilient(
+    const label = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-resolve-bail'},
       l => {
@@ -956,11 +976,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('shouldBail 透传到 resolve 读口（r3-chip-1）：不在调用点时 options 不带该键', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -971,7 +991,7 @@ describe('chat-prompt-tokens.service', () => {
 
     // ① 传了 shouldBail → 透传到第 4 参（core 读口的弃权观察点由此生效）。
     const shouldBail = () => false;
-    await loadChatPromptTokenLabelResilient(
+    await loadResilientOrThrow(
       stubRuntime({contextWindow: 128_000}),
       {projectId: 'p', sessionId: 's-bail-passthrough'},
       undefined,
@@ -989,7 +1009,7 @@ describe('chat-prompt-tokens.service', () => {
     // ② 不传 → options 仍带 shouldBail 键（包装判据恒 null，与不传同义）；
     // core 缺省「恒不弃权」，既有调用面零影响。
     mockResolvePromptTokensWithBackfill.mockClear();
-    await loadChatPromptTokenLabel(stubRuntime(), {
+    await loadLabelOrThrow(stubRuntime(), {
       projectId: 'p',
       sessionId: 's-bail-absent',
     });
@@ -1001,11 +1021,11 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('两阶段：api 命中即精确，不触发后台升级', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 50_000,
@@ -1016,7 +1036,7 @@ describe('chat-prompt-tokens.service', () => {
 
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
-    const label = await loadChatPromptTokenLabelResilient(
+    const label = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-two-phase-api'},
       l => {
@@ -1038,11 +1058,11 @@ describe('chat-prompt-tokens.service', () => {
       source: 'local';
     }>,
   ): void {
-    mockBuildSessionPromptInput.mockResolvedValue({
+    mockBuildSessionPromptInput.mockResolvedValue({ok: true, value: {
       definition: {model: 'zai/glm-4.6'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
+    }});
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -1080,14 +1100,14 @@ describe('chat-prompt-tokens.service', () => {
 
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
-    await loadChatPromptTokenLabelResilient(
+    await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-inflight'},
       l => upgrades.push(l),
     );
     // 升级在途（第一轮尚未放行）时再次刷新：首帧照出估算，后台轮被 inflight
     // 去重——此时 3 次 resolve（两首帧 + 一轮升级），不堆叠并发计数。
-    const second = await loadChatPromptTokenLabelResilient(
+    const second = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-inflight'},
       l => upgrades.push(l),
@@ -1129,7 +1149,7 @@ describe('chat-prompt-tokens.service', () => {
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
     for (let i = 0; i < 3; i++) {
-      await loadChatPromptTokenLabelResilient(
+      await loadResilientOrThrow(
         runtime,
         {projectId: 'p', sessionId: 's-coalesce'},
         l => upgrades.push(l),
@@ -1167,7 +1187,7 @@ describe('chat-prompt-tokens.service', () => {
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
     // 第一次升级 reject：保持首帧估算标签、无回调。
-    await loadChatPromptTokenLabelResilient(
+    await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-retry'},
       l => upgrades.push(l),
@@ -1177,7 +1197,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(upgrades).toEqual([]);
 
     // inflight 已释放：下一次刷新重新启动升级（第二次不 reject）→ 回调到位。
-    await loadChatPromptTokenLabelResilient(
+    await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-retry'},
       l => upgrades.push(l),
@@ -1194,9 +1214,12 @@ describe('chat-prompt-tokens.service', () => {
     let family: 'glm' | 'tiktoken' = 'glm';
     const releaseQueue: Array<() => void> = [];
     mockBuildSessionPromptInput.mockImplementation(() => ({
-      definition: {model: family === 'glm' ? 'zai/glm-4.6' : 'openai/gpt-4o'},
-      layout: {persist: [], dynamic: []},
-      ctx: {workplaceDisplay: '', messages: []},
+      ok: true,
+      value: {
+        definition: {model: family === 'glm' ? 'zai/glm-4.6' : 'openai/gpt-4o'},
+        layout: {persist: [], dynamic: []},
+        ctx: {workplaceDisplay: '', messages: []},
+      },
     }));
     mockResolveTokenCounterModeForModel.mockImplementation(() =>
       Promise.resolve(family),
@@ -1240,7 +1263,7 @@ describe('chat-prompt-tokens.service', () => {
     const runtime = stubRuntime({contextWindow: 128_000});
     const upgrades: string[] = [];
     // ① model A 首帧 + 升级在途。
-    await loadChatPromptTokenLabelResilient(
+    await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-switch-model'},
       l => upgrades.push(l),
@@ -1248,7 +1271,7 @@ describe('chat-prompt-tokens.service', () => {
     // ② 切到 model B 并刷新：新首帧（推进新鲜度代数）；旧轮按「切模型」路径
     //    被主动取消（tokenizer-switch-stall），B 的升级轮立刻起跑。
     family = 'tiktoken';
-    const afterSwitch = await loadChatPromptTokenLabelResilient(
+    const afterSwitch = await loadResilientOrThrow(
       runtime,
       {projectId: 'p', sessionId: 's-switch-model'},
       l => upgrades.push(l),

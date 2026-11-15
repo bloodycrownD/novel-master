@@ -15,6 +15,8 @@
  * @module service/workplace/impl/workplace-view-cache
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type {
   WorkplaceRuleContext,
   WorkplaceRuleView,
@@ -49,7 +51,7 @@ export interface WorkplaceViewCacheEntry {
   view?: WorkplaceRuleView;
   filetreeDisplay?: string;
   /** 承接原实例级 liveViewInFlight 的并发去重语义（升级为 conn 级跨实例）。 */
-  inFlight?: Promise<WorkplaceViewCacheValue>;
+  inFlight?: Promise<Result<WorkplaceViewCacheValue, AppError>>;
 }
 
 let cache = new WeakMap<

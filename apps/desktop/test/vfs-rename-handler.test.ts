@@ -133,7 +133,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
 
     // VFS 侧条目确实换到了新路径
     const rt = await getDesktopRuntime();
-    const entries = await rt.projectVfs(projectId).list("/");
+    const listed = await rt.projectVfs(projectId).list("/");
+    if (!listed.ok) throw listed.error;
+    const entries = listed.value;
     assert.ok(entries.some((e) => e.path === "/新项目目录"));
     assert.ok(!entries.some((e) => e.path === "/旧项目目录"));
   });
@@ -182,7 +184,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(newRule.data.sortOrder, DISTINCT_RULE.sortOrder);
 
     const rt = await getDesktopRuntime();
-    const entries = await rt.sessionVfs(projectId, sessionId).list("/");
+    const listed = await rt.sessionVfs(projectId, sessionId).list("/");
+    if (!listed.ok) throw listed.error;
+    const entries = listed.value;
     assert.ok(entries.some((e) => e.path === "/新会话目录"));
     assert.ok(!entries.some((e) => e.path === "/旧会话目录"));
   });
@@ -225,9 +229,10 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(newRule.data.sortOrder, DISTINCT_RULE.sortOrder);
 
     const rt = await getDesktopRuntime();
-    const entries = await rt.sessionVfs(projectId, sessionId).list("/");
-    assert.ok(entries.some((e) => e.path === "/改名空会话目录"));
-    assert.ok(!entries.some((e) => e.path === "/空会话目录"));
+    const listed = await rt.sessionVfs(projectId, sessionId).list("/");
+    if (!listed.ok) throw listed.error;
+    assert.ok(listed.value.some((e) => e.path === "/改名空会话目录"));
+    assert.ok(!listed.value.some((e) => e.path === "/空会话目录"));
   });
 
   it("project 面板 scope（对照）：纯空目录 rename 同样成功且规则迁移", async () => {
@@ -260,9 +265,10 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
 
     const rt = await getDesktopRuntime();
-    const entries = await rt.projectVfs(projectId).list("/");
-    assert.ok(entries.some((e) => e.path === "/改名空项目目录"));
-    assert.ok(!entries.some((e) => e.path === "/空项目目录"));
+    const listed = await rt.projectVfs(projectId).list("/");
+    if (!listed.ok) throw listed.error;
+    assert.ok(listed.value.some((e) => e.path === "/改名空项目目录"));
+    assert.ok(!listed.value.some((e) => e.path === "/空项目目录"));
   });
 
   it("文件 rename 不迁移规则（对照）：fileRule 留在旧路径", async () => {

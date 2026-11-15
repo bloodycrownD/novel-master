@@ -16,8 +16,14 @@ import { agentDefinitionSchema } from "../model/agent-definition.schema.js";
 type AgentValidationError = AppError<"AGENT_INVALID_SCHEMA" | "AGENT_INVALID_TOOL_POLICY" | "AGENT_INVALID_MODEL">;
 
 export interface ValidateAgentDefinitionOptions {
-  /** Ensures model pin refers to a saved model (CLI injects). */
-  readonly assertSavedModel?: (savedModelId: string) => void | Promise<void>;
+  /**
+   * Ensures model pin refers to a saved model (CLI injects).
+   *
+   * 已知失败沿返回值（四期门⑦）：回调可返回 `Result`（Err 收编为
+   * `AGENT_INVALID_MODEL`，detail 转码与旧 throw 路径逐字一致）；void /
+   * throw 通道保留向后兼容，宿主未迁移时行为不变。
+   */
+  readonly assertSavedModel?: (savedModelId: string) => void | Result<void, AppError> | Promise<void | Result<void, AppError>>;
   /** Registered tool names for tools policy validation (host injects after registerVfsTools). */
   readonly registeredToolNames?: readonly string[];
 }
@@ -76,7 +82,12 @@ export async function validateAgentDefinition(def: AgentDefinition, options: Val
     return Result.ok(undefined);
   }
   try {
-    await options.assertSavedModel(pin);
+    const outcome = await options.assertSavedModel(pin);
+    if (outcome != null && !outcome.ok) {
+      // Err 沿返回值到达（四期门⑦）：detail 转码与旧 throw 路径逐字一致。
+      const detail = outcome.error instanceof Error ? outcome.error.message : String(outcome.error);
+      return Result.err(new AppError("AGENT_INVALID_MODEL", { detail: detail, modelId: pin }));
+    }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     return Result.err(new AppError("AGENT_INVALID_MODEL", { detail: detail, modelId: pin }));

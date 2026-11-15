@@ -128,7 +128,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockAgentActive.mockReturnValue(false);
   mockGetConfig.mockResolvedValue({
-    endpoint: 'https://s3.example.com',
+    ok: true,
+    value: {
+      endpoint: 'https://s3.example.com',
     bucket: 'test-bucket',
     region: '',
     pathPrefix: 'novel-master/sync/',
@@ -136,19 +138,26 @@ beforeEach(() => {
     forcePathStyle: true,
     deviceId: 'device-1',
     secretKeySet: true,
+    },
   });
   mockGetLocalStatus.mockResolvedValue({
-    configured: true,
-    deviceId: 'device-1',
-    lastSyncedRev: 1,
+    ok: true,
+    value: {
+      configured: true,
+      deviceId: 'device-1',
+      lastSyncedRev: 1,
+    },
   });
   mockBuildS3Config.mockResolvedValue({
-    endpoint: 'https://s3.example.com',
+    ok: true,
+    value: {
+      endpoint: 'https://s3.example.com',
     bucket: 'test-bucket',
     region: '',
     accessKeyId: 'ak',
     secretAccessKey: 'sk',
     forcePathStyle: true,
+    },
   });
   mockCreateS3Storage.mockReturnValue(storage);
   // clearAllMocks 只清调用记录、**不清实现**；pullCloudSync 里那条「拿旧 runtime
@@ -172,7 +181,10 @@ describe('sha256Hex', () => {
 
 describe('testCloudSyncConnection', () => {
   it('HeadBucket 成功时不抛错', async () => {
-    await expect(testCloudSyncConnection(runtime)).resolves.toBeUndefined();
+    await expect(testCloudSyncConnection(runtime)).resolves.toEqual({
+      ok: true,
+      value: undefined,
+    });
     expect(mockHeadBucket).toHaveBeenCalled();
   });
 
@@ -223,7 +235,7 @@ describe('pullCloudSync', () => {
 
     const result = await pullCloudSync(runtime, rebootstrap);
 
-    expect(result).toEqual({rev: 3, alreadyUpToDate: false});
+    expect(result).toEqual({ok: true, value: {rev: 3, alreadyUpToDate: false}});
     expect(mockCoordinatorPull).toHaveBeenCalledWith({lastSyncedRev: 1});
     expect(rebootstrap).toHaveBeenCalledTimes(1);
     expect(order).toEqual(['rebootstrap', 'patch']);
@@ -249,7 +261,7 @@ describe('pullCloudSync', () => {
 
     const result = await pullCloudSync(runtime, rebootstrap);
 
-    expect(result).toEqual({rev: 3, alreadyUpToDate: false});
+    expect(result).toEqual({ok: true, value: {rev: 3, alreadyUpToDate: false}});
     expect(rebootstrap).not.toHaveBeenCalled();
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,
@@ -265,7 +277,7 @@ describe('pullCloudSync', () => {
 
     const result = await pullCloudSync(runtime, rebootstrap);
 
-    expect(result).toEqual({rev: 1, alreadyUpToDate: true});
+    expect(result).toEqual({ok: true, value: {rev: 1, alreadyUpToDate: true}});
     expect(rebootstrap).not.toHaveBeenCalled();
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,
@@ -282,7 +294,8 @@ describe('pullCloudSync', () => {
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    await expect(pullCloudSync(runtime, rebootstrap)).rejects.toBeDefined();
+    const failed = await pullCloudSync(runtime, rebootstrap);
+    expect(failed.ok).toBe(false);
 
     // mobile 的 runtime 是 React state、没有懒建自愈 ⇒ 不补这条，一次失败 pull
     // 之后整个 App 会带着已关 runtime 跑到用户手动重启。
@@ -295,16 +308,19 @@ describe('pullCloudSync', () => {
 
   it('未配置时抛 NOT_CONFIGURED', async () => {
     mockGetLocalStatus.mockResolvedValue({
-      configured: false,
-      deviceId: '',
-      lastSyncedRev: 0,
+      ok: true,
+      value: {
+        configured: false,
+        deviceId: '',
+        lastSyncedRev: 0,
+      },
     });
 
-    await expect(
-      pullCloudSync(runtime, jest.fn(async () => freshRuntime)),
-    ).rejects.toMatchObject({
-      key: 'CLOUD_SYNC_NOT_CONFIGURED',
-    });
+    const denied = await pullCloudSync(runtime, jest.fn(async () => freshRuntime));
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) {
+      expect(denied.error).toMatchObject({key: 'CLOUD_SYNC_NOT_CONFIGURED'});
+    }
   });
 
   it('createCoordinator 抛错时 reject 且 isMobileDbMaintenanceBusy() 回到 false', async () => {
@@ -315,31 +331,39 @@ describe('pullCloudSync', () => {
     // 反向断言：调用前先确认计数是干净的——否则本条的 `=== false` 会恒红，
     // 而上一条若把它配平了，本条的「泄漏」就观测不到。
     expect(isMobileDbMaintenanceBusy()).toBe(false);
-    mockBuildS3Config.mockRejectedValue(new Error('请先完成云存储配置'));
+    mockBuildS3Config.mockResolvedValue({
+      ok: false,
+      error: new Error('请先完成云存储配置'),
+    });
 
-    await expect(
-      pullCloudSync(runtime, jest.fn(async () => freshRuntime)),
-    ).rejects.toBeDefined();
+    const deniedCoordinator = await pullCloudSync(
+      runtime,
+      jest.fn(async () => freshRuntime),
+    );
+    expect(deniedCoordinator.ok).toBe(false);
 
     expect(isMobileDbMaintenanceBusy()).toBe(false);
-    // `!= null` 守卫的唯一钉点：createCoordinator 抛错时两个临时路径都还是
+    // `!= null` 守卫的唯一钉点：createCoordinator 失败时两个临时路径都还是
     // undefined，unlink 绝不能以 undefined 被调用（同步抛 TypeError 会用
     // 一个新错盖掉原始错，把「配置不全」报成「临时文件清理失败」）。
     expect(mockUnlink).not.toHaveBeenCalledWith(undefined);
     // 弱断言：错因是配置没填全，与网络毫无关系；兜底分支会把它误报成
     // 「请检查网络」这种误导引导。
-    await pullCloudSync(runtime, jest.fn(async () => freshRuntime)).catch(
-      (error: Error) => {
-        expect(error.message).not.toMatch(/网络/);
-      },
+    const deniedAgain = await pullCloudSync(
+      runtime,
+      jest.fn(async () => freshRuntime),
     );
+    if (!deniedAgain.ok) {
+      expect(String(deniedAgain.error)).not.toMatch(/网络/);
+    }
   });
 
   it('coordinator.pull 失败时两个临时文件都被清理且参数为完整路径', async () => {
     mockCoordinatorPull.mockRejectedValue(new Error('快照校验失败'));
     const rebootstrap = jest.fn(async () => freshRuntime);
 
-    await expect(pullCloudSync(runtime, rebootstrap)).rejects.toBeDefined();
+    const failed = await pullCloudSync(runtime, rebootstrap);
+    expect(failed.ok).toBe(false);
 
     expect(mockUnlink).toHaveBeenCalledTimes(2);
     const unlinkedArgs = mockUnlink.mock.calls.map(call => call[0]);
@@ -356,7 +380,7 @@ describe('pushCloudSync', () => {
 
     const result = await pushCloudSync(runtime, undefined);
 
-    expect(result).toEqual({rev: 2});
+    expect(result).toEqual({ok: true, value: {rev: 2}});
     expect(mockCoordinatorPush).toHaveBeenCalledWith({
       lastSyncedRev: 1,
       forceOverwriteRemote: undefined,

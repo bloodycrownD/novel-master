@@ -20,6 +20,7 @@ import type { SkillListScope, SkillLocation } from "@novel-master/core/skills";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 
 function toSkillLocation(ref: SkillRefDto): SkillLocation {
   return {
@@ -89,7 +90,7 @@ export async function handleSkillsRead(
     const file = await rt
       .skills()
       .readSkillFile(req.domain, req.name, req.path, req.projectId);
-    if (!file.ok) throw file.error;
+    if (!file.ok) return ipcErr(formatIpcError(file.error));
     return {
       ok: true,
       data: {
@@ -119,7 +120,7 @@ export async function handleSkillsWrite(
         req.content,
         req.projectId
       );
-    if (!result.ok) throw result.error;
+    if (!result.ok) return ipcErr(formatIpcError(result.error));
     return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -131,11 +132,11 @@ export async function handleSkillsToggle(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 解包 throw 边界（同上）：setDisabled 已走 Result。
+    // 已知失败沿 Result 到达，就地转码（错误通道迁移四期）。
     const toggled = await rt
       .skills()
       .setDisabled(req.projectId, req.name, req.disabled);
-    if (!toggled.ok) throw toggled.error;
+    if (!toggled.ok) return ipcErr(formatIpcError(toggled.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -147,9 +148,9 @@ export async function handleSkillsDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 解包 throw 边界（同上）：deleteSkill 已走 Result。
+    // 已知失败沿 Result 到达，就地转码（错误通道迁移四期）。
     const deleted = await rt.skills().deleteSkill(toSkillLocation(req));
-    if (!deleted.ok) throw deleted.error;
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -162,11 +163,11 @@ export async function handleSkillsAssertCreateName(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 解包 throw 边界（错误通道迁移三期门⑦）：core 校验改回 Result，err 原样上抛进 formatIpcError。
+    // 已知失败沿 Result 到达，就地转码（错误通道迁移四期；三期门⑦口径不变）。
     const asserted = await rt
       .skills()
       .assertSkillNameNotReservedForCreate(req.domain, req.name, req.projectId);
-    if (!asserted.ok) throw asserted.error;
+    if (!asserted.ok) return ipcErr(formatIpcError(asserted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -179,12 +180,12 @@ export async function handleSkillsUpdateInfo(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 解包 throw 边界（同上）：updateSkillInfo 已走 Result。
+    // 已知失败沿 Result 到达，就地转码（错误通道迁移四期）。
     const updated = await rt.skills().updateSkillInfo(toSkillLocation(req), {
       ...(req.newName != null ? { newName: req.newName } : {}),
       ...(req.description != null ? { description: req.description } : {}),
     });
-    if (!updated.ok) throw updated.error;
+    if (!updated.ok) return ipcErr(formatIpcError(updated.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

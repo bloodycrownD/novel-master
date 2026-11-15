@@ -69,7 +69,7 @@ const mockRuntime = {
     listAgentIds: mockListAgentIds,
     getRawWire: mockGetRawWire,
   },
-  state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
+  state: {getCurrentModelId: jest.fn().mockResolvedValue({ok: true, value: null})},
 };
 
 jest.mock('@/theme/ThemeProvider', () => ({
@@ -357,7 +357,7 @@ describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
 
 describe('createBlankAgent mode 落库（T-M2）', () => {
   it('mode 传入时写进 upsert 定义；不传维持现行为（无 mode 字段）', async () => {
-    const upsert = jest.fn();
+    const upsert = jest.fn(async () => ({ok: true, value: undefined}));
     const runtime = {
       agentRegistry: {
         listAgentIds: jest.fn().mockResolvedValue([]),

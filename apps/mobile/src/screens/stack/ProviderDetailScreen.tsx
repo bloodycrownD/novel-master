@@ -1,6 +1,8 @@
 /**
  * Saved models for one provider; add model + navigate to sampling.
  */
+import {AppError, Result} from '@novel-master/core/errors';
+import {isAppError} from '@novel-master/core/agent';
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
@@ -172,7 +174,18 @@ export function ProviderDetailScreen() {
     message: ids => `确定删除选中的 ${ids.length} 个模型？`,
     deleteOne: useCallback(
       async (savedModelId: string) => {
-        await runtime.providerModels.deleteSaved(savedModelId);
+        try {
+          await runtime.providerModels.deleteSaved(savedModelId);
+          return Result.ok(undefined);
+        } catch (error) {
+          // void-throwing core 方法 → Result 桥（错误通道迁移四期）；
+          // deleteSaved 的失败面是 AppError，非 AppError 兜 INFRA_UNEXPECTED_ERROR。
+          return Result.err(
+            isAppError(error)
+              ? error
+              : new AppError('INFRA_UNEXPECTED_ERROR', {detail: String(error)}),
+          );
+        }
       },
       [runtime],
     ),
@@ -474,13 +487,16 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
           setSaving(true);
           try {
             const patch = providerFormToEditPatch(values);
-            if (!isBuiltin && values.protocol !== initial.protocol) {
-              await runtime.providers.edit(providerId, {
-                ...patch,
-                protocol: values.protocol,
-              });
-            } else {
-              await runtime.providers.edit(providerId, patch);
+            const edited =
+              !isBuiltin && values.protocol !== initial.protocol
+                ? await runtime.providers.edit(providerId, {
+                    ...patch,
+                    protocol: values.protocol,
+                  })
+                : await runtime.providers.edit(providerId, patch);
+            if (!edited.ok) {
+              showToast(toastMessage('保存失败', edited.error));
+              return;
             }
             showToast('已保存');
             // tab 内不 goBack，重新拉取以反映 protocol 等不可变字段的现状

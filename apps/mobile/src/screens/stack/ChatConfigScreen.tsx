@@ -64,19 +64,30 @@ export function ChatConfigScreen() {
   );
 
   const refreshStreamPref = useCallback(async () => {
-    setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
+    const pref = await runtime.preferences.getLlmStreamEnabled();
+    // 读取失败静默保持（错误通道迁移四期：旧 rejection 被焦点 .catch 吞掉，同款）。
+    if (!pref.ok) {
+      return;
+    }
+    setLlmStreamEnabled(pref.value);
   }, [runtime]);
 
   const refreshSubagentStreamPref = useCallback(async () => {
-    setSubagentStreamEnabled(
-      await runtime.preferences.getSubagentStreamEnabled(),
-    );
+    const pref = await runtime.preferences.getSubagentStreamEnabled();
+    // 读取失败静默保持（错误通道迁移四期：旧 rejection 被焦点 .catch 吞掉，同款）。
+    if (!pref.ok) {
+      return;
+    }
+    setSubagentStreamEnabled(pref.value);
   }, [runtime]);
 
   const refreshThinkingContextPref = useCallback(async () => {
-    setThinkingContextEnabled(
-      await runtime.preferences.getThinkingContextEnabled(),
-    );
+    const pref = await runtime.preferences.getThinkingContextEnabled();
+    // 读取失败静默保持（错误通道迁移四期：旧 rejection 被焦点 .catch 吞掉，同款）。
+    if (!pref.ok) {
+      return;
+    }
+    setThinkingContextEnabled(pref.value);
   }, [runtime]);
 
   const refreshChatRichTextPref = useCallback(async () => {
@@ -110,7 +121,11 @@ export function ChatConfigScreen() {
 
   const refreshCompaction = useCallback(async () => {
     const stored = await runtime.compactionConditions.getConditions();
-    const c = stored ?? DEFAULT_CONDITIONS;
+    // 读取失败静默保持（错误通道迁移四期：旧 rejection 被焦点 .catch 吞掉，同款）。
+    if (!stored.ok) {
+      return;
+    }
+    const c = stored.value ?? DEFAULT_CONDITIONS;
     setCompactionEnabled(c.enabled);
     setCompactionTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
     setCompactionHideStartDepth(

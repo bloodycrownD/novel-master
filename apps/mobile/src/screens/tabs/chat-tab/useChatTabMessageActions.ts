@@ -1,6 +1,8 @@
 /**
  * Chat tab message actions: compact, fork, rollback, set-floor, edit, copy.
  */
+import type {Result} from '@novel-master/core/errors';
+import {AppError} from '@novel-master/core/errors';
 import {useCallback} from 'react';
 import {Alert} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -65,7 +67,7 @@ export type UseChatTabMessageActionsParams = {
    */
   snapshotCompleteSignal?: SnapshotCompleteSignal;
   bumpWorktreeUiToken: () => void;
-  reloadLists: () => Promise<void>;
+  reloadLists: () => Promise<Result<void, AppError>>;
   setCurrentSession: (sessionId: string) => Promise<void>;
   setChatSubview: (subview: ChatSubview) => void;
   setConversationPanel: (panel: ConversationPanel) => void;
@@ -161,8 +163,15 @@ export function useChatTabMessageActions({
       }
       try {
         const forked = await runtime.messages.fork(sessionId, messageId);
-        if (!forked.ok) throw forked.error;
-        await reloadLists();
+        if (!forked.ok) {
+          showToast(toastMessage('分叉失败', forked.error));
+          return;
+        }
+        const lr = await reloadLists();
+        if (!lr.ok) {
+          showToast(toastMessage('分叉失败', lr.error));
+          return;
+        }
         await setCurrentSession(forked.value.id);
         setChatSubview('conversation');
         setConversationPanel('chat');
@@ -423,7 +432,10 @@ export function useChatTabMessageActions({
               sessionId,
               messageId,
             );
-          if (!result.ok) throw result.error;
+          if (!result.ok) {
+            showToast(toastMessage('置位失败', result.error));
+            return;
+          }
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();

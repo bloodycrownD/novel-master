@@ -2,6 +2,8 @@
  * VFS mutations for desktop file manager (ported from mobile).
  */
 import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
+import { type AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { moveVfsPath, remapPathUnderDir } from "@novel-master/core/vfs";
 
 export async function createVfsFile(
@@ -32,20 +34,22 @@ export async function renameVfsFile(
   vfs: VfsService,
   oldPath: string,
   newPath: string,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 解包 throw 边界：失败落唯一调用方 handleVfsRename 的紧邻 catch（formatIpcError）。
-  if (!moved.ok) throw moved.error;
+  // 失败沿 Result 返回，由唯一调用方 handleVfsRename 转码（ipcErr + formatIpcError）。
+  if (!moved.ok) return Result.err(moved.error);
+  return Result.ok(undefined);
 }
 
 export async function renameVfsDirectory(
   vfs: VfsService,
   oldPath: string,
   newPath: string,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 解包 throw 边界：失败落唯一调用方 handleVfsRename 的紧邻 catch（formatIpcError）。
-  if (!moved.ok) throw moved.error;
+  // 失败沿 Result 返回，由唯一调用方 handleVfsRename 转码（ipcErr + formatIpcError）。
+  if (!moved.ok) return Result.err(moved.error);
+  return Result.ok(undefined);
 }
 
 export { remapPathUnderDir };

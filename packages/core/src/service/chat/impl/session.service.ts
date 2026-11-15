@@ -71,8 +71,8 @@ export interface SessionServiceDeps {
   readonly vfs: VfsEntryRepository;
   /** 用于新建会话时读 workspace 当前 agentId + modelId。 */
   readonly state: {
-    getCurrentAgentId(): Promise<string | null | undefined>;
-    getCurrentModelId(): Promise<string | null | undefined>;
+    getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
+    getCurrentModelId(): Promise<Result<string | undefined, AppError>>;
   };
   /** agentId 缺失时回落 registry 第一个 agent。 */
   readonly agentRegistry: {
@@ -116,7 +116,9 @@ export class DefaultSessionService implements SessionService {
     if (agentId == null || agentId === "") {
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {descriptor: {key: "error.chat.session_create_agent_missing"}}));
     }
-    const workspaceModelId = await this.deps.state.getCurrentModelId();
+    const currentModel = await this.deps.state.getCurrentModelId();
+    if (!currentModel.ok) throw currentModel.error;
+    const workspaceModelId = currentModel.value;
     const config: SessionAgentConfig =
       workspaceModelId == null || workspaceModelId === ""
         ? { agentId }

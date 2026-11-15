@@ -7,7 +7,9 @@
 import { readFile } from "node:fs/promises";
 import { formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
 import { type ChatMessageData } from "@novel-master/core/chat";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { RESULT_OK } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { seqRangeFromFloors } from "./floor.js";
 
@@ -64,11 +66,11 @@ function resolveSeqRange(
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：解析的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * 解析的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 async function resolveAppendContent(
   flags: ReadonlyMap<string, string | true>,
-): Promise<ReturnType<typeof textBlocks>> {
+): Promise<Result<ReturnType<typeof textBlocks>, AppError>> {
   const contentFlag = flags.get("content");
   const blocksPath = flags.get("blocks");
   const blocksJson = flags.get("blocks-json");
@@ -86,22 +88,22 @@ async function resolveAppendContent(
   }
 
   if (typeof contentFlag === "string") {
-    return textBlocks(contentFlag);
+    return Result.ok(textBlocks(contentFlag));
   }
   if (typeof blocksJson === "string") {
     const parsed = parseMessageContent(blocksJson);
-    if (!parsed.ok) throw parsed.error;
-    return parsed.value;
+    if (!parsed.ok) return parsed;
+    return Result.ok(parsed.value);
   }
   if (typeof blocksPath === "string") {
     const raw = await readFile(blocksPath, "utf8");
     const parsed = parseMessageContent(raw);
-    if (!parsed.ok) throw parsed.error;
-    return parsed.value;
+    if (!parsed.ok) return parsed;
+    return Result.ok(parsed.value);
   }
   if (typeof fileFlag === "string") {
     const text = await readFile(fileFlag, "utf8");
-    return textBlocks(text);
+    return Result.ok(textBlocks(text));
   }
 
   throw new Error(
@@ -113,9 +115,11 @@ export async function runMessage(
   rt: Pick<NovelMasterRuntime, "messages" | "scope" | "state">,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { flags } = parseCliArgs(args);
-  const sessionId = await rt.scope.resolveSessionId(flags);
+  const resolvedSession = await rt.scope.resolveSessionId(flags);
+  if (!resolvedSession.ok) return Result.err(resolvedSession.error);
+  const sessionId = resolvedSession.value;
 
   switch (subcommand) {
     case "list": {
@@ -134,7 +138,7 @@ export async function runMessage(
         const orderCol = showSeq ? `${floor || ""}\t${m.seq}` : m.hidden ? "" : String(floor);
         console.log(`${m.id}\t${orderCol}\t${m.role}\t${hiddenMark}\t${text}`);
       }
-      return;
+      return RESULT_OK;
     }
     case "append": {
       const role = flags.get("role");
@@ -144,10 +148,11 @@ export async function runMessage(
         );
       }
       const content = await resolveAppendContent(flags);
-      const msg = await rt.messages.append(sessionId, role, content);
-      if (!msg.ok) throw msg.error;
+      if (!content.ok) return Result.err(content.error);
+      const msg = await rt.messages.append(sessionId, role, content.value);
+      if (!msg.ok) return Result.err(msg.error);
       console.log(msg.value.id);
-      return;
+      return RESULT_OK;
     }
     case "delete": {
       const messageId = flags.get("message");
@@ -157,8 +162,8 @@ export async function runMessage(
         );
       }
       const deleted = await rt.messages.delete(messageId);
-      if (!deleted.ok) throw deleted.error;
-      return;
+      if (!deleted.ok) return Result.err(deleted.error);
+      return RESULT_OK;
     }
     case "fork": {
       const upTo = flags.get("up-to");
@@ -168,37 +173,37 @@ export async function runMessage(
         );
       }
       const forked = await rt.messages.fork(sessionId, upTo);
-      if (!forked.ok) throw forked.error;
+      if (!forked.ok) return Result.err(forked.error);
       console.log(forked.value.id);
-      return;
+      return RESULT_OK;
     }
     case "hide": {
       const messageId = flags.get("message");
       if (typeof messageId === "string") {
         const hidden = await rt.messages.hide(messageId);
-        if (!hidden.ok) throw hidden.error;
-        return;
+        if (!hidden.ok) return hidden;
+        return RESULT_OK;
       }
       const list = await rt.messages.listBySession(sessionId);
       const { fromSeq, toSeq } = resolveSeqRange(flags, list);
       const count = await rt.messages.hideRange(sessionId, fromSeq, toSeq);
-      if (!count.ok) throw count.error;
+      if (!count.ok) return Result.err(count.error);
       console.log(`Hidden ${count.value} message(s)`);
-      return;
+      return RESULT_OK;
     }
     case "show": {
       const messageId = flags.get("message");
       if (typeof messageId === "string") {
         const shown = await rt.messages.show(messageId);
-        if (!shown.ok) throw shown.error;
-        return;
+        if (!shown.ok) return shown;
+        return RESULT_OK;
       }
       const list = await rt.messages.listBySession(sessionId);
       const { fromSeq, toSeq } = resolveSeqRange(flags, list);
       const count = await rt.messages.showRange(sessionId, fromSeq, toSeq);
-      if (!count.ok) throw count.error;
+      if (!count.ok) return Result.err(count.error);
       console.log(`Shown ${count.value} message(s)`);
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error("Usage: nm message <list|append|delete|fork|hide|show> ...");

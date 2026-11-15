@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import { applyMergePatch } from "@/common/json.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
@@ -87,17 +88,17 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     return def;
   }
 
-  async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<void> {
+  async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AppError>> {
     const defaulted = withDefaultPromptLayouts(def);
     const validation = await validateAgentDefinition(defaulted, options);
-    if (!validation.ok) throw validation.error;
+    if (!validation.ok) return validation;
     const trimmedName = defaulted.name.trim();
     if (trimmedName.length === 0) {
-      throw new AppError("AGENT_INVALID_SCHEMA", {detail: "agent name must not be empty"});
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {detail: "agent name must not be empty"}));
     }
     // 内置 general 是虚拟 agent，禁止用户创建同名
     if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}});
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_name_reserved", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
     }
     const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
@@ -112,19 +113,21 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         otherName = otherId.trim();
       }
       if (otherName.length > 0 && otherName === trimmedName) {
-        throw new AppError("AGENT_DUPLICATE_NAME", {descriptor: {key: "error.agent.duplicate_name"}});
+        return Result.err(new AppError("AGENT_DUPLICATE_NAME", {descriptor: {key: "error.agent.duplicate_name"}}));
       }
     }
 
     const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
     await this.deps.repository.upsert(agentId, normalized);
+    return Result.ok(undefined);
   }
 
-  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<AgentDefinition> {
+  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<AgentDefinition, AppError>> {
     const current = await this.get(agentId);
     const merged = applyMergePatch(current, patch);
-    await this.upsert(agentId, merged, options);
-    return merged;
+    const saved = await this.upsert(agentId, merged, options);
+    if (!saved.ok) return Result.err(saved.error);
+    return Result.ok(merged);
   }
 
   async delete(agentId: string): Promise<void> {
@@ -142,7 +145,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {
       const current = await this.deps.state.getCurrentAgentId();
-      if (current === agentId) {
+      if (current.ok && current.value === agentId) {
         await this.deps.state.resetCurrentAgentId();
       }
     }

@@ -19,20 +19,6 @@ const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
 
 type ChatLogicError = AppError<"CHAT_INVALID_ARGUMENT">;
 
-/**
- * 旧附件路径参数错误类。
- *
- * `fromPaths` 已不再抛出它：失败改为 `Result<..., AppError<"CHAT_INVALID_ARGUMENT">>`。
- * 类保留给 `public/chat.ts` 的既有导出契约（allowlist 快照），phase 2 随旧 API 删除。
- * nm-style: keep-public — 三端 public 契约，domain 内零抛出。
- */
-export class AttachmentPathArgumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AttachmentPathArgumentError";
-  }
-}
-
 /** 附件领域服务：扫描、物化、按 path/skillName 去重。 */
 class AttachmentScanner {
   /** 从正文扫描 `@path` token，生成 `source:attach` 附件（按规范化 seen key 去重）。 */

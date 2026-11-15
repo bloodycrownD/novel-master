@@ -40,15 +40,18 @@ class FakeVfs {
   async read(path: string) {
     const content = this.files.get(path);
     if (content !== undefined) {
-      return {path, content, version: 1, mtimeMs: 0};
+      return {ok: true as const, value: {path, content, version: 1, mtimeMs: 0}};
     }
     if (this.dirs.has(path)) {
-      throw new AppError('VFS_IS_DIRECTORY', {
-        detail: `Path is a directory: ${path}`,
-        path,
-      });
+      return {
+        ok: false as const,
+        error: new AppError('VFS_IS_DIRECTORY', {
+          detail: `Path is a directory: ${path}`,
+          path,
+        }),
+      };
     }
-    throw notFound(path);
+    return {ok: false as const, error: notFound(path)};
   }
 
   async list(dir: string, options?: {recursive?: boolean}) {
@@ -75,22 +78,23 @@ class FakeVfs {
     for (const f of this.files.keys()) {
       collect(f, 'file');
     }
-    return out as VfsListEntry[];
+    return {ok: true as const, value: out as VfsListEntry[]};
   }
 
-  async mkdir(path: string): Promise<void> {
+  async mkdir(path: string) {
     this.mkdirCalls.push(path);
     this.dirs.add(path);
+    return {ok: true as const, value: undefined};
   }
 
-  async write(path: string, content: string): Promise<{version: number}> {
+  async write(path: string, content: string) {
     this.files.set(path, content);
-    return {version: 1};
+    return {ok: true as const, value: {version: 1}};
   }
 
-  async delete(path: string): Promise<void> {
+  async delete(path: string) {
     if (this.failDelete.has(path)) {
-      throw notFound(path);
+      return {ok: false as const, error: notFound(path)};
     }
     const normalized =
       path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
@@ -106,21 +110,23 @@ class FakeVfs {
         this.dirs.delete(dir);
       }
     }
+    return {ok: true as const, value: undefined};
   }
 
-  async renamePath(from: string, to: string): Promise<void> {
+  async renamePath(from: string, to: string) {
     const content = this.files.get(from);
     if (content === undefined) {
-      throw notFound(from);
+      return {ok: false as const, error: notFound(from)};
     }
     const normalizedTo = to !== '/' && to.endsWith('/') ? to.slice(0, -1) : to;
     this.files.delete(from);
     this.files.set(normalizedTo, content);
+    return {ok: true as const, value: undefined};
   }
 
-  async renamePrefix(oldDir: string, newDir: string): Promise<void> {
+  async renamePrefix(oldDir: string, newDir: string) {
     if (!this.dirs.has(oldDir)) {
-      throw notFound(oldDir);
+      return {ok: false as const, error: notFound(oldDir)};
     }
     const remap = (path: string): string =>
       path === oldDir
@@ -136,6 +142,7 @@ class FakeVfs {
       this.files.delete(key);
       this.files.set(remap(key), value);
     }
+    return {ok: true as const, value: undefined};
   }
 }
 
@@ -175,18 +182,30 @@ describe('vfs-operations move/rename 冲突', () => {
   // 不再是旧 VfsError short code。
   it('renameVfsFile 目标文件已存在 → VFS_ALREADY_EXISTS 且双端内容不变', async () => {
     const vfs = seededVfs();
-    await expect(
-      renameVfsFile(vfs as unknown as VfsService, '/a.md', '/b.md'),
-    ).rejects.toMatchObject({name: 'VFS_ALREADY_EXISTS'});
+    const denied = await renameVfsFile(
+      vfs as unknown as VfsService,
+      '/a.md',
+      '/b.md',
+    );
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) {
+      expect(denied.error).toMatchObject({name: 'VFS_ALREADY_EXISTS'});
+    }
     expect(vfs.files.get('/a.md')).toBe('content-a');
     expect(vfs.files.get('/b.md')).toBe('content-b');
   });
 
   it('renameVfsDirectory 目标目录已存在（非空）→ VFS_ALREADY_EXISTS 且子树未动', async () => {
     const vfs = seededVfs();
-    await expect(
-      renameVfsDirectory(vfs as unknown as VfsService, '/old', '/target'),
-    ).rejects.toMatchObject({name: 'VFS_ALREADY_EXISTS'});
+    const deniedDir = await renameVfsDirectory(
+      vfs as unknown as VfsService,
+      '/old',
+      '/target',
+    );
+    expect(deniedDir.ok).toBe(false);
+    if (!deniedDir.ok) {
+      expect(deniedDir.error).toMatchObject({name: 'VFS_ALREADY_EXISTS'});
+    }
     expect(vfs.files.get('/old/sub/note.md')).toBe('note');
     expect(vfs.files.get('/target/keep.md')).toBe('keep');
     expect(vfs.files.has('/target/sub/note.md')).toBe(false);
@@ -194,9 +213,15 @@ describe('vfs-operations move/rename 冲突', () => {
 
   it('rename 源不存在 → VFS_NOT_FOUND', async () => {
     const vfs = seededVfs();
-    await expect(
-      renameVfsFile(vfs as unknown as VfsService, '/missing.md', '/c.md'),
-    ).rejects.toMatchObject({name: 'VFS_NOT_FOUND'});
+    const missing = await renameVfsFile(
+      vfs as unknown as VfsService,
+      '/missing.md',
+      '/c.md',
+    );
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.error).toMatchObject({name: 'VFS_NOT_FOUND'});
+    }
   });
 });
 
@@ -243,26 +268,30 @@ describe('vfs-operations 批量删除部分失败', () => {
     } as VfsScope;
 
     const batch = ['/x.md', '/y.md', '/a.md'];
-    let failure: unknown;
-    try {
-      for (const path of batch) {
-        // 模拟文件管理器批量删除循环（fail-fast，错误中断批次）
-        // eslint-disable-next-line no-await-in-loop
-        await deleteScopedVfsEntry(
-          runtime,
-          scope,
-          vfs as unknown as VfsService,
-          path,
-          {
-            useUserVfsTurn: false,
-          },
-        );
+    let failure: {ok: false; error: unknown} | undefined;
+    for (const path of batch) {
+      // 模拟文件管理器批量删除循环（fail-fast，失败中断批次；错误通道迁移
+      // 四期后失败沿 Result 接力，不再 throw）。
+      // eslint-disable-next-line no-await-in-loop
+      const outcome = await deleteScopedVfsEntry(
+        runtime,
+        scope,
+        vfs as unknown as VfsService,
+        path,
+        {
+          useUserVfsTurn: false,
+        },
+      );
+      if (!outcome.ok) {
+        failure = outcome;
+        break;
       }
-    } catch (error) {
-      failure = error;
     }
 
-    expect(failure).toMatchObject({name: 'VFS_NOT_FOUND'});
+    expect(failure).toBeDefined();
+    if (failure != null) {
+      expect(failure.error).toMatchObject({name: 'VFS_NOT_FOUND'});
+    }
     expect(vfs.files.has('/x.md')).toBe(false);
     expect(vfs.files.get('/a.md')).toBe('content-a');
     expect(vfs.files.get('/y.md')).toBe('y');
@@ -278,18 +307,20 @@ describe('vfs-operations 批量删除部分失败', () => {
       sessionId: 's1',
     } as VfsScope;
 
-    await expect(
-      deleteScopedVfsEntry(
-        runtime,
-        scope,
-        vfs as unknown as VfsService,
-        '/a.md',
-        {
-          useUserVfsTurn: false,
-        },
-      ),
-      // 错误通道迁移后失败载荷是 AppError（name=key、code=段号数字）。
-    ).rejects.toMatchObject({name: 'VFS_NOT_FOUND'});
+    const denied = await deleteScopedVfsEntry(
+      runtime,
+      scope,
+      vfs as unknown as VfsService,
+      '/a.md',
+      {
+        useUserVfsTurn: false,
+      },
+    );
+    // 错误通道迁移后失败载荷沿 Result 接力（AppError：name=key、code=段号数字）。
+    expect(denied.ok).toBe(false);
+    if (!denied.ok) {
+      expect(denied.error).toMatchObject({name: 'VFS_NOT_FOUND'});
+    }
     expect(deleteRulesCalls).toEqual([]);
 
     await deleteScopedVfsEntry(

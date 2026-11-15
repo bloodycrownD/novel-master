@@ -3,7 +3,7 @@
  * 两个偏好的测试形态，key 换 messageNotification、默认关）。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {AppError} from '@novel-master/core/agent';
+import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {
   readMessageNotificationEnabled,
@@ -16,9 +16,13 @@ import {
 
 function appUiWith(raw: Record<string, string | undefined>): AppUiPreferences {
   return {
-    get: jest.fn(async (key: string) => raw[key]),
+    // 错误通道迁移四期：appUi.get 走 Result（未写值归一 undefined，读失败归 err）。
+    get: jest.fn(async (key: string) => ({
+      ok: true as const,
+      value: raw[key],
+    })),
     set: jest.fn(async () => undefined),
-    delete: jest.fn(async () => undefined),
+    delete: jest.fn(async () => ({ok: true as const, value: undefined})),
     listKeys: jest.fn(async () => []),
   };
 }
@@ -38,9 +42,13 @@ function createMemoryKkv(): KkvService {
     async get(module: string, key: string) {
       const v = data.get(compound(module, key));
       if (v === undefined) {
-        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
+        return Result.err(
+          new AppError('KKV_NOT_FOUND', {
+            detail: `KKV key not found: ${module}/${key}`,
+          }),
+        );
       }
-      return v;
+      return Result.ok(v);
     },
     async set(module: string, key: string, value: string) {
       data.set(compound(module, key), value);
@@ -48,9 +56,14 @@ function createMemoryKkv(): KkvService {
     async delete(module: string, key: string) {
       const k = compound(module, key);
       if (!data.has(k)) {
-        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
+        return Result.err(
+          new AppError('KKV_NOT_FOUND', {
+            detail: `KKV key not found: ${module}/${key}`,
+          }),
+        );
       }
       data.delete(k);
+      return Result.ok(undefined);
     },
   };
 }
@@ -81,9 +94,10 @@ describe('message-notification-pref', () => {
 
   it('读失败（KKV 异常）回退默认（关）', async () => {
     const appUi: AppUiPreferences = {
-      get: jest.fn(async () => {
-        throw new Error('kkv down');
-      }),
+      get: jest.fn(async () => ({
+        ok: false as const,
+        error: new Error('kkv down'),
+      })),
       set: jest.fn(async () => undefined),
       delete: jest.fn(async () => undefined),
       listKeys: jest.fn(async () => []),

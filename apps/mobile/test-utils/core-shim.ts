@@ -31,7 +31,7 @@ export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent
 export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js';
 export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';
-export {AgentRunResolveError, resolveCurrentAgentId, resolveCurrentAgentDefinition, resolveApplicationModelIdForRun} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
+export {AGENT_RUN_RESOLVE_KEYS, resolveCurrentAgentId, resolveCurrentAgentDefinition, resolveApplicationModelIdForRun} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
 export {runAgentTurn, AgentTurnError} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';
 export type {AgentDefinition} from '../../../packages/core/dist/domain/agent/model/agent-definition.js';
 export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/model/agent-run-result.js';

@@ -17,6 +17,8 @@
 
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
@@ -34,15 +36,12 @@ const log = createLogger("vfs.import-dir-rules");
  *
  * nm-style: keep-local — 默认规则行构造契约（等价性注记）由单测 3 处直接构造期望行，
  * 内联会丢注记且须改测试。
-  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（backfillMissingDirRules 同款），输入来自已入库路径，失败沿调用链至端点 catch 收口。
+ * 错误通道迁移四期：normalizePath 失败走返回值通道（输入来自已入库路径），决定权交给上层。
  */
-export function buildDefaultDirRule(
-  scopeKey: string,
-  logicalPath: string
-): WorkplaceDirRule {
+export function buildDefaultDirRule(scopeKey: string, logicalPath: string): Result<WorkplaceDirRule, AppError> {
   const normalized = normalizePath(logicalPath);
-  if (!normalized.ok) throw normalized.error;
-  return {
+  if (!normalized.ok) return Result.err(normalized.error);
+  return Result.ok({
     scopeKey,
     logicalPath: normalized.value,
     ruleEnabled: true,
@@ -51,7 +50,7 @@ export function buildDefaultDirRule(
     headCount: DEFAULT_WORKPLACE_DIR_RULE.headCount,
     tailCount: DEFAULT_WORKPLACE_DIR_RULE.tailCount,
     fillPolicy: DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
-  };
+  });
 }
 
 /**
@@ -62,22 +61,20 @@ export function buildDefaultDirRule(
  *
  * @param candidates 候选目录逻辑路径集合
  * @param existingLogicalPaths 已有规则行的逻辑路径集合（有行即跳过，含 rule_off 不覆盖）
- * @param writeDefaultRule 写入一条默认启用行的载体
+ * @param writeDefaultRule 写入一条默认启用行的载体；Err 即中断补行并原样接力
  */
-export async function backfillMissingDirRules(
-  candidates: readonly string[],
-  existingLogicalPaths: ReadonlySet<string>,
-  writeDefaultRule: (logicalPath: string) => Promise<void>
-): Promise<void> {
+export async function backfillMissingDirRules(candidates: readonly string[], existingLogicalPaths: ReadonlySet<string>, writeDefaultRule: (logicalPath: string) => Promise<Result<void, AppError>>): Promise<Result<void, AppError>> {
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
-    if (!normalized.ok) throw normalized.error;
+    if (!normalized.ok) return Result.err(normalized.error);
     const logicalPath = normalized.value;
     if (logicalPath === "/" || existingLogicalPaths.has(logicalPath)) {
       continue;
     }
-    await writeDefaultRule(logicalPath);
+    const written = await writeDefaultRule(logicalPath);
+    if (!written.ok) return Result.err(written.error);
   }
+  return Result.ok(undefined);
 }
 
 /** {@link ensureImportDirRules} 依赖。 */
@@ -101,41 +98,44 @@ interface EnsureImportDirRulesDeps {
  * 目录全集含 prefix 自身；根自身 `/` 由内核跳过不补，根前缀（`/`）下其余
  * 子目录照常求差补行（CLI / desktop 缺省导入到根的场景由此覆盖）。
  */
-export async function ensureImportDirRules(
-  deps: EnsureImportDirRulesDeps
-): Promise<void> {
+export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Promise<void> {
   const { vfsRepo, workplaceRepo, scope, directoryPath } = deps;
   try {
     const normalizedPrefix = normalizePath(directoryPath);
-    if (!normalizedPrefix.ok) throw normalizedPrefix.error;
+    if (!normalizedPrefix.ok) {
+      log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: normalizedPrefix.error });
+      return;
+    }
     const prefix = normalizedPrefix.value;
     const targetScopeKey = workplaceScopeKey(scope);
-    const directories = await vfsRepo.listDirectoryPathsUnderPrefix(
-      scopeKey(scope),
-      prefix
-    );
-    const existing = new Set(
-      (await workplaceRepo.listDirRules(targetScopeKey)).map((rule) => {
-        const normalized = normalizePath(rule.logicalPath);
-        if (!normalized.ok) throw normalized.error;
-        return normalized.value;
-      })
-    );
-    await backfillMissingDirRules(
-      directories,
-      existing,
-      async (logicalPath) => {
-        try {
-          await workplaceRepo.upsertDirRule(
-            buildDefaultDirRule(targetScopeKey, logicalPath)
-          );
-        } catch (error) {
-          // 逐目录容错（PRD 需求 4）：单个目录补行失败只 warn 并跳过，
-          // 不阻断剩余目录补行；外层整体 try/catch 仍是兜底。
-          log.warn(`补目录规则行失败（directory=${logicalPath}）`, { error });
-        }
+    const directories = await vfsRepo.listDirectoryPathsUnderPrefix(scopeKey(scope), prefix);
+    const existing = new Set<string>();
+    for (const rule of await workplaceRepo.listDirRules(targetScopeKey)) {
+      const normalized = normalizePath(rule.logicalPath);
+      if (!normalized.ok) {
+        log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: normalized.error });
+        return;
       }
-    );
+      existing.add(normalized.value);
+    }
+    const backfilled = await backfillMissingDirRules(directories, existing, async (logicalPath) => {
+      const rule = buildDefaultDirRule(targetScopeKey, logicalPath);
+      if (!rule.ok) {
+        // 逐目录容错（PRD 需求 4）：单个目录补行失败只 warn 并跳过，
+        // 不阻断剩余目录补行；外层整体 try/catch 仍是兜底。
+        log.warn(`补目录规则行失败（directory=${logicalPath}）`, { error: rule.error });
+        return Result.ok(undefined);
+      }
+      try {
+        await workplaceRepo.upsertDirRule(rule.value);
+      } catch (error) {
+        log.warn(`补目录规则行失败（directory=${logicalPath}）`, { error });
+      }
+      return Result.ok(undefined);
+    });
+    if (!backfilled.ok) {
+      log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: backfilled.error });
+    }
   } catch (error) {
     // 吞错但不无声：目录/文件已落库（同事务），补规则失败不阻断导入主流程。
     log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error });

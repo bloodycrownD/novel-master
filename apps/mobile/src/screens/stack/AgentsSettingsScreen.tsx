@@ -27,9 +27,13 @@ export function AgentsSettingsScreen() {
       <AgentList
         onCreate={tab => {
           const mode = tab === 'primary' ? 'primary' : 'subagent';
-          void createBlankAgent(runtime, undefined, mode)
-            .then(id => navigation.navigate('AgentEditor', {agentId: id}))
-            .catch(error => showToast(toastMessage('创建失败', error)));
+          void createBlankAgent(runtime, undefined, mode).then(created => {
+            if (!created.ok) {
+              showToast(toastMessage('创建失败', created.error));
+              return;
+            }
+            navigation.navigate('AgentEditor', {agentId: created.value});
+          });
         }}
       />
     </View>

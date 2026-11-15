@@ -22,7 +22,6 @@ import {
   SSE_WHOLE_CALL_TIMEOUT_MS,
 } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
 import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
-import { LlmStreamTimeoutError } from "../../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";
@@ -156,7 +155,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await promise;
   });
 
-  it("T-D5: ontimeout 分级——0 数据（黑洞）→ reject LlmStreamTimeoutError('first-chunk')，非用户取消", async () => {
+  it("T-D5: ontimeout 分级——0 数据（黑洞）→ reject PROVIDER_STREAM_TIMEOUT first-chunk，非用户取消", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -173,11 +172,11 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await settleAsync();
 
     await assert.rejects(promise, (err: unknown) => {
-      assert.ok(err instanceof LlmStreamTimeoutError);
-      assert.equal(err.name, "LlmStreamTimeoutError");
-      assert.equal(err.phase, "first-chunk");
-      // 不得冒充用户取消（ProviderError "Request aborted"）
-      assert.ok(!isAppError(err));
+      assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+      assert.equal(err.name, "PROVIDER_STREAM_TIMEOUT");
+      assert.equal(err.details?.phase, "first-chunk");
+      // 不得冒充用户取消（PROVIDER_HTTP_ERROR "Request aborted" 形态）
+      assert.ok(!isAppError(err, "PROVIDER_HTTP_ERROR"));
       return true;
     });
 
@@ -205,7 +204,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
     );
   });
 
@@ -243,7 +242,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        err instanceof LlmStreamTimeoutError && err.phase === "first-chunk",
+        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "first-chunk",
       "迟到 onload 不得把终态顶替成 resolve",
     );
   });
@@ -273,8 +272,8 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     xhr.ontimeout?.();
     await settleAsync();
     assert.ok(
-      settledError instanceof LlmStreamTimeoutError &&
-        settledError.phase === "idle",
+      isAppError(settledError, "PROVIDER_STREAM_TIMEOUT") &&
+        settledError.details?.phase === "idle",
       "有数据时按 idle 分级 settle",
     );
 
@@ -292,7 +291,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) =>
-        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
       "迟到 onload 不得改变既有 idle 超时终态",
     );
   });
@@ -380,7 +379,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
 });
 
 describe("llm-stream-timeout fetch 集成（回炉版）", () => {
-  it("T-D6: whole-call 兜底——body 无数据挂起 → reject LlmStreamTimeoutError('first-chunk') 而非 AbortError", async () => {
+  it("T-D6: whole-call 兜底——body 无数据挂起 → reject PROVIDER_STREAM_TIMEOUT first-chunk 而非 AbortError", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -411,8 +410,8 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) => {
-        assert.ok(err instanceof LlmStreamTimeoutError);
-        assert.equal(err.phase, "first-chunk");
+        assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+        assert.equal(err.details?.phase, "first-chunk");
         assert.notEqual((err as Error).name, "AbortError");
         return true;
       },
@@ -458,8 +457,8 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     await assert.rejects(
       promise,
       (err: unknown) => {
-        assert.ok(err instanceof LlmStreamTimeoutError);
-        assert.equal(err.phase, "idle");
+        assert.ok(isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
+        assert.equal(err.details?.phase, "idle");
         assert.notEqual((err as Error).name, "AbortError");
         return true;
       },
@@ -505,10 +504,10 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
       chatPromise,
       (err: unknown) => {
         assert.ok(
-          err instanceof LlmStreamTimeoutError,
+          isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
           `应 rethrow 超时错误，实际：${String(err)}`,
         );
-        assert.equal(err.phase, "idle");
+        assert.equal(err.details?.phase, "idle");
         return true;
       },
     );
@@ -547,7 +546,7 @@ describe("llm-stream-timeout 观测打点", () => {
 
       await assert.rejects(
         promise,
-        (err: unknown) => err instanceof LlmStreamTimeoutError,
+        (err: unknown) => isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
       );
 
       const timeoutCall = records.find(
@@ -619,7 +618,7 @@ describe("llm-stream-timeout 观测打点", () => {
 
       await assert.rejects(
         promise,
-        (err: unknown) => err instanceof LlmStreamTimeoutError,
+        (err: unknown) => isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
       );
 
       const timeoutCall = records.find(

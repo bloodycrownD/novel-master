@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
@@ -83,16 +84,16 @@ export class SqliteVfsContentStore implements VfsContentStore {
   }
 
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：解码 / 解包 `Result` → 领域异常通道转码点（get/getMany/appendPackMemberPlaintexts 同款）——损坏数据按仓储边界抛出，由调用链端点 catch 收口。
+   * 按 hash 解出明文；解码 / 解包失败与 blob 缺失走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，决定权交给上层）。
    */
-  async get(contentHash: string): Promise<string> {
+  async get(contentHash: string): Promise<Result<string, AppError>> {
     // 进程内解压产物层（infra/content-cache）：内容是内容寻址的，同 hash
     // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与
     // session-kkv file_cache 的 content_hash 同一个算法（hashContent(明文)），
     // 两套存储共享同一份内存条目。
     const cached = lookupDecodedContentBody(contentHash);
     if (cached != null) {
-      return cached;
+      return Result.ok(cached);
     }
     const rows = await queryTemplate<{ encoding: string; bytes: SqlValue }>(this.conn, this.parser, `SELECT encoding, bytes FROM vfs_content_blob WHERE content_hash = #{contentHash}`, { contentHash });
     if (rows.length > 0) {
@@ -100,12 +101,12 @@ export class SqliteVfsContentStore implements VfsContentStore {
       const row = rows[0]!;
       const encoding = String(row.encoding);
       const compressed = decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
-      if (!compressed.ok) throw compressed.error;
+      if (!compressed.ok) return Result.err(compressed.error);
       const plainUtf8 = decompressZlib(compressed.value);
-      if (!plainUtf8.ok) throw plainUtf8.error;
+      if (!plainUtf8.ok) return Result.err(plainUtf8.error);
       const plain = new TextDecoder().decode(plainUtf8.value);
       rememberDecodedContentBody(contentHash, plain);
-      return plain;
+      return Result.ok(plain);
     }
 
     // blob 未命中 → 查 member（JOIN pack 取 format + bytes）按 format 分派解码。
@@ -113,25 +114,25 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const memberRows = await queryTemplate<{ offset: number; length: number; format: string; bytes: SqlValue }>(this.conn, this.parser, sql20, { contentHash });
     if (memberRows.length === 0) {
       // 文案被测试与调用方依赖（resolveScanRows 同款），一个字不能改。
-      throw new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${contentHash}`, contentHash });
+      return Result.err(new AppError("VFS_CONTENT_BLOB_MISSING", { detail: `vfs_content_blob 缺失: ${contentHash}`, contentHash }));
     }
     const member = memberRows[0]!;
     const packBytes = asUint8Array(member.bytes, "vfs_content_pack.bytes");
-    if (!packBytes.ok) throw packBytes.error;
+    if (!packBytes.ok) return Result.err(packBytes.error);
     const decoded = decodePackMembers(String(member.format), packBytes.value, [{ offset: Number(member.offset), length: Number(member.length) }]);
-    if (!decoded.ok) throw decoded.error;
+    if (!decoded.ok) return Result.err(decoded.error);
     const plainUtf8 = decoded.value[0]!;
     const plain = new TextDecoder().decode(plainUtf8);
     // member 的 content_hash 与 blob 同一个键空间（hashContent(明文)），
     // 解码产物同样进进程内缓存层。
     rememberDecodedContentBody(contentHash, plain);
-    return plain;
+    return Result.ok(plain);
   }
 
-  async getMany(hashes: readonly string[]): Promise<Map<string, string>> {
+  async getMany(hashes: readonly string[]): Promise<Result<Map<string, string>, AppError>> {
     const result = new Map<string, string>();
     if (hashes.length === 0) {
-      return result;
+      return Result.ok(result);
     }
     // 先走内存层，只把 miss 的 hash 投进 SQL（见 get 的说明）。去重是
     // 顺手的：IN 查询对重复值本来就无害，但 miss 列表去重后分片更干净。
@@ -155,9 +156,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
       for (const row of rows) {
         const encoding = String(row.encoding);
         const compressed = decodeCompressedBytes(encoding, row.bytes, "vfs_content_blob.bytes");
-        if (!compressed.ok) throw compressed.error;
+        if (!compressed.ok) return Result.err(compressed.error);
         const plainUtf8 = decompressZlib(compressed.value);
-        if (!plainUtf8.ok) throw plainUtf8.error;
+        if (!plainUtf8.ok) return Result.err(plainUtf8.error);
         const plain = new TextDecoder().decode(plainUtf8.value);
         const contentHash = String(row.content_hash);
         rememberDecodedContentBody(contentHash, plain);
@@ -166,10 +167,11 @@ export class SqliteVfsContentStore implements VfsContentStore {
       // blob 未命中的 hash 落 member 侧批量解析；全部命中时零额外查询。
       const missing = chunk.filter((hash) => !result.has(hash));
       if (missing.length > 0) {
-        await this.appendPackMemberPlaintexts(missing, result);
+        const packed = await this.appendPackMemberPlaintexts(missing, result);
+        if (!packed.ok) return Result.err(packed.error);
       }
     }
-    return result;
+    return Result.ok(result);
   }
 
   /**
@@ -179,7 +181,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
    * 一次，fossil 组沿链一次走到所需最大段号、中间明文组内共享（详见 pack-codec）。
    * 缺失 hash 不出现在结果中（调用方 resolveScanRows 的缺失升级语义不变）。
    */
-  private async appendPackMemberPlaintexts(missing: ReadonlyArray<string>, result: Map<string, string>): Promise<void> {
+  private async appendPackMemberPlaintexts(missing: ReadonlyArray<string>, result: Map<string, string>): Promise<Result<void, AppError>> {
     const missList = [...new Set(missing)];
     const memberPlaceholders = missList.map(() => `?`).join(`,`);
     const sql21 = `SELECT content_hash, pack_id, offset, length
@@ -187,7 +189,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
        WHERE content_hash IN (${memberPlaceholders})`;
     const memberRows = await this.conn.query<{ content_hash: string; pack_id: number; offset: number; length: number }>(sql21, missList);
     if (memberRows.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     const packIds = [...new Set(memberRows.map((row) => Number(row.pack_id)))];
     const packPlaceholders = packIds.map(() => `?`).join(`,`);
@@ -209,13 +211,13 @@ export class SqliteVfsContentStore implements VfsContentStore {
     for (const [packId, members] of membersByPack) {
       const pack = packById.get(packId);
       if (pack == null) {
-        throw new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId });
+        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId }));
       }
       const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
-      if (!packBytes.ok) throw packBytes.error;
+      if (!packBytes.ok) return Result.err(packBytes.error);
       const spans = members.map((member) => member.span);
       const decoded = decodePackMembers(pack.format, packBytes.value, spans);
-      if (!decoded.ok) throw decoded.error;
+      if (!decoded.ok) return Result.err(decoded.error);
       const plains = decoded.value;
       members.forEach((member, index) => {
         const plain = decoder.decode(plains[index]!);
@@ -223,6 +225,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         result.set(member.contentHash, plain);
       });
     }
+    return Result.ok(undefined);
   }
 
   /**

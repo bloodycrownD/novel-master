@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
   scopeKey as vfsScopeKey,
@@ -74,7 +75,7 @@ interface WorkplaceServiceDeps {
  * - 目录规则路径 P：VFS 目录行仍在（dirPathSet），或前缀 `P/` 下仍有 live
  *   文件（文件隐含父目录存在）；
  * - 文件规则路径 P：文件本身仍在（fileSet）。
-  * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（setDirRule / getDirRule / setFileRule / deleteRulesUnderLogicalPrefix / loadContextMetadata 同款），输入来自已归一化的规则与请求，失败经端点（handler / 屏幕）catch 收口。
+  * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（setDirRule / getDirRule / setFileRule / deleteRulesUnderLogicalPrefix / loadContextMetadata 同款），决定权交给调用方。
  */
 function filterGhostConfiguredPaths(input: {
   readonly dirRulePaths: ReadonlySet<string>;
@@ -82,12 +83,12 @@ function filterGhostConfiguredPaths(input: {
   readonly fileSet: ReadonlySet<string>;
   readonly dirPathSet: ReadonlySet<string>;
   readonly configuredPaths: readonly string[];
-}): string[] {
+}): Result<string[], AppError> {
   const kept: string[] = [];
   const files = [...input.fileSet];
   for (const raw of input.configuredPaths) {
     const resolved = normalizePath(raw);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const n = resolved.value;
     if (n === "/") {
       kept.push(raw);
@@ -103,7 +104,7 @@ function filterGhostConfiguredPaths(input: {
       kept.push(raw);
     }
   }
-  return kept;
+  return Result.ok(kept);
 }
 
 /**
@@ -116,22 +117,24 @@ export class DefaultWorkplaceService implements WorkplaceService {
     this.scope = deps.scope;
   }
 
-  async setDirRule(input: SetDirRuleInput): Promise<void> {
+  async setDirRule(input: SetDirRuleInput): Promise<Result<void, AppError>> {
     const resolved = normalizePath(input.logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const allowed = validateLogicalPath(this.scope, logicalPath);
-    if (!allowed.ok) throw allowed.error;
+    if (!allowed.ok) return Result.err(allowed.error);
     if (
       input.ruleEnabled === false &&
       isWorkplaceRootPath(this.scope, logicalPath)
     ) {
-      throw new AppError("WORKPLACE_ROOT_RULE_LOCKED", {detail: "cannot disable rules on root directory"});
+      return Result.err(new AppError("WORKPLACE_ROOT_RULE_LOCKED", {detail: "cannot disable rules on root directory"}));
     }
-    const existing = await this.deps.workplace.findDirRule(
+    const existingRule = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
       logicalPath
     );
+    if (!existingRule.ok) return Result.err(existingRule.error);
+    const existing = existingRule.value;
     // Any save without explicit --rule off enables rules (do not preserve prior rule_off).
     const rule: WorkplaceDirRule = {
       scopeKey: workplaceScopeKey(this.scope),
@@ -158,125 +161,145 @@ export class DefaultWorkplaceService implements WorkplaceService {
         existing?.fillPolicy ??
         DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     };
-    await this.deps.workplace.upsertDirRule(rule);
+    const upserted = await this.deps.workplace.upsertDirRule(rule);
+    if (!upserted.ok) return Result.err(upserted.error);
+    return Result.ok(undefined);
   }
 
-  async getDirRule(logicalPath: string): Promise<WorkplaceDirRule | undefined> {
+  async getDirRule(logicalPath: string): Promise<Result<WorkplaceDirRule | undefined, AppError>> {
     const resolved = normalizePath(logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const allowed = validateLogicalPath(this.scope, normalized);
-    if (!allowed.ok) throw allowed.error;
+    if (!allowed.ok) return Result.err(allowed.error);
     const rule = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
       normalized
     );
-    return rule ?? undefined;
+    if (!rule.ok) return Result.err(rule.error);
+    return Result.ok(rule.value ?? undefined);
   }
 
   async listDirRules(): Promise<WorkplaceDirRule[]> {
     return this.deps.workplace.listDirRules(workplaceScopeKey(this.scope));
   }
 
-  async setFileRule(input: SetFileRuleInput): Promise<void> {
+  async setFileRule(input: SetFileRuleInput): Promise<Result<void, AppError>> {
     const resolved = normalizePath(input.logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
     const allowed = validateLogicalPath(this.scope, logicalPath);
-    if (!allowed.ok) throw allowed.error;
-    await this.deps.workplace.upsertFileRule({
+    if (!allowed.ok) return Result.err(allowed.error);
+    const upserted = await this.deps.workplace.upsertFileRule({
       scopeKey: workplaceScopeKey(this.scope),
       logicalPath,
       inclusionMode: input.inclusionMode,
     });
+    if (!upserted.ok) return Result.err(upserted.error);
+    return Result.ok(undefined);
   }
 
-  async deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void> {
+  async deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<Result<void, AppError>> {
     const resolved = normalizePath(logicalPrefix);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     const allowed = validateLogicalPath(this.scope, normalized);
-    if (!allowed.ok) throw allowed.error;
-    await this.deps.workplace.deleteRulesUnderLogicalPrefix(
+    if (!allowed.ok) return Result.err(allowed.error);
+    const deleted = await this.deps.workplace.deleteRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
       normalized
     );
+    if (!deleted.ok) return Result.err(deleted.error);
+    return Result.ok(undefined);
   }
 
   async renameRulesUnderLogicalPrefix(
     oldPrefix: string,
     newPrefix: string
-  ): Promise<void> {
+  ): Promise<Result<void, AppError>> {
     const oldResolved = normalizePath(oldPrefix);
-    if (!oldResolved.ok) throw oldResolved.error;
+    if (!oldResolved.ok) return Result.err(oldResolved.error);
     const newResolved = normalizePath(newPrefix);
-    if (!newResolved.ok) throw newResolved.error;
+    if (!newResolved.ok) return Result.err(newResolved.error);
     const oldNormalized = oldResolved.value;
     const newNormalized = newResolved.value;
     const allowedOld = validateLogicalPath(this.scope, oldNormalized);
-    if (!allowedOld.ok) throw allowedOld.error;
+    if (!allowedOld.ok) return Result.err(allowedOld.error);
     const allowedNew = validateLogicalPath(this.scope, newNormalized);
-    if (!allowedNew.ok) throw allowedNew.error;
-    await this.deps.workplace.renameRulesUnderLogicalPrefix(
+    if (!allowedNew.ok) return Result.err(allowedNew.error);
+    const renamed = await this.deps.workplace.renameRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
       oldNormalized,
       newNormalized
     );
+    if (!renamed.ok) return Result.err(renamed.error);
+    return Result.ok(undefined);
   }
 
   /** @deprecated 使用 {@link materializeLiveView} / {@link materializePersistBlock}。 */
-  async materialize(): Promise<WorkplaceMaterialized> {
+  async materialize(): Promise<Result<WorkplaceMaterialized, AppError>> {
     const [live, persist] = await Promise.all([
       this.materializeLiveView(),
       this.materializePersistBlock(),
     ]);
-    return {
-      listRows: live.listRows,
-      workplaceDisplay: persist.workplaceDisplay,
-      filetreeDisplay: live.filetreeDisplay,
-    };
+    if (!live.ok) return Result.err(live.error);
+    if (!persist.ok) return Result.err(persist.error);
+    return Result.ok({
+      listRows: live.value.listRows,
+      workplaceDisplay: persist.value.workplaceDisplay,
+      filetreeDisplay: live.value.filetreeDisplay,
+    });
   }
 
-  async materializeLiveView(): Promise<WorkplaceLiveView> {
+  async materializeLiveView(): Promise<Result<WorkplaceLiveView, AppError>> {
     // 并发去重由 conn 级缓存 entry.inFlight 承接（升级为跨实例，语义等价于
     // 原实例级 liveViewInFlight 的合并行为）。
     return this.doMaterializeLiveView();
   }
 
-  async materializePersistBlock(): Promise<WorkplacePersistBlock> {
+  async materializePersistBlock(): Promise<Result<WorkplacePersistBlock, AppError>> {
     const value = await this.evaluateCachedView();
+    if (!value.ok) return Result.err(value.error);
     // 缓存命中时复用缓存 ctx 的 mtimeByPath：mtime 变化必然改变 vfs 签名
     // 触发整条重算，读-改-写一致性不受损。
     const workplaceDisplay = await materializeBlockFromView(
-      value.view,
+      value.value.view,
       this.deps.vfs,
       this.scope,
-      value.ctx.mtimeByPath
+      value.value.ctx.mtimeByPath
     );
-    return { workplaceDisplay };
+    if (!workplaceDisplay.ok) return Result.err(workplaceDisplay.error);
+    return Result.ok({ workplaceDisplay: workplaceDisplay.value });
   }
 
-  async evaluateRuleView(): Promise<WorkplaceRuleView> {
+  async evaluateRuleView(): Promise<Result<WorkplaceRuleView, AppError>> {
     const value = await this.evaluateCachedView();
-    return value.view;
+    if (!value.ok) return Result.err(value.error);
+    return Result.ok(value.value.view);
   }
 
-  async buildListRows(): Promise<WorkplaceListRow[]> {
+  async buildListRows(): Promise<Result<WorkplaceListRow[], AppError>> {
     const live = await this.materializeLiveView();
-    return [...live.listRows];
+    if (!live.ok) return Result.err(live.error);
+    return Result.ok([...live.value.listRows]);
   }
 
-  async renderDisplay(): Promise<string> {
-    return (await this.materializePersistBlock()).workplaceDisplay;
+  async renderDisplay(): Promise<Result<string, AppError>> {
+    const block = await this.materializePersistBlock();
+    if (!block.ok) return Result.err(block.error);
+    return Result.ok(block.value.workplaceDisplay);
   }
 
-  async renderFileTree(): Promise<string> {
-    return (await this.materializeLiveView()).filetreeDisplay;
+  async renderFileTree(): Promise<Result<string, AppError>> {
+    const live = await this.materializeLiveView();
+    if (!live.ok) return Result.err(live.error);
+    return Result.ok(live.value.filetreeDisplay);
   }
 
-  private async doMaterializeLiveView(): Promise<WorkplaceLiveView> {
+  private async doMaterializeLiveView(): Promise<Result<WorkplaceLiveView, AppError>> {
     const value = await this.evaluateCachedView();
-    return { listRows: value.view.rows, filetreeDisplay: value.filetreeDisplay };
+    if (!value.ok) return Result.err(value.error);
+    return Result.ok({ listRows: value.value.view.rows, filetreeDisplay: value.value.filetreeDisplay });
   }
 
   /**
@@ -284,14 +307,14 @@ export class DefaultWorkplaceService implements WorkplaceService {
    * 并发去重计算（loadContextMetadata + evaluate + filetree render）→ 发布时
    * 携带计算**前**采样的 sigs（计算期间有写时下一个读者自愈，脏结果最多存活一次）。
    */
-  private async evaluateCachedView(): Promise<WorkplaceViewCacheValue> {
+  private async evaluateCachedView(): Promise<Result<WorkplaceViewCacheValue, AppError>> {
     const conn = this.deps.conn;
     const cacheKey = workplaceScopeKey(this.scope);
     const sigs = await this.sampleSignatures();
     const entry = ensureWorkplaceViewEntry(conn, cacheKey);
     const cached = getCachedWorkplaceView(entry, sigs);
     if (cached != null) {
-      return cached;
+      return Result.ok(cached);
     }
     if (entry.inFlight != null) {
       return entry.inFlight;
@@ -300,7 +323,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
     entry.inFlight = computing;
     try {
       const value = await computing;
-      publishWorkplaceView(conn, cacheKey, sigs, value);
+      if (!value.ok) return Result.err(value.error);
+      publishWorkplaceView(conn, cacheKey, sigs, value.value);
       return value;
     } finally {
       if (entry.inFlight === computing) {
@@ -310,20 +334,24 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   /** 完整评估三件套（ctx + view + filetree），供 inFlight 去重共享。 */
-  private async computeFullViewValue(): Promise<WorkplaceViewCacheValue> {
+  private async computeFullViewValue(): Promise<Result<WorkplaceViewCacheValue, AppError>> {
     const ctx = await this.loadContextMetadata();
-    const view = evaluateWorkplaceRuleView(this.scope, ctx);
-    const filetreeDisplay = renderWorkplaceFileTreeForMacro({
+    if (!ctx.ok) return Result.err(ctx.error);
+    const evaluated = evaluateWorkplaceRuleView(this.scope, ctx.value);
+    if (!evaluated.ok) return Result.err(evaluated.error);
+    const view = evaluated.value;
+    const filetree = renderWorkplaceFileTreeForMacro({
       scope: this.scope,
-      allDirs: ctx.allDirs,
-      fileSet: ctx.fileSet,
-      dirRuleMap: ctx.dirRuleMap,
-      mtimeByPath: ctx.mtimeByPath,
-      smartRules: ctx.smartRules,
-      dirMtimeByPath: ctx.dirMtimeByPath,
+      allDirs: ctx.value.allDirs,
+      fileSet: ctx.value.fileSet,
+      dirRuleMap: ctx.value.dirRuleMap,
+      mtimeByPath: ctx.value.mtimeByPath,
+      smartRules: ctx.value.smartRules,
+      dirMtimeByPath: ctx.value.dirMtimeByPath,
       displayByPath: view.displayByPath,
     });
-    return { ctx, view, filetreeDisplay };
+    if (!filetree.ok) return Result.err(filetree.error);
+    return Result.ok({ ctx: ctx.value, view, filetreeDisplay: filetree.value });
   }
 
   /**
@@ -358,7 +386,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   /** Loads path/mtime/rules context without scanning file content. */
-  private async loadContextMetadata(): Promise<WorkplaceRuleContext> {
+  private async loadContextMetadata(): Promise<Result<WorkplaceRuleContext, AppError>> {
     const scopeKey = workplaceScopeKey(this.scope);
     const vfsKey = vfsScopeKey(this.scope);
     // entry_id 化后 path 列直接存逻辑路径，整个 scope 列在 "/" 前缀下
@@ -376,17 +404,17 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const fileSet = new Set<string>();
     for (const row of fileMeta) {
       const resolved = normalizePath(row.path);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       fileSet.add(resolved.value);
     }
     // VFS 中真实存在的目录行（normalize 后作判据；喂 allDirs 用同一份数据）
     const dirPathSet = new Set<string>();
     for (const logical of dirPaths) {
       const resolved = normalizePath(logical);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       dirPathSet.add(resolved.value);
     }
-    const configuredPaths = filterGhostConfiguredPaths({
+    const kept = filterGhostConfiguredPaths({
       dirRulePaths: new Set(dirRuleMap.keys()),
       fileRulePaths: new Set(fileRuleMap.keys()),
       fileSet,
@@ -396,6 +424,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
         ...fileRules.map((r) => r.logicalPath),
       ],
     });
+    if (!kept.ok) return Result.err(kept.error);
     const mtimeByPath = new Map<string, number>();
     for (const row of fileMeta) {
       mtimeByPath.set(row.path, row.mtimeMs);
@@ -403,10 +432,11 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const allDirs = buildWorkplaceDirSet({
       scope: this.scope,
       filePaths: [...fileSet],
-      configuredPaths,
+      configuredPaths: kept.value,
     });
+    if (!allDirs.ok) return Result.err(allDirs.error);
     for (const logical of dirPathSet) {
-      allDirs.add(logical);
+      allDirs.value.add(logical);
     }
     const dirMtimeByPath = new Map<string, number>();
     for (const row of await this.deps.vfs.listDirectoryMetaUnderPrefix(
@@ -425,14 +455,15 @@ export class DefaultWorkplaceService implements WorkplaceService {
       [...dirRuleMap.values()].some((r) => r.sortField === "smart")
         ? await this.deps.smartRules()
         : undefined;
-    return {
+    if (smartRules != null && !smartRules.ok) return Result.err(smartRules.error);
+    return Result.ok({
       dirRuleMap,
       fileRuleMap,
       fileSet,
       mtimeByPath,
-      allDirs,
-      smartRules,
+      allDirs: allDirs.value,
+      smartRules: smartRules?.value,
       dirMtimeByPath,
-    };
+    });
   }
 }

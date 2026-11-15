@@ -20,6 +20,8 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { SessionFileHead } from "../model/message-checkpoint.js";
 
 /** reconcile 需处理的路径集合。 */
@@ -70,7 +72,7 @@ export function resolvePathsNeedDeleteInTransaction(args: { readonly liveHeads: 
  *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
  *        不再一律标 -1 判「必写盘+必 missing」。
  */
-export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scope: Extract<VfsScope, { kind: "session" }>, targetTree: ReadonlyMap<string, number>, _hasDirectTargetTree: boolean, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<ReconcilePathSets> {
+export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scope: Extract<VfsScope, { kind: "session" }>, targetTree: ReadonlyMap<string, number>, _hasDirectTargetTree: boolean, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<Result<ReconcilePathSets, AppError>> {
   const { projectId, sessionId } = scope;
   const scopeKeyStr = scopeKey(scope);
   const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);
@@ -91,7 +93,8 @@ export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, re
     if (entryId == null) {
       // 非-live 路径（可能已删）：退化为 entryRepo 探测拿 entryId。
       const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-      entryId = entry?.entryId ?? null;
+      if (!entry.ok) return Result.err(entry.error);
+      entryId = entry.value?.entryId ?? null;
     }
     const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
     if (entryId != null && cpEntryId != null && entryId !== cpEntryId) {
@@ -112,7 +115,9 @@ export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, re
 
   const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
   const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
-  const liveHashByPath = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+  const hashes = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+  if (!hashes.ok) return Result.err(hashes.error);
+  const liveHashByPath = hashes.value;
 
   for (const pair of reconcilePairs) {
     const liveHead = liveHeadByPath.get(pair.logicalPath);
@@ -143,5 +148,5 @@ export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, re
 
   // 删集合半段已搬进事务内（CD-01 第 3 步）；这里恒为空集合，调用方拿它只当
   // 「plan 半段」的占位。返回值保留是为了不破坏既有调用面。
-  return { pathsNeedWrite, pathsNeedDelete: new Set<string>() };
+  return Result.ok({ pathsNeedWrite, pathsNeedDelete: new Set<string>() });
 }

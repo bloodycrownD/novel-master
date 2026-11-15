@@ -2,7 +2,8 @@
  * Prompt IPC handlers — real prompt preview turns, chat token label, agent meta.
  */
 import {
-  AgentRunResolveError,
+  AGENT_RUN_RESOLVE_KEYS,
+  isAppError,
   resolveAgentForProject,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
@@ -22,16 +23,19 @@ import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-to
 import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr, toIpcResult } from "../ipc-result.js";
 
 export async function handlePromptRealPreview(
   req: PromptScopeRequest,
 ): Promise<IpcResult<PromptPreviewTurnDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const turns = await buildRealPromptPreviewTurns(rt, req);
+    const preview = await buildRealPromptPreviewTurns(rt, req);
+    // 已知失败沿 Result 到达，就地转码（错误通道迁移四期）；未知异常仍由 catch 兜底。
+    if (!preview.ok) return ipcErr(formatIpcError(preview.error));
     return {
       ok: true,
-      data: turns.map((turn) => ({
+      data: preview.value.map((turn) => ({
         id: turn.id,
         kind: turn.kind,
         // core 产出 MessageLike（G3.5）：main 翻译后写 string DTO（spec G4.3）
@@ -87,8 +91,8 @@ export async function handlePromptChatTokenLabel(
 ): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
   try {
     const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStatsResilient(rt, req);
-    return { ok: true, data: stats };
+    // resilient 的已知失败（主路径 + fallback 双双失败）原样转码；弃权 → null（保留旧标签）。
+    return toIpcResult(await loadChatPromptTokenStatsResilient(rt, req));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -111,7 +115,7 @@ export async function handlePromptAgentMeta(
       const sessionConfig = await rt.sessions.getSessionAgentConfig(
         req.sessionId,
       );
-      if (!sessionConfig.ok) throw sessionConfig.error;
+      if (!sessionConfig.ok) return ipcErr(formatIpcError(sessionConfig.error));
       const savedModelId = definition.model ?? sessionConfig.value.modelId;
       let modelLabel = "未选择模型";
       if (savedModelId) {
@@ -142,7 +146,7 @@ export async function handlePromptAgentMeta(
         },
       };
     } catch (error) {
-      if (error instanceof AgentRunResolveError) {
+      if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
         return {
           ok: true,
           data: {

@@ -8,6 +8,7 @@
  */
 export {normalizeYamlError} from '@novel-master/core/common';
 
+import {Result, AppError} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, pickAndReadText} from './document-io';
 import {blobFs} from './rn-file-io';
 import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
@@ -35,10 +36,15 @@ export async function exportYamlFile(
  * 流程是：pick → 校验文件名 → keepLocalCopy 落到 caches 目录 →
  * 通过 blobUtil 读出 UTF-8 文本。decode/validate/persist 的逻辑
  * 全部由调用方在 `consume` 里完成，方便按各 schema 自己处理。
+ *
+ * 失败通道（错误通道迁移四期）：consume 的已知失败沿 `Result.err` 接力给
+ * 调用方；pick/读文件的平台异常仍走 reject（调用方 catch 收口）。
+ * 错误类型是 `Error`：core normalizeYamlError 的归一产物含普通 Error
+ * （字符串前缀分支），不强升 AppError。
  */
 export async function importYamlFile(
-  consume: (yamlText: string) => Promise<void>,
-): Promise<void> {
+  consume: (yamlText: string) => Promise<Result<void, Error>>,
+): Promise<Result<void, Error>> {
   const yaml = await pickAndReadText({
     mimeTypes: yamlImportPickTypes(),
     fallbackLocalFileName: 'yaml-import.yaml',
@@ -46,7 +52,7 @@ export async function importYamlFile(
     buildCopyError: copyError => new Error(copyError ?? '无法读取 YAML 文件'),
   });
   if (yaml == null) {
-    return;
+    return Result.ok(undefined);
   }
-  await consume(yaml);
+  return consume(yaml);
 }

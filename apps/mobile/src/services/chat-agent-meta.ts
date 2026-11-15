@@ -8,9 +8,11 @@
  * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
 import {
-  AgentRunResolveError,
+  AGENT_RUN_RESOLVE_KEYS,
+  isAppError,
   resolveAgentForProject,
 } from '@novel-master/core/agent';
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';
 
@@ -42,12 +44,16 @@ export interface ChatAgentMeta {
  *
  * modelSource 两档：agent definition 自带 model 压制一切，
  * 否则跟随会话（session.modelId 可选，作为 savedModelId 兜底）。
+ *
+ * 失败通道（错误通道迁移四期）：会话配置的已知失败沿 `Result.err` 接力；
+ * agent 解析失败（AGENT_RUN_RESOLVE_KEYS）归一为 source='none' 的待重选
+ * meta（Ok）；其余未知异常保持 reject，调用方「锁定 + 错误文案」报错态。
  */
 export async function loadChatAgentMeta(
   runtime: MobileNovelMasterRuntime,
   projectId: string,
   sessionId: string,
-): Promise<ChatAgentMeta> {
+): Promise<Result<ChatAgentMeta, AppError>> {
   try {
     // resolveAgentForProject 与 getSessionAgentConfig 互不依赖（后者只需
     // sessionId，且为无副作用的读取），并行发起；resolveModelDisplayLabel
@@ -65,7 +71,7 @@ export async function loadChatAgentMeta(
       sessionId,
     );
     const sessionConfig = await sessionConfigPromise;
-    if (!sessionConfig.ok) throw sessionConfig.error;
+    if (!sessionConfig.ok) return Result.err(sessionConfig.error);
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
@@ -82,7 +88,7 @@ export async function loadChatAgentMeta(
     const modelSource: ChatAgentModelSource = hasDedicatedModel
       ? 'agent-pin'
       : 'session';
-    return {
+    return Result.ok({
       source: 'session',
       agentId: resolved.agentId,
       agentName: definition.name,
@@ -90,14 +96,15 @@ export async function loadChatAgentMeta(
       tokenLabel: '',
       hasDedicatedModel,
       modelSource,
-    };
+    });
   } catch (error) {
     // 归一口径与 desktop prompt handler 对齐（au/C-orch-2，方向 b）：仅
-    // AgentRunResolveError（agentId 指向已删 agent）归一为 source='none'
-    // 的待重选 meta；ChatError（配置缺失/迁移未跑）等其它异常原样向上抛，
-    // 由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充「已被删除」。
-    if (error instanceof AgentRunResolveError) {
-      return {
+    // AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（agentId 指向已删 agent 等）
+    // 归一为 source='none' 的待重选 meta；其它失败走 Err / 未知异常原样
+    // reject，由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充
+    // 「已被删除」。
+    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
+      return Result.ok({
         source: 'none',
         agentId: undefined,
         agentName: '未配置 Agent',
@@ -105,7 +112,7 @@ export async function loadChatAgentMeta(
         tokenLabel: '',
         hasDedicatedModel: false,
         modelSource: 'session',
-      };
+      });
     }
     throw error;
   }

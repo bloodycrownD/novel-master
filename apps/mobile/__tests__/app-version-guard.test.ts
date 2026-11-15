@@ -8,14 +8,16 @@ import {
 function mockAppUi(initial: Record<string, string> = {}): AppUiPreferences {
   const store = {...initial};
   return {
+    // 错误通道迁移四期：get 走 Result（未写值归一 undefined）。
     async get(key: string) {
-      return store[key];
+      return {ok: true as const, value: store[key]};
     },
     async set(key: string, value: string) {
       store[key] = value;
     },
     async delete(key: string) {
       delete store[key];
+      return {ok: true as const, value: undefined};
     },
     async listKeys() {
       return Object.keys(store);
@@ -29,9 +31,10 @@ describe('app-version-guard', () => {
       [APP_UI_KEY_LAST_RUN_VERSION]: '1.0.0',
       [APP_UI_KEY_RICH_RENDER_EPOCH]: '3',
     });
-    const epoch = await syncAppVersionForRichRender(appUi, '1.0.0');
-    expect(epoch).toBe(3);
-    expect(await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).toBe('3');
+    const syncResult = await syncAppVersionForRichRender(appUi, '1.0.0');
+    if (!syncResult.ok) throw syncResult.error;
+    expect(syncResult.value).toBe(3);
+    expect((await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).value).toBe('3');
   });
 
   it('increments epoch when version changes', async () => {
@@ -39,9 +42,10 @@ describe('app-version-guard', () => {
       [APP_UI_KEY_LAST_RUN_VERSION]: '1.0.0',
       [APP_UI_KEY_RICH_RENDER_EPOCH]: '2',
     });
-    const epoch = await syncAppVersionForRichRender(appUi, '1.0.1');
-    expect(epoch).toBe(3);
-    expect(await appUi.get(APP_UI_KEY_LAST_RUN_VERSION)).toBe('1.0.1');
-    expect(await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).toBe('3');
+    const syncResult = await syncAppVersionForRichRender(appUi, '1.0.1');
+    if (!syncResult.ok) throw syncResult.error;
+    expect(syncResult.value).toBe(3);
+    expect((await appUi.get(APP_UI_KEY_LAST_RUN_VERSION)).value).toBe('1.0.1');
+    expect((await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).value).toBe('3');
   });
 });

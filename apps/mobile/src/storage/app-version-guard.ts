@@ -3,6 +3,7 @@
  *
  * @module storage/app-version-guard
  */
+import {Result, AppError} from '@novel-master/core/errors';
 import type {AppUiPreferences} from './app-ui-prefs';
 import {
   APP_UI_KEY_LAST_RUN_VERSION,
@@ -17,19 +18,25 @@ function parseEpoch(raw: string | undefined): number {
 /**
  * Compares `currentVersion` to stored last-run version; on change increments epoch.
  * Call once after UI prefs are available at bootstrap.
+ *
+ * 失败通道（错误通道迁移四期）：读失败沿 `Result.err` 接力给 bootstrap——
+ * 与旧异常通道同终端（bootstrap catch → 错误屏），不在 storage 层吞成 0。
  */
 export async function syncAppVersionForRichRender(
   appUi: AppUiPreferences,
   currentVersion: string,
-): Promise<number> {
+): Promise<Result<number, AppError>> {
   const lastRun = await appUi.get(APP_UI_KEY_LAST_RUN_VERSION);
-  let epoch = parseEpoch(await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH));
+  if (!lastRun.ok) return Result.err(lastRun.error);
+  const storedEpoch = await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH);
+  if (!storedEpoch.ok) return Result.err(storedEpoch.error);
+  let epoch = parseEpoch(storedEpoch.value);
 
-  if (lastRun !== currentVersion) {
+  if (lastRun.value !== currentVersion) {
     epoch += 1;
     await appUi.set(APP_UI_KEY_LAST_RUN_VERSION, currentVersion);
     await appUi.set(APP_UI_KEY_RICH_RENDER_EPOCH, String(epoch));
   }
 
-  return epoch;
+  return Result.ok(epoch);
 }

@@ -46,6 +46,7 @@ import {
   resolveSkspDriver,
 } from '@novel-master/core/sksp';
 import {getMobileConnection} from '../db/connection';
+import {Result, AppError} from '@novel-master/core/errors';
 import {mobileSkspDriverName} from './mobile-sksp';
 import {ensureLlmFetchConfigured} from './setup-llm-fetch';
 import {rollbackTimingLog} from '../debug/run-timing';
@@ -77,16 +78,21 @@ function mobileRollbackProbe(
  * NovelMasterProvider bootstrap 装配（见 runtime/types.ts 字段注释），
  * 构造时经 core 的 createSessionRunStateService(conn) 注入 run 状态
  * 持久层（自动 kick 重启水合）。
+ *
+ * 失败通道（错误通道迁移四期）：装配期的已知失败（偏好读取）沿 `Result.err`
+ * 接力给 bootstrap；连接/驱动等平台异常仍走 reject（bootstrap catch 统一收口）。
  */
-export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCore> {
+export async function createMobileNovelMasterRuntime(): Promise<
+  Result<MobileRuntimeCore, AppError>
+> {
   const conn = await getMobileConnection();
 
   const state = createPersistentState(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
-  const userVfsUnifiedToolTurnEnabled =
-    await preferences.getUserVfsUnifiedToolTurn();
-  userVfsUnifiedToolTurnFlag.refresh(userVfsUnifiedToolTurnEnabled);
+  const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
+  if (!unifiedTurnPref.ok) return Result.err(unifiedTurnPref.error);
+  userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
 
   const smartSortRule = createSmartSortRuleService(conn);
   const agentRegistry = createAgentRegistryService(conn, state);
@@ -150,7 +156,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     ensureLlmFetchConfigured();
   }, 0);
 
-  return {
+  return Result.ok({
     conn,
     state,
     preferences,
@@ -195,5 +201,5 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     modelRequests: providerBundle.modelRequests,
     smartSortRule,
     userVfsTurn,
-  };
+  });
 }

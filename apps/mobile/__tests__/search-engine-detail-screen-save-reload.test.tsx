@@ -332,7 +332,10 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     mockUpdateCustomEngine.mockReset().mockResolvedValue(undefined);
     mockUpdatePresetOverride.mockReset().mockResolvedValue(undefined);
     mockResetPresetOverride.mockReset().mockResolvedValue(undefined);
-    mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
+    mockReadConfig.mockReset().mockImplementation(async () => ({
+      ok: true,
+      value: makeConfig(),
+    }));
   });
 
   it('详情页标题 override 用配置读模型里的引擎名（FIX-23：name 优先）', async () => {
@@ -383,8 +386,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
 
   it('零改动保存：不发任何写调用且 toast「无改动」（ui/P2-8 对齐 desktop）', async () => {
     // bocha 已存 key（不触发拦截）+ 表单未改 + key/baseUrl 草稿空 → 零写操作。
-    mockReadConfig.mockImplementation(async () =>
-      makeConfig({
+    mockReadConfig.mockImplementation(async () => ({
+      ok: true,
+      value: makeConfig({
         engines: [
           {
             id: 'bocha',
@@ -398,7 +402,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
           },
         ],
       }),
-    );
+    }));
     const {renderer} = await renderScreen();
     const readsBefore = mockReadConfig.mock.calls.length;
     await tapSave(renderer.root);
@@ -417,8 +421,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     // searxng 出厂模板引用 {{baseUrl}}：已存实例地址与草稿相同 → 无写操作早退，
     // 锁「仅 baseUrlChanged 才发 setEngineBaseUrl」的 desktop 同款判定。
     mockRouteParams = {engineId: 'searxng'};
-    mockReadConfig.mockImplementation(async () =>
-      makeConfig({
+    mockReadConfig.mockImplementation(async () => ({
+      ok: true,
+      value: makeConfig({
         engines: [
           {
             id: 'searxng',
@@ -433,7 +438,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
           },
         ],
       }),
-    );
+    }));
     const {renderer} = await renderScreen();
     const readsBefore = mockReadConfig.mock.calls.length;
     await tapSave(renderer.root);
@@ -455,8 +460,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
 
   describe('预置写路径：恢复默认模板 / 清除密钥（ui-copy/G-1）', () => {
     it('有覆盖预置点恢复默认：发 resetPresetOverride、toast 完成并静默回读', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({
+      mockReadConfig.mockImplementation(async () => ({
+        ok: true,
+        value: makeConfig({
           engines: [
             {
               id: 'bocha',
@@ -471,7 +477,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
           ],
           presetOverrides: {bocha: true},
         }),
-      );
+      }));
       const {renderer} = await renderScreen();
       const readsBefore = mockReadConfig.mock.calls.length;
 
@@ -488,7 +494,10 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     });
 
     it('恢复默认失败：toast 失败前缀 + 原因，不回读', async () => {
-      mockReadConfig.mockImplementation(async () => makeConfig({presetOverrides: {bocha: true}}));
+      mockReadConfig.mockImplementation(async () => ({
+        ok: true,
+        value: makeConfig({presetOverrides: {bocha: true}}),
+      }));
       mockResetPresetOverride.mockRejectedValueOnce(new Error('盘炸了'));
       const {renderer} = await renderScreen();
       const readsBefore = mockReadConfig.mock.calls.length;
@@ -504,8 +513,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     });
 
     it('已配 key 点清除密钥：发 clearEngineKey、toast 带引擎名并静默回读', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({
+      mockReadConfig.mockImplementation(async () => ({
+        ok: true,
+        value: makeConfig({
           engines: [
             {
               id: 'bocha',
@@ -519,7 +529,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
             },
           ],
         }),
-      );
+      }));
       const {renderer} = await renderScreen();
       const readsBefore = mockReadConfig.mock.calls.length;
 
@@ -535,8 +545,9 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
     });
 
     it('清除密钥失败：toast 失败前缀 + 原因，不回读', async () => {
-      mockReadConfig.mockImplementation(async () =>
-        makeConfig({
+      mockReadConfig.mockImplementation(async () => ({
+        ok: true,
+        value: makeConfig({
           engines: [
             {
               id: 'bocha',
@@ -550,7 +561,7 @@ describe('SearchEngineDetailScreen 保存语义（web-search-curl 动态清单�
             },
           ],
         }),
-      );
+      }));
       mockClearEngineKey.mockRejectedValueOnce(new Error('盘炸了'));
       const {renderer} = await renderScreen();
       const readsBefore = mockReadConfig.mock.calls.length;

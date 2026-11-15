@@ -68,7 +68,10 @@ export async function resolveVendorModelIdFromSaved(savedModelId: string, savedM
     return savedModelId;
   }
   const saved = await savedModels.findById(savedModelId.trim());
-  return saved?.vendorModelId ?? savedModelId;
+  if (!saved.ok || saved.value == null) {
+    return savedModelId;
+  }
+  return saved.value.vendorModelId;
 }
 
 /**

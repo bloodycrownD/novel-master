@@ -5,6 +5,8 @@
  */
 
 import {resolveLogicalPath} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {AppError} from "@/errors/app-error.js";
+import {Result} from "@/errors/either.js";
 
 /** 提示词 seen 路径命名空间（无实例状态）。 */
 export const promptPathSeen = {
@@ -15,17 +17,17 @@ export const promptPathSeen = {
     },
 
     /** 落库 / 短提示 XML 用 path：一律带前导 `/`；目录可选保留尾 `/`。
-     * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath 失败按仓储边界抛出，由调用链端点 catch 收口。
+     * 失败（`VFS_INVALID_PATH`）走返回值通道，由调用方接力决定（错误通道迁移四期门：throw x.error 清零）。
      */
-    normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): string {
+    normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): Result<string, AppError> {
         const keepSlash = options?.keepDirTrailingSlash === true;
         const isDir = this.isDirToken(path);
         const seen = resolveLogicalPath(path);
-        if (!seen.ok) throw seen.error;
+        if (!seen.ok) return seen;
         if (keepSlash && isDir && seen.value !== "/") {
-            return `${seen.value}/`;
+            return Result.ok(`${seen.value}/`);
         }
-        return seen.value;
+        return Result.ok(seen.value);
     },
 
     /** 尝试规范化；非法 path 返回 `null`（不抛）。 */

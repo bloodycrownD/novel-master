@@ -13,6 +13,8 @@ import {
   ruleViewToSnapshotEntries,
   serializeRuleSnapshot,
 } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
@@ -29,9 +31,10 @@ export type RefreshRuleSnapshotDeps = {
 export async function refreshRuleSnapshot(
   sessionId: string,
   deps: RefreshRuleSnapshotDeps
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const view = await deps.workplace.evaluateRuleView();
-  const entries = ruleViewToSnapshotEntries(view);
+  if (!view.ok) return Result.err(view.error);
+  const entries = ruleViewToSnapshotEntries(view.value);
   await deps.sessionKkv.set(
     sessionId,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
@@ -39,4 +42,5 @@ export async function refreshRuleSnapshot(
     serializeRuleSnapshot(entries)
   );
   await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
+  return Result.ok(undefined);
 }

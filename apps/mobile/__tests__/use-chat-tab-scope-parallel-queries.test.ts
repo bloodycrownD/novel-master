@@ -25,7 +25,10 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // 返回真标签而非 ''：空串是「中途弃权（保留旧标签）」哨兵（2026-09-30
   // 回滚竞态修复），写不进 meta——本套件要观测的是防抖后写入落位。
-  loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
+  loadChatPromptTokenLabelResilient: jest.fn(async () => ({
+    ok: true as const,
+    value: '1K tokens · 预估',
+  })),
   // cr2-E-2 新导出：useChatTabScope 换会话/卸载时会调；手写 mock 缺它会让
   // 整条 meta 加载链炸在 "is not a function"（2026-10-02 全量门实锤）。
   cancelPreciseUpgradeDelay: jest.fn(),
@@ -252,11 +255,10 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
           });
         await flushMicrotasks(3);
         pendingProjectGet[2].resolve({ok: true, value: {id: 'p1', name: 'P1'}});
-        pendingSessionsList[2].reject(new Error('list failed'));
+        pendingSessionsList[2].resolve({ok: false as const, error: new Error('list failed')});
         await reloading;
         await flushMicrotasks();
       });
-      expect((caught as Error).message).toBe('list failed');
       // get 的结果已先行落位（原语义：meta 更新不因 sessions 失败回滚）。
       expect(scope.api().currentProject).toEqual({id: 'p1', name: 'P1'});
       expect(scope.api().sessions).toEqual([
@@ -281,8 +283,8 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       expect(pendingMeta).toHaveLength(1);
 
       await act(async () => {
-        pendingModelId[0].resolve('openai/gpt-4o-mini');
-        pendingMeta[0].resolve(MOCK_META);
+        pendingModelId[0].resolve({ok: true as const, value: 'openai/gpt-4o-mini'});
+        pendingMeta[0].resolve({ok: true, value: MOCK_META});
         await flushMicrotasks();
       });
 
@@ -328,8 +330,8 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
       // 放行第一轮，状态落位（modelId 为空 → 无工作区模型）。
       await act(async () => {
-        pendingModelId[0].resolve('');
-        pendingMeta[0].resolve(MOCK_META);
+        pendingModelId[0].resolve({ok: true as const, value: ''});
+        pendingMeta[0].resolve({ok: true, value: MOCK_META});
         await flushMicrotasks();
       });
       expect(scope.api().hasWorkspaceModel).toBe(false);
@@ -340,8 +342,8 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
         const refreshing = scope.api().refreshChatMeta();
         await flushMicrotasks(3);
         expect(loadChatAgentMetaMock).toHaveBeenCalledTimes(2);
-        pendingModelId[1].resolve('openai/gpt-4o-mini');
-        pendingMeta[1].resolve(MOCK_META);
+        pendingModelId[1].resolve({ok: true as const, value: 'openai/gpt-4o-mini'});
+        pendingMeta[1].resolve({ok: true, value: MOCK_META});
         await refreshing;
         await flushMicrotasks();
       });
@@ -365,10 +367,10 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
       // 两轮各自放行，最终态由 s2 轮落位。
       await act(async () => {
-        pendingModelId[0].resolve('');
-        pendingModelId[1].resolve('openai/gpt-4o-mini');
-        pendingMeta[0].resolve(MOCK_META);
-        pendingMeta[1].resolve({...MOCK_META, agentName: 'Agent-2'});
+        pendingModelId[0].resolve({ok: true as const, value: ''});
+        pendingModelId[1].resolve({ok: true as const, value: 'openai/gpt-4o-mini'});
+        pendingMeta[0].resolve({ok: true, value: MOCK_META});
+        pendingMeta[1].resolve({ok: true, value: {...MOCK_META, agentName: 'Agent-2'}});
         await flushMicrotasks();
       });
       expect(scope.api().agentMeta?.agentName).toBe('Agent-2');
@@ -385,8 +387,8 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       });
       // 第一轮成功落位：证明后续 undefined 是失败回退、不是初始态巧合。
       await act(async () => {
-        pendingModelId[0].resolve('openai/gpt-4o-mini');
-        pendingMeta[0].resolve(MOCK_META);
+        pendingModelId[0].resolve({ok: true as const, value: 'openai/gpt-4o-mini'});
+        pendingMeta[0].resolve({ok: true, value: MOCK_META});
         await flushMicrotasks();
       });
       expect(scope.api().agentMeta?.agentName).toBe('Agent');
@@ -399,8 +401,8 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
           .refreshChatMeta()
           .catch(() => undefined);
         await flushMicrotasks(3);
-        pendingModelId[1].resolve('openai/gpt-4o-mini');
-        pendingMeta[1].reject(new Error('chat config broken'));
+        pendingModelId[1].resolve({ok: true as const, value: 'openai/gpt-4o-mini'});
+        pendingMeta[1].resolve({ok: false as const, error: new Error('chat config broken')});
         await flushMicrotasks();
       });
       expect(scope.api().agentMeta).toBeUndefined();

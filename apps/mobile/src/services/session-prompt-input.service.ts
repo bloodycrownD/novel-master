@@ -18,6 +18,7 @@ import {
 } from '@novel-master/core/prompt';
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
 import type {Interrupt} from '@novel-master/core/workplace';
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export interface SessionPromptScope {
@@ -62,13 +63,18 @@ export interface SessionPromptInputBundle {
   readonly rawMessages: readonly ChatMessageData[];
 }
 
-/** 可见会话消息 + worktree/VFS 上下文 → 当前 Agent 的 LLM 输入。 */
+/** 可见会话消息 + worktree/VFS 上下文 → 当前 Agent 的 LLM 输入。
+ *
+ * 失败通道（错误通道迁移四期）：组装/prepare 的已知失败沿 `Result.err` 接力
+ * 给调用方；bail 弃权哨兵（{@link ChatPromptBuildBailedError}，控制流类）
+ * 仍走 throw——调用方 chip 读口紧邻 catch 收成空串哨兵，判定不变。
+ */
 export async function buildSessionPromptInput(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
   definition?: AgentDefinition,
   options?: BuildSessionPromptInputOptions,
-): Promise<SessionPromptInputBundle> {
+): Promise<Result<SessionPromptInputBundle, AppError>> {
   // 分段弃权 + 分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip-build]；长期保留的诊断日志）：
   // 2026-09-30 回滚竞态里一次 build 墙钟 18.9s，靠分段读数定位被谁拖住。
   const shouldBail = options?.shouldBail;
@@ -128,11 +134,8 @@ export async function buildSessionPromptInput(
     },
   );
   if (assembled.kind === 'failed') {
-    // 组装内的已知失败（如路径解析）：与旧 throw 同路径上抛，不吞成弃权。
-    // 解包 throw 边界（错误通道迁移三期门⑦）：build 链整体是异常通道
-    // （bail 哨兵同走 throw），chip 读口 chat-prompt-tokens 紧邻 catch 收成
-    // null 哨兵；desktop 同名 service 同形态。
-    throw assembled.error;
+    // 组装内的已知失败（如路径解析）：沿 Result 通道接力，不吞成弃权。
+    return Result.err(assembled.error);
   }
   if (assembled.kind !== 'completed') {
     throw new ChatPromptBuildBailedError();
@@ -156,7 +159,9 @@ export async function buildSessionPromptInput(
     skills: runtime.skills(),
     projectId: scope.projectId,
   };
-  const messages = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+  const prepared = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+  if (!prepared.ok) return Result.err(prepared.error);
+  const messages = prepared.value;
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] prepare +${Date.now() - diagT0}ms`);
@@ -174,11 +179,11 @@ export async function buildSessionPromptInput(
   if (__DEV__) {
     console.log(`[nm-chip-build] layout +${Date.now() - diagT0}ms`);
   }
-  return {
+  return Result.ok({
     definition: resolved,
     layout: resolved.prompts,
     ctx,
     input,
     rawMessages: visibleMessages,
-  };
+  });
 }

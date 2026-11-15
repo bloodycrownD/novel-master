@@ -7,6 +7,7 @@
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { randomUUID } from "@/infra/random-uuid.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import {
@@ -71,7 +72,7 @@ export class DefaultProviderService implements ProviderService {
     return p;
   }
 
-  async create(input: CreateProviderInput): Promise<LlmProvider> {
+  async create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>> {
     const displayName = requireNonEmptyDisplayName(input.displayName);
     const id = randomUUID();
     const now = Date.now();
@@ -99,11 +100,13 @@ export class DefaultProviderService implements ProviderService {
         name: "set-secret",
         execute: async () => {
           await this.deps.secretStore.set(ref, input.apiKey!);
+          return Result.ok(undefined);
         },
         rollback: async () => {
           if (await this.deps.secretStore.has(ref)) {
             await this.deps.secretStore.delete(ref);
           }
+          return Result.ok(undefined);
         },
       });
     }
@@ -111,16 +114,19 @@ export class DefaultProviderService implements ProviderService {
       name: "insert-provider",
       execute: async () => {
         await this.deps.providers.insert(provider);
+        return Result.ok(undefined);
       },
       rollback: async () => {
         await this.deps.providers.delete(id);
+        return Result.ok(undefined);
       },
     });
-    await write.run();
-    return provider;
+    const ran = await write.run();
+    if (!ran.ok) return Result.err(ran.error);
+    return Result.ok(provider);
   }
 
-  async edit(id: string, patch: EditProviderPatch): Promise<LlmProvider> {
+  async edit(id: string, patch: EditProviderPatch): Promise<Result<LlmProvider, AppError>> {
     const provider = await this.get(id);
     if (provider.isBuiltin && patch.protocol !== undefined) {
       throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id });
@@ -178,6 +184,7 @@ export class DefaultProviderService implements ProviderService {
           } else {
             await this.deps.secretStore.set(secretRef!, newSecretValue!);
           }
+          return Result.ok(undefined);
         },
         rollback: async () => {
           if (originalSecretValue != null) {
@@ -191,6 +198,7 @@ export class DefaultProviderService implements ProviderService {
               await this.deps.secretStore.delete(secretRef!);
             }
           }
+          return Result.ok(undefined);
         },
       });
     }
@@ -198,16 +206,19 @@ export class DefaultProviderService implements ProviderService {
       name: "update-provider",
       execute: async () => {
         await this.deps.providers.update(updated);
+        return Result.ok(undefined);
       },
       rollback: async () => {
         await this.deps.providers.update(provider);
+        return Result.ok(undefined);
       },
     });
-    await write.run();
-    return updated;
+    const ran = await write.run();
+    if (!ran.ok) return Result.err(ran.error);
+    return Result.ok(updated);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string): Promise<Result<void, AppError>> {
     const provider = await this.get(id);
     if (provider.isBuiltin) {
       throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id });
@@ -216,8 +227,12 @@ export class DefaultProviderService implements ProviderService {
     // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
     // 先把待删数据快照下来，失败时逆序恢复，保证不留半套。
     const ref = resolveProviderApiKeySecretRef(provider);
-    const suggestions = await this.deps.suggestions.listByProvider(id);
-    const savedModels = await this.deps.savedModels.listByProvider(id);
+    const listedSuggestions = await this.deps.suggestions.listByProvider(id);
+    if (!listedSuggestions.ok) return Result.err(listedSuggestions.error);
+    const suggestions = listedSuggestions.value;
+    const listedSavedModels = await this.deps.savedModels.listByProvider(id);
+    if (!listedSavedModels.ok) return Result.err(listedSavedModels.error);
+    const savedModels = listedSavedModels.value;
     const secretValue = await this.deps.secretStore.get(ref);
 
     // S-D 前置拒绝（**在 CoordinatedWrite 之外**）：本路径走
@@ -259,32 +274,39 @@ export class DefaultProviderService implements ProviderService {
     write.register({
       name: "delete-suggestions",
       execute: async () => {
-        await this.deps.suggestions.deleteByProvider(id);
+        const deleted = await this.deps.suggestions.deleteByProvider(id);
+        if (!deleted.ok) return deleted;
+        return Result.ok(undefined);
       },
       rollback: async () => {
         for (const s of suggestions) {
           await this.deps.suggestions.upsert(s);
         }
+        return Result.ok(undefined);
       },
     });
     write.register({
       name: "delete-saved-models",
       execute: async () => {
         await this.deps.savedModels.deleteByProvider(id);
+        return Result.ok(undefined);
       },
       rollback: async () => {
         for (const m of savedModels) {
           await this.deps.savedModels.insert(m);
         }
+        return Result.ok(undefined);
       },
     });
     write.register({
       name: "delete-provider",
       execute: async () => {
         await this.deps.providers.delete(id);
+        return Result.ok(undefined);
       },
       rollback: async () => {
         await this.deps.providers.insert(provider);
+        return Result.ok(undefined);
       },
     });
     write.register({
@@ -293,14 +315,18 @@ export class DefaultProviderService implements ProviderService {
         if (await this.deps.secretStore.has(ref)) {
           await this.deps.secretStore.delete(ref);
         }
+        return Result.ok(undefined);
       },
       rollback: async () => {
         if (secretValue != null) {
           await this.deps.secretStore.set(ref, secretValue);
         }
+        return Result.ok(undefined);
       },
     });
-    await write.run();
+    const ran = await write.run();
+    if (!ran.ok) return Result.err(ran.error);
+    return Result.ok(undefined);
   }
 
   private async apiKeyStatus(

@@ -17,7 +17,7 @@ describe('chat-transcript-engine（legacy-rn 已退役）', () => {
 
   it('KKV 留着 legacy-rn 也按 webview 走（值忽略）', async () => {
     const appUi = {
-      get: jest.fn(async () => 'legacy-rn'),
+      get: jest.fn(async () => ({ok: true, value: 'legacy-rn'})),
     };
     expect(await readChatTranscriptEngine(appUi as never)).toBe('webview');
     // 键仍被读：读动作保留是为了留消费点，不是死代码
@@ -27,14 +27,15 @@ describe('chat-transcript-engine（legacy-rn 已退役）', () => {
   it('KKV 未设 / 读失败都回落 webview', async () => {
     expect(
       await readChatTranscriptEngine({
-        get: jest.fn(async () => undefined),
+        get: jest.fn(async () => ({ok: true, value: undefined})),
       } as never),
     ).toBe('webview');
     expect(
       await readChatTranscriptEngine({
-        get: jest.fn(async () => {
-          throw new Error('KKV 炸了');
-        }),
+        get: jest.fn(async () => ({
+          ok: false,
+          error: new Error('KKV 炸了'),
+        })),
       } as never),
     ).toBe('webview');
   });

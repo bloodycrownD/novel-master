@@ -4,6 +4,7 @@
  * @module services/vfs-zip
  */
 import { AppError, createVfsZipIoService, type VfsScope } from "@novel-master/core/vfs";
+import { Result } from "@novel-master/core/errors";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -33,13 +34,9 @@ async function resolveWorkspaceZipName(
   if (projectId == null) {
     return WORKSPACE_FALLBACK_ZIP_NAME;
   }
-  try {
-    const project = await runtime.projects.get(projectId);
-    if (!project.ok) throw project.error;
-    return `${project.value.name}.zip`;
-  } catch {
-    return WORKSPACE_FALLBACK_ZIP_NAME;
-  }
+  const project = await runtime.projects.get(projectId);
+  if (!project.ok) return WORKSPACE_FALLBACK_ZIP_NAME;
+  return `${project.value.name}.zip`;
 }
 
 function assertZipArchive(bytes: Uint8Array): void {
@@ -73,10 +70,13 @@ export async function exportVfsZipWithDialog(
     readonly fileName?: string;
   } = {},
   parentWindow?: BrowserWindow | null,
-): Promise<"saved" | "cancelled"> {
+): Promise<Result<"saved" | "cancelled", AppError>> {
   const directoryPath = resolveDirectoryPath(options.directoryPath);
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, { directoryPath });
+  const exported = await zipSvc.export(scope, { directoryPath });
+  // 失败沿 Result 返回，由唯一调用方 handleVfsZipExport 转码。
+  if (!exported.ok) return Result.err(exported.error);
+  const bytes = exported.value;
   assertZipArchive(bytes);
 
   const base = zipBaseNameFromPath(directoryPath);
@@ -97,10 +97,10 @@ export async function exportVfsZipWithDialog(
         filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
       });
   if (result.canceled || result.filePath == null) {
-    return "cancelled";
+    return Result.ok("cancelled");
   }
   await writeFile(result.filePath, bytes);
-  return "saved";
+  return Result.ok("saved");
 }
 
 /** 弹框选择 zip 并读字节（新建弹窗预检用）；用户取消返回 null。 */

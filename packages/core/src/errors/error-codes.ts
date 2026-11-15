@@ -61,6 +61,10 @@ export const ErrorCodes = {
   AGENT_RUN_FAILED: {code: 101011, desc: "agent run failed"},
   AGENT_BUSY: {code: 101012, desc: "agent busy"},
   AGENT_RUN_IN_FLIGHT: {code: 101013, desc: "agent run in flight"},
+  // 101 AGENT 014-016：agent run resolve 失败（AgentRunResolveError 退役，messageKey 既有）。
+  AGENT_NOT_CONFIGURED: {code: 101014, desc: "agent not configured", messageKey: "error.agent.not_configured"},
+  AGENT_MODEL_NOT_SET: {code: 101015, desc: "agent model not set", messageKey: "error.agent.model_not_set"},
+  AGENT_REFERENCED_NOT_FOUND: {code: 101016, desc: "session references a missing agent", messageKey: "error.agent.referenced_not_found"},
 
   // 102 VFS 001-999：vfs 路径、zip、content-store 与端口失败。
   VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found", messageKey: "error.vfs.not_found"},
@@ -123,6 +127,8 @@ export const ErrorCodes = {
   PROVIDER_INVALID_MODEL_NAME: {code: 105016, desc: "invalid provider model name", messageKey: "error.provider.invalid_model_name"},
   // 105 PROVIDER 017：handler 直构码（三期迁入）。
   PROVIDER_MODEL_MISMATCH: {code: 105017, desc: "provider model mismatch"},
+  // 105 PROVIDER 018：LLM 流式整调用超时（LlmStreamTimeoutError 退役；phase/timeoutMs 走 params，message 用 detail 承载原动态文案）。
+  PROVIDER_STREAM_TIMEOUT: {code: 105018, desc: "provider stream timeout"},
 
   // 106 CHAT 002-999：消息行/元数据损坏（001 为历史保留）。
   CHAT_MESSAGE_CORRUPT: {code: 106002, desc: "chat message row corrupt"},

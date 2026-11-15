@@ -9,6 +9,8 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { WORKPLACE_DIR_RULE_TABLE, WORKPLACE_FILE_RULE_TABLE } from "@/bootstrap/workplace/workplace-schema.js";
 import type { FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule, WorkplaceFileRule } from "../../model/workplace-types.js";
 import type { WorkplaceRepository } from "../workplace.port.js";
@@ -47,11 +49,11 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath `Result` → 领域异常通道转码点（本仓储各方法同款）——非法路径按仓储边界抛出，经 service 至端点（handler / 屏幕）catch 收口。
+   * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（本仓储各方法同款），决定权逐层交给调用方。
    */
-  async upsertDirRule(rule: WorkplaceDirRule): Promise<void> {
+  async upsertDirRule(rule: WorkplaceDirRule): Promise<Result<void, AppError>> {
     const resolved = normalizePath(rule.logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
         const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
@@ -77,11 +79,12 @@ await executeTemplate(this.conn, this.parser, sql28, {
         tailCount: rule.tailCount,
         fillPolicy: rule.fillPolicy,
       });
+    return Result.ok(undefined);
   }
 
-  async upsertFileRule(rule: WorkplaceFileRule): Promise<void> {
+  async upsertFileRule(rule: WorkplaceFileRule): Promise<Result<void, AppError>> {
     const resolved = normalizePath(rule.logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
         const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
@@ -92,13 +95,14 @@ await executeTemplate(this.conn, this.parser, sql29, {
         logicalPath,
         inclusionMode: rule.inclusionMode,
       });
+    return Result.ok(undefined);
   }
 
-  async batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<void> {
+  async batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<Result<void, AppError>> {
     // 空数组直接返回：copyScope 在源 scope 无目录规则时不用特殊判断，
     // 也避免驱动对空 parametersList 的行为分歧。
     if (rules.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     // 位置占位符 SQL（和本 worktree 其它 batch 实现一致），一次 conn.batch 提交全部行。
     // 调用方负责先清空目标 scope，这里走 INSERT … ON CONFLICT DO UPDATE（upsert 语义）。
@@ -117,15 +121,16 @@ await executeTemplate(this.conn, this.parser, sql29, {
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
       const resolved = normalizePath(rule.logicalPath);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([rule.scopeKey, resolved.value, rule.ruleEnabled ? 1 : 0, rule.sortField, rule.sortOrder, rule.headCount, rule.tailCount, rule.fillPolicy]);
     }
     await this.conn.batch(sql, paramsList);
+    return Result.ok(undefined);
   }
 
-  async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<void> {
+  async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<Result<void, AppError>> {
     if (rules.length === 0) {
-      return;
+      return Result.ok(undefined);
     }
     // SQL 与单条 upsertFileRule 保持一致，改一处务必同步另一处。
     const sql = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
@@ -135,10 +140,11 @@ await executeTemplate(this.conn, this.parser, sql29, {
     const paramsList: unknown[][] = [];
     for (const rule of rules) {
       const resolved = normalizePath(rule.logicalPath);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       paramsList.push([rule.scopeKey, resolved.value, rule.inclusionMode]);
     }
     await this.conn.batch(sql, paramsList);
+    return Result.ok(undefined);
   }
 
   async deleteScope(scopeKey: string): Promise<void> {
@@ -161,56 +167,60 @@ const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
     return rows.map(rowToFileRule);
   }
 
-  async findDirRule(scopeKey: string, logicalPath: string): Promise<WorkplaceDirRule | null> {
+  async findDirRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceDirRule | null, AppError>> {
         const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = normalizePath(logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
 const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
-    return rowToDirRule(rows[0]!);
+    return Result.ok(rowToDirRule(rows[0]!));
   }
 
-  async findFileRule(scopeKey: string, logicalPath: string): Promise<WorkplaceFileRule | null> {
+  async findFileRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceFileRule | null, AppError>> {
         const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = normalizePath(logicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
 const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
-      return null;
+      return Result.ok(null);
     }
-    return rowToFileRule(rows[0]!);
+    return Result.ok(rowToFileRule(rows[0]!));
   }
 
-  async copyScope(fromScopeKey: string, toScopeKey: string, mapLogicalPath: (logical: string) => string): Promise<void> {
+  async copyScope(fromScopeKey: string, toScopeKey: string, mapLogicalPath: (logical: string) => Result<string, AppError>): Promise<Result<void, AppError>> {
     // 先清空目标 scope（覆盖目标 scope 原有、但不在源 scope 的规则），语义保持不变。
     await this.deleteScope(toScopeKey);
     const dirs = await this.listDirRules(fromScopeKey);
     const files = await this.listFileRules(fromScopeKey);
     // 收集两组规则后各调一次 batch，把原来「规则数 × 1」条 INSERT 压成每表 1 条 batch INSERT。
-    const mappedDirs = dirs.map((d) => ({
-      ...d,
-      scopeKey: toScopeKey,
-      logicalPath: mapLogicalPath(d.logicalPath),
-    }));
-    const mappedFiles = files.map((f) => ({
-      ...f,
-      scopeKey: toScopeKey,
-      logicalPath: mapLogicalPath(f.logicalPath),
-    }));
-    await this.batchUpsertDirRules(mappedDirs);
-    await this.batchUpsertFileRules(mappedFiles);
+    // 映射回调走 Result 通道：任一路径映射失败即整体短路，决定权交给调用方。
+    const mappedDirs: WorkplaceDirRule[] = [];
+    for (const d of dirs) {
+      const mapped = mapLogicalPath(d.logicalPath);
+      if (!mapped.ok) return Result.err(mapped.error);
+      mappedDirs.push({ ...d, scopeKey: toScopeKey, logicalPath: mapped.value });
+    }
+    const mappedFiles: WorkplaceFileRule[] = [];
+    for (const f of files) {
+      const mapped = mapLogicalPath(f.logicalPath);
+      if (!mapped.ok) return Result.err(mapped.error);
+      mappedFiles.push({ ...f, scopeKey: toScopeKey, logicalPath: mapped.value });
+    }
+    const dirUpsert = await this.batchUpsertDirRules(mappedDirs);
+    if (!dirUpsert.ok) return Result.err(dirUpsert.error);
+    return this.batchUpsertFileRules(mappedFiles);
   }
 
-  async deleteRulesUnderLogicalPrefix(scopeKey: string, logicalPrefix: string): Promise<void> {
+  async deleteRulesUnderLogicalPrefix(scopeKey: string, logicalPrefix: string): Promise<Result<void, AppError>> {
     const resolved = normalizePath(logicalPrefix);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const base = resolved.value;
     const escaped = escapeLike(base);
     const childPattern = `${escaped}/%`;
@@ -222,13 +232,14 @@ await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: base, chi
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
 await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
+    return Result.ok(undefined);
   }
 
-  async renameRulesUnderLogicalPrefix(scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
+  async renameRulesUnderLogicalPrefix(scopeKey: string, oldPrefix: string, newPrefix: string): Promise<Result<void, AppError>> {
     const oldResolved = normalizePath(oldPrefix);
-    if (!oldResolved.ok) throw oldResolved.error;
+    if (!oldResolved.ok) return Result.err(oldResolved.error);
     const newResolved = normalizePath(newPrefix);
-    if (!newResolved.ok) throw newResolved.error;
+    if (!newResolved.ok) return Result.err(newResolved.error);
     const oldBase = oldResolved.value;
     const newBase = newResolved.value;
     const escaped = escapeLike(oldBase);
@@ -268,5 +279,6 @@ await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, chi
         childPattern,
       });
     });
+    return Result.ok(undefined);
   }
 }

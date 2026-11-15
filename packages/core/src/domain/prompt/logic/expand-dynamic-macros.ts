@@ -34,7 +34,16 @@ export async function expandDynamicMacros(content: string, ctx: DynamicMacroCont
   const now = ctx.now ?? new Date();
   let filetree = "";
   if (content.includes("$filetree")) {
-    filetree = ctx.filetree ?? (ctx.workplace != null ? await ctx.workplace.renderFileTree() : "");
+    if (ctx.filetree != null) {
+      filetree = ctx.filetree;
+    } else if (ctx.workplace != null) {
+      const rendered = await ctx.workplace.renderFileTree();
+      if (!rendered.ok) {
+        // 本层契约：不把 infra 的 AppError 漏出（见 @returns），统一收口为 PROMPT_INVALID_MACRO。
+        return Result.err(new AppError("PROMPT_INVALID_MACRO", { detail: `$filetree render failed: ${rendered.error.message}`, cause: rendered.error }));
+      }
+      filetree = rendered.value;
+    }
   }
   const root = {
     time: formatLocalDateTime(now),

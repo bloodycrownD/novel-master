@@ -4,13 +4,16 @@
 import type { IpcResult } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 
 export async function handlePreferencesGetLlmStream(): Promise<
   IpcResult<boolean>
 > {
   try {
     const rt = await getDesktopRuntime();
-    return { ok: true, data: await rt.preferences.getLlmStreamEnabled() };
+    const enabled = await rt.preferences.getLlmStreamEnabled();
+    if (!enabled.ok) return ipcErr(formatIpcError(enabled.error));
+    return { ok: true, data: enabled.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -33,10 +36,9 @@ export async function handlePreferencesGetSubagentStream(): Promise<
 > {
   try {
     const rt = await getDesktopRuntime();
-    return {
-      ok: true,
-      data: await rt.preferences.getSubagentStreamEnabled(),
-    };
+    const enabled = await rt.preferences.getSubagentStreamEnabled();
+    if (!enabled.ok) return ipcErr(formatIpcError(enabled.error));
+    return { ok: true, data: enabled.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -59,10 +61,9 @@ export async function handlePreferencesGetThinkingContext(): Promise<
 > {
   try {
     const rt = await getDesktopRuntime();
-    return {
-      ok: true,
-      data: await rt.preferences.getThinkingContextEnabled(),
-    };
+    const enabled = await rt.preferences.getThinkingContextEnabled();
+    if (!enabled.ok) return ipcErr(formatIpcError(enabled.error));
+    return { ok: true, data: enabled.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

@@ -411,8 +411,9 @@ describe("handleCompactionManual", () => {
 
       // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
       const firstFrame = await loadChatPromptTokenStats(rt, scope);
+      if (!firstFrame.ok) throw firstFrame.error;
       assert.equal(
-        firstFrame?.estimated,
+        firstFrame.value?.estimated,
         true,
         "压缩后常规读口首帧应回落估算档（压缩路径不该预写 L1）",
       );

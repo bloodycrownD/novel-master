@@ -8,6 +8,7 @@ import { AppError, isAppError } from "@novel-master/core/agent";
 import { TdbcError } from "@novel-master/core";
 import { SkspError } from "@novel-master/core/sksp";
 import { userMessageOf } from "@novel-master/core/i18n";
+import { Result } from "@novel-master/core/errors";
 import type { Outcome } from "@novel-master/core/workplace";
 import { coreT } from "./i18n.js";
 
@@ -19,6 +20,8 @@ export const EXIT_CANCELLED = 130;
 export const CANCELLED_MESSAGE = "已取消";
 /** 命令函数 `Outcome<void>` 的完成分支（run* 的非中断 return 共用）。 */
 export const OUTCOME_COMPLETED: Outcome<void> = { kind: "completed", value: undefined };
+/** 命令函数 `Result<void, AppError>` 的完成分支（run* 的非中断 return 共用，错误通道迁移四期）。 */
+export const RESULT_OK: Result<void, AppError> = Result.ok(undefined);
 
 /** 错误 → 用户可见中文文案：i18n 后 descriptor 模式的 message 是英文 desc，边界统一解析。 */
 function visibleMessage(error: Error): string {

@@ -57,10 +57,18 @@ export function SessionDetailScreen() {
     setLoading(true);
     try {
       const session = await runtime.sessions.get(sessionId);
-      if (!session.ok) throw session.error;
+      if (!session.ok) {
+        showToast(toastMessage('加载会话详情失败', session.error));
+        return;
+      }
       setSessionTitle(session.value.title ?? '');
       const agentMeta = await loadChatAgentMeta(runtime, projectId, sessionId);
-      setMeta(agentMeta);
+      // 非 agent 解析类失败（Result.err，错误通道迁移四期）与未知异常同终端。
+      if (!agentMeta.ok) {
+        showToast(toastMessage('加载会话详情失败', agentMeta.error));
+        return;
+      }
+      setMeta(agentMeta.value);
     } catch (error) {
       showToast(toastMessage('加载会话详情失败', error));
     } finally {

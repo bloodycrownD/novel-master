@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { joinTargetLogicalPath, normalizeBatchRelativePath, relativePathUnderAnchor } from "@/domain/vfs/logic/vfs-batch-path.js";
@@ -47,23 +48,30 @@ function tryDecodeUtf8(bytes: Uint8Array): string | null {
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath / 写入 `Result` → service 异常通道转码点（本文件各函数同款）——失败原样上抛，由调用链端点 catch 收口。
+ * 事务回调内解包（总纲 §五例外 2）：本函数只在 `applyBatchIngest` 段 B0 的
+ * `conn.transaction` 回调内调用，parentCheck / repo 写入失败靠抛错回滚。
  */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_batch_placeholder`);
   if (!parentCheck.ok) throw parentCheck.error;
   const existing = await repo.findByPath(sk, logical);
-  if (existing == null) {
-    await repo.insertDirectory(sk, logical);
+  if (!existing.ok) throw existing.error;
+  if (existing.value == null) {
+    const inserted = await repo.insertDirectory(sk, logical);
+    if (!inserted.ok) throw inserted.error;
     return;
   }
-  if (existing.entryKind === "file") {
+  if (existing.value.entryKind === "file") {
     throw new AppError("VFS_NOT_A_DIRECTORY", { detail: `path is a file, not a directory: ${logical}`, path: logical });
   }
 }
 
-/** 分块写入单个文件：走共享的 revision 写路径（不再绕开 revision 层）。 */
+/**
+ * 分块写入单个文件：走共享的 revision 写路径（不再绕开 revision 层）。
+ * 事务回调内解包（总纲 §五例外 2）：只在 `applyBatchIngest` 段 B1..Bk 的
+ * `conn.transaction` 回调内调用，parentCheck / 写入失败靠抛错回滚。
+ */
 async function writeOrUpdateFile(entryRepo: VfsEntryRepository, revisionRepo: SqliteVfsRevisionRepository, scope: VfsScope, logical: string, content: string): Promise<void> {
   const sk = scopeKey(scope);
   // WHY 外面保底父链：writeWithRevision 只在**新建**分支调 ensureParentDirectories，
@@ -120,14 +128,14 @@ function detectIngestTypeConflict(rel: string, kind: "file" | "directory", pathK
   return null;
 }
 
-function basenameOf(logical: string): string {
+function basenameOf(logical: string): Result<string, AppError> {
   const resolved = resolveLogicalPath(logical);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return resolved;
   const path = resolved.value;
   if (path === "/") {
-    return "";
+    return Result.ok("");
   }
-  return path.slice(path.lastIndexOf("/") + 1);
+  return Result.ok(path.slice(path.lastIndexOf("/") + 1));
 }
 
 /**
@@ -138,29 +146,31 @@ function basenameOf(logical: string): string {
  * ⚠️ **锚点绝不能用 `logical` 自身**：`relativePathUnderAnchor(p, p)` 按定义返回空串，
  * 调用方会 `continue` 掉，单选一个文件会被整个丢掉。
  */
-function parentLogicalOf(logical: string): string {
+function parentLogicalOf(logical: string): Result<string, AppError> {
   const resolved = resolveLogicalPath(logical);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return resolved;
   const path = resolved.value;
   const i = path.lastIndexOf("/");
-  return i <= 0 ? "/" : path.slice(0, i);
+  return Result.ok(i <= 0 ? "/" : path.slice(0, i));
 }
 
 /**
  * 多选导出相对路径：单选时相对该锚点；多选时带顶层 basename，避免摊平冲突。
  */
-function exportRelativePath(childLogical: string, anchorLogical: string, selectionCount: number): string {
+function exportRelativePath(childLogical: string, anchorLogical: string, selectionCount: number): Result<string, AppError> {
   const underResult = relativePathUnderAnchor(childLogical, anchorLogical);
-  if (!underResult.ok) throw underResult.error;
+  if (!underResult.ok) return Result.err(underResult.error);
   const under = underResult.value;
   if (selectionCount <= 1) {
-    return under;
+    return Result.ok(under);
   }
-  const rootName = basenameOf(anchorLogical);
+  const rootNameResult = basenameOf(anchorLogical);
+  if (!rootNameResult.ok) return rootNameResult;
+  const rootName = rootNameResult.value;
   if (rootName.length === 0) {
-    return under;
+    return Result.ok(under);
   }
-  return under.length === 0 ? rootName : `${rootName}/${under}`;
+  return Result.ok(under.length === 0 ? rootName : `${rootName}/${under}`);
 }
 
 type DefaultVfsBatchIoServiceOptions = {
@@ -182,12 +192,12 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     this.sessionKkv = options.sessionKkv;
   }
 
-  async planBatchIngest(scope: VfsScope, targetDir: string, entries: readonly BatchIngestRawEntry[]): Promise<BatchIngestPlan> {
+  async planBatchIngest(scope: VfsScope, targetDir: string, entries: readonly BatchIngestRawEntry[]): Promise<Result<BatchIngestPlan, AppError>> {
     const resolvedTarget = resolveLogicalPath(targetDir);
-    if (!resolvedTarget.ok) throw resolvedTarget.error;
+    if (!resolvedTarget.ok) return Result.err(resolvedTarget.error);
     const target = resolvedTarget.value;
     const allowedTarget = validateLogicalPath(scope, target);
-    if (!allowedTarget.ok) throw allowedTarget.error;
+    if (!allowedTarget.ok) return Result.err(allowedTarget.error);
 
     const writes: BatchIngestPlanEntry[] = [];
     const mkdirPaths: string[] = [];
@@ -208,7 +218,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       const typeConflict = detectIngestTypeConflict(rel, kind, pathKind);
       if (typeConflict != null) {
         const logicalResult = joinTargetLogicalPath(target, rel);
-        if (!logicalResult.ok) throw logicalResult.error;
+        if (!logicalResult.ok) return Result.err(logicalResult.error);
         typeConflicts.push({ logicalPath: logicalResult.value, message: typeConflict });
         continue;
       }
@@ -216,10 +226,10 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
 
       if (entry.kind === "directory") {
         const logicalResult = joinTargetLogicalPath(target, rel);
-        if (!logicalResult.ok) throw logicalResult.error;
+        if (!logicalResult.ok) return Result.err(logicalResult.error);
         const logical = logicalResult.value;
         const allowedDir = validateLogicalPath(scope, logical);
-        if (!allowedDir.ok) throw allowedDir.error;
+        if (!allowedDir.ok) return Result.err(allowedDir.error);
         if (!seenLogical.has(logical)) {
           seenLogical.add(logical);
           mkdirPaths.push(logical);
@@ -234,45 +244,40 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
 
       const logicalResult = joinTargetLogicalPath(target, rel);
-      if (!logicalResult.ok) throw logicalResult.error;
+      if (!logicalResult.ok) return Result.err(logicalResult.error);
       const logical = logicalResult.value;
       const allowedLogical = validateLogicalPath(scope, logical);
-      if (!allowedLogical.ok) throw allowedLogical.error;
+      if (!allowedLogical.ok) return Result.err(allowedLogical.error);
       if (seenLogical.has(logical)) {
         continue;
       }
       seenLogical.add(logical);
 
       const existing = await this.repo.findByPath(scopeKey(scope), logical);
-      if (existing != null && existing.entryKind === "file") {
+      if (!existing.ok) return Result.err(existing.error);
+      if (existing.value != null && existing.value.entryKind === "file") {
         conflicts.push({ logicalPath: logical, reason: "exists" });
       }
 
       writes.push({ relativePath: rel, content: decoded });
     }
 
-    return { writes, mkdirPaths, conflicts, skippedBinary, typeConflicts };
+    return Result.ok({ writes, mkdirPaths, conflicts, skippedBinary, typeConflicts });
   }
 
-  async applyBatchIngest(scope: VfsScope, _targetDir: string, plan: BatchIngestPlan, options: BatchApplyOptions): Promise<BatchApplyReport> {
+  async applyBatchIngest(scope: VfsScope, _targetDir: string, plan: BatchIngestPlan, options: BatchApplyOptions): Promise<Result<BatchApplyReport, AppError>> {
     const skippedBase = [...plan.skippedBinary];
 
     if (plan.typeConflicts.length > 0) {
-      return emptyReport(
-        skippedBase,
-        plan.typeConflicts.map((c) => ({
-          path: c.logicalPath,
-          message: c.message,
-        }))
-      );
+      return Result.ok(emptyReport(skippedBase, plan.typeConflicts.map((c) => ({ path: c.logicalPath, message: c.message }))));
     }
 
     if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
-      return emptyReport([...skippedBase, ...plan.conflicts.map((c) => c.logicalPath)]);
+      return Result.ok(emptyReport([...skippedBase, ...plan.conflicts.map((c) => c.logicalPath)]));
     }
 
     const resolvedTarget = resolveLogicalPath(_targetDir);
-    if (!resolvedTarget.ok) throw resolvedTarget.error;
+    if (!resolvedTarget.ok) return Result.err(resolvedTarget.error);
     const target = resolvedTarget.value;
     const writtenLogical: string[] = [];
 
@@ -311,6 +316,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
             const revisionTx = new SqliteVfsRevisionRepository(tx);
             for (const write of shard) {
               const logicalResult = joinTargetLogicalPath(target, write.relativePath);
+              // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
               if (!logicalResult.ok) throw logicalResult.error;
               const logical = logicalResult.value;
               if (this.testHook?.throwOnWriteLogical === logical) {
@@ -343,7 +349,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     await this.alignPromptCachesAfterWrite(scope, writtenLogical.length);
 
     if (failedPath != null) {
-      return {
+      return Result.ok({
         written: [...writtenLogical],
         skipped: skippedBase,
         failed: [
@@ -353,28 +359,28 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
             message: {key: "error.vfs.batch_ingest_partial", params: {reason: failureMessage ?? "batch ingest failed", committed: committedShards, failed_shard: shardIndex + 1}},
           },
         ],
-      };
+      });
     }
 
-    return {
+    return Result.ok({
       written: writtenLogical,
       skipped: skippedBase,
       failed: [],
-    };
+    });
   }
 
-  async applyBatchIngestWithWriter(scope: VfsScope, targetDir: string, plan: BatchIngestPlan, options: BatchApplyOptions, writer: BatchIngestWriter): Promise<BatchApplyReport> {
+  async applyBatchIngestWithWriter(scope: VfsScope, targetDir: string, plan: BatchIngestPlan, options: BatchApplyOptions, writer: BatchIngestWriter): Promise<Result<BatchApplyReport, AppError>> {
     const skipped: string[] = [...plan.skippedBinary];
 
     if (plan.typeConflicts.length > 0) {
-      return {
+      return Result.ok({
         written: [],
         skipped,
         failed: plan.typeConflicts.map((c) => ({
           path: c.logicalPath,
           message: c.message,
         })),
-      };
+      });
     }
 
     if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
@@ -383,11 +389,11 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
           skipped.push(c.logicalPath);
         }
       }
-      return { written: [], skipped, failed: [] };
+      return Result.ok({ written: [], skipped, failed: [] });
     }
 
     const resolvedTarget = resolveLogicalPath(targetDir);
-    if (!resolvedTarget.ok) throw resolvedTarget.error;
+    if (!resolvedTarget.ok) return Result.err(resolvedTarget.error);
     const target = resolvedTarget.value;
     const written: string[] = [];
     const failed: Array<{ path: string; message: string }> = [];
@@ -423,7 +429,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     // token cache，所以「上层已保证一致性」不成立。
     await this.alignPromptCachesAfterWrite(scope, written.length);
 
-    return { written, skipped, failed };
+    return Result.ok({ written, skipped, failed });
   }
 
   /**
@@ -444,7 +450,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     }
   }
 
-  async planBatchExport(scope: VfsScope, logicalPaths: readonly string[]): Promise<BatchExportPlan> {
+  async planBatchExport(scope: VfsScope, logicalPaths: readonly string[]): Promise<Result<BatchExportPlan, AppError>> {
     const files: Array<{ relativePath: string; content: string }> = [];
     const mkdirPaths: string[] = [];
     const skipped: BatchExportSkip[] = [];
@@ -455,19 +461,24 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
 
     for (const raw of logicalPaths) {
       const resolved = resolveLogicalPath(raw);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       const logical = resolved.value;
       const allowedExport = validateLogicalPath(scope, logical);
-      if (!allowedExport.ok) throw allowedExport.error;
+      if (!allowedExport.ok) return Result.err(allowedExport.error);
       const existing = await this.repo.findByPath(sk, logical);
+      if (!existing.ok) return Result.err(existing.error);
 
-      if (existing != null && existing.entryKind === "file") {
+      if (existing.value != null && existing.value.entryKind === "file") {
         // 锚点取**父目录**：多选时带一层父目录名，避免同名文件（中文工程常见
         // 「同名卷章」）被 `seenFileRels` 静默丢弃。单选时与旧的 basename 形态一致。
-        const fileRel = exportRelativePath(logical, parentLogicalOf(logical), selectionCount);
+        const anchorResult = parentLogicalOf(logical);
+        if (!anchorResult.ok) return Result.err(anchorResult.error);
+        const fileRelResult = exportRelativePath(logical, anchorResult.value, selectionCount);
+        if (!fileRelResult.ok) return Result.err(fileRelResult.error);
+        const fileRel = fileRelResult.value;
         if (fileRel.length > 0 && !seenFileRels.has(fileRel)) {
           seenFileRels.add(fileRel);
-          files.push({ relativePath: fileRel, content: existing.content });
+          files.push({ relativePath: fileRel, content: existing.value.content });
         } else if (fileRel.length > 0) {
           // 撞名：报告而不是静默丢（锚点改父目录消不掉「文件与目录同选」那一类碰撞）
           skipped.push({
@@ -479,10 +490,14 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
 
       // 目录或隐式前缀：递归文件 + 显式空目录
-      const rows = await this.repo.scanContents(sk, logical);
+      const rowsResult = await this.repo.scanContents(sk, logical);
+      if (!rowsResult.ok) return Result.err(rowsResult.error);
+      const rows = rowsResult.value;
       for (const row of rows) {
         const childLogical = row.path;
-        const rel = exportRelativePath(childLogical, logical, selectionCount);
+        const relResult = exportRelativePath(childLogical, logical, selectionCount);
+        if (!relResult.ok) return Result.err(relResult.error);
+        const rel = relResult.value;
         if (rel.length === 0) {
           continue;
         }
@@ -503,7 +518,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
           continue;
         }
         const childLogical = entry.path;
-        const rel = exportRelativePath(childLogical, logical, selectionCount);
+        const relResult = exportRelativePath(childLogical, logical, selectionCount);
+        if (!relResult.ok) return Result.err(relResult.error);
+        const rel = relResult.value;
         if (rel.length === 0 || seenDirRels.has(rel)) {
           continue;
         }
@@ -519,6 +536,6 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       })
       .sort();
 
-    return { files, mkdirPaths: filteredMkdirs, skipped };
+    return Result.ok({ files, mkdirPaths: filteredMkdirs, skipped });
   }
 }

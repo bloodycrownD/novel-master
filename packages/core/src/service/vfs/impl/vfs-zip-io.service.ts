@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
@@ -60,7 +61,8 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath / 命名 `Result` → service 异常通道转码点——失败原样上抛，由调用链端点 catch 收口。
+ * 事务回调内解包（总纲 §五例外 2）：本函数只在 `import` 段 B0 的
+ * `conn.transaction` 回调内调用，parentCheck / repo 写入失败靠抛错回滚。
  */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
@@ -70,11 +72,13 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
   const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
   if (!parentCheck.ok) throw parentCheck.error;
   const existing = await repo.findByPath(sk, logical);
-  if (existing == null) {
-    await repo.insertDirectory(sk, logical);
+  if (!existing.ok) throw existing.error;
+  if (existing.value == null) {
+    const inserted = await repo.insertDirectory(sk, logical);
+    if (!inserted.ok) throw inserted.error;
     return;
   }
-  if (existing.entryKind !== "directory") {
+  if (existing.value.entryKind !== "directory") {
     throw new AppError("VFS_NOT_A_DIRECTORY", {path: logical, detail: `Not a directory: ${logical}`});
   }
 }
@@ -101,11 +105,13 @@ function wrapImportError(error: unknown, committedShards?: number, failedShard?:
   return new AppError("VFS_ZIP_IMPORT_FAILED", {detail: base});
 }
 
-async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
+async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<Result<void, AppError>> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
-  if (existing != null && existing.entryKind === "file") {
-    throw new AppError("VFS_ZIP_INVALID_PATH", {detail: `ZIP target path is a file, not a directory: ${directoryPath}`});
+  if (!existing.ok) return Result.err(existing.error);
+  if (existing.value != null && existing.value.entryKind === "file") {
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", {detail: `ZIP target path is a file, not a directory: ${directoryPath}`}));
   }
+  return Result.ok(undefined);
 }
 
 export type DefaultVfsZipIoServiceOptions = {
@@ -134,17 +140,22 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     this.sessionKkv = options.sessionKkv;
   }
 
-  async export(scope: VfsScope, options?: ZipPathOptions): Promise<Uint8Array> {
-    const directoryPath = resolveZipDirectoryPath(options?.directoryPath);
-    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+  async export(scope: VfsScope, options?: ZipPathOptions): Promise<Result<Uint8Array, AppError>> {
+    const directoryPathResult = resolveZipDirectoryPath(options?.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
+    const dirCheck = await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    if (!dirCheck.ok) return Result.err(dirCheck.error);
     const sk = scopeKey(scope);
-    const rows = await this.repo.scanContents(sk, directoryPath);
+    const rowsResult = await this.repo.scanContents(sk, directoryPath);
+    if (!rowsResult.ok) return Result.err(rowsResult.error);
+    const rows = rowsResult.value;
     const zipFiles = new Map<string, string>();
 
     for (const row of rows) {
       // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
       const entryNameResult = zipEntryNameRelativeToDirectory(row.path, directoryPath);
-      if (!entryNameResult.ok) throw entryNameResult.error;
+      if (!entryNameResult.ok) return Result.err(entryNameResult.error);
       const entryName = entryNameResult.value;
       if (entryName.length === 0) {
         continue;
@@ -162,26 +173,29 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         continue;
       }
       const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
-      if (!directoryNameResult.ok) throw directoryNameResult.error;
+      if (!directoryNameResult.ok) return Result.err(directoryNameResult.error);
       directoryZipNames.push(directoryNameResult.value);
     }
 
-    return buildVfsZip(zipFiles, directoryZipNames);
+    return Result.ok(buildVfsZip(zipFiles, directoryZipNames));
   }
 
-  async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<void> {
+  async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<Result<void, AppError>> {
     if (options.confirmed !== true) {
       throw new AppError("VFS_ZIP_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"});
     }
 
-    const directoryPath = resolveZipDirectoryPath(options.directoryPath);
-    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+    const directoryPath = directoryPathResult.value;
+    const dirCheck = await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+    if (!dirCheck.ok) return Result.err(dirCheck.error);
 
     const rawEntriesResult = parseVfsZip(zipBytes);
-    if (!rawEntriesResult.ok) throw rawEntriesResult.error;
+    if (!rawEntriesResult.ok) return Result.err(rawEntriesResult.error);
     // Phase A：路径/UTF-8/带域根前缀判定 — 任何 delete 之前
     const validated = validateVfsZipEntries(scope, rawEntriesResult.value, directoryPath);
-    if (!validated.ok) throw validated.error;
+    if (!validated.ok) return Result.err(validated.error);
     const { files, directories } = validated.value;
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -241,6 +255,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
               throw new Error("test import failure");
             }
             const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
+            // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
             if (!parentCheck.ok) throw parentCheck.error;
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
@@ -298,5 +313,6 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     if (this.sessionKkv && scope.kind === "session") {
       await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
     }
+    return Result.ok(undefined);
   }
 }

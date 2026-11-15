@@ -87,7 +87,7 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       path: "/draft.md",
       content: "session-file-content",
     });
-    assert.equal(chatWrite.ok, true);
+    assert.equal(chatWrite.ok, true, chatWrite.ok ? "" : JSON.stringify(chatWrite.error));
   });
 
   after(async () => {
@@ -169,10 +169,14 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
       const originalListTree = svc.listTree.bind(svc);
       svc.listTree = async (physicalPath: string) => {
         if (physicalPath === "/meta") {
-          throw new AppError("VFS_NOT_FOUND", {
-            path: physicalPath,
-            detail: `Path not found: ${physicalPath}`,
-          });
+          // 错误通道迁移四期：listTree 已知失败沿 Result.err（不再 throw）。
+          return {
+            ok: false as const,
+            error: new AppError("VFS_NOT_FOUND", {
+              path: physicalPath,
+              detail: `Path not found: ${physicalPath}`,
+            }),
+          };
         }
         return originalListTree(physicalPath);
       };

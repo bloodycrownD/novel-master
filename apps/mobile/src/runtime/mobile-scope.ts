@@ -4,6 +4,7 @@
  * @module runtime/mobile-scope
  */
 
+import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from './types';
 
 export interface MobileScopeSnapshot {
@@ -13,13 +14,18 @@ export interface MobileScopeSnapshot {
 
 /**
  * Loads persisted pointers and reconciles against project/session lists.
-  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛（switchToProject 同款）——core Result → 端内异常通道转码边界，UI 调用链 catch → formatError → toast 收口。
+ * 失败通道（错误通道迁移四期）：持久层 `Result` 失败沿返回值接力，调用方
+ * （novel-master-context bootstrap / refreshScope）失败走错误屏或静默保持。
  */
 export async function loadMobileScope(
   runtime: MobileNovelMasterRuntime,
-): Promise<MobileScopeSnapshot> {
-  let projectId = await runtime.state.getCurrentProjectId();
-  let sessionId = await runtime.state.getCurrentSessionId();
+): Promise<Result<MobileScopeSnapshot, AppError>> {
+  const currentProject = await runtime.state.getCurrentProjectId();
+  if (!currentProject.ok) return Result.err(currentProject.error);
+  let projectId = currentProject.value;
+  const currentSession = await runtime.state.getCurrentSessionId();
+  if (!currentSession.ok) return Result.err(currentSession.error);
+  let sessionId = currentSession.value;
 
   const projects = await runtime.projects.list();
   if (projectId != null && !projects.some(p => p.id === projectId)) {
@@ -36,11 +42,11 @@ export async function loadMobileScope(
     if (sessionId != null) {
       await runtime.state.resetCurrentSessionId();
     }
-    return {projectId: undefined, sessionId: undefined};
+    return Result.ok({projectId: undefined, sessionId: undefined});
   }
 
   const sessions = await runtime.sessions.listByProject(projectId);
-  if (!sessions.ok) throw sessions.error;
+  if (!sessions.ok) return Result.err(sessions.error);
   if (sessionId != null && !sessions.value.some(s => s.id === sessionId)) {
     sessionId = undefined;
     await runtime.state.resetCurrentSessionId();
@@ -51,24 +57,24 @@ export async function loadMobileScope(
     await runtime.state.setCurrentSessionId(nextSessionId);
   }
 
-  return {projectId, sessionId};
+  return Result.ok({projectId, sessionId});
 }
 
 /** Persists and returns updated project scope (clears session when project changes). */
 export async function setMobileProject(
   runtime: MobileNovelMasterRuntime,
   projectId: string,
-): Promise<MobileScopeSnapshot> {
+): Promise<Result<MobileScopeSnapshot, AppError>> {
   await runtime.state.setCurrentProjectId(projectId);
   const sessions = await runtime.sessions.listByProject(projectId);
-  if (!sessions.ok) throw sessions.error;
+  if (!sessions.ok) return Result.err(sessions.error);
   const sessionId = sessions.value[0]?.id;
   if (sessionId != null) {
     await runtime.state.setCurrentSessionId(sessionId);
   } else {
     await runtime.state.resetCurrentSessionId();
   }
-  return {projectId, sessionId};
+  return Result.ok({projectId, sessionId});
 }
 
 /** Persists session pointer for the current project. */

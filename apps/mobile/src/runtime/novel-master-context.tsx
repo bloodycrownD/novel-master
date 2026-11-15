@@ -258,6 +258,17 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         error: err,
       });
     };
+    // bootstrap 失败统一终端（错误通道迁移四期）：装配/读偏好/scope 装载的
+    // Result.err 与平台 reject 共用——错误屏 + reject 等待者。
+    const failBootstrap = (err: unknown): void => {
+      if (!cancelled) {
+        setRuntime(undefined);
+        setAppUi(undefined);
+        setError(formatBootstrapError(err));
+        setStatus('error');
+      }
+      rejectRebootWaiter(err);
+    };
 
     (async () => {
       if (bootToken > 0) {
@@ -268,7 +279,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         runtimeRef.current?.sessionStreamUnitManager.dispose();
         await closeMobileConnection();
       }
-      const rt = await createMobileNovelMasterRuntime();
+      const rtResult = await createMobileNovelMasterRuntime();
+      if (!rtResult.ok) {
+        failBootstrap(rtResult.error);
+        return;
+      }
+      const rt = rtResult.value;
       // 装配契约：runtime 创建完成后实例化 Manager 并挂到 runtime 上
       // （Manager 生命周期跟随 runtime；桥在下方 ready 后的 effect 注入）。
       // 构造注入 core 的 session_run_state 服务——持久化开跑（写通/水合/
@@ -285,11 +301,19 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         }),
       });
       const loaded = await loadMobileScope(runtime);
+      if (!loaded.ok) {
+        failBootstrap(loaded.error);
+        return;
+      }
       const ui = createAppUiPreferences(runtime.kkv);
       const epoch = await syncAppVersionForRichRender(
         ui,
         mobilePackage.version,
       );
+      if (!epoch.ok) {
+        failBootstrap(epoch.error);
+        return;
+      }
       if (cancelled) {
         // svc/B-2：此刻 Manager 已构造（事件订阅、AppState 订阅、通知点按
         // 注册均已生效），直接 return 会泄漏——对齐 bootToken>0 分支的
@@ -304,19 +328,11 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       }
       setRuntime(runtime);
       setAppUi(ui);
-      setRichRenderEpoch(epoch);
-      setScope(loaded);
+      setRichRenderEpoch(epoch.value);
+      setScope(loaded.value);
       setStatus('ready');
       resolveRebootWaiter(runtime);
-    })().catch(err => {
-      if (!cancelled) {
-        setRuntime(undefined);
-        setAppUi(undefined);
-        setError(formatBootstrapError(err));
-        setStatus('error');
-      }
-      rejectRebootWaiter(err);
-    });
+    })().catch(failBootstrap);
 
     return () => {
       cancelled = true;
@@ -360,7 +376,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       return;
     }
     const loaded = await loadMobileScope(runtime);
-    setScope(loaded);
+    // 失败保持现有 scope（错误通道迁移四期：旧通道为无 catch 的 rejection，
+    // 同为静默不更新）。
+    if (!loaded.ok) {
+      return;
+    }
+    setScope(loaded.value);
   }, [runtime]);
 
   // 实时 token 估算的编码提示预热（stream-metrics-native ②）：会话切换时
@@ -379,7 +400,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         return;
       }
       const next = await setMobileProject(runtime, projectId);
-      setScope(next);
+      // 失败保持现有 scope（错误通道迁移四期：旧通道为无 catch 的 rejection，
+      // 同为静默不更新）。
+      if (!next.ok) {
+        return;
+      }
+      setScope(next.value);
     },
     [runtime],
   );

@@ -9,6 +9,8 @@ import {
   APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
   APP_UI_KEY_UPDATES_SNOOZE_UNTIL,
 } from './app-ui-keys';
+import type {Result} from '@novel-master/core/errors';
+import type {AppError} from '@novel-master/core/errors';
 import {readBoolPref, writeBoolPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 import type {UpdateCheckData} from '../update-check/types';
@@ -29,7 +31,7 @@ export async function writeUpdatesAutoCheck(
 
 export async function readDismissedVersion(
   appUi: AppUiPreferences,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_DISMISSED_VERSION);
 }
 
@@ -42,19 +44,19 @@ export async function writeDismissedVersion(
 
 export async function readLastCheckAt(
   appUi: AppUiPreferences,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_AT);
 }
 
 export async function readLastCheckStatus(
   appUi: AppUiPreferences,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS);
 }
 
 export async function readLastCheckRemoteVersion(
   appUi: AppUiPreferences,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION);
 }
 
@@ -71,7 +73,7 @@ export function isSnoozed(snoozeUntil: string | undefined): boolean {
 
 export async function readSnoozeUntil(
   appUi: AppUiPreferences,
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
 }
 

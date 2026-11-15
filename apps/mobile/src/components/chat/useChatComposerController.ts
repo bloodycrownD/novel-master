@@ -467,10 +467,12 @@ export function useChatComposerController({
     let cancelled = false;
     void (async () => {
       const rt = runtimeRef.current;
-      try {
-        await hydrateChatComposerDraftFromDb(sessionId, rt.sessions);
-      } catch {
-        // 草稿水化失败：沿用内存缓存里的初值，不阻断 dock 渲染
+      // 草稿水化失败：沿用内存缓存里的初值，不阻断 dock 渲染
+      const hydrated = await hydrateChatComposerDraftFromDb(
+        sessionId,
+        rt.sessions,
+      );
+      if (!hydrated.ok) {
         return;
       }
       if (cancelled) {
@@ -606,7 +608,14 @@ export function useChatComposerController({
       };
 
       try {
-        const stream = await runtime.preferences.getLlmStreamEnabled();
+        const streamPref = await runtime.preferences.getLlmStreamEnabled();
+        if (!streamPref.ok) {
+          // 偏好读取失败（错误通道迁移四期）：run 未受理，与本地异常同终端——
+          // 反馈错误、不影响单元投影。
+          setError(formatError(streamPref.error));
+          return;
+        }
+        const stream = streamPref.value;
         timingLog('pref-read done');
         const annotateDrafts = chatAnnotateDraftStore.list(sessionId);
         // 门禁由 manager 的 per-session 单元拒绝（返回明确错误），run 本体

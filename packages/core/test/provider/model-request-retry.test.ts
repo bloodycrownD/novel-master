@@ -9,7 +9,6 @@ import type { SavedModelRepository } from "../../src/domain/provider/repositorie
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
 import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
-import { LlmStreamTimeoutError } from "../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 
 const providerRepo: ProviderRepository = {
   list: async () => [],
@@ -252,7 +251,7 @@ describe("DefaultModelRequestService retry", () => {
         calls += 1;
         if (calls < 3) {
           // 传输层首字超时：无任何输出、无副作用，应与 429/5xx 同列可重试
-          throw new LlmStreamTimeoutError("first-chunk", 120_000);
+          throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "first-chunk", timeoutMs: 120_000, detail: "LLM stream timed out after 120000ms waiting for the first chunk"});
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -278,7 +277,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         // 流中断：已有部分输出，不重试（避免重复输出/重复计费）
-        throw new LlmStreamTimeoutError("idle", 90_000);
+        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
       },
     };
     const svc = new DefaultModelRequestService({
@@ -292,7 +291,7 @@ describe("DefaultModelRequestService retry", () => {
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
       (error: unknown) =>
-        error instanceof LlmStreamTimeoutError && error.phase === "idle",
+        isAppError(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
     );
     assert.equal(calls, 1, "idle 超时不应重试");
   });
@@ -404,7 +403,7 @@ describe("DefaultModelRequestService retry", () => {
   });
 
   it("T-RR-1c: 已产出的 idle 超时仍不重试（两条路径并存、归因不漂移）", async () => {
-    // 证明 §修法 5：闩锁与 `LlmStreamTimeoutError.phase` 分级**并存**而非互相顶掉。
+    // 证明 §修法 5：闩锁与 PROVIDER_STREAM_TIMEOUT details.phase 分级**并存**而非互相顶掉。
     // 若实现把 `:78-80` 改写成「先看闩锁再判 phase」，这条的失败归因会变得不可分辨。
     let calls = 0;
     const seen: string[] = [];
@@ -414,7 +413,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async (req) => {
         calls += 1;
         req.onStream?.({ type: "text-delta", text: "半句" });
-        throw new LlmStreamTimeoutError("idle", 90_000);
+        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
       },
     };
     const svc = new DefaultModelRequestService({
@@ -435,7 +434,7 @@ describe("DefaultModelRequestService retry", () => {
           },
         }),
       (error: unknown) =>
-        error instanceof LlmStreamTimeoutError && error.phase === "idle",
+        isAppError(error, "PROVIDER_STREAM_TIMEOUT") && error.details?.phase === "idle",
     );
     assert.equal(calls, 1);
     assert.equal(seen.length, 1);

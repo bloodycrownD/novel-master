@@ -18,6 +18,7 @@ import {
   releaseDesktopDbMaintenanceBusy,
 } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.ipc.cloud-sync");
@@ -27,8 +28,7 @@ export async function handleCloudSyncGetConfig(): Promise<
 > {
   try {
     const service = await getDesktopCloudSyncService();
-    const config = await service.getConfig();
-    return { ok: true, data: config };
+    return toIpcResult(await service.getConfig());
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -39,7 +39,8 @@ export async function handleCloudSyncSetConfig(
 ): Promise<IpcResult<void>> {
   try {
     const service = await getDesktopCloudSyncService();
-    await service.setConfig(req);
+    const r = await service.setConfig(req);
+    if (!r.ok) return ipcErr(formatIpcError(r.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -61,7 +62,8 @@ export async function handleCloudSyncSetEnabled(
 export async function handleCloudSyncTestConnection(): Promise<IpcResult<void>> {
   try {
     const service = await getDesktopCloudSyncService();
-    await service.testConnection();
+    const r = await service.testConnection();
+    if (!r.ok) return ipcErr(formatIpcError(r.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -74,7 +76,8 @@ export async function handleCloudSyncGetLocalStatus(): Promise<
   try {
     const service = await getDesktopCloudSyncService();
     const status = await service.getLocalStatus();
-    return { ok: true, data: status };
+    if (!status.ok) return ipcErr(formatIpcError(status.error));
+    return { ok: true, data: status.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -96,7 +99,10 @@ export async function handleCloudSyncPull(): Promise<
   acquireDesktopDbMaintenanceBusy();
   try {
     const service = await getDesktopCloudSyncService();
-    const result = await service.pull();
+    const pulled = await service.pull();
+    // 已知失败沿 Result 到达（错误通道迁移四期）；coordinator 侧故障仍走下方 catch。
+    if (!pulled.ok) return ipcErr(formatIpcError(pulled.error));
+    const result = pulled.value;
     if (result.databaseReplaced) {
       await rebootstrapDesktopRuntime();
       // 记账必须用重建后的 runtime：service 实例是 rebootstrap 之前捕获的旧代，
@@ -134,10 +140,11 @@ export async function handleCloudSyncPush(
 ): Promise<IpcResult<CloudSyncPushResult>> {
   try {
     const service = await getDesktopCloudSyncService();
-    const result = await service.push({
+    const pushed = await service.push({
       forceOverwriteRemote: req?.forceOverwriteRemote,
     });
-    return { ok: true, data: result };
+    if (!pushed.ok) return ipcErr(formatIpcError(pushed.error));
+    return { ok: true, data: pushed.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

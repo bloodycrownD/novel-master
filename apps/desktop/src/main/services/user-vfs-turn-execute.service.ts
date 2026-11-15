@@ -4,8 +4,8 @@
  * @module services/user-vfs-turn-execute.service
  */
 import { type UserVfsTurnOp } from "@novel-master/core/chat";
-
 import { type VfsScope } from "@novel-master/core/vfs";
+import { Result } from "@novel-master/core/errors";
 import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { projectComposerStatusForSession } from "./project-composer-status.service.js";
@@ -18,25 +18,24 @@ export function isSessionVfsScope(
 }
 
 /**
- * 经 userVfsTurn 执行；失败抛错供 IPC 格式化。
- * 成功后轻量 refresh：读 main 侧 annotate store 投影推送（无净 diff preview）。
+ * 经 userVfsTurn 执行；失败沿 `Result` 返回，由调用方转码（handlers/vfs.ts 各
+ * handler 的 `ipcErr(formatIpcError(...))`；vfs-batch 侧经 core BatchIngestWriter
+ * 协议落 handleVfsBatchIngestFromPaths 的 catch）。错误侧照 core port 契约保持
+ * `unknown`（`user-vfs-turn.port.ts` 的 UserVfsTurnExecuteResult：合成 tool 失败
+ * 是异构形态），转码统一走 formatIpcError。成功后轻量 refresh：读 main 侧
+ * annotate store 投影推送（无净 diff preview）。
  */
 export async function executeSessionUserVfsOp(
   rt: DesktopNovelMasterRuntime,
   sessionId: string,
   op: UserVfsTurnOp,
-): Promise<void> {
+): Promise<Result<void, unknown>> {
   const result = await rt.userVfsTurn.executeOp(sessionId, op);
-  if (!result.ok) {
-    // 解包 throw 边界：失败抛错供 IPC 格式化——4 个调用点落在 handlers/vfs.ts
-    // 各 handler 的紧邻 try/catch（formatIpcError）；vfs-batch 侧经 core
-    // BatchIngestWriter（Promise<void>）最终落 handleVfsBatchIngestFromPaths
-    // 的 catch。总纲 §1.1 点名的生产接线边界（desktop+mobile 同名镜像）。
-    throw result.error;
-  }
+  if (!result.ok) return Result.err(result.error);
   const attachments = await projectComposerStatusForSession(rt, sessionId);
   notifyComposerAttachmentsSuggestToRenderer({
     sessionId,
     attachments,
   });
+  return Result.ok(undefined);
 }

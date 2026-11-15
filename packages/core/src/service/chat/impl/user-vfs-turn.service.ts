@@ -90,10 +90,14 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       input: tool.input,
     }));
     const mutatingPaths = collectMutatingPathsFromCalls(calls);
-    const headSnapshots = await captureMutatingPathHeadSnapshots(
+    const captured = await captureMutatingPathHeadSnapshots(
       toolCtx.vfs,
       mutatingPaths
     );
+    if (!captured.ok) {
+      return { ok: false, error: captured.error };
+    }
+    const headSnapshots = captured.value;
 
     const outcomes = await this.deps.toolRunner.runParallel(calls, toolCtx);
 
@@ -113,13 +117,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         if (paths == null || paths.length === 0) {
           continue;
         }
-        try {
-          await restoreMutatingPathHeads(toolCtx.vfs, headSnapshots, paths);
-        } catch (error: unknown) {
-          if (error instanceof MutatingPathRestoreCompositeError) {
-            restoreErrors.push(...error.causes);
+        const restored = await restoreMutatingPathHeads(toolCtx.vfs, headSnapshots, paths);
+        if (!restored.ok) {
+          if (restored.error instanceof MutatingPathRestoreCompositeError) {
+            restoreErrors.push(...restored.error.causes);
           } else {
-            restoreErrors.push(error);
+            restoreErrors.push(restored.error);
           }
         }
       }

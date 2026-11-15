@@ -43,6 +43,7 @@ import {
 } from "../../runtime/agent-activity.js";
 import { createLogger } from "@novel-master/core/log";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-appended.js";
 
 const log = createLogger("desktop.ipc.agent");
@@ -104,7 +105,9 @@ export async function handleAgentListPicker(): Promise<
 > {
   try {
     const rt = await getDesktopRuntime();
-    const currentId = (await rt.state.getCurrentAgentId()) ?? undefined;
+    const currentAgent = await rt.state.getCurrentAgentId();
+    if (!currentAgent.ok) return ipcErr(formatIpcError(currentAgent.error));
+    const currentId = currentAgent.value ?? undefined;
     const ids = await rt.agentRegistry.listAgentIds();
     const rows = [];
     for (const agentId of ids) {
@@ -141,7 +144,9 @@ export async function handleModelListPicker(): Promise<
 > {
   try {
     const rt = await getDesktopRuntime();
-    const currentId = (await rt.state.getCurrentModelId()) ?? undefined;
+    const currentModel = await rt.state.getCurrentModelId();
+    if (!currentModel.ok) return ipcErr(formatIpcError(currentModel.error));
+    const currentId = currentModel.value ?? undefined;
     const providers = await rt.providers.list();
     const rows = [];
     for (const provider of providers) {
@@ -173,7 +178,7 @@ export async function handleModelSetCurrent(
       req.savedModelId,
       rt.savedModelRepo,
     );
-    if (!saved.ok) throw saved.error;
+    if (!saved.ok) return ipcErr(formatIpcError(saved.error));
     await rt.state.setCurrentModelId(saved.value.id);
     return { ok: true, data: undefined };
   } catch (err) {
@@ -436,6 +441,12 @@ export async function handleAgentRun(
         },
       },
     )
+      .then((outcome) => {
+        // 已知失败沿 Result 到达（四期门⑦）：终态事件已由 core 补发，这里只记日志。
+        if (!outcome.ok) {
+          log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: outcome.error });
+        }
+      })
       .catch((err) => {
         log.error("agent/run IPC background task failed", { sessionId, projectId: req.projectId, error: err });
       })

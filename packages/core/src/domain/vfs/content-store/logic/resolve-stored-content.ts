@@ -1,9 +1,8 @@
 /**
  * 按 SPEC「NULL content 读路径」解出明文（directory 显式分支）。
  *
- * 领域失败（active 文件双 NULL）走 `Result`（key `VFS_CONTENT_CORRUPT`），本模块
- * 不抛。端口 `VfsContentStore` 的实现在 content-store/impl（phase 1 冻结），其抛出
- * 的基础设施异常原样透传。
+ * 领域失败（active 文件双 NULL）与 ContentStore 的解码 / blob 缺失失败一并走
+ * `Result`，本模块不抛。端口 `VfsContentStore` 的实现在 content-store/impl。
  *
  * @module domain/vfs/content-store/logic/resolve-stored-content
  */
@@ -12,7 +11,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsContentStore } from "../vfs-content-store.port.js";
 
-// legacy-port: VfsContentStore — phase 2（实现仍抛旧异常，本层只透传）
+// legacy-port: VfsContentStore — phase 4（get 失败走 Result，本层透传）
 
 /** entry / revision 行上用于解正文的字段。 */
 type StoredContentFields = {
@@ -20,8 +19,8 @@ type StoredContentFields = {
   readonly contentHash: string | null;
 };
 
-/** 本模块的领域失败：active 文件正文损坏。 */
-type VfsContentError = AppError<"VFS_CONTENT_CORRUPT">;
+/** 本模块的失败载荷：active 文件正文损坏 + ContentStore 透传的解码失败。 */
+type VfsContentError = AppError;
 
 /**
  * 解出文件明文；目录不走 ContentStore，返回空串。
@@ -49,7 +48,7 @@ export async function resolveRevisionPlainContent(contentStore: VfsContentStore,
 
 async function resolveActiveFilePlainContent(contentStore: VfsContentStore, fields: StoredContentFields): Promise<Result<string, VfsContentError>> {
   if (fields.contentHash != null && fields.contentHash.length > 0) {
-    return Result.ok(await contentStore.get(fields.contentHash));
+    return contentStore.get(fields.contentHash);
   }
   if (fields.content != null) {
     // 迁移窗口 / 遗留行：读旧明文

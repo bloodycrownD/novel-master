@@ -170,7 +170,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
 
       if (!options?.skipVfsReconcile) {
-        const missing = await findMissingRevisionPointers(this.deps.revisions, this.deps.entries, plan.scope, plan.targetTree, plan.pathsNeedWrite, plan.checkpointEntryIdByPath);
+        const detected = await findMissingRevisionPointers(this.deps.revisions, this.deps.entries, plan.scope, plan.targetTree, plan.pathsNeedWrite, plan.checkpointEntryIdByPath);
+        if (!detected.ok) throw detected.error;
+        const missing = detected.value;
         if (missing.length > 0 && !options?.revisionHeadBackfill) {
           // details 保留 camelCase 数组（readRollbackRevisionBackfillMissingPaths / IPC 提取消费），模板参数才 join 成串。
           throw new AppError("SESSION_FS_ROLLBACK_REVISION_BACKFILL_REQUIRED", { descriptor: {key: "error.session_fs.rollback_revision_backfill_required", params: {missing_logical_paths: missing.join(", ")}}, missingLogicalPaths: missing, sessionId, messageId: anchorMessageId });
@@ -362,7 +364,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
     const scope: VfsScope = { kind: "session", projectId, sessionId };
 
-    const reconcileSets = await resolveReconcilePathSets(this.deps.entries, this.deps.revisions, scope, targetTree, hasDirectTargetTree, checkpointEntryIdByPath);
+    const reconciled = await resolveReconcilePathSets(this.deps.entries, this.deps.revisions, scope, targetTree, hasDirectTargetTree, checkpointEntryIdByPath);
+    if (!reconciled.ok) throw reconciled.error;
+    const reconcileSets = reconciled.value;
 
     // CD-01 第 3 步：plan 段只产出 **tail 指针反解出的删候选**，真正的删集合
     // 在事务内用 live 快照重算（见 reconcileVfsPaths / resolvePathsNeedDeleteInTransaction）。
@@ -458,7 +462,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         let entryId = entryIdByPath.get(logicalPath);
         if (entryId == null) {
           const entry = await entries.findByPath(scopeKeyStr, logicalPath);
-          entryId = entry?.entryId ?? -1;
+          if (!entry.ok) throw entry.error;
+          entryId = entry.value?.entryId ?? -1;
         }
         reconcilePairs.push({ logicalPath, entryId, version });
       }
@@ -471,7 +476,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         version: pair.version,
       }))
     );
-    const liveHashByPath = await entries.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+    const liveHashes = await entries.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
+    if (!liveHashes.ok) throw liveHashes.error;
+    const liveHashByPath = liveHashes.value;
     const prefetch = {
       entryIdByPath,
       revisionMetaByKey,
@@ -541,12 +548,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   }
 
   private async deletePathIfExists(vfs: VfsService, logicalPath: string): Promise<void> {
-    try {
-      await vfs.delete(logicalPath);
-    } catch (error) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
-        throw error;
-      }
+    const deleted = await vfs.delete(logicalPath);
+    if (!deleted.ok && !isAppError(deleted.error, "VFS_NOT_FOUND")) {
+      throw deleted.error;
     }
   }
 }

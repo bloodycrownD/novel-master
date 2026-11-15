@@ -30,7 +30,7 @@ import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.po
 import { createAgentStreamRegistry } from "@/service/agent/create-agent-stream-registry.js";
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
-import { LlmStreamTimeoutError } from "@/infra/llm-protocol/logic/llm-stream-timeout-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
 
@@ -957,7 +957,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
           firstRunSawRegistered = true;
         }
         if (calls <= 1) {
-          throw new LlmStreamTimeoutError("idle", 90_000);
+          throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
         }
         return textDoneResponse("重试成功");
       },
@@ -974,7 +974,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
 
     await assert.rejects(
       () => runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "第一次会超时", { stream: false, onStream: () => {} }),
-      (e: unknown) => e instanceof LlmStreamTimeoutError && e.phase === "idle"
+      (e: unknown) => isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"
     );
     assert.ok(firstRunSawRegistered, "第一次 run 应已执行到 model 调用");
 

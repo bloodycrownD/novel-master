@@ -102,43 +102,9 @@ export function CloudSyncProgressScreen() {
     setProgress(initialCloudSyncProgressUi(op));
 
     const run = async (): Promise<void> => {
-      try {
-        if (op === 'pull') {
-          // retryAndWait：拉取换库后必须用**重建出来的新 runtime** 记账，
-          // 旧 runtime 背后的连接已被换库关掉。retry（只 setBootToken）
-          // 拿不到新 runtime。
-          const result = await pullCloudSync(runtime, retryAndWait, {
-            onProgress: state => {
-              if (active) {
-                setProgress(state);
-              }
-            },
-          });
-          if (!active) {
-            return;
-          }
-          if (result.alreadyUpToDate) {
-            showToast('已是最新');
-          } else {
-            showToast('拉取成功，正在重新加载…');
-          }
-        } else {
-          await pushCloudSync(runtime, {
-            forceOverwriteRemote,
-            onProgress: state => {
-              if (active) {
-                setProgress(state);
-              }
-            },
-          });
-          if (!active) {
-            return;
-          }
-          showToast('推送成功');
-        }
-        runningRef.current = false;
-        navigation.goBack();
-      } catch (error) {
+      // 已知失败沿 Result.err 回来（错误通道迁移四期），与剩余异常共用同一
+      // 套失败收尾（NEED_PULL_FIRST 控制流 + toast），不再解包 throw。
+      const handleFailure = (error: unknown): void => {
         if (!active) {
           return;
         }
@@ -154,6 +120,53 @@ export function CloudSyncProgressScreen() {
         showToast(toastMessage(op === 'pull' ? '拉取失败' : '推送失败', error));
         runningRef.current = false;
         navigation.goBack();
+      };
+      try {
+        if (op === 'pull') {
+          // retryAndWait：拉取换库后必须用**重建出来的新 runtime** 记账，
+          // 旧 runtime 背后的连接已被换库关掉。retry（只 setBootToken）
+          // 拿不到新 runtime。
+          const result = await pullCloudSync(runtime, retryAndWait, {
+            onProgress: state => {
+              if (active) {
+                setProgress(state);
+              }
+            },
+          });
+          if (!result.ok) {
+            handleFailure(result.error);
+            return;
+          }
+          if (!active) {
+            return;
+          }
+          if (result.value.alreadyUpToDate) {
+            showToast('已是最新');
+          } else {
+            showToast('拉取成功，正在重新加载…');
+          }
+        } else {
+          const pushed = await pushCloudSync(runtime, {
+            forceOverwriteRemote,
+            onProgress: state => {
+              if (active) {
+                setProgress(state);
+              }
+            },
+          });
+          if (!pushed.ok) {
+            handleFailure(pushed.error);
+            return;
+          }
+          if (!active) {
+            return;
+          }
+          showToast('推送成功');
+        }
+        runningRef.current = false;
+        navigation.goBack();
+      } catch (error) {
+        handleFailure(error);
       }
     };
 

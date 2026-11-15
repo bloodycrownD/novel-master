@@ -36,6 +36,7 @@ import { utf8ByteLength } from "@/common/encoding.js";
 import { z } from "zod";
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
@@ -156,11 +157,11 @@ ${engineSection}
 
     // 引擎链解析：engineOrderV2 优先级序（显式 input.engine 时先钉该引擎，
     // 不可用则沿序顺位回落）；链空是合法常态（全关）→ 中性配置指引提示
-    //（成功输出、非错误）。无效引擎名的 Result.err 解包进 ToolError 通道。
+    //（成功输出、非错误）。无效引擎名沿 Result.err 接力（四期门⑦）。
     const chainResult = await search.resolveEngineChain(input.engine);
-    if (!chainResult.ok) throw chainResult.error;
+    if (!chainResult.ok) return Result.err(chainResult.error);
     const chain = chainResult.value;
-    if (chain.length === 0) return SEARCH_NOT_CONFIGURED_MESSAGE;
+    if (chain.length === 0) return Result.ok(SEARCH_NOT_CONFIGURED_MESSAGE);
 
     // 搜索词在 params 里（各家字段名不同：q / query / search_query）；模板占位符
     // 替换与 DuckDuckGo 兜底共用该值。条数同理：count / max_results 归一后只喂
@@ -190,6 +191,16 @@ ${engineSection}
     // attempts 轨迹分段（「bocha 失败(401)」…，成功引擎由返回处拼接）。
     const attemptParts: string[] = [];
     let success: SearchChainOutput | null = null;
+    // 单引擎失败摘要收编（已知 Err 与未知异常同口；脱敏 + 截断口径不变）。
+    const recordEngineFailure = (entry: ResolvedEngineConfig, e: unknown): void => {
+      const msg = e instanceof Error ? e.message : String(e);
+      const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
+      const code = msg.match(/error (\d{3})/i)?.[1];
+      const timeout = msg.match(/timed out after (\d+)ms/);
+      const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
+      failureLines.push(`${entry.engine}: ${safe}`);
+      attemptParts.push(`${entry.engine} 失败(${brief})`);
+    };
 
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
@@ -200,20 +211,21 @@ ${engineSection}
       if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
       try {
         const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
+        if (!response.ok) {
+          // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
+          // 尝试链中下一个引擎（钉死时仅一员，自然止）。
+          if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
+          recordEngineFailure(entry, response.error);
+          continue;
+        }
         // 降级后成功：输出携带 attempts 轨迹；链首首发成功省略该字段。
-        const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.engine} 成功`;
-        success = attempts == null ? response : { ...response, attempts };
+        const attempts = attemptParts.length === 0 ? undefined : `${attemptParts.join(" → ")} → ${response.value.engine} 成功`;
+        success = attempts == null ? response.value : { ...response.value, attempts };
         break;
       } catch (e) {
-        // 用户取消：不是引擎失败，立即终止、不走降级链（重读 ctx.signal：局部 signal 已被上面的检查收窄）。
+        // 未知异常（非 abort 的 fetch 错误 / 编程错误）：取消重判 + 同口收编为降级行。
         if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
-        const msg = e instanceof Error ? e.message : String(e);
-        const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
-        const code = msg.match(/error (\d{3})/i)?.[1];
-        const timeout = msg.match(/timed out after (\d+)ms/);
-        const brief = code ?? (timeout?.[1] ? `超时 ${timeout[1]}ms` : msg.slice(0, 40) || "未知错误");
-        failureLines.push(`${entry.engine}: ${safe}`);
-        attemptParts.push(`${entry.engine} 失败(${brief})`);
+        recordEngineFailure(entry, e);
         // 循环继续：尝试链中下一个引擎（钉死时仅一员，自然止）。
       }
     }
@@ -232,15 +244,15 @@ ${engineSection}
     if (utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
       try {
         const sink = await sinkOversizedOutput(ctx, { tool: SEARCH_TOOL_NAME, content: serialized, contentType: "application/json" });
-        return {
+        return Result.ok({
           engine: success.engine,
           savedPath: sink.savedPath,
           message: sink.message,
-        };
+        });
       } catch (error) {
         log.debug("超预算落盘失败，回落完整输出", { error });
       }
     }
-    return success;
+    return Result.ok(success);
   },
 };

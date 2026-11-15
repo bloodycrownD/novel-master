@@ -46,13 +46,13 @@ function validatePolicy(input: ModelRetryPolicy): Result<void, AppError<"PROVIDE
 export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
   constructor(private readonly kkv: KkvService) {}
 
-  async getPolicy(): Promise<ModelRetryPolicy | null> {
+  async getPolicy(): Promise<Result<ModelRetryPolicy | null, AppError>> {
     const raw = await this.kkv.get(MODULE, KEY);
     if (!raw.ok) {
       if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-        return null;
+        return Result.ok(null);
       }
-      throw raw.error;
+      return Result.err(raw.error);
     }
     try {
       const parsed = JSON.parse(raw.value) as Partial<ModelRetryPolicy>;
@@ -64,34 +64,25 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
       };
       const valid = validatePolicy(policy);
       // Treat invalid stored values as "unset" to avoid bricking requests.
-      return valid.ok ? policy : null;
+      return Result.ok(valid.ok ? policy : null);
     } catch {
-      return null;
+      return Result.ok(null);
     }
   }
 
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：校验失败（`validatePolicy` 的
-   * `Result.err`）转回 service 异常通道，由 settings 链端点（handler / 屏幕）
-   * catch 提示；`clearPolicy` 的 KKV 解包同此口径。
-   */
-  async setPolicy(policy: ModelRetryPolicy): Promise<void> {
+  /** 校验失败（`validatePolicy` 的 `Result.err`）原样接力，由上层决定提示。 */
+  async setPolicy(policy: ModelRetryPolicy): Promise<Result<void, AppError>> {
     const valid = validatePolicy(policy);
-    if (!valid.ok) {
-      throw valid.error;
-    }
+    if (!valid.ok) return Result.err(valid.error);
     // WHY: serialized config must be stable across runtimes (CLI/mobile); JSON is the boundary.
     await this.kkv.set(MODULE, KEY, JSON.stringify(policy));
+    return Result.ok(undefined);
   }
 
-  /** 解包 throw 边界（同 {@link ModelRetryPolicyService.setPolicy}）：`KKV_NOT_FOUND` 幂等忽略。 */
-  async clearPolicy(): Promise<void> {
+  /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */
+  async clearPolicy(): Promise<Result<void, AppError>> {
     const deleted = await this.kkv.delete(MODULE, KEY);
-    if (!deleted.ok) {
-      if (isAppError(deleted.error, "KKV_NOT_FOUND")) {
-        return;
-      }
-      throw deleted.error;
-    }
+    if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;
+    return Result.ok(undefined);
   }
 }

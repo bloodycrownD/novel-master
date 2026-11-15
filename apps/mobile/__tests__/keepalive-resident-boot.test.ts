@@ -18,9 +18,12 @@ import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 /** 内存 KKV 形状的 appUi（照 message-notification-pref.test.ts 的模式）。 */
 function appUiWith(raw: Record<string, string | undefined>): AppUiPreferences {
   return {
-    get: jest.fn(async (key: string) => raw[key]),
+    get: jest.fn(async (key: string) => ({
+      ok: true as const,
+      value: raw[key],
+    })),
     set: jest.fn(async () => undefined),
-    delete: jest.fn(async () => undefined),
+    delete: jest.fn(async () => ({ok: true as const, value: undefined})),
     listKeys: jest.fn(async () => []),
   };
 }

@@ -26,6 +26,7 @@ import { z } from "zod";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
@@ -288,9 +289,9 @@ action 说明：
     }),
   ]),
   /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：工具执行闭包内 `Result` 失败上抛（readSkillFile/editSkillFile/writeSkillFile 同款），由 tool-runner 框架级统一收口。
+   * 已知失败走返回值通道（四期门⑦）：service `Result` 失败 `return r` 接力，tool-runner 框架级统一收口。
    */
-  async run(input, ctx): Promise<SkillToolOutput> {
+  async run(input, ctx): Promise<Result<SkillToolOutput, AppError>> {
     const skills = ctx.skills;
     if (skills == null) {
       throw new AppError("TOOL_FAILED", {toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）"});
@@ -301,10 +302,10 @@ action 说明：
       case "load": {
         const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(undefined, name, undefined, skills.projectId);
-        if (!result.ok) throw result.error;
+        if (!result.ok) return Result.err(result.error);
         // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
         if (skills.referencedNames?.has(name)) {
-          return {
+          return Result.ok({
             action: "load",
             domain: result.value.domain,
             name,
@@ -314,7 +315,7 @@ action 说明：
             files: [],
             truncated: false,
             alreadyReferenced: true,
-          };
+          });
         }
         // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
         // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
@@ -325,7 +326,7 @@ action 说明：
         const files = list.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
         // v1.5.30 unref 回迁：load 不再同步 +1、不再产 contentRef 引用块
         // （alreadyReferenced 分支恒返回常量 tip，本分支恒返回全文）。
-        return {
+        return Result.ok({
           action: "load",
           domain: result.value.domain,
           name,
@@ -334,12 +335,12 @@ action 说明：
           version: result.value.version,
           files,
           truncated,
-        };
+        });
       }
       case "read": {
         const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(input.domain, name, input.path, skills.projectId);
-        if (!result.ok) throw result.error;
+        if (!result.ok) return Result.err(result.error);
         const offset = input.offset ?? 1;
         const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
         // 分页截断推导单源（见
@@ -352,7 +353,7 @@ action 说明：
           throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
-        return {
+        return Result.ok({
           action: "read",
           domain: result.value.domain,
           name,
@@ -365,7 +366,7 @@ action 说明：
           returnedLines,
           truncated,
           ...(nextOffset != null ? { nextOffset } : {}),
-        };
+        });
       }
       case "write": {
         const name = requiredField(input.name, "name");
@@ -375,9 +376,9 @@ action 说明：
         const domain = input.domain ?? "project";
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const written = await service.writeSkillFile(domain, name, input.path, content, skills.projectId);
-        if (!written.ok) throw written.error;
+        if (!written.ok) return Result.err(written.error);
         const { version } = written.value;
-        return { action: "write", domain, name, path, version };
+        return Result.ok({ action: "write", domain, name, path, version });
       }
       case "edit": {
         const name = requiredField(input.name, "name");
@@ -388,21 +389,21 @@ action 说明：
         const domain = requiredField(input.domain, "domain");
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const result = await service.editSkillFile(domain, name, input.path, { oldString, newString, replaceAll: input.replaceAll }, skills.projectId);
-        if (!result.ok) throw result.error;
-        return {
+        if (!result.ok) return Result.err(result.error);
+        return Result.ok({
           action: "edit",
           domain,
           name,
           path,
           version: result.value.version,
           replacements: result.value.replacements,
-        };
+        });
       }
       case "list": {
         if (input.domain == null) {
           // 缺省列合并视图（当前项目视角的生效清单，含禁用/覆盖标记）
           const effective = await service.effectiveSkills(skills.projectId);
-          return {
+          return Result.ok({
             action: "list",
             entries: effective.map((s) => ({
               name: s.name,
@@ -413,10 +414,10 @@ action 说明：
               ...(s.overridden ? { overridden: true } : {}),
             })),
             total: effective.length,
-          };
+          });
         }
         const items = await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId });
-        return {
+        return Result.ok({
           action: "list",
           entries: items.map((s) => ({
             name: s.name,
@@ -425,7 +426,7 @@ action 说明：
             valid: s.valid,
           })),
           total: items.length,
-        };
+        });
       }
     }
   },

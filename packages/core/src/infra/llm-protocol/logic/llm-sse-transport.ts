@@ -51,7 +51,6 @@ import {
   dispatchSseChunk,
 } from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
-import { LlmStreamTimeoutError } from "./llm-stream-timeout-error.js";
 
 const log = createLogger("llm.sse-transport");
 
@@ -75,7 +74,7 @@ export interface PostSseOptions {
  *   port——port 自带传输。
  * - 超时契约（native callTimeout 到点）：抛出 name 为 `"LlmSseTimeoutError"`
  *   或携带 `kind === "timeout"` 字段的 Error，postSse 公共层识别后映射
- *   {@link LlmStreamTimeoutError} 分级（已收数据 → idle；0 数据 →
+ *   PROVIDER_STREAM_TIMEOUT 分级（已收数据 → idle；0 数据 →
  *   first-chunk 可重试）。
  * - abort 语义走 `opts.signal`：signal abort 后 transport 应停止投递并
  *   reject（AbortError 形态或等价）；公共层超时 settle 后同样 abort 该
@@ -314,7 +313,7 @@ export function postSse(
       clearWholeCallTimer();
       resolve(value);
     };
-    // 放宽为 Error：整调用超时要以此 settle LlmStreamTimeoutError（非 ProviderError）。
+    // 放宽为 Error：整调用超时要以此 settle PROVIDER_STREAM_TIMEOUT AppError（非 ProviderError 家族旧语义）。
     const rejectOnce = (error: Error) => {
       if (settled) return;
       settled = true;
@@ -355,12 +354,13 @@ export function postSse(
         processedLength,
         bufferedBytes: bufferedBytesNow(),
       });
+      // LlmStreamTimeoutError 已退役为 AppError("PROVIDER_STREAM_TIMEOUT")：phase/timeoutMs 进 params
+      // （重试分级经 details.phase 判），detail 承载原动态 message 文案（失败链占位文案依赖它）。
+      const timeoutDetail = phase === "first-chunk"
+        ? `LLM stream timed out after ${SSE_WHOLE_CALL_TIMEOUT_MS}ms waiting for the first chunk (${detail ?? "whole-call budget"})`
+        : `LLM stream idle for ${SSE_WHOLE_CALL_TIMEOUT_MS}ms after the last chunk (${detail ?? "whole-call budget"})`;
       rejectOnce(
-        new LlmStreamTimeoutError(
-          phase,
-          SSE_WHOLE_CALL_TIMEOUT_MS,
-          detail ?? "whole-call budget"
-        )
+        new AppError("PROVIDER_STREAM_TIMEOUT", {phase, timeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS, detail: timeoutDetail})
       );
       abortStream?.();
       cleanupBranch?.();

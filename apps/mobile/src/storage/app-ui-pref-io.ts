@@ -18,13 +18,14 @@ export async function readEnumPref<T extends string>(
   if (appUi == null) {
     return fallback;
   }
-  try {
-    const raw = await appUi.get(key);
-    if (raw != null && (allowed as readonly string[]).includes(raw)) {
-      return raw as T;
-    }
-  } catch {
-    // 读失败按未配置处理，回退默认值。
+  // 读失败按未配置处理，回退默认值（错误通道迁移四期：get 走 Result）。
+  const raw = await appUi.get(key);
+  if (
+    raw.ok &&
+    raw.value != null &&
+    (allowed as readonly string[]).includes(raw.value)
+  ) {
+    return raw.value as T;
   }
   return fallback;
 }
@@ -38,16 +39,12 @@ export async function readBoolPref(
   if (appUi == null) {
     return fallback;
   }
-  try {
-    const raw = await appUi.get(key);
-    if (raw === 'true') {
-      return true;
-    }
-    if (raw === 'false') {
-      return false;
-    }
-  } catch {
-    // 读失败按未配置处理，回退默认值。
+  const raw = await appUi.get(key);
+  if (raw.ok && raw.value === 'true') {
+    return true;
+  }
+  if (raw.ok && raw.value === 'false') {
+    return false;
   }
   return fallback;
 }

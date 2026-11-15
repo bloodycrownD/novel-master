@@ -165,7 +165,7 @@ async function renderPicker(
 
 describe('AgentPickerModal 错误处理', () => {
   beforeEach(() => {
-    mockLoad.mockReset().mockResolvedValue({currentId: undefined, rows: []});
+    mockLoad.mockReset().mockResolvedValue({ok: true, value: {currentId: undefined, rows: []}});
     mockSelect.mockReset().mockResolvedValue(undefined);
     mockShowToast.mockReset();
   });
@@ -183,8 +183,11 @@ describe('AgentPickerModal 错误处理', () => {
     mockLoad
       .mockRejectedValueOnce(new Error('读档失败'))
       .mockResolvedValueOnce({
-        currentId: 'a1',
-        rows: [{agentId: 'a1', label: 'Writer'}],
+        ok: true,
+        value: {
+          currentId: 'a1',
+          rows: [{agentId: 'a1', label: 'Writer'}],
+        },
       });
     const {renderer} = await renderPicker();
     expect(json(renderer)).toContain('读档失败');
@@ -198,8 +201,11 @@ describe('AgentPickerModal 错误处理', () => {
 
   it('B-2: 选中写入失败 toast「设置失败」且不回调不关闭', async () => {
     mockLoad.mockResolvedValue({
-      currentId: 'a1',
-      rows: [{agentId: 'a1', label: 'Writer'}],
+      ok: true,
+      value: {
+        currentId: 'a1',
+        rows: [{agentId: 'a1', label: 'Writer'}],
+      },
     });
     mockSelect.mockRejectedValueOnce(new Error('写入炸了'));
     const {renderer, onClose, onSelected} = await renderPicker();
@@ -215,8 +221,11 @@ describe('AgentPickerModal 错误处理', () => {
 
   it('B-2: 写入成功才 onSelected + onClose', async () => {
     mockLoad.mockResolvedValue({
-      currentId: 'a1',
-      rows: [{agentId: 'a1', label: 'Writer'}],
+      ok: true,
+      value: {
+        currentId: 'a1',
+        rows: [{agentId: 'a1', label: 'Writer'}],
+      },
     });
     const {renderer, onClose, onSelected} = await renderPicker();
 

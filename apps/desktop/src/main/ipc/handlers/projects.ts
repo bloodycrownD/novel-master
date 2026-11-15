@@ -10,6 +10,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 
 function toDto(project: {
   id: string;
@@ -41,7 +42,7 @@ export async function handleProjectsCreate(
   try {
     const rt = await getDesktopRuntime();
     const project = await rt.projects.create(req.name);
-    if (!project.ok) throw project.error;
+    if (!project.ok) return ipcErr(formatIpcError(project.error));
     return { ok: true, data: toDto(project.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -54,7 +55,7 @@ export async function handleProjectsRename(
   try {
     const rt = await getDesktopRuntime();
     const project = await rt.projects.rename(req.id, req.name);
-    if (!project.ok) throw project.error;
+    if (!project.ok) return ipcErr(formatIpcError(project.error));
     return { ok: true, data: toDto(project.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -67,7 +68,7 @@ export async function handleProjectsDelete(
   try {
     const rt = await getDesktopRuntime();
     const deleted = await rt.projects.delete(req.id);
-    if (!deleted.ok) throw deleted.error;
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

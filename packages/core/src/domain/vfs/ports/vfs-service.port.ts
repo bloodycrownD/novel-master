@@ -12,6 +12,8 @@ import type { VfsEntryKind } from "../model/vfs-entry.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type { VfsGrepOptions } from "../logic/vfs-grep.js";
 import type { VfsContentSize } from "../model/vfs-content-size.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 export type { VfsEntryKind, VfsListEntry, VfsContentSize };
 
@@ -39,16 +41,15 @@ export type { VfsGrepMatchMode, VfsGrepOptions } from "../logic/vfs-grep.js";
  * @remarks
  * Scoping (global / project / session paths) is applied by scoped service wrappers;
  * callers inject the appropriate instance (e.g. session-scoped for agent tools).
+ * 错误通道迁移四期：路径解析 / scope 校验失败走返回值通道（`Result<T, AppError>`）；
+ * 业务错（VFS_NOT_FOUND / VFS_IS_DIRECTORY / VFS_OPERATION_UNSUPPORTED 等）仍按边界抛出。
  */
 export interface VfsService {
-  list(
-    dir: string,
-    options?: { recursive?: boolean; maxDepth?: number }
-  ): Promise<VfsListEntry[]>;
+  list(dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<Result<VfsListEntry[], AppError>>;
 
-  mkdir(path: string): Promise<void>;
+  mkdir(path: string): Promise<Result<void, AppError>>;
 
-  read(path: string): Promise<VfsReadResult>;
+  read(path: string): Promise<Result<VfsReadResult, AppError>>;
 
   /**
    * 按路径轻量探测文件 content 大小（不解正文）。
@@ -57,22 +58,17 @@ export interface VfsService {
    * 历史毒数据（巨型角色卡导入产物）在组装/渲染链上触发原生 OOM。
    * 目录行 / 路径不存在等无法探测的情形返回 `null`，由调用方回退。
    */
-  findContentSize(path: string): Promise<VfsContentSize | null>;
+  findContentSize(path: string): Promise<Result<VfsContentSize | null, AppError>>;
 
-  write(path: string, content: string): Promise<{ version: number }>;
+  write(path: string, content: string): Promise<Result<{ version: number }, AppError>>;
 
-  replace(
-    path: string,
-    oldString: string,
-    newString: string,
-    options?: { replaceAll?: boolean }
-  ): Promise<{ version: number; replacements: number }>;
+  replace(path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>>;
 
-  glob(pattern: string, options?: { cwd?: string }): Promise<string[]>;
+  glob(pattern: string, options?: { cwd?: string }): Promise<Result<string[], AppError>>;
 
-  grep(pattern: string, options?: VfsGrepOptions): Promise<VfsGrepMatch[]>;
+  grep(pattern: string, options?: VfsGrepOptions): Promise<Result<VfsGrepMatch[], AppError>>;
 
-  delete(path: string, options?: { recursive?: boolean }): Promise<void>;
+  delete(path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>>;
 
   /**
    * 失败补偿：将 live head 拨回指定 revision，不 append、不 bump。
@@ -81,12 +77,12 @@ export interface VfsService {
    * revision 缺失或 `status='deleted'` 时明确抛错。
    * live entry 不存在时按该 revision 重建（含父目录），禁止走 `write` 注水。
    */
-  resetHeadToVersion(path: string, version: number): Promise<void>;
+  resetHeadToVersion(path: string, version: number): Promise<Result<void, AppError>>;
 
   /**
    * 失败补偿：物理删除 entry（及约定子树），不 append `deleted` 墓碑 revision。
    */
-  hardDelete(path: string, options?: { recursive?: boolean }): Promise<void>;
+  hardDelete(path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>>;
 
   /**
    * 单文件重命名/移动（单事务 UPDATE entry_path，不写 revision/checkpoint）。
@@ -99,11 +95,7 @@ export interface VfsService {
    * @throws 目标路径已存在时抛 ALREADY_EXISTS（需调用方先校验或传 options.overwrite）
    * @throws `DefaultVfsService` 下抛 unsupported
    */
-  renamePath(
-    from: string,
-    to: string,
-    options?: { overwrite?: boolean }
-  ): Promise<void>;
+  renamePath(from: string, to: string, options?: { overwrite?: boolean }): Promise<Result<void, AppError>>;
 
   /**
    * 目录前缀批量重命名（单事务 UPDATE 全部子路径，不写 revision/checkpoint）。
@@ -115,5 +107,5 @@ export interface VfsService {
    * @throws 旧目录不存在时抛 NOT_FOUND
    * @throws `DefaultVfsService` 下抛 unsupported
    */
-  renamePrefix(oldDir: string, newDir: string): Promise<void>;
+  renamePrefix(oldDir: string, newDir: string): Promise<Result<void, AppError>>;
 }

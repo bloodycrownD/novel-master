@@ -25,11 +25,12 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
+import { toIpcResult } from "../ipc-result.js";
 
 export async function handleSearchGetConfig(): Promise<IpcResult<SearchConfigDto>> {
   try {
     const rt = await getDesktopRuntime();
-    return { ok: true, data: await rt.searchConfig.readConfig() };
+    return toIpcResult(await rt.searchConfig.readConfig());
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -38,8 +39,7 @@ export async function handleSearchGetConfig(): Promise<IpcResult<SearchConfigDto
 export async function handleSearchSaveEngineKey(req: SearchSaveEngineKeyRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.saveEngineKey(req.engineId, req.apiKey);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.saveEngineKey(req.engineId, req.apiKey));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -48,8 +48,7 @@ export async function handleSearchSaveEngineKey(req: SearchSaveEngineKeyRequest)
 export async function handleSearchClearEngineKey(req: SearchClearEngineKeyRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.clearEngineKey(req.engineId);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.clearEngineKey(req.engineId));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -58,8 +57,7 @@ export async function handleSearchClearEngineKey(req: SearchClearEngineKeyReques
 export async function handleSearchSetEnabled(req: SearchSetEnabledRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.setEnabled(req.engineId, req.enabled);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.setEnabled(req.engineId, req.enabled));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -68,9 +66,8 @@ export async function handleSearchSetEnabled(req: SearchSetEnabledRequest): Prom
 export async function handleSearchSetEngineBaseUrl(req: SearchSetEngineBaseUrlRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 空串 = 清除；非法 URL 形状由 core normalizeEngineBaseUrl 抛错回传
-    await rt.searchConfig.setEngineBaseUrl(req.engineId, req.baseUrl);
-    return { ok: true, data: undefined };
+    // 空串 = 清除；非法 URL 形状由 core 校验后收进 Err（四期门⑦）
+    return toIpcResult(await rt.searchConfig.setEngineBaseUrl(req.engineId, req.baseUrl));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -79,9 +76,8 @@ export async function handleSearchSetEngineBaseUrl(req: SearchSetEngineBaseUrlRe
 export async function handleSearchSetEngineOrder(req: SearchSetEngineOrderRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // 合法性校验在 core setEngineOrder 内（未知 id / 重复项抛错经 IpcResult 回传）
-    await rt.searchConfig.setEngineOrder(req.engineOrder);
-    return { ok: true, data: undefined };
+    // 合法性校验在 core setEngineOrder 内（未知 id / 重复项收进 Err 经 IpcResult 回传）
+    return toIpcResult(await rt.searchConfig.setEngineOrder(req.engineOrder));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -90,8 +86,7 @@ export async function handleSearchSetEngineOrder(req: SearchSetEngineOrderReques
 export async function handleSearchCreateCustomEngine(req: SearchCreateCustomEngineRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.createCustomEngine(req);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.createCustomEngine(req));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -101,8 +96,7 @@ export async function handleSearchUpdateCustomEngine(req: SearchUpdateCustomEngi
   try {
     const rt = await getDesktopRuntime();
     const { engineId, ...input } = req;
-    await rt.searchConfig.updateCustomEngine(engineId, input);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.updateCustomEngine(engineId, input));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -111,8 +105,7 @@ export async function handleSearchUpdateCustomEngine(req: SearchUpdateCustomEngi
 export async function handleSearchDeleteCustomEngine(req: SearchDeleteCustomEngineRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.deleteCustomEngine(req.engineId);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.deleteCustomEngine(req.engineId));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -121,8 +114,7 @@ export async function handleSearchDeleteCustomEngine(req: SearchDeleteCustomEngi
 export async function handleSearchUpdatePresetOverride(req: SearchUpdatePresetOverrideRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.updatePresetOverride(req.engineId, req.patch);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.updatePresetOverride(req.engineId, req.patch));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -131,8 +123,7 @@ export async function handleSearchUpdatePresetOverride(req: SearchUpdatePresetOv
 export async function handleSearchResetPresetOverride(req: SearchResetPresetOverrideRequest): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.searchConfig.resetPresetOverride(req.engineId);
-    return { ok: true, data: undefined };
+    return toIpcResult(await rt.searchConfig.resetPresetOverride(req.engineId));
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

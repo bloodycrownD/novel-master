@@ -59,7 +59,8 @@ const mockRuntime = {
     list: mockProvidersList,
   },
   savedModelRepo: {
-    listByProvider: mockListByProvider,
+    // 错误通道迁移四期：listByProvider 走 Result（screen 侧 !ok 回退空选项）。
+    listByProvider: (...args: unknown[]) => wireOk(mockListByProvider, ...args),
   },
   state: {
     getCurrentModelId: jest.fn(async () => null),

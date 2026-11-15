@@ -68,7 +68,7 @@ import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
 import { assembleAgentRunnerDeps } from "./assemble-agent-runner-deps.js";
-import { AgentRunResolveError, resolveApplicationModelIdForRun, type AgentRunRuntimePort } from "./agent-run-shared.js";
+import { AGENT_RUN_RESOLVE_KEYS, resolveApplicationModelIdForRun, type AgentRunRuntimePort } from "./agent-run-shared.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 import { createLogger } from "@/infra/log/logger.js";
 
@@ -217,17 +217,21 @@ export async function assembleSkillsToolContext(
  * 就绪）∩ 按 engineOrderV2 序；paramHint 不限长，装配期原样透传（v3 起已
  * 废除「保存拒绝 + 装配期截断 500」双道限长，保存路径只扫密钥不扫长度）。
  *
- * 装配失败降级：`readConfig` 抛错 → 空快照 + 一条 warn，search 工具照旧
- * 装配（引擎链解析在 run 内自会报错），不让搜索配置读取失败击穿整个
- * agent turn。
+ * 装配失败降级：`readConfig` 的 Err（四期门⑦沿返回值到达）→ 空快照 +
+ * 一条 warn，search 工具照旧装配（引擎链解析在 run 内自会报错），不让
+ * 搜索配置读取失败击穿整个 agent turn。
  */
 // nm-style: keep-public — 19 处测试直接 import 锁装配期快照口径（本片禁改测试）；生产侧主 / 子两个装配点直接调用。
 export async function assembleSearchToolContext(store: SearchConfigStore): Promise<BuiltinToolSearchContext> {
   let engineSnapshot: BuiltinToolSearchContext["engineSnapshot"] = [];
-  try {
-    const config = await store.readConfig();
-    const runnable = new Set(config.canRun);
-    engineSnapshot = config.engines
+  // 已知失败沿 Result 到达（四期门⑦）：读取失败降级空快照 + warn，search
+  // 工具照旧装配（引擎链解析在 run 内自会报错），不让配置读取失败击穿 turn。
+  const config = await store.readConfig();
+  if (!config.ok) {
+    searchLog.warn("读取搜索配置失败，search 工具描述快照降级为空", { error: config.error });
+  } else {
+    const runnable = new Set(config.value.canRun);
+    engineSnapshot = config.value.engines
       .filter((engine) => runnable.has(engine.id))
       .map((engine) => ({
         id: engine.id,
@@ -236,12 +240,10 @@ export async function assembleSearchToolContext(store: SearchConfigStore): Promi
       }));
     // 排障插桩（正式包也可观测）：装配期读模型的逐引擎状态 + canRun + 快照。
     searchLog.info("搜索上下文装配", {
-      engines: config.engines.map((engine) => ({ id: engine.id, enabled: engine.enabled, needsKey: engine.needsKey, hasKey: engine.hasKey, needsBaseUrl: engine.needsBaseUrl })),
-      canRun: config.canRun,
+      engines: config.value.engines.map((engine) => ({ id: engine.id, enabled: engine.enabled, needsKey: engine.needsKey, hasKey: engine.hasKey, needsBaseUrl: engine.needsBaseUrl })),
+      canRun: config.value.canRun,
       snapshot: engineSnapshot.map((engine) => engine.id),
     });
-  } catch (error) {
-    searchLog.warn("读取搜索配置失败，search 工具描述快照降级为空", { error });
   }
   return {
     resolveEngineChain: (inputEngine) => store.resolveEngineChain(inputEngine),
@@ -337,7 +339,7 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
-    if (error instanceof AgentRunResolveError) {
+    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
       throw new AgentTurnError(error.message);
     }
     throw error;
@@ -356,10 +358,11 @@ type ChildModelIds = {
  * 不走 workspace fallback；主 / 子两个装配点共用同一条校验，error key 由调用点给。
  * 闭包调用点按边界转 `throw`（`task` 工具的 run 是抛错边界）。
  */
-function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, workspaceModelId: string, missingKey: CoreMessageKey): Result<ChildModelIds, AgentRunResolveError> {
+function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, workspaceModelId: string, missingKey: CoreMessageKey): Result<ChildModelIds, AppError<"AGENT_MODEL_NOT_SET">> {
   const savedModelId = def.model ?? fallbackSavedModelId;
   if (savedModelId == null || savedModelId === "") {
-    return Result.err(new AgentRunResolveError({ key: missingKey }));
+    // missingKey（subagent/grandchild_model_missing）走 descriptor 通道接管 messageKey，码表文案模板保持既有。
+    return Result.err(new AppError("AGENT_MODEL_NOT_SET", {descriptor: {key: missingKey}}));
   }
   return Result.ok({ savedModelId, workspaceModelId });
 }
@@ -383,7 +386,8 @@ function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, w
  * 覆盖「前奏抛错、内层 try 尚未进入」的路径——否则陈旧 controller 会让
  * `abortRegistry.has` 永久为真，卡死该会话后续的发送门禁。
  */
-export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTurnScope, userContent: string, options?: RunAgentTurnOptions): Promise<AgentRunResult> {
+/** 已知失败沿 `Result.err` 交回（四期门⑦）：前奏期失败由本函数内联补 FAILED(runId:'')（与 catch 同款记账）；未知异常仍抛，调用方 catch 兜底。 */
+export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTurnScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
   // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
   // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
@@ -507,7 +511,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       const entryCancelled = preludeAbortResult();
       if (entryCancelled != null) {
         publishPreludeRunFinished(runtime, scope);
-        return entryCancelled;
+        return Result.ok(entryCancelled);
       }
 
       // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
@@ -605,11 +609,11 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           return attachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
         let sourceText: string | undefined;
-        try {
-          sourceText = (await annotateVfs.read(draft.path)).content;
-        } catch {
-          // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
+        const source = await annotateVfs.read(draft.path);
+        if (source.ok) {
+          sourceText = source.value.content;
         }
+        // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
         if (typeof sourceText !== "string" || sourceText.length === 0) {
           return attachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
@@ -661,15 +665,18 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
             // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
             // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
             // 这里把不变式上提到源头（所有 user append 统一走同一 capture）。
-            if (!appended.ok) throw appended.error;
+            // 步骤已知失败沿 Result 回传（四期门⑦），协调器触发逆序补偿。
+            if (!appended.ok) return Result.err(appended.error);
             checkpointAnchorMessageId = appended.value.id;
             await options?.onUserMessageAppended?.();
+            return Result.ok(undefined);
           },
           rollback: async () => {
             const appendedId = checkpointAnchorMessageId;
             if (appendedId != null) {
               await runtime.messages.delete(appendedId);
             }
+            return Result.ok(undefined);
           },
         });
       }
@@ -679,9 +686,10 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         name: "capture-baseline-checkpoint",
         execute: async () => {
           const anchorId = checkpointAnchorMessageId;
-          if (anchorId == null) return;
+          if (anchorId == null) return Result.ok(undefined);
           stage = "capture-baseline-checkpoint";
           await runtime.messageCheckpoint.capture(scope.sessionId, scope.projectId, anchorId);
+          return Result.ok(undefined);
         },
         rollback: async () => {
           const anchorId = checkpointAnchorMessageId;
@@ -689,10 +697,22 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
             // release 可选：runtime 未提供时按 best-effort no-op 处理。
             await runtime.messageCheckpoint.release?.(scope.sessionId, anchorId);
           }
+          return Result.ok(undefined);
         },
       });
 
-      await coordinatedWrite.run();
+      const coordinatedRun = await coordinatedWrite.run();
+      if (!coordinatedRun.ok) {
+        // 前奏期 append/capture 已知失败（四期门⑦沿 Result 到达）：终态记账与下方
+        // catch 同款——此刻必在 STARTED 之前，补 FAILED(runId:'') 后沿 Result 交回。
+        safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
+          sessionId: scope.sessionId,
+          projectId: scope.projectId,
+          runId: "",
+          error: coordinatedRun.error instanceof Error ? coordinatedRun.error.message : String(coordinatedRun.error),
+        });
+        return Result.err(coordinatedRun.error);
+      }
 
       // 检查点①：append+capture 已完成（用户消息已落库）——此后的停止不再需要
       // 跑完剩余前奏（校验 / 子代理名单 / 技能装配）才兑现。
@@ -702,14 +722,23 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // 此处用户消息已落库，但本次 run 没跑过任何 step，delta 一条都没有——
         // desktop 侧靠「runId==='' 强制全量 reload」把这条消息捞回面板。
         publishPreludeRunFinished(runtime, scope);
-        return afterAppendCancelled;
+        return Result.ok(afterAppendCancelled);
       }
 
       stage = "validate-agent-definition";
       const toolProbe = new ToolRegistry<BuiltinToolContext>();
       registerBuiltinTools(toolProbe);
       const validation = await validateAgentDefinition(definition, { registeredToolNames: toolProbe.list() });
-      if (!validation.ok) throw validation.error;
+      if (!validation.ok) {
+        // 前奏期校验已知失败（四期门⑦沿 Result 到达）：终态记账与下方 catch 同款。
+        safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
+          sessionId: scope.sessionId,
+          projectId: scope.projectId,
+          runId: "",
+          error: validation.error instanceof Error ? validation.error.message : String(validation.error),
+        });
+        return Result.err(validation.error);
+      }
 
       // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
       // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
@@ -724,7 +753,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       const afterListCancelled = preludeAbortResult();
       if (afterListCancelled != null) {
         publishPreludeRunFinished(runtime, scope);
-        return afterListCancelled;
+        return Result.ok(afterListCancelled);
       }
 
       const callable = allDefs.filter((d) => d.mode !== "primary" && d.name !== definition.name).map((d) => ({ name: d.name, description: d.description }));
@@ -746,7 +775,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       const afterSkillsCancelled = preludeAbortResult();
       if (afterSkillsCancelled != null) {
         publishPreludeRunFinished(runtime, scope);
-        return afterSkillsCancelled;
+        return Result.ok(afterSkillsCancelled);
       }
       // agent 管理工具读取：快照复用上方 allDefs（零新增 IO）；probe 名单透传给
       // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
@@ -794,16 +823,16 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           agentRegistry: runtime.agentRegistry,
           messages: runtime.messages,
           sessions: runtime.sessions,
-          createChildSession: async (title: string): Promise<string> => {
+          createChildSession: async (title: string): Promise<Result<string, AppError>> => {
             const child = await runtime.sessions.createSubSession(scope.sessionId, scope.projectId, title);
-            if (!child.ok) throw child.error;
+            if (!child.ok) return Result.err(child.error);
             runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
               parentSessionId: scope.sessionId,
               projectId: scope.projectId,
               childSessionId: child.value.id,
               title,
             });
-            return child.value.id;
+            return Result.ok(child.value.id);
           },
           // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
           parentSessionId: scope.sessionId,
@@ -811,14 +840,12 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           // （?? true）——宁可让模型新开，也不要在无并发信息时赌一把。
           // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
           isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
-          // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）；闭包边界把域校验的 Result 转 throw。
-          resolveChildModelId: (def: AgentDefinition): ChildModelIds => {
-            const resolved = resolveChildModel(def, savedModelId, workspaceModelId, "error.agent.subagent_model_missing");
-            if (!resolved.ok) throw resolved.error;
-            return resolved.value;
+          // 子 agent pin → 父 savedModelId（四期门⑦：已知失败沿 Result 回传给 task 工具）。
+          resolveChildModelId: (def: AgentDefinition): Result<ChildModelIds, AppError> => {
+            return resolveChildModel(def, savedModelId, workspaceModelId, "error.agent.subagent_model_missing");
           },
           // 根父会话 id：子 agent 的 VFS / 工作区归属指向它（嵌套时孙 agent 也指向根父，不指向中间子会话）。
-          runChildAgent: async (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions): Promise<AgentRunResult> => {
+          runChildAgent: async (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions): Promise<Result<AgentRunResult, AppError>> => {
             return runChildAgent({
               runtime,
               parentProjectId: scope.projectId,
@@ -848,7 +875,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // 先发 FINISHED('') 再返回合成 cancelled——双端据此收口（r3-run-1
         // 步骤 1）。顺序不能反：事件同步分发，返回前事件必须已落到订阅方。
         publishPreludeRunFinished(runtime, scope);
-        return preRunnerCancelled;
+        return Result.ok(preRunnerCancelled);
       }
 
       // abortRegistry 的注册已在入口完成（见 {@link runAgentTurn}），这里不重复。
@@ -878,7 +905,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         offTerminalWatch.unsubscribe();
         offFailedWatch.unsubscribe();
       }
-      return result;
+      return Result.ok(result);
     } catch (error) {
       // 收口分岔（r3-run-1 步骤 2）：本函数是「前奏期唯一终态事件出口」。
       //
@@ -911,6 +938,10 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           savedModelId: failureSavedModelId ?? "",
           stream,
         });
+      }
+      // 已知失败沿 Result 交回（四期门⑦）；未知异常保持 throw（转码矩阵「未知 throw」行）。
+      if (error instanceof AppError) {
+        return Result.err(error);
       }
       throw error;
     } finally {
@@ -1045,7 +1076,7 @@ async function runChildAgent(args: {
   readonly def: AgentDefinition;
   readonly childSessionId: string;
   readonly opts: RunChildAgentOptions;
-}): Promise<AgentRunResult> {
+}): Promise<Result<AgentRunResult, AppError>> {
   const { runtime, parentProjectId, parentSessionId, parentDepth, def, childSessionId, opts } = args;
   const childDepth = parentDepth + 1;
 
@@ -1118,7 +1149,7 @@ async function runChildAgent(args: {
     const childPreListCancelled = childPreludeAbortResult();
     if (childPreListCancelled != null) {
       publishPreludeRunFinished(runtime, childScope);
-      return childPreListCancelled;
+      return Result.ok(childPreListCancelled);
     }
 
     // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
@@ -1146,7 +1177,7 @@ async function runChildAgent(args: {
     const childPostSkillsCancelled = childPreludeAbortResult();
     if (childPostSkillsCancelled != null) {
       publishPreludeRunFinished(runtime, childScope);
-      return childPostSkillsCancelled;
+      return Result.ok(childPostSkillsCancelled);
     }
 
     // agent 管理工具：快照复用上方 childAllDefs；probe 名单用 baseRegistry。
@@ -1210,30 +1241,28 @@ async function runChildAgent(args: {
         agentRegistry: runtime.agentRegistry,
         messages: runtime.messages,
         sessions: runtime.sessions,
-        createChildSession: async (title: string): Promise<string> => {
+        createChildSession: async (title: string): Promise<Result<string, AppError>> => {
           const grandchild = await runtime.sessions.createSubSession(childSessionId, parentProjectId, title);
-          if (!grandchild.ok) throw grandchild.error;
+          if (!grandchild.ok) return Result.err(grandchild.error);
           runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
             parentSessionId: childSessionId,
             projectId: parentProjectId,
             childSessionId: grandchild.value.id,
             title,
           });
-          return grandchild.value.id;
+          return Result.ok(grandchild.value.id);
         },
         // 续用归属校验（spec D2 直接父口径）：子装配点里孙会话的直接父就是本
         // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。
         parentSessionId: childSessionId,
         // 并发软闸与主装配点同款（缺 registry 保守拒绝）。
         isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
-        // 孙 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）；闭包边界把域校验的 Result 转 throw。
-        resolveChildModelId: (grandchildDef: AgentDefinition): ChildModelIds => {
-          const resolved = resolveChildModel(grandchildDef, opts.savedModelId, opts.workspaceModelId, "error.agent.grandchild_model_missing");
-          if (!resolved.ok) throw resolved.error;
-          return resolved.value;
+        // 孙 agent pin → 父子 agent 的 savedModelId（四期门⑦：已知失败沿 Result 回传）。
+        resolveChildModelId: (grandchildDef: AgentDefinition): Result<ChildModelIds, AppError> => {
+          return resolveChildModel(grandchildDef, opts.savedModelId, opts.workspaceModelId, "error.agent.grandchild_model_missing");
         },
         // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
-        runChildAgent: async (grandchildDef: AgentDefinition, grandchildSessionId: string, grandchildOpts: RunChildAgentOptions): Promise<AgentRunResult> => {
+        runChildAgent: async (grandchildDef: AgentDefinition, grandchildSessionId: string, grandchildOpts: RunChildAgentOptions): Promise<Result<AgentRunResult, AppError>> => {
           return runChildAgent({
             runtime,
             parentProjectId,
@@ -1262,15 +1291,18 @@ async function runChildAgent(args: {
     // 偏好读失败（如手工写入脏值）时只兜 PREFERENCES_INVALID_VALUE——回退默认流式并记
     // 标签日志，不炸 run；其余异常重抛，避免静默吞掉装配类 bug。
     let childStream = true;
-    try {
-      childStream = (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
-    } catch (cause) {
-      if (!isAppError(cause, "PREFERENCES_INVALID_VALUE")) throw cause;
-      log.error("subagentStream pref read failed", { error: cause });
+    if (runtime.preferences != null) {
+      const pref = await runtime.preferences.getSubagentStreamEnabled();
+      if (!pref.ok) {
+        if (!isAppError(pref.error, "PREFERENCES_INVALID_VALUE")) return Result.err(pref.error);
+        log.error("subagentStream pref read failed", { error: pref.error });
+      } else {
+        childStream = pref.value;
+      }
     }
 
     const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-    return await runner.run({
+    return Result.ok(await runner.run({
       definition: def,
       sessionId: childSessionId,
       projectId: parentProjectId,
@@ -1282,7 +1314,7 @@ async function runChildAgent(args: {
       publishRunLifecycle: true,
       stream: childStream,
       signal: childController.signal,
-    });
+    }));
   } finally {
     // 反注册带所有权比对，防误删新 run 的 controller / partial。
     runtime.abortRegistry?.unregister(childSessionId, childController);

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 import {
-  AgentRunResolveError,
   agentDefinitionSchema,
   createAgentRegistryService,
+  isAppError,
   resolveAgentForProject,
 } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
@@ -227,7 +227,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     }
   });
 
-  it("session.agentId 在 registry 不存在时抛 AgentRunResolveError", async () => {
+  it("session.agentId 在 registry 不存在时抛 AGENT_REFERENCED_NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
@@ -260,9 +260,10 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     await assert.rejects(
       () => resolveAgentForProject(runtime, project.id, session.id),
       (error: unknown) =>
-        error instanceof AgentRunResolveError &&
+        isAppError(error, "AGENT_REFERENCED_NOT_FOUND") &&
         error.messageKey === "error.agent.referenced_not_found" &&
-        error.messageParams?.agent_id === "ghost-agent",
+        error.messageParams?.agent_id === "ghost-agent" &&
+        error.messageParams?.detail != null,
     );
   });
 

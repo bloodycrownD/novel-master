@@ -7,8 +7,8 @@
 import type { AppError } from "@/errors/app-error.js";
 import type { VfsRevisionPointerMeta } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
-/** restore 路径的领域失败：checkpoint 指针指向的 revision / 正文缺失，或父目录被文件占用。 */
-export type RestorePathError = AppError<"SESSION_FS_RESTORE_REVISION_MISSING" | "VFS_NOT_A_DIRECTORY">;
+/** restore 路径的领域失败：checkpoint 指针指向的 revision / 正文缺失，父目录被文件占用，以及下游路径工具透传的路径类码（四期返回值通道透传，联合放宽为全集）。 */
+export type RestorePathError = AppError;
 
 /** restore 单路径结果（供 reconcile 统计短路次数）。 */
 export type RestorePathOutcome = "skipped_same_version" | "skipped_same_content_hash" | "restored" | "deleted";

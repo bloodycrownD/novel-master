@@ -5,33 +5,40 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { WorkplaceScope } from "../model/workplace-types.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
 
 /** 逻辑路径的父目录；根目录文件返回 `/`。
- * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛（buildWorkplaceDirSet / directChildDirs 同款），由调用链端点 catch 收口。
+ * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（buildWorkplaceDirSet / directChildDirs 同款），决定权交给调用方。
  */
-export function parentDirOf(logicalPath: string): string | null {
+export function parentDirOf(logicalPath: string): Result<string | null, AppError> {
   const resolved = normalizePath(logicalPath);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return Result.err(resolved.error);
   const n = resolved.value;
   if (n === "/") {
-    return null;
+    return Result.ok(null);
   }
   const idx = n.lastIndexOf("/");
   if (idx <= 0) {
-    return "/";
+    return Result.ok("/");
   }
-  return n.slice(0, idx);
+  return Result.ok(n.slice(0, idx));
 }
 
-function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
-  let current = parentDirOf(logicalPath);
+function addParentChain(dirs: Set<string>, logicalPath: string, root: string): Result<void, AppError> {
+  let stepped = parentDirOf(logicalPath);
+  if (!stepped.ok) return Result.err(stepped.error);
+  let current = stepped.value;
   while (current != null && current !== root) {
     dirs.add(current);
-    current = parentDirOf(current);
+    stepped = parentDirOf(current);
+    if (!stepped.ok) return Result.err(stepped.error);
+    current = stepped.value;
   }
   dirs.add(root);
+  return Result.ok(undefined);
 }
 
 /**
@@ -40,44 +47,49 @@ function addParentChain(dirs: Set<string>, logicalPath: string, root: string): v
  * nm-style: keep-public — workplace 树构造的唯一 domain 入口，由 workplace.service
  * 跨层单点调用；内联需把 addParentChain/parentDirOf 的目录链逻辑一并搬进 service。
  */
-export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Set<string> {
+export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Result<Set<string>, AppError> {
   const root = workplaceRootLogicalPath(params.scope);
   const dirs = new Set<string>([root]);
   for (const p of params.filePaths) {
     const resolved = normalizePath(p);
-    if (!resolved.ok) throw resolved.error;
-    addParentChain(dirs, resolved.value, root);
+    if (!resolved.ok) return Result.err(resolved.error);
+    const stepped = addParentChain(dirs, resolved.value, root);
+    if (!stepped.ok) return Result.err(stepped.error);
   }
   for (const p of params.configuredPaths) {
     const resolved = normalizePath(p);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const n = resolved.value;
     if (n === root) {
       dirs.add(root);
       continue;
     }
-    addParentChain(dirs, n, root);
+    const stepped = addParentChain(dirs, n, root);
+    if (!stepped.ok) return Result.err(stepped.error);
     const parent = parentDirOf(n);
-    if (parent != null) {
-      dirs.add(parent);
+    if (!parent.ok) return Result.err(parent.error);
+    if (parent.value != null) {
+      dirs.add(parent.value);
     }
   }
-  return dirs;
+  return Result.ok(dirs);
 }
 
 /** Direct child directories of `dir` within `allDirs`. */
-export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): string[] {
+export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): Result<string[], AppError> {
   const resolved = normalizePath(dir);
-  if (!resolved.ok) throw resolved.error;
+  if (!resolved.ok) return Result.err(resolved.error);
   const normalized = resolved.value;
   const children: string[] = [];
   for (const d of allDirs) {
     if (d === normalized) {
       continue;
     }
-    if (parentDirOf(d) === normalized) {
+    const parent = parentDirOf(d);
+    if (!parent.ok) return Result.err(parent.error);
+    if (parent.value === normalized) {
       children.push(d);
     }
   }
-  return children;
+  return Result.ok(children);
 }

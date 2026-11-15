@@ -4,6 +4,9 @@
  * @module domain/vfs/content-store/vfs-content-store.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
+
 /**
  * 明文经 ContentStore 落库；多 revision / live entry 可共享同一 blob。
  */
@@ -16,18 +19,16 @@ export interface VfsContentStore {
   put(plain: string): Promise<string>;
 
   /**
-   * 按 hash 解出 UTF-8 明文。
-   *
-   * @throws 当 blob 不存在或 encoding 无法解码时
+   * 按 hash 解出 UTF-8 明文；blob 缺失 / encoding 无法解码走 `Result.err`。
    */
-  get(contentHash: string): Promise<string>;
+  get(contentHash: string): Promise<Result<string, AppError>>;
 
   /**
    * 批量按 hash 解出 UTF-8 明文（分块下发 `IN (...)` 查询，避免逐条 get 的 N+1）。
    *
    * @returns 键为命中的 content_hash，值为对应明文；未命中的 hash 不出现在结果中。
    */
-  getMany(hashes: readonly string[]): Promise<Map<string, string>>;
+  getMany(hashes: readonly string[]): Promise<Result<Map<string, string>, AppError>>;
 
   /**
    * 清扫未被 `vfs_entry` ∪ `vfs_revision` 引用的孤立 blob 行（一条 NOT IN 子查询完成）。

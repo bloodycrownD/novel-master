@@ -188,7 +188,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     try {
       // 腿一：service 层——跳过本轮并回 null 哨兵。
       const stats = await loadChatPromptTokenStatsResilient(probeRt, scope);
-      assert.equal(stats, null, "run 在途时读口必须回 null（保留旧标签）");
+      assert.ok(stats.ok && stats.value === null, "run 在途时读口必须回 null（保留旧标签）");
       assert.equal(
         listCalls,
         0,
@@ -342,7 +342,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     release();
     try {
       const stats = await pending;
-      assert.equal(stats, null, "build 途中 run 起步应弃权回 null（保留旧标签）");
+      assert.ok(stats.ok && stats.value === null, "build 途中 run 起步应弃权回 null（保留旧标签）");
       assert.equal(
         listCalls,
         1,
@@ -385,7 +385,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
       },
     }) as typeof rt;
 
-    const stats = await loadChatPromptTokenStatsResilient(flakyRt, scope);
+    const outcome = await loadChatPromptTokenStatsResilient(flakyRt, scope);
+    if (!outcome.ok) throw outcome.error;
+    const stats = outcome.value;
     assert.equal(listCalls, 2, "普通异常必须落进 fallback（重跑一次 build）");
     assert.ok(stats != null, "兜底应给出读数而不是 null");
     assert.equal(typeof stats.label, "string");

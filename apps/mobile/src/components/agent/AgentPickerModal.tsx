@@ -7,6 +7,8 @@
  */
 import React, {useCallback} from 'react';
 import {Text} from 'react-native';
+import type {Result} from '@novel-master/core/errors';
+import {AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import {toastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
@@ -47,7 +49,7 @@ export function AgentPickerModal({
   const runtime = useRuntime();
 
   const load = useCallback(async (): Promise<
-    PickerListLoadResult<AgentPickerRow>
+    Result<PickerListLoadResult<AgentPickerRow>, AppError>
   > => {
     // 有 sessionId 走会话级（绑定优先、缺失回退 workspace）；否则读 workspace 全局。
     return sessionId != null

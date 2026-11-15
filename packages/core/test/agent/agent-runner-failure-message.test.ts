@@ -36,7 +36,7 @@ import {
   type BuiltinToolContext,
 } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { LlmStreamTimeoutError } from "@novel-master/core/provider";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import type { VfsService } from "@novel-master/core/vfs";
@@ -256,7 +256,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
       request: async () => {
         calls += 1;
         // 模拟传输层 watchdog 空闲超时收敛上抛（流中断，已有部分输出）
-        throw new LlmStreamTimeoutError("idle", 90_000);
+        throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
       },
     };
     const registry = new ToolRegistry();
@@ -279,7 +279,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
           definition: minimalDefinition(),
           ...defaultRunScope,
         }),
-      (e: unknown) => e instanceof LlmStreamTimeoutError && e.phase === "idle",
+      (e: unknown) => isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle",
     );
 
     // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）

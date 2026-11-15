@@ -10,14 +10,14 @@ describe('vfs-markdown-preview-engine', () => {
 
   it('honors KKV override to rn', async () => {
     const appUi = {
-      get: jest.fn(async () => 'rn'),
+      get: jest.fn(async () => ({ok: true, value: 'rn'})),
     };
     expect(await readVfsMarkdownPreviewEngine(appUi as never)).toBe('rn');
   });
 
   it('falls back to webview when KKV unset', async () => {
     const appUi = {
-      get: jest.fn(async () => undefined),
+      get: jest.fn(async () => ({ok: true, value: undefined})),
     };
     expect(await readVfsMarkdownPreviewEngine(appUi as never)).toBe('webview');
   });

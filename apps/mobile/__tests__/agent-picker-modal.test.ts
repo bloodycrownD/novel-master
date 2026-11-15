@@ -8,7 +8,7 @@ import {
 
 const mockSetCurrentAgentId = jest.fn(async () => undefined);
 const mockGetCurrentAgentId = jest.fn(
-  async () => undefined as string | undefined,
+  async () => ({ok: true as const, value: undefined as string | undefined}),
 );
 const mockListAgentIds = jest.fn(async () => [] as string[]);
 const mockGet = jest.fn(async () => ({name: 'writer', mode: 'all'} as const));
@@ -29,7 +29,7 @@ function mockRuntime() {
 describe('AgentPickerModal (picker service)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetCurrentAgentId.mockResolvedValue(undefined);
+    mockGetCurrentAgentId.mockResolvedValue({ok: true as const, value: undefined});
     mockListAgentIds.mockResolvedValue([]);
   });
 
@@ -38,8 +38,9 @@ describe('AgentPickerModal (picker service)', () => {
   });
 
   it('T-P2: loadAgentPickerRows returns no rows when registry empty', async () => {
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([]);
+    const loaded = await loadAgentPickerRows(mockRuntime() as never);
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value.rows).toEqual([]);
   });
 
   it('T-P1: selectWorkspaceAgent calls setCurrentAgentId', async () => {
@@ -59,8 +60,9 @@ describe('AgentPickerModal (picker service)', () => {
       mode: 'all',
     }));
 
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([
+    const labeled = await loadAgentPickerRows(mockRuntime() as never);
+    if (!labeled.ok) throw labeled.error;
+    expect(labeled.value.rows).toEqual([
       {agentId: 'a1', label: 'Alpha'},
       {agentId: 'a2', label: 'Beta'},
     ]);
@@ -78,8 +80,9 @@ describe('AgentPickerModal (picker service)', () => {
       return {name: 'All', mode: 'all'};
     });
 
-    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
-    expect(rows).toEqual([
+    const loaded = await loadAgentPickerRows(mockRuntime() as never);
+    if (!loaded.ok) throw loaded.error;
+    expect(loaded.value.rows).toEqual([
       {agentId: 'primary', label: 'Primary'},
       {agentId: 'all', label: 'All'},
     ]);

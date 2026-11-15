@@ -111,7 +111,7 @@ describe('agent-yaml.service', () => {
     }));
     const runtime = {
       agentRegistry: {
-        upsert: jest.fn(async () => undefined),
+        upsert: jest.fn(async () => ({ok: true as const, value: undefined})),
       },
     } as any;
     await importAgentYaml(runtime, 'a1');

@@ -6,6 +6,7 @@
  * - 已关闭技能可选但标注「已关闭」——显式引用优先于项目负清单；
  * - 骨架（加载/错误重试/空态/列表）由 PickerListModal 承担。
  */
+import {AppError, Result} from '@novel-master/core/errors';
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
@@ -38,10 +39,10 @@ export function SkillPicker({
   const runtime = useRuntime();
 
   const load = useCallback(async (): Promise<
-    PickerListLoadResult<EffectiveSkill>
+    Result<PickerListLoadResult<EffectiveSkill>, AppError>
   > => {
     const list = await runtime.skills().effectiveSkills(projectId);
-    return {rows: list.filter(s => s.valid)};
+    return Result.ok({rows: list.filter(s => s.valid)});
   }, [runtime, projectId]);
 
   return (

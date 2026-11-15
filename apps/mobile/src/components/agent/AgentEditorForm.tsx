@@ -234,7 +234,11 @@ export function AgentEditorForm(props: Props) {
         onPress: () => {
           void (async () => {
             try {
-              await importAgentYaml(runtime, agentId);
+              const imported = await importAgentYaml(runtime, agentId);
+              if (!imported.ok) {
+                showToast(toastMessage('导入 YAML 失败', imported.error));
+                return;
+              }
               await loadAgent();
               showToast('已导入 Agent YAML');
             } catch (error) {

@@ -9,6 +9,8 @@
  * @module domain/tool/builtin/search/engines/dispatch
  */
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { engineFailed, type FetchFn, type ResolvedEngineConfig, type SearchResponse, type SearchToolOptions, type ToolParams } from "../types.js";
 import { searchWithDuckduckgo } from "./duckduckgo.js";
 import { runTemplateEngine } from "./template-engine.js";
@@ -23,16 +25,17 @@ export const SEARCH_NOT_CONFIGURED_MESSAGE = "当前没有可用的已启用搜�
 
 /**
  * 按解析结果分发到代码适配器 / 模板执行器（单引擎请求，串行降级循环在
- * search 工具 run 内）。抛出的错误由调用方逐引擎收集、全链失败 / 预算
- * 耗尽时聚合为一条 `toolFailed("search", …)` 返回。
+ * search 工具 run 内）。已知引擎失败收 `Result.err` 由调用方逐引擎收集、
+ * 全链失败 / 预算耗尽时聚合为一条 `toolFailed("search", …)` 返回；未知
+ * 异常（非 abort 的 fetch 错误、unknown engine 编程错误）仍抛，调用方
+ * catch 同口收编。
  *
  * `params` 是工具层自由 JSON（Step 4 接线透传），原样交给模板执行器；
- * DDG 无模板、忽略 params。函数标 `async`：template 缺失分支同样以
- * rejected promise 回流（不走同步 throw，与 fetch 路径同时序）。
+ * DDG 无模板、忽略 params。
  *
  * nm-style: keep-public — spec §4 引擎分发唯一入口（search 工具 run 消费）。
  */
-export async function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<SearchResponse> {
+export async function dispatchSearch(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
   if (resolved.engine === "duckduckgo") return searchWithDuckduckgo(resolved, query, options, fetch, signal);
   const template = resolved.template;
   if (template == null) throw engineFailed(`unknown search engine: ${resolved.engine} (no template resolved)`);

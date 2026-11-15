@@ -11,6 +11,7 @@ import {
   type CompactionConditions,
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
 
@@ -83,12 +84,11 @@ export class DefaultCompactionConditionsStore
 {
   constructor(private readonly kkv: KkvService) {}
 
-  async getConditions(): Promise<CompactionConditions | null> {
-    const raw = await this.getRaw();
-    if (raw === undefined) {
-      return null;
-    }
-    return this.parseAndDecode(raw);
+  async getConditions(): Promise<Result<CompactionConditions | null, AppError>> {
+    const raw = await this.kkv.get(MODULE, KEY_POLICY);
+    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    if (!raw.ok) return Result.ok(null);
+    return Result.ok(await this.parseAndDecode(raw.value));
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
@@ -147,21 +147,5 @@ export class DefaultCompactionConditionsStore
     } catch (error) {
       rethrowDecodeError(error);
     }
-  }
-
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：KKV `Result` → service 异常通道
-   * 转码点——`KKV_NOT_FOUND` 归一为 `undefined`，其余失败原样上抛，由本
-   * service 公共 API 的调用链端点（handler / 屏幕）catch 收口。
-   */
-  private async getRaw(): Promise<string | undefined> {
-    const raw = await this.kkv.get(MODULE, KEY_POLICY);
-    if (!raw.ok) {
-      if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-        return undefined;
-      }
-      throw raw.error;
-    }
-    return raw.value;
   }
 }

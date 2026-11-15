@@ -147,12 +147,18 @@ export function FileEditorScreen() {
       try {
         const vfs = resolveVfs();
         const result = await vfs.read(path);
+        if (!result.ok) {
+          if (!cancelled) {
+            showToast(toastMessage('读取失败', result.error));
+          }
+          return;
+        }
         if (cancelled) {
           return;
         }
-        setContent(result.content);
-        setSavedContent(result.content);
-        setMtimeMs(result.mtimeMs);
+        setContent(result.value.content);
+        setSavedContent(result.value.content);
+        setMtimeMs(result.value.mtimeMs);
       } catch (error) {
         if (!cancelled) {
           showToast(toastMessage('读取失败', error));
@@ -191,7 +197,7 @@ export function FileEditorScreen() {
         sessionId &&
         userVfsUnifiedToolTurnFlag.isEnabled()
       ) {
-        await sessionSaveVfsFile(
+        const saved = await sessionSaveVfsFile(
           runtime,
           sessionId,
           vfs,
@@ -199,9 +205,17 @@ export function FileEditorScreen() {
           content,
           savedContent,
         );
+        if (!saved.ok) {
+          showToast(toastMessage('保存失败', saved.error));
+          return;
+        }
         setSavedContent(content);
         const refreshed = await vfs.read(path);
-        setMtimeMs(refreshed.mtimeMs);
+        if (!refreshed.ok) {
+          showToast(toastMessage('保存失败', refreshed.error));
+          return;
+        }
+        setMtimeMs(refreshed.value.mtimeMs);
         onSessionVfsSavedRef.current?.();
         showToast('已保存');
         return;
@@ -210,7 +224,11 @@ export function FileEditorScreen() {
       await vfs.write(path, content);
       setSavedContent(content);
       const refreshed = await vfs.read(path);
-      setMtimeMs(refreshed.mtimeMs);
+      if (!refreshed.ok) {
+        showToast(toastMessage('保存失败', refreshed.error));
+        return;
+      }
+      setMtimeMs(refreshed.value.mtimeMs);
       showToast('已保存');
     } catch (error) {
       showToast(toastMessage('保存失败', error));

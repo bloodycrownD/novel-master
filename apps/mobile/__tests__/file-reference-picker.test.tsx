@@ -4,7 +4,10 @@ import TestRenderer, {act} from 'react-test-renderer';
 import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import { composerAtPath, FileReferencePicker, listPickerChildRows } from '@/components/chat/FileReferencePicker';
 
-const mockBuildListRows = jest.fn(async (): Promise<WorkplaceListRow[]> => []);
+const mockBuildListRows = jest.fn(async () => ({
+  ok: true as const,
+  value: [] as WorkplaceListRow[],
+}));
 
 jest.mock('@/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
@@ -96,19 +99,19 @@ describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
   });
 
   it('目录多选 + 文件多选同确认产出 @path token', () => {
-    expect(
-      composerAtPath.tokensFromPickerSelection(
-        ['/notes', '/'],
-        ['/a.md', '/notes/b.md'],
-      ),
-    ).toEqual(['@/notes/', '@/', '@/a.md', '@/notes/b.md']);
+    const tokens = composerAtPath.tokensFromPickerSelection(
+      ['/notes', '/'],
+      ['/a.md', '/notes/b.md'],
+    );
+    if (!tokens.ok) throw tokens.error;
+    expect(tokens.value).toEqual(['@/notes/', '@/', '@/a.md', '@/notes/b.md']);
   });
 });
 
 describe('FileReferencePicker', () => {
   beforeEach(() => {
     mockBuildListRows.mockReset();
-    mockBuildListRows.mockResolvedValue(fixtureRows);
+    mockBuildListRows.mockResolvedValue({ok: true, value: fixtureRows});
   });
 
   it('点目录进入改 cwd；勾选目录确认产出 @path/ token', async () => {

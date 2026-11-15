@@ -139,12 +139,15 @@ const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 // 物理树根目录形态：虚拟目录 + 全局文件（list 为唯一数据源，workplace 不传）。
-const list = jest.fn(async () => [
-  {path: '/projects', kind: 'directory' as const},
-  {path: '/template', kind: 'directory' as const},
-  {path: '/meta', kind: 'directory' as const},
-  {path: '/readme.md', kind: 'file' as const},
-]);
+const list = jest.fn(async () => ({
+  ok: true as const,
+  value: [
+    {path: '/projects', kind: 'directory' as const},
+    {path: '/template', kind: 'directory' as const},
+    {path: '/meta', kind: 'directory' as const},
+    {path: '/readme.md', kind: 'file' as const},
+  ],
+}));
 
 const onOpenFile = jest.fn();
 
@@ -183,12 +186,15 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
     onOpenFile.mockClear();
     mockShowToast.mockClear();
     mockMenuOpenCount.opened = 0;
-    list.mockResolvedValue([
-      {path: '/projects', kind: 'directory' as const},
-      {path: '/template', kind: 'directory' as const},
-      {path: '/meta', kind: 'directory' as const},
-      {path: '/readme.md', kind: 'file' as const},
-    ]);
+    list.mockResolvedValue({
+      ok: true,
+      value: [
+        {path: '/projects', kind: 'directory' as const},
+        {path: '/template', kind: 'directory' as const},
+        {path: '/meta', kind: 'directory' as const},
+        {path: '/readme.md', kind: 'file' as const},
+      ],
+    });
   });
 
   afterEach(() => {

@@ -43,8 +43,10 @@ export function ThemeProvider({children}: {children: ReactNode}) {
         if (cancelled) {
           return;
         }
-        if (raw === 'dark' || raw === 'light') {
-          setModeState(raw);
+        // 读取失败（错误通道迁移四期：Result）与旧 catch 同款按系统色兜底。
+        const value = raw.ok ? raw.value : undefined;
+        if (value === 'dark' || value === 'light') {
+          setModeState(value);
         } else if (system === 'dark') {
           setModeState('dark');
         } else {

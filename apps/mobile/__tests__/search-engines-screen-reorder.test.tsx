@@ -300,7 +300,10 @@ describe('SearchEnginesScreen 列表屏（web-search-curl 动态清单）', () =
     mockShowToast.mockReset();
     mockNavigate.mockReset();
     mockSetStackOverride.mockReset();
-    mockReadConfig.mockReset().mockImplementation(async () => makeConfig());
+    mockReadConfig.mockReset().mockImplementation(async () => ({
+      ok: true,
+      value: makeConfig(),
+    }));
     mockSetEnabled.mockReset().mockResolvedValue(undefined);
     mockSetEngineOrder.mockReset().mockResolvedValue(undefined);
     mockDeleteCustomEngine.mockReset().mockResolvedValue(undefined);

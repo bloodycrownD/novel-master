@@ -13,6 +13,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getPhysicalVfs } from "../resolve-vfs-scope.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 import { isAppError } from "@novel-master/core/vfs";
 import { createLogger } from "@novel-master/core/log";
 
@@ -75,22 +76,16 @@ export async function handlePhysicalList(
       }
     }
     for (const scopeDir of scopeDirs) {
-      try {
-        rows.push(
-          ...(await vfs.listTree(scopeDir)).map((entry) =>
-            toPhysicalRow(entry),
-          ),
-        );
-      } catch (err) {
+      const listed = await vfs.listTree(scopeDir);
+      if (!listed.ok) {
         // vfsNotFound：子树已不存在（如项目被并发删除）→ 跳过该子树；
-        // 其他异常同样降级跳过（不中断整树），留 warn 便于排查。
-        // 类退役后 service 直抛 AppError，isVfsError 带短码只认 legacy 形态，
-        // 这里按 spec Step 9 改判 key。
-        if (!isAppError(err, "VFS_NOT_FOUND")) {
-          log.warn("physical-list 子树拉取失败，已跳过", { scopeDir, error: err });
+        // 其他失败同样降级跳过（不中断整树），留 warn 便于排查。
+        if (!isAppError(listed.error, "VFS_NOT_FOUND")) {
+          log.warn("physical-list 子树拉取失败，已跳过", { scopeDir, error: listed.error });
         }
         continue;
       }
+      rows.push(...listed.value.map((entry) => toPhysicalRow(entry)));
     }
     return { ok: true, data: rows };
   } catch (err) {
@@ -105,12 +100,13 @@ export async function handlePhysicalRead(
   try {
     const rt = await getDesktopRuntime();
     const result = await getPhysicalVfs(rt).read(req.path);
+    if (!result.ok) return ipcErr(formatIpcError(result.error));
     return {
       ok: true,
       data: {
-        content: result.content,
-        version: result.version,
-        mtimeMs: result.mtimeMs,
+        content: result.value.content,
+        version: result.value.version,
+        mtimeMs: result.value.mtimeMs,
       },
     };
   } catch (err) {

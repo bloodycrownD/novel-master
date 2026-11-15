@@ -28,6 +28,7 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
 
@@ -121,56 +122,62 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     this.sessions = new SqliteSessionRepository(conn);
   }
 
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：resolveLogicalPath `Result` → 领域异常通道转码点（本服务各方法同款）——非法路径按边界抛出，由调用链端点 catch 收口。
-   */
-  async list(physicalPath: string): Promise<VfsListEntry[]> {
+
+  /** 私有树行方法仍按内部 throw 协议实现；此处统一转码到 Result 边界（AppError 透传，未知异常上抛）。 */
+  private async wrapResult<T>(p: Promise<T>): Promise<Result<T, AppError>> {
+    try {
+      return Result.ok(await p);
+    } catch (error) {
+      if (isAppError(error)) return Result.err(error);
+      throw error;
+    }
+  }
+
+  async list(physicalPath: string): Promise<Result<VfsListEntry[], AppError>> {
     const resolved = resolveLogicalPath(physicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
 
     // 物理根：三个域挂载点合成目录行（域内根级文件在各自挂载点下列出）
     if (normalized === "/") {
-      return [
+      return Result.ok([
         syntheticDir("/meta"),
         syntheticDir("/projects"),
         syntheticDir("/template"),
-      ];
+      ]);
     }
 
     if (normalized === "/projects") {
       const projects = await this.projects.list();
-      return projects
-        .map((p) => syntheticDir(`/projects/${p.id}`, p.name))
-        .sort(compareEntries);
+      return Result.ok(projects.map((p) => syntheticDir(`/projects/${p.id}`, p.name)).sort(compareEntries));
     }
 
     const projectsMatch = normalized.match(/^\/projects\/([^/]+)(\/.*)?$/);
     if (projectsMatch != null) {
-      return this.listUnderProject(projectsMatch[1]!, projectsMatch[2]);
+      return this.wrapResult(this.listUnderProject(projectsMatch[1]!, projectsMatch[2]));
     }
 
     const metaMatch = normalized.match(/^\/meta(\/.*)?$/);
     if (metaMatch != null) {
       // global-meta：物理目录即域内逻辑目录（逻辑路径自带 /meta 段）
-      return this.listScopeFirstLevel({ kind: "global-meta" }, normalized);
+      return this.wrapResult(this.listScopeFirstLevel({ kind: "global-meta" }, normalized));
     }
 
     const templateMatch = normalized.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
-      return this.listScopeFirstLevel({ kind: "global" }, normalized);
+      return this.wrapResult(this.listScopeFirstLevel({ kind: "global" }, normalized));
     }
 
-    throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+    return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
   }
 
   /**
    * 批量列物理目录下全部层级的行（路由与 {@link list} 一致，
    * 详见 port 注释；每个 scope 一次前缀查询后应用层递归切层）。
    */
-  async listTree(physicalPath: string): Promise<VfsListEntry[]> {
+  async listTree(physicalPath: string): Promise<Result<VfsListEntry[], AppError>> {
     const resolved = resolveLogicalPath(physicalPath);
-    if (!resolved.ok) throw resolved.error;
+    if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
 
     if (normalized === "/") {
@@ -179,16 +186,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         syntheticDir("/projects"),
         syntheticDir("/template"),
       ];
-      rows.push(
-        ...(await this.scopeTreeRows({ kind: "global-meta" }, "/meta"))
-      );
+      rows.push(...(await this.scopeTreeRows({ kind: "global-meta" }, "/meta")));
       rows.push(...(await this.scopeTreeRows({ kind: "global" }, "/template")));
       rows.push(...(await this.projectsTreeRows()));
-      return rows.sort(compareEntries);
+      return Result.ok(rows.sort(compareEntries));
     }
 
     if (normalized === "/projects") {
-      return (await this.projectsTreeRows()).sort(compareEntries);
+      return Result.ok((await this.projectsTreeRows()).sort(compareEntries));
     }
 
     const projectsMatch = normalized.match(/^\/projects\/([^/]+)(\/.*)?$/);
@@ -196,58 +201,52 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       const projectId = projectsMatch[1]!;
       const project = await this.projects.findById(projectId);
       if (project == null) {
-        throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`});
+        return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`}));
       }
-      return (await this.projectTreeRows(projectId, projectsMatch[2])).sort(
-        compareEntries
-      );
+      return this.wrapResult(this.projectTreeRows(projectId, projectsMatch[2]).then((rows) => rows.sort(compareEntries)));
     }
 
     const metaMatch = normalized.match(/^\/meta(\/.*)?$/);
     if (metaMatch != null) {
-      return (
-        await this.scopeTreeRows({ kind: "global-meta" }, normalized)
-      ).sort(compareEntries);
+      return this.wrapResult(this.scopeTreeRows({ kind: "global-meta" }, normalized).then((rows) => rows.sort(compareEntries)));
     }
 
     const templateMatch = normalized.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
-      return (await this.scopeTreeRows({ kind: "global" }, normalized)).sort(
-        compareEntries
-      );
+      return this.wrapResult(this.scopeTreeRows({ kind: "global" }, normalized).then((rows) => rows.sort(compareEntries)));
     }
 
-    throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+    return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
   }
 
-  async read(physicalPath: string): Promise<VfsReadResult> {
+  async read(physicalPath: string): Promise<Result<VfsReadResult, AppError>> {
     const logicalResult = resolveLogicalPath(physicalPath);
-    if (!logicalResult.ok) throw logicalResult.error;
+    if (!logicalResult.ok) return Result.err(logicalResult.error);
     const normalized = logicalResult.value;
     const resolved = resolvePhysicalPath(normalized);
     if (resolved == null) {
-      throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
     }
-    let result: VfsReadResult;
+    let result: Result<VfsReadResult, AppError>;
     try {
-      result = await createScopedVfsService(this.conn, resolved.scope).read(
-        resolved.logicalPath
-      );
+      result = await createScopedVfsService(this.conn, resolved.scope).read(resolved.logicalPath);
     } catch (error) {
-      // 挂载点根等目录行按「无此文件」归一（本视图 read 只面向文件）
+      // inner 的 read 链若仍有边界抛出（如旧 wiring），此处转码到 Result 通道；
+      // 目录行按「无此文件」归一（本视图 read 只面向文件）。
       if (isAppError(error, "VFS_IS_DIRECTORY")) {
-        throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`});
+        return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
+      }
+      if (isAppError(error)) {
+        return Result.err(error);
       }
       throw error;
     }
+    if (!result.ok) return result;
     const prefix = scopePhysicalPrefix(resolved.scope);
-    return {
-      ...result,
-      path:
-        resolved.logicalPath === "/"
-          ? prefix
-          : `${prefix}${resolved.logicalPath}`,
-    };
+    return Result.ok({
+      ...result.value,
+      path: resolved.logicalPath === "/" ? prefix : `${prefix}${resolved.logicalPath}`,
+    });
   }
 
   /** `/projects/{pid}` 下的列目录分流（项目存在性在此校验）。 */

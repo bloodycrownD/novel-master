@@ -77,11 +77,11 @@ export interface SmartSortRuleService {
 
   /**
    * 排序测试（纯方法，D11）：给定规则集（缺省用库内启用规则）+ 文件名
-   * 列表，返回逐行命中明细与排序后顺序。草稿规则不可编译时返回
-   * `Result.err`；库内存量规则的编译失败（不变量破坏）仍 throw。
+   * 列表，返回逐行命中明细与排序后顺序。草稿规则与库内存量规则的
+   * 编译失败都走 `Result.err`（四期起存量规则不再 throw）。
    */
   previewSort(names: readonly string[], draftRules?: readonly SmartSortRulePreviewDraft[]): Promise<Result<SmartSortRulePreviewResult, AppError>>;
 
-  /** 启用规则按 sortOrder 预编译（workplace 排序输入）。 */
-  listCompiledRules(): Promise<CompiledSmartSortRule[]>;
+  /** 启用规则按 sortOrder 预编译（workplace 排序输入）；编译失败走 `Result.err`。 */
+  listCompiledRules(): Promise<Result<CompiledSmartSortRule[], AppError>>;
 }

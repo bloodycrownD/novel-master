@@ -6,6 +6,8 @@
 
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import type { VfsScope } from "../logic/vfs-path-mapper.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /** 宿主传入的原始 ingest 条目（文件字节或显式空目录）。 */
 export type BatchIngestRawEntry =
@@ -114,13 +116,15 @@ export interface BatchIngestWriter {
 
 /**
  * 批量 ingest / export 规划与非 session 事务落库。
+ * 错误通道迁移四期：路径解析 / scope 校验失败走返回值 `Result.err`；
+ * 分片写入的事务内失败仍靠抛错回滚，经 Report.failed 汇总（不整批 err）。
  */
 export interface VfsBatchIoService {
   planBatchIngest(
     scope: VfsScope,
     targetDir: string,
     entries: readonly BatchIngestRawEntry[]
-  ): Promise<BatchIngestPlan>;
+  ): Promise<Result<BatchIngestPlan, AppError>>;
 
   /**
    * 非 session 通道：单事务整批 apply；任一项失败 → 整批回滚。
@@ -130,7 +134,7 @@ export interface VfsBatchIoService {
     targetDir: string,
     plan: BatchIngestPlan,
     options: BatchApplyOptions
-  ): Promise<BatchApplyReport>;
+  ): Promise<Result<BatchApplyReport, AppError>>;
 
   /**
    * session 通道：按 writer 逐文件执行；部分失败保留已成功项并汇总 Report。
@@ -145,10 +149,10 @@ export interface VfsBatchIoService {
     plan: BatchIngestPlan,
     options: BatchApplyOptions,
     writer: BatchIngestWriter
-  ): Promise<BatchApplyReport>;
+  ): Promise<Result<BatchApplyReport, AppError>>;
 
   planBatchExport(
     scope: VfsScope,
     logicalPaths: readonly string[]
-  ): Promise<BatchExportPlan>;
+  ): Promise<Result<BatchExportPlan, AppError>>;
 }

@@ -20,6 +20,7 @@ import { bootstrapNovelMaster,
   type PersistentState,
   type TdbcConnection } from "@novel-master/core";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
+import { type AppError, Result } from "@novel-master/core/errors";
 
 import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
 import {
@@ -188,10 +189,11 @@ export interface NovelMasterRuntime {
 
 /**
  * Opens SQLite, bootstraps full schema, and returns service handles.
+ * preferences 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function createNovelMasterRuntime(
   argv: readonly string[],
-): Promise<NovelMasterRuntime> {
+): Promise<Result<NovelMasterRuntime, AppError>> {
   registerBetterSqlite3Driver();
   const skspName = registerPlatformSkspDriver();
   registerTokenizerNodeDriver();
@@ -215,8 +217,9 @@ export async function createNovelMasterRuntime(
   const state = createPersistentState(conn);
   const smartSortRule = createSmartSortRuleService(conn);
   const preferences = createPersistentPreferences(conn);
-  const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
-  userVfsUnifiedToolTurnFlag.refresh(userVfsUnifiedToolTurnEnabled);
+  const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
+  if (!unifiedTurnPref.ok) return Result.err(unifiedTurnPref.error);
+  userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
   const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver(skspName).createStore(conn);
@@ -257,7 +260,7 @@ export async function createNovelMasterRuntime(
   // D6：进程内单例（Map 薄封装），runAgentTurn 入口即注册 controller。
   const abortRegistry = createAgentAbortRegistry();
 
-  return {
+  return Result.ok({
     conn,
     state,
     preferences,
@@ -298,5 +301,5 @@ export async function createNovelMasterRuntime(
     providerRepo: providerBundle.providerRepo,
     userVfsTurn,
     smartSortRule,
-  };
+  });
 }

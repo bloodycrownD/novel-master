@@ -157,8 +157,10 @@ export function SearchEngineDetailScreen() {
       }
       try {
         const nextConfig = await searchStore.readConfig();
-        setConfig(nextConfig);
-        const {engines, customEngines} = nextConfig;
+        // 读失败进 catch 的 toast 通道（UI 边界，四期门⑦沿 Result 到这里转码）
+        if (!nextConfig.ok) throw nextConfig.error;
+        setConfig(nextConfig.value);
+        const {engines, customEngines} = nextConfig.value;
         const engine = engines.find(item => item.id === engineId);
         if (engineId != null && engine == null) {
           return;

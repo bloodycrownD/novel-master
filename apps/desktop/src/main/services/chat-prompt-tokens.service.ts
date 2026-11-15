@@ -28,6 +28,8 @@
 import { app } from "electron";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { type AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 
 import {
   countPromptLlmInputHeuristicOnly,
@@ -54,6 +56,7 @@ import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import {
   buildSessionPromptInput,
   ChatPromptBuildBailedError,
+  type SessionPromptInputBundle,
   type SessionPromptScope,
 } from "./session-prompt-input.service.js";
 
@@ -184,10 +187,8 @@ function buildTokenStats(
   };
 }
 
-// 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
-type SessionPromptInput = Awaited<ReturnType<typeof buildSessionPromptInput>>;
 // 传给计数分叉的参数：计数必需的三项 + rawMessages（cache miss 时回填用）。
-type CountArgs = Pick<SessionPromptInput, "layout" | "ctx" | "rawMessages"> & {
+type CountArgs = Pick<SessionPromptInputBundle, "layout" | "ctx" | "rawMessages"> & {
   savedModelId: string;
 };
 type CountResult = {
@@ -204,18 +205,24 @@ type CountResult = {
 // `shouldBail`（r3-dt-align 第 2/3 层）：读口两条路径（首帧、后台暖机）传「run 在途」
 // 判据进来，让 build 的分段检查点与 resolve 的整串级检查点都有观察点；fallback
 // 不传（它只在真异常后跑，见 loadChatPromptTokenStatsFallback 注释）。
+//
+// 错误通道迁移四期：已知失败沿 `Result` 上行（build 装配失败 / sessionConfig 读
+// 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权哨兵
+// ChatPromptBuildBailedError 与未知异常仍走 throw 通道。
 async function computeChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-  countFn: (args: CountArgs) => Promise<CountResult>,
+  countFn: (args: CountArgs) => Promise<Result<CountResult, AppError>>,
   shouldBail?: () => boolean,
-): Promise<PromptChatTokenStatsResponse> {
-  const { definition, layout, ctx, rawMessages } = await buildSessionPromptInput(
+): Promise<Result<PromptChatTokenStatsResponse, AppError>> {
+  const built = await buildSessionPromptInput(
     runtime,
     scope,
     undefined,
     shouldBail != null ? { shouldBail } : undefined,
   );
+  if (!built.ok) return Result.err(built.error);
+  const { definition, layout, ctx, rawMessages } = built.value;
 
   // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
   // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
@@ -230,9 +237,8 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  // 解包 throw 边界：装配失败沿读口既有 catch 收口——resilient（bail→null、
-  // 其余→fallback）、暖机链 .catch、终态钩子 .catch（chat-prompt-tokens 三处）。
-  if (!sessionConfig.ok) throw sessionConfig.error;
+  // 已知失败沿 Result 上行，resilient 收口降级（错误通道迁移四期）。
+  if (!sessionConfig.ok) return Result.err(sessionConfig.error);
   const savedModelId = definition.model ?? sessionConfig.value.modelId;
 
   if (!savedModelId) {
@@ -245,17 +251,15 @@ async function computeChatPromptTokenStats(
     // 「预估」标签与 counterKind 语义不变，变的是读数——折算对中文低估八成，而这
     // 正是最需要保守估计的一条路径。
     const count = countFallbackTokens(runtime, serialized);
-    return buildTokenStats(count, true, "heuristic", undefined, "local");
+    return Result.ok(buildTokenStats(count, true, "heuristic", undefined, "local"));
   }
 
+  const counted = await countFn({ layout, ctx, savedModelId, rawMessages });
+  if (!counted.ok) return Result.err(counted.error);
   const { tokenCount, estimated, counterKind, contextWindow, source } =
-    await countFn({ layout, ctx, savedModelId, rawMessages });
-  return buildTokenStats(
-    tokenCount,
-    estimated,
-    counterKind,
-    contextWindow,
-    source,
+    counted.value;
+  return Result.ok(
+    buildTokenStats(tokenCount, estimated, counterKind, contextWindow, source),
   );
 }
 
@@ -340,7 +344,8 @@ async function isPreciseWarmStillCurrent(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    if (!sessionConfig.ok) throw sessionConfig.error;
+    // 读失败（已知失败）与 registry.get 抛错同判：宁可信「变了」去补读一次。
+    if (!sessionConfig.ok) return false;
     const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
     return (
       (definition.model ?? sessionConfig.value.modelId) === warmSavedModelId
@@ -378,10 +383,18 @@ async function pushPreciseStatsIfReady(
   }
   if (!(await isPreciseWarmStillCurrent(runtime, scope, warm.savedModelId))) {
     // 暖机期间切了模型：手里的精确读数属于旧模型，直接推会让旧标签闪进 UI。
-    // 按当下模型补读一次；拿到 null（run 在途被抑制/中途弃权）就如实不推。
-    const stats = await loadChatPromptTokenStatsNow(runtime, scope, {
+    // 按当下模型补读一次；拿到 null（run 在途被抑制/中途弃权）或已知失败
+    // （四期沿 Result 上行）就如实不推，开发期留一条与暖机链同款的告警。
+    const reread = await loadChatPromptTokenStatsNow(runtime, scope, {
       armPreciseWarm: false,
     });
+    if (!reread.ok) {
+      if (!app.isPackaged) {
+        log.warn("prompt token precise warm-up failed", { error: reread.error });
+      }
+      return;
+    }
+    const stats = reread.value;
     if (stats == null || stats.estimated) {
       return;
     }
@@ -432,7 +445,7 @@ async function loadChatPromptTokenStatsNow(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
   options?: { readonly armPreciseWarm?: boolean },
-): Promise<PromptChatTokenStatsResponse | null> {
+): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
   const armPreciseWarm = options?.armPreciseWarm ?? true;
   // 一次成型、整条链共用：build 分段检查点、build/resolve 边界、resolve 内部
   // 整串级检查点、后台暖机的排程判断，全看这一条判据（与 mobile 同款口径）。
@@ -444,7 +457,7 @@ async function loadChatPromptTokenStatsNow(
   if (shouldBail()) {
     // 在途即跳过本轮：进得去也停不下才是真问题（mobile 实锤过 build 把
     // POST 派发从 +1.2s 拖到 +19.6s），所以这里连输入装配都不起步。
-    return null;
+    return Result.ok(null);
   }
   return computeChatPromptTokenStats(
     runtime,
@@ -463,8 +476,9 @@ async function loadChatPromptTokenStatsNow(
         { sessionKkv: runtime.sessionKkv, preferEstimate: true, shouldBail: bailInterrupt },
       );
       if (outcome.kind === "failed") {
-        // core 读口的已知失败（现无产出路径）：原样上抛，不吞成弃权。
-        throw outcome.error;
+        // core 读口的已知失败（现无产出路径）：沿 Result 上行（错误通道迁移
+        // 四期），不吞成弃权，由 resilient 收口降级。
+        return Result.err(outcome.error);
       }
       if (outcome.kind !== "completed") {
         // 中途弃权（run 起步）：core 不再抛哨兵，转抛本地 bail 哨兵——既有
@@ -526,13 +540,13 @@ async function loadChatPromptTokenStatsNow(
       }
       const contextWindow =
         await runtime.providerModels.getContextWindow(savedModelId);
-      return {
+      return Result.ok({
         tokenCount: result.tokenCount,
         estimated: result.estimated,
         counterKind: result.counterKind,
         contextWindow: contextWindow ?? undefined,
         source: result.source,
-      };
+      });
     },
     shouldBail,
   );
@@ -558,10 +572,12 @@ const CHAT_PROMPT_TOKEN_DEBOUNCE_MS = 300;
 type ChatPromptTokenDebounceSlot = {
   timer: ReturnType<typeof setTimeout> | null;
   deferred: {
-    promise: Promise<PromptChatTokenStatsResponse | null>;
-    resolve: (value: Promise<PromptChatTokenStatsResponse | null>) => void;
+    promise: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
+    resolve: (
+      value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>,
+    ) => void;
   } | null;
-  running: Promise<PromptChatTokenStatsResponse | null> | null;
+  running: Promise<Result<PromptChatTokenStatsResponse | null, AppError>> | null;
   scope: SessionPromptScope;
 };
 
@@ -624,14 +640,15 @@ function scheduleChatPromptTokenTrailing(
  *   （在途落地后串行执行），新触发的数据变化最终必被计算；
  * - 不同 sessionId 互不干扰（Map 按 key 隔离）。
  *
- * 返回类型是 `PromptChatTokenStatsResponse | null`（r3-dt-align 第 2 层的返回
- * 契约）：**null = 本轮被抑制或中途弃权，caller 必须按「保留旧标签」收场**
- * （不清空、不显示占位），语义与 mobile 的空串哨兵一一对应。
+ * 返回类型是 `Result<PromptChatTokenStatsResponse | null, AppError>`（r3-dt-align
+ * 第 2 层的返回契约）：**null = 本轮被抑制或中途弃权，caller 必须按「保留旧标签」
+ * 收场**（不清空、不显示占位），语义与 mobile 的空串哨兵一一对应；已知失败沿
+ * `Result.err` 上行（错误通道迁移四期），弃权哨兵与未知异常仍走 rejection 通道。
  */
 export function loadChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<PromptChatTokenStatsResponse | null> {
+): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
   const key = scope.sessionId;
   let slot = chatPromptTokenDebounceSlots.get(key);
   if (slot == null) {
@@ -645,8 +662,12 @@ export function loadChatPromptTokenStats(
     return slot.running;
   }
   if (slot.deferred == null) {
-    let resolve!: (value: Promise<PromptChatTokenStatsResponse | null>) => void;
-    const promise = new Promise<PromptChatTokenStatsResponse | null>((res) => {
+    let resolve!: (
+      value: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>,
+    ) => void;
+    const promise = new Promise<
+      Result<PromptChatTokenStatsResponse | null, AppError>
+    >((res) => {
       resolve = res;
     });
     slot.deferred = { promise, resolve };
@@ -683,7 +704,9 @@ export function chatPromptTokenDebounceExecCountForTests(
 async function loadChatPromptTokenStatsFallback(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<PromptChatTokenStatsResponse> {
+): Promise<Result<PromptChatTokenStatsResponse, AppError>> {
+  // fallback 自身的 build 失败沿 Result 上行：resilient 原样透传给 IPC handler
+  // （与旧链路「fallback 再抛 → handler catch」同一终点、同一载荷）。
   return computeChatPromptTokenStats(runtime, scope, async (args) => {
     const { layout, ctx, savedModelId } = args;
     const result = await countPromptLlmInputHeuristicOnly({
@@ -703,13 +726,13 @@ async function loadChatPromptTokenStatsFallback(
       contextWindow = undefined;
     }
 
-    return {
+    return Result.ok({
       tokenCount: result.tokenCount,
       estimated: result.estimated,
       counterKind: result.counterKind,
       contextWindow,
       source: "local",
-    };
+    });
   });
 }
 
@@ -724,12 +747,16 @@ async function loadChatPromptTokenStatsFallback(
 export async function loadChatPromptTokenStatsResilient(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<PromptChatTokenStatsResponse | null> {
+): Promise<Result<PromptChatTokenStatsResponse | null, AppError>> {
   try {
-    return await loadChatPromptTokenStats(runtime, scope);
+    const r = await loadChatPromptTokenStats(runtime, scope);
+    // 已知失败沿 Result 到达（错误通道迁移四期）：与旧「throw → catch → fallback」
+    // 同路径降级，fallback 自身的失败再原样透传给 IPC handler。
+    if (!r.ok) return loadChatPromptTokenStatsFallback(runtime, scope);
+    return r;
   } catch (error) {
     if (isChipBailError(error)) {
-      return null;
+      return Result.ok(null);
     }
     return loadChatPromptTokenStatsFallback(runtime, scope);
   }
@@ -746,7 +773,7 @@ export async function loadChatPromptTokenStatsResilient(
  * 一层 try/catch 兜底）。
  */
 setRunFinishedTokenStatsRefresh((payload) => {
-  let pending: Promise<PromptChatTokenStatsResponse | null>;
+  let pending: Promise<Result<PromptChatTokenStatsResponse | null, AppError>>;
   try {
     const runtime = getDesktopRuntimeOrThrow();
     pending = loadChatPromptTokenStats(runtime, {
@@ -757,14 +784,22 @@ setRunFinishedTokenStatsRefresh((payload) => {
     // runtime 尚未 bootstrap（极早期窗口）时没有读口可补，如实跳过。
     return;
   }
-  void pending.catch((error: unknown) => {
-    if (isChipBailError(error)) {
-      return;
-    }
-    if (!app.isPackaged) {
-      log.warn("prompt token post-run refresh failed", { error });
-    }
-  });
+  void pending.then(
+    (r) => {
+      // 已知失败沿 Result 到达（错误通道迁移四期）：与旧 rejection 同款留痕。
+      if (!r.ok && !app.isPackaged) {
+        log.warn("prompt token post-run refresh failed", { error: r.error });
+      }
+    },
+    (error: unknown) => {
+      if (isChipBailError(error)) {
+        return;
+      }
+      if (!app.isPackaged) {
+        log.warn("prompt token post-run refresh failed", { error });
+      }
+    },
+  );
 });
 
 // 此前的 deprecated 链（loadChatPromptTokenLabelResilient + formatChatTokenStatsLabel）

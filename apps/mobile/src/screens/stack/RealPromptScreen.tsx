@@ -134,14 +134,22 @@ export function RealPromptScreen() {
       lastSessionRef.current = sessionId;
     }
     try {
-      const list = await buildRealPromptPreviewTurns(runtime, {
+      const built = await buildRealPromptPreviewTurns(runtime, {
         projectId,
         sessionId,
       });
       if (requestId !== requestIdRef.current) {
         return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
       }
-      setTurns(list);
+      // 已知失败走 Result 收口（错误通道迁移四期），未知异常仍走下方 catch。
+      if (!built.ok) {
+        setError(
+          built.error instanceof Error ? built.error.message : String(built.error),
+        );
+        setTurns([]);
+        return;
+      }
+      setTurns(built.value);
     } catch (err) {
       if (requestId !== requestIdRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。

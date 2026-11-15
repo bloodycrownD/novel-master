@@ -5,7 +5,9 @@
  */
 
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { RESULT_OK } from "../cli-errors.js";
 import { requireProviderId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { runProviderModel } from "./model/commands.js";
@@ -46,18 +48,20 @@ function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string,
 
 // nm-style: keep-local — CLI 子命令分发 handler：main.ts 按 domain 单点分发，
 // 内联会把 provider 域整个 subcommand switch 搬进分发器，破坏 main 的路由结构。
+/**
+ * repo 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
+ */
 export async function runProvider(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   if (subcommand === "model") {
     const modelSub = args[0];
     if (modelSub == null) {
       throw new Error("Usage: nm provider model <subcommand> ...");
     }
-    await runProviderModel(rt, modelSub, args.slice(1));
-    return;
+    return runProviderModel(rt, modelSub, args.slice(1));
   }
 
   const { flags } = parseCliArgs(args);
@@ -70,7 +74,7 @@ export async function runProvider(
           `${p.id}\t${p.displayName}\t${p.protocol}\t${p.baseUrl}\tapiKey: ${p.apiKeyStatus}`,
         );
       }
-      return;
+      return RESULT_OK;
     }
     case "create": {
       const name = flagString(flags, "name");
@@ -92,27 +96,32 @@ export async function runProvider(
         headers: parseHeaders(flags),
         apiKey: flagString(flags, "apiKey"),
       });
-      console.error(created.id);
-      return;
+      if (!created.ok) return Result.err(created.error);
+      console.error(created.value.id);
+      return RESULT_OK;
     }
     case "delete": {
       const id = requireProviderId(flags);
       // 须在 providers.delete（会级联删 saved model）之前查归属
-      const currentModelId = await rt.state.getCurrentModelId();
+      const currentModel = await rt.state.getCurrentModelId();
+      if (!currentModel.ok) return Result.err(currentModel.error);
+      const currentModelId = currentModel.value;
       let clearCurrentModel = false;
       if (currentModelId != null && currentModelId !== "") {
         const saved = await rt.providerModels.getSavedById(currentModelId);
         clearCurrentModel = saved?.providerId === id;
       }
-      await rt.providers.delete(id);
-      const currentProviderId = await rt.state.getCurrentProviderId();
-      if (currentProviderId === id) {
+      const deleted = await rt.providers.delete(id);
+      if (!deleted.ok) return Result.err(deleted.error);
+      const currentProvider = await rt.state.getCurrentProviderId();
+      if (!currentProvider.ok) return Result.err(currentProvider.error);
+      if (currentProvider.value === id) {
         await rt.state.resetCurrentProviderId();
       }
       if (clearCurrentModel) {
         await rt.state.resetCurrentModelId();
       }
-      return;
+      return RESULT_OK;
     }
     case "edit": {
       const id = requireProviderId(flags);
@@ -152,17 +161,20 @@ export async function runProvider(
           "Usage: nm provider edit --providerId <uuid> [--baseUrl] [--name] [--headers] [--apiKey] [--clear-api-key] [--protocol]",
         );
       }
-      await rt.providers.edit(id, patch);
-      return;
+      const edited = await rt.providers.edit(id, patch);
+      if (!edited.ok) return Result.err(edited.error);
+      return RESULT_OK;
     }
     case "use": {
       const id = requireProviderId(flags);
       await rt.providers.get(id);
       await rt.state.setCurrentProviderId(id);
-      return;
+      return RESULT_OK;
     }
     case "current": {
-      const id = await rt.state.getCurrentProviderId();
+      const currentProvider = await rt.state.getCurrentProviderId();
+      if (!currentProvider.ok) return Result.err(currentProvider.error);
+      const id = currentProvider.value;
       if (id == null || id === "") {
         throw new Error(
           "No current provider (run: nm provider use --providerId <uuid>)",
@@ -170,7 +182,7 @@ export async function runProvider(
       }
       const provider = await rt.providers.get(id);
       console.log(`${provider.displayName}\t${provider.id}`);
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error(

@@ -11,6 +11,8 @@ import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * 扫描待 reconcile 路径，找出目标树中 revision 行不存在的逻辑路径。
@@ -20,7 +22,7 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
  *        entry 行已被物理删除但 checkpoint 有指针的路径按旧 entryId 查 revision，
  *        行在即视为可恢复（复活），不算 missing。
  */
-export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scope: VfsScope, targetTree: ReadonlyMap<string, number>, pathsToReconcile: Iterable<string>, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<string[]> {
+export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scope: VfsScope, targetTree: ReadonlyMap<string, number>, pathsToReconcile: Iterable<string>, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<Result<string[], AppError>> {
   const scopeKeyStr = scopeKey(scope);
   const pairs: Array<{
     logicalPath: string;
@@ -34,8 +36,9 @@ export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepos
       continue;
     }
     const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+    if (!entry.ok) return Result.err(entry.error);
     const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
-    if (entry != null && cpEntryId != null && entry.entryId !== cpEntryId) {
+    if (entry.value != null && cpEntryId != null && entry.value.entryId !== cpEntryId) {
       // live entry 与 checkpoint 指针不同源（删除后同路径重建）：两边版本
       // 空间各自独立，按 checkpoint 旧 entryId 组对寻址 revision（对齐
       // resolve-reconcile-paths / restore 的 diverged 语义），避免按 live
@@ -43,7 +46,7 @@ export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepos
       pairs.push({ logicalPath, entryId: cpEntryId, version: targetVersion });
       continue;
     }
-    if (entry == null) {
+    if (entry.value == null) {
       // entry 行已物理删除：有 checkpoint 旧 entryId 时按它寻址 revision
       //（entryId >= 0 进下方 meta 批查，查到即非 missing）；无指针上下文
       // 才维持 entryId=-1 直接算 missing。
@@ -54,11 +57,11 @@ export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepos
       });
       continue;
     }
-    pairs.push({ logicalPath, entryId: entry.entryId, version: targetVersion });
+    pairs.push({ logicalPath, entryId: entry.value.entryId, version: targetVersion });
   }
 
   if (pairs.length === 0) {
-    return [];
+    return Result.ok([]);
   }
 
   // entryId=-1 的（entry 缺失）无需查 meta，直接算 missing。
@@ -78,5 +81,5 @@ export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepos
     }
   }
 
-  return missing;
+  return Result.ok(missing);
 }

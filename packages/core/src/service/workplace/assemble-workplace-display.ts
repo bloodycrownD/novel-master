@@ -145,7 +145,11 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   if (parsedSnapshot?.ok === true && parsedSnapshot.value.length > 0) {
     entries = parsedSnapshot.value;
   } else {
-    entries = ruleViewToSnapshotEntries(await deps.workplace.evaluateRuleView());
+    const evaluated = await deps.workplace.evaluateRuleView();
+    if (!evaluated.ok) {
+      return { kind: "failed", error: evaluated.error };
+    }
+    entries = ruleViewToSnapshotEntries(evaluated.value);
     await deps.sessionKkv.set(kkvSessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, serializeRuleSnapshot(entries));
   }
   if (entries.length === 0) {

@@ -11,7 +11,9 @@ import {
   savedModelSettingsFromJson,
   savedModelSettingsToJson,
 } from "@novel-master/core/provider";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../../runtime.js";
+import { RESULT_OK } from "../../cli-errors.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 
 function flagString(
@@ -33,17 +35,17 @@ function requireModelId(flags: ReadonlyMap<string, string | true>): string {
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：save / parse 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * save / parse 的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function runProviderModelSampling(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { flags } = parseCliArgs(args);
   const modelId = requireModelId(flags);
   const saved = await assertSavedModelUuid(modelId, rt.savedModels);
-  if (!saved.ok) throw saved.error;
+  if (!saved.ok) return Result.err(saved.error);
 
   switch (subcommand) {
     case "show": {
@@ -58,7 +60,7 @@ export async function runProviderModelSampling(
           2,
         ),
       );
-      return;
+      return RESULT_OK;
     }
     case "set": {
       const filePath = flagString(flags, "file");
@@ -80,17 +82,17 @@ export async function runProviderModelSampling(
           },
         },
       });
-      if (!parsed.ok) throw parsed.error;
+      if (!parsed.ok) return Result.err(parsed.error);
       await rt.providerModels.updateSettings(saved.value.id, {
         sampling: savedModelSampling(parsed.value),
       });
-      return;
+      return RESULT_OK;
     }
     case "clear": {
       await rt.providerModels.updateSettings(saved.value.id, {
         sampling: { enabled: false },
       });
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error(

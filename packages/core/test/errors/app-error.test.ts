@@ -20,6 +20,7 @@ function domainOf(key: string): string {
 /** 与 ErrorParamsMap 手工对齐的字段清单（带 ? 尾缀 = 可选）；漂移由下面的占位符守卫与 T-K2 编译期断言抓。 */
 const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   AGENT_NOT_FOUND: ["agentId"],
+  AGENT_REFERENCED_NOT_FOUND: ["agentId", "detail"],
   AGENT_INVALID_MODEL: ["modelId?"],
   VFS_NOT_FOUND: ["path"],
   VFS_REPLACE_NOT_FOUND: ["path", "oldStringLength", "longestCommonSubstring", "lcsLength", "lcsOccurrences", "oldStringPreview?", "fileHintPreview?"],
@@ -45,6 +46,7 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   TOOL_CANCELLED: ["toolName", "detail?"],
   PROVIDER_NOT_FOUND: ["providerId"],
   PROVIDER_SAVED_MODEL_IN_USE: ["modelName", "blockingRefs"],
+  PROVIDER_STREAM_TIMEOUT: ["phase", "timeoutMs"],
   CHAT_NOT_FOUND: ["kind", "id", "messageId?", "projectId?", "sessionId?"],
   SKILL_INVALID_NAME: ["skillName", "reason"],
   SKILL_INVALID_PATH: ["path", "reason?"],

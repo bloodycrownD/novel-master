@@ -39,22 +39,29 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
       displayName: "CR-F04 悬空网关",
       apiKey: "sk-cr-f04",
     });
-    const saved = await rt.providerModels.create(created.id, "cr-f04-model");
+    if (!created.ok) throw created.error;
+    const saved = await rt.providerModels.create(created.value.id, "cr-f04-model");
 
-    await rt.state.setCurrentProviderId(created.id);
+    await rt.state.setCurrentProviderId(created.value.id);
     await rt.state.setCurrentModelId(saved.id);
-    assert.equal(await rt.state.getCurrentModelId(), saved.id);
+    const currentModel = await rt.state.getCurrentModelId();
+    if (!currentModel.ok) throw currentModel.error;
+    assert.equal(currentModel.value, saved.id);
 
-    const res = await handleProvidersDelete({ providerId: created.id });
+    const res = await handleProvidersDelete({ providerId: created.value.id });
     assert.equal(res.ok, true, res.ok ? "" : res.error.message);
 
+    const currentModelAfter = await rt.state.getCurrentModelId();
+    if (!currentModelAfter.ok) throw currentModelAfter.error;
     assert.equal(
-      await rt.state.getCurrentModelId(),
+      currentModelAfter.value,
       undefined,
       "currentModelId 指向已删模型 = 悬空指针，必须在删除成功后被清掉",
     );
+    const currentProviderAfter = await rt.state.getCurrentProviderId();
+    if (!currentProviderAfter.ok) throw currentProviderAfter.error;
     assert.equal(
-      await rt.state.getCurrentProviderId(),
+      currentProviderAfter.value,
       undefined,
       "currentProviderId 同理必须被清掉",
     );

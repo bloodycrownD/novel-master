@@ -145,16 +145,12 @@ export async function fillFileCacheFromVfs(deps: LoadOrFillFileCacheDeps, option
   // 轻量 meta 探测提到 status 判断之外：filename 档也需要它拿真实 mtimeMs
   // （否则组装时渲染出 1970 假时间戳）。探测失败 / null 一律保守放行原路径。
   let probe: FileMetaProbe = { placeholder: null, mtimeMs: undefined };
-  try {
-    const size = await deps.vfs.findContentSize(deps.path);
-    if (size != null) {
-      // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
-      const limit = size.kind === "inlineChars" ? CHARACTER_CARD_MAX_SINGLE_FILE_BYTES : CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
-      const chars = size.kind === "inlineChars" ? size.size : size.size * 4;
-      probe = { placeholder: size.size > limit ? { body: `（文件过大，已跳过，约 ${chars} 字符）`, mtimeMs: size.mtimeMs } : null, mtimeMs: size.mtimeMs };
-    }
-  } catch {
-    // 查询失败按可读处理：走原路径（不阻断组装）
+  const size = await deps.vfs.findContentSize(deps.path);
+  if (size.ok && size.value != null) {
+    // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
+    const limit = size.value.kind === "inlineChars" ? CHARACTER_CARD_MAX_SINGLE_FILE_BYTES : CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
+    const chars = size.value.kind === "inlineChars" ? size.value.size : size.value.size * 4;
+    probe = { placeholder: size.value.size > limit ? { body: `（文件过大，已跳过，约 ${chars} 字符）`, mtimeMs: size.value.mtimeMs } : null, mtimeMs: size.value.mtimeMs };
   }
 
   // ⚠️ 超限占位分支**只对非 filename 档生效**（既有语义不变）：filename 档渲染的是
@@ -172,10 +168,10 @@ export async function fillFileCacheFromVfs(deps: LoadOrFillFileCacheDeps, option
   if (deps.status === "filename") {
     filled = { payload: { body: "", mtimeMs: probe.mtimeMs ?? 0 } };
   } else {
-    try {
-      const result = await deps.vfs.read(deps.path);
-      filled = { payload: { body: result.content, mtimeMs: result.mtimeMs } };
-    } catch {
+    const result = await deps.vfs.read(deps.path);
+    if (result.ok) {
+      filled = { payload: { body: result.value.content, mtimeMs: result.value.mtimeMs } };
+    } else {
       filled = { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
     }
   }

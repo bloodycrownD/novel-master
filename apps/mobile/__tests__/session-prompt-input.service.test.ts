@@ -118,16 +118,22 @@ function makeStubRuntime(options?: {
     },
     state: {},
     workplace: jest.fn(() => ({
-      evaluateRuleView: jest.fn(async () => ruleView),
+      // 错误通道迁移四期：workplace 读口走 Result。
+      evaluateRuleView: jest.fn(async () => ({ok: true as const, value: ruleView})),
     })),
     // 只搭 read：prepare 侧 attach hydrate 需要它。刻意**不**给
     // findContentSize —— 真实 VFS 缺该方法时读侧降级回 vfs.read，
     // 这里保持同款降级路径。
     sessionVfs: jest.fn(() => ({
       read: jest.fn(async (path: string) => ({
-        content: options?.vfsBodies?.[path] ?? `VFS-BODY ${path}`,
-        mtimeMs: 1000,
+        ok: true as const,
+        value: {
+          content: options?.vfsBodies?.[path] ?? `VFS-BODY ${path}`,
+          mtimeMs: 1000,
+        },
       })),
+      // 附件预算探测（T-A8）：null = 未知长度，预算段保守放行。
+      findContentSize: jest.fn(async () => ({ok: true as const, value: null})),
     })),
     // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，
     // prepare 惰性预算不会真正调用，给个空壳即可。
@@ -136,7 +142,7 @@ function makeStubRuntime(options?: {
       get: jest.fn(async () => null),
       getMany: jest.fn(async () => prefetched),
       set: jest.fn(async () => undefined),
-      delete: jest.fn(async () => undefined),
+      delete: jest.fn(async () => ({ok: true as const, value: undefined})),
       clearSession: jest.fn(async () => undefined),
       listKeys: jest.fn(async () => []),
     },
@@ -154,11 +160,13 @@ describe('buildSessionPromptInput (T-CA5 mobile)', () => {
       customAttach: '这是常驻附加信息：优先级最高',
     };
 
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
 
     const userBody = bundle.ctx.messages
       .filter(m => m.role === 'user')
@@ -228,12 +236,14 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
     const runtime = makeBailRuntime();
     const definition = makeBailDefinition();
     const shouldBail = jest.fn(() => false);
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
       {shouldBail},
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
     expect(bundle.input).toBeDefined();
     // 构成：build 的四道段界检查点（resolve 后 / messages 后 / 组装后 /
     // prepare 后）+ 组装内 shouldStop（快照加载后 1 次 + 每文件 1 次）。
@@ -286,11 +296,13 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
   it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
     const runtime = makeStubRuntime();
     const definition = buildDefaultAgentDefinitionPreservingName('plain-agent');
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
     expect(bundle.rawMessages).toHaveLength(1);
     expect(bundle.input).toBeDefined();
   });
@@ -355,11 +367,13 @@ describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
     });
     const definition = buildDefaultAgentDefinitionPreservingName('budget-agent');
 
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
 
     const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? '';
     // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
@@ -424,11 +438,13 @@ describe('buildSessionPromptInput S0 双读接线（d-s0/G-1）', () => {
     // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
     definition.prompts = {...definition.prompts, workplace: '【工作区】'};
 
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;;
 
     const [workplaceMsg, attachMsg] = bundle.ctx.messages;
     // ① workplace 侧读 workplaceSeen（= visiblePaths，全量可见档）：header

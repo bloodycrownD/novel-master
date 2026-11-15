@@ -10,6 +10,7 @@ import {
   statusKey,
 } from '@novel-master/core';
 import {AppError, isAppError} from '@novel-master/core/agent';
+import {Result} from '@novel-master/core/errors';
 import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
 import {
   createCloudSyncProgress,
@@ -114,21 +115,25 @@ function mapSdkError(error: unknown): AppError {
 async function readRemoteRev(
   runtime: MobileNovelMasterRuntime,
   s3Config?: S3StorageConfig,
-): Promise<number> {
-  const config = s3Config ?? (await buildS3StorageConfig(runtime));
+): Promise<Result<number, AppError>> {
+  const configResult =
+    s3Config != null ? Result.ok(s3Config) : await buildS3StorageConfig(runtime);
+  if (!configResult.ok) return Result.err(configResult.error);
+  const config = configResult.value;
   const storage = createS3ObjectStorage(config, {
     client: createRnS3Client(config),
   });
-  const pathPrefix = (await getCloudSyncConfig(runtime)).pathPrefix;
-  const key = statusKey(pathPrefix);
+  const publicConfig = await getCloudSyncConfig(runtime);
+  if (!publicConfig.ok) return Result.err(publicConfig.error);
+  const key = statusKey(publicConfig.value.pathPrefix);
   const head = await storage.head(key);
   if (!head.exists) {
-    return 0;
+    return Result.ok(0);
   }
   const {body} = await storage.get(key);
   try {
     const parsed = JSON.parse(decodeUtf8Bytes(body));
-    return parseCloudSyncStatus(parsed).rev;
+    return Result.ok(parseCloudSyncStatus(parsed).rev);
   } catch (error) {
     throw new AppError('CLOUD_SYNC_INVALID_STATUS', {detail: '云端状态文件无法解析'}, {cause: error});
   }
@@ -138,14 +143,23 @@ async function createCoordinator(
   runtime: MobileNovelMasterRuntime,
   s3Config?: S3StorageConfig,
   progress?: ReturnType<typeof createCloudSyncProgress>,
-): Promise<{
-  coordinator: CloudSyncCoordinator;
-  pathPrefix: string;
-  exportTempPath: string;
-  importTempPath: string;
-}> {
+): Promise<
+  Result<
+    {
+      coordinator: CloudSyncCoordinator;
+      pathPrefix: string;
+      exportTempPath: string;
+      importTempPath: string;
+    },
+    AppError
+  >
+> {
   const publicConfig = await getCloudSyncConfig(runtime);
-  const storageConfig = s3Config ?? (await buildS3StorageConfig(runtime));
+  if (!publicConfig.ok) return Result.err(publicConfig.error);
+  const storageConfigResult =
+    s3Config != null ? Result.ok(s3Config) : await buildS3StorageConfig(runtime);
+  if (!storageConfigResult.ok) return Result.err(storageConfigResult.error);
+  const storageConfig = storageConfigResult.value;
   const baseStorage = createS3ObjectStorage(storageConfig, {
     client: createRnS3Client(storageConfig),
     // mobile 端注入基于 react-native-blob-util 的 FileSystemPort（对应 A-26）。
@@ -164,7 +178,7 @@ async function createCoordinator(
     progress != null
       ? withCloudSyncStorageProgress(baseStorage, progress)
       : baseStorage;
-  const pathPrefix = normalizePrefix(publicConfig.pathPrefix);
+  const pathPrefix = normalizePrefix(publicConfig.value.pathPrefix);
   const stamp = Date.now();
   const exportTempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/cloud-sync-export-${stamp}.nmbackup`;
   const importTempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/cloud-sync-import-${stamp}.nmbackup`;
@@ -172,7 +186,7 @@ async function createCoordinator(
   const coordinator = new CloudSyncCoordinator({
     storage,
     pathPrefix,
-    deviceId: publicConfig.deviceId,
+    deviceId: publicConfig.value.deviceId,
     exportTempPath,
     importTempPath,
     computeSha256Hex: bytes => {
@@ -237,48 +251,51 @@ async function createCoordinator(
     },
   });
 
-  return {coordinator, pathPrefix, exportTempPath, importTempPath};
+  return Result.ok({coordinator, pathPrefix, exportTempPath, importTempPath});
 }
 
-/** 读取本机状态与云端 rev，供 Profile 展示。 */
+/** 读取本机状态与云端 rev，供 Profile 展示。已知失败沿 `Result.err` 上行；云端 rev 读不到按缺省 0 收（旧 catch 同路径）。 */
 export async function getCloudSyncStatusView(
   runtime: MobileNovelMasterRuntime,
-): Promise<CloudSyncStatusView> {
+): Promise<Result<CloudSyncStatusView, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
-  if (!local.configured) {
-    return {...local, remoteRev: 0, suggestPull: false};
+  if (!local.ok) return Result.err(local.error);
+  if (!local.value.configured) {
+    return Result.ok({...local.value, remoteRev: 0, suggestPull: false});
   }
   try {
-    const remoteRev = await readRemoteRev(runtime);
-    return {
-      ...local,
+    const remote = await readRemoteRev(runtime);
+    const remoteRev = remote.ok ? remote.value : 0;
+    return Result.ok({
+      ...local.value,
       remoteRev,
-      suggestPull: remoteRev > local.lastSyncedRev,
-    };
+      suggestPull: remoteRev > local.value.lastSyncedRev,
+    });
   } catch {
-    return {...local, remoteRev: 0, suggestPull: false};
+    return Result.ok({...local.value, remoteRev: 0, suggestPull: false});
   }
 }
 
-/** 测试 S3 连接（HeadBucket 或 ListObjectsV2，不读写 status.json）。 */
+/** 测试 S3 连接（HeadBucket 或 ListObjectsV2，不读写 status.json）。配置类失败沿 `Result.err` 上行，存储侧故障保持异常（屏幕 catch 提示）。 */
 export async function testCloudSyncConnection(
   runtime: MobileNovelMasterRuntime,
   input?: CloudSyncConfigInput,
-): Promise<void> {
-  const s3Config = input
-    ? await buildS3StorageConfig(runtime, input)
-    : await buildS3StorageConfig(runtime);
-  const client = buildS3Client(s3Config);
+): Promise<Result<void, AppError>> {
+  const s3Config = await buildS3StorageConfig(runtime, input);
+  if (!s3Config.ok) return Result.err(s3Config.error);
+  const client = buildS3Client(s3Config.value);
+  const publicConfig = await getCloudSyncConfig(runtime);
+  if (!publicConfig.ok) return Result.err(publicConfig.error);
   const pathPrefix = normalizePrefix(
-    input?.pathPrefix?.trim() || (await getCloudSyncConfig(runtime)).pathPrefix,
+    input?.pathPrefix?.trim() || publicConfig.value.pathPrefix,
   );
 
   const progress = createCloudSyncProgress('test');
-  progress.step('start', {bucket: s3Config.bucket, prefix: pathPrefix});
+  progress.step('start', {bucket: s3Config.value.bucket, prefix: pathPrefix});
 
   try {
     progress.step('head_bucket_start', {});
-    await client.send(new HeadBucketCommand({Bucket: s3Config.bucket}));
+    await client.send(new HeadBucketCommand({Bucket: s3Config.value.bucket}));
     progress.done({via: 'HeadBucket'});
   } catch (headError) {
     progress.step('head_bucket_failed', {
@@ -288,7 +305,7 @@ export async function testCloudSyncConnection(
       progress.step('list_objects_start', {});
       await client.send(
         new ListObjectsV2Command({
-          Bucket: s3Config.bucket,
+          Bucket: s3Config.value.bucket,
           Prefix: pathPrefix,
           MaxKeys: 1,
         }),
@@ -299,6 +316,7 @@ export async function testCloudSyncConnection(
       throw mapSdkError(listError ?? headError);
     }
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -332,10 +350,11 @@ export async function pullCloudSync(
   runtime: MobileNovelMasterRuntime,
   onRebootstrap: () => Promise<MobileNovelMasterRuntime>,
   options?: CloudSyncPullOptions,
-): Promise<CloudSyncPullOutcome> {
+): Promise<Result<CloudSyncPullOutcome, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
-  if (!local.configured) {
-    throw new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'});
+  if (!local.ok) return Result.err(local.error);
+  if (!local.value.configured) {
+    return Result.err(new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'}));
   }
 
   if (syncBusy) {
@@ -375,15 +394,16 @@ export async function pullCloudSync(
     progress = createCloudSyncProgress('pull', {
       onUiProgress: options?.onProgress,
     });
-    progress.step('start', {lastSyncedRev: local.lastSyncedRev});
+    progress.step('start', {lastSyncedRev: local.value.lastSyncedRev});
     const created = await createCoordinator(runtime, undefined, progress);
-    coordinator = created.coordinator;
-    exportTempPath = created.exportTempPath;
-    importTempPath = created.importTempPath;
+    if (!created.ok) return Result.err(created.error);
+    coordinator = created.value.coordinator;
+    exportTempPath = created.value.exportTempPath;
+    importTempPath = created.value.importTempPath;
 
     progress.step('coordinator_pull_start', {});
     const result = await coordinator.pull({
-      lastSyncedRev: local.lastSyncedRev,
+      lastSyncedRev: local.value.lastSyncedRev,
     });
     if (result.databaseReplaced) {
       // 先重建，再用新 runtime 记账。
@@ -403,7 +423,7 @@ export async function pullCloudSync(
     // 重建 + 记账已完成，重建窗口结束，此处释放外层互斥（finally 兜底幂等）。
     releasePullBusy();
     progress.done({rev: result.rev});
-    return {rev: result.rev, alreadyUpToDate: false};
+    return Result.ok({rev: result.rev, alreadyUpToDate: false});
   } catch (error) {
     if (isAppError(error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
       // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
@@ -416,8 +436,8 @@ export async function pullCloudSync(
         lastPullAt: now,
         lastPullResult: 'already_up_to_date',
       }).catch(() => undefined);
-      progress?.done({rev: local.lastSyncedRev, alreadyUpToDate: true});
-      return {rev: local.lastSyncedRev, alreadyUpToDate: true};
+      progress?.done({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
+      return Result.ok({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
     }
     if (error instanceof DatabaseReplacedError) {
       // 库已换代但后续步骤抛错：runtime 换代优先于报错。mobile 的 runtime 是
@@ -435,7 +455,7 @@ export async function pullCloudSync(
       lastPullResult: 'error',
     }).catch(() => undefined);
     progress?.fail(error);
-    throw mapSdkError(error);
+    return Result.err(mapSdkError(error));
   } finally {
     syncBusy = false;
     releasePullBusy();
@@ -456,10 +476,11 @@ export async function pullCloudSync(
 export async function pushCloudSync(
   runtime: MobileNovelMasterRuntime,
   options: CloudSyncPushOptions | undefined,
-): Promise<{rev: number}> {
+): Promise<Result<{rev: number}, AppError>> {
   const local = await getCloudSyncLocalStatus(runtime);
-  if (!local.configured) {
-    throw new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'});
+  if (!local.ok) return Result.err(local.error);
+  if (!local.value.configured) {
+    return Result.err(new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先配置云存储'}));
   }
 
   if (syncBusy) {
@@ -471,22 +492,23 @@ export async function pushCloudSync(
     onUiProgress: options?.onProgress,
   });
   progress.step('start', {
-    lastSyncedRev: local.lastSyncedRev,
+    lastSyncedRev: local.value.lastSyncedRev,
     forceOverwriteRemote: options?.forceOverwriteRemote ?? false,
   });
 
   const now = new Date().toISOString();
   try {
-    const {coordinator, exportTempPath} = await createCoordinator(
-      runtime,
-      undefined,
-      progress,
-    );
+    const created = await createCoordinator(runtime, undefined, progress);
+    if (!created.ok) {
+      progress.fail(created.error);
+      return Result.err(created.error);
+    }
+    const {coordinator, exportTempPath} = created.value;
 
     try {
       progress.step('coordinator_push_start', {});
       const result = await coordinator.push({
-        lastSyncedRev: local.lastSyncedRev,
+        lastSyncedRev: local.value.lastSyncedRev,
         forceOverwriteRemote: options?.forceOverwriteRemote,
       });
       await patchCloudSyncLocalStatus(runtime, {
@@ -495,7 +517,7 @@ export async function pushCloudSync(
         lastPushResult: 'success',
       });
       progress.done({rev: result.rev});
-      return result;
+      return Result.ok(result);
     } catch (error) {
       await patchCloudSyncLocalStatus(runtime, {
         lastPushAt: now,

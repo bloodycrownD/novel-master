@@ -18,7 +18,9 @@ import {
   resolveAgentForProject,
   resolveAgentToolRegistry,
   type AgentDefinition,
+  type AppError,
 } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { buildSessionPromptInput } from "./session-prompt-input.service.js";
 
@@ -60,17 +62,16 @@ async function budgetSkillsIndex(
 export async function buildRealPromptPreviewTurns(
   runtime: DesktopNovelMasterRuntime,
   scope: PromptPreviewScope,
-): Promise<readonly PromptPreviewTurn[]> {
+): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
   const { definition } = await resolveAgentForProject(
     runtime,
     scope.projectId,
     scope.sessionId,
   );
-  const { layout, ctx } = await buildSessionPromptInput(
-    runtime,
-    scope,
-    definition,
-  );
+  const built = await buildSessionPromptInput(runtime, scope, definition);
+  // build 的已知失败沿 Result 原样上行（错误通道迁移四期）。
+  if (!built.ok) return Result.err(built.error);
+  const { layout, ctx } = built.value;
   const skillsIndex = await budgetSkillsIndex(
     runtime,
     scope.projectId,
@@ -81,9 +82,9 @@ export async function buildRealPromptPreviewTurns(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  // 解包 throw 边界：失败落唯一调用方 handlePromptRealPreview 的紧邻 catch
-  // （formatIpcError）；本函数其余 await 链仍是 throw 面，不单点改 Result。
-  if (!sessionConfig.ok) throw sessionConfig.error;
+  // 已知失败沿 Result 返回（错误通道迁移四期）：唯一调用方 handlePromptRealPreview
+  // 转 `ipcErr(formatIpcError(...))`；本函数其余 await 链仍是未知 throw 面。
+  if (!sessionConfig.ok) return Result.err(sessionConfig.error);
   const thinking = await resolvePreviewThinkingContext({
     preferences: runtime.preferences,
     savedModels: runtime.savedModelRepo,
@@ -103,7 +104,9 @@ export async function buildRealPromptPreviewTurns(
     skillsIndex != null
       ? { ...ctx, skillsIndex, messages: filteredMessages }
       : { ...ctx, messages: filteredMessages };
-  return await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
-    includeThinkingBlocks: thinking.enabled,
-  });
+  return Result.ok(
+    await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
+      includeThinkingBlocks: thinking.enabled,
+    }),
+  );
 }

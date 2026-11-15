@@ -12,6 +12,7 @@ import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -101,7 +102,7 @@ type GlobToolOutput = {
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
  * (global / project / session scope). Mutations append revisions via the revision-aware wrapper.
-  * 解包 throw 边界（错误通道迁移三期门⑦）：工具执行闭包内 `Result` 失败上抛，由 tool-runner 框架级统一收口。
+ * 已知失败走返回值通道（四期门⑦）：工具闭包内 `Result` 失败 `return r` 接力，tool-runner 框架级统一收口。
  */
 export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] {
   const read: Tool<{ path: string; offset?: number; limit?: number }, ReadToolOutput, BuiltinToolContext> = {
@@ -137,7 +138,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const offset = input.offset ?? 1;
       const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
       const raw = await ctx.vfs.read(input.path);
-      const lines = raw.content.split("\n");
+      if (!raw.ok) return Result.err(raw.error);
+      const lines = raw.value.content.split("\n");
       const totalLines = lines.length;
 
       if (offset > 1 && totalLines === 0) {
@@ -180,11 +182,11 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       // tool_result 恒走全文形态，prompt 侧拿到的是带行号的 wire 全文。
       // （保活链的两类持有者 checkpoint 指针 + live head 不受本版影响。）
 
-      return {
-        path: raw.path,
+      return Result.ok({
+        path: raw.value.path,
         content,
-        version: raw.version,
-        mtimeMs: raw.mtimeMs,
+        version: raw.value.version,
+        mtimeMs: raw.value.mtimeMs,
         offset,
         limit,
         totalLines,
@@ -192,7 +194,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
         truncated,
         ...(byteCapped.lastLinePartial ? { lastLineTruncated: true } : {}),
         ...(nextOffset != null ? { nextOffset } : {}),
-      };
+      });
     },
   };
 
@@ -216,19 +218,20 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
       const resolved = resolveLogicalPath(input.path);
-      if (!resolved.ok) throw resolved.error;
+      if (!resolved.ok) return Result.err(resolved.error);
       const logicalPath = resolved.value;
       // B-1：仅新建文件时补父链规则——编辑已有文件不得静默把存量无行目录翻成 rule_on。
       // 未注入 workplace 时无补规则可谈，连探测也一并跳过（旧 ctx 的 vfs 可能没有 read）。
       const isNewFile = ctx.workplace != null && (await probeFileAbsentForWrite(ctx, logicalPath));
       const result = await ctx.vfs.write(logicalPath, input.content);
+      if (!result.ok) return Result.err(result.error);
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
       if (isNewFile) {
         await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
       }
-      return result;
+      return Result.ok(result.value);
     },
   };
 
@@ -262,7 +265,9 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       replacements: z.number().int(),
     }),
     async run(input, ctx) {
-      return await ctx.vfs.replace(input.path, input.oldString, input.newString, input.options);
+      const replaced = await ctx.vfs.replace(input.path, input.oldString, input.newString, input.options);
+      if (!replaced.ok) return Result.err(replaced.error);
+      return Result.ok(replaced.value);
     },
   };
 
@@ -314,10 +319,11 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     async run(input, ctx) {
       const parsed = parseFsCommand(input);
       const result = await executeFsCommand(ctx.vfs, parsed);
+      if (!result.ok) return Result.err(result.error);
       // mkdir 成功后为新目录及其祖先补默认目录规则；其余子命令不碰
       if (parsed.kind === "mkdir") {
         const resolved = resolveLogicalPath(parsed.path);
-        if (!resolved.ok) throw resolved.error;
+        if (!resolved.ok) return Result.err(resolved.error);
         await ensureDirRulesForNewPath(ctx, resolved.value);
       }
       return result;
@@ -344,12 +350,13 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     }),
     async run(input, ctx) {
       const allPaths = await ctx.vfs.glob(input.pattern, input.options);
-      const capped = capMatchList(allPaths, TOOL_OUTPUT_MAX_MATCHES, (p) => p);
-      return {
+      if (!allPaths.ok) return Result.err(allPaths.error);
+      const capped = capMatchList(allPaths.value, TOOL_OUTPUT_MAX_MATCHES, (p) => p);
+      return Result.ok({
         paths: capped.items,
         total: capped.total,
         truncated: capped.truncated,
-      };
+      });
     },
   };
 
@@ -392,16 +399,17 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     }),
     async run(input, ctx) {
       const rawMatches = await ctx.vfs.grep(input.pattern, input.options);
-      const withTruncatedExcerpts = rawMatches.map((m) => ({
+      if (!rawMatches.ok) return Result.err(rawMatches.error);
+      const withTruncatedExcerpts = rawMatches.value.map((m) => ({
         ...m,
         excerpt: truncateLine(m.excerpt).line,
       }));
       const capped = capMatchList(withTruncatedExcerpts, TOOL_OUTPUT_MAX_MATCHES, (m) => JSON.stringify(m));
-      return {
+      return Result.ok({
         matches: capped.items,
         total: capped.total,
         truncated: capped.truncated,
-      };
+      });
     },
   };
 
@@ -438,16 +446,15 @@ function parentDirOfLogicalPath(logicalPath: string): string {
  * 探测自身出错）一律保守视作「已存在」跳过补规则——宁可少补、不可误翻存量。
  */
 async function probeFileAbsentForWrite(ctx: BuiltinToolContext, logicalPath: string): Promise<boolean> {
-  try {
-    await ctx.vfs.read(logicalPath);
-    return false;
-  } catch (error) {
-    if (isAppError(error, "VFS_NOT_FOUND")) {
-      return true;
-    }
-    log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error });
+  const read = await ctx.vfs.read(logicalPath);
+  if (read.ok) {
     return false;
   }
+  if (isAppError(read.error, "VFS_NOT_FOUND")) {
+    return true;
+  }
+  log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error: read.error });
+  return false;
 }
 
 /**
@@ -482,7 +489,10 @@ export async function ensureDirRulesForNewPath(ctx: BuiltinToolContext, dirLogic
     // 求差 / 跳根 / 路径规范化内核与导入链路共享；写入载体仍是 service
     // 层的 setDirRule（缺省字段即默认启用），BuiltinToolContext 依赖形状不变。
     const workplace = ctx.workplace;
-    await backfillMissingDirRules(chain, existing, (logicalPath) => workplace.setDirRule({ logicalPath }));
+    const backfilled = await backfillMissingDirRules(chain, existing, (logicalPath) => workplace.setDirRule({ logicalPath }));
+    if (!backfilled.ok) {
+      log.debug(`补目录规则失败（${dirLogicalPath}）`, { error: backfilled.error });
+    }
   } catch (error) {
     // 吞错但不无声：文件/目录已落盘，补规则失败不阻断主流程。
     log.debug(`补目录规则失败（${dirLogicalPath}）`, { error });

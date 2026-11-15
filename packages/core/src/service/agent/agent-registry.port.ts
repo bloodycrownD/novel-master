@@ -6,6 +6,8 @@
 
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /** Workspace agent registry (SQL-backed). */
 export interface AgentRegistryService {
@@ -21,11 +23,15 @@ export interface AgentRegistryService {
   /** 读取 prompts_json 解析后的 wire，行不存在返回 null（不解码）。 */
   getRawWire(agentId: string): Promise<unknown | null>;
   get(agentId: string): Promise<AgentDefinition>;
+  /**
+   * 已知失败走返回值（四期门⑦）：schema / 校验 / 重名等域校验失败收
+   * `Result.err`；repository 层未知异常仍抛，由边界统一收口。
+   */
   upsert(
     agentId: string,
     def: AgentDefinition,
     options?: ValidateAgentDefinitionOptions
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
   /**
    * 按 RFC 7396 patch 更新已有 agent：读当前定义 → 合并 → 走 upsert 校验落库。
    *
@@ -33,7 +39,7 @@ export interface AgentRegistryService {
    * 清除字段；upsert 则是整份替换（编辑器保存 / 导入等全量场景用它）。
    * 返回合并后的定义（`name` 的 trim 由 upsert 内部完成）。
    */
-  update(agentId: string, patch: AgentDefinitionPatch, options?: ValidateAgentDefinitionOptions): Promise<AgentDefinition>;
+  update(agentId: string, patch: AgentDefinitionPatch, options?: ValidateAgentDefinitionOptions): Promise<Result<AgentDefinition, AppError>>;
   /**
    * 删除指定 Agent。
    *

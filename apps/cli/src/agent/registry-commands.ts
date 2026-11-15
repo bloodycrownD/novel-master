@@ -6,6 +6,8 @@
 
 import { randomUUID } from "node:crypto";
 import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { type AppError, Result } from "@novel-master/core/errors";
+import { RESULT_OK } from "../cli-errors.js";
 
 import {
   agentDefinitionSchema,
@@ -26,21 +28,23 @@ function flagString(
 }
 
 /**
- * 解包 throw 边界（错误通道迁移三期门⑦）：save 的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * 模型 pin 校验沿 `Result` 回传（错误通道迁移四期；core 回调契约已放宽为
+ * void | Result 双通道，core 侧把 Err 收编为 `AGENT_INVALID_MODEL`）。
  */
 async function assertSavedModel(
   rt: NovelMasterRuntime,
   savedModelId: string,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const saved = await assertSavedModelUuid(savedModelId, rt.savedModels);
-  if (!saved.ok) throw saved.error;
+  if (!saved.ok) return Result.err(saved.error);
+  return Result.ok(undefined);
 }
 
 export async function runAgentRegistryCommand(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   // ⚠️ 位置参数一律取 `positional`，**不许直接取 `args[0]`**（CR WA-P2-05）：
   // `args` 里 flag 本身也在第一层，`nm agent create --description "写手" smoke`
   // 会把 agent 命名成 `--description` 并静默成功（随后 `session create` 照样能
@@ -62,7 +66,7 @@ export async function runAgentRegistryCommand(
       }
       const system = flagString(flags, "system") ?? "你是一个写作助手。";
       const agentId = randomUUID();
-      await registry.upsert(
+      const saved = await registry.upsert(
         agentId,
         {
           name: name.trim(),
@@ -71,11 +75,12 @@ export async function runAgentRegistryCommand(
         } satisfies AgentDefinition,
         createRegistryValidateOptions(rt),
       );
+      if (!saved.ok) return saved;
       // 顺带把 workspace 当前 agent 指过去：session create 优先读 state，
       // 这样即使 registry 里有别的 agent，用户新建的会话也用自己刚建的。
       await rt.state.setCurrentAgentId(agentId);
       console.log(agentId); // 与 `nm session create` 同口径：stdout 只出 id
-      return;
+      return RESULT_OK;
     }
     case "list": {
       const defs = await registry.list();
@@ -83,12 +88,12 @@ export async function runAgentRegistryCommand(
         console.log(
           "No agents in registry. Run: nm agent create --name <name>",
         );
-        return;
+        return RESULT_OK;
       }
       for (const def of defs) {
         console.log(def.name);
       }
-      return;
+      return RESULT_OK;
     }
     case "show": {
       const agentId = flagString(flags, "id") ?? positional[0];
@@ -97,7 +102,7 @@ export async function runAgentRegistryCommand(
       }
       const def = await registry.get(agentId);
       console.log(JSON.stringify(encode(def, agentDefinitionSchema), null, 2));
-      return;
+      return RESULT_OK;
     }
     case "delete": {
       const agentId = flagString(flags, "id") ?? positional[0];
@@ -106,7 +111,7 @@ export async function runAgentRegistryCommand(
       }
       await registry.delete(agentId);
       console.log(`Deleted agent: ${agentId}`);
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error(

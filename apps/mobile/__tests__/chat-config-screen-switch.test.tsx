@@ -287,19 +287,19 @@ async function toggleSwitchAsync(
 describe('ChatConfigScreen 开关持久化失败回滚', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
+    }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
     mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
@@ -377,19 +377,19 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
 describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
+    }});
     mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
     mockSetConditions.mockReset().mockResolvedValue(undefined);
@@ -523,19 +523,19 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
 describe('ChatConfigScreen 压缩配置即时保存', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
-    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
-    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue({ok: true, value: true});
     mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue({ok: true, value: false});
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetConditions.mockReset().mockResolvedValue({
+    mockGetConditions.mockReset().mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       tokenRatio: 0.8,
       hideStartDepth: 6,
-    });
+    }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
     mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
@@ -572,11 +572,11 @@ describe('ChatConfigScreen 压缩配置即时保存', () => {
   });
 
   it('启用但 token 比例为空 → toast 提示、开关回滚、不落库', async () => {
-    mockGetConditions.mockResolvedValue({
+    mockGetConditions.mockResolvedValue({ok: true, value: {
       schemaVersion: 4,
       enabled: false,
       hideStartDepth: 6,
-    });
+    }});
     const {renderer} = await renderScreen();
 
     await act(async () => {

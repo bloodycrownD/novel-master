@@ -36,8 +36,8 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   async forSavedModel(savedModelId: string, _options?: ForVendorModelOptions): Promise<TokenCounter> {
     if (this.savedModels != null) {
       const saved = await this.savedModels.findById(savedModelId.trim());
-      if (saved != null) {
-        return this.forVendorModel(saved.vendorModelId, _options);
+      if (saved.ok && saved.value != null) {
+        return this.forVendorModel(saved.value.vendorModelId, _options);
       }
     }
     return this.heuristic;

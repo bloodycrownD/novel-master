@@ -1,7 +1,8 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
+import { type AgentDefinition, type AppError, resolveAgentForProject } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { promptAssembler } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay, type Interrupt } from "@novel-master/core/workplace";
@@ -56,7 +57,7 @@ export async function buildSessionPromptInput(
   scope: SessionPromptScope,
   definition?: AgentDefinition,
   options?: BuildSessionPromptInputOptions,
-): Promise<SessionPromptInputBundle> {
+): Promise<Result<SessionPromptInputBundle, AppError>> {
   // 分段弃权：每段之间看一眼「run 是不是已经起步了」。mobile 真机实锤过
   // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
   // 连接），desktop main 是同进程同连接，问题一模一样。
@@ -108,11 +109,11 @@ export async function buildSessionPromptInput(
     },
   );
   if (assembled.kind === "failed") {
-    // 解包 throw 边界：组装内的已知失败（如路径解析）与旧 throw 同路径上抛，
-    // 不吞成弃权；收口在 token 读口三处既有 catch（chat-prompt-tokens 的
-    // resilient / 暖机链 / 终态钩子）与 preview 的 handlePromptRealPreview
-    // catch。哨兵类 ChatPromptBuildBailedError 见 spec-3 §3.6（控制流保留）。
-    throw assembled.error;
+    // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），
+    // 不吞成弃权；收口在 token 读口的 resilient（err → fallback 降级）与
+    // preview 的 handlePromptRealPreview（ipcErr + formatIpcError）。哨兵类
+    // ChatPromptBuildBailedError 见 spec-3 §3.6（控制流保留，仍走 throw）。
+    return Result.err(assembled.error);
   }
   if (assembled.kind !== "completed") {
     throw new ChatPromptBuildBailedError();
@@ -133,7 +134,9 @@ export async function buildSessionPromptInput(
     skills: runtime.skills(),
     projectId: scope.projectId,
   };
-  const messages = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+  const prepared = await promptAssembler.prepare(visibleMessages, prepareRuntime);
+  if (!prepared.ok) return Result.err(prepared.error);
+  const messages = prepared.value;
   bail();
   const ctx: PromptRenderContext = {
     workplaceDisplay,
@@ -146,5 +149,5 @@ export async function buildSessionPromptInput(
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
-  return { definition: resolved, layout: resolved.prompts, ctx, input, rawMessages: visibleMessages };
+  return Result.ok({ definition: resolved, layout: resolved.prompts, ctx, input, rawMessages: visibleMessages });
 }

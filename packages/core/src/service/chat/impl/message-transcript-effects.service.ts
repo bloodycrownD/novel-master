@@ -119,9 +119,10 @@ export class DefaultMessageTranscriptEffectsService
             hidePrefix.fromSeq,
             hidePrefix.toSeq
           );
-          // CoordinatedWrite 的补偿协议只有 throw 通道（平台边界，保留解包 throw）。
-          if (!r.ok) throw r.error;
+          // 步骤已知失败沿 Result 回传（四期门⑦），协调器触发逆序补偿。
+          if (!r.ok) return Result.err(r.error);
           hiddenCount = r.value;
+          return Result.ok(undefined);
         },
         rollback: async () => {
           const r = await this.deps.messages.showRange(
@@ -129,7 +130,8 @@ export class DefaultMessageTranscriptEffectsService
             hidePrefix.fromSeq,
             hidePrefix.toSeq
           );
-          if (!r.ok) throw r.error;
+          if (!r.ok) return Result.err(r.error);
+          return Result.ok(undefined);
         },
       });
     }
@@ -142,8 +144,9 @@ export class DefaultMessageTranscriptEffectsService
             showSuffix.fromSeq,
             showSuffix.toSeq
           );
-          if (!r.ok) throw r.error;
+          if (!r.ok) return Result.err(r.error);
           shownCount = r.value;
+          return Result.ok(undefined);
         },
         rollback: async () => {
           const r = await this.deps.messages.hideRange(
@@ -151,7 +154,8 @@ export class DefaultMessageTranscriptEffectsService
             showSuffix.fromSeq,
             showSuffix.toSeq
           );
-          if (!r.ok) throw r.error;
+          if (!r.ok) return Result.err(r.error);
+          return Result.ok(undefined);
         },
       });
     }
@@ -162,9 +166,11 @@ export class DefaultMessageTranscriptEffectsService
           sessionId,
           SESSION_KKV_DOMAIN_RULE_SNAPSHOT
         );
+        return Result.ok(undefined);
       },
       rollback: async () => {
         // rule_snapshot 是缓存快照，清空后无法重建原值；丢失只触发下次重算，不影响一致性。
+        return Result.ok(undefined);
       },
     });
     write.register({
@@ -174,12 +180,15 @@ export class DefaultMessageTranscriptEffectsService
           sessionId,
           SESSION_KKV_DOMAIN_FILE_CACHE
         );
+        return Result.ok(undefined);
       },
       rollback: async () => {
         // file_cache 同为缓存，best-effort 不补偿。
+        return Result.ok(undefined);
       },
     });
-    await write.run();
+    const ran = await write.run();
+    if (!ran.ok) return Result.err(ran.error);
     // 置位后上下文范围变了：API 占用双删（进程内热层 + session KKV 行），
     // 否则重启后从 KKV 读回旧值，与置位后的可见 prompt 不符。
     await invalidateSessionApiPromptTokenEntry(

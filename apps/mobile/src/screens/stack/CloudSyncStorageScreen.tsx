@@ -44,14 +44,23 @@ export function CloudSyncStorageScreen() {
     setStatusLoading(true);
     try {
       const status = await getCloudSyncStatusView(runtime);
-      setCloudConfigured(status.configured);
-      setCloudRemoteRev(status.remoteRev);
-      setCloudLastSyncedRev(status.lastSyncedRev);
-      setCloudSuggestPull(status.suggestPull);
-      setCloudLastPullAt(status.lastPullAt);
-      setCloudLastPushAt(status.lastPushAt);
-      setCloudLastPullResult(status.lastPullResult);
-      setCloudLastPushResult(status.lastPushResult);
+      const view = status.ok
+        ? status.value
+        : {
+            configured: false,
+            deviceId: '',
+            lastSyncedRev: 0,
+            remoteRev: 0,
+            suggestPull: false,
+          };
+      setCloudConfigured(view.configured);
+      setCloudRemoteRev(view.remoteRev);
+      setCloudLastSyncedRev(view.lastSyncedRev);
+      setCloudSuggestPull(view.suggestPull);
+      setCloudLastPullAt(view.lastPullAt);
+      setCloudLastPushAt(view.lastPushAt);
+      setCloudLastPullResult(view.lastPullResult);
+      setCloudLastPushResult(view.lastPushResult);
     } catch {
       setCloudConfigured(false);
       setCloudRemoteRev(null);

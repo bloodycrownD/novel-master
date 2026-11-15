@@ -18,6 +18,7 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 import type {AgentDefinition} from '@novel-master/core/agent';
+import {Result, AppError} from '@novel-master/core/errors';
 import {agentModeMatchesTab, type AgentSettingsTab} from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
@@ -113,11 +114,15 @@ export function AgentList({onCreate}: Props) {
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
   // nm-style: keep-local — 列表装载与工作区模型解析的状态链，内联回 useCallback 会让调用参数跨行
-  const reloadAgentList = async () => {
+  const reloadAgentList = async (): Promise<Result<void, AppError>> => {
     setLoading(true);
     try {
       const ids = await runtime.agentRegistry.listAgentIds();
-      const workspaceModelId = await runtime.state.getCurrentModelId();
+      const workspaceModel = await runtime.state.getCurrentModelId();
+      // 失败沿 Result 接力（错误通道迁移四期）：焦点回归时 toast，删除后
+      // 重载失败按各调用点原收场提示。
+      if (!workspaceModel.ok) return Result.err(workspaceModel.error);
+      const workspaceModelId = workspaceModel.value ?? undefined;
       let wsLabel = '—';
       if (workspaceModelId) {
         try {
@@ -166,6 +171,7 @@ export function AgentList({onCreate}: Props) {
         }
       }
       setRows(enriched);
+      return Result.ok(undefined);
     } finally {
       setLoading(false);
     }
@@ -175,7 +181,13 @@ export function AgentList({onCreate}: Props) {
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   useFocusEffect(
     useCallback(() => {
-      reload().catch(err => showToast(toastMessage('加载智能体列表失败', err)));
+      reload()
+        .then(r => {
+          if (!r.ok) {
+            showToast(toastMessage('加载智能体列表失败', r.error));
+          }
+        })
+        .catch(err => showToast(toastMessage('加载智能体列表失败', err)));
     }, [reload, showToast]),
   );
 
@@ -208,7 +220,10 @@ export function AgentList({onCreate}: Props) {
               await runtime.agentRegistry.delete(agentId);
             }
             batch.exit();
-            await reload();
+            const lr = await reload();
+            if (!lr.ok) {
+              showToast(toastMessage('删除失败', lr.error));
+            }
           })().catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
@@ -454,7 +469,10 @@ export function AgentList({onCreate}: Props) {
                 onPress: () => {
                   void (async () => {
                     await runtime.agentRegistry.delete(id);
-                    await reload();
+                    const lr = await reload();
+                    if (!lr.ok) {
+                      showToast(toastMessage('删除失败', lr.error));
+                    }
                   })().catch(err => showToast(toastMessage('删除失败', err)));
                 },
               },

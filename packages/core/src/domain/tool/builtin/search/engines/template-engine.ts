@@ -42,6 +42,7 @@ import {
   type FetchFn,
   type ResolvedEngineConfig,
   type SearchEngineTemplate,
+  type SearchResponse,
   type SearchToolOptions,
   type ToolParams,
 } from "../types.js";
@@ -89,12 +90,16 @@ function substitutePlaceholders(text: string, values: TemplatePlaceholderValues,
  * 唯一查模板点），分开传只为调用点可读。params 是工具层自由 JSON，原样透传引擎方言
  * 字段（GET 并入 query string、POST 浅合并覆盖 defaultBody 同名键）。成功返回
  * `results` 为提取结果的 JSON 文本（最长对象数组；50KB 预算内截断）。
+ *
+ * 已知失败走返回值通道（四期门⑦）：引擎失败收 `Result.err`；未知异常
+ * （非 abort 的 fetch 错误经 engineTimeoutError 透传）仍抛，search-tool 的
+ * 降级 catch 收口。
  */
-export async function runTemplateEngine(template: SearchEngineTemplate, resolved: ResolvedEngineConfig, q: string, opts: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal) {
+export async function runTemplateEngine(template: SearchEngineTemplate, resolved: ResolvedEngineConfig, q: string, opts: SearchToolOptions, params: ToolParams, fetch: FetchFn, signal?: AbortSignal): Promise<Result<SearchResponse, AppError>> {
   // 父 signal 已 abort（取消先于请求）：直接取消、不发起请求——已 aborted 的
   // signal 再注册监听器不会补发回调（WHATWG 语义），不早退会空挂满 30s 超时
   //（照 curl-tool / tool-runner 的取消早退先例）。
-  if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: template.name});
+  if (signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: template.name}));
   const engine = resolved.engine;
   const numResults = normalizeMaxResults(opts.maxResults);
   const values: TemplatePlaceholderValues = {
@@ -103,16 +108,14 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
     apiKey: resolved.apiKey,
     baseUrl: resolved.baseUrl,
   };
-  // 占位符替换 / body 字符串值归一：失败一律在 fetch 前转 throw（search-tool run 的 catch 是降级边界）。
-  const bodyValue = (value: string): string | number => {
-    if (value === "{{count}}") return numResults;
-    const substituted = substitutePlaceholders(value, values, template.name, false);
-    if (!substituted.ok) throw substituted.error;
-    return substituted.value;
+  // 占位符替换 / body 字符串值归一：失败一律在 fetch 前收 Result.err（search-tool run 的降级判别收口）。
+  const bodyValue = (value: string): Result<string | number, AppError> => {
+    if (value === "{{count}}") return Result.ok(numResults);
+    return substitutePlaceholders(value, values, template.name, false);
   };
 
   const urlResult = substitutePlaceholders(template.url, values, template.name, true);
-  if (!urlResult.ok) throw urlResult.error;
+  if (!urlResult.ok) return Result.err(urlResult.error);
   let requestUrl = urlResult.value;
   if (template.method === "GET") {
     try {
@@ -124,14 +127,14 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       requestUrl = parsedUrl.toString();
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      throw engineFailed(`${template.name} template URL is invalid: ${redactSecret(detail, resolved.apiKey)}`);
+      return Result.err(engineFailed(`${template.name} template URL is invalid: ${redactSecret(detail, resolved.apiKey)}`));
     }
   }
 
   const headers: Record<string, string> = {};
   for (const [headerName, headerValue] of Object.entries(template.headers)) {
     const substituted = substitutePlaceholders(headerValue, values, template.name, false);
-    if (!substituted.ok) throw substituted.error;
+    if (!substituted.ok) return Result.err(substituted.error);
     headers[headerName] = substituted.value;
   }
 
@@ -143,24 +146,30 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       try {
         parsedBody = JSON.parse(template.defaultBody);
       } catch {
-        throw engineFailed(`${template.name} template defaultBody is not valid JSON`);
+        return Result.err(engineFailed(`${template.name} template defaultBody is not valid JSON`));
       }
-      if (!isRecord(parsedBody)) throw engineFailed(`${template.name} template defaultBody must be a JSON object`);
+      if (!isRecord(parsedBody)) return Result.err(engineFailed(`${template.name} template defaultBody must be a JSON object`));
       const pending: unknown[] = [parsedBody];
       while (pending.length > 0) {
         const node = pending.pop();
         if (Array.isArray(node)) {
           for (let index = 0; index < node.length; index += 1) {
             const value: unknown = node[index];
-            if (typeof value === "string") node[index] = bodyValue(value);
-            else pending.push(value);
+            if (typeof value === "string") {
+              const substituted = bodyValue(value);
+              if (!substituted.ok) return Result.err(substituted.error);
+              node[index] = substituted.value;
+            } else pending.push(value);
           }
           continue;
         }
         if (!isRecord(node)) continue;
         for (const [key, value] of Object.entries(node)) {
-          if (typeof value === "string") node[key] = bodyValue(value);
-          else pending.push(value);
+          if (typeof value === "string") {
+            const substituted = bodyValue(value);
+            if (!substituted.ok) return Result.err(substituted.error);
+            node[key] = substituted.value;
+          } else pending.push(value);
         }
       }
       parsedDefaultBody = parsedBody;
@@ -195,11 +204,11 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       // 父级取消 → TOOL_CANCELLED 控制流码；其余 aborted 是 30s 计时器触发，
       // engineTimeoutError 保留超时失败语义（search-tool 的 catch 是降级边界，
       // 取消靠 search-tool 重判 signal 终止链降级）。
-      if (parentAborted) throw new AppError("TOOL_CANCELLED", {toolName: template.name});
+      if (parentAborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: template.name}));
       throw engineTimeoutError(e, controller.signal.aborted, template.name, TEMPLATE_ENGINE_TIMEOUT_MS);
     }
 
-    if (!response.ok) throw engineFailed(engineApiErrorMessage(template.name, response.status, await response.text(), resolved.apiKey));
+    if (!response.ok) return Result.err(engineFailed(engineApiErrorMessage(template.name, response.status, await response.text(), resolved.apiKey)));
 
     const responseText = await response.text();
     let raw: unknown;
@@ -207,7 +216,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       raw = JSON.parse(responseText);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      throw engineFailed(`${template.name} API returned invalid JSON: ${redactSecret(detail, resolved.apiKey)}`);
+      return Result.err(engineFailed(`${template.name} API returned invalid JSON: ${redactSecret(detail, resolved.apiKey)}`));
     }
 
     // 递归提取最长的「对象数组」（全部元素为 object 才算候选；空数组也算命中 =
@@ -229,11 +238,11 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
     }
     // 响应无对象数组：链降级失败（涵盖 bocha 业务码失败——失败响应里没有结果数组）。
     // 摘录整响应 JSON（脱敏后截 300 字符，口径同 HTTP 错误）供诊断引擎侧失败原因。
-    if (items == null) throw engineFailed(`${template.name} API returned no results array: ${redactSecret(responseText, resolved.apiKey).slice(0, 300)}`);
+    if (items == null) return Result.err(engineFailed(`${template.name} API returned no results array: ${redactSecret(responseText, resolved.apiKey).slice(0, 300)}`));
     // 提取文本按工具输出既有 50KB 字节预算截断：预算内原样透传；超预算逐码点累计
     //（不劈开多字节字符）切片，尾部追加截断标注（文本不再保证是合法 JSON，标注让 agent 知情）。
     const fullText = JSON.stringify(items);
-    if (utf8ByteLength(fullText) <= TOOL_OUTPUT_MAX_BYTES) return { engine, results: fullText };
+    if (utf8ByteLength(fullText) <= TOOL_OUTPUT_MAX_BYTES) return Result.ok({ engine, results: fullText });
     let used = 0;
     let end = 0;
     for (const char of fullText) {
@@ -242,7 +251,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       used += size;
       end += char.length;
     }
-    return { engine, results: fullText.slice(0, end) + TRUNCATION_MARKER };
+    return Result.ok({ engine, results: fullText.slice(0, end) + TRUNCATION_MARKER });
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", onParentAbort);

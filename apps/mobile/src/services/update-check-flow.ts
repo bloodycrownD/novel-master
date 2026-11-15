@@ -38,15 +38,43 @@ export async function runAutoUpdateCheckFlow(
   appUi: AppUiPreferences,
   fx: UpdateCheckSideEffects,
 ): Promise<void> {
-  // snoozed 提到 try 外：读偏好失败时未知静音状态，按未静音处理，
+  // snoozed 提到失败收口外：读偏好失败时未知静音状态，按未静音处理，
   // 保证用户能看到失败反馈而不是静默吞错。
   let snoozed = false;
+  // 失败收口（错误通道迁移四期）：读偏好失败（Result.err）与写持久化异常
+  // （reject）共用同一终端——标记检查失败 + 弹错误结果。
+  const fail = async (): Promise<void> => {
+    // 持久化失败标记自身可能因同一存储故障 reject，显式吃掉，不再冒泡。
+    await persistFailedUpdateCheck(appUi).catch(() => undefined);
+    if (!snoozed) {
+      fx.showResultModal('error');
+    }
+  };
+  // 读偏好的两步各兑住 infra rejection：已知失败沿 Result.err（下方判 ok），
+  // 未预期异常（appUi.get reject）与 Result 失败同终端——fail 收口，不冒泡。
+  let autoCheck: boolean;
   try {
-    const autoCheck = await readUpdatesAutoCheck(appUi);
-    if (!autoCheck) return;
+    autoCheck = await readUpdatesAutoCheck(appUi);
+  } catch {
+    await fail();
+    return;
+  }
+  if (!autoCheck) return;
 
-    snoozed = isSnoozed(await readSnoozeUntil(appUi));
+  let snoozeResult: Awaited<ReturnType<typeof readSnoozeUntil>>;
+  try {
+    snoozeResult = await readSnoozeUntil(appUi);
+  } catch {
+    await fail();
+    return;
+  }
+  if (!snoozeResult.ok) {
+    await fail();
+    return;
+  }
+  snoozed = isSnoozed(snoozeResult.value);
 
+  try {
     const data = await checkForUpdates();
     await persistUpdateCheckResult(appUi, data);
 
@@ -60,7 +88,11 @@ export async function runAutoUpdateCheckFlow(
     if (data.status !== 'update-available') return;
 
     const dismissed = await readDismissedVersion(appUi);
-    if (dismissed === data.remoteVersion) return;
+    if (!dismissed.ok) {
+      await fail();
+      return;
+    }
+    if (dismissed.value === data.remoteVersion) return;
 
     fx.showToast(`发现新版本 ${data.remoteVersion}`, {
       actionLabel: '查看',
@@ -71,11 +103,7 @@ export async function runAutoUpdateCheckFlow(
       },
     });
   } catch {
-    // 持久化失败标记自身可能因同一存储故障 reject，显式吃掉，不再冒泡。
-    await persistFailedUpdateCheck(appUi).catch(() => undefined);
-    if (!snoozed) {
-      fx.showResultModal('error');
-    }
+    await fail();
   }
 }
 

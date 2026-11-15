@@ -22,7 +22,8 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createSkillsService } from "@/service/skills/create-skills-service.js";
-import { isAppError } from "@/errors/app-error.js";
+import { isAppError, type AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * 内置技能名名单（删除 / 新建拦截与 seed 共用的单一来源）。
@@ -173,24 +174,25 @@ async function writeSeedLedger(conn: TdbcConnection): Promise<void> {
  * 存 VFS（vfs_entry/revision/内容寻址 blob），migration 事务内裸写等于
  * 重实现一遍 VFS 写路径，故升级逻辑挂本 seed 而非 SCHEMA_MIGRATIONS。
  *
- * 解包 throw 边界（错误通道迁移三期门⑦）：SkillsService 已是 Result 通道，
- * 本函数把读/写失败原样转回 bootstrap 异常通道；唯一调用方
- * novel-master-bootstrap 紧邻 try/catch 记日志不阻断启动。
+ * 错误通道迁移四期：SkillsService 已是 Result 通道，本函数把已知读/写
+ * 失败经 `Result` 返回，决定权交给调用方——唯一调用方
+ * novel-master-bootstrap 按 `!ok` 分支记日志不阻断启动（SQL 级未知异常
+ * 仍走 throw，由调用方原 catch 收口）。
  */
-export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
+export async function seedBuiltinSkills(conn: TdbcConnection): Promise<Result<void, AppError>> {
   // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。
   const applied = await readSeedLedger(conn);
   if (applied != null && applied >= AGENT_CONFIG_SEED_VERSION) {
-    return;
+    return Result.ok(undefined);
   }
   const service = createSkillsService(conn);
   // 错误通道迁移二期：readSkillFile 已改 Result 通道——Err 不再抛出，
-  // 存在性判定改为按 `!ok` 收窄（非 NOT_FOUND 的失败原样上抛）。
+  // 存在性判定改为按 `!ok` 收窄（非 NOT_FOUND 的失败按 Result 原样返回）。
   const existing = await service.readSkillFile("global", "agent-config");
   let exists = true;
   if (!existing.ok) {
     if (!isAppError(existing.error, "SKILL_NOT_FOUND")) {
-      throw existing.error;
+      return Result.err(existing.error);
     }
     exists = false;
   }
@@ -205,7 +207,8 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
     exists ? undefined : { builtinSeed: true }
   );
   if (!written.ok) {
-    throw written.error;
+    return Result.err(written.error);
   }
   await writeSeedLedger(conn);
+  return Result.ok(undefined);
 }

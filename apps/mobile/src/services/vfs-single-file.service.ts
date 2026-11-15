@@ -19,6 +19,7 @@ import {
   type BatchIngestPlan,
   type VfsScope,
 } from '@novel-master/core/vfs';
+import {Result} from '@novel-master/core/errors';
 import {
   exportBytesViaDocumentPicker,
   knownTypesForExtension,
@@ -53,7 +54,7 @@ export interface VfsSingleFileConfirmRequest {
    * 「用户看到的那个待覆盖文件」是同一份，二次调用会再弹一次选择器，
    * 用户可能改选另一个文件，等于用确认框给别的文件开了覆盖。
    */
-  readonly confirm: () => Promise<VfsSingleFileAppliedResult>;
+  readonly confirm: () => Promise<Result<VfsSingleFileAppliedResult, AppError>>;
 }
 
 /** 已落库的结果。 */
@@ -93,7 +94,7 @@ export async function importVfsSingleFile(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
   options: VfsSingleFileImportOptions = {},
-): Promise<VfsSingleFileImportResult> {
+): Promise<Result<VfsSingleFileImportResult, AppError>> {
   const picked = await pickAndReadFileWithMeta({
     mimeTypes: vfsSingleFileImportPickTypes(),
     // 缓存目录里的固定临时名：原件名走 fileName 返回，不靠落盘名反推。
@@ -104,32 +105,35 @@ export async function importVfsSingleFile(
     buildMissingError: fsPath => new AppError('VFS_SINGLE_FILE_NOT_FOUND', {path: fsPath}),
   });
   if (picked == null) {
-    return {status: 'cancelled'};
+    return Result.ok({status: 'cancelled'});
   }
 
   const targetDir = normalizeTargetDir(options.targetDir);
   const batchIo = createVfsBatchIoService(runtime.conn);
-  const plan = await batchIo.planBatchIngest(scope, targetDir, [
+  const planned = await batchIo.planBatchIngest(scope, targetDir, [
     {relativePath: picked.fileName, kind: 'file', bytes: picked.bytes},
   ]);
+  if (!planned.ok) return Result.err(planned.error);
+  const plan = planned.value;
 
-  const apply = async (): Promise<VfsSingleFileAppliedResult> => {
-    const report = await batchIo.applyBatchIngest(
+  const apply = async (): Promise<Result<VfsSingleFileAppliedResult, AppError>> => {
+    const applied = await batchIo.applyBatchIngest(
       scope,
       targetDir,
       plan,
       {overwriteConfirmed: true},
     );
-    return {status: 'applied', report, skippedBinary: [...plan.skippedBinary]};
+    if (!applied.ok) return Result.err(applied.error);
+    return Result.ok({status: 'applied', report: applied.value, skippedBinary: [...plan.skippedBinary]});
   };
 
   if (plan.conflicts.length > 0) {
-    return {
+    return Result.ok({
       status: 'needs-confirm',
       conflictCount: plan.conflicts.length,
       fileName: picked.fileName,
       confirm: apply,
-    };
+    });
   }
   return apply();
 }
@@ -157,9 +161,11 @@ export async function exportVfsSingleFile(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
   logicalPath: string,
-): Promise<'saved' | 'cancelled'> {
+): Promise<Result<'saved' | 'cancelled', AppError>> {
   const batchIo = createVfsBatchIoService(runtime.conn);
-  const plan = await batchIo.planBatchExport(scope, [logicalPath]);
+  const planned = await batchIo.planBatchExport(scope, [logicalPath]);
+  if (!planned.ok) return Result.err(planned.error);
+  const plan = planned.value;
   if (plan.files.length !== 1) {
     throw new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath});
   }
@@ -171,10 +177,12 @@ export async function exportVfsSingleFile(
   const mimeType =
     knownTypesForExtension(extensionOf(fileName))[0] ?? FALLBACK_EXPORT_MIME_TYPE;
 
-  return exportBytesViaDocumentPicker({
-    fileName,
-    mimeType,
-    // VFS 内容本就是 core 解码过的 UTF-8 文本，走 utf8 直写，不绕 base64。
-    write: tmpPath => blobFs().writeFile(tmpPath, file.content, 'utf8'),
-  });
+  return Result.ok(
+    await exportBytesViaDocumentPicker({
+      fileName,
+      mimeType,
+      // VFS 内容本就是 core 解码过的 UTF-8 文本，走 utf8 直写，不绕 base64。
+      write: tmpPath => blobFs().writeFile(tmpPath, file.content, 'utf8'),
+    }),
+  );
 }

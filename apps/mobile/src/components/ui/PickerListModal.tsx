@@ -16,6 +16,8 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import type {Result} from '@novel-master/core/errors';
+import {AppError} from '@novel-master/core/errors';
 import {formatError} from '../../errors/format-error';
 import {useTheme} from '../../theme/ThemeProvider';
 import {ModalShell} from './ModalShell';
@@ -36,8 +38,8 @@ type Props<T> = {
   visible: boolean;
   title: string;
   subtitle?: string;
-  /** 每次打开时拉取行数据与当前选中 id。 */
-  load: () => Promise<PickerListLoadResult<T>>;
+  /** 每次打开时拉取行数据与当前选中 id（已知失败走 Result.err，渲染错误文案与重试）。 */
+  load: () => Promise<Result<PickerListLoadResult<T>, AppError>>;
   keyExtractor: (item: T) => string;
   /** 选中判定，默认 keyExtractor(item) === selectedId。 */
   isSelected?: (
@@ -84,9 +86,15 @@ export function PickerListModal<T>({
     setError(undefined);
     try {
       const result = await load();
-      setRows(result.rows);
-      setSelectedId(result.selectedId);
+      if (result.ok) {
+        setRows(result.value.rows);
+        setSelectedId(result.value.selectedId);
+      } else {
+        setRows([]);
+        setError(formatError(result.error));
+      }
     } catch (cause) {
+      // 未知异常仍走异常通道：渲染错误文案与「重试」，不吞错伪装成空列表。
       setRows([]);
       setError(formatError(cause));
     } finally {

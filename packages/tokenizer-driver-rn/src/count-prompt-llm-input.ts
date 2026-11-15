@@ -660,8 +660,8 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
   let vendorModelId = savedModelId;
   if (params.savedModels != null) {
     const saved = await params.savedModels.findById(savedModelId.trim());
-    if (saved != null) {
-      vendorModelId = saved.vendorModelId;
+    if (saved.ok && saved.value != null) {
+      vendorModelId = saved.value.vendorModelId;
     }
   }
   let override = params.tokenizerOverride;

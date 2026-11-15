@@ -32,6 +32,7 @@ import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext, BuiltinToolSubagentContext } from "./builtin-tool-context.js";
 
@@ -147,18 +148,18 @@ function isSessionNotFound(error: unknown): boolean {
  * 伪装成「找不到子会话」会让模型误以为该 sessionId 失效，转而去新建一个重复
  * 的子会话，把一次瞬时故障放大成历史污染。
  *
- * @returns 校验通过的子会话 id（= 请求的 id 原样）。
- * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
- * @throws 非 `NOT_FOUND` 的 `sessions.get` 错误原样上抛
+ * @returns 校验通过的子会话 id（= 请求的 id 原样）；Err 分两类：infra 故障
+ * （非 `NOT_FOUND` 的 `sessions.get` 错误）原样接力，业务失败（不存在 /
+ * 非本会话子会话 / 活跃中 / 历史超限）抛 `TOOL_FAILED` 文案。
  *
- * 解包 throw 边界（错误通道迁移三期门⑦）：infra 故障与业务失败分流后原样
- * 上抛，由 tool-runner 的统一 catch 收成 tool error block，不落业务文案。
+ * 已知失败走返回值通道（四期门⑦）：infra 故障与业务失败分流，前者由
+ * `return r` 接力给 tool-runner 的统一收口，不落业务文案。
  */
-async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<string> {
+async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<Result<string, AppError>> {
   const sessionResult = await subagent.sessions.get(sessionId);
   if (!sessionResult.ok) {
     if (!isSessionNotFound(sessionResult.error)) {
-      throw sessionResult.error;
+      return Result.err(sessionResult.error);
     }
     throw new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`});
   }
@@ -176,7 +177,7 @@ async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSu
   if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
     throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`});
   }
-  return sessionId;
+  return Result.ok(sessionId);
 }
 
 /**
@@ -264,9 +265,20 @@ ${formatCallableList(callable)}
     // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
     // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
     const requestedSessionId = input.sessionId?.trim() ?? "";
-    const childSessionId = requestedSessionId.length > 0 ? await resolveResumeSessionId(requestedSessionId, subagent) : await subagent.createChildSession(title);
+    let childSessionId: string;
+    if (requestedSessionId.length > 0) {
+      const resumed = await resolveResumeSessionId(requestedSessionId, subagent);
+      if (!resumed.ok) return Result.err(resumed.error);
+      childSessionId = resumed.value;
+    } else {
+      const created = await subagent.createChildSession(title);
+      if (!created.ok) return Result.err(created.error);
+      childSessionId = created.value;
+    }
 
-    const { savedModelId, workspaceModelId } = subagent.resolveChildModelId(def);
+    const resolvedModel = subagent.resolveChildModelId(def);
+    if (!resolvedModel.ok) return Result.err(resolvedModel.error);
+    const { savedModelId, workspaceModelId } = resolvedModel.value;
 
     const runInput = {
       savedModelId,
@@ -276,7 +288,9 @@ ${formatCallableList(callable)}
       prompt: input.prompt,
       ...(attachments != null ? { attachments } : {}),
     };
-    const result = await subagent.runChildAgent(def, childSessionId, runInput);
+    const runOutcome = await subagent.runChildAgent(def, childSessionId, runInput);
+    if (!runOutcome.ok) return Result.err(runOutcome.error);
+    const result = runOutcome.value;
 
     // AgentRunResult 不带文本，必须自己取末条 assistant text。
     // tail+role 过滤读口（limit 只数 assistant 行）：旧形态 listBySession 读整条
@@ -302,12 +316,12 @@ ${formatCallableList(callable)}
     // formatToolOutputForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
     // 能同时拿到 stopped / failureReason / text / subagentSessionId。
     if (result.stopReason === "cancelled") {
-      return {
+      return Result.ok({
         text: lastText ?? "[用户停止，无已生成文本]",
         subagentSessionId: childSessionId,
         stopped: true,
         failureReason: SUBAGENT_STOP_REASON_USER,
-      };
+      });
     }
 
     let text: string;
@@ -318,7 +332,7 @@ ${formatCallableList(callable)}
       text = `[子代理未完成任务: stopReason=${result.stopReason}]`;
     }
 
-    return { text, subagentSessionId: childSessionId };
+    return Result.ok({ text, subagentSessionId: childSessionId });
   },
 };
 

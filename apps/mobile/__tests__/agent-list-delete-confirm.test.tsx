@@ -22,7 +22,7 @@ const mockRuntime = {
     listAgentIds: mockListAgentIds,
     getRawWire: mockGetRawWire,
   },
-  state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
+  state: {getCurrentModelId: jest.fn().mockResolvedValue({ok: true, value: null})},
 };
 
 jest.mock('@/theme/ThemeProvider', () => ({

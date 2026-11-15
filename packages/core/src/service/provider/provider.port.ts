@@ -1,4 +1,6 @@
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface CreateProviderInput {
@@ -30,7 +32,10 @@ export interface ProviderListItem extends LlmProvider {
 export interface ProviderService {
   list(): Promise<ProviderListItem[]>;
   get(id: string): Promise<LlmProvider>;
-  create(input: CreateProviderInput): Promise<LlmProvider>;
-  edit(id: string, patch: EditProviderPatch): Promise<LlmProvider>;
-  delete(id: string): Promise<void>;
+  /** 已知失败走返回值（四期门⑦）：域校验 / 跨资源写失败收 `Result.err`；未知异常仍抛。 */
+  create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>>;
+  /** 已知失败走返回值（四期门⑦）。 */
+  edit(id: string, patch: EditProviderPatch): Promise<Result<LlmProvider, AppError>>;
+  /** 已知失败走返回值（四期门⑦）。 */
+  delete(id: string): Promise<Result<void, AppError>>;
 }

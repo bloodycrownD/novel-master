@@ -26,9 +26,18 @@ function makeVfs(
   const impl = {
     list: jest.fn(async (dir: string) => {
       if (throwDirs.includes(dir)) {
-        throw new Error(`NOT_FOUND: ${dir}`);
+        // 错误通道迁移四期：list 已知失败走 Result.err（不再 throw）。
+        return {
+          ok: false,
+          error: new Error(`NOT_FOUND: ${dir}`),
+        } as const;
       }
-      return entries.filter(e => e.path.startsWith(`${dir === '/' ? '' : dir}/`));
+      return {
+        ok: true,
+        value: entries.filter(e =>
+          e.path.startsWith(`${dir === '/' ? '' : dir}/`),
+        ),
+      } as const;
     }),
   };
   return impl;

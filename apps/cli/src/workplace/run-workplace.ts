@@ -50,9 +50,10 @@ export async function runWorkplace(
 
   switch (sub) {
     case "list": {
-      const rows = await service.buildListRows();
+      const built = await service.buildListRows();
+      if (!built.ok) return { kind: "failed", error: built.error };
       console.log("kind\tpath\trule_state\tinclusion_mode\tdisplay_state");
-      for (const row of rows) {
+      for (const row of built.value) {
         if (row.kind === "dir") {
           console.log(`${row.kind}\t${row.path}\t${row.ruleState}\t\t`);
         } else {
@@ -134,7 +135,9 @@ async function resolveWorkplaceDisplay(
 ): Promise<Outcome<string>> {
   if (assemble == null) {
     // 调试 live materialize：无 session kkv，与 Agent 常驻前缀不同源。
-    return { kind: "completed", value: await service.renderDisplay() };
+    const rendered = await service.renderDisplay();
+    if (!rendered.ok) return { kind: "failed", error: rendered.error };
+    return { kind: "completed", value: rendered.value };
   }
   const scope = {
     kind: "session" as const,

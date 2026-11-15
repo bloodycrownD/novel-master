@@ -38,6 +38,7 @@ export interface AppErrorWire {
  */
 export interface ErrorParamsMap {
   AGENT_NOT_FOUND: {readonly agentId: string};
+  AGENT_REFERENCED_NOT_FOUND: {readonly agentId: string; readonly detail: string};
   AGENT_INVALID_MODEL: {readonly modelId?: string};
   VFS_NOT_FOUND: {readonly path?: string; readonly entryId?: number; readonly version?: number; readonly missing?: readonly {readonly entryId: number; readonly version: number}[]; readonly cause?: unknown};
   VFS_REPLACE_NOT_FOUND: {readonly path: string; readonly oldStringLength: number; readonly longestCommonSubstring: string; readonly lcsLength: number; readonly lcsOccurrences: number; readonly oldStringPreview?: string; readonly fileHintPreview?: string};
@@ -76,6 +77,7 @@ export interface ErrorParamsMap {
   PROVIDER_INVALID_SAVED_MODEL_ID: {readonly modelId?: string};
   PROVIDER_INVALID_ARGUMENT: {readonly modelId?: string; readonly providerId?: string; readonly issues?: readonly ZodIssue[]};
   PROVIDER_HTTP_ERROR: {readonly providerId?: string};
+  PROVIDER_STREAM_TIMEOUT: {readonly phase: "first-chunk" | "idle"; readonly timeoutMs: number};
   CHAT_NOT_FOUND: {readonly kind: string; readonly id: string; readonly messageId?: string; readonly projectId?: string; readonly sessionId?: string};
   CHAT_INVALID_ARGUMENT: {readonly path?: string};
   CHAT_MESSAGE_CORRUPT: {readonly messageId?: string; readonly field?: string};

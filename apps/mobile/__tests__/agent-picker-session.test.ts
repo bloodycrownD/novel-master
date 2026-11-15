@@ -30,7 +30,9 @@ function mockRuntime(sessionAgentConfig: {agentId: string; modelId?: string}) {
 describe('session 级 agent picker', () => {
   it('loadSessionAgentPickerRows：currentId 直接取会话 agentId', async () => {
     const rt = mockRuntime({agentId: 'agent-a'});
-    const result = await loadSessionAgentPickerRows(rt as never, 'sess-1');
+    const loaded = await loadSessionAgentPickerRows(rt as never, 'sess-1');
+    if (!loaded.ok) throw loaded.error;
+    const result = loaded.value;
     expect(result.currentId).toBe('agent-a');
     expect(result.rows).toHaveLength(2);
     expect(result.rows[0]).toEqual({

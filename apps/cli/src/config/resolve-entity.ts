@@ -5,6 +5,7 @@
  */
 
 import { type ProjectService, type SessionService } from "@novel-master/core/chat";
+import { type AppError, Result } from "@novel-master/core/errors";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -16,17 +17,17 @@ function flagString(
 
 /**
  * `use` target: `--project <id>` or unique `--name <name>` among all projects.
-  * 解包 throw 边界（错误通道迁移三期门⑦）：repo 读 / 列举的 `Result` 失败原样上抛（core Result → CLI 异常通道转码点），由 main.ts 两个边界 catch（exitCodeForError + formatCliError）收口。
+ * repo 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
 export async function resolveProjectUseId(
   projects: ProjectService,
   flags: ReadonlyMap<string, string | true>,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const byId = flagString(flags, "project");
   if (byId != null) {
     const exists = await projects.get(byId);
-    if (!exists.ok) throw exists.error;
-    return byId;
+    if (!exists.ok) return Result.err(exists.error);
+    return Result.ok(byId);
   }
 
   const byName = flagString(flags, "name");
@@ -40,7 +41,7 @@ export async function resolveProjectUseId(
         `Ambiguous project name ${JSON.stringify(byName)} (${matches.length} matches)`,
       );
     }
-    return matches[0]!.id;
+    return Result.ok(matches[0]!.id);
   }
 
   throw new Error(
@@ -57,12 +58,12 @@ export async function resolveSessionUseId(
   sessions: SessionService,
   flags: ReadonlyMap<string, string | true>,
   defaultProjectId: string | undefined,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const byId = flagString(flags, "session");
   if (byId != null) {
     const exists = await sessions.get(byId);
-    if (!exists.ok) throw exists.error;
-    return byId;
+    if (!exists.ok) return Result.err(exists.error);
+    return Result.ok(byId);
   }
 
   const label =
@@ -75,7 +76,7 @@ export async function resolveSessionUseId(
       );
     }
     const listed = await sessions.listByProject(projectId);
-    if (!listed.ok) throw listed.error;
+    if (!listed.ok) return Result.err(listed.error);
     const matches = listed.value.filter(
       (s) => (s.title ?? "") === label,
     );
@@ -89,7 +90,7 @@ export async function resolveSessionUseId(
         `Ambiguous session title ${JSON.stringify(label)} (${matches.length} matches)`,
       );
     }
-    return matches[0]!.id;
+    return Result.ok(matches[0]!.id);
   }
 
   throw new Error(

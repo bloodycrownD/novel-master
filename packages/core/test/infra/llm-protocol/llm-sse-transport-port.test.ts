@@ -6,7 +6,7 @@
  *   `setSseTransportOverrideForTests`；`Connection: close` 条件化——native
  *   分支不设（init 原样透传），注销 native 回落 XHR 时保留。
  * - T-N2: transport 超时错误（native LlmSseError(kind:"timeout") 经 wrapper
- *   转换的两种契约形态）映射 `LlmStreamTimeoutError` 分级——0 数据 →
+ *   转换的两种契约形态）映射 PROVIDER_STREAM_TIMEOUT 分级——0 数据 →
  *   first-chunk（可重试）；已投数据 → idle（不自动重试）。
  * - native 分支时序（公共层上移后与 XHR/fetch 同一套语义）：流中长静默不
  *   自动超时（空闲看门狗已退役——产品拍板流式不设固定空闲限制）、首字黑洞
@@ -29,7 +29,7 @@ import {
   type SseTransport,
 } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
 import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
-import { LlmStreamTimeoutError } from "../../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
+import { isAppError } from "../../../src/errors/app-error.js";
 import { isRequestAborted } from "../../../src/infra/llm-protocol/logic/request-abort.js";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
@@ -352,7 +352,7 @@ describe("T-N3: Connection: close 条件化（spec §7）", () => {
   });
 });
 
-describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () => {
+describe("T-N2: transport 超时错误映射 PROVIDER_STREAM_TIMEOUT 分级", () => {
   it("0 数据超时（name 形态）→ 'first-chunk'（可重试分级），整调用预算", async () => {
     const fake = createHangingTransport();
     registerSseTransport(fake.transport);
@@ -367,11 +367,11 @@ describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () =
       promise,
       (err: unknown) => {
         assert.ok(
-          err instanceof LlmStreamTimeoutError,
-          `应映射为 LlmStreamTimeoutError，实际：${String(err)}`,
+          isAppError(err, "PROVIDER_STREAM_TIMEOUT"),
+          `应映射为 PROVIDER_STREAM_TIMEOUT，实际：${String(err)}`,
         );
-        assert.equal(err.name, "LlmStreamTimeoutError");
-        assert.equal(err.phase, "first-chunk", "0 数据 → first-chunk 可重试");
+        assert.equal(err.name, "PROVIDER_STREAM_TIMEOUT");
+        assert.equal(err.details?.phase, "first-chunk", "0 数据 → first-chunk 可重试");
         assert.match(
           err.message,
           new RegExp(String(SSE_WHOLE_CALL_TIMEOUT_MS)),
@@ -402,7 +402,7 @@ describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () =
     await assert.rejects(
       promise,
       (err: unknown) =>
-        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+        isAppError(err, "PROVIDER_STREAM_TIMEOUT") && err.details?.phase === "idle",
     );
     assert.equal(chunks.join(""), 'data: {"x":1}\n\n', "超时前数据已投递");
   });
@@ -416,7 +416,7 @@ describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () =
     fake.reject(new Error("boom: network down"));
 
     await assert.rejects(promise, (err: unknown) => {
-      assert.ok(!(err instanceof LlmStreamTimeoutError));
+      assert.ok(!isAppError(err, "PROVIDER_STREAM_TIMEOUT"));
       assert.ok(err instanceof Error);
       assert.equal((err as Error).message, "boom: network down");
       return true;
@@ -491,8 +491,8 @@ describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义�
     await assert.rejects(
       promise,
       (err: unknown) =>
-        err instanceof LlmStreamTimeoutError &&
-        err.phase === "first-chunk",
+        isAppError(err, "PROVIDER_STREAM_TIMEOUT") &&
+        err.details?.phase === "first-chunk",
     );
   });
 

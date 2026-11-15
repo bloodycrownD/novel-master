@@ -7,10 +7,12 @@ import {
   layoutFromFormInput,
   type AgentMode,
 } from '@/config-forms/agent';
+import {AppError, Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /**
- * Creates blank agent in registry; returns new agentId.
+ * Creates blank agent in registry; returns new agentId（已知失败沿
+ * `Result.err` 上行，四期门⑦；屏幕按 Err 分支 toast）。
  *
  * `mode` 传入时作为新定义的默认作用域直接落库（主 tab → "primary"、
  * 子 tab → "subagent"）；不传则维持既有行为（缺省 all，双侧可见）。
@@ -20,7 +22,7 @@ export async function createBlankAgent(
   runtime: MobileNovelMasterRuntime,
   id = `agent-${Date.now()}`,
   mode?: AgentMode,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const ids = await runtime.agentRegistry.listAgentIds();
   const slots = [];
   for (const id of ids) {
@@ -32,11 +34,12 @@ export async function createBlankAgent(
     }
   }
   const name = allocateAgentDisplayName(slots);
-  await runtime.agentRegistry.upsert(id, {
+  const saved = await runtime.agentRegistry.upsert(id, {
     name,
     ...(mode != null ? {mode} : {}),
     runtime: {maxSteps: 20},
     prompts: layoutFromFormInput(createDefaultAgentEditorPrompts()),
   });
-  return id;
+  if (!saved.ok) return Result.err(saved.error);
+  return Result.ok(id);
 }

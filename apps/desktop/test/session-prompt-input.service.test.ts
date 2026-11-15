@@ -95,11 +95,13 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
       customAttach: "这是常驻附加信息：优先级最高",
     };
 
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       rt,
       { projectId, sessionId },
       definition,
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
 
     const userBody = bundle.ctx.messages
       .filter((m) => m.role === "user")
@@ -186,7 +188,9 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
 
   it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
     const rt = await getDesktopRuntime();
-    const bundle = await buildSessionPromptInput(rt, { projectId, sessionId });
+    const bundleResult = await buildSessionPromptInput(rt, { projectId, sessionId })
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
 
     const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? "";
     // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
@@ -453,20 +457,24 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
     const rt = await getDesktopRuntime();
     const { runtime, counts } = probeRuntime(rt);
-    const bundle = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInput(
       runtime,
       { projectId, sessionId },
       undefined,
       { shouldBail: () => false },
-    );
+    )
+    if (!bundleResult.ok) throw bundleResult.error;
+    const bundle = bundleResult.value;
     assert.equal(bundle.rawMessages.length, 1);
     assert.ok(counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1);
 
     // 预览消费方（不传 options）：原签名调用零变化。
-    const previewBundle = await buildSessionPromptInput(
+    const previewResult = await buildSessionPromptInput(
       runtime,
       { projectId, sessionId },
     );
+    if (!previewResult.ok) throw previewResult.error;
+    const previewBundle = previewResult.value;
     assert.equal(previewBundle.rawMessages.length, 1);
   });
 });

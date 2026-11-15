@@ -22,9 +22,6 @@ import { adjustRef, transferLiveRef } from "./revision-ref-count.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
 
-/** writeWithRevision 的失败载荷。 */
-type WriteWithRevisionError = AppError<"VFS_IS_DIRECTORY" | "VFS_INVALID_NAME" | "VFS_INVALID_PATH" | "VFS_NOT_A_DIRECTORY">;
-
 interface WriteWithRevisionOptions {
   /**
    * 跳过「文件名合法性」校验（`assertValidVfsEntryName`）。
@@ -46,11 +43,13 @@ interface WriteWithRevisionOptions {
  *
  * 零 service 层依赖（只吃两个 repo），故下沉不违反分层。
  */
-export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, content: string, options: WriteWithRevisionOptions = {}): Promise<Result<{ version: number }, WriteWithRevisionError>> {
+export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, content: string, options: WriteWithRevisionOptions = {}): Promise<Result<{ version: number }, AppError>> {
   const resolved = normalizePath(path);
   if (!resolved.ok) return Result.err(resolved.error);
   const normalized = resolved.value;
-  const existing = await entryRepo.findByPath(scopeKey, normalized);
+  const found = await entryRepo.findByPath(scopeKey, normalized);
+  if (!found.ok) return Result.err(found.error);
+  const existing = found.value;
   if (existing?.entryKind === "directory") {
     return Result.err(new AppError("VFS_IS_DIRECTORY", { detail: `Path is a directory: ${normalized}`, path: normalized }));
   }
@@ -75,9 +74,11 @@ export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionR
     // scope 的 revision 历史还在」这个状态本身也不再产生。存量历史版本的续号
     // 语义由 update 路径的 `nextVersionFor`（`max(head, MAX(version)) + 1`）保证。
     const inserted = await entryRepo.insert(scopeKey, normalized, content);
-    version = inserted.version;
+    if (!inserted.ok) return Result.err(inserted.error);
+    version = inserted.value.version;
     const entry = await entryRepo.findByPath(scopeKey, normalized);
-    const entryId = entry!.entryId;
+    if (!entry.ok) return Result.err(entry.error);
+    const entryId = entry.value!.entryId;
     await revisionRepo.append({
       entryId,
       version,
@@ -97,7 +98,8 @@ export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionR
   // 统一分配器：max(head, MAX(version)) + 1，避开 head 回拨后历史占号段
   const nextVersion = await nextVersionFor(revisionRepo, existing.entryId, existing.version);
   const updated = await entryRepo.update(scopeKey, normalized, content, nextVersion);
-  version = updated.version;
+  if (!updated.ok) return Result.err(updated.error);
+  version = updated.value.version;
   await revisionRepo.append({
     entryId: existing.entryId,
     version,

@@ -371,7 +371,9 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       }
       compiled = compiledDrafts;
     } else {
-      compiled = await this.listCompiledRules();
+      const listed = await this.listCompiledRules();
+      if (!listed.ok) return Result.err(listed.error);
+      compiled = listed.value;
     }
     const lines: SmartSortRulePreviewLine[] = names.map((name) => {
       const detail = extractSortKeyDetail(name, compiled);
@@ -391,10 +393,8 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
     return Result.ok({ lines, sortedNames });
   }
 
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：compile `Result` → service 异常通道转码点（本文件其余解包 throw 同款）——失败原样上抛，由调用链端点（handler / 屏幕）catch 收口。
-   */
-  async listCompiledRules(): Promise<CompiledSmartSortRule[]> {
+  /** 启用规则逐条预编译；任一编译失败（存量数据违约）经 `Result.err` 原样接力。 */
+  async listCompiledRules(): Promise<Result<CompiledSmartSortRule[], AppError>> {
     const rules = await this.rules().listOrdered();
     const out: CompiledSmartSortRule[] = [];
     for (const rule of rules) {
@@ -402,10 +402,10 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         continue;
       }
       const compiled = compileSmartSortRule(rule);
-      if (!compiled.ok) throw compiled.error;
+      if (!compiled.ok) return Result.err(compiled.error);
       out.push(compiled.value);
     }
-    return out;
+    return Result.ok(out);
   }
 
   private async getRule(ruleId: string): Promise<Result<SmartSortRule, AppError>> {

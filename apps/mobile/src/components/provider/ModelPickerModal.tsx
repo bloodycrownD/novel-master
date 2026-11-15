@@ -9,6 +9,7 @@
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {Result, AppError} from '@novel-master/core/errors';
 import {useRuntime} from '../../hooks/useRuntime';
 import {toastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
@@ -50,7 +51,7 @@ export function ModelPickerModal({
   const runtime = useRuntime();
 
   const load = useCallback(async (): Promise<
-    PickerListLoadResult<SavedModelRow>
+    Result<PickerListLoadResult<SavedModelRow>, AppError>
   > => {
     let selectedId: string | undefined;
     if (sessionId != null) {
@@ -59,15 +60,16 @@ export function ModelPickerModal({
       const sessionConfig = await runtime.sessions.getSessionAgentConfig(
         sessionId,
       );
-      if (!sessionConfig.ok) throw sessionConfig.error;
+      if (!sessionConfig.ok) return Result.err(sessionConfig.error);
       selectedId =
         sessionConfig.value.modelId && sessionConfig.value.modelId.length > 0
           ? sessionConfig.value.modelId
           : undefined;
     } else {
       // workspace 全局：用 workspace 当前模型高亮。
-      const workspaceId = await runtime.state.getCurrentModelId();
-      selectedId = workspaceId ?? undefined;
+      const workspaceModel = await runtime.state.getCurrentModelId();
+      if (!workspaceModel.ok) return Result.err(workspaceModel.error);
+      selectedId = workspaceModel.value ?? undefined;
     }
     const providers = await runtime.providers.list();
     const nameById = new Map(
@@ -111,7 +113,7 @@ export function ModelPickerModal({
       };
     });
     collected.sort((a, b) => a.label.localeCompare(b.label));
-    return {rows: collected, selectedId};
+    return Result.ok({rows: collected, selectedId});
   }, [runtime, sessionId]);
 
   const select = useCallback(
@@ -123,7 +125,10 @@ export function ModelPickerModal({
           const current = await runtime.sessions.getSessionAgentConfig(
             sessionId,
           );
-          if (!current.ok) throw current.error;
+          if (!current.ok) {
+            showToast(toastMessage('设置失败', current.error));
+            return;
+          }
           const updated = await runtime.sessions.updateSessionAgentConfig(
             sessionId,
             {
@@ -131,7 +136,10 @@ export function ModelPickerModal({
               modelId: savedModelId,
             },
           );
-          if (!updated.ok) throw updated.error;
+          if (!updated.ok) {
+            showToast(toastMessage('设置失败', updated.error));
+            return;
+          }
         } else {
           await runtime.state.setCurrentModelId(savedModelId);
         }

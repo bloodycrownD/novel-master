@@ -5,6 +5,8 @@
  */
 
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { joinFileBlocks, renderFileBlock } from "./workplace-display.js";
 import type { WorkplaceScope } from "../model/workplace-types.js";
@@ -14,7 +16,7 @@ import type { WorkplaceRuleView } from "../model/workplace-rule-view.js";
  * 从规则视图物化持久 workplace 块文本。
  * 按 DFS 文件行顺序遍历；仅对非 hidden 且 full/header 档位读取 VFS 正文。
  */
-export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: VfsEntryRepository, scope: WorkplaceScope, mtimeByPath: ReadonlyMap<string, number>): Promise<string> {
+export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: VfsEntryRepository, scope: WorkplaceScope, mtimeByPath: ReadonlyMap<string, number>): Promise<Result<string, AppError>> {
   const scopeKeyStr = scopeKey(scope);
   const blocks: string[] = [];
   for (const row of view.rows) {
@@ -29,7 +31,8 @@ export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: Vfs
     if (display === "full" || display === "header") {
       // entry_id 化后 path 列直接存纯逻辑路径，无需物理前缀拼接
       const entry = await vfs.findByPath(scopeKeyStr, row.path);
-      content = entry?.content ?? "";
+      if (!entry.ok) return Result.err(entry.error);
+      content = entry.value?.content ?? "";
     }
     const block = renderFileBlock({
       logicalPath: row.path,
@@ -39,5 +42,5 @@ export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: Vfs
     });
     blocks.push(block);
   }
-  return joinFileBlocks(blocks);
+  return Result.ok(joinFileBlocks(blocks));
 }

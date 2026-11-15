@@ -5,7 +5,7 @@ import {AboutScreen} from '@/screens/stack/AboutScreen';
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     appUi: {
-      get: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn().mockResolvedValue({ok: true, value: undefined}),
       set: jest.fn().mockResolvedValue(undefined),
     },
   }),
