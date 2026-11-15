@@ -137,10 +137,7 @@ function parseDayLocalDate(
 } {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
-    throw new AppError(
-      "CHAT_INVALID_ARGUMENT",
-      {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}}
-    );
+    throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.invalid_day_format", params: {field: label, value: dayLocalDate}});
   }
   const year = Number(match[1]);
   const month = Number(match[2]) - 1;
@@ -363,18 +360,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
   ): Promise<UsageStatsRequestPage> {
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
-      throw new AppError(
-        "CHAT_INVALID_ARGUMENT",
-        {key: "error.usage.invalid_page_limit", params: {value: page.limit}}
-      );
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.invalid_page_limit", params: {value: page.limit}});
     }
     // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
     // 直接抛错），与 limit 同构提前拒收。
     if (!Number.isFinite(page.offset)) {
-      throw new AppError(
-        "CHAT_INVALID_ARGUMENT",
-        {key: "error.usage.invalid_page_offset", params: {value: page.offset}}
-      );
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.invalid_page_offset", params: {value: page.offset}});
     }
     const offset = Math.max(0, Math.floor(page.offset));
     const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
@@ -450,10 +441,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
 
   async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
     if (typeof sessionId !== "string" || sessionId.length === 0) {
-      throw new AppError(
-        "CHAT_INVALID_ARGUMENT",
-        {key: "error.usage.session_id_required", params: {value: String(sessionId)}}
-      );
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.session_id_required", params: {value: String(sessionId)}});
     }
     // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
     // （usage_record，按 created_at_ms 倒序取首行）——消息被删除/回滚后
@@ -588,10 +576,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const fromStart = new Date(from.year, from.month, from.day);
     const toStart = new Date(to.year, to.month, to.day);
     if (fromStart.getTime() > toStart.getTime()) {
-      throw new AppError(
-        "CHAT_INVALID_ARGUMENT",
-        {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}}
-      );
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.usage.from_after_to", params: {from_day: range.fromDay, to_day: range.toDay}});
     }
     return {
       fromMs: fromStart.getTime(),

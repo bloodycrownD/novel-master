@@ -8,7 +8,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createVfsService } from "@novel-master/core/vfs";
-import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { AppError } from "../../src/errors/app-error.js";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
 import { vfsUserMessage } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
 import { tCore } from "../helpers/core-i18n.js";
 import { insertFileSeedingRevision } from "../../src/domain/vfs/logic/seed-live-head-revisions.js";
@@ -38,7 +39,7 @@ describe("VFS entry name validation (service)", () => {
     await assert.rejects(
       () => vfs.write(SCOPE, scoped("/坏\n名.txt"), "x"),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+        assert.ok(isVfsError(e, "INVALID_NAME"));
         assert.equal(tCore(vfsUserMessage(e)), "文件名不能包含换行或控制字符");
         return true;
       },
@@ -50,12 +51,12 @@ describe("VFS entry name validation (service)", () => {
     const vfs = createVfsService(ctx.conn);
     await assert.rejects(
       () => vfs.write(SCOPE, scoped("/带\t制表.txt"), "x"),
-      (e: unknown) => isAppError(e, "VFS_INVALID_NAME"),
+      (e: unknown) => isVfsError(e, "INVALID_NAME"),
     );
     await assert.rejects(
       () => vfs.write(SCOPE, scoped("/ 首空格.txt"), "x"),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_INVALID_NAME"));
+        assert.ok(isVfsError(e, "INVALID_NAME"));
         assert.equal(
           tCore(vfsUserMessage(e)),
           "文件名不能以空格开头或结尾",
@@ -70,7 +71,7 @@ describe("VFS entry name validation (service)", () => {
     const vfs = createVfsService(ctx.conn);
     await assert.rejects(
       () => vfs.mkdir(SCOPE, scoped("/目录\u0007")),
-      (e: unknown) => isAppError(e, "VFS_INVALID_NAME"),
+      (e: unknown) => isVfsError(e, "INVALID_NAME"),
     );
   });
 
@@ -81,7 +82,7 @@ describe("VFS entry name validation (service)", () => {
     await vfs.write(SCOPE, from, "x");
     await assert.rejects(
       () => vfs.renamePath(SCOPE, from, scoped("/新\n名.txt")),
-      (e: unknown) => isAppError(e, "VFS_INVALID_NAME"),
+      (e: unknown) => isVfsError(e, "INVALID_NAME"),
     );
   });
 
@@ -93,7 +94,7 @@ describe("VFS entry name validation (service)", () => {
     await vfs.write(SCOPE, `${dir}/a.txt`, "x");
     await assert.rejects(
       () => vfs.renamePrefix(SCOPE, dir, scoped("/　")),
-      (e: unknown) => isAppError(e, "VFS_INVALID_NAME"),
+      (e: unknown) => isVfsError(e, "INVALID_NAME"),
     );
   });
 

@@ -79,8 +79,8 @@ error:
   # —— infra：启动基线（INFRA_BASELINE_TOO_OLD，bootstrap 域不在词表，按 code 归 infra）——
   infra:
     baseline_too_old: 检测到当前数据库低于本版本最低支持版本（{minimum_version}）。请先升级到{minimum_version}，再升级到本版本。
-    decode_invalid_schema: 配置数据不符合 schema
-    encode_not_supported: 此数据格式不支持写入
+    decode_invalid_schema: 配置数据不符合 schema：{detail}
+    encode_not_supported: 此数据格式不支持写入：{detail}
   # —— prompt：布局校验（PROMPT_INVALID_LAYOUT）与动态宏校验（PROMPT_INVALID_MACRO）；{block} 是块名「N」片段，{hint} 是嵌套 descriptor ——
   prompt:
     invalid_layout:

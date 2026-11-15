@@ -24,7 +24,7 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {isAppError} from '@novel-master/core/vfs';
+import {isVfsError} from '@novel-master/core/vfs';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {
   skillDomainBadgeColor,
@@ -66,7 +66,8 @@ export function SkillPanelScreen() {
         return await runtime.skills().effectiveSkills(projectId);
       } catch (error) {
         // 与服务层向 NOT_FOUND 语义对齐：技能根目录不存在 = 空列表
-        if (isAppError(error, 'VFS_NOT_FOUND')) {
+        // （skills 链路经 legacy mapper 抛旧形态对象，双形态守卫带短码判别）
+        if (isVfsError(error, 'NOT_FOUND')) {
           return [];
         }
         throw error;

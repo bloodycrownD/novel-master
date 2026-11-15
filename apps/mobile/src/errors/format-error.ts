@@ -4,7 +4,7 @@
 import {CloudSyncError, TdbcError} from '@novel-master/core';
 import {coreT} from '@/i18n/core';
 
-import {AppError, isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/agent';
 
 import {isVfsError, vfsUserMessage} from '@novel-master/core/vfs';
 

@@ -128,7 +128,9 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
 
   it('format-error 走 AppError 统一分支', () => {
     const src = readSrc('src/errors/format-error.ts');
-    expect(src).toContain('error instanceof AppError');
+    // 错误类已退役（isAppError 判 key 收窄），不再有 instanceof 类分支。
+    expect(src).toContain('isAppError(error');
+    expect(src).not.toContain('instanceof AppError');
     expect(src).not.toContain('CharacterCardError');
   });
 });

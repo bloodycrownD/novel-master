@@ -17,7 +17,7 @@ describe("buildReplaceNotFoundError", () => {
 
     assert.ok(isAppError(err, "VFS_REPLACE_NOT_FOUND"));
     assert.equal(err.details?.path, "/note.md");
-    const details = err.details?.details as {
+    const details = err.details as {
       oldStringPreview?: string;
       fileHintPreview?: string;
     };
@@ -38,7 +38,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "AAAAAAAAAAAAAAAA";
     const oldString = "ZZZZZZZZZZZZZZZZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details?.details as { fileHintPreview?: string };
+    const details = err.details as { fileHintPreview?: string };
     assert.equal(details.fileHintPreview, "A".repeat(16));
   });
 
@@ -46,7 +46,7 @@ describe("buildReplaceNotFoundError", () => {
     const longOld = "你".repeat(250);
     const fileContent = "XYZXYZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, longOld);
-    const details = err.details?.details as { oldStringPreview?: string };
+    const details = err.details as { oldStringPreview?: string };
     // 250 个「你」只该输出 100 个（按码点截，代理对不会切半）。
     assert.equal(details.oldStringPreview, "你".repeat(100));
   });
@@ -57,7 +57,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "😀abc";
     const oldString = "ZZZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details?.details as { fileHintPreview?: string };
+    const details = err.details as { fileHintPreview?: string };
     assert.ok(details.fileHintPreview?.startsWith("😀abc"));
     // 转义后不得出现孤立代理对转义（半个 emoji 被切开的标志）。
     assert.ok(!JSON.stringify(details.fileHintPreview).includes("\\ud"));
@@ -67,7 +67,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "line1\nline2\ttab";
     const oldString = "line1 line2";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details?.details as { fileHintPreview?: string };
+    const details = err.details as { fileHintPreview?: string };
     // 预览是原始文本：换行/制表保留在字符串里，formatter JSON.stringify 后显形为 \n、\t。
     assert.ok(details.fileHintPreview?.includes("\n"));
     assert.ok(details.fileHintPreview?.includes("\t"));
@@ -93,7 +93,7 @@ describe("buildReplaceNotFoundError", () => {
     assert.equal(err.key, "VFS_REPLACE_NOT_FOUND");
     assert.equal(err.details?.path, "/big.md");
 
-    const details = err.details?.details as {
+    const details = err.details as {
       longestCommonSubstring?: string;
       lcsLength?: number;
       fileHintPreview?: string;

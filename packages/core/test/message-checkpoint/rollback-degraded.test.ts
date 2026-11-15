@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { AppError } from "../../src/errors/app-error.js";
 import { textBlocks } from "@novel-master/core/chat";
 import {
   isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
   isSessionFsError,
-  SessionFsError,
-  sessionFsRollbackMessageNotFound,
-  sessionFsRollbackUndoSendEmptyTarget,
-  sessionFsRollbackVfsRestoreFailed,
 } from "@novel-master/core/session-fs";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
@@ -202,26 +199,26 @@ describe("MessageRollbackService (degraded fallback)", () => {
   it("DF6: isRollbackVfsDegradableError 边界", () => {
     assert.equal(
       isRollbackVfsDegradableError(
-        sessionFsRollbackVfsRestoreFailed("工作区无法恢复：测试"),
+        new AppError("SESSION_FS_ROLLBACK_VFS_RESTORE_FAILED", "工作区无法恢复：测试"),
       ),
       true,
     );
     // undo_send 无 baseline（live 树非空）：同样可降级为仅截断消息
     assert.equal(
       isRollbackVfsDegradableError(
-        sessionFsRollbackUndoSendEmptyTarget("s-1", "m-1"),
+        new AppError("SESSION_FS_ROLLBACK_UNDO_SEND_EMPTY_TARGET", "undo send empty target"),
       ),
       true,
     );
     assert.equal(
       isRollbackVfsDegradableError(
-        new SessionFsError("RESTORE_REVISION_MISSING", "revision missing"),
+        new AppError("SESSION_FS_RESTORE_REVISION_MISSING", "revision missing"),
       ),
       false,
     );
     assert.equal(
       isRollbackVfsDegradableError(
-        sessionFsRollbackMessageNotFound("msg-1"),
+        new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", "rollback message not found: msg-1"),
       ),
       false,
     );

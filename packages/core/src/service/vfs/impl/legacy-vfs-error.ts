@@ -53,8 +53,11 @@ export function throwLegacyVfs(error: AppError): never {
     throw error;
   }
   const path = typeof error.details?.path === "string" ? error.details.path : undefined;
+  // REPLACE_NOT_FOUND 的 LCS 诊断字段在一期已平铺进 details 顶层（不再有 details.details 双层），
+  // legacy 对象的 details 保持旧 VfsError 语义 = 诊断对象本身，format 链按六字段读取。
+  const details = error.key === "VFS_REPLACE_NOT_FOUND" ? error.details : error.details?.details;
   const localized = resolveLocalizedMessage(legacyMessageOf(error));
-  throw Object.assign(new Error(localized.text), {name: "VfsError", code, ...(path != null ? {path} : {}), ...(error.details?.details !== undefined ? {details: error.details.details} : {}), ...(localized.messageKey != null ? {messageKey: localized.messageKey as CoreMessageKey, messageParams: localized.messageParams as MessageParams} : {})});
+  throw Object.assign(new Error(localized.text), {name: "VfsError", code, ...(path != null ? {path} : {}), ...(details !== undefined && details != null ? {details} : {}), ...(localized.messageKey != null ? {messageKey: localized.messageKey as CoreMessageKey, messageParams: localized.messageParams as MessageParams} : {})});
 }
 
 /** 解包失败：VFS_ZIP_* key 翻成 legacy 旧形态对象（`name + code` 手搓，VfsZipError 类已退役），其余 AppError 原样抛出（descriptor 随 messageKey 透传）。 */

@@ -749,7 +749,7 @@ describe("curl 工具", () => {
       thrown = e;
     }
     assert.ok(isAppError(thrown) && thrown.key.startsWith("TOOL_"));
-    assert.equal(thrown.code, "FAILED");
+    assert.equal(thrown.key, "TOOL_FAILED");
     const llmMessage = formatToolErrorForLlm(thrown);
     assert.match(llmMessage, /请求已取消/);
     assert.match(llmMessage, /https:\/\/example\.com\/pre-aborted/);

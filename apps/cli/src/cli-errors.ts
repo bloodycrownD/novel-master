@@ -11,7 +11,7 @@ import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "./i18n.js";
 
 export const EXIT_USAGE = 1;
-export const EXIT_RUNTIME = 2;
+const EXIT_RUNTIME = 2;
 
 /** 错误 → 用户可见中文文案：i18n 后 descriptor 模式的 message 是英文 desc，边界统一解析。 */
 function visibleMessage(error: unknown): string {

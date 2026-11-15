@@ -5,8 +5,7 @@
  */
 
 import type { AppError } from "@/errors/app-error.js";
-import type { ErrorKey } from "@/errors/error-codes.js";
-import type { VfsErrorCode, VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
+import { vfsErrorCodeOf, type LegacyVfsError, type VfsErrorCode, type VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
 import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
@@ -16,18 +15,6 @@ type VfsErrorLike = {
   readonly message: string;
   readonly path?: string;
   readonly details?: unknown;
-};
-
-const APP_ERROR_TO_VFS_CODE: Partial<Record<ErrorKey, VfsErrorCode>> = {
-  VFS_NOT_FOUND: "NOT_FOUND",
-  VFS_REPLACE_NOT_FOUND: "REPLACE_NOT_FOUND",
-  VFS_DIRECTORY_NOT_EMPTY: "DIRECTORY_NOT_EMPTY",
-  VFS_INVALID_PATH: "INVALID_PATH",
-  VFS_INVALID_NAME: "INVALID_NAME",
-  VFS_IS_DIRECTORY: "IS_DIRECTORY",
-  VFS_ALREADY_EXISTS: "ALREADY_EXISTS",
-  VFS_NOT_A_DIRECTORY: "NOT_A_DIRECTORY",
-  VFS_PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
 };
 
 // nm-style: keep-local — REPLACE_NOT_FOUND 分支独占 LCS 诊断与预览渲染；
@@ -66,10 +53,13 @@ function formatReplaceNotFound(error: VfsErrorLike, logicalPath: string): string
 }
 
 /** 将 VFS 域 AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
-export function formatVfsErrorForLlm(error: AppError, _scope?: VfsScope): string {
-  const code = APP_ERROR_TO_VFS_CODE[error.key];
-  // VfsError 类退役后 LCS 诊断字段平铺在 params/details 顶层（不再有 details.details 双层）。
-  const normalized: VfsErrorLike | null = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined, details: error.details };
+/** AppError（key + 平铺 details）与 legacy 手搓对象（顶层 path + code 短码）都收；经 service 端口出来的 VFS 失败是后者。 */
+export function formatVfsErrorForLlm(error: AppError | LegacyVfsError, _scope?: VfsScope): string {
+  const code = vfsErrorCodeOf(error);
+  // VfsError 类退役后 LCS 诊断字段平铺在 AppError details 顶层；legacy 对象的 details 即诊断对象本身。
+  const details: unknown = error.details;
+  const path = typeof (error as {path?: unknown}).path === "string" ? (error as {path?: unknown}).path as string : typeof details === "object" && details != null && typeof (details as {path?: unknown}).path === "string" ? (details as {path?: unknown}).path as string : undefined;
+  const normalized: VfsErrorLike | null = code == null ? null : { code, message: error.message, path, details };
   if (normalized == null) {
     return stripKnownPhysicalPrefixes(error.message);
   }

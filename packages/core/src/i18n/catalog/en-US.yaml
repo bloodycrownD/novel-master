@@ -10,8 +10,8 @@ error:
   chat:
     not_found: "{kind} not found: {id}"
   infra:
-    decode_invalid_schema: Config data does not match its schema.
-    encode_not_supported: Encoding is not supported for this format.
+    decode_invalid_schema: "Config data does not match its schema: {detail}"
+    encode_not_supported: "Encoding is not supported for this format: {detail}"
   prompt:
     invalid_yaml: Invalid prompt YAML.
     invalid_block: Invalid prompt block.

@@ -7,8 +7,8 @@
  * - {@link VfsReplaceNotFoundDetails}：edit REPLACE_NOT_FOUND 的 LCS 诊断字段类型。
  * - {@link isVfsError} 双形态守卫：AppError（`name` 以 `VFS_` 开头且 `code` 为数字）
  *   与 legacy 手搓对象（`name === "VfsError"` + 字符串短码）都能判中，沿 cause 链
- *   回溯。不带短码实参的调用对两种形态都收窄；带短码实参只精确匹配 legacy 形态
- *   （AppError 的 `code` 是数字，判 key 请用 `isAppError(error, "VFS_*")`）。
+ *   回溯。带短码实参时两种形态都精确匹配（AppError 按 `VFS_<短码>` 对 name——
+ *   `this.name = key`；legacy 按字符串 code），与 {@link isSessionFsError} 同构。
  *
  * @module errors/vfs-errors
  */
@@ -64,6 +64,21 @@ export function isVfsError(
   return false;
 }
 
+/** 从 {@link isVfsError} 判中的错误里读 VFS 短码：AppError 形态由 name（= key）去 `VFS_` 前缀反推，legacy 形态读字符串 `code`；非 VFS 错误返回 undefined。 */
+export function vfsErrorCodeOf(error: unknown): VfsErrorCode | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+  const candidate = error as { name?: unknown; code?: unknown };
+  if (typeof candidate.name === "string" && candidate.name.startsWith("VFS_") && typeof candidate.code === "number") {
+    return candidate.name.slice("VFS_".length) as VfsErrorCode;
+  }
+  if (candidate.name === "VfsError" && typeof candidate.code === "string") {
+    return candidate.code as VfsErrorCode;
+  }
+  return undefined;
+}
+
 function matchesVfsError(
   error: unknown,
   code?: VfsErrorCode
@@ -72,10 +87,9 @@ function matchesVfsError(
     return false;
   }
   const candidate = error as { name?: unknown; code?: unknown };
-  const legacy = candidate.name === "VfsError" && typeof candidate.code === "string";
   const modern = typeof candidate.name === "string" && candidate.name.startsWith("VFS_") && typeof candidate.code === "number";
-  if (!legacy && !modern) {
-    return false;
+  if (modern) {
+    return code === undefined || candidate.name === `VFS_${code}`;
   }
-  return code === undefined || (legacy && candidate.code === code);
+  return candidate.name === "VfsError" && typeof candidate.code === "string" && (code === undefined || candidate.code === code);
 }

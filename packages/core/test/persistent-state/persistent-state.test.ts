@@ -28,7 +28,7 @@ describe("PersistentState", () => {
       () => {
         void ctx.state.setCurrentModelId("prov1/model");
       },
-      ((error: unknown) => isAppError(error, "PROVIDER_INVALID_SAVED_MODEL_ID"),
+      (error: unknown) => isAppError(error, "PROVIDER_INVALID_SAVED_MODEL_ID"),
     );
   });
 

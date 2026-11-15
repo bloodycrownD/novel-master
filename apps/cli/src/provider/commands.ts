@@ -44,6 +44,8 @@ function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string,
   }
 }
 
+// nm-style: keep-local — CLI 子命令分发 handler：main.ts 按 domain 单点分发，
+// 内联会把 provider 域整个 subcommand switch 搬进分发器，破坏 main 的路由结构。
 export async function runProvider(
   rt: NovelMasterRuntime,
   subcommand: string,

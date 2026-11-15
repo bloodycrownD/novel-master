@@ -146,9 +146,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
   constructor(key: K, message?: string | CoreMessageDescriptor, details?: Record<string, unknown>, options?: ErrorOptions);
   constructor(key: K, paramsOrMessage?: ErrorParams<K> | string | CoreMessageDescriptor, detailsOrOptions?: Record<string, unknown> | ErrorOptions, legacyOptions?: ErrorOptions) {
     const legacy = typeof paramsOrMessage === "string" || isCoreMessageDescriptor(paramsOrMessage);
-    const params = (legacy
-      ? {...(typeof paramsOrMessage === "string" ? {detail: paramsOrMessage} : {descriptor: paramsOrMessage}), ...(detailsOrOptions as Record<string, unknown> | undefined)}
-      : paramsOrMessage) as ErrorParams<K> | undefined;
+    const params = (legacy ? {...(typeof paramsOrMessage === "string" ? {detail: paramsOrMessage} : {descriptor: paramsOrMessage}), ...(detailsOrOptions as Record<string, unknown> | undefined)} : paramsOrMessage) as ErrorParams<K> | undefined;
     const options = (legacy ? legacyOptions : detailsOrOptions) as ErrorOptions | undefined;
     const def: ErrorCodeDef = ErrorCodes[key];
     // 旧签名的字符串 message 不得从 details 里「捡」descriptor（既有行为：字符串通道不带 messageKey）。

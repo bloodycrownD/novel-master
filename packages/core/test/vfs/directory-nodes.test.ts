@@ -1,4 +1,4 @@
-import { isAppError } from "../../src/errors/app-error.js";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createVfsService } from "@novel-master/core/vfs";
@@ -56,7 +56,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.delete(GLOBAL_SCOPE, drafts),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_DIRECTORY_NOT_EMPTY"));
+        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
         return true;
       },
     );
@@ -76,7 +76,7 @@ describe("VFS directory nodes", () => {
       () => vfs.replace(GLOBAL_SCOPE, drafts, "a", "b"),
     ]) {
       await assert.rejects(fn, (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_IS_DIRECTORY"));
+        assert.ok(isVfsError(e, "IS_DIRECTORY"));
         return true;
       });
     }
@@ -127,7 +127,7 @@ describe("VFS directory nodes", () => {
 
     await assert.rejects(
       () => vfs.read(GLOBAL_SCOPE, `${dir}/诗歌.txt`),
-      (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
   });
 
@@ -147,7 +147,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.mkdir(GLOBAL_SCOPE, `${parentFile}/child`),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_NOT_A_DIRECTORY"));
+        assert.ok(isVfsError(e, "NOT_A_DIRECTORY"));
         return true;
       },
     );
@@ -160,7 +160,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.mkdir(GLOBAL_SCOPE, nested),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_PARENT_NOT_FOUND"));
+        assert.ok(isVfsError(e, "PARENT_NOT_FOUND"));
         return true;
       },
     );

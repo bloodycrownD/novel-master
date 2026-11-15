@@ -481,8 +481,7 @@ describe("MessageRollbackService (revision model)", () => {
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) =>
-        (error as { code?: string }).code ===
-        "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
       "空 targetTree + live 树非空必须被拦下（rewind 同样适用）"
     );
 

@@ -23,7 +23,7 @@ export class ToolRegistry<Ctx = unknown> {
    */
   register(tool: Tool<any, any, Ctx>): void {
     if (this.tools.has(tool.name)) {
-      throw new AppError("TOOL_CONFLICT", {toolName: tool.name, detail: `Tool already registered: \${tool.name}`});
+      throw new AppError("TOOL_CONFLICT", {toolName: tool.name, detail: `Tool already registered: ${tool.name}`});
     }
     this.tools.set(tool.name, tool);
   }

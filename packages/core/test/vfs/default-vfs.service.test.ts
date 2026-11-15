@@ -1,4 +1,4 @@
-import { isAppError } from "../../src/errors/app-error.js";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createVfsService } from "@novel-master/core/vfs";
@@ -68,7 +68,7 @@ describe("DefaultVfsService (integration)", () => {
     await assert.rejects(
       () => vfs.replace(GLOBAL, "/missing.txt", "nope", "x"),
       (e: unknown) => {
-        assert.ok(isAppError(e, "VFS_REPLACE_NOT_FOUND"));
+        assert.ok(isVfsError(e, "REPLACE_NOT_FOUND"));
         return true;
       },
     );
@@ -135,7 +135,7 @@ describe("DefaultVfsService (integration)", () => {
     await vfs.write(GLOBAL, "/del/child", "child");
     await vfs.delete(GLOBAL, "/del", { recursive: true });
     await assert.rejects(() => vfs.read(GLOBAL, "/del/child"), (e: unknown) => {
-      assert.ok(isAppError(e, "VFS_NOT_FOUND"));
+      assert.ok(isVfsError(e, "NOT_FOUND"));
       return true;
     });
   });

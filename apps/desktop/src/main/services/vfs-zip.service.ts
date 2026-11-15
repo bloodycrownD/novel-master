@@ -49,10 +49,7 @@ function assertZipArchive(bytes: Uint8Array): void {
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
   if (!ok) {
-    throw new AppError(
-      "VFS_ZIP_INVALID_ARCHIVE",
-      `not a ZIP archive (${bytes.length} bytes)`,
-    );
+    throw new AppError("VFS_ZIP_INVALID_ARCHIVE", `not a ZIP archive (${bytes.length} bytes)`);
   }
 }
 

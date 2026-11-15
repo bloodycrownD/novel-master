@@ -80,12 +80,8 @@ function typedDomainCode(err: Error): string | undefined {
   return coded.code;
 }
 
-function sessionFsMissingPaths(
-  err: Error,
-): readonly string[] | undefined {
-  const details = (err as AppError).details as
-    | { missingLogicalPaths?: readonly string[] }
-    | undefined;
+function sessionFsMissingPaths(err: Error): readonly string[] | undefined {
+  const details = (err as AppError).details as { missingLogicalPaths?: readonly string[] } | undefined;
   const paths = details?.missingLogicalPaths;
   return paths != null && paths.length > 0 ? paths : undefined;
 }

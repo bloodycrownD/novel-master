@@ -5,12 +5,12 @@
  * @module domain/vfs/logic/vfs-move
  */
 
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isVfsError, vfsErrorCodeOf } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
-import { isVfsPortError, type VfsPortError } from "./vfs-port-error.js";
+import { vfsPortError, type VfsPortError } from "./vfs-port-error.js";
 
 /** mkdirIgnoreExistingDirectory 的失败载荷。 */
 type VfsNotADirectoryError = AppError<"VFS_NOT_A_DIRECTORY">;
@@ -55,7 +55,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.mkdir(path);
     return Result.ok(undefined);
   } catch (error) {
-    if (!isAppError(error, "VFS_ALREADY_EXISTS")) {
+    if (!isVfsError(error, "ALREADY_EXISTS")) {
       throw error;
     }
   }
@@ -63,7 +63,7 @@ export async function mkdirIgnoreExistingDirectory(vfs: VfsRestorePort, path: st
     await vfs.read(path);
     return Result.err(new AppError("VFS_NOT_A_DIRECTORY", `Not a directory: ${path}`, { path }));
   } catch (readError) {
-    if (isAppError(readError, "VFS_IS_DIRECTORY")) {
+    if (isVfsError(readError, "IS_DIRECTORY")) {
       return Result.ok(undefined);
     }
     throw readError;
@@ -101,10 +101,10 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       await vfs.read(to);
       return alreadyExists();
     } catch (error) {
-      if (isAppError(error, "VFS_IS_DIRECTORY")) {
+      if (isVfsError(error, "IS_DIRECTORY")) {
         return alreadyExists();
       }
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
+      if (!isVfsError(error, "NOT_FOUND")) {
         throw error;
       }
     }
@@ -113,7 +113,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       const hasDirRow = targetEntries.some((e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo);
       if (targetEntries.length > 0 || hasDirRow) return alreadyExists();
     } catch (error) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
+      if (!isVfsError(error, "NOT_FOUND")) {
         throw error;
       }
     }
@@ -124,9 +124,8 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
       await run();
       return Result.ok(undefined);
     } catch (error) {
-      // 端口已统一抛 AppError，VFS 域错误直接收口（vfsPortError 桥已删）。
-      if (isVfsPortError(error)) {
-        return Result.err(error);
+      if (isVfsError(error)) {
+        return Result.err(vfsPortError(error));
       }
       throw error;
     }
@@ -141,11 +140,12 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
     if (!isVfsError(error)) {
       throw error;
     }
+    const code = vfsErrorCodeOf(error);
     // IS_DIRECTORY：from 有 directory 行（空目录也是真实目录），直接判为目录移动，
     // 不依赖子项列表——list 只返回子项、不含目录自身行，空目录下列表恒空。
-    if (error.code === "IS_DIRECTORY") {
+    if (code === "IS_DIRECTORY") {
       sawDirectoryRow = true;
-    } else if (error.code !== "NOT_FOUND") {
+    } else if (code !== "NOT_FOUND") {
       throw error;
     }
   }
@@ -167,8 +167,8 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
   try {
     entries = await vfs.list(normalizeDirPath(from), { recursive: true });
   } catch (error) {
-    if (isVfsPortError(error)) {
-      return Result.err(error);
+    if (isVfsError(error)) {
+      return Result.err(vfsPortError(error));
     }
     throw error;
   }

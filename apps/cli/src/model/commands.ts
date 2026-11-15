@@ -24,6 +24,8 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
+// nm-style: keep-local — CLI 子命令分发 handler：main.ts 按 domain 单点分发，
+// 内联会把 model 域整个 subcommand switch 搬进分发器，破坏 main 的路由结构。
 export async function runModel(
   rt: NovelMasterRuntime,
   subcommand: string,
@@ -51,11 +53,7 @@ export async function runModel(
       }
       const saved = await rt.savedModels.findById(modelId);
       if (saved == null) {
-        throw new AppError(
-          "PROVIDER_INVALID_SAVED_MODEL_ID",
-          `Saved model not found: ${modelId}`,
-          { modelId },
-        );
+        throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", `Saved model not found: ${modelId}`, { modelId });
       }
       const provider = await rt.providers.get(saved.providerId);
       console.log(savedModelDisplayName(saved, provider.displayName));

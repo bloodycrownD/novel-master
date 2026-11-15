@@ -14,6 +14,7 @@
 import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { isAppError } from "@/errors/app-error.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
 
@@ -311,11 +312,13 @@ export function formatToolErrorForLlm(error: unknown, options?: FormatToolErrorF
       if (cause != null) {
         // TdbcError 可能层层包裹 VFS 失败：先剥到最内层 cause 找 VFS 分类；
         // 找不到时仍按**外层** cause 归类（AppError → VFS 文案，裸 Error → message）。
+        // VFS 失败经 service 端口出的是 legacy 手搓形态（throwLegacyVfs），须用
+        // 双形态守卫判别并经 vfsPortError 翻回 AppError 再进文案表。
         let unwrapped: unknown = cause;
         while (unwrapped instanceof TdbcError && unwrapped.cause != null) {
           unwrapped = unwrapped.cause;
         }
-        const vfsError = isAppError(unwrapped) && unwrapped.key.startsWith("VFS_") ? unwrapped : undefined;
+        const vfsError = isVfsError(unwrapped) ? unwrapped : isVfsError(cause) ? cause : isAppError(cause) && cause.key.startsWith("VFS_") ? cause : undefined;
         if (vfsError != null) {
           message = formatVfsErrorForLlm(vfsError, options?.vfsScope);
         } else if (isAppError(cause)) {

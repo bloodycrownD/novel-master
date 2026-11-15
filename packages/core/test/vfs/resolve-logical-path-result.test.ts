@@ -53,7 +53,7 @@ function legacyOutcome(input: string): PathOutcome {
     if (!(error instanceof Error)) {
       throw error;
     }
-    return {ok: false, message: error.message, path: (error as { path?: unknown }).path};
+    return {ok: false, message: error.message, path: (error as { details?: { path?: unknown } }).details?.path};
   }
 }
 

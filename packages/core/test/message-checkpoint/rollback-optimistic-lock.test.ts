@@ -92,10 +92,10 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
         // better-sqlite3 驱动会把事务里抛出的非 TdbcError 用 TdbcError 包起来（cause 链指向原错误），
         // isSessionFsError 会追 cause 链识别；descriptor 形态下 key/计数挂在 cause 的
         // messageKey/messageParams 上（包装层不带）。
-        const original = (error as {cause?: {messageKey?: string; messageParams?: {expected_count?: number; actual_count?: number}}}).cause;
+        const original = (error as {cause?: {messageKey?: string; messageParams?: {expected_message_count?: number; actual_message_count?: number}}}).cause;
         assert.equal(original?.messageKey, "error.session_fs.rollback_conflict");
-        assert.equal(typeof original?.messageParams?.expected_count, "number");
-        assert.equal(typeof original?.messageParams?.actual_count, "number");
+        assert.equal(typeof original?.messageParams?.expected_message_count, "number");
+        assert.equal(typeof original?.messageParams?.actual_message_count, "number");
         return true;
       },
     );

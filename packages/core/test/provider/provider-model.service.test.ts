@@ -136,7 +136,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           contextWindowTokens: 0,
         }),
-      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -188,7 +188,7 @@ describe("ProviderModelService settings", () => {
         bundle.providerModels.updateSettings(saved.id, {
           tokenCounterMode: "not-a-mode" as "auto",
         }),
-      ((e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
   });
 
@@ -259,7 +259,7 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
     assert.equal(after.modelName, "Label A");
     await assert.rejects(
       () => bundle.providerModels.editSaved(created.id, ""),
-      ((e) => isAppError(e, "PROVIDER_INVALID_MODEL_NAME"),
+      (e) => isAppError(e, "PROVIDER_INVALID_MODEL_NAME"),
     );
   });
 });
@@ -273,7 +273,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     await state.setCurrentModelId(saved.id);
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -296,7 +296,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     );
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -319,7 +319,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     });
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 
@@ -337,7 +337,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     });
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
-      ((e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
     );
   });
 

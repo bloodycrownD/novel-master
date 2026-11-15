@@ -5,7 +5,7 @@
  * @module domain/vfs/logic/read-user-vfs-save-baseline
  */
 
-import { isAppError } from "@/errors/app-error.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 
 /**
@@ -18,7 +18,7 @@ export async function readUserVfsSaveBaseline(vfs: VfsService, path: string): Pr
     const result = await vfs.read(path);
     return result.content;
   } catch (error: unknown) {
-    if (isAppError(error, "VFS_NOT_FOUND")) {
+    if (isVfsError(error, "NOT_FOUND")) {
       return null;
     }
     throw error;

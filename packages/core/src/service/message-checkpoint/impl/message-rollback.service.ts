@@ -24,7 +24,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { AppError } from "@/errors/app-error.js";
 import { isSessionFsError } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { userMessageOf } from "@/i18n/error-message.js";
@@ -193,14 +193,14 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             current: currentCount,
           });
           if (currentCount !== plan.messageCountSnapshot) {
-            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", { expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId });
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", {key: "error.session_fs.rollback_conflict", params: {expected_message_count: plan.messageCountSnapshot, actual_message_count: currentCount}}, { expectedMessageCount: plan.messageCountSnapshot, actualMessageCount: currentCount, sessionId, messageId: anchorMessageId });
           }
 
           // CD-01 第 2 步 · 文件维度指纹乐观锁：消息数不变不代表文件面没变。
           // 必须用 **tx 面** repo 重算——事务内用外层 conn 会重入驱动 mutex 死锁。
           const currentFingerprint = await this.computeFileTreeFingerprint(tx, projectId, sessionId);
           if (!sameFileTreeFingerprint(currentFingerprint, plan.fileTreeFingerprint)) {
-            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", { expectedMessageCount: plan.fileTreeFingerprint.length, actualMessageCount: currentFingerprint.length, sessionId, messageId: anchorMessageId });
+            throw new AppError("SESSION_FS_ROLLBACK_CONFLICT", {key: "error.session_fs.rollback_conflict", params: {expected_message_count: plan.fileTreeFingerprint.length, actual_message_count: currentFingerprint.length}}, { expectedMessageCount: plan.fileTreeFingerprint.length, actualMessageCount: currentFingerprint.length, sessionId, messageId: anchorMessageId });
           }
 
           if (!options?.skipVfsReconcile) {
@@ -225,7 +225,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // 与 skipVfsReconcile **无关**（那条只跳 VFS reconcile，消息截断照跑）。
           const actualTailIds = await txMessages.listIdsAfterSeq(sessionId, plan.truncateAfterSeq);
           if (!sameIdList(actualTailIds, plan.tailMessageIds)) {
-            throw new AppError("SESSION_FS_ROLLBACK_TAIL_DRIFT", { expectedMessageCount: plan.tailMessageIds.length, actualMessageCount: actualTailIds.length, sessionId, messageId: anchorMessageId });
+            throw new AppError("SESSION_FS_ROLLBACK_TAIL_DRIFT", {key: "error.session_fs.rollback_tail_drift", params: {expected_message_count: plan.tailMessageIds.length, actual_message_count: actualTailIds.length}}, { expectedMessageCount: plan.tailMessageIds.length, actualMessageCount: actualTailIds.length, sessionId, messageId: anchorMessageId });
           }
           await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
             projectId: plan.projectId,
@@ -290,10 +290,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   private async resolveRollbackPlan(sessionId: string, projectId: string, anchorMessageId: string): Promise<RollbackPlan> {
     const clicked = await this.deps.messages.findById(anchorMessageId);
     if (clicked == null) {
-      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", { messageId: anchorMessageId });
+      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_NOT_FOUND", {key: "error.session_fs.rollback_message_not_found", params: {message_id: anchorMessageId}}, { messageId: anchorMessageId });
     }
     if (clicked.sessionId !== sessionId) {
-      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_SESSION_MISMATCH", { messageId: anchorMessageId, sessionId });
+      throw new AppError("SESSION_FS_ROLLBACK_MESSAGE_SESSION_MISMATCH", {key: "error.session_fs.rollback_message_session_mismatch", params: {message_id: anchorMessageId}}, { messageId: anchorMessageId, sessionId });
     }
 
     // plan 拉取收窄（rollback-large-jank Step 2）：锚点解析只做 tool_result
@@ -544,7 +544,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     try {
       await vfs.delete(logicalPath);
     } catch (error) {
-      if (!isAppError(error, "VFS_NOT_FOUND")) {
+      if (!isVfsError(error, "NOT_FOUND")) {
         throw error;
       }
     }

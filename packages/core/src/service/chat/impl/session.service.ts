@@ -107,10 +107,7 @@ export class DefaultSessionService implements SessionService {
       agentRegistry: this.deps.agentRegistry,
     });
     if (agentId == null || agentId === "") {
-      throw new AppError(
-        "CHAT_INVALID_ARGUMENT",
-        {key: "error.chat.session_create_agent_missing"}
-      );
+      throw new AppError("CHAT_INVALID_ARGUMENT", {key: "error.chat.session_create_agent_missing"});
     }
     const workspaceModelId = await this.deps.state.getCurrentModelId();
     const config: SessionAgentConfig =

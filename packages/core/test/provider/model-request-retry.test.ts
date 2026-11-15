@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
-import { isAppError } from "../../src/errors/app-error.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -73,7 +73,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         if (calls < 3) {
-          throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+          throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -121,7 +121,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async () => {
         calls += 1;
         if (calls === 1) {
-          throw new ProviderError("HTTP_ERROR", "HTTP 429: rate limited");
+          throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 429: rate limited");
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
       },
@@ -172,7 +172,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -185,7 +185,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
+      (error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 3);
   });
@@ -197,7 +197,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 500: upstream");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -225,7 +225,7 @@ describe("DefaultModelRequestService retry", () => {
         calls += 1;
         // 黑洞复现实验 r3 实锤形态：用户停止后 onabort 链 reject 的错误
         // 若逃离 adapter 吞错，不得落入「无状态码 → 默认可重试」触发僵尸重发
-        throw new ProviderError("HTTP_ERROR", "Request aborted");
+        throw new AppError("PROVIDER_HTTP_ERROR", "Request aborted");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -238,7 +238,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     await assert.rejects(
       () => svc.request(SAVED_MODEL_ID, "hello"),
-      ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
+      (error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
     );
     assert.equal(calls, 1, "abort 形态错误不应重试");
   });
@@ -308,7 +308,7 @@ describe("DefaultModelRequestService retry", () => {
       listModels: async () => ({ models: [] }),
       chat: async () => {
         calls += 1;
-        throw new ProviderError("HTTP_ERROR", "HTTP 400: bad request");
+        throw new AppError("PROVIDER_HTTP_ERROR", "HTTP 400: bad request");
       },
     };
     const svc = new DefaultModelRequestService({
@@ -322,7 +322,7 @@ describe("DefaultModelRequestService retry", () => {
     try {
       await assert.rejects(
         () => svc.request(SAVED_MODEL_ID, "hello"),
-        ((error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
+        (error: unknown) => isAppError(error, "PROVIDER_HTTP_ERROR"),
       );
       assert.equal(calls, 1);
     } finally {

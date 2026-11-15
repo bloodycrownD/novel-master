@@ -151,7 +151,7 @@ ${engineSection}
     if (search == null) {
       // 未装配闭包（CLI 无 kkv / 旧测试 mock）：可读错误而非崩溃。
       log.warn("search run：ctx.search 未注入（工具未装配搜索上下文）");
-      throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"), detail: `Tool failed: \${SEARCH_TOOL_NAME}`});
+      throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
     }
 
     // 引擎链解析：engineOrderV2 优先级序（显式 input.engine 时先钉该引擎，
@@ -172,7 +172,7 @@ ${engineSection}
         break;
       }
     }
-    if (query.length === 0) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: \${SEARCH_TOOL_NAME}`});
+    if (query.length === 0) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
     const rawCount = params.count ?? params.max_results ?? params.maxResults;
     const maxResults = normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
 
@@ -192,7 +192,7 @@ ${engineSection}
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
       // 拦一道，避免取消后仍去尝试链上剩余引擎。
-      if (signal?.aborted === true) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("搜索已取消"), detail: `Tool failed: \${SEARCH_TOOL_NAME}`});
+      if (signal?.aborted === true) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("搜索已取消"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
       if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
@@ -204,7 +204,7 @@ ${engineSection}
         break;
       } catch (e) {
         // 用户取消：不是引擎失败，立即终止、不走降级链（重读 ctx.signal：局部 signal 已被上面的检查收窄）。
-        if (ctx.signal?.aborted === true) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("搜索已取消"), detail: `Tool failed: \${SEARCH_TOOL_NAME}`});
+        if (ctx.signal?.aborted === true) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("搜索已取消"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
         const msg = e instanceof Error ? e.message : String(e);
         const safe = redactSecret(msg, entry.apiKey).slice(0, ENGINE_ERROR_SUMMARY_LIMIT);
         const code = msg.match(/error (\d{3})/i)?.[1];
