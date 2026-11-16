@@ -1,0 +1,135 @@
+---
+date: 2026-11-14
+title: 错误通道迁移：总纲 + 一期 spec（errors/ 收敛）
+keywords: Either, Result, Outcome, Interrupt, AppError, 错误通道, 错误码表, Error 子类, 错误工厂, format-ipc-error, spec-generate, 分期迁移
+abstract: 用户拍板把 NM 的错误通道从「throw 为主」迁为「已知走返回值、未知走 throw」，并纠正了此前「29 个 Error 子类 / 38 个纯转发工厂」的错误口径——实测 errors/ 只有 8 个类、39 个工厂且仅 4 个纯转发。派 3 个 readonly 探索子代理产出全仓现状（875 处 throw、217 文件提 Result、attempt*/revive 零调用、三套失败通道并存）后，定下四类型（Outcome/Interrupt/AppError/Result）、三期路线（errors/ → core → apps+导出面），落盘总纲与一期 spec，待用户确认。
+---
+
+# 错误通道迁移
+
+user:
+先问「`compactionConditionsInvalidSchema`、`skillInvalidName` 这类错误工厂函数意义不大且丑」，随后澄清真实意图是「清理剩下 `PromptError extends Error` 这种 error 架构，Either 迁移已执行一部分、可以整体迁移」，并追问 AppError 的封装有没有更好的方案（内部封装 / 类内静态方法 / 总之收敛）。
+
+讨论了多轮控制流语义：用户以 Java 工程师视角追问「一个流程控制为什么要 throw？正常 return 不就行吗？」，并指出 Java 的 `InterruptedException` 之所以 throw 是因为它可能出现在线程当前执行的任何函数上、自己控制不了；而我们的检查点是自己主动请求，属于「已知」，按他的原则「未知 throw 合法、已知应该 Either」。最终拍板 **全量 Either 化**，并倾向 `Either<Signal, AppError>` 这种「控制流不是错误」的表达。
+
+设计收敛过程：我先提出三态（ok/signal/error），用户追问「成功不也是一个信号吗」，于是定为**四分支平级的 `Outcome<T>`**（completed/cancelled/replaced/failed），`checkpoint()` 返回更窄的 `Interrupt | null`。
+
+用户要求「先有一个总纲，再进行 error-channel-slim 的设计，确保整个流程不会偏移」，并让我把五期合并成三期、给出每期改动量级预估。
+
+**探索结论（3 个 readonly 子代理，实测数字，推翻此前口径）**：
+- `packages/core/src/errors` 15 文件 1430 行：**8 个 `extends Error` 类**（不是 29）、**39 个工厂且纯转发仅 4 个**（不是 38）、6 个守卫、2 个文案 builder
+- 全仓 32 个自定义 Error 类（errors/ 8 + core 其余 15 + 跨包 3 + apps 6）
+- 约 875 处 `throw`（core/service 261、core/domain 211、core/infra 100、apps 约 285）
+- 约 217 个文件提到 `Result`，50 个直接 import `errors/either`
+- **`Result.attempt*` / `revive` 零生产调用**；边界 `if (!r.ok) throw r.error` 生产接线仅 2 处
+- 三套失败通道并存：core `Result`（domain 74 文件）、app `IpcResult` 裸对象（desktop 30 文件）、纯 `throw`（service/cli）；CLI 完全不用 core `Result`
+- `isVfsError`/`isSessionFsError` 刻意用 `name + code` 结构判别（src/dist 双实例），不能改 instanceof
+- 6 个零调用死码：`vfsInvalidName`、`sessionFsRestoreRevisionMissing`、`isRollbackConflictError`、`sessionFsRollbackNoCheckpoint`、`formatRollbackRevisionBackfillAlertMessage`、`vfsReplaceNotFound`
+
+**落盘产物**：
+- `docs/iterations/error-channel-migration/strategy.md`（总纲）：第一原则「已知走返回值，未知走 throw」+ 三问判定树、四类型职责边界、通道转码矩阵、平台例外四处（fetch abort / better-sqlite3 事务回滚 / Promise.race reject / AbortSignal.throwIfAborted）、三期路线、验收不变量、风险表
+- `docs/iterations/error-channel-migration/spec.md`（一期）：新增 `errors/outcome.ts`（Outcome/Interrupt + 组合子）、`AppError.details` 泛型化、删 6 死码、内联 3 个低频纯转发（保留高频 `chatInvalidArgument` 26 调用）、7 个类迁 AppError（40-52 个新码）、instanceof → isAppError、双端三条格式化链适配；11 个 Step、16 条 T 用例
+
+**三期量级预估**：一期 60-70 文件 / 750-900 行；二期 180-220 文件 / 1500-1800 行；三期 140-160 文件 / 1100-1400 行。
+
+**后续修正（同一轮对话内）**：
+- 工厂函数方案被用户连纠三次：① 我先写成「全部保留」→ ② 改成「升静态方法 / 降私有 / 内联」三分类 → ③ 用户第三次指出「我是让你处理函数，是处理那些有复用 message 模版的情况」。最终定为：**message 模板搬进码表（`{ code, desc, messageKey }`）+ `ErrorParamsMap` 参数类型表 + `AppError` 构造器 `(key, params?, options?)`，39 个工厂与 7 个 per-domain 子类全部退役**，`errors/` 从 15 文件降到 5 文件。依据是 nm-code-style §3 第 45 条「只有 `new XxxError` 的 wrapper 直接删」。
+- 用户纠正 `throw new AppError(...)` 样例：「either 啊」——终态是 `return Result.err(...)` / `Outcome.failed(...)`，`throw` 只在边界。一期因此明确**只改「错误怎么造」，不改「怎么传播」**。
+- 用户指出「一期 errors/、二期 core、三期 apps」是**分步不是分期，容易迁不干净**，要求把剩下两期 spec 也产出。回应：保留按层切（`errors/` 是公共依赖，按模块切会让码表与 public 面被三期反复改），但补三条**机械 grep 门**作为防遗漏保障——一期后 `src/errors` 不得再有 `class .* extends Error` 与转发工厂；二期后 core 的 `throw new AppError` 只允许白名单文件；三期后全仓只允许白名单。验收按文件清单锁，不按处数。
+
+**补充探索（二期 / 三期，2 个 readonly 子代理）**：
+- 二期 core：592 处 throw（service 264/37、infra 100/31、domain 228/52）；45 个 domain 文件已返回 Result、172 处 `Result.err(new AppError)`、零自定义 Error 构造；`if (!x.ok) throw x.error` 103 处（事务内 26 处必须保留）；编程错误 11 处、平台边界约 90、控制流 10 处 + **7 处「取消伪装成 toolFailed」**；无 AbortScope（signal-abort-scope 未落地）；core 测试 441 文件、136 文件 / 536 处 throws/rejects 断言。
+- 三期 apps：`IpcResult` 是裸对象（`data`/`error`），改成 core `Result` 会打断 63 文件，定死**线格式不变、只改 `error.code` 取值空间为 AppError key**；`AppErrorWire` 只有生产端零消费端；`Result`/`Outcome` 完全不在 public 面，三期首次新增 `./errors` 子路径；public 41 符号 = 11 有生产消费者 / 3 仅测试 / 27 零消费者；desktop 65 throw/210 catch/13 instanceof、mobile 120/377/19、cli 134/9/17 且只有两档 exit code；双端 17 对镜像 service，`format-error` 与 `format-ipc-error` 已漂移（mobile 有 ProviderError 硬编码中文、desktop 有 Zod 与 VFS 兼容映射）。
+
+**落盘产物（4 份）**：
+- `docs/iterations/error-channel-migration/strategy.md`（总纲 + 期次口径 + 三条 grep 门）
+- `docs/iterations/error-channel-migration/spec.md`（一期：11 Step、20 条 T 用例）
+- `docs/iterations/error-channel-migration/spec-2-core.md`（二期：9 Step、8 条 T 用例）
+- `docs/iterations/error-channel-migration/spec-3-apps.md`（三期：8 Step、9 条 T 用例）
+
+状态：四份文档已落盘，**待用户确认**。一期量级 80-90 文件 / 1000-1200 行；二期 180-220 / 1500-1800；三期 140-160 / 1100-1400。
+
+**三轮 spec-check-loop（2026-11-14，额度用满）**：
+
+用户要求「至多三次」loop。每轮都是 1 个全局 judge + 3 个模块审查者互盲，轮后主代理直接 doc-fix，不派修复子代理。
+
+- **第 1 轮**：全局 No-Go + 三模块全 ready: no，去重约 16 条 P0 → 一期/二期/三期 spec **全部重写**。主线问题：一期 messageKey 未同步 i18n（`keys.ts` 封闭联合 + 双 catalog 双向覆盖锁）、`messageParams` camelCase/snake_case 冲突、`firstDescriptorOf` 不可实现、7 类退役后结构守卫无生产者；二期「工具取消改 `Outcome.cancelled`」与「保留 ToolError 并发协议」自相矛盾、`legacy-vfs-error` 波及面漏列（实为 6 文件约 50 处）、cloud-sync 改 Result 与 apps 消费面断层；三期迁码表不全（handler 直构漏 6 处）、`CloudSyncError` 无改码机制、锁测试指错文件（真正的门是 `public-subpath-allowlist.test.ts` + 16 个快照，不是 `package-exports-t0`）、分派链 3/4 步互斥致 `PROVIDER_*` 不可达。
+- **第 2 轮**：二期 ready: yes；全局 No-Go、一期/三期 no。关键修复：一期 A1「`Error.message` 的 descriptor 命中时必须取英文 `desc`，不能塞 `descriptor.key`」（否则 7 个 skill 工厂迁移后 message 变 key 原文）、A2「catalog 既有占位符随字段名改 snake_case + T-K1 增占位符⊆字段名断言」、A3「`ErrorParams` 增可选 `descriptor?: CoreMessageDescriptor` 通道」；三期补 handler 4 处、`CloudSyncError` 39 处清扫面、grep 门②③可执行化。
+- **第 3 轮（终态）**：全局 **Go**、二期 **yes**、一期/三期各剩 3 条行级残留（风险表 message 顺序与正文互斥、守卫计数 4→3、`format-vfs-error-for-llm` 动作张冠李戴、`cloud-sync-driver-s3` 6 处实构漏列、grep 门③ 的 `physical.ts:87` 无主、`isSessionFsError`「apps 已实证」断言为假）。全部一次性修完，四份文档现无待修项。
+
+**四条教训**：
+1. 写迁移 spec 不能只写「改什么」，必须写「**谁生产、谁消费、消费形态**」——legacy mapper 与结构守卫的闭环、`CloudSyncError` 的跨端消费面，都是靠这条挖出来的。
+2. 「码表只动一次」要精确到「**结构**只动一次、**条目**可各期追加」，否则一期写不出二/三期的码（`TOOL_CANCELLED`、`CLOUD_SYNC_*`）。
+3. 数字类验收（处数、文件数）必然漂移，全部改为「按文件清单锁 + 处数只作参考」；但 grep 门本身必须**可执行**（限定路径、给白名单），否则门永红。
+4. 审查者说「当前代码不存在 X」时要区分**规划缺陷**与**交接前提**——一期/二期是规划文档，三期审查报的 P0-N4（`outcome.ts` 不存在）就是这类误判；判断前先读相邻期的认领段。
+
+**进入一期开发（2026-11-14）**：
+
+- 用户就 `VfsError` 类型别名去留选 **A：不保留**。理由写进 spec：留 `type VfsError = AppError` 会让「类已退役」在类型层面看不出来，实施 agent 继续写 `VfsError` 编译器不拦；因此直接把 `format-vfs-error-for-llm.ts` 的 `VfsError | AppError` 收窄成 `AppError`，两个调用方同波改判。`VfsErrorCode` / `VfsErrorKey` 是字符串短码联合，不是类类型，保留。
+- worktree：`D:\worktree\error-channel-slim`，分支 `feat/error-channel-slim`，基线 `6575b46c2`（文档提交）。
+- **worktree 要先全量 build 一次**：core 的 `types` 指向 `dist/index.d.ts`，apps 通过 dist 消费 core 类型；只 `npm ci` 不 build 会让根 typecheck 在 apps/cli、apps/desktop 处红（core 自身 typecheck 却是绿的，容易误判成代码改错）。`npm run build` 全量 59s，之后根 typecheck 31s。
+- 动态工作流 `dwfrun-5e952db6-fd07-4a78-b2c0-2475bee0d024`：12 个 impl 节点一一对应 spec 的 12 个 Step（串行，因每个 Step 结束都要求全仓 tsc 绿），每个节点交卷后由流程自己跑 `core build + 根 typecheck` 作为确定性门，红则同 agent 重试最多 3 轮；4 个只读 cr-func 节点（Step 1-2 / 3-4 / 5-8 / 整体）。提速用的关键形态：`world.run("cmd", ["/c", "npm", "run", "--prefix", <abs>", "typecheck"])`——npm 的 `--prefix` 会 chdir，绕开 workflow 固定 cwd 的限制。
+
+**工作流 v1 → v2（并发调整）**：v1 把 12 个 Step 排成纯串行链（峰值并发 1），用户当即指出并发太低。根因是我把「每个 Step 结束都要全仓 tsc 绿」当成硬约束——但那只是串行才需要的；并行波只要**文件集不相交 + 波末统一收敛**，中间态红是允许的。v2 重排为 6 个波次：① Step 1 ∥ Step 2（outcome.ts 与码表零交集）② Step 3+4 合一（共享 kkv/preferences/compaction errors）③ **Step 5 ∥ 6 ∥ 7 ∥ 8**（四个域各碰自己的 errors 与调用点，`public/*.ts` 从波内剥离）④ public 重导出清理 + 波末收敛（四个 agent 会抢 `public/vfs.ts`，只能集中做）⑤ Step 9+10 合一（共享 format-ipc-error.ts）⑥ Step 11+12。峰值并发从 1 提到 4。并行波内明确禁止 agent 跑 build、跑根 typecheck、git commit、改 public/。
+
+**并行波的文件所有权裁决**（Step 6 实现者 escalation 触发）：v2 脚本给并行波下的纪律「不要动 packages/core/src/public/ 下任何文件」过粗，实际删类时 `public/prompt.ts` 的重导出必然红。正确口径是按**独占 vs 共享**分：
+
+- **独占文件可以自己摘**：`public/prompt.ts` 只有 Step 6 碰、`public/provider.ts` 只有 Step 8 碰、`public/chat.ts` 只有 Step 5 碰 —— 各自动手，否则自检永远绿不了。
+- **共享文件必须留到波末**：`src/index.ts` 被四路同时改（Step 5 删 ChatError、Step 7 删 VfsError、Step 8 删 ProviderError 的导出都在同一文件），并行写会互相覆盖丢改动；`public/vfs.ts` 同时导出 VfsError（Step 7）与 VfsZipError（Step 8），同理。
+- **自检判据**：`npm run --prefix packages/core typecheck` 后只看**不在 `src/index.ts` 里**的 error TS，剩下那些是波内预期红，不算实施者责任。
+
+教训：并行波的纪律不能只写「禁止改某目录」，要按文件所有权枚举——写「禁止改共享文件，独占文件自行处理」并点出具体清单。
+
+**一期工作流实跑结果与验证（2026-11-15 复核）**：`dwfrun-ddc8e02f` 跑满 5h29m / 50 步 / 1.82 亿 token，四个 cr-func 全判未通过，但**报告基于中间态**——它审的是 `e0f9b411a`（Step 5-8 四路刚合流），那时 118 条测试红是真的；Step 9-10 的 47 个未提交改动把这些都修了。主代理亲自复验的真实状态：根 typecheck exit=0，core 3428 用例全绿、desktop 739 绿、mobile 2366 绿、cli 76/24 与 main 基线一字不差。
+
+**一条 cr-func 没抓到、主代理抓到的真回归**：cli 比基线多 1 条失败（`rejects enabled conditions with no triggers`），根因是 `CONFIG_DECODE_INVALID_SCHEMA` 的 zod 细节被塞进 `params.detail` 而 catalog 模板没有 `{detail}` 占位符——信息在迁移中静默丢失。修法：zh-CN/en-US 两条模板加占位符后重生成 catalog。**教训：错误迁移里「params 有字段但模板没占位符」是一类系统性静默缺陷，必须专项审计**（已作为一个独立审计节点放进收尾工作流）。另注意 YAML 里值是 `...: {detail}` 形态必须加引号，否则被当 flow mapping 解析炸掉；zh-CN 因为用全角 `：` 不触发。
+
+**一期剩余真实缺口**：`AppError` 旧签名重载仍在、71 处旧签名调用（27 个文件，最大 `rule-snapshot-codec.ts` 7 处）、spec 的 grep 门写法会误命中 `K extends ErrorKey`。收尾工作流 `dwfrun-0ed17c1b` 按 4 个不相交文件分区并行改写 → 删旧重载 → 全量测试 → 占位符审计 → grep 门修正 + tag `p1-errors-slim`。
+
+**二期/三期拓扑（读 spec 确认）**：二期 Step 3-7 spec 明写「文件集不相交可并行波」，Step 1（两哨兵改 Interrupt + core 3 处 + apps 4 处 catch + public 导出联动）必须先做；三期依赖 1→2→3→4→5→6→7→8，但 Step 2/3/4/5 分属 desktop 服务、mobile 格式化、mobile 服务、cli，三端代码树独立，可在 Step 1 之后四路并行；Step 6 依赖 1-5 全部（public 撤导出需 apps 已改认 key）。
+
+## 六期收口（2026-11-16）：nm style 全量 + 三端测试修红，tag `p6-nm-style`
+
+**终态（全部主代理实跑复核）**：`HEAD eecff1b29`，工作树 0 未提交。desktop 739/739/0、mobile 266 suites/2362 tests 全绿、cli 117/93/0/24skip（与主干基线一致）、根 typecheck 15 workspace exit 0、core 575/575/0。`check-signatures` **744 → 0（PASS）**、`check-inline` 195 → 28、`check-methods` 132 → 21。上一轮累计：`throw x.error` 344 → 0、`throw new AppError` 171 → 47（剩不变量/事务/控制信号三类合法保留）。
+
+**nm style 基线与拆法**：`check-style --all` 在 616 个 src 文件上报 signatures 744 / inline 195 / methods 132 阻断。拆到标签是 PARAMS 293、ARGS 265、VARDECL 179、INLINE_LOCAL 163、INLINE_METHOD 96。这批主要是错误通道迁移过程中把 `Promise<Result<T, AppError>>` 签名和调用拆成多行写出来的，不是主干存量（命中最多的十个文件全是本轮改过的大文件）。
+
+**分片三次翻车、三种不同原因**：
+1. **slice 截断**（dwfrun-30515274 桶B 六片 / 测试修六片）：把一份 12000/9000 字符的探针输出 `slice(0, N)` 喂给多个 agent，清单在中间被切断，六个 agent 抢同一批文件。靠 agent escalate 才发现。
+2. **目录包含关系**（dwfrun-907a2830）：`service/chat`、`service/chat/impl`、`service` 三个片范围互相包含，`service` 那片会重做前六片的活。补 `scope` 排他字段后修好。
+3. **目录枚举漏项**（dwfrun-d04a918c）：15 片清单只列了 `service/{5 子目录+其余}` + `infra` + `domain` + `common` + 三端，**漏了 `core/src/bootstrap`（58 signatures + 12 inline）、`core/src/errors`（17）、`core/src/i18n`**。补完轮才收掉。
+
+**教训：派分片必须给「按片切好的确定清单」，不能给「一份全文让 agent 自己挑」；目录分片必须显式写排除规则；清单要按 `ls` 枚举而不能凭记忆列。**
+
+**`prettier --write --print-width 200` 与 check-signatures 直接冲突**：对全仓跑让 signatures 从 0 反弹到 148（`git restore .` 回滚后复验回 0）。prettier 会把超长签名/调用拆成多行，而 check-signatures 要求一行写完。**signatures 已 PASS 的仓库不要再跑全局 prettier。**
+
+**六期打坏 122 个 apps 测试，三类根因**：
+1. **dist 不同步（最隐蔽）**：`packages/tokenizer-driver-node/dist` 停在 Result 化之前（01:38 构建 vs 源码 `b55be6aaa` 09:38），旧 dist 返裸值、core dist 按 `.ok` 判 → `local.ok === undefined` → 本地精确计数全线判失败 → compaction T-IPC2、chat-prompt-tokens T-T9b/T-T9b2/T-T9b3/T-T9c、usage-stats IPC 15 条全红。主代理重建该包 dist 后转绿，测试与源码零改动。**dist 是 gitignore 的构建产物，git 干净 ≠ 运行时一致；core 测试直读 src、apps 测试走 workspace 解析到 dist，两边看到的世界不一样。**
+2. **测试替身没跟 Result 契约**（大头）：mock 还 `mockResolvedValue(undefined)` 而端口已返 `Result`。改 mock，测试文件零改动、断言强度原样。
+3. **源码文本断言被 nm style 打断**：`expect(src).toMatch(/export type .../)` 这类，源码被内联/并行/假公开审计改了形态后正则失效。按「改断言匹配新形态、不回退源码」处理。
+
+**mobile 全量高并发会产生超时假红**：8 worker 下首跑报 111 红，其中 12 个 suite 是 5 秒超时、单跑全绿；`--maxWorkers=2` 复跑真实红只有 20 个。**判红前先降并发复跑。**
+
+**剩余 28 + 21 处是规则冲突不是活**：inline 28 里 26 处带 `KEEP_LOCAL`，另 2 处（`isVfsError`、`deliverNativeChunk`）是 check-signatures 与 check-inline 互相矛盾（要一行就得提取具名函数，提取后 inline 又要求内联回去）；methods 21 里 12 处是 `errors/either.ts` 的 `Ok`/`Err` 跨类同名 `DEAD_METHOD` 误判（动它就拆 Result 运行时），剩 9 处是接口实现、`AppError.toJSON` 序列化钩子、120 次调用的公开方法。**要让这两段 PASS 得改 check-style 判据（接口实现/序列化钩子/导出 API/规则冲突四项豁免），不是在代码里加注释。**
+
+**关掉的两条规则**：`AMBIGUOUS_METHOD`（221 条，同名多定义）不计阻断；`DEAD`（215 条）大量假阳性——`core/domain` 106 条里只 2 条真死（`VfsPortError` 整文件、`createRevisionRefCountRepairOperation`），其余是只在类型位置被引用或测试契约常量。
+
+## 七期～B 收官（2026-11-17）：四轮工作流 + 一次 spec 合规审查
+
+**七期 `p7-error-debt`**（`3df20fb4c`）：`common/assert.ts` 建立（`AssertionError`/`assert`/`assertNever`），**9 处** `*_INVARIANT_VIOLATION`（core 8 + mobile `rn-file-io.ts:44`）改 assert，四个码退役；工具取消 11 处构造点里 4 处 `throw` 改 `return Result.err(TOOL_CANCELLED)`、`curl-tool` 的 `phaseError` 两调用点同批改、`TOOL_CANCELLED` **码保留作展示标签**（它有 messageKey + i18n + LLM 可见文案 + CLI exit 130 的完整展示契约）；30 处业务失败改 `Result.err`；`errors/vfs-errors.ts` + `session-fs-errors.ts` 合并进 `guards.ts`，`errors/` 8→6 文件。三个 grep 闸全 0。
+
+**八期 `abort-scope`**（`a97fafdc4`）：`domain/abort` 六个文件从零建（`abort-scope`/`abort-key`/`create-abort-scope`/`create-abort-error`/`create-abort-registry`/`abort-registry.port`）+ `public/abort.ts` barrel；`checkpoint(): Interrupt | null`；core 四个 port 换 `scope`；`tool-runner` 竞速走 `signalView(...).race(...)`；repository 六个 mapRows 读口 + batchInsert 返回 `Outcome`；桌面 6 类 handler 走 `createAbortScope + matchOutcome` 三分派；移动 4 类 service + CloudSyncCoordinator 阶段边界；native request 加 `requestId` 走 OkHttp `Call.cancel()` 真断连。三端 739→757 / 2362→2372 / core 3485 全绿。
+
+**九期 `p9-bare-throw`**（`f3cf8eeb7`）：**裸 `throw new Error` 是前三轮审查的盲区**——三期/五期/七期只扫 `throw new AppError` 和 `throw x.error`。实测 src 211 处（含 test 则 202+108）。按 A/B/C 三类处置：A 类（`Usage:`/`Unknown`/`Missing`/`No current` 等用户可触发失败）转通道，B 类（不变量 / webview bridge / native bridge / OS 加密 / S3 / tdbc / tiktoken / update-check 链）加 `// nm-throw: keep — <理由>`，C 类进 notes。**终态：无 keep 注释的裸 Error 归零（排 cli/test）**。
+
+**十期 `p10-clean-noise`**（`7e6076be3`）：签名重复门禁 5 组新增全判为刻意重复（`createAbortScope` 内部 vs `signalView` 裸 signal 适配、repository ↔ message.service 转发链）；`known-false-positives.json` 22 条覆盖 33 行阻断，只改 `check-style.mjs` **汇总层**（子脚本判据一行未改），`suppressPrefixes: ["apps/cli/"]`；`scripts/prettier-guard.mjs` 拒绝无 `--print-width` 的 write 与全仓通配。**清单移除后仍能复现原始 37/21，证明降级是清单驱动而非判据放松。**
+
+**B：八期 spec 合规审查 `abort-scope-audited`**（`67bf45d11`）：4 片只读审计，**P0 5 / P1 17 / P2 14**。5 个 P0：① desktop cloud-sync 的 coordinator 阶段边界 `checkpoint` **一处未传**（`service.pull/push` 不接收，全文件 grep 0）→ 分钟级 S3 传输期间取消静默无效；② desktop backup export 的 scope 在**对话框之前**创建（spec 要求之后），300s deadline 覆盖的是用户盯对话框的时间且超时后无检查点可观测；③④ mobile `db-backup.service.ts` 与 `db-maintenance.service.ts` **完全没有取消面**（`core/abort` import 数 0）；⑤ spec 自身两处 `hit !== null` 与同文件 `:209-210` 的强制口径冲突（代码全对，是文档地雷）。P1 里最重：T-S15 只覆盖 2/6 类 handler 的异步段 abort、T-S8/S24/S25/S28 无测试、core `createAgentAbortRegistry` 仍是独立 Map 而非 `scopeFromController` 薄包装、mobile `runManualCompaction` 两个调用点 `void` 无 catch。
+
+**这轮新增的硬教训**：
+
+1. **工作流自报的数字不可信，必须自己复跑**。两次因脚本 `runQ` 的 tail 提取 bug 误判 partial（七期三闸全 0 被滤成空串、九期 `wc -l` 输出被吃掉）。修法是 tail 里单独保留纯数字行与 jest `Tests:` 行。
+2. **测试用「第 N 次调用」定位检查点极其脆弱**。`session-prompt-input.service.test.ts` 用 `bailAt(3)` 定位「工作区装配之后」，八期给 `listBySession` 加分片级 checkpoint 后 `shouldBail` 调用次数前移，第 3 次从「assemble 之后」变成「分页之中」。改成**足迹判据**（`counts.workplace > 0 && counts.skills === 0`）才稳。
+3. **目录枚举漏项第三次翻车**：六期 15 片清单漏了 `core/src/bootstrap`(58) / `core/src/errors`(17) / `core/src/i18n`(1)，占总残留一半。**清单必须按 `ls` 枚举，不能凭记忆列。**
+4. **`prettier --print-width 200` 与 check-signatures 直接冲突**：全仓跑让 signatures 从 0 反弹到 148。已建 `prettier-guard.mjs` 拦截。
+5. **工具改动必须两边同步**：十期把清单机制改在 worktree 的 `.agents/`，主仓那份没变，导致我在主仓跑检查时误判「十期没做」。已同步并提交 `cd4067c07`。
