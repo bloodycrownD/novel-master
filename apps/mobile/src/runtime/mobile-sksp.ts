@@ -3,9 +3,7 @@
  */
 import {Platform} from 'react-native';
 
-export function mobileSkspDriverName(
-  platform: string = Platform.OS,
-): 'android' {
+export function mobileSkspDriverName(platform: string = Platform.OS): 'android' {
   if (platform === 'android') {
     return 'android';
   }

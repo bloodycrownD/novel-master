@@ -3,12 +3,7 @@
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, BackHandler, StyleSheet, View} from 'react-native';
-import {
-  type RouteProp,
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native';
+import {type RouteProp, useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -17,12 +12,7 @@ import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useNovelMaster} from '@/runtime/novel-master-context';
-import {
-  initialCloudSyncProgressUi,
-  pullCloudSync,
-  pushCloudSync,
-  type CloudSyncProgressUiState,
-} from '@/services/cloud-sync.service';
+import {initialCloudSyncProgressUi, pullCloudSync, pushCloudSync, type CloudSyncProgressUiState} from '@/services/cloud-sync.service';
 import {isAppError} from '@novel-master/core/agent';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -42,9 +32,7 @@ export function CloudSyncProgressScreen() {
   const {op, forceOverwriteRemote = false} = route.params;
   const title = op === 'pull' ? '从云端拉取' : '推送到云端';
 
-  const [progress, setProgress] = useState<CloudSyncProgressUiState>(() =>
-    initialCloudSyncProgressUi(op),
-  );
+  const [progress, setProgress] = useState<CloudSyncProgressUiState>(() => initialCloudSyncProgressUi(op));
   const runningRef = useRef(true);
 
   const handleNeedPullFirst = useCallback(() => {
@@ -73,28 +61,23 @@ export function CloudSyncProgressScreen() {
     ]);
   }, [navigation]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setStackOverride({title, showBack: false});
-      return () => setStackOverride(undefined);
-    }, [setStackOverride, title]),
-  );
+  const onTitleFocus = useCallback(() => {
+    setStackOverride({title, showBack: false});
+    return () => setStackOverride(undefined);
+  }, [setStackOverride, title]);
+  useFocusEffect(onTitleFocus);
 
-  useFocusEffect(
-    useCallback(() => {
-      const onBack = () => {
-        if (runningRef.current) {
-          return true;
-        }
-        return false;
-      };
-      const subscription = BackHandler.addEventListener(
-        'hardwareBackPress',
-        onBack,
-      );
-      return () => subscription.remove();
-    }, []),
-  );
+  const onBackFocus = useCallback(() => {
+    const onBack = () => {
+      if (runningRef.current) {
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => subscription.remove();
+  }, []);
+  useFocusEffect(onBackFocus);
 
   useEffect(() => {
     let active = true;
@@ -108,11 +91,7 @@ export function CloudSyncProgressScreen() {
         if (!active) {
           return;
         }
-        if (
-          op === 'push' &&
-          isAppError(error, 'CLOUD_SYNC_NEED_PULL_FIRST') &&
-          !forceOverwriteRemote
-        ) {
+        if (op === 'push' && isAppError(error, 'CLOUD_SYNC_NEED_PULL_FIRST') && !forceOverwriteRemote) {
           runningRef.current = false;
           handleNeedPullFirst();
           return;
@@ -126,13 +105,14 @@ export function CloudSyncProgressScreen() {
           // retryAndWait：拉取换库后必须用**重建出来的新 runtime** 记账，
           // 旧 runtime 背后的连接已被换库关掉。retry（只 setBootToken）
           // 拿不到新 runtime。
-          const result = await pullCloudSync(runtime, retryAndWait, {
-            onProgress: state => {
+          const pullOptions = {
+            onProgress: (state: CloudSyncProgressUiState) => {
               if (active) {
                 setProgress(state);
               }
             },
-          });
+          };
+          const result = await pullCloudSync(runtime, retryAndWait, pullOptions);
           if (!result.ok) {
             handleFailure(result.error);
             return;
@@ -146,14 +126,15 @@ export function CloudSyncProgressScreen() {
             showToast('拉取成功，正在重新加载…');
           }
         } else {
-          const pushed = await pushCloudSync(runtime, {
+          const pushOptions = {
             forceOverwriteRemote,
-            onProgress: state => {
+            onProgress: (state: CloudSyncProgressUiState) => {
               if (active) {
                 setProgress(state);
               }
             },
-          });
+          };
+          const pushed = await pushCloudSync(runtime, pushOptions);
           if (!pushed.ok) {
             handleFailure(pushed.error);
             return;
@@ -174,15 +155,7 @@ export function CloudSyncProgressScreen() {
     return () => {
       active = false;
     };
-  }, [
-    op,
-    forceOverwriteRemote,
-    runtime,
-    retryAndWait,
-    navigation,
-    showToast,
-    handleNeedPullFirst,
-  ]);
+  }, [op, forceOverwriteRemote, runtime, retryAndWait, navigation, showToast, handleNeedPullFirst]);
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>

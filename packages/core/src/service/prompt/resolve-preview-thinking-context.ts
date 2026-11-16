@@ -26,10 +26,7 @@ import type { PersistentPreferences } from "../persistent-preferences/persistent
 /** 预览思考上下文解析入参（端口窄切片 + 已解析的模型 id）。 */
 export interface ResolvePreviewThinkingContextInput {
   /** 偏好窄切片：读「思考内容进入上下文」开关。 */
-  readonly preferences: Pick<
-    PersistentPreferences,
-    "getThinkingContextEnabled"
-  >;
+  readonly preferences: Pick<PersistentPreferences, "getThinkingContextEnabled">;
   /** 已保存模型仓库窄切片：读思考档位、参与协议推断。 */
   readonly savedModels: Pick<SavedModelRepository, "findById">;
   /** 服务商仓库窄切片：参与协议推断。 */
@@ -48,11 +45,8 @@ export interface ResolvedPreviewThinkingContext {
 }
 
 /** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）；偏好/读档失败沿 `Result.err` 回传。 */
-export async function resolvePreviewThinkingContext(
-  input: ResolvePreviewThinkingContextInput
-): Promise<Result<ResolvedPreviewThinkingContext, AppError>> {
-  const { preferences, savedModels, providers, agentModelId, sessionModelId } =
-    input;
+export async function resolvePreviewThinkingContext(input: ResolvePreviewThinkingContextInput): Promise<Result<ResolvedPreviewThinkingContext, AppError>> {
+  const { preferences, savedModels, providers, agentModelId, sessionModelId } = input;
   const enabledPref = await preferences.getThinkingContextEnabled();
   if (!enabledPref.ok) return Result.err(enabledPref.error);
   const enabled = enabledPref.value;
@@ -62,17 +56,9 @@ export async function resolvePreviewThinkingContext(
     const saved = await savedModels.findById(savedModelId);
     if (!saved.ok) return Result.err(saved.error);
     if (saved.value != null) {
-      requestThinkingEnabled =
-        saved.value.settings.generation.thinkingLevel !== "off";
+      requestThinkingEnabled = saved.value.settings.generation.thinkingLevel !== "off";
     }
   }
-  const protocol =
-    savedModelId != null && savedModelId !== ""
-      ? await inferLlmProtocolFromSavedModelId(
-          savedModelId,
-          savedModels,
-          providers
-        )
-      : "anthropic";
+  const protocol = savedModelId != null && savedModelId !== "" ? await inferLlmProtocolFromSavedModelId(savedModelId, savedModels, providers) : "anthropic";
   return Result.ok({ enabled, requestThinkingEnabled, protocol });
 }

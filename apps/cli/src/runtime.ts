@@ -4,31 +4,25 @@
  * @module runtime
  */
 
-import {
-  mkdir } from "node:fs/promises";
-import { dirname,
-  resolve } from "node:path";
-import { deflateSync,
-  inflateSync } from "node:zlib";
+import { mkdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster,
+import {
+  bootstrapNovelMaster,
   createPersistentPreferences,
   createPersistentState,
   open,
   registerZlibCodecAccelerator,
   type PersistentPreferences,
   type PersistentState,
-  type TdbcConnection } from "@novel-master/core";
+  type TdbcConnection,
+} from "@novel-master/core";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { type AppError, Result } from "@novel-master/core/errors";
 
 import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
-import {
-  createCompactionConditionEvaluator,
-  createCompactionConditionsStore,
-  type CompactionConditionEvaluator,
-  type CompactionConditionsStore,
-} from "@novel-master/core/compaction";
+import { createCompactionConditionEvaluator, createCompactionConditionsStore, type CompactionConditionEvaluator, type CompactionConditionsStore } from "@novel-master/core/compaction";
 import { SimpleEventBus } from "@novel-master/core/events";
 import {
   createMessageService,
@@ -52,40 +46,16 @@ import {
   type SecretStore,
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
-import {
-  createSmartSortRuleService,
-  type SmartSortRuleService,
-} from "@novel-master/core/smart-sort-rule";
+import { createSmartSortRuleService, type SmartSortRuleService } from "@novel-master/core/smart-sort-rule";
 import { createMessageCheckpointService, type MessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import {
-  createSessionFsService,
-  type SessionFsService,
-} from "@novel-master/core/session-fs";
-import {
-  createPhysicalVfsService,
-  createScopedVfsService,
-  type PhysicalVfsService,
-  type VfsScope,
-  type VfsService,
-} from "@novel-master/core/vfs";
-import {
-  createWorkplaceService,
-  type WorkplaceService,
-} from "@novel-master/core/workplace";
-import {
-  createSessionKkvService,
-  type SessionKkvService,
-} from "@novel-master/core/session-kkv";
+import { createSessionFsService, type SessionFsService } from "@novel-master/core/session-fs";
+import { createPhysicalVfsService, createScopedVfsService, type PhysicalVfsService, type VfsScope, type VfsService } from "@novel-master/core/vfs";
+import { createWorkplaceService, type WorkplaceService } from "@novel-master/core/workplace";
+import { createSessionKkvService, type SessionKkvService } from "@novel-master/core/session-kkv";
 import { createSkillsService, type SkillService } from "@novel-master/core/skills";
 import type { AgentAbortRegistry, AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
-import {
-  createCompositeSecretStore,
-  createEnvSecretStore,
-  resolveSkspDriver,
-  resolveSkspNameFromPlatform,
-  type PlatformSkspName,
-} from "@novel-master/core/sksp";
+import { createCompositeSecretStore, createEnvSecretStore, resolveSkspDriver, resolveSkspNameFromPlatform, type PlatformSkspName } from "@novel-master/core/sksp";
 import { registerSkspMacDriver } from "@novel-master/sksp-mac";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
 import { registerSkspLinuxDriver } from "@novel-master/sksp-linux";
@@ -105,9 +75,7 @@ const DEFAULT_DB = "./.novel-master/novel.db";
  * `Result.err`（INFRA_UNSUPPORTED_PLATFORM）——无 driver 的平台在启动
  * 早期就明确报错，而不是悄悄用错驱动。
  */
-export function registerPlatformSkspDriver(
-  platform: string = process.platform,
-): Result<PlatformSkspName, AppError> {
+export function registerPlatformSkspDriver(platform: string = process.platform): Result<PlatformSkspName, AppError> {
   const name = resolveSkspNameFromPlatform(platform);
   if (!name.ok) return name;
   if (name.value === "macos") {
@@ -193,9 +161,7 @@ export interface NovelMasterRuntime {
  * Opens SQLite, bootstraps full schema, and returns service handles.
  * preferences 读的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
-export async function createNovelMasterRuntime(
-  argv: readonly string[],
-): Promise<Result<NovelMasterRuntime, AppError>> {
+export async function createNovelMasterRuntime(argv: readonly string[]): Promise<Result<NovelMasterRuntime, AppError>> {
   registerBetterSqlite3Driver();
   const skspName = registerPlatformSkspDriver();
   if (!skspName.ok) return Result.err(skspName.error);
@@ -205,16 +171,13 @@ export async function createNovelMasterRuntime(
   // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
   // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
   registerZlibCodecAccelerator({
-    deflate: (data, level) =>
-      level === undefined ? deflateSync(data) : deflateSync(data, { level }),
+    deflate: (data, level) => (level === undefined ? deflateSync(data) : deflateSync(data, { level })),
     inflate: (data) => inflateSync(data),
   });
   const dbPath = resolve(resolveDbPath(argv));
   await mkdir(dirname(dbPath), { recursive: true });
 
-  const conn = await open(`tdbc:sqlite:file:${dbPath}`, {
-    driver: "better-sqlite3",
-  });
+  const conn = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
   await bootstrapNovelMaster(conn);
 
   const state = createPersistentState(conn);
@@ -226,10 +189,7 @@ export async function createNovelMasterRuntime(
   const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver(skspName.value).createStore(conn);
-  const envStore =
-    process.env.NM_SKSP_DISABLE_ENV === "1"
-      ? undefined
-      : createEnvSecretStore();
+  const envStore = process.env.NM_SKSP_DISABLE_ENV === "1" ? undefined : createEnvSecretStore();
   const secretStore = createCompositeSecretStore({
     db: dbStore,
     env: envStore,
@@ -238,10 +198,7 @@ export async function createNovelMasterRuntime(
     installE2eLlmFetchCapture();
   }
   const providerBundle = createProviderServices(conn, secretStore);
-  const modelRequests =
-    process.env.NM_AGENT_MOCK_LLM === "1"
-      ? createAgentMockModelRequests()
-      : providerBundle.modelRequests;
+  const modelRequests = process.env.NM_AGENT_MOCK_LLM === "1" ? createAgentMockModelRequests() : providerBundle.modelRequests;
 
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
@@ -284,8 +241,7 @@ export async function createNovelMasterRuntime(
     sessionKkv,
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
-    projectVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project", projectId }),
+    projectVfs: (projectId) => createScopedVfsService(conn, { kind: "project", projectId }),
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, {
         kind: "session",

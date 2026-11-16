@@ -6,10 +6,7 @@ export const BRIDGE_V = 1;
 export const OVER_LIMIT_HINT = '内容过长，已显示原文';
 
 /** 拼接 FM HTML（置于前）与正文，统一进 .doc-body；无 FM 时原样返回正文。 */
-export function concatDocBodyHtml(
-  frontMatterHtml: string,
-  body: string,
-): string {
+export function concatDocBodyHtml(frontMatterHtml: string, body: string): string {
   return frontMatterHtml ? `${frontMatterHtml}${body}` : body;
 }
 
@@ -19,7 +16,7 @@ export function concatDocBodyHtml(
  * - `plain`：FM 是 HTML 串须单独经 TrustedHtml，正文保持文本节点按原文显示
  *   （over-limit 回退）。绝不可把 fmHtml 拼进 text——HTML 会按字面透出。
  */
-export type DocumentBody =
+type DocumentBody =
   | {
       readonly kind: 'html';
       readonly html: string;
@@ -32,9 +29,7 @@ export type DocumentBody =
     };
 
 /** 由载荷选出 `.doc-body` 分支；无可显示内容时返回 null。 */
-export function buildDocumentBody(
-  payload: DocumentPayload,
-): DocumentBody | null {
+export function buildDocumentBody(payload: DocumentPayload): DocumentBody | null {
   const fm = payload.frontMatterHtml || '';
   if (payload.mode === 'html' && payload.html) {
     return {

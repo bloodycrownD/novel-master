@@ -40,10 +40,7 @@ export function resolveVfsScopeFromRequest(req: VfsScopeRequest): IpcResult<VfsS
   }
 }
 
-export function getVfsForScope(
-  rt: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-): VfsService {
+export function getVfsForScope(rt: DesktopNovelMasterRuntime, scope: VfsScope): VfsService {
   switch (scope.kind) {
     case "global":
       return rt.globalVfs();
@@ -66,9 +63,6 @@ export function getPhysicalVfs(rt: DesktopNovelMasterRuntime) {
   return rt.physicalVfs();
 }
 
-export function getWorkplaceForScope(
-  rt: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-) {
+export function getWorkplaceForScope(rt: DesktopNovelMasterRuntime, scope: VfsScope) {
   return rt.workplace(scope);
 }

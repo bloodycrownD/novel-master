@@ -47,12 +47,6 @@ function basename(logicalPath: string): string {
   return idx >= 0 ? logicalPath.slice(idx + 1) : logicalPath;
 }
 
-function fileExtension(logicalPath: string): string {
-  const base = basename(logicalPath);
-  const dot = base.lastIndexOf(".");
-  return dot >= 0 ? base.slice(dot) : "";
-}
-
 function compareStrings(a: string, b: string, order: SortOrder): number {
   const cmp = a.localeCompare(b);
   return order === "asc" ? cmp : -cmp;
@@ -128,7 +122,9 @@ export function evaluateFileDisplay(params: { readonly inclusion: InclusionMode;
   if (fill === "filename") {
     return "filename";
   }
-  const ext = fileExtension(params.logicalPath).toLowerCase();
+  const base = params.logicalPath.slice(params.logicalPath.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  const ext = (dot >= 0 ? base.slice(dot) : "").toLowerCase();
   if (ext !== ".md" && ext !== ".markdown") {
     return "hidden";
   }

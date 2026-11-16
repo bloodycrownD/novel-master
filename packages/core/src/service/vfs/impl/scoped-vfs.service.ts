@@ -24,10 +24,7 @@ import { Result } from "@/errors/either.js";
  * 错误通道迁移四期：路径解析 / scope 校验失败走返回值通道（`Result.err`），inner 仍按边界抛出的业务错（如 VFS_NOT_FOUND）原样穿透。
  */
 export class ScopedVfsService implements VfsService {
-  constructor(
-    private readonly inner: InternalVfsService,
-    private readonly scope: VfsScope
-  ) {}
+  constructor(private readonly inner: InternalVfsService, private readonly scope: VfsScope) {}
 
   private get scopeKeyStr(): string {
     return scopeKey(this.scope);

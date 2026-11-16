@@ -49,10 +49,7 @@ import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-app
 
 const log = createLogger("desktop.ipc.agent");
 
-async function resolveModelLabel(
-  rt: DesktopNovelMasterRuntime,
-  savedModelId: string,
-): Promise<Result<string, AppError>> {
+async function resolveModelLabel(rt: DesktopNovelMasterRuntime, savedModelId: string): Promise<Result<string, AppError>> {
   const saved = await rt.providerModels.getSavedById(savedModelId);
   if (!saved.ok) return Result.err(saved.error);
   if (saved.value == null) {
@@ -260,10 +257,7 @@ export function onCoreRunFailed({
  * 收 runtime 作参数而不是自己 `getDesktopRuntime()`：读口 service 手里已经有
  * 同一个 runtime（单测还会传 Proxy 探针），走参数才不会被绕开。
  */
-export function isDesktopSessionRunInFlight(
-  runtime: DesktopNovelMasterRuntime,
-  sessionId: string,
-): boolean {
+export function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, sessionId: string): boolean {
   return runtime.abortRegistry.has(sessionId);
 }
 
@@ -284,9 +278,7 @@ type RunFinishedTokenStatsRefresh = (payload: {
 let runFinishedTokenStatsRefresh: RunFinishedTokenStatsRefresh | null = null;
 
 /** 注册/注销 run 结束后的读口补跑（读口 service 在模块加载时注册自己）。 */
-export function setRunFinishedTokenStatsRefresh(
-  refresh: RunFinishedTokenStatsRefresh | null,
-): void {
+export function setRunFinishedTokenStatsRefresh(refresh: RunFinishedTokenStatsRefresh | null): void {
   runFinishedTokenStatsRefresh = refresh;
 }
 
@@ -332,9 +324,7 @@ function detachAgentRunLifecycleListeners(): void {
  * 订阅 core run 生命周期事件，与 handleAgentRun 同模块维护 activeRuns / agentActive。
  * 返回 cleanup 供 rebootstrap / quit。
  */
-export function attachAgentRunLifecycleListeners(
-  eventBus: SimpleEventBus,
-): () => void {
+export function attachAgentRunLifecycleListeners(eventBus: SimpleEventBus): () => void {
   detachAgentRunLifecycleListeners();
 
   lifecycleSubscriptions = [
@@ -348,9 +338,7 @@ export function attachAgentRunLifecycleListeners(
   return detachAgentRunLifecycleListeners;
 }
 
-export async function handleAgentAbort(
-  req: AgentAbortRequest,
-): Promise<IpcResult<void>> {
+export async function handleAgentAbort(req: AgentAbortRequest): Promise<IpcResult<void>> {
   await abortAgentRun(req.sessionId);
   return { ok: true, data: undefined };
 }
@@ -359,9 +347,7 @@ export async function handleAgentAbort(
  * 查询某 session 是否有 in-flight run——转调 rt.abortRegistry.has(sessionId)。
  * renderer 的 readOnly 子面板用它判断 stale，避免在 run 进行中渲染可交互 UI。
  */
-export async function handleAgentRunIsActive(
-  req: AgentRunIsActiveRequest,
-): Promise<IpcResult<boolean>> {
+export async function handleAgentRunIsActive(req: AgentRunIsActiveRequest): Promise<IpcResult<boolean>> {
   const built = await getDesktopRuntime();
   // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
   if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
@@ -376,18 +362,13 @@ export async function handleAgentRunIsActive(
  * 的 wasTracked 闸）之后，单测想触发补推就必须先把 run「登记」进来——直接调
  * onCoreRunFinished 而不登记，事件会被当子 run 终态过滤掉。生产代码不得调用。
  */
-export function registerTrackedRunForTests(
-  sessionId: string,
-  runId: string,
-): void {
+export function registerTrackedRunForTests(sessionId: string, runId: string): void {
   activeRuns.set(sessionId, { runId, terminalSeen: false });
   sessionRunIds.set(sessionId, runId);
   incrementDesktopAgentActive();
 }
 
-export async function handleAgentRun(
-  req: AgentRunRequest,
-): Promise<IpcResult<{ started: boolean }>> {
+export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ started: boolean }>> {
   if (isDesktopAgentActive()) {
     return { ok: false, error: { code: "AGENT_BUSY", message: "Agent 正在运行" } };
   }
@@ -397,11 +378,7 @@ export async function handleAgentRun(
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    await resolveDesktopSavedModelId(
-      rt,
-      (await resolveCurrentAgentDefinition(rt)).definition,
-      req.sessionId,
-    );
+    await resolveDesktopSavedModelId(rt, (await resolveCurrentAgentDefinition(rt)).definition, req.sessionId);
     const { sessionId } = req;
     // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
     // core runAgentTurn 内部自建 internalController 注册到 rt.abortRegistry，
@@ -411,20 +388,16 @@ export async function handleAgentRun(
     activeRuns.set(sessionId, { runId: null, terminalSeen: false });
     incrementDesktopAgentActive();
 
-    void runAgentTurn(
-      rt,
-      { projectId: req.projectId, sessionId },
-      req.userContent,
-      {
-        stream: req.stream !== false,
-        allowResumeWithoutInput: req.allowResumeWithoutInput,
-        attachments: req.attachments,
-        annotateDrafts: req.annotateDrafts,
-        onUserMessageAppended: () => {
-          notifyUserMessageAppendedToRenderer({ sessionId });
-        },
+    const runOptions = {
+      stream: req.stream !== false,
+      allowResumeWithoutInput: req.allowResumeWithoutInput,
+      attachments: req.attachments,
+      annotateDrafts: req.annotateDrafts,
+      onUserMessageAppended: () => {
+        notifyUserMessageAppendedToRenderer({ sessionId });
       },
-    )
+    };
+    void runAgentTurn(rt, { projectId: req.projectId, sessionId }, req.userContent, runOptions)
       .then((outcome) => {
         // 已知失败沿 Result 到达（四期门⑦）：终态事件已由 core 补发，这里只记日志。
         if (!outcome.ok) {
@@ -500,6 +473,7 @@ export async function abortAgentRun(sessionId: string): Promise<void> {
  * 测试专用内省：暴露 run 追踪 map 的当前大小，用于断言早退兜底无泄漏。
  * 仅在单测中引用，生产代码不应依赖。
  */
+// nm-style: keep-public — 测试契约：apps/desktop/test/agent-prelude-terminal.test.ts 与 agent-run-early-exit.test.ts 动态 import 解构直引
 export function __testRunTrackingState(): {
   activeRunsCount: number;
   sessionRunIdsCount: number;

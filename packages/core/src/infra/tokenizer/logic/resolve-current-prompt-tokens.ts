@@ -210,10 +210,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   const shouldBail = options?.shouldBail;
   const bail = (): Interrupt | null => shouldBail?.() ?? null;
   const entry = await readSessionApiPromptTokenEntry(options?.sessionKkv, sessionId);
-  if (
-    entry != null &&
-    (entry.savedModelId == null || entry.savedModelId === params.savedModelId)
-  ) {
+  if (entry != null && (entry.savedModelId == null || entry.savedModelId === params.savedModelId)) {
     return {
       kind: "completed",
       value: {
@@ -310,12 +307,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 有指纹时也跳过下方 L1 预查——它要 serialize+hash 整串（真机 ~1.3s），
     // 恰是要消灭的成本；「同内容已有精确读数」由上方记忆精确条目覆盖。
     const fingerprint = params.ctx?.workplaceFingerprint;
-    if (
-      fingerprint != null &&
-      params.ctx != null &&
-      layoutHasWorkplace(params.layout) &&
-      params.ctx.workplaceDisplay.length > 0
-    ) {
+    if (fingerprint != null && params.ctx != null && layoutHasWorkplace(params.layout) && params.ctx.workplaceDisplay.length > 0) {
       let wpEstimate = lookupWorkplaceEstimateByFingerprint(fingerprint);
       if (wpEstimate == null) {
         wpEstimate = estimateTokensCjkAware(params.ctx.workplaceDisplay);

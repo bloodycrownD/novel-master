@@ -8,38 +8,22 @@ export {NEAR_BOTTOM_THRESHOLD_PX} from '@/web/shared/constants';
 import {NEAR_BOTTOM_THRESHOLD_PX} from '@/web/shared/constants';
 
 /** True when scrollTop is within threshold of the visual bottom. */
-export function nearBottom(
-  scrollTop: number,
-  scrollHeight: number,
-  clientHeight: number,
-  threshold = NEAR_BOTTOM_THRESHOLD_PX,
-): boolean {
+export function nearBottom(scrollTop: number, scrollHeight: number, clientHeight: number, threshold = NEAR_BOTTOM_THRESHOLD_PX): boolean {
   return offsetFromBottom(scrollTop, scrollHeight, clientHeight) <= threshold;
 }
 
 /** Pixels from visual bottom (DOM forward order: newest at bottom). */
-export function offsetFromBottom(
-  scrollTop: number,
-  scrollHeight: number,
-  clientHeight: number,
-): number {
+export function offsetFromBottom(scrollTop: number, scrollHeight: number, clientHeight: number): number {
   return Math.max(0, scrollHeight - scrollTop - clientHeight);
 }
 
 /** Pin scroll to visual bottom (open session / stream follow). */
-export function scrollTopForBottom(
-  scrollHeight: number,
-  clientHeight: number,
-): number {
+export function scrollTopForBottom(scrollHeight: number, clientHeight: number): number {
   return Math.max(0, scrollHeight - clientHeight);
 }
 
 /** Restore scrollTop from cached distance-from-bottom (T6 workspace↔chat). */
-export function scrollTopForOffsetFromBottom(
-  scrollHeight: number,
-  clientHeight: number,
-  offsetY: number,
-): number {
+export function scrollTopForOffsetFromBottom(scrollHeight: number, clientHeight: number, offsetY: number): number {
   return Math.max(0, scrollHeight - clientHeight - offsetY);
 }
 
@@ -47,22 +31,14 @@ export function scrollTopForOffsetFromBottom(
  * After prependPage (not sessionSnapshot): preserve reading position.
  * scrollTop += scrollHeight - prependedScrollHeight — see spec §prepend 稳定.
  */
-export function scrollTopAfterPrepend(
-  previousScrollTop: number,
-  previousScrollHeight: number,
-  nextScrollHeight: number,
-): number {
+export function scrollTopAfterPrepend(previousScrollTop: number, previousScrollHeight: number, nextScrollHeight: number): number {
   return previousScrollTop + (nextScrollHeight - previousScrollHeight);
 }
 
 /**
  * After tail removal (rollback/delete): keep reading position without overshooting max scroll.
  */
-export function clampScrollTop(
-  previousScrollTop: number,
-  scrollHeight: number,
-  clientHeight: number,
-): number {
+export function clampScrollTop(previousScrollTop: number, scrollHeight: number, clientHeight: number): number {
   const maxScroll = Math.max(0, scrollHeight - clientHeight);
   return Math.min(previousScrollTop, maxScroll);
 }

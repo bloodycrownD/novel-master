@@ -40,10 +40,10 @@ import { renderCodeBlock } from "./code-block";
  * - 主题：读 html[data-theme]（ThemeProvider 写入），MutationObserver 监听切换重渲染。
  */
 
-export type MermaidTheme = "dark" | "default";
+type MermaidTheme = "dark" | "default";
 
 /** 围栏扫描结果：mermaid 围栏总数 + 文末是否存在未闭合 mermaid 围栏。 */
-export interface MermaidFenceScan {
+interface MermaidFenceScan {
   mermaidCount: number;
   unclosedMermaid: boolean;
 }
@@ -202,7 +202,7 @@ export function lookupMermaidFailedError(
 }
 
 /** 可注入的渲染实现（默认动态 import mermaid；测试替换以断言调用次数）。 */
-export type MermaidSvgRenderer = (
+type MermaidSvgRenderer = (
   id: string,
   source: string,
   theme: MermaidTheme,
@@ -410,7 +410,7 @@ function extractChildCode(children: ReactNode): {
   return { className, source };
 }
 
-export interface MermaidMarkdownProps {
+interface MermaidMarkdownProps {
   content: string;
   /**
    * markdown 链接点击回调（chat-link-file-nav）：传了则覆盖 <a> 渲染，

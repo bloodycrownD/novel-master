@@ -40,6 +40,9 @@ export function ruleViewToSnapshotEntries(view: WorkplaceRuleView): RuleSnapshot
 
 /**
  * 序列化规则快照为 JSON 字符串。
+ *
+ * nm-style: keep-public — 两处 service 写入点 + `public/workplace.ts` 导出共用；
+ * 内联需改 service 与 public barrel（本轮只改 domain 范围）。
  */
 export function serializeRuleSnapshot(entries: readonly RuleSnapshotEntry[]): string {
   return JSON.stringify(entries);
@@ -81,6 +84,10 @@ export type FileCachePayload = {
 
 /**
  * 序列化文件缓存载荷。
+ *
+ * nm-style: keep-local — FileCachePayload 的 wire 形状契约：6 处写入点共用同一
+ * 键序（session-kkv repo ×3、vfs-tools、load-or-fill、parse 对偶），内联会把
+ * 持久化 JSON 形状摊回各调用点。
  */
 export function serializeFileCachePayload(payload: FileCachePayload): string {
   return JSON.stringify(payload);

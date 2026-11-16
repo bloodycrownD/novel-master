@@ -7,6 +7,7 @@
 import type { SecretStore } from "../ports/secret-store.port.js";
 
 /** Env-backed store: get/has only (no set/delete). */
+// nm-style: keep-public — @novel-master/core/sksp 子入口再导出的公共类型契约（无生产直引）
 export interface EnvSecretStoreLike {
   get(ref: string): Promise<string | null>;
   has(ref: string): Promise<boolean>;

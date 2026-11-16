@@ -15,7 +15,7 @@
 import type {ConversationDockAction} from '../ChatConversationBridge';
 
 /** 发送/终止钮形态：canSend=false 走 disabled，running 走 danger，否则 primary。 */
-export type SendButtonState = {
+type SendButtonState = {
   readonly disabled: boolean;
   readonly running: boolean;
   readonly variant: 'disabled' | 'danger' | 'primary';

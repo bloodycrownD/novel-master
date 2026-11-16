@@ -2,35 +2,15 @@
  * Saved models for one provider; add model + navigate to sampling.
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native';
+import {ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
+import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import {
-  formatSavedModelDisplayName,
-  savedModelSampling,
-} from '@novel-master/core/provider';
+import {formatSavedModelDisplayName, savedModelSampling} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
-import {
-  ProviderForm,
-  providerFormToEditPatch,
-  type ProviderFormValues,
-} from '../../components/provider/ProviderForm';
+import {ProviderForm, providerFormToEditPatch, type ProviderFormValues} from '../../components/provider/ProviderForm';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {PrimaryButton, SecondaryButton} from '../../components/ui/Buttons';
@@ -79,9 +59,7 @@ export function ProviderDetailScreen() {
 
   const [addVisible, setAddVisible] = useState(false);
   const [fetchVisible, setFetchVisible] = useState(false);
-  const [menuSavedModelId, setMenuSavedModelId] = useState<
-    string | undefined
-  >();
+  const [menuSavedModelId, setMenuSavedModelId] = useState<string | undefined>();
   const [renameModelName, setRenameModelName] = useState('');
   const [renameVisible, setRenameVisible] = useState(false);
   const batch = useBatchSelection();
@@ -116,17 +94,9 @@ export function ProviderDetailScreen() {
       return saved.value.map(model => {
         const sampling = savedModelSampling(model.settings);
         const hasSampling = Boolean(sampling.enabled && sampling.params);
-        const duplicate =
-          (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
-            0) > 1;
-        const label = formatSavedModelDisplayName(
-          provider.displayName,
-          model.modelName,
-        );
-        const subtitleParts = [
-          duplicate ? model.vendorModelId : undefined,
-          hasSampling ? '已配采样' : undefined,
-        ].filter(Boolean);
+        const duplicate = (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) > 1;
+        const label = formatSavedModelDisplayName(provider.displayName, model.modelName);
+        const subtitleParts = [duplicate ? model.vendorModelId : undefined, hasSampling ? '已配采样' : undefined].filter(Boolean);
         return {
           savedModelId: model.id,
           vendorModelId: model.vendorModelId,
@@ -141,11 +111,10 @@ export function ProviderDetailScreen() {
   });
 
   // 失焦时清掉栈顶标题覆盖（重载本身已交给 useFocusListReload）。
-  useFocusEffect(
-    useCallback(() => {
-      return () => setStackOverride(undefined);
-    }, [setStackOverride]),
-  );
+  const onScreenBlur = useCallback(() => {
+    return () => setStackOverride(undefined);
+  }, [setStackOverride]);
+  useFocusEffect(onScreenBlur);
 
   useEffect(() => {
     if (!providerId) {
@@ -195,9 +164,7 @@ export function ProviderDetailScreen() {
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          deleteModels([row.savedModelId]).catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
+          deleteModels([row.savedModelId]).catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
     ]);
@@ -236,9 +203,7 @@ export function ProviderDetailScreen() {
         providerId ? (
           <ProviderConfigTab providerId={providerId} />
         ) : (
-          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-            缺少 providerId
-          </Text>
+          <Text style={[styles.empty, {color: tokens.textSecondary}]}>缺少 providerId</Text>
         )
       ) : (
         <>
@@ -247,29 +212,15 @@ export function ProviderDetailScreen() {
             batchMode={batch.active}
             selectedCount={batch.selectedCount}
             allSelected={rows.length > 0 && batch.selectedCount === rows.length}
-            onSelectAll={() =>
-              batch.selectRange(
-                batch.selectedCount === rows.length
-                  ? []
-                  : rows.map(row => row.savedModelId),
-              )
-            }
+            onSelectAll={() => batch.selectRange(batch.selectedCount === rows.length ? [] : rows.map(row => row.savedModelId))}
             onEnterBatch={batch.enter}
             onCancelBatch={batch.exit}
             onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
             hint="选择要删除的模型（批量模式下不会进入采样配置）"
             normalActions={
               <>
-                <SecondaryButton
-                  label="远程"
-                  tokens={tokens}
-                  onPress={() => setFetchVisible(true)}
-                />
-                <PrimaryButton
-                  label="添加"
-                  tokens={tokens}
-                  onPress={() => setAddVisible(true)}
-                />
+                <SecondaryButton label="远程" tokens={tokens} onPress={() => setFetchVisible(true)} />
+                <PrimaryButton label="添加" tokens={tokens} onPress={() => setAddVisible(true)} />
               </>
             }
           />
@@ -277,13 +228,9 @@ export function ProviderDetailScreen() {
             <ActivityIndicator style={listScreenStyles.loader} />
           ) : error ? (
             <View style={styles.errorWrap}>
-              <Text style={[styles.errorText, {color: tokens.danger}]}>
-                {error}
-              </Text>
+              <Text style={[styles.errorText, {color: tokens.danger}]}>{error}</Text>
               <Pressable onPress={() => void reload()}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  重试
-                </Text>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
               </Pressable>
             </View>
           ) : (
@@ -291,17 +238,10 @@ export function ProviderDetailScreen() {
               data={rows}
               keyExtractor={item => item.savedModelId}
               contentContainerStyle={listScreenStyles.listContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={() => void reload()}
-                />
-              }
+              refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void reload()} />}
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
-                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                    暂无已保存模型
-                  </Text>
+                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>暂无已保存模型</Text>
                 </View>
               }
               renderItem={({item}) => (
@@ -317,23 +257,10 @@ export function ProviderDetailScreen() {
                       });
                     }
                   }}
-                  leading={
-                    batch.active ? (
-                      <BatchCheckbox
-                        checked={batch.isSelected(item.savedModelId)}
-                        onToggle={() => batch.toggle(item.savedModelId)}
-                      />
-                    ) : (
-                      <Text style={styles.modelIcon}>🧠</Text>
-                    )
-                  }
+                  leading={batch.active ? <BatchCheckbox checked={batch.isSelected(item.savedModelId)} onToggle={() => batch.toggle(item.savedModelId)} /> : <Text style={styles.modelIcon}>🧠</Text>}
                   title={item.label}
                   subtitle={item.subtitle || undefined}
-                  onMenuPress={
-                    batch.active
-                      ? undefined
-                      : () => setMenuSavedModelId(item.savedModelId)
-                  }
+                  onMenuPress={batch.active ? undefined : () => setMenuSavedModelId(item.savedModelId)}
                 />
               )}
             />
@@ -373,14 +300,7 @@ export function ProviderDetailScreen() {
             }}
             onConfirm={values => handleRename(values[0])}
           />
-          {providerId ? (
-            <FetchModelsSheet
-              visible={fetchVisible}
-              providerId={providerId}
-              onClose={() => setFetchVisible(false)}
-              onSaved={() => void reload()}
-            />
-          ) : null}
+          {providerId ? <FetchModelsSheet visible={fetchVisible} providerId={providerId} onClose={() => setFetchVisible(false)} onSaved={() => void reload()} /> : null}
           <BottomSheetMenu
             visible={menuSavedModelId != null}
             items={[
@@ -418,9 +338,7 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
   const [saving, setSaving] = useState(false);
   const [initial, setInitial] = useState<Partial<ProviderFormValues>>();
   const [isBuiltin, setIsBuiltin] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'set' | 'not set'>(
-    'not set',
-  );
+  const [apiKeyStatus, setApiKeyStatus] = useState<'set' | 'not set'>('not set');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -437,14 +355,8 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
         displayName: provider.displayName,
         protocol: provider.protocol,
         baseUrl: provider.baseUrl,
-        headersJson:
-          Object.keys(provider.headers).length > 0
-            ? JSON.stringify(provider.headers)
-            : '',
-        bodyParamsJson:
-          Object.keys(provider.bodyParams ?? {}).length > 0
-            ? JSON.stringify(provider.bodyParams)
-            : '',
+        headersJson: Object.keys(provider.headers).length > 0 ? JSON.stringify(provider.headers) : '',
+        bodyParamsJson: Object.keys(provider.bodyParams ?? {}).length > 0 ? JSON.stringify(provider.bodyParams) : '',
         apiKey: '',
       });
     } catch (error) {
@@ -468,11 +380,7 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
 
   return (
     <View style={[styles.configRoot, {backgroundColor: tokens.background}]}>
-      {isBuiltin ? (
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          内置服务商不可修改协议。
-        </Text>
-      ) : null}
+      {isBuiltin ? <Text style={[styles.hint, {color: tokens.textSecondary}]}>内置服务商不可修改协议。</Text> : null}
       <ProviderForm
         mode="edit"
         initial={initial}
@@ -483,13 +391,8 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
           setSaving(true);
           try {
             const patch = providerFormToEditPatch(values);
-            const edited =
-              !isBuiltin && values.protocol !== initial.protocol
-                ? await runtime.providers.edit(providerId, {
-                    ...patch,
-                    protocol: values.protocol,
-                  })
-                : await runtime.providers.edit(providerId, patch);
+            const editInput = !isBuiltin && values.protocol !== initial.protocol ? {...patch, protocol: values.protocol} : patch;
+            const edited = await runtime.providers.edit(providerId, editInput);
             if (!edited.ok) {
               showToast(toastMessage('保存失败', edited.error));
               return;

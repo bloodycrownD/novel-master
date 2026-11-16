@@ -11,13 +11,14 @@
  */
 import {createScopeKeyCache} from './scope-key-cache';
 
-export type ChatListScrollSnapshot = {
+type ChatListScrollSnapshot = {
   readonly offsetY: number;
   readonly nearBottom: boolean;
 };
 
 const cache = createScopeKeyCache<ChatListScrollSnapshot>({maxEntries: 500});
 
+// nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
 export function scrollCacheKey(projectId: string, sessionId: string): string {
   return cache.key(projectId, sessionId);
 }
@@ -25,14 +26,4 @@ export function scrollCacheKey(projectId: string, sessionId: string): string {
 /** 项目删除后按前缀清理其全部会话快照。 */
 export function clearScrollSnapshotsByProject(projectId: string): void {
   cache.clearByProjectPrefix(projectId);
-}
-
-/** Test-only: reset process-wide cache between cases. */
-export function clearAllScrollSnapshots(): void {
-  cache.clearAll();
-}
-
-/** Test-only: entry count for LRU-bound assertions. */
-export function scrollSnapshotCacheSize(): number {
-  return cache.size;
 }

@@ -23,7 +23,7 @@ import {Platform, useWindowDimensions} from 'react-native';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {useAnimatedStyle} from 'react-native-reanimated';
 
-export type Options = {
+type Options = {
   /** 顶部余量（px），默认 0：面板贴屏顶，全遮页面标题。 */
   topMargin?: number;
   /** maxHeight 收缩下限（px），默认 160，防止键盘比屏高还高时面板被压没。 */
@@ -39,10 +39,7 @@ export type Options = {
 /**
  * @param maxHeightRatio 静态上限占屏比例（0.75 / 0.85），键盘未弹起时的面板高度上限。
  */
-export function useAdaptiveKeyboardSheetStyle(
-  maxHeightRatio: number,
-  opts?: Options,
-) {
+export function useAdaptiveKeyboardSheetStyle(maxHeightRatio: number, opts?: Options) {
   const topMargin = opts?.topMargin ?? 0;
   const minPanelHeight = opts?.minPanelHeight ?? 160;
   const iosTranslateY = opts?.iosTranslateY ?? false;
@@ -55,17 +52,7 @@ export function useAdaptiveKeyboardSheetStyle(
     const useTranslateY = Platform.OS === 'android' || iosTranslateY;
     return {
       ...(useTranslateY ? {transform: [{translateY: kb}]} : {}),
-      maxHeight: Math.max(
-        minPanelHeight,
-        Math.min(screenH * maxHeightRatio, available),
-      ),
+      maxHeight: Math.max(minPanelHeight, Math.min(screenH * maxHeightRatio, available)),
     };
-  }, [
-    keyboardHeightSV,
-    screenH,
-    maxHeightRatio,
-    topMargin,
-    minPanelHeight,
-    iosTranslateY,
-  ]);
+  }, [keyboardHeightSV, screenH, maxHeightRatio, topMargin, minPanelHeight, iosTranslateY]);
 }

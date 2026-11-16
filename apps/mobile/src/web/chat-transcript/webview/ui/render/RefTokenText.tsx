@@ -37,12 +37,7 @@ type RefMatch = {
  * （`notes/a.md` → `/notes/a.md`），正文保留用户原样 `@notes/a.md`，
  * 双形态探测保证手输相对路径的真实挂载引用也能命中。
  */
-function findLiteralTokenMatches(
-  text: string,
-  trigger: '@' | '$',
-  names: Iterable<string>,
-  kind: 'path' | 'skill',
-): RefMatch[] {
+function findLiteralTokenMatches(text: string, trigger: '@' | '$', names: Iterable<string>, kind: 'path' | 'skill'): RefMatch[] {
   const out: RefMatch[] = [];
   const seen = new Set<string>();
   for (const name of names) {
@@ -84,9 +79,7 @@ type AttachLike = {
 };
 
 /** 从消息附件提取胶囊真源（skillAttach → skillName/name；路径附件 → path）。 */
-export function attachedRefTokensFrom(
-  attachments: readonly AttachLike[],
-): AttachedRefTokens {
+export function attachedRefTokensFrom(attachments: readonly AttachLike[]): AttachedRefTokens {
   const skills = new Set<string>();
   const paths = new Set<string>();
   for (const a of attachments) {
@@ -107,14 +100,8 @@ export function attachedRefTokensFrom(
 }
 
 /** 正文按附件命中切分为普通文本 / 引用胶囊片段（无命中时原样单段）。 */
-export function splitRefTokenSpans(
-  text: string,
-  attached: AttachedRefTokens,
-): RefSpan[] {
-  const matches = [
-    ...findLiteralTokenMatches(text, '@', attached.paths, 'path'),
-    ...findLiteralTokenMatches(text, '$', attached.skills, 'skill'),
-  ];
+export function splitRefTokenSpans(text: string, attached: AttachedRefTokens): RefSpan[] {
+  const matches = [...findLiteralTokenMatches(text, '@', attached.paths, 'path'), ...findLiteralTokenMatches(text, '$', attached.skills, 'skill')];
   // 同起始位置取最长命中；再按位置贪心取不重叠区间
   matches.sort((a, b) => a.index - b.index || b.end - a.end);
 
@@ -140,15 +127,11 @@ export function splitRefTokenSpans(
     // 否则「什么算成对终止符」会有两份实现，阈值一漂移就出现「split 吃了、渲染没裁」。
     // 未消费终止符的 span 不带 displayText（渲染回落 text），旧格式断言面因此不变。
     const consumed = end > match.end;
-    spans.push(
-      consumed
-        ? {
-            kind: match.kind,
-            text: text.slice(match.index, end),
-            displayText: text.slice(match.index + 1, end - 1),
-          }
-        : {kind: match.kind, text: text.slice(match.index, end)},
-    );
+    if (consumed) {
+      spans.push({kind: match.kind, text: text.slice(match.index, end), displayText: text.slice(match.index + 1, end - 1)});
+    } else {
+      spans.push({kind: match.kind, text: text.slice(match.index, end)});
+    }
     cursor = end;
   }
   if (cursor < text.length) {
@@ -158,17 +141,8 @@ export function splitRefTokenSpans(
 }
 
 /** 用户气泡正文渲染：引用 token 套胶囊样式，其余原样。 */
-export function RefTokenText({
-  text,
-  attached,
-}: {
-  text: string;
-  attached?: AttachedRefTokens;
-}): ComponentChildren {
-  const spans = splitRefTokenSpans(
-    text,
-    attached ?? {skills: new Set<string>(), paths: new Set<string>()},
-  );
+export function RefTokenText({text, attached}: {text: string; attached?: AttachedRefTokens}): ComponentChildren {
+  const spans = splitRefTokenSpans(text, attached ?? {skills: new Set<string>(), paths: new Set<string>()});
   if (spans.length === 0) {
     return null;
   }
@@ -178,10 +152,7 @@ export function RefTokenText({
         span.kind === 'text' ? (
           span.text
         ) : (
-          <span
-            key={`ref-${index}`}
-            className={`ref-token ref-token--${span.kind}`}
-          >
+          <span key={`ref-${index}`} className={`ref-token ref-token--${span.kind}`}>
             {span.displayText ?? span.text}
           </span>
         ),

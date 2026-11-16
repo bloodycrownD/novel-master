@@ -15,19 +15,13 @@ import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
 
 const EXPORT_FILE_NAME = "smart-sort-rules.yaml";
 
-export async function exportSmartSortRuleYamlWithDialog(
-  runtime: DesktopNovelMasterRuntime,
-  parentWindow?: BrowserWindow | null,
-): Promise<"saved" | "cancelled"> {
+export async function exportSmartSortRuleYamlWithDialog(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<"saved" | "cancelled"> {
   const doc = await runtime.smartSortRule.exportRules();
   const yaml = stringifyText(doc, "yaml");
   return exportYamlWithDialog(yaml, EXPORT_FILE_NAME, parentWindow);
 }
 
-export async function importSmartSortRuleYamlWithDialog(
-  runtime: DesktopNovelMasterRuntime,
-  parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
+export async function importSmartSortRuleYamlWithDialog(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<"imported" | "cancelled"> {
   return importYamlWithDialog(async (yaml) => {
     try {
       // service.importRules 内部走 core 单源 decode（含 zod 校验）。

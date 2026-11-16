@@ -23,7 +23,7 @@ export class EnvSecretStore {
   }
 }
 
-/** 创建 {@link EnvSecretStore} 实例。 */
+/** 创建 {@link EnvSecretStore} 实例。nm-style: keep-public — CLI / Desktop 经 sksp barrel 消费的工厂入口，删除需同步改 apps 调用方。 */
 export function createEnvSecretStore(): EnvSecretStore {
   return new EnvSecretStore();
 }

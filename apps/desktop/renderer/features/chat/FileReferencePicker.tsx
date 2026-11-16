@@ -11,7 +11,7 @@ import {
 } from '@/features/workspace/vfs-tree-utils';
 import { composerAtPath } from './composer-at-path';
 
-export type FileReferencePickerProps = {
+type FileReferencePickerProps = {
   open: boolean;
   projectId: string;
   sessionId: string;

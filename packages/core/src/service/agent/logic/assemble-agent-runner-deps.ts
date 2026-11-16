@@ -19,15 +19,7 @@ export interface AssembleAgentRunnerDepsInput {
   /** AgentTurnRuntimePort 或 EventActionDeps 的 runtime 切片（modelRequests、eventBus 等）。 */
   readonly runtime: Pick<
     AgentTurnRuntimePort,
-    | "messages"
-    | "messageTranscriptEffects"
-    | "modelRequests"
-    | "messageCheckpoint"
-    | "eventBus"
-    | "sessionKkv"
-    | "streamRegistry"
-    | "skills"
-    | "preferences"
+    "messages" | "messageTranscriptEffects" | "modelRequests" | "messageCheckpoint" | "eventBus" | "sessionKkv" | "streamRegistry" | "skills" | "preferences"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly savedModelRepo?: SavedModelRepository;
@@ -44,9 +36,7 @@ export interface AssembleAgentRunnerDepsInput {
 }
 
 /** 装配 createAgentRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
-export function assembleAgentRunnerDeps(
-  input: AssembleAgentRunnerDepsInput
-): CreateAgentRunnerDeps {
+export function assembleAgentRunnerDeps(input: AssembleAgentRunnerDepsInput): CreateAgentRunnerDeps {
   const savedModels = input.runtime.savedModelRepo ?? input.runtime.savedModels;
   const providers = input.runtime.providerRepo ?? input.runtime.providers;
 

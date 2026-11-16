@@ -9,42 +9,18 @@ import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { RESULT_OK } from "../cli-errors.js";
 
-import {
-  agentDefinitionSchema,
-  type AgentDefinition,
-  type AgentRegistryService,
-} from "@novel-master/core/agent";
+import { agentDefinitionSchema, type AgentDefinition, type AgentRegistryService } from "@novel-master/core/agent";
 
 import { assertSavedModelUuid } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
 }
 
-/**
- * 模型 pin 校验沿 `Result` 回传（错误通道迁移四期；core 回调契约已放宽为
- * void | Result 双通道，core 侧把 Err 收编为 `AGENT_INVALID_MODEL`）。
- */
-async function assertSavedModel(
-  rt: NovelMasterRuntime,
-  savedModelId: string,
-): Promise<Result<void, AppError>> {
-  const saved = await assertSavedModelUuid(savedModelId, rt.savedModels);
-  if (!saved.ok) return Result.err(saved.error);
-  return Result.ok(undefined);
-}
-
-export async function runAgentRegistryCommand(
-  rt: NovelMasterRuntime,
-  subcommand: string,
-  args: readonly string[],
-): Promise<Result<void, AppError>> {
+export async function runAgentRegistryCommand(rt: NovelMasterRuntime, subcommand: string, args: readonly string[]): Promise<Result<void, AppError>> {
   // ⚠️ 位置参数一律取 `positional`，**不许直接取 `args[0]`**（CR WA-P2-05）：
   // `args` 里 flag 本身也在第一层，`nm agent create --description "写手" smoke`
   // 会把 agent 命名成 `--description` 并静默成功（随后 `session create` 照样能
@@ -66,15 +42,8 @@ export async function runAgentRegistryCommand(
       }
       const system = flagString(flags, "system") ?? "你是一个写作助手。";
       const agentId = randomUUID();
-      const saved = await registry.upsert(
-        agentId,
-        {
-          name: name.trim(),
-          description: flagString(flags, "description") ?? "",
-          prompts: { system, persist: [], dynamic: [] },
-        } satisfies AgentDefinition,
-        createRegistryValidateOptions(rt),
-      );
+      const definition: AgentDefinition = { name: name.trim(), description: flagString(flags, "description") ?? "", prompts: { system, persist: [], dynamic: [] } };
+      const saved = await registry.upsert(agentId, definition, createRegistryValidateOptions(rt));
       if (!saved.ok) return saved;
       // 顺带把 workspace 当前 agent 指过去：session create 优先读 state，
       // 这样即使 registry 里有别的 agent，用户新建的会话也用自己刚建的。
@@ -86,9 +55,7 @@ export async function runAgentRegistryCommand(
       const defs = await registry.list();
       if (!defs.ok) return Result.err(defs.error);
       if (defs.value.length === 0) {
-        console.log(
-          "No agents in registry. Run: nm agent create --name <name>",
-        );
+        console.log("No agents in registry. Run: nm agent create --name <name>");
         return RESULT_OK;
       }
       for (const def of defs.value) {
@@ -119,20 +86,21 @@ export async function runAgentRegistryCommand(
       return RESULT_OK;
     }
     default:
-      throw new Error(
-        "Usage: nm agent <list|show|create|delete> ...",
-      );
+      throw new Error("Usage: nm agent <list|show|create|delete> ...");
   }
 }
 
 /** Validation hook for registry upsert from CLI file loads. */
-export function createRegistryValidateOptions(
-  rt: NovelMasterRuntime,
-): Parameters<AgentRegistryService["upsert"]>[2] {
+export function createRegistryValidateOptions(rt: NovelMasterRuntime): Parameters<AgentRegistryService["upsert"]>[2] {
   const probe = new ToolRegistry();
   registerBuiltinTools(probe);
   return {
-    assertSavedModel: (id) => assertSavedModel(rt, id),
+    // 模型 pin 校验沿 `Result` 回传（错误通道迁移四期；core 回调契约已放宽为
+    // void | Result 双通道，core 侧把 Err 收编为 `AGENT_INVALID_MODEL`）。
+    assertSavedModel: async (id) => {
+      const saved = await assertSavedModelUuid(id, rt.savedModels);
+      return saved.ok ? Result.ok(undefined) : Result.err(saved.error);
+    },
     registeredToolNames: probe.list(),
   };
 }

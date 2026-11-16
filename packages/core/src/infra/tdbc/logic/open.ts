@@ -13,6 +13,7 @@ import type { OpenOptions } from "../types.js";
 const TDBC_SCHEME = "tdbc:";
 
 /** Parsed SQLite URL components. */
+// nm-style: keep-public — packages/core/src/index.ts 与 @novel-master/core/tdbc 再导出的公共类型契约（无生产直引）
 export interface ParsedTdbcUrl {
   readonly filename: string;
 }
@@ -55,10 +56,7 @@ export function parseUrl(url: string): ParsedTdbcUrl {
  * @param url - TDBC URL (e.g. `tdbc:sqlite:file::memory:`)
  * @param options - Optional filename override, read-only flag, explicit driver name
  */
-export async function open(
-  url: string,
-  options?: OpenOptions
-): Promise<TdbcConnection> {
+export async function open(url: string, options?: OpenOptions): Promise<TdbcConnection> {
   const parsed = parseUrl(url);
   const driver = resolveDriver(options?.driver);
   return driver.open({

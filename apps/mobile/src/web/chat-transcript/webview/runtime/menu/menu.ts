@@ -20,14 +20,14 @@ import {post} from '../bridge';
  * - **入口**：气泡右上角 ⋯ → `openContextMenuFromAnchor`（长按开菜单主路径已移除）
  * P0-3：完整 MenuOverlay 由 main 注册到 #menu-portal；本文件只持有实现引用，不 import ui / 不 preact.render。
  */
-export type MenuOverlayViewProps = {
+type MenuOverlayViewProps = {
   messageId: string;
   items: MenuItem[];
   anchor: MenuAnchor;
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 刷新完整 overlay。 */
-export type RenderContextMenuView = (
+type RenderContextMenuView = (
   props: MenuOverlayViewProps | null,
 ) => void;
 
@@ -151,7 +151,7 @@ export function closeContextMenu(notifyHost?: boolean): void {
   if (notifyHost !== false) post('menuClosed', {});
 }
 
-export function handleMenuOverlayEvent(event: Event): void {
+function handleMenuOverlayEvent(event: Event): void {
   if (!state.menu) return;
   const target = event.target as Element | null;
   if (!target || !target.closest) return;

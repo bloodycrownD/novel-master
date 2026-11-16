@@ -13,27 +13,13 @@ import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
-import type {
-  LlmChatResult,
-  LlmProtocolAdapter,
-  LlmProtocolKind,
-  LlmStreamEvent,
-} from "@/infra/llm-protocol/ports/adapter.port.js";
+import type { LlmChatResult, LlmProtocolAdapter, LlmProtocolKind, LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import type {
-  ModelRetryPolicy,
-  ModelRetryPolicyService,
-} from "../model-retry-policy.port.js";
-import type {
-  ModelRequestOptions,
-  ModelRequestService,
-} from "../model-request.port.js";
-import {
-  createAbortError,
-  isAbortLikeError,
-} from "@/infra/llm-protocol/logic/request-abort.js";
+import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
+import type { ModelRequestOptions, ModelRequestService } from "../model-request.port.js";
+import { createAbortError, isAbortLikeError } from "@/infra/llm-protocol/logic/request-abort.js";
 
-export interface DefaultModelRequestServiceDeps {
+interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
@@ -55,16 +41,6 @@ const DEFAULT_RETRY_POLICY = {
   jitterRatio: 0.2,
 } as const;
 
-function parseHttpStatusFromProviderError(
-  error: AppError
-): number | undefined {
-  const m = /HTTP\s+(\d{3})/.exec(error.message);
-  if (m == null) {
-    return undefined;
-  }
-  return Number(m[1]);
-}
-
 /**
  * 「本 attempt 已产出可见内容」的可判据事件族。
  *
@@ -74,12 +50,14 @@ function parseHttpStatusFromProviderError(
  * 「只收到一个 usage 就断流」的黑洞会被误判成已产出而彻底不重试——
  * 那是把重试闩锁修成反向 bug。
  */
-const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>([
-  "text-delta",
-  "thinking-delta",
-  "tool-use",
-]);
+const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>(["text-delta", "thinking-delta", "tool-use"]);
 
+/**
+ * 重试策略矩阵：abort 形态 / 流超时相位 / 领域错误 / HTTP 状态四段判定。
+ *
+ * nm-style: keep-local — 分支顺序本身就是不变量（超时相位必须先于「非 PROVIDER_* 默认 true」，
+ * abort 文本判定又必须先于「无状态码默认可重试」）；内联进 catch 会把顺序敏感的矩阵拆进重试编排。
+ */
 function isRetryableError(error: unknown): boolean {
   if (isAbortLikeError(error)) {
     return false;
@@ -107,30 +85,19 @@ function isRetryableError(error: unknown): boolean {
   if (error.key !== "PROVIDER_HTTP_ERROR") {
     return false;
   }
-  const status = parseHttpStatusFromProviderError(error);
-  if (status == null) {
+  const matched = /HTTP\s+(\d{3})/.exec(error.message);
+  if (matched == null) {
     return true;
   }
+  const status = Number(matched[1]);
   return status === 429 || status >= 500;
 }
 
-function computeBackoffMs(
-  attempt: number,
-  policy: ModelRetryPolicy | undefined
-): number {
-  const p = policy ?? DEFAULT_RETRY_POLICY;
-  const base = Math.min(
-    p.baseDelayMs * 2 ** Math.max(0, attempt - 1),
-    p.maxDelayMs
-  );
-  const jitterRange = base * p.jitterRatio;
-  return Math.max(0, Math.round(base + (Math.random() * 2 - 1) * jitterRange));
-}
-
-async function delayWithSignal(
-  ms: number,
-  signal?: AbortSignal
-): Promise<void> {
+/**
+ * nm-style: keep-local — timer 与 abort listener 必须成对注册/移除（生命周期不变量），
+ * 内联进重试分支会把清理句柄拆散，泄漏 timer 或触发已 settle 的 reject。
+ */
+async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) {
     return;
   }
@@ -158,11 +125,7 @@ async function delayWithSignal(
 export class DefaultModelRequestService implements ModelRequestService {
   constructor(private readonly deps: DefaultModelRequestServiceDeps) {}
 
-  async request(
-    savedModelId: string,
-    userContent: string,
-    options?: ModelRequestOptions
-  ): Promise<Result<LlmChatResult, AppError>> {
+  async request(savedModelId: string, userContent: string, options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> {
     const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
     if (!asserted.ok) {
       return Result.err(new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId }));
@@ -191,12 +154,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     if (thinking === undefined) {
       const thinkingLevel = saved.settings.generation.thinkingLevel;
       if (thinkingLevel !== "off") {
-        thinking = resolveThinkingParamsForLevel(
-          thinkingLevel,
-          row.protocol,
-          saved.settings.generation.sampling,
-          vendorModelId
-        );
+        thinking = resolveThinkingParamsForLevel(thinkingLevel, row.protocol, saved.settings.generation.sampling, vendorModelId);
       }
     }
 
@@ -222,21 +180,21 @@ export class DefaultModelRequestService implements ModelRequestService {
       // 「已产出后续传」类策略，逐 attempt 复位是它能成立的前提）。
       attemptEmitted = false;
       // 非流式请求直接传 undefined、**不要造闭包**（不该凭空多一层）。
-      const onStream =
-        options?.onStream == null
-          ? undefined
-          : (ev: LlmStreamEvent): void => {
-              // ⚠️ **先置闩、再转发**：顺序反了的话，一旦下游 onStream 自身抛错，
-              // 闩锁会来不及置位 ⇒ 变成静默可重试。
-              if (PRODUCED_EVENT_TYPES.has(ev.type)) {
-                attemptEmitted = true;
-              }
-              options.onStream!(ev);
-            };
+      let onStream: ((event: LlmStreamEvent) => void) | undefined;
+      if (options?.onStream != null) {
+        onStream = (ev) => {
+          // ⚠️ **先置闩、再转发**：顺序反了的话，一旦下游 onStream 自身抛错，
+          // 闩锁会来不及置位 ⇒ 变成静默可重试。
+          if (PRODUCED_EVENT_TYPES.has(ev.type)) {
+            attemptEmitted = true;
+          }
+          options.onStream!(ev);
+        };
+      }
       try {
         // 传输层失败仍沿 throw 通道（retry 按 catch + code 分派，spec-2-core §2.1 D 类），
         // 只有预检失败（上方三处 + policy 读取）走 `Result.err`。
-        return Result.ok(await adapter.chat({
+        const chatArgs = {
           baseUrl: row.baseUrl,
           apiKey,
           vendorModelId,
@@ -252,20 +210,18 @@ export class DefaultModelRequestService implements ModelRequestService {
           sampling,
           thinking,
           signal: options?.signal,
-        }));
+        };
+        return Result.ok(await adapter.chat(chatArgs));
       } catch (error) {
-        const canRetry =
-          attempt <= policy.maxRetries &&
-          !attemptEmitted &&
-          isRetryableError(error);
+        const canRetry = attempt <= policy.maxRetries && !attemptEmitted && isRetryableError(error);
         // WHY: cancel must short-circuit retries so terminate actions feel immediate.
         if (!canRetry || isAbortLikeError(error)) {
           throw error;
         }
-        await delayWithSignal(
-          computeBackoffMs(attempt, policy),
-          options?.signal
-        );
+        const retryPolicy = policy ?? DEFAULT_RETRY_POLICY;
+        const baseDelay = Math.min(retryPolicy.baseDelayMs * 2 ** Math.max(0, attempt - 1), retryPolicy.maxDelayMs);
+        const jitterRange = baseDelay * retryPolicy.jitterRatio;
+        await delayWithSignal(Math.max(0, Math.round(baseDelay + (Math.random() * 2 - 1) * jitterRange)), options?.signal);
       }
     }
   }

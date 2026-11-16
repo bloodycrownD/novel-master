@@ -4,26 +4,19 @@
  * @module service/message-checkpoint/impl/message-checkpoint.service
  */
 
-import {
-  decideBackfillShortCircuit,
-  scanBackfillGap,
-  writeBackfillGap,
-} from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { decideBackfillShortCircuit, scanBackfillGap, writeBackfillGap } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint.port.js";
 
 /** Dependencies for {@link DefaultMessageCheckpointService}. */
-export interface MessageCheckpointServiceDeps {
+interface MessageCheckpointServiceDeps {
   readonly conn: TdbcConnection;
   readonly entries: VfsEntryRepository;
 }
@@ -31,19 +24,13 @@ export interface MessageCheckpointServiceDeps {
 /**
  * Scans session files and writes a checkpoint tree (files only, no empty dirs).
  */
-export class DefaultMessageCheckpointService
-  implements MessageCheckpointService
-{
+export class DefaultMessageCheckpointService implements MessageCheckpointService {
   constructor(private readonly deps: MessageCheckpointServiceDeps) {}
 
   /**
    * @remarks listSessionFileHeads 移入事务内执行，持锁扫描避免并发 capture 捕获陈旧 head。
    */
-  async capture(
-    sessionId: string,
-    projectId: string,
-    messageId: string
-  ): Promise<void> {
+  async capture(sessionId: string, projectId: string, messageId: string): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
       // listSessionFileHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
       // 避免并发 capture 读到未提交的 head（V8）。
@@ -89,19 +76,15 @@ export class DefaultMessageCheckpointService
    * checkpoint 行不会被覆盖、下一轮发送接着补齐剩余空窗；且中断路径下
    * `confirmedNoGap` 恒为 false → 游标**不写** → 下轮判定必然回退全量，
    * 绝不会把「只补了一半」误认成「已确认无空窗」。不传 signal 时与旧版等价。
+   *
+   * nm-style: keep-public — MessageCheckpointService 端口方法；run-agent-turn 发送编排单点消费。
    */
-  async backfillMissingBaselines(
-    sessionId: string,
-    projectId: string,
-    signal?: AbortSignal
-  ): Promise<void> {
+  async backfillMissingBaselines(sessionId: string, projectId: string, signal?: AbortSignal): Promise<void> {
+    const { conn } = this.deps;
     // 段 0（事务外，只读）：两段式短路判定。
-    const decision = await decideBackfillShortCircuit({
-      sessionKkv: new SqliteSessionKkvRepository(this.deps.conn),
-      messageRepo: new SqliteMessageRepository(this.deps.conn),
-      checkpointRepo: new SqliteMessageCheckpointRepository(this.deps.conn),
-      sessionId,
-    });
+    const messageRepo = new SqliteMessageRepository(conn);
+    const checkpointRepo = new SqliteMessageCheckpointRepository(conn);
+    const decision = await decideBackfillShortCircuit({ sessionKkv: new SqliteSessionKkvRepository(conn), messageRepo, checkpointRepo, sessionId });
 
     if (decision.kind === "short-circuit") {
       // 弃权点（r3-run-4）：短路判定本身就是几次单行读、窗口极短，但把它放在
@@ -112,49 +95,35 @@ export class DefaultMessageCheckpointService
       }
       // 游标只在值前移时写（count == 游标的短路不产生写入）。
       if (decision.newCursor !== decision.previousCursor) {
-        const kkv = new SqliteSessionKkvRepository(this.deps.conn);
-        await kkv.set(
-          sessionId,
-          SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-          BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-          String(decision.newCursor)
-        );
+        const kkv = new SqliteSessionKkvRepository(conn);
+        await kkv.set(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, String(decision.newCursor));
       }
       return;
     }
 
     // 段 1（事务外，只读）：定位空窗 + 取 live head 指针快照。
-    const scan = await scanBackfillGap({
-      entryRepo: new SqliteVfsEntryRepository(this.deps.conn),
-      messageRepo: new SqliteMessageRepository(this.deps.conn),
-      checkpointRepo: new SqliteMessageCheckpointRepository(this.deps.conn),
+    const scanInput = {
+      entryRepo: new SqliteVfsEntryRepository(conn),
+      messageRepo,
+      checkpointRepo,
       projectId,
       sessionId,
       signal,
-    });
+    };
+    const scan = await scanBackfillGap(scanInput);
     if (scan.gapMessageIds.length === 0 && !scan.confirmedNoGap) {
       // 无 live 文件：无法建点也无法验证，不算确认——游标留空让下次继续走全量。
       return;
     }
 
     // 段 2（短事务，只写）：连续前缀复核 + 逐条补写；确认无空窗才写游标。
-    await this.deps.conn.transaction(async (tx) => {
+    await conn.transaction(async (tx) => {
       // 事务回调里**所有** repo 都必须用回调传入的 tx 构造；用外层 conn 会撞
       // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-      const result = await writeBackfillGap({
-        checkpointRepo: new SqliteMessageCheckpointRepository(tx),
-        sessionId,
-        scan,
-        signal,
-      });
+      const result = await writeBackfillGap({ checkpointRepo: new SqliteMessageCheckpointRepository(tx), sessionId, scan, signal });
       if (result.confirmedNoGap) {
         const kkv = new SqliteSessionKkvRepository(tx);
-        await kkv.set(
-          sessionId,
-          SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-          BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-          String(decision.count)
-        );
+        await kkv.set(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, String(decision.count));
       }
     });
   }

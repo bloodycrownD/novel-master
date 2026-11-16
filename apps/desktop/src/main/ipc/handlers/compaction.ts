@@ -33,9 +33,7 @@ import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
 import { isDesktopSessionRunInFlight } from "./agent.js";
 
-export async function handleCompactionManual(
-  req: CompactionManualRequest,
-): Promise<IpcResult<{ ok: boolean }>> {
+export async function handleCompactionManual(req: CompactionManualRequest): Promise<IpcResult<{ ok: boolean }>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -63,15 +61,10 @@ export async function handleCompactionManual(
     const hiddenDepth = await rt.compactionConditionEvaluator.getHideStartDepth();
     if (!hiddenDepth.ok) return ipcErr(formatIpcError(hiddenDepth.error));
     const hideStartDepth = hiddenDepth.value;
-    const result = await runCompaction(deps, {
-      sessionId: req.sessionId,
-      projectId: req.projectId,
-      hideStartDepth,
-      // 手动压缩：core 侧据此清 `rule_snapshot` + `file_cache` 两域，下一次拼
-      // 提示词（发送或预览）时 workplace 块按当前工作区重评估。自动压缩不传、
-      // 缺省 auto，不清（保住「回合内前缀冻结」）。
-      trigger: "manual",
-    });
+    // 手动压缩：core 侧据此清 `rule_snapshot` + `file_cache` 两域，下一次拼
+    // 提示词（发送或预览）时 workplace 块按当前工作区重评估。自动压缩不传、
+    // 缺省 auto，不清（保住「回合内前缀冻结」）。
+    const result = await runCompaction(deps, { sessionId: req.sessionId, projectId: req.projectId, hideStartDepth, trigger: "manual" });
     if (result.ok) {
       // 置位/压缩：project∪annotate；禁止终态强制 []
       await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);

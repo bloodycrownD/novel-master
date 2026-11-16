@@ -14,8 +14,6 @@ import type { SessionKkvService } from "./session-kkv.port.js";
  *
  * @param conn - 已 {@link bootstrapNovelMaster} 的连接（可为事务连接）
  */
-export function createSessionKkvService(
-  conn: TdbcConnection
-): SessionKkvService {
+export function createSessionKkvService(conn: TdbcConnection): SessionKkvService {
   return new DefaultSessionKkvService(new SqliteSessionKkvRepository(conn));
 }

@@ -12,15 +12,9 @@ import type { NovelMasterRuntime } from "../runtime.js";
 import { runWorkplace } from "../workplace/run-workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-type SessionWorkplaceDeps = Pick<
-  NovelMasterRuntime,
-  "scope" | "workplace" | "sessionKkv" | "sessionVfs"
->;
+type SessionWorkplaceDeps = Pick<NovelMasterRuntime, "scope" | "workplace" | "sessionKkv" | "sessionVfs">;
 
-export async function runSessionWorkplace(
-  rt: SessionWorkplaceDeps,
-  args: readonly string[],
-): Promise<Outcome<void>> {
+export async function runSessionWorkplace(rt: SessionWorkplaceDeps, args: readonly string[]): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
   const resolvedScope = await rt.scope.resolveProjectSession(flags);
   if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };

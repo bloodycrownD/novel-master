@@ -25,8 +25,8 @@
  *    XHR）时设置。native 管子黑洞由整调用 callTimeout 兜底，不设 close
  *    以保留连接复用；回落 XHR 时死连接复用黑洞仍由 close 消灭。OkHttp
  *    尊重请求侧 close，连接用完即废不回池；h2 下该头被协议剥离（无害），
- *    由 2 兜底。该条件由分支派发表达（`runXhr` 只在 registered transport
- *    缺席时执行，函数内无条件设置 close），不再写函数内的恒真判断。
+ *    由 2 兜底。该条件由分支派发表达（XHR 分支只在 registered transport
+ *    缺席时执行，分支内无条件设置 close），不再写恒真判断。
  * 2. 整调用兜底 `SSE_WHOLE_CALL_TIMEOUT_MS`：触发机制按分支表达——XHR 经
  *    `xhr.timeout`（RN 0.85.3 映射 OkHttp callTimeout，覆盖 connect/写/读
  *    全周期）；fetch 经公共层 whole-call 定时器 + controller.abort；native
@@ -46,17 +46,14 @@ import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 import { createSseChunkEmitter } from "./sse-chunk-emitter.js";
-import {
-  createSseDispatchState,
-  dispatchSseChunk,
-} from "./dispatch-sse-chunk.js";
+import { createSseDispatchState, dispatchSseChunk } from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
 
 const log = createLogger("llm.sse-transport");
 
 export type SseByteHandler = (chunk: string) => void;
 
-export interface PostSseOptions {
+interface PostSseOptions {
   readonly fetchFn?: FetchFn;
   readonly signal?: AbortSignal;
   readonly logTag?: string;
@@ -109,16 +106,12 @@ let sseTransportOverrideForTests: SseTransport | undefined;
  * 注销后同进程内自动回落 XHR/fetch（`Connection: close` 条件化的前提，
  * spec §7）。
  */
-export function registerSseTransport(
-  transport: SseTransport | undefined
-): void {
+export function registerSseTransport(transport: SseTransport | undefined): void {
   registeredSseTransport = transport;
 }
 
 /** @internal Test hook: force a fake transport; `undefined` restores. */
-export function setSseTransportOverrideForTests(
-  transport: SseTransport | undefined
-): void {
+export function setSseTransportOverrideForTests(transport: SseTransport | undefined): void {
   sseTransportOverrideForTests = transport;
 }
 
@@ -152,8 +145,7 @@ type SseXmlHttpRequest = {
 type SseXmlHttpRequestConstructor = new () => SseXmlHttpRequest;
 
 function getXmlHttpRequestCtor(): SseXmlHttpRequestConstructor | undefined {
-  return (globalThis as { XMLHttpRequest?: SseXmlHttpRequestConstructor })
-    .XMLHttpRequest;
+  return (globalThis as { XMLHttpRequest?: SseXmlHttpRequestConstructor }).XMLHttpRequest;
 }
 
 let cachedShouldUseXhr: boolean | undefined;
@@ -168,9 +160,7 @@ export function resetShouldUseXhrForSseCacheForTests(): void {
 }
 
 /** @internal Force XHR/fetch branch in tests. */
-export function setShouldUseXhrForSseOverrideForTests(
-  value: boolean | undefined
-): void {
+export function setShouldUseXhrForSseOverrideForTests(value: boolean | undefined): void {
   shouldUseXhrOverrideForTests = value;
   cachedShouldUseXhr = undefined;
 }
@@ -187,66 +177,18 @@ export function shouldUseXhrForSse(): boolean {
     return cachedShouldUseXhr;
   }
   // RN exposes XMLHttpRequest and sets navigator.product; Node/CLI do not.
-  cachedShouldUseXhr =
-    getXmlHttpRequestCtor() != null &&
-    (globalThis as { navigator?: { product?: string } }).navigator?.product ===
-      "ReactNative";
+  cachedShouldUseXhr = getXmlHttpRequestCtor() != null && (globalThis as { navigator?: { product?: string } }).navigator?.product === "ReactNative";
   return cachedShouldUseXhr;
 }
 
-function isSseDebugEnabled(): boolean {
-  if (process.env.NM_DEBUG_LLM_FETCH === "1") {
-    return true;
-  }
-  const g = globalThis as {
-    __NM_DEBUG_LLM_FETCH__?: boolean;
-    __DEV__?: boolean;
-  };
-  return g.__NM_DEBUG_LLM_FETCH__ === true || g.__DEV__ === true;
-}
-
-function applyXhrHeaders(
-  xhr: SseXmlHttpRequest,
-  headers: RequestInit["headers"] | undefined
-): void {
-  if (headers == null) {
-    return;
-  }
-  if (headers instanceof Headers) {
-    headers.forEach((value, key) => {
-      xhr.setRequestHeader(key, value);
-    });
-    return;
-  }
-  if (Array.isArray(headers)) {
-    for (const [key, value] of headers) {
-      xhr.setRequestHeader(key, value);
-    }
-    return;
-  }
-  for (const [key, value] of Object.entries(headers)) {
-    xhr.setRequestHeader(key, String(value));
-  }
-}
-
 function logSse(logTag: string, message: string, detail?: Record<string, unknown>): void {
-  if (!isSseDebugEnabled()) {
-    return;
+  if (process.env.NM_DEBUG_LLM_FETCH !== "1") {
+    const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean; __DEV__?: boolean };
+    if (g.__NM_DEBUG_LLM_FETCH__ !== true && g.__DEV__ !== true) {
+      return;
+    }
   }
   log.debug(message, detail == null ? { logTag } : { logTag, ...detail });
-}
-
-/**
- * transport 超时错误识别（鸭子类型，core 不 import 原生包）：native 侧
- * LlmSseError(kind:"timeout") 经 wrapper 转成 name 为 `"LlmSseTimeoutError"`
- * 或携带 `kind === "timeout"` 字段的 Error（契约见 {@link SseTransport}）。
- */
-function isTransportTimeoutError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-  const e = error as { name?: unknown; kind?: unknown };
-  return e.name === "LlmSseTimeoutError" || e.kind === "timeout";
 }
 
 /**
@@ -256,13 +198,7 @@ function isTransportTimeoutError(error: unknown): boolean {
  * 传输三分支逐请求择优（registered native → XHR → fetch）；whole-call
  * 语义与 settle 守卫在公共层装配（见模块文档）。
  */
-export function postSse(
-  url: string,
-  init: RequestInit,
-  onChunk: SseByteHandler,
-  providerId?: string,
-  options?: PostSseOptions
-): Promise<{ status: number; contentType: string | null }> {
+export function postSse(url: string, init: RequestInit, onChunk: SseByteHandler, providerId?: string, options?: PostSseOptions): Promise<{ status: number; contentType: string | null }> {
   const logTag = options?.logTag ?? DEFAULT_LOG_TAG;
   const signal = options?.signal ?? init.signal ?? undefined;
   const method = init.method ?? "POST";
@@ -271,11 +207,7 @@ export function postSse(
   // 测试强制位优先于真实注册位；native 未注册时同进程自动回落 XHR。
   const transport = sseTransportOverrideForTests ?? registeredSseTransport;
   const usedRegisteredTransport = transport != null;
-  const kind: "native" | "xhr" | "fetch" = usedRegisteredTransport
-    ? "native"
-    : shouldUseXhrForSse()
-      ? "xhr"
-      : "fetch";
+  const kind: "native" | "xhr" | "fetch" = usedRegisteredTransport ? "native" : shouldUseXhrForSse() ? "xhr" : "fetch";
 
   logSse(logTag, "→", { method, url, transport: kind });
 
@@ -304,10 +236,7 @@ export function postSse(
       }
     };
 
-    const resolveOnce = (value: {
-      status: number;
-      contentType: string | null;
-    }) => {
+    const resolveOnce = (value: { status: number; contentType: string | null }) => {
       if (settled) return;
       settled = true;
       clearWholeCallTimer();
@@ -356,71 +285,58 @@ export function postSse(
       });
       // LlmStreamTimeoutError 已退役为 AppError("PROVIDER_STREAM_TIMEOUT")：phase/timeoutMs 进 params
       // （重试分级经 details.phase 判），detail 承载原动态 message 文案（失败链占位文案依赖它）。
-      const timeoutDetail = phase === "first-chunk"
-        ? `LLM stream timed out after ${SSE_WHOLE_CALL_TIMEOUT_MS}ms waiting for the first chunk (${detail ?? "whole-call budget"})`
-        : `LLM stream idle for ${SSE_WHOLE_CALL_TIMEOUT_MS}ms after the last chunk (${detail ?? "whole-call budget"})`;
-      rejectOnce(
-        new AppError("PROVIDER_STREAM_TIMEOUT", {phase, timeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS, detail: timeoutDetail})
-      );
+      const budget = detail ?? "whole-call budget";
+      let timeoutDetail: string;
+      if (phase === "first-chunk") {
+        timeoutDetail = `LLM stream timed out after ${SSE_WHOLE_CALL_TIMEOUT_MS}ms waiting for the first chunk (${budget})`;
+      } else {
+        timeoutDetail = `LLM stream idle for ${SSE_WHOLE_CALL_TIMEOUT_MS}ms after the last chunk (${budget})`;
+      }
+      rejectOnce(new AppError("PROVIDER_STREAM_TIMEOUT", { phase, timeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS, detail: timeoutDetail }));
       abortStream?.();
       cleanupBranch?.();
     };
 
-    /** 仅 fetch 分支启用：whole-call 预算的 JS 定时器表达。 */
-    const armWholeCallTimer = (): void => {
-      wholeCallTimer = setTimeout(() => {
-        wholeCallTimer = null;
-        handleWholeCallTimeout();
-      }, SSE_WHOLE_CALL_TIMEOUT_MS);
-    };
-
     // ===== 分支执行（分支内只保留传输专属清理）=====
 
-    /**
-     * native 分支：registered transport 承载传输（合批后的 chunk 事件由
-     * wrapper 转成 onChunk 调用）。whole-call 语义在公共层：
-     * callTimeout 由 transport 内部承接（超时按契约形态抛错），公共层
-     * 不再开 JS 定时器避免双触发竞态。
-     */
-    const runNative = (t: SseTransport): void => {
-      // abort 语义走 opts.signal（与 fetch 分支同构）：用户 signal（停止
-      // 生成）与公共层超时断流共用一个组合 controller，wrapper 侧监听并
-      // 转发到原生 sseAbort。用户取消抛 AbortError 形态原样上抛，
-      // isRequestAborted 判据链路保持兼容。
+    if (transport != null) {
+      /**
+       * native 分支：registered transport 承载传输（合批后的 chunk 事件由
+       * wrapper 转成 onChunk 调用）。whole-call 语义在公共层：
+       * callTimeout 由 transport 内部承接（超时按契约形态抛错），公共层
+       * 不再开 JS 定时器避免双触发竞态。
+       *
+       * abort 语义走 opts.signal（与 fetch 分支同构）：用户 signal（停止
+       * 生成）与公共层超时断流共用一个组合 controller，wrapper 侧监听并
+       * 转发到原生 sseAbort。用户取消抛 AbortError 形态原样上抛，
+       * isRequestAborted 判据链路保持兼容。
+       */
       const controller = new AbortController();
       if (signal != null) {
         if (signal.aborted) {
           controller.abort();
         } else {
-          signal.addEventListener(
-            "abort",
-            () => {
-              controller.abort();
-            },
-            { once: true }
-          );
+          signal.addEventListener("abort", () => controller.abort(), { once: true });
         }
       }
       abortStream = () => controller.abort();
 
       const dispatchState = createSseDispatchState();
-      const transportOnChunk: SseByteHandler = (chunk) => {
-        noteActivity(chunk.length);
-        // native 侧已合批（~10 事件/s），JS 侧直投（与 fetch 同款即时转发）。
-        dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
-          logSse(logTag, "native first chunk", { bytes })
-        );
-      };
+      // 整调用预算单点下发（core-transport/C-orch-1）：wrapper 以之覆盖
+      // timeouts.callMs；缺省时回退 Kotlin 默认 600s 作后备。
+      const postOptions = { providerId, signal: controller.signal, logTag, wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS };
 
-      void t
-        .post(url, init, transportOnChunk, {
-          providerId,
-          signal: controller.signal,
-          logTag,
-          // 整调用预算单点下发（core-transport/C-orch-1）：wrapper 以之覆盖
-          // timeouts.callMs；缺省时回退 Kotlin 默认 600s 作后备。
-          wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS,
-        })
+      // native 侧已合批（~10 事件/s），JS 侧直投（与 fetch 同款即时转发）。
+      void transport
+        .post(
+          url,
+          init,
+          (chunk) => {
+            noteActivity(chunk.length);
+            dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) => logSse(logTag, "native first chunk", { bytes }));
+          },
+          postOptions
+        )
         .then(
           (result) => {
             resolveOnce(result);
@@ -431,26 +347,19 @@ export function postSse(
               // 不让它顶替/竞态超时错误。
               return;
             }
-            if (isTransportTimeoutError(error)) {
+            const transportError = typeof error === "object" && error !== null ? (error as { name?: unknown; kind?: unknown }) : undefined;
+            if (transportError != null && (transportError.name === "LlmSseTimeoutError" || transportError.kind === "timeout")) {
               // native 整调用 callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
               // detail 透传 wrapper 错误的真实信息；终版无流式空闲界，
               // SocketTimeoutException 仅存防御性文案路径。
-              handleWholeCallTimeout(
-                `native timeout: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-              );
+              handleWholeCallTimeout(`native timeout: ${error instanceof Error ? error.message : String(error)}`);
               return;
             }
-            rejectOnce(
-              error instanceof Error ? error : new Error(String(error))
-            );
+            rejectOnce(error instanceof Error ? error : new Error(String(error)));
           }
         );
-    };
-
-    /** XHR 分支：RN 上 fetch 无流式 body 时的主力路径（无 native 注册时）。 */
-    const runXhr = (): void => {
+    } else if (kind === "xhr") {
+      /** XHR 分支：RN 上 fetch 无流式 body 时的主力路径（无 native 注册时）。 */
       const XhrCtor = getXmlHttpRequestCtor();
       if (XhrCtor == null) {
         rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "XMLHttpRequest is not available in this environment", providerId }));
@@ -477,12 +386,7 @@ export function postSse(
         xhrCursor = text.length;
         noteActivity(chunk.length);
         // 经公共 dispatchSseChunk 转发到 emitter（节流由 emitter 负责），首包日志统一在此。
-        dispatchSseChunk(
-          chunk,
-          dispatchState,
-          (text) => emitter.append(text),
-          (bytes) => logSse(logTag, "xhr first chunk", { bytes })
-        );
+        dispatchSseChunk(chunk, dispatchState, emitter.append, (bytes) => logSse(logTag, "xhr first chunk", { bytes }));
       };
 
       xhr.open(init.method ?? "POST", url);
@@ -498,13 +402,7 @@ export function postSse(
           rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
           return;
         }
-        signal.addEventListener(
-          "abort",
-          () => {
-            xhr.abort();
-          },
-          { once: true }
-        );
+        signal.addEventListener("abort", () => xhr.abort(), { once: true });
       }
 
       xhr.onprogress = () => {
@@ -559,24 +457,36 @@ export function postSse(
         rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: "Request aborted", providerId }));
       };
 
-      applyXhrHeaders(xhr, init.headers);
+      const headers = init.headers;
+      if (headers != null) {
+        if (headers instanceof Headers) {
+          headers.forEach((value, key) => {
+            xhr.setRequestHeader(key, value);
+          });
+        } else if (Array.isArray(headers)) {
+          for (const [key, value] of headers) {
+            xhr.setRequestHeader(key, value);
+          }
+        } else {
+          for (const [key, value] of Object.entries(headers)) {
+            xhr.setRequestHeader(key, String(value));
+          }
+        }
+      }
       // 防死连接复用（回炉版 spec 第 1 节；llm-stream-native §7 条件化）：
-      // 置于 applyXhrHeaders 之后 = 覆盖用户 provider.headers 的同名头，强制
+      // 置于 headers 之后 = 覆盖用户 provider.headers 的同名头，强制
       // 生效。OkHttp 尊重请求侧 Connection: close（CallServerInterceptor →
       // noNewExchangesOnConnection），连接用完即废不回池——「上一次流留下的
       // （可能已静默死亡的）连接」不再被下一次请求复用。h2 下该头被协议剥离
       // （无害），黑洞由 xhr.timeout 兜底。
       // 条件化（spec §7）落地形态：native 分支不设 close 以保留连接复用，
-      // 回落 XHR 才设。本函数只在 registered transport 缺席时执行（分支判定
-      // 见下方 `transport != null` 派发），故此处无条件设置——native 注册态
-      // 根本不进这里，等价于原 `!usedRegisteredTransport` 判断（该判断在本
-      // 函数内恒真，已按 core-transport Q2 简化掉）。
+      // 回落 XHR 才设。本分支只在 registered transport 缺席时执行，故此处
+      // 无条件设置——native 注册态根本不进这里，等价于原
+      // `!usedRegisteredTransport` 判断（该判断在此恒真，已按 core-transport Q2 简化掉）。
       xhr.setRequestHeader("Connection", "close");
       xhr.send(init.body ?? null);
-    };
-
-    /** fetch 分支：Desktop/CLI（流式 body 可用）与未注册 native 的非 RN 环境。 */
-    const runFetch = (): void => {
+    } else {
+      /** fetch 分支：Desktop/CLI（流式 body 可用）与未注册 native 的非 RN 环境。 */
       const fetchFn = options?.fetchFn ?? globalThis.fetch;
 
       // 组合自有 controller：用户 AbortSignal（停止生成）转发进来；公共层
@@ -588,13 +498,7 @@ export function postSse(
         if (signal.aborted) {
           controller.abort();
         } else {
-          signal.addEventListener(
-            "abort",
-            () => {
-              controller.abort();
-            },
-            { once: true }
-          );
+          signal.addEventListener("abort", () => controller.abort(), { once: true });
         }
       }
       abortStream = () => controller.abort();
@@ -603,14 +507,14 @@ export function postSse(
 
       // 整调用兜底（与 XHR 的 xhr.timeout 语义对齐，回炉版 spec 第 2 节）：
       // connect/写/读全周期预算，到点经公共层 handleWholeCallTimeout 分级收敛。
-      armWholeCallTimer();
+      wholeCallTimer = setTimeout(() => {
+        wholeCallTimer = null;
+        handleWholeCallTimeout();
+      }, SSE_WHOLE_CALL_TIMEOUT_MS);
 
       void (async () => {
         try {
-          const response = await fetchFn(url, {
-            ...init,
-            signal: controller.signal,
-          });
+          const response = await fetchFn(url, { ...init, signal: controller.signal });
           const checked = await assertOk(response, providerId);
           if (!checked.ok) {
             rejectOnce(checked.error);
@@ -621,7 +525,8 @@ export function postSse(
             const contentType = response.headers.get("content-type") ?? "none";
             // SSE transport 的失败通道是 Promise reject（与文件内其余错误路径同款）：
             // transport 边界不返 Result，AppError 经 rejectOnce 上行，由 adapter 收口。
-            rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, providerId }));
+            const detail = `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`;
+            rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail, providerId }));
             return;
           }
 
@@ -644,9 +549,7 @@ export function postSse(
             // processedLength），不参与任何超时判定（空闲看门狗已退役）。
             const chunk = decoder.decode(value, { stream: true });
             noteActivity(chunk.length);
-            dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
-              logSse(logTag, "fetch first chunk", { bytes })
-            );
+            dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) => logSse(logTag, "fetch first chunk", { bytes }));
           }
 
           resolveOnce({
@@ -659,19 +562,9 @@ export function postSse(
             // 在此丢弃，不让它顶替/竞态超时错误。
             return;
           }
-          rejectOnce(
-            error instanceof Error ? error : new Error(String(error))
-          );
+          rejectOnce(error instanceof Error ? error : new Error(String(error)));
         }
       })();
-    };
-
-    if (transport != null) {
-      runNative(transport);
-    } else if (kind === "xhr") {
-      runXhr();
-    } else {
-      runFetch();
     }
   });
 }

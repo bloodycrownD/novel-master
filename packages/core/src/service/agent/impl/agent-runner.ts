@@ -6,39 +6,23 @@
 
 import { truncateText } from "@/common/text.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
-import type {
-  ToolResultBlock,
-  ToolUseBlock,
-} from "@/domain/chat/model/content-block.js";
+import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import { DoomLoopDetector } from "@/domain/agent/logic/doom-loop.js";
 import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
 import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
-import type {
-  AgentRunResult,
-  ModelRoundSummary,
-} from "@/domain/agent/model/agent-run-result.js";
+import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import {
-  ToolRunner,
-  type ParallelToolOutcome,
-  type ToolCall,
-} from "@/domain/tool/logic/tool-runner.js";
+import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
-import {
-  invalidateSessionApiPromptTokenEntry,
-  writeSessionApiPromptTokenEntry,
-} from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import type { ModelRequestService } from "../../provider/model-request.port.js";
-import {
-  buildPromptLlmInputFromLayout,
-  computeLlmExportZonesFromLayout,
-} from "../../prompt/render-prompt.js";
+import { invalidateSessionApiPromptTokenEntry, writeSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import type { ModelRequestOptions, ModelRequestService } from "../../provider/model-request.port.js";
+import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
@@ -52,7 +36,8 @@ import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
+import { assembleWorkplaceDisplay, type AssembleWorkplaceDisplayDeps, type AssembleWorkplaceDisplayOptions } from "@/service/workplace/assemble-workplace-display.js";
+import type { CompactionEvaluationContext } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -122,10 +107,7 @@ interface DefaultAgentRunnerDeps {
   /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
   readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessageData[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
-  readonly preferences?: Pick<
-    PersistentPreferences,
-    "getThinkingContextEnabled"
-  >;
+  readonly preferences?: Pick<PersistentPreferences, "getThinkingContextEnabled">;
 }
 
 /**
@@ -143,9 +125,7 @@ export class DefaultAgentRunner implements AgentRunner {
     const persistMessages = options.persistMessages !== false;
     const publishRunLifecycle = options.publishRunLifecycle !== false;
     const bus = this.deps.eventBus;
-    const session = persistMessages
-      ? this.deps.session
-      : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
+    const session = persistMessages ? this.deps.session : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
     const runId = randomUUID();
 
@@ -177,10 +157,7 @@ export class DefaultAgentRunner implements AgentRunner {
     const signal = options.signal;
     let vfsMutatedInRun = false;
 
-    const maxSteps =
-      options.maxSteps ??
-      options.definition.runtime?.maxSteps ??
-      DEFAULT_AGENT_MAX_STEPS;
+    const maxSteps = options.maxSteps ?? options.definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     // 死循环检测器按 run 建一个：跨轮窗口状态收在实例里，runner 不再手动维护。
     const doomLoop = new DoomLoopDetector(options.definition.runtime);
 
@@ -188,9 +165,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
     // 回合内技能启停不即时反映）；skill 被 policy 禁用时闭包为空，
     // 索引随之置空（D4：工具与索引同进退）。
-    const skillBudget = this.deps.toolCtx.skills?.effective.filter(
-      (s) => s.effective
-    );
+    const skillBudget = this.deps.toolCtx.skills?.effective.filter((s) => s.effective);
     const skillsIndex = skillBudget?.map((s) => ({
       name: s.name,
       description: s.description ?? "",
@@ -219,9 +194,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
     // assistant 落库的 model_name 来源（vendorModelId）；每 run 查一次即可。
     // saved model 可能已被删除（悬空引用）：查不到时降级不传该字段。
-    const savedModelFound = await this.deps.savedModels.findById(
-      options.savedModelId
-    );
+    const savedModelFound = await this.deps.savedModels.findById(options.savedModelId);
     // 主 try 之前的前置读失败：直接沿返回值交入口壳（STARTED 未发，入口壳补 FAILED('')）。
     if (!savedModelFound.ok) return Result.err(savedModelFound.error);
     const savedModelForAppend = savedModelFound.value;
@@ -254,9 +227,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // （thinkingLevel !== "off" 时才写 body.thinking）。savedModelForAppend
     // 为 null 时取 true——保守保留方向（该请求本身会随 MODEL_NOT_SAVED
     // 校验失败，取值仅占位）。
-    const requestThinkingEnabled =
-      savedModelForAppend == null ||
-      savedModelForAppend.settings.generation.thinkingLevel !== "off";
+    const requestThinkingEnabled = savedModelForAppend == null || savedModelForAppend.settings.generation.thinkingLevel !== "off";
 
     /**
      * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
@@ -283,10 +254,7 @@ export class DefaultAgentRunner implements AgentRunner {
      * 与锚点出自同一步，不会错位。
      */
     let lastAnchorSeq: number | undefined;
-    const anchorStepUsage = (
-      usage: { readonly promptTokens?: number } | undefined,
-      anchorSeq: number | undefined
-    ): void => {
+    const anchorStepUsage = (usage: { readonly promptTokens?: number } | undefined, anchorSeq: number | undefined): void => {
       // overlay 内存会话（persistMessages=false）的 usage 不落持久层：
       // append 不落库也不触发失效，写进 KKV 会与 overlay 语义错位。
       if (!persistMessages) {
@@ -369,19 +337,12 @@ export class DefaultAgentRunner implements AgentRunner {
         // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
         // 评估链归零）。与 desktop build 的 ctx 同款透传（见
         // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
-        const assembled = await assembleWorkplaceDisplay(
-          wtScope,
-          {
-            sessionKkv: this.deps.sessionKkv,
-            workplace: wt,
-            vfs: this.deps.toolCtx.vfs,
-            layout: options.definition.prompts,
-          },
-          {
-            kkvSessionId: session.kkvScopeSessionId,
-            shouldStop: () => signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null,
-          }
-        );
+        const assembleDeps: AssembleWorkplaceDisplayDeps = { sessionKkv: this.deps.sessionKkv, workplace: wt, vfs: this.deps.toolCtx.vfs, layout: options.definition.prompts };
+        const assembleOptions: AssembleWorkplaceDisplayOptions = {
+          kkvSessionId: session.kkvScopeSessionId,
+          shouldStop: () => (signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null),
+        };
+        const assembled = await assembleWorkplaceDisplay(wtScope, assembleDeps, assembleOptions);
         if (assembled.kind === "cancelled" || assembled.kind === "replaced") {
           await handleAbort("after_assemble_workplace");
           break;
@@ -425,8 +386,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         // API 占用增量锚点：本 step 请求的提示词以这批可见消息为尾，usage
         // 回锚时记下末条 seq，读口据此把「此后追加的消息」折成增量估算。
-        const stepAnchorSeq =
-          visible.length > 0 ? visible[visible.length - 1]!.seq : undefined;
+        const stepAnchorSeq = visible.length > 0 ? visible[visible.length - 1]!.seq : undefined;
 
         // skill load seen 共享（方向 A）：把本请求可见窗口内 `$` 引用过的
         // 技能名回填进 skills 闭包，load 工具据此返回短提示（与 $ 附件
@@ -437,11 +397,7 @@ export class DefaultAgentRunner implements AgentRunner {
           names.clear();
           for (const m of visible) {
             for (const a of m.attachments ?? []) {
-              if (
-                a.action === "skillAttach" &&
-                typeof a.skillName === "string" &&
-                a.skillName !== ""
-              ) {
+              if (a.action === "skillAttach" && typeof a.skillName === "string" && a.skillName !== "") {
                 names.add(a.skillName);
               }
             }
@@ -467,26 +423,21 @@ export class DefaultAgentRunner implements AgentRunner {
         const promptInput = promptInputBuilt.value;
 
         if (persistMessages && this.deps.compactionConditions != null) {
-          const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(
-              this.deps.session,
-              {
-                sessionId,
-                modelContext: {
-                  workspaceModelId: options.workspaceModelId,
-                  savedModelId: options.savedModelId,
-                },
-                promptInput,
-                layout: options.definition.prompts,
-                ctx: promptRenderCtx,
-                // 压缩评估的本地估算必须含 tools 段（与 API 口径可比）；
-                // sessionKkv 让读口能命中落库的 API 值（跨重启同口径）。
-                tools,
-                sessionKkv: this.deps.sessionKkv,
-                // 本 step 开头那次 session.list() 的条数（prepare 覆盖 visible
-                // 之前取的），供 VisibleFloorTrigger 零读取复用（RT-02）。
-                visibleMessageCount,
-              }
-            );
+          const compactionEvaluation: CompactionEvaluationContext = {
+            sessionId,
+            modelContext: { workspaceModelId: options.workspaceModelId, savedModelId: options.savedModelId },
+            promptInput,
+            layout: options.definition.prompts,
+            ctx: promptRenderCtx,
+            // 压缩评估的本地估算必须含 tools 段（与 API 口径可比）；
+            // sessionKkv 让读口能命中落库的 API 值（跨重启同口径）。
+            tools,
+            sessionKkv: this.deps.sessionKkv,
+            // 本 step 开头那次 session.list() 的条数（prepare 覆盖 visible
+            // 之前取的），供 VisibleFloorTrigger 零读取复用（RT-02）。
+            visibleMessageCount,
+          };
+          const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(this.deps.session, compactionEvaluation);
           if (!evaluated.ok) raiseRunError(evaluated.error);
           const shouldCompact = evaluated.value;
           if (signal?.aborted) {
@@ -506,37 +457,19 @@ export class DefaultAgentRunner implements AgentRunner {
             const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
             if (!hiddenDepth.ok) raiseRunError(hiddenDepth.error);
             const hideStartDepth = hiddenDepth.value;
-            await runCompaction(
-              {
-                sessionKkv: this.deps.sessionKkv,
-                messages,
-                messageTranscriptEffects,
-              },
-              { sessionId, projectId, hideStartDepth }
-            );
+            await runCompaction({ sessionKkv: this.deps.sessionKkv, messages, messageTranscriptEffects }, { sessionId, projectId, hideStartDepth });
             stepCompactionEmitted = true;
           }
         }
 
         const llmInput = promptInput;
-        const zones = computeLlmExportZonesFromLayout(
-          options.definition.prompts,
-          {
-            agentStepIndex: step,
-            workplaceDisplay,
-            skillsIndex,
-          }
-        );
-        const protocol = await inferLlmProtocolFromSavedModelId(
-          options.savedModelId,
-          this.deps.savedModels,
-          this.deps.providers
-        );
-        const exportMessages = normalizeForLlmExport(
-          llmInput.messages,
-          protocol,
-          zones
-        );
+        const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
+          agentStepIndex: step,
+          workplaceDisplay,
+          skillsIndex,
+        });
+        const protocol = await inferLlmProtocolFromSavedModelId(options.savedModelId, this.deps.savedModels, this.deps.providers);
+        const exportMessages = normalizeForLlmExport(llmInput.messages, protocol, zones);
         // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前。
         // 容量 1 判定只看 assistant 消息，与 orphan 归一化顺序无耦合，
         // 此处保持既有插入位置（历史顺序、避免无关行为差异）。
@@ -580,10 +513,7 @@ export class DefaultAgentRunner implements AgentRunner {
         //    代价是 ephemeral run 每 step 一次全列读——已知取舍，甲案保守。
         let toolUseLookupMessages: readonly ChatMessageData[] | undefined;
         if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
-          toolUseLookupMessages =
-            stepCompactionEmitted || !persistMessages
-              ? await this.deps.listVisibleSessionMessages()
-              : visibleBeforePrepare;
+          toolUseLookupMessages = stepCompactionEmitted || !persistMessages ? await this.deps.listVisibleSessionMessages() : visibleBeforePrepare;
         }
 
         // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；
@@ -591,61 +521,43 @@ export class DefaultAgentRunner implements AgentRunner {
         // 非流式（无 onStream）时 firstContentAtMs 保持 null，TTFT 取完成时刻。
         const requestStartedAtMs = Date.now();
         let firstContentAtMs: number | null = null;
-        const innerOnStream =
-          options.stream && publishRunLifecycle
-            ? wrapStreamForBus(
-                bus,
-                sessionId,
-                runId,
-                {
-                  streamRegistry: this.deps.streamRegistry,
-                  usageBase: runUsageBase,
-                },
-                options.onStream
-              )
-            : options.stream
-            ? options.onStream
-            : undefined;
+        const streamBusDeps = { streamRegistry: this.deps.streamRegistry, usageBase: runUsageBase };
+        let innerOnStream: StreamEventListener | undefined;
+        if (options.stream) {
+          innerOnStream = publishRunLifecycle ? wrapStreamForBus(bus, sessionId, runId, streamBusDeps, options.onStream) : options.onStream;
+        }
         // 在 bus 分发层之外再包一层 timing onStream：只记首个内容事件时刻，
         // 不改变事件流向内层回调；wrapStreamForBus 本身不动。
-        const onStream =
-          innerOnStream != null
-            ? (ev: LlmStreamEvent) => {
-                if (
-                  firstContentAtMs == null &&
-                  (ev.type === "text-delta" || ev.type === "thinking-delta")
-                ) {
-                  firstContentAtMs = Date.now();
-                }
-                innerOnStream(ev);
-              }
-            : undefined;
+        let onStream: StreamEventListener | undefined;
+        if (innerOnStream != null) {
+          const emitToInner = innerOnStream;
+          onStream = (ev: LlmStreamEvent) => {
+            if (firstContentAtMs == null && (ev.type === "text-delta" || ev.type === "thinking-delta")) {
+              firstContentAtMs = Date.now();
+            }
+            emitToInner(ev);
+          };
+        }
 
         let result;
         try {
           // 五期门⑦：预检失败（模型未保存 / 服务商缺失 / 密钥未设 / policy 读取）
           // 收 `Result.err`，经 raiseRunError 保持「run 侧错误沿 catch 冒泡」既有语义；
           // 传输层错误仍由 request 直接抛。
-          const requested = await this.deps.modelRequests.request(
-            options.savedModelId,
-            "",
-            {
-              history: llmMessages,
-              toolUseLookupMessages,
-              system: llmInput.system,
-              tools: tools.length > 0 ? tools : undefined,
-              stream: options.stream,
-              onStream,
-              signal,
-            }
-          );
+          const requestOptions: ModelRequestOptions = {
+            history: llmMessages,
+            toolUseLookupMessages,
+            system: llmInput.system,
+            tools: tools.length > 0 ? tools : undefined,
+            stream: options.stream,
+            onStream,
+            signal,
+          };
+          const requested = await this.deps.modelRequests.request(options.savedModelId, "", requestOptions);
           if (!requested.ok) raiseRunError(requested.error);
           result = requested.value;
         } catch (e: unknown) {
-          if (
-            signal?.aborted ||
-            (e instanceof Error && e.name === "AbortError")
-          ) {
+          if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
             await handleAbort("model_request_catch");
             break;
           }
@@ -656,8 +568,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const endedAtMs = Date.now();
         const durationMs = endedAtMs - requestStartedAtMs;
         // 非流式请求（无 onStream 或未收到内容事件）TTFT = 总时长（完成时刻口径）。
-        const firstTokenMs =
-          (firstContentAtMs ?? endedAtMs) - requestStartedAtMs;
+        const firstTokenMs = (firstContentAtMs ?? endedAtMs) - requestStartedAtMs;
 
         // step done 补发（无论协议）：把该步 LlmChatResult.usage 的输出侧并入
         // run 级累计基线，补发一条 run 级累计 usage 事件。openai 流中无事件段由
@@ -703,28 +614,26 @@ export class DefaultAgentRunner implements AgentRunner {
 
         let assistantMessage: ChatMessageData | undefined;
         if (result.blocks.length > 0 && meaningful) {
-          const appended = await session.append(
-            "assistant",
-            { blocks: result.blocks },
-            {
-              // 统计页协议分桶依据：provider 记协议（anthropic/openai/gemini），
-              // 与 saved model 的服务商解耦。
-              provider: protocol,
-              ...(savedModelForAppend != null
-                ? {
-                    modelName: savedModelForAppend.vendorModelId,
-                    // provider×model 维度统计：服务商配置 id 写入时快照，
-                    // 服务商后续改名/删除不回写历史行（删除后统计解析不到
-                    // 归「其他」，用户已确认可接受）。
-                    providerId: savedModelForAppend.providerId,
-                  }
-                : {}),
-              raw: result.raw as Record<string, unknown>,
-              // 耗时随 usage 一并落库；result.usage 缺失时仅含两个耗时字段，
-              // token 统计仍由 USAGE_NOT_NULL_SQL 把关（缺失行不计入）。
-              usage: { ...result.usage, firstTokenMs, durationMs },
-            }
-          );
+          const assistantContent = { blocks: result.blocks };
+          // 统计页协议分桶依据：provider 记协议（anthropic/openai/gemini），
+          // 与 saved model 的服务商解耦。
+          const assistantAppendOptions = {
+            provider: protocol,
+            ...(savedModelForAppend != null
+              ? {
+                  modelName: savedModelForAppend.vendorModelId,
+                  // provider×model 维度统计：服务商配置 id 写入时快照，
+                  // 服务商后续改名/删除不回写历史行（删除后统计解析不到
+                  // 归「其他」，用户已确认可接受）。
+                  providerId: savedModelForAppend.providerId,
+                }
+              : {}),
+            raw: result.raw as Record<string, unknown>,
+            // 耗时随 usage 一并落库；result.usage 缺失时仅含两个耗时字段，
+            // token 统计仍由 USAGE_NOT_NULL_SQL 把关（缺失行不计入）。
+            usage: { ...result.usage, firstTokenMs, durationMs },
+          };
+          const appended = await session.append("assistant", assistantContent, assistantAppendOptions);
           if (!appended.ok) raiseRunError(appended.error);
           assistantMessage = appended.value;
           assistantAppendedInRun = true;
@@ -777,9 +686,7 @@ export class DefaultAgentRunner implements AgentRunner {
           }
         }
 
-        const toolUses = result.blocks.filter(
-          (b): b is ToolUseBlock => b.type === "tool_use"
-        );
+        const toolUses = result.blocks.filter((b): b is ToolUseBlock => b.type === "tool_use");
 
         if (toolUses.length === 0) {
           // chokepoint ①：完成/空回复路径的全部落库已结束，回锚本 step 的
@@ -814,9 +721,7 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        const degradedById = new Map(
-          (result.degradedToolCalls ?? []).map((d) => [d.id, d] as const)
-        );
+        const degradedById = new Map((result.degradedToolCalls ?? []).map((d) => [d.id, d] as const));
         const outcomes: Array<ParallelToolOutcome | null> = [];
         const runnableCalls: ToolCall[] = [];
 
@@ -833,10 +738,7 @@ export class DefaultAgentRunner implements AgentRunner {
           outcomes.push(null);
         }
 
-        const parallelResults = await this.toolRunner.runParallel(
-          runnableCalls,
-          this.deps.toolCtx
-        );
+        const parallelResults = await this.toolRunner.runParallel(runnableCalls, this.deps.toolCtx);
         let parallelIdx = 0;
         for (let i = 0; i < outcomes.length; i++) {
           if (outcomes[i] == null) {
@@ -864,18 +766,9 @@ export class DefaultAgentRunner implements AgentRunner {
           })
         );
 
-        if (
-          vfsMutated &&
-          persistMessages &&
-          assistantMessage != null &&
-          this.deps.messageCheckpoint != null
-        ) {
+        if (vfsMutated && persistMessages && assistantMessage != null && this.deps.messageCheckpoint != null) {
           try {
-            await this.deps.messageCheckpoint.capture(
-              sessionId,
-              projectId,
-              assistantMessage.id
-            );
+            await this.deps.messageCheckpoint.capture(sessionId, projectId, assistantMessage.id);
           } catch (error) {
             log.error("checkpoint_capture_failed", {
               stage: "checkpoint_capture",
@@ -946,10 +839,7 @@ export class DefaultAgentRunner implements AgentRunner {
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
         // session KKV 行双删），避免重启后从 KKV 读回旧值。
         // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
-        void invalidateSessionApiPromptTokenEntry(
-          this.deps.sessionKkv,
-          sessionId
-        );
+        void invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_RUN_FAILED, {
             sessionId,
@@ -985,11 +875,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // persistMessages=false（overlay run）的终值同样不落——锚点口径属持久
     // 会话，与 anchorStepUsage / 失败消息落库同一条豁免，走 else 连旧值失效。
     const picked = pickLastPromptUsage(rounds);
-    if (
-      persistMessages &&
-      stopReason === "completed" &&
-      picked !== undefined
-    ) {
+    if (persistMessages && stopReason === "completed" && picked !== undefined) {
       writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
         atMs: Date.now(),
@@ -998,10 +884,7 @@ export class DefaultAgentRunner implements AgentRunner {
       });
     } else {
       // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
-      void invalidateSessionApiPromptTokenEntry(
-        this.deps.sessionKkv,
-        sessionId
-      );
+      void invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
     }
 
     return Result.ok({
@@ -1012,6 +895,19 @@ export class DefaultAgentRunner implements AgentRunner {
     });
   }
 }
+
+/** {@link wrapStreamForBus} 的依赖切片。 */
+interface StreamBusDeps {
+  readonly streamRegistry?: AgentStreamRegistry;
+  /**
+   * run 级 usage 累计基线（跨 step 存活；step 循环外创建、随 run 生命周期
+   * 存取）。流中 usage 事件是 step 口径累计，换算 run 级 = 基线 + step 累计。
+   */
+  readonly usageBase?: { completionTokens: number };
+}
+
+/** 流式事件监听回调（bus 合批包装与 userOnStream 共用同一形状）。 */
+type StreamEventListener = (event: LlmStreamEvent) => void;
 
 /**
  * @internal Exposed for stream-bus deferral unit tests.
@@ -1029,20 +925,7 @@ export class DefaultAgentRunner implements AgentRunner {
  * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
  * 同步执行（避免订阅者中途回访 runner 产生的重入）。
  */
-export function wrapStreamForBus(
-  bus: SimpleEventBus,
-  sessionId: string,
-  runId: string,
-  deps: {
-    readonly streamRegistry?: AgentStreamRegistry;
-    /**
-     * run 级 usage 累计基线（跨 step 存活；step 循环外创建、随 run 生命周期
-     * 存取）。流中 usage 事件是 step 口径累计，换算 run 级 = 基线 + step 累计。
-     */
-    readonly usageBase?: { completionTokens: number };
-  } = {},
-  userOnStream?: (event: LlmStreamEvent) => void
-): ((event: LlmStreamEvent) => void) | undefined {
+export function wrapStreamForBus(bus: SimpleEventBus, sessionId: string, runId: string, deps: StreamBusDeps = {}, userOnStream?: StreamEventListener): StreamEventListener | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
   const pendingQueue: Array<() => void> = [];
   let flushScheduled = false;

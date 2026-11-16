@@ -10,7 +10,7 @@ import type { EffectiveSkillDto } from "@shared/ipc-types";
 import { ipcSkillsEffective } from "@/ipc/client";
 import { skillDomainLabel } from "./skill-ui";
 
-export type SkillPickerProps = {
+type SkillPickerProps = {
   open: boolean;
   projectId: string;
   onClose: () => void;

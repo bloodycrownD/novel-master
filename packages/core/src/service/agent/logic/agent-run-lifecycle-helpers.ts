@@ -21,10 +21,7 @@
 export const PENDING_RUN_ID = "__pending__" as const;
 
 /** 是否接受带 runId 的 stream/bus 事件。 */
-export function shouldAcceptRunEvent(
-  activeRunId: string | null,
-  runId: string | undefined
-): boolean {
+export function shouldAcceptRunEvent(activeRunId: string | null, runId: string | undefined): boolean {
   // 前奏终态（runId === ''）：只在受理哨兵态下放行（见 PENDING_RUN_ID 注释）。
   // 这里的顺序不能调换——空串终态必须先于「空串一律拒绝」判据被接住。
   if (runId === "") {
@@ -40,14 +37,13 @@ export function shouldAcceptRunEvent(
 }
 
 /** abort 后迟到 RUN_STARTED 是否应被忽略。 */
-export function shouldIgnoreStaleRunStarted(
-  uiRunning: boolean,
-  _activeRunId: string | null
-): boolean {
+// nm-style: keep-public — public/agent.ts 门面导出，desktop renderer useAgentRunLifecycle 与 desktop shared 逻辑直接消费（跨包调用），保留公开读口。
+export function shouldIgnoreStaleRunStarted(uiRunning: boolean, _activeRunId: string | null): boolean {
   return !uiRunning;
 }
 
 /** STEP/FINISHED 是否允许触发增列表的 transcript reload。 */
+// nm-style: keep-public — public/agent.ts 门面导出，desktop renderer useAgentRunLifecycle 与 desktop shared 逻辑直接消费（跨包调用），保留公开读口。
 export function shouldReloadTranscriptOnRunEvent(uiRunning: boolean): boolean {
   return uiRunning;
 }
@@ -58,11 +54,7 @@ export type ShouldApplyTranscriptReloadOptions = {
 };
 
 /** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险；abort retain 一次例外）。 */
-export function shouldApplyTranscriptReload(
-  uiRunning: boolean,
-  freezeCount: number | null,
-  opts?: ShouldApplyTranscriptReloadOptions
-): boolean {
+export function shouldApplyTranscriptReload(uiRunning: boolean, freezeCount: number | null, opts?: ShouldApplyTranscriptReloadOptions): boolean {
   if (opts?.abortRetainPending === true && opts.phase === "assistant") {
     return true;
   }

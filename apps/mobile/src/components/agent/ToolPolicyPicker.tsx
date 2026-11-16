@@ -11,14 +11,7 @@
  * - 点行只 toggle 临时 draft，不关闭 sheet；点确定才把 draft 提交回 onChange 并关闭。
  * - draft 仅在 open 从 false 翻 true 时用 selected 初始化一次，sheet 打开期间不再随 selected 变化重置。
  */
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@/config-forms/agent';
@@ -37,12 +30,7 @@ type Props = {
 
 const TOTAL = BUILTIN_TOOL_CATALOG.length;
 
-export function ToolPolicyPicker({
-  tokens,
-  selected,
-  onChange,
-  disabled = false,
-}: Props) {
+export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}: Props) {
   const overlay = useFormOverlay();
   const overlayKey = useId();
   const insets = useSafeAreaInsets();
@@ -70,11 +58,7 @@ export function ToolPolicyPicker({
     if (q === '') {
       return BUILTIN_TOOL_CATALOG;
     }
-    return BUILTIN_TOOL_CATALOG.filter(
-      item =>
-        item.name.toLowerCase().includes(q) ||
-        item.description.toLowerCase().includes(q),
-    );
+    return BUILTIN_TOOL_CATALOG.filter(item => item.name.toLowerCase().includes(q) || item.description.toLowerCase().includes(q));
   }, [query]);
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
@@ -108,8 +92,7 @@ export function ToolPolicyPicker({
       return;
     }
 
-    overlay.show(
-      overlayKey,
+    const sheetNode = (
       <ModalShell
         standalone
         visible
@@ -124,12 +107,7 @@ export function ToolPolicyPicker({
       >
         <Text style={[styles.sheetTitle, {color: tokens.text}]}>选择工具</Text>
         <View style={styles.searchWrap}>
-          <FormTextInput
-            tokens={tokens}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="搜索工具…"
-          />
+          <FormTextInput tokens={tokens} value={query} onChangeText={setQuery} placeholder="搜索工具…" />
         </View>
         <FlatList
           data={filtered}
@@ -138,19 +116,10 @@ export function ToolPolicyPicker({
           renderItem={({item}) => {
             const active = draftSet.has(item.name);
             return (
-              <Pressable
-                style={[
-                  styles.row,
-                  {borderBottomColor: tokens.border},
-                  active && {backgroundColor: tokens.bgSecondary},
-                ]}
-                onPress={() => toggle(item.name)}
-              >
+              <Pressable style={[styles.row, {borderBottomColor: tokens.border}, active && {backgroundColor: tokens.bgSecondary}]} onPress={() => toggle(item.name)}>
                 <View style={styles.rowText}>
                   <Text style={{color: tokens.text}}>{item.name}</Text>
-                  <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-                    {item.description}
-                  </Text>
+                  <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.description}</Text>
                 </View>
                 {active ? <Text style={{color: tokens.primary}}>✓</Text> : null}
               </Pressable>
@@ -169,32 +138,17 @@ export function ToolPolicyPicker({
           <Pressable onPress={close} style={styles.actionBtn}>
             <Text style={{color: tokens.textSecondary}}>取消</Text>
           </Pressable>
-          <Pressable
-            onPress={confirm}
-            style={[styles.actionBtn, {backgroundColor: tokens.primary}]}
-          >
+          <Pressable onPress={confirm} style={[styles.actionBtn, {backgroundColor: tokens.primary}]}>
             <Text style={styles.confirmText}>确定</Text>
           </Pressable>
         </View>
-      </ModalShell>,
+      </ModalShell>
     );
+    overlay.show(overlayKey, sheetNode);
 
     return () => overlay.hide(overlayKey);
   };
-  const sheetDeps = [
-    open,
-    overlay,
-    overlayKey,
-    filtered,
-    draft,
-    draftSet,
-    query,
-    tokens,
-    insets.bottom,
-    close,
-    confirm,
-    toggle,
-  ];
+  const sheetDeps = [open, overlay, overlayKey, filtered, draft, draftSet, query, tokens, insets.bottom, close, confirm, toggle];
   useEffect(showSheet, sheetDeps);
 
   return (
@@ -217,11 +171,7 @@ export function ToolPolicyPicker({
         }}
         numberOfLines={1}
       >
-        {selected.length === 0
-          ? `未选择工具（0/${TOTAL}）`
-          : selected.length >= TOTAL
-          ? `全部工具（${TOTAL}/${TOTAL}）`
-          : `已选工具（${selected.length}/${TOTAL}）`}
+        {selected.length === 0 ? `未选择工具（0/${TOTAL}）` : selected.length >= TOTAL ? `全部工具（${TOTAL}/${TOTAL}）` : `已选工具（${selected.length}/${TOTAL}）`}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
     </Pressable>

@@ -3,16 +3,10 @@
  * 内存 Map 作 UI 缓存；`composer_draft_json`（text+tokenRanges，attach 恒空）为权威。
  */
 
-import {
-  chatAnnotateDraftStore,
-  parseComposerDraftJson,
-  serializeComposerDraftJson,
-  type ComposerDraftTokenRange,
-  type MessageAttachment,
-} from '@novel-master/core/chat';
+import {chatAnnotateDraftStore, parseComposerDraftJson, serializeComposerDraftJson, type ComposerDraftTokenRange, type MessageAttachment} from '@novel-master/core/chat';
 import {Result, AppError} from '@novel-master/core/errors';
 
-export type ChatComposerDraft = {
+type ChatComposerDraft = {
   readonly text: string;
   readonly attachments: readonly MessageAttachment[];
   /**
@@ -27,14 +21,8 @@ export type ChatComposerDraft = {
  * 避免 `{text, attachments, tokenRanges: undefined}` 这类形状在断言与序列化处
  * 引入噪声）。区间数组拷一份，防止调用方后续可变。
  */
-function buildDraft(
-  text: string,
-  attachments: readonly MessageAttachment[],
-  tokenRanges: readonly ComposerDraftTokenRange[] | undefined,
-): ChatComposerDraft {
-  return tokenRanges !== undefined
-    ? {text, attachments: [...attachments], tokenRanges: [...tokenRanges]}
-    : {text, attachments: [...attachments]};
+function buildDraft(text: string, attachments: readonly MessageAttachment[], tokenRanges: readonly ComposerDraftTokenRange[] | undefined): ChatComposerDraft {
+  return tokenRanges !== undefined ? {text, attachments: [...attachments], tokenRanges: [...tokenRanges]} : {text, attachments: [...attachments]};
 }
 
 const bySession = new Map<string, ChatComposerDraft>();
@@ -50,9 +38,7 @@ function warnPersistFailure(error: unknown): void {
 }
 
 /** 订阅草稿变更（attachments 合并等）；返回取消订阅。 */
-export function subscribeChatComposerDraft(
-  listener: DraftListener,
-): () => void {
+export function subscribeChatComposerDraft(listener: DraftListener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -65,9 +51,7 @@ function notifyDraftListeners(sessionId: string): void {
   }
 }
 
-export function readChatComposerDraftState(
-  sessionId: string | undefined,
-): ChatComposerDraft {
+export function readChatComposerDraftState(sessionId: string | undefined): ChatComposerDraft {
   if (sessionId == null || sessionId === '') {
     return EMPTY;
   }
@@ -84,11 +68,7 @@ type ComposerDraftPersistence = {
  * 调用方 writeChatComposerDraft / writeChatComposerDraftState fire-and-forget，
  * 失败走 warnPersistFailure 告警。
  */
-async function persistAttachTextDraft(
-  sessions: ComposerDraftPersistence,
-  sessionId: string,
-  draft: ChatComposerDraft,
-): Promise<Result<void, AppError>> {
+async function persistAttachTextDraft(sessions: ComposerDraftPersistence, sessionId: string, draft: ChatComposerDraft): Promise<Result<void, AppError>> {
   // draft attach 恒空；仅持久正文（含 `@路径`）+ 确认胶囊区间。
   const json = serializeComposerDraftJson({
     text: draft.text,
@@ -109,12 +89,7 @@ async function persistAttachTextDraft(
  * 不扫正文、不臆造 `[]`，让下一次水化走兜底扫描一次（旧草稿语义）。
  * 现有三参调用零改动。
  */
-export function writeChatComposerDraft(
-  sessionId: string | undefined,
-  text: string,
-  sessions?: ComposerDraftPersistence,
-  tokenRanges?: readonly ComposerDraftTokenRange[],
-): void {
+export function writeChatComposerDraft(sessionId: string | undefined, text: string, sessions?: ComposerDraftPersistence, tokenRanges?: readonly ComposerDraftTokenRange[]): void {
   if (sessionId == null || sessionId === '') {
     return;
   }
@@ -123,74 +98,64 @@ export function writeChatComposerDraft(
   if (!text && attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions
-        .setComposerDraftJson(sessionId, null)
-        .then((r) => {
-          if (!r.ok) warnPersistFailure(r.error);
-        })
-        .catch(warnPersistFailure);
+      const clearPromise = sessions.setComposerDraftJson(sessionId, null);
+      const notifiedClearPromise = clearPromise.then(r => {
+        if (!r.ok) warnPersistFailure(r.error);
+      });
+      void notifiedClearPromise.catch(warnPersistFailure);
     }
     return;
   }
   const next = buildDraft(text, attachments, tokenRanges);
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next)
-      .then(r => {
-        if (!r.ok) warnPersistFailure(r.error);
-      })
-      .catch(warnPersistFailure);
+    const persistPromise = persistAttachTextDraft(sessions, sessionId, next);
+    const notifiedPersistPromise = persistPromise.then(r => {
+      if (!r.ok) warnPersistFailure(r.error);
+    });
+    void notifiedPersistPromise.catch(warnPersistFailure);
   }
 }
 
 /** 写入完整草稿 `{ text, attachments, tokenRanges? }`（缓存含状态条；落库仅 text+ranges）。 */
-export function writeChatComposerDraftState(
-  sessionId: string | undefined,
-  draft: ChatComposerDraft,
-  sessions?: ComposerDraftPersistence,
-): void {
+export function writeChatComposerDraftState(sessionId: string | undefined, draft: ChatComposerDraft, sessions?: ComposerDraftPersistence): void {
   if (sessionId == null || sessionId === '') {
     return;
   }
   if (!draft.text && draft.attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions
-        .setComposerDraftJson(sessionId, null)
-        .then((r) => {
-          if (!r.ok) warnPersistFailure(r.error);
-        })
-        .catch(warnPersistFailure);
+      const clearPromise = sessions.setComposerDraftJson(sessionId, null);
+      const notifiedClearPromise = clearPromise.then(r => {
+        if (!r.ok) warnPersistFailure(r.error);
+      });
+      void notifiedClearPromise.catch(warnPersistFailure);
     }
     return;
   }
   const next = buildDraft(draft.text, draft.attachments, draft.tokenRanges);
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next)
-      .then(r => {
-        if (!r.ok) warnPersistFailure(r.error);
-      })
-      .catch(warnPersistFailure);
+    const persistPromise = persistAttachTextDraft(sessions, sessionId, next);
+    const notifiedPersistPromise = persistPromise.then(r => {
+      if (!r.ok) warnPersistFailure(r.error);
+    });
+    void notifiedPersistPromise.catch(warnPersistFailure);
   }
 }
 
 /** 清空会话草稿（发送成功后）。 */
-export function clearChatComposerDraft(
-  sessionId: string | undefined,
-  sessions?: ComposerDraftPersistence,
-): void {
+export function clearChatComposerDraft(sessionId: string | undefined, sessions?: ComposerDraftPersistence): void {
   if (sessionId == null || sessionId === '') {
     return;
   }
   bySession.delete(sessionId);
   if (sessions != null) {
-    void sessions
-      .setComposerDraftJson(sessionId, null)
-      .then((r) => {
-        if (!r.ok) warnPersistFailure(r.error);
-      })
-      .catch(warnPersistFailure);
+    const clearPromise = sessions.setComposerDraftJson(sessionId, null);
+    const notifiedClearPromise = clearPromise.then(r => {
+      if (!r.ok) warnPersistFailure(r.error);
+    });
+    void notifiedClearPromise.catch(warnPersistFailure);
   }
 }
 
@@ -204,24 +169,14 @@ export function clearChatComposerDraft(
  * tokenRanges 缺失/非法（core parse 已降级为 undefined）→ 缓存条目同样不带该键，
  * 由 controller 走「旧草稿兜底扫描一次」。
  */
-export async function hydrateChatComposerDraftFromDb(
-  sessionId: string,
-  sessions: ComposerDraftPersistence,
-): Promise<Result<ChatComposerDraft, AppError>> {
+export async function hydrateChatComposerDraftFromDb(sessionId: string, sessions: ComposerDraftPersistence): Promise<Result<ChatComposerDraft, AppError>> {
   const raw = await sessions.getComposerDraftJson(sessionId);
   if (!raw.ok) return Result.err(raw.error);
   const parsed = parseComposerDraftJson(raw.value);
   const prev = bySession.get(sessionId);
-  const statusOnly =
-    prev?.attachments.filter(
-      a => a.source === 'workplace' || a.source === 'user_ops',
-    ) ?? [];
-  const next = buildDraft(
-    parsed.text,
-    // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
-    statusOnly,
-    parsed.tokenRanges,
-  );
+  const statusOnly = prev?.attachments.filter(a => a.source === 'workplace' || a.source === 'user_ops') ?? [];
+  // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
+  const next = buildDraft(parsed.text, statusOnly, parsed.tokenRanges);
   if (!next.text && next.attachments.length === 0) {
     bySession.delete(sessionId);
     notifyDraftListeners(sessionId);
@@ -240,10 +195,7 @@ export async function hydrateChatComposerDraftFromDb(
  * hydrate → project → apply → syncFromDraft，这里丢字段会让 `[]`（确认无胶囊）
  * 退化为 undefined，手输 `$foo` 每次水化都被兜底扫描升格。
  */
-export function applyComposerStatusAttachmentsReplace(payload: {
-  readonly sessionId: string;
-  readonly attachments: readonly MessageAttachment[];
-}): void {
+export function applyComposerStatusAttachmentsReplace(payload: {readonly sessionId: string; readonly attachments: readonly MessageAttachment[]}): void {
   const {sessionId, attachments: statusProjected} = payload;
   if (sessionId === '') {
     return;

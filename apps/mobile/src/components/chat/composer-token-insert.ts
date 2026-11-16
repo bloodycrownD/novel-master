@@ -28,12 +28,7 @@ export type ComposerTokenInsertion = {
  * - 多 token（@ 选择器多选）也直接拼接（无连接空格）；
  * - 光标落在插入段末尾。
  */
-export function buildTokenInsertion(
-  text: string,
-  cursor: number,
-  replaceStart: number,
-  token: string | readonly string[],
-): ComposerTokenInsertion {
+export function buildTokenInsertion(text: string, cursor: number, replaceStart: number, token: string | readonly string[]): ComposerTokenInsertion {
   const before = text.slice(0, replaceStart);
   const after = text.slice(cursor);
   const tokens = typeof token === 'string' ? [token] : token;
@@ -60,19 +55,11 @@ export function buildTokenInsertion(
  * 已插入 token 当成活跃查询，第二次确认把上一颗整颗替换掉（「连插互替换」的
  * 真因）。真手输的 `$半截` / `@半截` 不在任何确认区间内，替换补全语义不变。
  */
-export function queryWithinConfirmedRange(
-  ranges: readonly ComposerTokenRange[],
-  start: number,
-  end: number,
-): boolean {
+export function queryWithinConfirmedRange(ranges: readonly ComposerTokenRange[], start: number, end: number): boolean {
   return ranges.some(r => r.start <= start && end <= r.end);
 }
 
 /** draft 持久化只保留状态 chip（workplace / user_ops）；文件引用由正文 `@` 扫描。 */
-export function statusOnlyComposerAttachments(
-  attachments: readonly MessageAttachment[],
-): MessageAttachment[] {
-  return attachments.filter(
-    a => a.source === 'workplace' || a.source === 'user_ops',
-  );
+export function statusOnlyComposerAttachments(attachments: readonly MessageAttachment[]): MessageAttachment[] {
+  return attachments.filter(a => a.source === 'workplace' || a.source === 'user_ops');
 }

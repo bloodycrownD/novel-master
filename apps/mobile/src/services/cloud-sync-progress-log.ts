@@ -7,21 +7,18 @@
 import {type ObjectStoragePort} from '@novel-master/core';
 import {isAppError} from '@novel-master/core/agent';
 import {domainOf} from '@novel-master/core/errors';
-import {
-  mapCloudSyncProgressEvent,
-  type CloudSyncProgressListener,
-} from './cloud-sync-progress-ui';
+import {mapCloudSyncProgressEvent, type CloudSyncProgressListener} from './cloud-sync-progress-ui';
 
 const LOG_TAG = '[cloud-sync]';
 
 export type CloudSyncProgressOp = 'pull' | 'push' | 'test';
 
-export type CloudSyncProgressOptions = {
+type CloudSyncProgressOptions = {
   /** 向 UI 层推送阶段进度（生产环境可用） */
   onUiProgress?: CloudSyncProgressListener;
 };
 
-export type CloudSyncProgress = {
+type CloudSyncProgress = {
   step: (event: string, detail?: Record<string, unknown>) => void;
   done: (detail?: Record<string, unknown>) => void;
   fail: (error: unknown, detail?: Record<string, unknown>) => void;
@@ -36,32 +33,20 @@ export function shortStorageKey(key: string): string {
   return `…/${parts.slice(-2).join('/')}`;
 }
 
-function isDevLogEnabled(): boolean {
-  return typeof __DEV__ !== 'undefined' && __DEV__;
-}
-
 /** 创建带耗时的进度追踪器（`msTotal` / `msStep` + 可选 UI 回调）。 */
-export function createCloudSyncProgress(
-  op: CloudSyncProgressOp,
-  options?: CloudSyncProgressOptions,
-): CloudSyncProgress {
+export function createCloudSyncProgress(op: CloudSyncProgressOp, options?: CloudSyncProgressOptions): CloudSyncProgress {
   const startedAt = Date.now();
   let lastAt = startedAt;
   const onUiProgress = options?.onUiProgress;
 
-  const emitUi = (event: string, detail?: Record<string, unknown>): void => {
-    if (onUiProgress == null || (op !== 'push' && op !== 'pull')) {
-      return;
-    }
-    const uiState = mapCloudSyncProgressEvent(op, event, detail);
-    if (uiState != null) {
-      onUiProgress(uiState);
-    }
-  };
-
   const step = (event: string, detail?: Record<string, unknown>): void => {
-    emitUi(event, detail);
-    if (!isDevLogEnabled()) {
+    if (onUiProgress != null && (op === 'push' || op === 'pull')) {
+      const uiState = mapCloudSyncProgressEvent(op, event, detail);
+      if (uiState != null) {
+        onUiProgress(uiState);
+      }
+    }
+    if (typeof __DEV__ === 'undefined' || !__DEV__) {
       return;
     }
     const now = Date.now();
@@ -90,10 +75,7 @@ export function createCloudSyncProgress(
 }
 
 /** 包装 ObjectStoragePort，记录 head/get/put/putFile/getToPath 各阶段。 */
-export function withCloudSyncStorageProgress(
-  storage: ObjectStoragePort,
-  progress: CloudSyncProgress,
-): ObjectStoragePort {
+export function withCloudSyncStorageProgress(storage: ObjectStoragePort, progress: CloudSyncProgress): ObjectStoragePort {
   const wrapped: ObjectStoragePort = {
     async head(key) {
       progress.step('storage_head_start', {key: shortStorageKey(key)});

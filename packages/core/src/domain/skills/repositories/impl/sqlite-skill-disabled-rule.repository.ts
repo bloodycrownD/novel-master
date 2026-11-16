@@ -23,6 +23,7 @@ export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepos
 
   constructor(private readonly conn: TdbcConnection) {}
 
+  /** nm-style: keep-public — 实现 SkillDisabledRuleRepository.listDisabledNames 端口方法；内联会把查询 SQL 搬进调用层。 */
   async listDisabledNames(scopeKey: string): Promise<string[]> {
     const rows = await queryTemplate<{ skill_name: string }>(this.conn, this.parser, LIST_DISABLED_SQL, { scopeKey });
     return rows.map((row) => String(row.skill_name));
@@ -36,10 +37,12 @@ export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepos
     await executeTemplate(this.conn, this.parser, REMOVE_SQL, { scopeKey, skillName });
   }
 
+  /** nm-style: keep-public — 实现 SkillDisabledRuleRepository.removeScope 端口方法；内联会把删除 SQL 搬进调用层。 */
   async removeScope(scopeKey: string): Promise<void> {
     await executeTemplate(this.conn, this.parser, REMOVE_SCOPE_SQL, { scopeKey });
   }
 
+  /** nm-style: keep-public — 实现 SkillDisabledRuleRepository.removeAllScopesByName 端口方法；内联会把删除 SQL 搬进调用层。 */
   async removeAllScopesByName(skillName: string): Promise<void> {
     await executeTemplate(this.conn, this.parser, REMOVE_ALL_BY_NAME_SQL, { skillName });
   }
@@ -56,6 +59,7 @@ export class SqliteSkillDisabledRuleRepository implements SkillDisabledRuleRepos
     await executeTemplate(this.conn, this.parser, `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE skill_name = #{from}${scopeFilter}`, params);
   }
 
+  /** nm-style: keep-public — 实现 SkillDisabledRuleRepository.copyScopeRules 端口方法；内联会把跨 scope 复制 SQL 搬进调用层。 */
   async copyScopeRules(fromScopeKey: string, toScopeKey: string): Promise<void> {
     await executeTemplate(this.conn, this.parser, COPY_SCOPE_SQL, { fromScopeKey, toScopeKey });
   }

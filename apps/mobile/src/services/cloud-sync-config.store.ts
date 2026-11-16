@@ -47,7 +47,7 @@ export type CloudSyncConfigInput = {
 };
 
 /** 对外展示的配置（不含 SK 明文） */
-export type CloudSyncConfigPublic = {
+type CloudSyncConfigPublic = {
   endpoint: string;
   bucket: string;
   region: string;
@@ -70,29 +70,11 @@ export type CloudSyncLocalStatus = {
   lastPushResult?: string;
 };
 
-function parseBool(raw: string | undefined, fallback: boolean): boolean {
-  if (raw == null || raw === '') {
-    return fallback;
-  }
-  return raw === 'true' || raw === '1';
-}
-
-function parseRev(raw: string | undefined): number {
-  if (raw == null || raw === '') {
-    return 0;
-  }
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
 /**
  * KKV 读适配：`KKV_NOT_FOUND` 归一为 `undefined`（Ok），其余失败沿
  * `Result.err` 接力（错误通道迁移四期）。
  */
-async function kkvGet(
-  kkv: KkvService,
-  key: string,
-): Promise<Result<string | undefined, AppError>> {
+async function kkvGet(kkv: KkvService, key: string): Promise<Result<string | undefined, AppError>> {
   const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
   if (!raw.ok) {
     if (isAppError(raw.error, 'KKV_NOT_FOUND')) {
@@ -103,11 +85,7 @@ async function kkvGet(
   return Result.ok(raw.value);
 }
 
-async function kkvSet(
-  kkv: KkvService,
-  key: string,
-  value: string,
-): Promise<void> {
+async function kkvSet(kkv: KkvService, key: string, value: string): Promise<void> {
   await kkv.set(CLOUD_SYNC_KKV_MODULE, key, value);
 }
 
@@ -116,13 +94,9 @@ type RandomCrypto = {
   getRandomValues?: (array: Uint8Array) => Uint8Array;
 };
 
-function readWebCrypto(): RandomCrypto | undefined {
-  return (globalThis as {crypto?: RandomCrypto}).crypto;
-}
-
 /** 生成设备 ID（首次保存配置时写入 KKV） */
 export function generateCloudSyncDeviceId(): string {
-  const cryptoApi = readWebCrypto();
+  const cryptoApi = (globalThis as {crypto?: RandomCrypto}).crypto;
   if (cryptoApi != null && typeof cryptoApi.randomUUID === 'function') {
     return cryptoApi.randomUUID();
   }
@@ -137,51 +111,14 @@ export function generateCloudSyncDeviceId(): string {
   bytes[6] = (bytes[6]! & 0x0f) | 0x40;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(
-    12,
-    16,
-  )}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function validateConfigInput(input: CloudSyncConfigInput): void {
-  if (!input.endpoint.trim()) {
-    throw new Error('请填写 Endpoint');
-  }
-  if (!input.bucket.trim()) {
-    throw new Error('请填写 Bucket');
-  }
-  if (!input.accessKeyId.trim()) {
-    throw new Error('请填写 Access Key');
-  }
-  if (!input.secretAccessKey.trim()) {
-    throw new Error('请填写 Secret Key');
-  }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** 读取对外配置；未配置时 endpoint 等为空串。失败沿 `Result.err` 接力。 */
-export async function getCloudSyncConfig(
-  runtime: MobileNovelMasterRuntime,
-): Promise<Result<CloudSyncConfigPublic, AppError>> {
+export async function getCloudSyncConfig(runtime: MobileNovelMasterRuntime): Promise<Result<CloudSyncConfigPublic, AppError>> {
   const {kkv, secretStore} = runtime;
-  const [
-    endpoint,
-    bucket,
-    region,
-    pathPrefix,
-    accessKeyId,
-    forcePathStyle,
-    deviceId,
-    deviceLabel,
-  ] = await Promise.all([
-    kkvGet(kkv, KEY_ENDPOINT),
-    kkvGet(kkv, KEY_BUCKET),
-    kkvGet(kkv, KEY_REGION),
-    kkvGet(kkv, KEY_PATH_PREFIX),
-    kkvGet(kkv, KEY_ACCESS_KEY_ID),
-    kkvGet(kkv, KEY_FORCE_PATH_STYLE),
-    kkvGet(kkv, KEY_DEVICE_ID),
-    kkvGet(kkv, KEY_DEVICE_LABEL),
-  ]);
+  const configKeys = [KEY_ENDPOINT, KEY_BUCKET, KEY_REGION, KEY_PATH_PREFIX, KEY_ACCESS_KEY_ID, KEY_FORCE_PATH_STYLE, KEY_DEVICE_ID, KEY_DEVICE_LABEL];
+  const [endpoint, bucket, region, pathPrefix, accessKeyId, forcePathStyle, deviceId, deviceLabel] = await Promise.all(configKeys.map(key => kkvGet(kkv, key)));
   if (!endpoint.ok) return Result.err(endpoint.error);
   if (!bucket.ok) return Result.err(bucket.error);
   if (!region.ok) return Result.err(region.error);
@@ -199,7 +136,7 @@ export async function getCloudSyncConfig(
     region: region.value ?? '',
     pathPrefix: pathPrefix.value ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
     accessKeyId: accessKeyId.value ?? '',
-    forcePathStyle: parseBool(forcePathStyle.value, false),
+    forcePathStyle: forcePathStyle.value == null || forcePathStyle.value === '' ? false : forcePathStyle.value === 'true' || forcePathStyle.value === '1',
     deviceId: deviceId.value ?? '',
     deviceLabel: deviceLabel.value?.trim() || undefined,
     secretKeySet,
@@ -207,42 +144,28 @@ export async function getCloudSyncConfig(
 }
 
 /** 读取本机同步状态字段。失败沿 `Result.err` 接力。 */
-export async function getCloudSyncLocalStatus(
-  runtime: MobileNovelMasterRuntime,
-): Promise<Result<CloudSyncLocalStatus, AppError>> {
+export async function getCloudSyncLocalStatus(runtime: MobileNovelMasterRuntime): Promise<Result<CloudSyncLocalStatus, AppError>> {
   const config = await getCloudSyncConfig(runtime);
   if (!config.ok) return Result.err(config.error);
   const {kkv} = runtime;
-  const [
-    lastSyncedRev,
-    lastPullAt,
-    lastPushAt,
-    lastPullResult,
-    lastPushResult,
-  ] = await Promise.all([
-    kkvGet(kkv, KEY_LAST_SYNCED_REV),
-    kkvGet(kkv, KEY_LAST_PULL_AT),
-    kkvGet(kkv, KEY_LAST_PUSH_AT),
-    kkvGet(kkv, KEY_LAST_PULL_RESULT),
-    kkvGet(kkv, KEY_LAST_PUSH_RESULT),
-  ]);
+  const statusKeys = [KEY_LAST_SYNCED_REV, KEY_LAST_PULL_AT, KEY_LAST_PUSH_AT, KEY_LAST_PULL_RESULT, KEY_LAST_PUSH_RESULT];
+  const [lastSyncedRev, lastPullAt, lastPushAt, lastPullResult, lastPushResult] = await Promise.all(statusKeys.map(key => kkvGet(kkv, key)));
   if (!lastSyncedRev.ok) return Result.err(lastSyncedRev.error);
   if (!lastPullAt.ok) return Result.err(lastPullAt.error);
   if (!lastPushAt.ok) return Result.err(lastPushAt.error);
   if (!lastPullResult.ok) return Result.err(lastPullResult.error);
   if (!lastPushResult.ok) return Result.err(lastPushResult.error);
 
-  const configured =
-    config.value.endpoint.trim().length > 0 &&
-    config.value.bucket.trim().length > 0 &&
-    config.value.accessKeyId.trim().length > 0 &&
-    config.value.secretKeySet &&
-    config.value.deviceId.trim().length > 0;
+  const hasText = (value: string): boolean => value.trim().length > 0;
+  const configured = hasText(config.value.endpoint) && hasText(config.value.bucket) && hasText(config.value.accessKeyId) && config.value.secretKeySet && hasText(config.value.deviceId);
 
+  const rawRev = lastSyncedRev.value;
+  const parsedRevNum = rawRev == null || rawRev === '' ? 0 : Number.parseInt(rawRev, 10);
+  const parsedRev = Number.isFinite(parsedRevNum) && parsedRevNum >= 0 ? parsedRevNum : 0;
   return Result.ok({
     configured,
     deviceId: config.value.deviceId,
-    lastSyncedRev: parseRev(lastSyncedRev.value),
+    lastSyncedRev: parsedRev,
     lastPullAt: lastPullAt.value ?? undefined,
     lastPushAt: lastPushAt.value ?? undefined,
     lastPullResult: lastPullResult.value ?? undefined,
@@ -251,11 +174,11 @@ export async function getCloudSyncLocalStatus(
 }
 
 /** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。已知失败沿 `Result.err` 上行，校验非空仍走异常（校验本就 reject，屏幕 catch 提示）。 */
-export async function setCloudSyncConfig(
-  runtime: MobileNovelMasterRuntime,
-  input: CloudSyncConfigInput,
-): Promise<Result<CloudSyncConfigPublic, AppError>> {
-  validateConfigInput(input);
+export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, input: CloudSyncConfigInput): Promise<Result<CloudSyncConfigPublic, AppError>> {
+  if (!input.endpoint.trim()) throw new Error('请填写 Endpoint');
+  if (!input.bucket.trim()) throw new Error('请填写 Bucket');
+  if (!input.accessKeyId.trim()) throw new Error('请填写 Access Key');
+  if (!input.secretAccessKey.trim()) throw new Error('请填写 Secret Key');
   const {kkv, secretStore} = runtime;
 
   const existingDeviceId = await kkvGet(kkv, KEY_DEVICE_ID);
@@ -265,9 +188,7 @@ export async function setCloudSyncConfig(
     deviceId = generateCloudSyncDeviceId();
   }
 
-  const normalizedPrefix = normalizePrefix(
-    input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
-  );
+  const normalizedPrefix = normalizePrefix(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
   await Promise.all([
     kkvSet(kkv, KEY_ENDPOINT, input.endpoint.trim()),
@@ -289,16 +210,15 @@ export async function setCloudSyncConfig(
 }
 
 /** 更新本机 Pull/Push 结果与时间戳。 */
-export async function patchCloudSyncLocalStatus(
-  runtime: MobileNovelMasterRuntime,
-  patch: {
-    lastSyncedRev?: number;
-    lastPullAt?: string;
-    lastPushAt?: string;
-    lastPullResult?: string;
-    lastPushResult?: string;
-  },
-): Promise<void> {
+type CloudSyncLocalStatusPatch = {
+  lastSyncedRev?: number;
+  lastPullAt?: string;
+  lastPushAt?: string;
+  lastPullResult?: string;
+  lastPushResult?: string;
+};
+
+export async function patchCloudSyncLocalStatus(runtime: MobileNovelMasterRuntime, patch: CloudSyncLocalStatusPatch): Promise<void> {
   const {kkv} = runtime;
   const tasks: Promise<void>[] = [];
   if (patch.lastSyncedRev != null) {
@@ -320,39 +240,24 @@ export async function patchCloudSyncLocalStatus(
 }
 
 /** 读取 SK 明文（仅 service 内部组装 S3 配置时使用）。 */
-export async function readCloudSyncSecretKey(
-  secretStore: SecretStore,
-): Promise<string | null> {
+export async function readCloudSyncSecretKey(secretStore: SecretStore): Promise<string | null> {
   return secretStore.get(CLOUD_SYNC_SECRET_REF);
 }
 
 /** 由已存配置组装 S3 驱动配置；未配置完整收 `CLOUD_SYNC_NOT_CONFIGURED`（desktop 镜像同款），读失败沿 `Result.err` 上行。 */
-export async function buildS3StorageConfig(
-  runtime: MobileNovelMasterRuntime,
-  overrides?: Partial<CloudSyncConfigInput>,
-): Promise<Result<S3StorageConfig, AppError>> {
+export async function buildS3StorageConfig(runtime: MobileNovelMasterRuntime, overrides?: Partial<CloudSyncConfigInput>): Promise<Result<S3StorageConfig, AppError>> {
   const config = await getCloudSyncConfig(runtime);
   if (!config.ok) return Result.err(config.error);
-  const secretKey =
-    overrides?.secretAccessKey?.trim() ||
-    (await readCloudSyncSecretKey(runtime.secretStore));
-  if (
-    !config.value.endpoint.trim() ||
-    !config.value.bucket.trim() ||
-    !config.value.accessKeyId.trim() ||
-    !secretKey
-  ) {
-    return Result.err(
-      new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先完成云存储配置'}),
-    );
+  const secretKey = overrides?.secretAccessKey?.trim() || (await readCloudSyncSecretKey(runtime.secretStore));
+  if (!config.value.endpoint.trim() || !config.value.bucket.trim() || !config.value.accessKeyId.trim() || !secretKey) {
+    return Result.err(new AppError('CLOUD_SYNC_NOT_CONFIGURED', {detail: '请先完成云存储配置'}));
   }
 
   return Result.ok({
     endpoint: overrides?.endpoint?.trim() || config.value.endpoint.trim(),
     bucket: overrides?.bucket?.trim() || config.value.bucket.trim(),
     region: overrides?.region?.trim() ?? config.value.region.trim(),
-    accessKeyId:
-      overrides?.accessKeyId?.trim() || config.value.accessKeyId.trim(),
+    accessKeyId: overrides?.accessKeyId?.trim() || config.value.accessKeyId.trim(),
     secretAccessKey: secretKey,
     forcePathStyle: overrides?.forcePathStyle ?? config.value.forcePathStyle,
   });

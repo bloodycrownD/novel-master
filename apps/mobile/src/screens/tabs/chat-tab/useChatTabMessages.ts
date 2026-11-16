@@ -13,7 +13,7 @@
 import {useEffect, useState} from 'react';
 import {DeviceEventEmitter} from 'react-native';
 
-export type UseChatTabMessagesParams = {
+type UseChatTabMessagesParams = {
   readonly sessionId: string | undefined;
   /**
    * session-transcript-changed 命中当前会话时的回调（Provider 提供：
@@ -51,5 +51,3 @@ export function useChatTabMessages({
     setDraftRestoreToken,
   };
 }
-
-export type UseChatTabMessagesResult = ReturnType<typeof useChatTabMessages>;

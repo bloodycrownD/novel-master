@@ -10,7 +10,7 @@
  * - 主题按 documentElement 的 --bg 亮度推断 dark/default（不扩展 HostTheme payload）。
  */
 
-export type MermaidTheme = 'dark' | 'default';
+type MermaidTheme = 'dark' | 'default';
 
 // 颜色解析与亮度推断已抽至 theme-mode.ts（代码高亮 token 配色同样需要）；
 // 此处 re-export 保持既有 import 路径兼容。
@@ -18,9 +18,7 @@ export {parseColorToRgb} from './theme-mode';
 import {inferThemeModeFromBg, parseColorToRgb} from './theme-mode';
 
 /** 按背景亮度推断主题：暗底 dark，亮底 default；无法解析按 default。 */
-export function inferMermaidThemeFromBg(
-  bg: string | null | undefined,
-): MermaidTheme {
+export function inferMermaidThemeFromBg(bg: string | null | undefined): MermaidTheme {
   return inferThemeModeFromBg(bg) === 'dark' ? 'dark' : 'default';
 }
 
@@ -35,9 +33,7 @@ export function nextMermaidId(): string {
 let mermaidMod: typeof import('mermaid')['default'] | null = null;
 
 /** 懒加载 bundle 内 mermaid（IIFE 无分包，动态 import 已内联）。 */
-export async function loadMermaid(): Promise<
-  typeof import('mermaid')['default']
-> {
+export async function loadMermaid(): Promise<typeof import('mermaid')['default']> {
   if (!mermaidMod) {
     mermaidMod = (await import('mermaid')).default;
   }
@@ -45,11 +41,7 @@ export async function loadMermaid(): Promise<
 }
 
 /** 渲染单张图表；失败时清理 mermaid 残留的 d<id> 错误元素后抛出。 */
-export async function renderMermaidSvg(
-  id: string,
-  source: string,
-  theme: MermaidTheme,
-): Promise<string> {
+export async function renderMermaidSvg(id: string, source: string, theme: MermaidTheme): Promise<string> {
   const mermaid = await loadMermaid();
   mermaid.initialize({startOnLoad: false, theme, securityLevel: 'strict'});
   try {
@@ -69,20 +61,14 @@ export async function renderMermaidSvg(
  * mermaid DetailedError 取 str，其余 String 兑底。
  */
 export function extractMermaidErrorMessage(err: unknown): string {
-  return err instanceof Error
-    ? err.message
-    : String((err as {str?: unknown}).str ?? err);
+  return err instanceof Error ? err.message : String((err as {str?: unknown}).str ?? err);
 }
 
-export interface MermaidSourceCache {
+interface MermaidSourceCache {
   lookup(theme: MermaidTheme, source: string): string | null;
   isFailed(theme: MermaidTheme, source: string): boolean;
   /** 命中缓存直接返回；失败标记直接同错拒绝；并发同源请求合并；否则调 render。 */
-  getOrCreate(
-    theme: MermaidTheme,
-    source: string,
-    render: (id: string) => Promise<string>,
-  ): Promise<string>;
+  getOrCreate(theme: MermaidTheme, source: string, render: (id: string) => Promise<string>): Promise<string>;
 }
 
 function cacheKey(theme: MermaidTheme, source: string): string {
@@ -137,21 +123,15 @@ export function createMermaidSourceCache(): MermaidSourceCache {
 
 /** 从 documentElement 的 --bg CSS 变量读取当前主题。 */
 export function readMermaidThemeFromDocument(): MermaidTheme {
-  if (
-    typeof document === 'undefined' ||
-    typeof getComputedStyle !== 'function'
-  ) {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') {
     return 'default';
   }
   // 宿主未下发 --bg（条件式写入缺省）时按 #fff 亮底兜底，与 CSS var(--bg, #fff) 口径一致
-  const bg =
-    getComputedStyle(document.documentElement)
-      .getPropertyValue('--bg')
-      .trim() || '#fff';
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#fff';
   return inferMermaidThemeFromBg(bg);
 }
 
-export interface RenderMermaidCodeBlocksOptions {
+interface RenderMermaidCodeBlocksOptions {
   /** 返回 true 的 code 节点跳过（如聊天流式尾增量岛）。 */
   skip?: (code: Element) => boolean;
 }
@@ -161,11 +141,7 @@ export interface RenderMermaidCodeBlocksOptions {
  * 并把源码 <pre> 移入容器（文本流顺序不变），源码容器 display:none 由共享 CSS 控制。
  * 只操作 mermaid 节点自身与新建容器，不重排周边 DOM。返回处理（含失败）的块数。
  */
-export async function renderMermaidCodeBlocks(
-  root: ParentNode,
-  cache: MermaidSourceCache,
-  options: RenderMermaidCodeBlocksOptions = {},
-): Promise<number> {
+export async function renderMermaidCodeBlocks(root: ParentNode, cache: MermaidSourceCache, options: RenderMermaidCodeBlocksOptions = {}): Promise<number> {
   const codes = root.querySelectorAll('code.language-mermaid');
   if (!codes || codes.length === 0) {
     return 0;
@@ -187,9 +163,7 @@ export async function renderMermaidCodeBlocks(
     const source = code.textContent || '';
     handled += 1;
     try {
-      const svg = await cache.getOrCreate(theme, source, id =>
-        renderMermaidSvg(id, source, theme),
-      );
+      const svg = await cache.getOrCreate(theme, source, id => renderMermaidSvg(id, source, theme));
       const block = document.createElement('div');
       block.className = 'mermaid-block';
       const chart = document.createElement('div');

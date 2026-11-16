@@ -6,33 +6,19 @@
 
 import type { TdbcConnection } from "../tdbc/ports/connection.port.js";
 import type { Row } from "../tdbc/types.js";
-import {
-  DB_BACKUP_PROVIDER_TABLES,
-  type ProviderBackupTableName,
-  type ProviderTableSnapshot,
-} from "./provider-tables.js";
+import { DB_BACKUP_PROVIDER_TABLES, type ProviderBackupTableName, type ProviderTableSnapshot } from "./provider-tables.js";
 import { validateProviderTableSnapshot } from "./provider-table-snapshot-validate.js";
 
 /** restore 时插入顺序：先父表再子表，与 FK 一致。 */
-const RESTORE_TABLE_ORDER: readonly ProviderBackupTableName[] = [
-  "llm_provider",
-  "llm_saved_model",
-  "sksp_secrets",
-];
+const RESTORE_TABLE_ORDER: readonly ProviderBackupTableName[] = ["llm_provider", "llm_saved_model", "sksp_secrets"];
 
 /** scrub 时删除顺序：先子表再父表，避免 FK 约束。 */
-const SCRUB_TABLE_ORDER: readonly ProviderBackupTableName[] = [
-  "llm_saved_model",
-  "llm_provider",
-  "sksp_secrets",
-];
+const SCRUB_TABLE_ORDER: readonly ProviderBackupTableName[] = ["llm_saved_model", "llm_provider", "sksp_secrets"];
 
 /**
  * 从当前连接主库读取三张服务商表的全量行。
  */
-export async function dumpProviderTableSnapshot(
-  conn: TdbcConnection
-): Promise<ProviderTableSnapshot> {
+export async function dumpProviderTableSnapshot(conn: TdbcConnection): Promise<ProviderTableSnapshot> {
   const snapshot: Record<ProviderBackupTableName, Row[]> = {
     sksp_secrets: [],
     llm_provider: [],
@@ -58,11 +44,7 @@ export async function scrubProviderTables(conn: TdbcConnection): Promise<void> {
  * @param attachPath - 待清除副本的绝对路径，通过 `?` 绑定以防注入
  * @param alias - ATTACH 别名（字面量写入 SQL，由调用方控制）
  */
-export async function scrubProviderTablesInDatabase(
-  conn: TdbcConnection,
-  attachPath: string,
-  alias: string
-): Promise<void> {
+export async function scrubProviderTablesInDatabase(conn: TdbcConnection, attachPath: string, alias: string): Promise<void> {
   await conn.execute(`ATTACH DATABASE ? AS ${alias}`, [attachPath]);
   try {
     await scrubProviderTablesWithPrefix(conn, alias);
@@ -79,15 +61,21 @@ export async function scrubProviderTablesInDatabase(
  * 拉回到与 DefaultProviderService.create 等价的校验水位。校验在事务外执行，
  * 任意行非法直接抛 {@link ProviderTableSnapshotError}，主库保持原状。
  */
-export async function restoreProviderTableSnapshot(
-  conn: TdbcConnection,
-  snapshot: ProviderTableSnapshot
-): Promise<void> {
+export async function restoreProviderTableSnapshot(conn: TdbcConnection, snapshot: ProviderTableSnapshot): Promise<void> {
   validateProviderTableSnapshot(snapshot);
   await conn.transaction(async (tx) => {
     await scrubProviderTablesWithPrefix(tx);
     for (const table of RESTORE_TABLE_ORDER) {
-      await insertTableRows(tx, table, snapshot[table]);
+      const rows = snapshot[table];
+      if (rows.length === 0) {
+        continue;
+      }
+      const columns = Object.keys(rows[0]!);
+      const columnList = columns.join(", ");
+      const placeholders = columns.map(() => "?").join(", ");
+      const sql = `INSERT INTO ${table} (${columnList}) VALUES (${placeholders})`;
+      const parametersList = rows.map((row) => columns.map((column) => row[column] ?? null));
+      await tx.batch(sql, parametersList);
     }
   });
 }
@@ -95,33 +83,9 @@ export async function restoreProviderTableSnapshot(
 /**
  * 按删除顺序清空指定前缀（或主库）下的三张表。
  */
-async function scrubProviderTablesWithPrefix(
-  conn: TdbcConnection,
-  alias?: string
-): Promise<void> {
+async function scrubProviderTablesWithPrefix(conn: TdbcConnection, alias?: string): Promise<void> {
   const prefix = alias ? `${alias}.` : "";
   for (const table of SCRUB_TABLE_ORDER) {
     await conn.execute(`DELETE FROM ${prefix}${table}`);
   }
-}
-
-/**
- * 将快照行动态 INSERT 到目标表（列名取自首行，空表跳过）。
- */
-async function insertTableRows(
-  conn: TdbcConnection,
-  table: ProviderBackupTableName,
-  rows: readonly Row[]
-): Promise<void> {
-  if (rows.length === 0) {
-    return;
-  }
-  const columns = Object.keys(rows[0]!);
-  const columnList = columns.join(", ");
-  const placeholders = columns.map(() => "?").join(", ");
-  const sql = `INSERT INTO ${table} (${columnList}) VALUES (${placeholders})`;
-  const parametersList = rows.map((row) =>
-    columns.map((column) => row[column] ?? null)
-  );
-  await conn.batch(sql, parametersList);
 }

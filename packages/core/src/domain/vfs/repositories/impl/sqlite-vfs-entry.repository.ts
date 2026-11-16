@@ -13,7 +13,6 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import type { Row } from "@/infra/tdbc/types.js";
 import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
@@ -98,7 +97,20 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (rows.length === 0) {
       return Result.ok(null);
     }
-    return await this.rowToEntry(rows[0]!);
+    const row = rows[0]!;
+    const kindRaw = row.entry_kind;
+    const entryKind: VfsEntryKind = kindRaw === "directory" ? "directory" : "file";
+    const resolvedContent = await resolveEntryPlainContent(this.contentStore, { entryKind, content: nullableText(row.content), contentHash: nullableText(row.content_hash) });
+    if (!resolvedContent.ok) return Result.err(resolvedContent.error);
+    return Result.ok({
+      entryId: Number(row.entry_id),
+      scopeKey: String(row.scope_key),
+      path: String(row.path),
+      content: resolvedContent.value,
+      version: Number(row.head_version),
+      mtimeMs: Number(row.mtime_ms),
+      entryKind,
+    });
   }
 
   async findContentHash(scopeKey: string, path: string): Promise<Result<string | null, AppError>> {
@@ -159,6 +171,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(result);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.findContentSizeByPath 端口方法；内联会把大小探测 SQL 搬进调用层。 */
   async findContentSizeByPath(scopeKey: string, path: string): Promise<Result<VfsContentSize | null, AppError>> {
     const resolved = normalizePath(path);
     if (!resolved.ok) return Result.err(resolved.error);
@@ -216,6 +229,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return this.insertAtVersion(scopeKey, path, content, 1);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.insertWithContentHash 端口方法；内联会把 INSERT SQL 搬进调用层。 */
   async insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<Result<{ version: number }, AppError>> {
     const resolved = normalizePath(path);
     if (!resolved.ok) return Result.err(resolved.error);
@@ -248,6 +262,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.reviveEntryAtVersion 端口方法；内联会把显式 entry_id 重建 SQL 搬进调用层。 */
   async reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<Result<void, AppError>> {
     const resolved = normalizePath(input.path);
     if (!resolved.ok) return Result.err(resolved.error);
@@ -266,14 +281,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async update(scopeKey: string, path: string, content: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
     const contentHash = await this.contentStore.put(content);
-    return this.applyContentHashUpdate(scopeKey, path, contentHash, nextVersion);
+    return this.updateWithContentHash(scopeKey, path, contentHash, nextVersion);
   }
 
   async updateWithContentHash(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
-    return this.applyContentHashUpdate(scopeKey, path, contentHash, nextVersion);
-  }
-
-  private async applyContentHashUpdate(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<Result<{ version: number }, AppError>> {
     const resolved = normalizePath(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
@@ -282,7 +293,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql36 = "UPDATE vfs_entry\n       SET content = NULL,\n           content_hash = #{contentHash},\n           head_version = #{nextVersion},\n           mtime_ms = #{mtimeMs}\n       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'";
     const result = await executeTemplate(this.conn, this.parser, sql36, { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized });
     if (result.changes === 0) {
-      return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
+      return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
     }
 
     const sql17 = "SELECT head_version FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND path = #{path}";
@@ -290,6 +301,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok({ version: Number(rows[0]!.head_version) });
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.setHeadContentHash 端口方法；内联会把头指针更新 SQL 搬进调用层。 */
   async setHeadContentHash(scopeKey: string, path: string, input: {
       version: number;
       contentHash: string;
@@ -334,12 +346,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const sql20 = "SELECT 1 FROM vfs_entry\n         WHERE scope_key = #{scopeKey}\n           AND path LIKE #{pattern} ESCAPE '\\'\n           AND path <> #{path}\n         LIMIT 1";
       const childRows = await queryTemplate(this.conn, this.parser, sql20, { scopeKey, pattern, path: normalized });
       if (childRows.length > 0) {
-        return Result.err(new AppError("VFS_DIRECTORY_NOT_EMPTY", {path: normalized, detail: `Directory not empty: ${normalized}`}));
+        return Result.err(new AppError("VFS_DIRECTORY_NOT_EMPTY", { path: normalized, detail: `Directory not empty: ${normalized}` }));
       }
 
       const result = await executeTemplate(this.conn, this.parser, `DELETE FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`, { scopeKey, path: normalized });
       if (result.changes === 0) {
-        return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
+        return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
       }
       return Result.ok(result.changes);
     }
@@ -347,11 +359,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql21 = "DELETE FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')";
     const result = await executeTemplate(this.conn, this.parser, sql21, { scopeKey, path: normalized, pattern });
     if (result.changes === 0) {
-      return Result.err(new AppError("VFS_NOT_FOUND", {path: normalized, detail: `Path not found: ${normalized}`}));
+      return Result.err(new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` }));
     }
     return Result.ok(result.changes);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.deleteRecursiveIfAny 端口方法；内联会把探测 + 批量删除 SQL 搬进调用层。 */
   async deleteRecursiveIfAny(scopeKey: string, prefix: string): Promise<Result<number, AppError>> {
     // 先探测：prefix 下无任何 entry 时静默返回 0，避免 recursive:true 分支的 vfsNotFound。
     const base = normalizePrefix(prefix);
@@ -370,6 +383,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(deleted.value);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.listAllPaths 端口方法；内联会把查询 SQL 搬进调用层。 */
   async listAllPaths(scopeKey: string): Promise<string[]> {
     const sql38 = "SELECT path FROM vfs_entry\n       WHERE scope_key = #{scopeKey} AND entry_kind = 'file'\n       ORDER BY path";
     const rows = await queryTemplate<{ path: string }>(this.conn, this.parser, sql38, { scopeKey });
@@ -384,6 +398,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return rows.map((row) => String(row.path));
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.listDirectoryMetaUnderPrefix 端口方法；内联会把前缀扫描 SQL 搬进调用层。 */
   async listDirectoryMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -406,6 +421,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }));
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.listFileMetaUnderPrefix 端口方法；内联会把前缀扫描 SQL 搬进调用层。 */
   async listFileMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -417,6 +433,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }));
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.computeEntrySignature 端口方法；内联会把聚合签名 SQL 搬进调用层。 */
   async computeEntrySignature(scopeKey: string): Promise<string> {
     const sql43 = "SELECT count(*) AS entry_count, group_concat(s, char(31)) AS sig\n       FROM (SELECT path || ':' || head_version || ':' || mtime_ms AS s\n             FROM vfs_entry\n             WHERE scope_key = #{scopeKey}\n             ORDER BY path)";
     const rows = await queryTemplate<{ entry_count: number; sig: string | null }>(this.conn, this.parser, sql43, { scopeKey });
@@ -541,6 +558,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(result);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.batchInsertFileEntriesWithHash 端口方法；内联会把批量 INSERT 搬进调用层。 */
   async batchInsertFileEntriesWithHash(scopeKey: string, entries: ReadonlyArray<{
       path: string;
       contentHash: string;
@@ -558,6 +576,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.batchInsertDirectoryEntries 端口方法；内联会把批量 INSERT 搬进调用层。 */
   async batchInsertDirectoryEntries(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<void, AppError>> {
     if (paths.length === 0) return Result.ok(undefined);
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
@@ -616,6 +635,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(out);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.renamePathInScope 端口方法；内联会把事务内改名 SQL 搬进调用层。 */
   async renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
     const oldResolved = normalizePath(oldPath);
     if (!oldResolved.ok) return Result.err(oldResolved.error);
@@ -627,11 +647,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const sql49 = "UPDATE vfs_entry SET path = #{newPath}\n       WHERE scope_key = #{scopeKey} AND path = #{oldPath}";
     const result = await executeTemplate(tx, parser, sql49, { scopeKey, oldPath: oldNorm, newPath: newNorm });
     if (result.changes === 0) {
-      return Result.err(new AppError("VFS_NOT_FOUND", {path: oldNorm, detail: `Path not found: ${oldNorm}`}));
+      return Result.err(new AppError("VFS_NOT_FOUND", { path: oldNorm, detail: `Path not found: ${oldNorm}` }));
     }
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 VfsEntryRepository.renamePrefixInScope 端口方法；内联会把前缀重命名两条 UPDATE 搬进调用层。 */
   async renamePrefixInScope(tx: TdbcConnection, scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
     const oldBase = normalizePrefix(oldPrefix);
     const newBase = normalizePrefix(newPrefix);
@@ -657,24 +678,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       // 允许空目录（无子项）：根自身已被上面这条 UPDATE 改到新路径
       // （rootResult.changes === 1）即算成功，不能再按旧路径 SELECT 复核——
       // 根已改名，旧路径必然查不到。
-      throw new AppError("VFS_NOT_FOUND", {path: oldBase, detail: `Path not found: ${oldBase}`});
+      throw new AppError("VFS_NOT_FOUND", { path: oldBase, detail: `Path not found: ${oldBase}` });
     }
-  }
-
-  private async rowToEntry(row: Row): Promise<Result<VfsEntry, AppError>> {
-    const kindRaw = row.entry_kind;
-    const entryKind: VfsEntryKind = kindRaw === "directory" ? "directory" : "file";
-    const headVersion = Number(row.head_version);
-    const resolved = await resolveEntryPlainContent(this.contentStore, { entryKind, content: nullableText(row.content), contentHash: nullableText(row.content_hash) });
-    if (!resolved.ok) return Result.err(resolved.error);
-    return Result.ok({
-      entryId: Number(row.entry_id),
-      scopeKey: String(row.scope_key),
-      path: String(row.path),
-      content: resolved.value,
-      version: headVersion,
-      mtimeMs: Number(row.mtime_ms),
-      entryKind,
-    });
   }
 }

@@ -55,20 +55,6 @@ export function isDirectChild(dirPath: string, childPath: string): boolean {
   return parentLogicalPath(childPath) === dirPath;
 }
 
-/** Whether `childPath` is under `ancestorPath` (strict descendant). */
-export function isDescendantPath(
-  ancestorPath: string,
-  childPath: string,
-): boolean {
-  if (ancestorPath === childPath) {
-    return false;
-  }
-  if (ancestorPath === "/") {
-    return childPath !== "/";
-  }
-  return childPath.startsWith(`${ancestorPath}/`);
-}
-
 /** Row visible when every ancestor directory is expanded. */
 export function isTreeRowVisible(
   path: string,

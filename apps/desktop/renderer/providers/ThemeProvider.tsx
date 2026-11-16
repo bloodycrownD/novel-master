@@ -14,7 +14,7 @@ import { ipcAppUiGet, ipcAppUiSet, ipcShellSetTitleBarTheme, getDesktopBridge } 
 
 export type ThemeMode = "light" | "dark";
 
-export interface ThemeContextValue {
+interface ThemeContextValue {
   mode: ThemeMode;
   loaded: boolean;
   setMode: (mode: ThemeMode) => Promise<void>;

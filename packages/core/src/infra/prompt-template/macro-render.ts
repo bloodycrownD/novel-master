@@ -8,47 +8,11 @@ import { AppError } from "../../errors/app-error.js";
 import { Result } from "../../errors/either.js";
 import { scanMacroActions } from "./macro-scan.js";
 
-export interface MacroRenderContext {
+interface MacroRenderContext {
   readonly dot: Readonly<Record<string, unknown>>;
   readonly root: Readonly<Record<string, string>>;
   /** Dot fields that resolve to "" when missing. */
   readonly optionalDotFields?: readonly string[];
-}
-
-function lookupDot(dot: Readonly<Record<string, unknown>>, path: readonly string[], offset: number, optionalTopLevel?: ReadonlySet<string>): Result<string, AppError> {
-  if (path.length === 1 && optionalTopLevel?.has(path[0]!) === true) {
-    const value = dot[path[0]!];
-    if (value == null || typeof value !== "string") {
-      return Result.ok("");
-    }
-    return Result.ok(value);
-  }
-  let current: unknown = dot;
-  for (const segment of path) {
-    if (
-      current == null ||
-      typeof current !== "object" ||
-      Array.isArray(current)
-    ) {
-      return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${path.join(".")}`, offset }));
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-  if (current == null) {
-    return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${path.join(".")}`, offset }));
-  }
-  if (typeof current !== "string") {
-    return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `field .${path.join(".")} is not a string`, offset }));
-  }
-  return Result.ok(current);
-}
-
-function lookupRoot(root: Readonly<Record<string, string>>, key: string, offset: number): Result<string, AppError> {
-  const value = root[key];
-  if (value == null) {
-    return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: $.${key}`, offset }));
-  }
-  return Result.ok(value);
 }
 
 /**
@@ -78,11 +42,35 @@ export function renderMacro(template: string, ctx: MacroRenderContext): Result<s
       continue;
     }
 
-    const value = action.kind === "dot" ? lookupDot(ctx.dot, action.path, action.start, optionalTopLevel) : lookupRoot(ctx.root, action.path[0]!, action.start);
-    if (!value.ok) {
-      return Result.err(value.error);
+    let resolved: string;
+    if (action.kind === "dot") {
+      if (action.path.length === 1 && optionalTopLevel?.has(action.path[0]!) === true) {
+        const value = ctx.dot[action.path[0]!];
+        resolved = value == null || typeof value !== "string" ? "" : value;
+      } else {
+        let current: unknown = ctx.dot;
+        for (const segment of action.path) {
+          if (current == null || typeof current !== "object" || Array.isArray(current)) {
+            return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${action.path.join(".")}`, offset: action.start }));
+          }
+          current = (current as Record<string, unknown>)[segment];
+        }
+        if (current == null) {
+          return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: .${action.path.join(".")}`, offset: action.start }));
+        }
+        if (typeof current !== "string") {
+          return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `field .${action.path.join(".")} is not a string`, offset: action.start }));
+        }
+        resolved = current;
+      }
+    } else {
+      const value = ctx.root[action.path[0]!];
+      if (value == null) {
+        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown field: $.${action.path[0]!}`, offset: action.start }));
+      }
+      resolved = value;
     }
-    out += value.value;
+    out += resolved;
 
     cursor = action.end;
   }

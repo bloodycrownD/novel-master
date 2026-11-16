@@ -11,7 +11,7 @@ import type { MessageRollbackService } from "@/service/message-checkpoint/messag
 import type { SessionFsService } from "../session-fs.port.js";
 
 /** Dependencies for {@link DefaultSessionFsService}. */
-export interface SessionFsServiceDeps {
+interface SessionFsServiceDeps {
   readonly messageRollback: MessageRollbackService;
 }
 
@@ -21,17 +21,7 @@ export interface SessionFsServiceDeps {
 export class DefaultSessionFsService implements SessionFsService {
   constructor(private readonly deps: SessionFsServiceDeps) {}
 
-  async rollbackToMessage(
-    sessionId: string,
-    projectId: string,
-    messageId: string,
-    options?: RollbackOptions
-  ): Promise<Result<void, AppError>> {
-    return this.deps.messageRollback.rollbackToMessage(
-      sessionId,
-      projectId,
-      messageId,
-      options
-    );
+  async rollbackToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
+    return this.deps.messageRollback.rollbackToMessage(sessionId, projectId, messageId, options);
   }
 }

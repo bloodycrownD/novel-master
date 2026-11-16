@@ -27,14 +27,13 @@
 import { z } from "zod";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
-import type { BuiltinToolContext, BuiltinToolSubagentContext } from "./builtin-tool-context.js";
+import type { BuiltinToolContext } from "./builtin-tool-context.js";
 
 /**
  * 续用子会话的历史软闸（spec D7）：目标子会话消息数 > 该阈值即拒绝续用。
@@ -95,89 +94,9 @@ export const SUBAGENT_STOP_REASON_USER = "用户停止";
 /** 递归上限：depth >= 2（孙 agent）不允许调用 task（已被 registry 层 deny，双保险）。 */
 const SUBAGENT_MAX_DEPTH = 2;
 
-/**
- * 从装配期预算好的候选列表拼给 LLM 看的「可选 subagent 名单」文案。
- *
- * 候选来自 `ctx.subagent?.callableAgents ?? []`：装配段已过滤掉
- * `mode === "primary"` 的主 agent、排除当前 agent 自身，至少含内置 `general`。
- */
-function formatCallableList(callable: readonly { readonly name: string; readonly description?: string }[]): string {
-  if (callable.length === 0) return "（暂无）";
-  return callable.map((a) => (a.description != null && a.description.trim().length > 0 ? `${a.name}：${a.description.trim()}` : a.name)).join("\n");
-}
-
-/**
- * 从子 session 消息列表提取末条 assistant 的合并 text（按 block 顺序拼接）。
- *
- * @returns 末条 assistant 文本；不存在或无 text block 时返回 undefined。
- */
-function extractLastAssistantText(messages: readonly ChatMessageData[]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]!;
-    if (msg.role !== "assistant") continue;
-    const textBlocks = msg.content.blocks.filter((b): b is TextBlock => b.type === "text");
-    if (textBlocks.length === 0) continue;
-    const joined = textBlocks.map((b) => b.text).join("");
-    if (joined.length > 0) return joined;
-  }
-  return undefined;
-}
-
 /** 三态续用错误统一引导：去掉 sessionId 新开。 */
 function resumeGuide(): string {
   return "去掉 sessionId 重新调用即可新开一个子会话。";
-}
-
-/**
- * 鸭子判别「会话不存在」——只认 `CHAT_NOT_FOUND` 语义，不看具体类。
- *
- * 用 key 而非 `instanceof`：`src` 与 `dist` 双份模块实例下 `instanceof` 会失效
- * （同 `isVfsError` 的理由），而 `SessionService.get` 的契约只有 key 可依赖。
- */
-function isSessionNotFound(error: unknown): boolean {
-  return isAppError(error, "CHAT_NOT_FOUND");
-}
-
-/**
- * 续用目标子会话的四态前置校验（spec D2 / D7 / D8）。
- *
- * 顺序刻意如此——先判存在性（get 返回 err 即不存在），再判归属（直接父口径），
- * 再判活跃，最后判历史条数软闸。每态文案都引导「去掉 sessionId 新开」。
- *
- * 存在性只吞 `NOT_FOUND`（子会话真被删了）；DB 抖动等其它故障原样上抛——把它
- * 伪装成「找不到子会话」会让模型误以为该 sessionId 失效，转而去新建一个重复
- * 的子会话，把一次瞬时故障放大成历史污染。
- *
- * @returns 校验通过的子会话 id（= 请求的 id 原样）；Err 分两类：infra 故障
- * （非 `NOT_FOUND` 的 `sessions.get` 错误）原样接力，业务失败（不存在 /
- * 非本会话子会话 / 活跃中 / 历史超限）落 `TOOL_FAILED` 文案。
- *
- * 已知失败走返回值通道（四期门⑦）：infra 故障与业务失败分流，前者由
- * `return r` 接力给 tool-runner 的统一收口，不落业务文案。
- */
-async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<Result<string, AppError>> {
-  const sessionResult = await subagent.sessions.get(sessionId);
-  if (!sessionResult.ok) {
-    if (!isSessionNotFound(sessionResult.error)) {
-      return Result.err(sessionResult.error);
-    }
-    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`}));
-  }
-  const session = sessionResult.value;
-  // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
-  if (session.parentSessionId !== subagent.parentSessionId) {
-    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`}));
-  }
-  // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
-  if (subagent.isSessionRunActive(sessionId)) {
-    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`}));
-  }
-  // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
-  const existing = await subagent.messages.listBySession(sessionId);
-  if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
-    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`}));
-  }
-  return Result.ok(sessionId);
 }
 
 /**
@@ -191,11 +110,12 @@ export const subagentTool: Tool<TaskToolInput, TaskToolOutput, BuiltinToolContex
   name: "task",
   description: (ctx) => {
     const callable = ctx.subagent?.callableAgents ?? [];
+    const callableList = callable.length === 0 ? "（暂无）" : callable.map((a) => (a.description != null && a.description.trim().length > 0 ? `${a.name}：${a.description.trim()}` : a.name)).join("\n");
     return `派生一个子代理执行子任务，等它跑完后回流结果。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
 
 入参：
 - subagentName：目标子代理 name（你可以调用的 subagent 如下：
-${formatCallableList(callable)}
+${callableList}
 ）
 - description：3-5 词任务描述（用作子会话标题）
 - prompt：任务正文，写清要子代理完成什么
@@ -227,11 +147,11 @@ ${formatCallableList(callable)}
   async run(input, ctx) {
     const subagent = ctx.subagent;
     if (subagent == null) {
-      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）"}));
+      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）" }));
     }
     // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 resolveAgentToolRegistry）。
     if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
-      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`}));
+      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `已达子代理递归上限（depth=${subagent.depth}），不允许再派生` }));
     }
 
     const defs = await subagent.agentRegistry.list();
@@ -241,7 +161,7 @@ ${formatCallableList(callable)}
     const def = defs.value.find((d) => d.name === input.subagentName && d.mode !== "primary");
     if (def == null) {
       const callableNames = defs.value.filter((d) => d.mode !== "primary").map((d) => d.name);
-      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`}));
+      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}` }));
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
@@ -260,18 +180,37 @@ ${formatCallableList(callable)}
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
       const materialized = attachmentScanner.fromPaths(filePaths);
-      if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}`}));
+      if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}` }));
       attachments = materialized.value;
     }
 
     // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
     // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
+    // 四态校验顺序刻意如此——先判存在性（get 返回 err 即不存在），再判归属（直接父口径），
+    // 再判活跃，最后判历史条数软闸。存在性只吞 NOT_FOUND（子会话真被删了）；DB 抖动等
+    // 其它故障原样上抛——伪装成「找不到子会话」会让模型误以为 sessionId 失效而新建重复会话。
     const requestedSessionId = input.sessionId?.trim() ?? "";
     let childSessionId: string;
     if (requestedSessionId.length > 0) {
-      const resumed = await resolveResumeSessionId(requestedSessionId, subagent);
-      if (!resumed.ok) return Result.err(resumed.error);
-      childSessionId = resumed.value;
+      const sessionResult = await subagent.sessions.get(requestedSessionId);
+      if (!sessionResult.ok) {
+        if (!isAppError(sessionResult.error, "CHAT_NOT_FOUND")) return Result.err(sessionResult.error);
+        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `找不到子会话 "${requestedSessionId}"（可能已被删除）。${resumeGuide()}` }));
+      }
+      // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
+      if (sessionResult.value.parentSessionId !== subagent.parentSessionId) {
+        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}` }));
+      }
+      // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
+      if (subagent.isSessionRunActive(requestedSessionId)) {
+        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 正在运行中，不能同时续用。${resumeGuide()}` }));
+      }
+      // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
+      const existing = await subagent.messages.listBySession(requestedSessionId);
+      if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
+        return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}` }));
+      }
+      childSessionId = requestedSessionId;
     } else {
       const created = await subagent.createChildSession(title);
       if (!created.ok) return Result.err(created.error);
@@ -307,7 +246,18 @@ ${formatCallableList(callable)}
     // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
     // 的 T-SUB-TAIL3 钉成期望。
     const childMessages = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
-    const lastText = extractLastAssistantText(childMessages);
+    let lastText: string | undefined;
+    for (let i = childMessages.length - 1; i >= 0; i--) {
+      const msg = childMessages[i]!;
+      if (msg.role !== "assistant") continue;
+      const textBlocks = msg.content.blocks.filter((b): b is TextBlock => b.type === "text");
+      if (textBlocks.length === 0) continue;
+      const joined = textBlocks.map((b) => b.text).join("");
+      if (joined.length > 0) {
+        lastText = joined;
+        break;
+      }
+    }
 
     // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，
     // 不再套 [子代理未完成任务] 文案——主 agent 要能区分「用户主动停」和「工具崩了」。

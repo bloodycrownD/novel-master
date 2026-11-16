@@ -10,15 +10,14 @@ type JsonSchema = Record<string, unknown>;
 
 /** Converts a Zod schema to a JSON Schema object for LLM tool `input_schema`. */
 export function zodToJsonSchema(schema: z.ZodType): JsonSchema {
-  const withJson = schema as z.ZodType & {
-    toJSONSchema?: () => JsonSchema;
-  };
+  const withJson = schema as z.ZodType & { toJSONSchema?: () => JsonSchema };
   if (typeof withJson.toJSONSchema === "function") {
     return withJson.toJSONSchema();
   }
   return zodTypeToJsonSchema(schema);
 }
 
+/** nm-style: keep-local — 递归 worker：自引用无法内联，且 toJSONSchema 快路径只在根节点执行一次。 */
 function zodTypeToJsonSchema(schema: z.ZodType): JsonSchema {
   if (schema instanceof z.ZodOptional) {
     return zodTypeToJsonSchema(schema.unwrap() as z.ZodType);

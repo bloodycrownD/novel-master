@@ -96,10 +96,7 @@ export interface ProviderListRow {
  * @see packages/core/src/domain/provider/logic/builtin-providers.ts
  */
 export const BUILTIN_OPENAI_UUID = "c0ffeeee-0001-4000-8000-000000000001";
-export const BUILTIN_ANTHROPIC_UUID = "c0ffeeee-0001-4000-8000-000000000002";
-export const BUILTIN_GOOGLE_UUID = "c0ffeeee-0001-4000-8000-000000000003";
 export const BUILTIN_OPENROUTER_UUID = "c0ffeeee-0001-4000-8000-000000000004";
-export const BUILTIN_OPENCODE_UUID = "c0ffeeee-0001-4000-8000-000000000005";
 
 /** 解析 `nm provider list` TSV：`uuid\\tdisplayName\\tprotocol\\tbaseUrl\\tapiKey: …`。 */
 export function parseProviderList(stdout: string): ProviderListRow[] {

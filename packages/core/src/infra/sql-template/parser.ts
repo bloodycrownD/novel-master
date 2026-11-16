@@ -6,15 +6,7 @@
 import { SqlTemplateError } from "./errors.js";
 import type { AstNode, ForeachAttrs, TrimAttrs } from "./types.js";
 
-const KNOWN_TAGS = new Set([
-  "if",
-  "where",
-  "foreach",
-  "trim",
-  "choose",
-  "when",
-  "otherwise",
-]);
+const KNOWN_TAGS = new Set(["if", "where", "foreach", "trim", "choose", "when", "otherwise"]);
 
 const OPEN_TAG_RE = /^(if|where|foreach|trim|choose|when|otherwise)\b/i;
 
@@ -54,11 +46,7 @@ export class TemplateParser {
   }
 }
 
-function parseChildren(
-  template: string,
-  pos: { value: number },
-  closeTag: string | null
-): AstNode[] {
+function parseChildren(template: string, pos: { value: number }, closeTag: string | null): AstNode[] {
   const nodes: AstNode[] = [];
 
   while (pos.value < template.length) {
@@ -76,26 +64,15 @@ function parseChildren(
   return nodes;
 }
 
-function isTagStart(template: string, offset: number): boolean {
-  if (template[offset] !== "<") return false;
-  if (template.startsWith("</", offset)) return true;
-  const probe = template.slice(offset + 1);
-  if (OPEN_TAG_RE.test(probe)) return true;
-  const unknown = /^(\w+)(\s+[\w-]+=|\s*>)/.exec(probe);
-  return unknown !== null;
-}
-
-function parseNodesUntilClose(
-  template: string,
-  pos: { value: number },
-  closeTag: string | null,
-  nodes: AstNode[]
-): boolean {
+/** nm-style: keep-local — 与 parseChildren 互为递归的词法扫描阶段，共享 pos 游标与 nodes 累积器。 */
+function parseNodesUntilClose(template: string, pos: { value: number }, closeTag: string | null, nodes: AstNode[]): boolean {
   const i = pos.value;
   const hash = template.indexOf("#{", i);
   const dollar = template.indexOf("${", i);
   let lt = template.indexOf("<", i);
-  while (lt !== -1 && !isTagStart(template, lt)) {
+  while (lt !== -1) {
+    const tagStart = template.startsWith("</", lt) || OPEN_TAG_RE.test(template.slice(lt + 1)) || /^(\w+)(\s+[\w-]+=|\s*>)/.exec(template.slice(lt + 1)) !== null;
+    if (tagStart) break;
     lt = template.indexOf("<", lt + 1);
   }
 
@@ -150,18 +127,10 @@ function parseNodesUntilClose(
     const close = readCloseTag(template, start);
     pos.value = close.end;
     if (closeTag === null) {
-      throw new SqlTemplateError(
-        "MALFORMED_TAG",
-        `Unexpected closing tag </${close.name}>`,
-        { offset: start, tagName: close.name }
-      );
+      throw new SqlTemplateError("MALFORMED_TAG", `Unexpected closing tag </${close.name}>`, { offset: start, tagName: close.name });
     }
     if (close.name.toLowerCase() !== closeTag.toLowerCase()) {
-      throw new SqlTemplateError(
-        "MALFORMED_TAG",
-        `Mismatched closing tag: expected </${closeTag}>, got </${close.name}>`,
-        { offset: start, tagName: close.name }
-      );
+      throw new SqlTemplateError("MALFORMED_TAG", `Mismatched closing tag: expected </${closeTag}>, got </${close.name}>`, { offset: start, tagName: close.name });
     }
     return true;
   }
@@ -184,22 +153,126 @@ function parseNodesUntilClose(
   const tagName = openMatch[1].toLowerCase();
 
   if (tagName === "when" || tagName === "otherwise") {
-    throw new SqlTemplateError(
-      "MALFORMED_TAG",
-      `<${tagName}> must appear inside <choose>`,
-      { offset: start, tagName }
-    );
+    throw new SqlTemplateError("MALFORMED_TAG", `<${tagName}> must appear inside <choose>`, { offset: start, tagName });
   }
 
-  const node = parseOpenTag(template, pos, start, tagName);
-  nodes.push(node);
-  return false;
+  const { attrs, bodyStart } = readOpenTagHeader(template, start, tagName);
+  pos.value = bodyStart;
+
+  switch (tagName) {
+    case "if": {
+      const testAttr = requireAttr(attrs, "test", tagName, start);
+      const children = parseChildren(template, pos, tagName);
+      nodes.push({ type: "if", test: testAttr.value, testOffset: testAttr.valueOffset, children });
+      return false;
+    }
+    case "where": {
+      const children = parseChildren(template, pos, tagName);
+      nodes.push({ type: "where", children });
+      return false;
+    }
+    case "foreach": {
+      const collection = requireAttr(attrs, "collection", tagName, start).value;
+      const item = requireAttr(attrs, "item", tagName, start).value;
+      const foreachAttrs: ForeachAttrs = {
+        collection,
+        item,
+        index: attrs.get("index")?.value,
+        open: attrs.get("open")?.value,
+        close: attrs.get("close")?.value,
+        separator: attrs.get("separator")?.value,
+      };
+      const children = parseChildren(template, pos, tagName);
+      nodes.push({ type: "foreach", attrs: foreachAttrs, children });
+      return false;
+    }
+    case "trim": {
+      const trimAttrs: TrimAttrs = {
+        prefix: attrs.get("prefix")?.value,
+        suffix: attrs.get("suffix")?.value,
+        prefixOverrides: attrs.get("prefixoverrides")?.value,
+        suffixOverrides: attrs.get("suffixoverrides")?.value,
+      };
+      const children = parseChildren(template, pos, tagName);
+      nodes.push({ type: "trim", attrs: trimAttrs, children });
+      return false;
+    }
+    case "choose": {
+      const whens: { test: string; testOffset?: number; children: AstNode[] }[] = [];
+      let otherwise: AstNode[] | undefined;
+
+      while (pos.value < template.length) {
+        if (template.startsWith("</choose>", pos.value)) {
+          pos.value += "</choose>".length;
+          nodes.push({ type: "choose", whens, otherwise });
+          return false;
+        }
+
+        const tagStart = pos.value;
+        if (!template.startsWith("<", tagStart)) {
+          throw new SqlTemplateError("MALFORMED_TAG", "Only <when> and <otherwise> allowed inside <choose>", { offset: tagStart });
+        }
+
+        const probe = template.slice(tagStart + 1);
+        const whenMatch = /^when\b/i.exec(probe);
+        const otherwiseMatch = /^otherwise\b/i.exec(probe);
+
+        if (whenMatch) {
+          const { attrs: whenAttrs, bodyStart: whenBodyStart } = readOpenTagHeader(template, tagStart, "when");
+          const testAttr = requireAttr(whenAttrs, "test", "when", tagStart);
+          pos.value = whenBodyStart;
+          const children = parseChildren(template, pos, "when");
+          whens.push({
+            test: testAttr.value,
+            testOffset: testAttr.valueOffset,
+            children,
+          });
+          continue;
+        }
+
+        if (otherwiseMatch) {
+          if (otherwise !== undefined) {
+            throw new SqlTemplateError("MALFORMED_TAG", "Duplicate <otherwise> in <choose>", { offset: tagStart });
+          }
+          const { bodyStart: otherwiseBodyStart } = readOpenTagHeader(template, tagStart, "otherwise");
+          pos.value = otherwiseBodyStart;
+          otherwise = parseChildren(template, pos, "otherwise");
+          continue;
+        }
+
+        if (template.startsWith("</", tagStart)) {
+          const close = readCloseTag(template, tagStart);
+          if (close.name.toLowerCase() === "choose") {
+            pos.value = close.end;
+            nodes.push({ type: "choose", whens, otherwise });
+            return false;
+          }
+        }
+
+        const unknownChild = OPEN_TAG_RE.exec(probe);
+        if (unknownChild) {
+          throw new SqlTemplateError("MALFORMED_TAG", `Invalid child <${unknownChild[1]}> inside <choose>`, { offset: tagStart, tagName: unknownChild[1] });
+        }
+
+        throw new SqlTemplateError("UNKNOWN_TAG", "Unknown tag inside <choose>", {
+          offset: tagStart,
+        });
+      }
+
+      throw new SqlTemplateError("UNCLOSED_TAG", "Unclosed <choose>", {
+        offset: start,
+        tagName: "choose",
+      });
+    }
+    default:
+      throw new SqlTemplateError("UNKNOWN_TAG", `Unknown tag <${tagName}>`, {
+        offset: start,
+        tagName,
+      });
+  }
 }
 
-function readCloseTag(
-  template: string,
-  offset: number
-): { name: string; end: number } {
+function readCloseTag(template: string, offset: number): { name: string; end: number } {
   const m = /^<\/(\w+)\s*>/.exec(template.slice(offset));
   if (!m) {
     throw new SqlTemplateError("MALFORMED_TAG", "Invalid closing tag", {
@@ -214,11 +287,7 @@ interface ParsedAttribute {
   valueOffset: number;
 }
 
-function readOpenTagHeader(
-  template: string,
-  offset: number,
-  tagName: string
-): { attrs: Map<string, ParsedAttribute>; bodyStart: number } {
+function readOpenTagHeader(template: string, offset: number, tagName: string): { attrs: Map<string, ParsedAttribute>; bodyStart: number } {
   const headerStart = offset + 1 + tagName.length;
   const gt = template.indexOf(">", headerStart);
   if (gt === -1) {
@@ -228,16 +297,6 @@ function readOpenTagHeader(
     });
   }
   const header = template.slice(headerStart, gt);
-  const attrs = parseAttributes(header, headerStart, offset, tagName);
-  return { attrs, bodyStart: gt + 1 };
-}
-
-function parseAttributes(
-  header: string,
-  headerStart: number,
-  offset: number,
-  tagName: string
-): Map<string, ParsedAttribute> {
   const attrs = new Map<string, ParsedAttribute>();
   const attrRe = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
   let m: RegExpExecArray | null;
@@ -250,178 +309,15 @@ function parseAttributes(
     });
   }
   if (header.trim() && attrs.size === 0 && /\S/.test(header)) {
-    throw new SqlTemplateError(
-      "MALFORMED_TAG",
-      `Malformed attributes on <${tagName}>`,
-      { offset, tagName }
-    );
+    throw new SqlTemplateError("MALFORMED_TAG", `Malformed attributes on <${tagName}>`, { offset, tagName });
   }
-  return attrs;
+  return { attrs, bodyStart: gt + 1 };
 }
 
-function requireAttr(
-  attrs: Map<string, ParsedAttribute>,
-  name: string,
-  tagName: string,
-  offset: number
-): ParsedAttribute {
+function requireAttr(attrs: Map<string, ParsedAttribute>, name: string, tagName: string, offset: number): ParsedAttribute {
   const val = attrs.get(name);
   if (val === undefined) {
-    throw new SqlTemplateError(
-      "MALFORMED_TAG",
-      `Missing required attribute "${name}" on <${tagName}>`,
-      { offset, tagName }
-    );
+    throw new SqlTemplateError("MALFORMED_TAG", `Missing required attribute "${name}" on <${tagName}>`, { offset, tagName });
   }
   return val;
-}
-
-function parseOpenTag(
-  template: string,
-  pos: { value: number },
-  offset: number,
-  tagName: string
-): AstNode {
-  const { attrs, bodyStart } = readOpenTagHeader(template, offset, tagName);
-  pos.value = bodyStart;
-
-  switch (tagName) {
-    case "if": {
-      const testAttr = requireAttr(attrs, "test", tagName, offset);
-      const children = parseChildren(template, pos, tagName);
-      return {
-        type: "if",
-        test: testAttr.value,
-        testOffset: testAttr.valueOffset,
-        children,
-      };
-    }
-    case "where": {
-      const children = parseChildren(template, pos, tagName);
-      return { type: "where", children };
-    }
-    case "foreach": {
-      const collection = requireAttr(
-        attrs,
-        "collection",
-        tagName,
-        offset
-      ).value;
-      const item = requireAttr(attrs, "item", tagName, offset).value;
-      const foreachAttrs: ForeachAttrs = {
-        collection,
-        item,
-        index: attrs.get("index")?.value,
-        open: attrs.get("open")?.value,
-        close: attrs.get("close")?.value,
-        separator: attrs.get("separator")?.value,
-      };
-      const children = parseChildren(template, pos, tagName);
-      return { type: "foreach", attrs: foreachAttrs, children };
-    }
-    case "trim": {
-      const trimAttrs: TrimAttrs = {
-        prefix: attrs.get("prefix")?.value,
-        suffix: attrs.get("suffix")?.value,
-        prefixOverrides: attrs.get("prefixoverrides")?.value,
-        suffixOverrides: attrs.get("suffixoverrides")?.value,
-      };
-      const children = parseChildren(template, pos, tagName);
-      return { type: "trim", attrs: trimAttrs, children };
-    }
-    case "choose":
-      return parseChooseBody(template, pos, offset);
-    default:
-      throw new SqlTemplateError("UNKNOWN_TAG", `Unknown tag <${tagName}>`, {
-        offset,
-        tagName,
-      });
-  }
-}
-
-function parseChooseBody(
-  template: string,
-  pos: { value: number },
-  offset: number
-): AstNode {
-  const whens: { test: string; testOffset?: number; children: AstNode[] }[] =
-    [];
-  let otherwise: AstNode[] | undefined;
-
-  while (pos.value < template.length) {
-    if (template.startsWith("</choose>", pos.value)) {
-      pos.value += "</choose>".length;
-      return { type: "choose", whens, otherwise };
-    }
-
-    const tagStart = pos.value;
-    if (!template.startsWith("<", tagStart)) {
-      throw new SqlTemplateError(
-        "MALFORMED_TAG",
-        "Only <when> and <otherwise> allowed inside <choose>",
-        { offset: tagStart }
-      );
-    }
-
-    const probe = template.slice(tagStart + 1);
-    const whenMatch = /^when\b/i.exec(probe);
-    const otherwiseMatch = /^otherwise\b/i.exec(probe);
-
-    if (whenMatch) {
-      const { attrs, bodyStart } = readOpenTagHeader(
-        template,
-        tagStart,
-        "when"
-      );
-      const testAttr = requireAttr(attrs, "test", "when", tagStart);
-      pos.value = bodyStart;
-      const children = parseChildren(template, pos, "when");
-      whens.push({
-        test: testAttr.value,
-        testOffset: testAttr.valueOffset,
-        children,
-      });
-      continue;
-    }
-
-    if (otherwiseMatch) {
-      if (otherwise !== undefined) {
-        throw new SqlTemplateError(
-          "MALFORMED_TAG",
-          "Duplicate <otherwise> in <choose>",
-          { offset: tagStart }
-        );
-      }
-      const { bodyStart } = readOpenTagHeader(template, tagStart, "otherwise");
-      pos.value = bodyStart;
-      otherwise = parseChildren(template, pos, "otherwise");
-      continue;
-    }
-
-    if (template.startsWith("</", tagStart)) {
-      const close = readCloseTag(template, tagStart);
-      if (close.name.toLowerCase() === "choose") {
-        pos.value = close.end;
-        return { type: "choose", whens, otherwise };
-      }
-    }
-
-    const openMatch = OPEN_TAG_RE.exec(probe);
-    if (openMatch) {
-      throw new SqlTemplateError(
-        "MALFORMED_TAG",
-        `Invalid child <${openMatch[1]}> inside <choose>`,
-        { offset: tagStart, tagName: openMatch[1] }
-      );
-    }
-
-    throw new SqlTemplateError("UNKNOWN_TAG", "Unknown tag inside <choose>", {
-      offset: tagStart,
-    });
-  }
-
-  throw new SqlTemplateError("UNCLOSED_TAG", "Unclosed <choose>", {
-    offset,
-    tagName: "choose",
-  });
 }

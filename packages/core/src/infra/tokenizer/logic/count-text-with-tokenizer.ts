@@ -42,10 +42,7 @@
  * @module infra/tokenizer/logic/count-text-with-tokenizer
  */
 
-import {
-  createIncrementalTokenCounter,
-  type IncrementalTokenCounter,
-} from "./incremental-token-counter.js";
+import { createIncrementalTokenCounter, type IncrementalTokenCounter } from "./incremental-token-counter.js";
 
 /**
  * 用真分词器（由调用方以 `encode` 注入）计一段文本的 token 数。
@@ -59,10 +56,7 @@ import {
  * @param text 待计数文本；空串返回 0。
  * @returns token 数（估算值，误差实测 ≤0.6%）。
  */
-export function countTextWithIncrementalTokenizer(
-  encode: (text: string) => number,
-  text: string,
-): number {
+export function countTextWithIncrementalTokenizer(encode: (text: string) => number, text: string): number {
   if (text.length === 0) {
     return 0;
   }

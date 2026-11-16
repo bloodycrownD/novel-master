@@ -11,9 +11,7 @@ import { CONTEXT_WINDOW_RULES } from "./context-window-map.js";
  *
  * @param vendorModelId Provider model name.
  */
-export function resolveContextWindowTokens(
-  vendorModelId: string
-): number | undefined {
+export function resolveContextWindowTokens(vendorModelId: string): number | undefined {
   const id = vendorModelId.toLowerCase();
   for (const rule of CONTEXT_WINDOW_RULES) {
     for (const sub of rule.substrings) {

@@ -7,11 +7,7 @@
  * 项目智能体已下线：会话始终独立持有 agentId（必填），
  * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
-import {
-  AGENT_RUN_RESOLVE_KEYS,
-  isAppError,
-  resolveAgentForProject,
-} from '@novel-master/core/agent';
+import {AGENT_RUN_RESOLVE_KEYS, isAppError, resolveAgentForProject} from '@novel-master/core/agent';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';
@@ -21,7 +17,7 @@ import {resolveModelDisplayLabel} from './model-display-label';
  * （不含 desktop 独有的 'cli'）：
  * agent 自带 pin 压制 → 否则跟随会话配置。
  */
-export type ChatAgentModelSource = 'agent-pin' | 'session';
+type ChatAgentModelSource = 'agent-pin' | 'session';
 
 export interface ChatAgentMeta {
   readonly source: 'session' | 'none';
@@ -49,35 +45,22 @@ export interface ChatAgentMeta {
  * agent 解析失败（AGENT_RUN_RESOLVE_KEYS）归一为 source='none' 的待重选
  * meta（Ok）；其余未知异常保持 reject，调用方「锁定 + 错误文案」报错态。
  */
-export async function loadChatAgentMeta(
-  runtime: MobileNovelMasterRuntime,
-  projectId: string,
-  sessionId: string,
-): Promise<Result<ChatAgentMeta, AppError>> {
+export async function loadChatAgentMeta(runtime: MobileNovelMasterRuntime, projectId: string, sessionId: string): Promise<Result<ChatAgentMeta, AppError>> {
   try {
     // resolveAgentForProject 与 getSessionAgentConfig 互不依赖（后者只需
     // sessionId，且为无副作用的读取），并行发起；resolveModelDisplayLabel
     // 依赖两者结果合成的 savedModelId，必须等两边都回来，保持串行。
-    const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(
-      sessionId,
-    );
+    const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(sessionId);
     // 兜底挂接：resolveAgentForProject 先失败提前退出（归一 none meta /
     // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
     // 真正的错误仍在下方 await 按原语义抛出。
     sessionConfigPromise.catch(() => undefined);
-    const resolved = await resolveAgentForProject(
-      runtime,
-      projectId,
-      sessionId,
-    );
+    const resolved = await resolveAgentForProject(runtime, projectId, sessionId);
     if (!resolved.ok) {
       // 归一口径与下方 catch 同款（错误通道迁移四期：不再借 throw 进 catch）：
       // RESOLVE_KEYS 内的 agent 解析失败收成待重选 none meta，其余已知失败
       // 沿 Result.err 接力给调用方（两个调用方对 !ok 与未知异常同终端）。
-      if (
-        isAppError(resolved.error) &&
-        AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)
-      ) {
+      if (isAppError(resolved.error) && AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)) {
         return Result.ok({
           source: 'none',
           agentId: undefined,
@@ -93,8 +76,7 @@ export async function loadChatAgentMeta(
     const sessionConfig = await sessionConfigPromise;
     if (!sessionConfig.ok) return Result.err(sessionConfig.error);
     const {definition, agentId} = resolved.value;
-    const hasDedicatedModel =
-      definition.model != null && definition.model !== '';
+    const hasDedicatedModel = definition.model != null && definition.model !== '';
     const savedModelId = definition.model ?? sessionConfig.value.modelId;
     let modelLabel = '未选择模型';
     if (savedModelId) {
@@ -106,9 +88,7 @@ export async function loadChatAgentMeta(
       }
     }
     // modelSource 优先级链：agent pin 压制 → 否则跟随会话。
-    const modelSource: ChatAgentModelSource = hasDedicatedModel
-      ? 'agent-pin'
-      : 'session';
+    const modelSource: ChatAgentModelSource = hasDedicatedModel ? 'agent-pin' : 'session';
     return Result.ok({
       source: 'session',
       agentId,
@@ -189,9 +169,5 @@ export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
   if (!meta) {
     return true;
   }
-  return (
-    meta.source !== 'session' ||
-    meta.modelSource === 'agent-pin' ||
-    meta.hasDedicatedModel
-  );
+  return meta.source !== 'session' || meta.modelSource === 'agent-pin' || meta.hasDedicatedModel;
 }

@@ -12,19 +12,13 @@ import {
   mapUserSaveToToolUses,
   type UserVfsSaveMappingOptions,
 } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
-import type {
-  UserVfsTurnOp,
-  UserVfsTurnToolSpec,
-} from "@/service/chat/user-vfs-turn.port.js";
+import type { UserVfsTurnOp, UserVfsTurnToolSpec } from "@/service/chat/user-vfs-turn.port.js";
 
 let toolIdSeq = 0;
 
 function allocToolIds(count: number, prefix: string): string[] {
   const stamp = Date.now();
-  return Array.from(
-    { length: count },
-    (_, index) => `tu_${prefix}_${stamp}_${toolIdSeq++}_${index}`
-  );
+  return Array.from({ length: count }, (_, index) => `tu_${prefix}_${stamp}_${toolIdSeq++}_${index}`);
 }
 
 function toOp(actionXml: string, tools: UserVfsTurnToolSpec[]): UserVfsTurnOp {
@@ -32,27 +26,20 @@ function toOp(actionXml: string, tools: UserVfsTurnToolSpec[]): UserVfsTurnOp {
 }
 
 /** 构建删除操作 op。 */
-export function buildUserVfsDeleteOp(
-  path: string,
-  recursive = true
-): UserVfsTurnOp {
+export function buildUserVfsDeleteOp(path: string, recursive = true): UserVfsTurnOp {
   const actionXml = buildUserVfsSimpleActionXml("delete", {
     path,
     ...(recursive ? { recursive: "true" } : {}),
   });
   const [id] = allocToolIds(1, "delete");
-  return toOp(actionXml, [
-    { id, name: "fs", input: { action: "rm", path, recursive } },
-  ]);
+  return toOp(actionXml, [{ id, name: "fs", input: { action: "rm", path, recursive } }]);
 }
 
 /** 构建新建目录操作 op。 */
 export function buildUserVfsMkdirOp(path: string): UserVfsTurnOp {
   const actionXml = buildUserVfsSimpleActionXml("mkdir", { path });
   const [id] = allocToolIds(1, "mkdir");
-  return toOp(actionXml, [
-    { id, name: "fs", input: { action: "mkdir", path } },
-  ]);
+  return toOp(actionXml, [{ id, name: "fs", input: { action: "mkdir", path } }]);
 }
 
 /**
@@ -63,16 +50,11 @@ export function buildUserVfsRenameOp(from: string, to: string): UserVfsTurnOp {
   const kind = attachmentPath.actionBetween(from, to);
   const actionXml = buildUserVfsSimpleActionXml(kind, { from, to });
   const [id] = allocToolIds(1, kind);
-  return toOp(actionXml, [
-    { id, name: "fs", input: { action: "mv", from, to } },
-  ]);
+  return toOp(actionXml, [{ id, name: "fs", input: { action: "mv", from, to } }]);
 }
 
 /** 构建新建文件（write）操作 op。 */
-export function buildUserVfsCreateFileOp(
-  path: string,
-  content = ""
-): UserVfsTurnOp {
+export function buildUserVfsCreateFileOp(path: string, content = ""): UserVfsTurnOp {
   const actionXml = buildUserVfsSaveWriteActionXml(path, "new-file", content);
   const [id] = allocToolIds(1, "create");
   return toOp(actionXml, [{ id, name: "write", input: { path, content } }]);
@@ -81,31 +63,15 @@ export function buildUserVfsCreateFileOp(
 /**
  * 构建保存编辑操作 op；内容无变化时返回 `null`（no-op）。
  */
-export function buildUserVfsSaveOp(
-  baseline: string | null,
-  saved: string,
-  path: string,
-  fileContentAtSave: string,
-  mappingOptions?: UserVfsSaveMappingOptions
-): UserVfsTurnOp | null {
-  const mapped = mapUserSaveToToolUses(
-    baseline,
-    saved,
-    path,
-    fileContentAtSave,
-    mappingOptions
-  );
+export function buildUserVfsSaveOp(baseline: string | null, saved: string, path: string, fileContentAtSave: string, mappingOptions?: UserVfsSaveMappingOptions): UserVfsTurnOp | null {
+  const mapped = mapUserSaveToToolUses(baseline, saved, path, fileContentAtSave, mappingOptions);
 
   if (mapped.kind === "noop") {
     return null;
   }
 
   if (mapped.kind === "write") {
-    const actionXml = buildUserVfsSaveWriteActionXml(
-      mapped.path,
-      mapped.reason ?? "anchor-not-unique",
-      mapped.content
-    );
+    const actionXml = buildUserVfsSaveWriteActionXml(mapped.path, mapped.reason ?? "anchor-not-unique", mapped.content);
     const [id] = allocToolIds(1, "write");
     const writeInput: Record<string, unknown> = {
       path: mapped.path,
@@ -114,10 +80,7 @@ export function buildUserVfsSaveOp(
     return toOp(actionXml, [{ id, name: "write", input: writeInput }]);
   }
 
-  const actionXml = buildUserVfsSaveEditActionXml(
-    mapped.path,
-    mapped.editHunks
-  );
+  const actionXml = buildUserVfsSaveEditActionXml(mapped.path, mapped.editHunks);
   const ids = allocToolIds(mapped.toolUses.length, "edit");
   const tools = mapped.toolUses.map((toolUse, index) => ({
     id: ids[index]!,

@@ -53,6 +53,8 @@ export function buildDefaultDirRule(scopeKey: string, logicalPath: string): Resu
   });
 }
 
+type WriteDefaultDirRule = (logicalPath: string) => Promise<Result<void, AppError>>;
+
 /**
  * 求差补行内核：候选目录中无既有行的（跳过根 `/`）逐个补默认启用行。
  *
@@ -60,15 +62,15 @@ export function buildDefaultDirRule(scopeKey: string, logicalPath: string): Resu
  * service `setDirRule`），求差 / 跳根 / 路径规范化逻辑在此共享。
  *
  * @param candidates 候选目录逻辑路径集合
- * @param existingLogicalPaths 已有规则行的逻辑路径集合（有行即跳过，含 rule_off 不覆盖）
+ * @param existing 已有规则行的逻辑路径集合（有行即跳过，含 rule_off 不覆盖）
  * @param writeDefaultRule 写入一条默认启用行的载体；Err 即中断补行并原样接力
  */
-export async function backfillMissingDirRules(candidates: readonly string[], existingLogicalPaths: ReadonlySet<string>, writeDefaultRule: (logicalPath: string) => Promise<Result<void, AppError>>): Promise<Result<void, AppError>> {
+export async function backfillMissingDirRules(candidates: readonly string[], existing: ReadonlySet<string>, writeDefaultRule: WriteDefaultDirRule): Promise<Result<void, AppError>> {
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
     if (!normalized.ok) return Result.err(normalized.error);
     const logicalPath = normalized.value;
-    if (logicalPath === "/" || existingLogicalPaths.has(logicalPath)) {
+    if (logicalPath === "/" || existing.has(logicalPath)) {
       continue;
     }
     const written = await writeDefaultRule(logicalPath);
@@ -118,7 +120,7 @@ export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Prom
       }
       existing.add(normalized.value);
     }
-    const backfilled = await backfillMissingDirRules(directories, existing, async (logicalPath) => {
+    const writeDefaultRule = async (logicalPath: string): Promise<Result<void, AppError>> => {
       const rule = buildDefaultDirRule(targetScopeKey, logicalPath);
       if (!rule.ok) {
         // 逐目录容错（PRD 需求 4）：单个目录补行失败只 warn 并跳过，
@@ -132,7 +134,8 @@ export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Prom
         log.warn(`补目录规则行失败（directory=${logicalPath}）`, { error });
       }
       return Result.ok(undefined);
-    });
+    };
+    const backfilled = await backfillMissingDirRules(directories, existing, writeDefaultRule);
     if (!backfilled.ok) {
       log.warn(`best-effort 补目录规则行失败（directory=${directoryPath}）`, { error: backfilled.error });
     }

@@ -217,24 +217,6 @@ export async function saveDirRule(
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
-export async function setDirRuleEnabled(
-  target: WorkspaceContextTarget,
-  enabled: boolean,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (target.kind !== "row" || target.row.kind !== "dir") {
-    return { ok: false, message: "无效操作" };
-  }
-  const req = scopeRequestFromTarget(target, projectId, sessionId);
-  const result = await ipcWorkplaceSetDirRule({
-    ...req,
-    logicalPath: target.row.path,
-    ruleEnabled: enabled,
-  });
-  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
-}
-
 export function entryLabelForTarget(target: WorkspaceContextTarget): string {
   if (target.kind === "blank") {
     return "条目";
@@ -250,7 +232,7 @@ export function entryLabelForTarget(target: WorkspaceContextTarget): string {
  * （main 侧把非 UTF-8 判掉后不会写库，回不上 VFS）。多带字段对只读
  * `status`/`report` 的消费方无影响，Step 3 的 App 接线直接拿它出 toast。
  */
-export type SingleFileImportApplied = {
+type SingleFileImportApplied = {
   readonly status: "applied";
   readonly report: VfsBatchApplyReportDto;
   readonly skippedBinary: readonly string[];

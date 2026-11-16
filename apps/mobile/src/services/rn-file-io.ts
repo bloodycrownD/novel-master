@@ -12,9 +12,7 @@ export {base64ToBytes, bytesToBase64} from '@novel-master/core/common';
 
 /** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
 export function localUriToFsPath(localUri: string): string {
-  const withoutScheme = localUri.startsWith('file://')
-    ? localUri.slice('file://'.length)
-    : localUri;
+  const withoutScheme = localUri.startsWith('file://') ? localUri.slice('file://'.length) : localUri;
   return decodeURIComponent(withoutScheme);
 }
 
@@ -40,10 +38,7 @@ export function bytesToAsciiString(bytes: Uint8Array): string {
  * 或 ESM 包裹形态出现，这里同时兼容两种形状，省得每个调用方都写一遍。
  */
 export function blobFs(): typeof ReactNativeBlobUtil.fs {
-  const anyMod = ReactNativeBlobUtil as unknown as {
-    fs?: typeof ReactNativeBlobUtil.fs;
-    default?: {fs?: typeof ReactNativeBlobUtil.fs};
-  };
+  const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
   const fs = anyMod.fs ?? anyMod.default?.fs;
   if (fs == null) {
     throw new AppError('INFRA_INVARIANT_VIOLATION', {detail: 'react-native-blob-util.fs unavailable'});

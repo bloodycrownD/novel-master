@@ -6,7 +6,7 @@
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {refreshComposerStatusAfterSessionKkvCleared} from './project-composer-status.service';
 
-export interface SessionWorkplaceBlockScope {
+interface SessionWorkplaceBlockScope {
   readonly projectId: string;
   readonly sessionId: string;
 }
@@ -15,10 +15,7 @@ export interface SessionWorkplaceBlockScope {
  * 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。
  * 不必清 annotate store。
  */
-export async function clearSessionWorkplaceKkv(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionWorkplaceBlockScope,
-) {
+export async function clearSessionWorkplaceKkv(runtime: MobileNovelMasterRuntime, scope: SessionWorkplaceBlockScope) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
   await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
   return {workplaceDisplay: '', capturedAtMs: Date.now()};

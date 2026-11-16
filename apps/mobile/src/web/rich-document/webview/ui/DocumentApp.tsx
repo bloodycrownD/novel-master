@@ -11,33 +11,20 @@
  */
 import type {ComponentChildren} from 'preact';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
-import {
-  OVER_LIMIT_HINT,
-  buildDocumentBody,
-  type DocumentPayload,
-} from '../runtime/document-model';
+import {OVER_LIMIT_HINT, buildDocumentBody, type DocumentPayload} from '../runtime/document-model';
 
-export type DocumentAppProps = {
+type DocumentAppProps = {
   payload: DocumentPayload;
 };
 
 /** 落 `.doc-body` 的 class（HTML 布局按 payload.layout 区分富/纯）。 */
-function docBodyClass(layout: 'plain' | 'rich' | undefined): string {
-  return layout === 'plain' ? 'doc-body' : 'doc-body rich';
-}
-
 export function DocumentApp({payload}: DocumentAppProps) {
   const bodyDesc = buildDocumentBody(payload);
   const overLimit = !!payload.overLimit;
 
   let body: ComponentChildren = null;
   if (bodyDesc?.kind === 'html') {
-    body = (
-      <TrustedHtml
-        html={bodyDesc.html}
-        className={docBodyClass(bodyDesc.layout)}
-      />
-    );
+    body = <TrustedHtml html={bodyDesc.html} className={bodyDesc.layout === 'plain' ? 'doc-body' : 'doc-body rich'} />;
   } else if (bodyDesc) {
     body = (
       <div className="doc-body">

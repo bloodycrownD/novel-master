@@ -12,10 +12,7 @@ import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking
  * @param body 待序列化的请求 body。
  * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
  */
-export function applyAnthropicThinkingToBody(
-  body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined
-): void {
+export function applyAnthropicThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
   if (thinking?.protocol !== "anthropic") {
     return;
   }
@@ -31,10 +28,7 @@ export function applyAnthropicThinkingToBody(
  * @param body 待序列化的请求 body。
  * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
  */
-export function applyOpenAiThinkingToBody(
-  body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined
-): void {
+export function applyOpenAiThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
   if (thinking?.protocol !== "openai") {
     return;
   }
@@ -47,10 +41,7 @@ export function applyOpenAiThinkingToBody(
  * @param body 待序列化的请求 body。
  * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
  */
-export function applyGeminiThinkingToBody(
-  body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined
-): void {
+export function applyGeminiThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
   if (thinking?.protocol !== "gemini") {
     return;
   }

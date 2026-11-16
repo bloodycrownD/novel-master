@@ -36,17 +36,10 @@ export interface AgentRunRuntimePort {
  * 核心侧 {@link resolveCurrentAgentDefinition} / {@link resolveApplicationModelIdForRun} /
  * `resolveAgentForProject` 与双端 mapResolveError、meta 归一 catch 共用同一口径。
  */
-export const AGENT_RUN_RESOLVE_KEYS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
-  "AGENT_NOT_CONFIGURED",
-  "AGENT_NOT_FOUND",
-  "AGENT_MODEL_NOT_SET",
-  "AGENT_REFERENCED_NOT_FOUND",
-]);
+export const AGENT_RUN_RESOLVE_KEYS: ReadonlySet<ErrorKey> = new Set<ErrorKey>(["AGENT_NOT_CONFIGURED", "AGENT_NOT_FOUND", "AGENT_MODEL_NOT_SET", "AGENT_REFERENCED_NOT_FOUND"]);
 
 /** Resolves current agent id from state or registry fallback；state 读取失败沿 `Result.err` 回传。 */
-export async function resolveCurrentAgentId(
-  runtime: AgentRunRuntimePort
-): Promise<Result<string | undefined, AppError>> {
+export async function resolveCurrentAgentId(runtime: AgentRunRuntimePort): Promise<Result<string | undefined, AppError>> {
   const fromState = await runtime.state.getCurrentAgentId();
   if (!fromState.ok) return Result.err(fromState.error);
   if (fromState.value != null && fromState.value !== "") {
@@ -62,6 +55,7 @@ export async function resolveCurrentAgentId(
  * 与 {@link resolveCurrentAgentId} 同语义，只是入参收窄为 session service 实际
  * 持有的 `{ state, agentRegistry }` 形状（不强制要求 sessions 字段）。
  */
+// nm-style: keep-local — 唯一调用点在 service/chat/impl/session.service.ts（本片范围外），内联需跨目录改调用方；保留为 agent-run 共享的 resolve 语义单一入口。
 export async function resolveWorkspaceAgentForNewSession(deps: {
   readonly state: {
     getCurrentAgentId(): Promise<Result<string | undefined, AppError>>;
@@ -80,9 +74,7 @@ export async function resolveWorkspaceAgentForNewSession(deps: {
 }
 
 /** Loads agent definition for the current agent pointer；未配置/找不到 agent 沿 `Result.err` 回传（repository 未知异常仍走 throw 通道）。 */
-export async function resolveCurrentAgentDefinition(
-  runtime: AgentRunRuntimePort
-): Promise<Result<{ agentId: string; definition: AgentDefinition }, AppError>> {
+export async function resolveCurrentAgentDefinition(runtime: AgentRunRuntimePort): Promise<Result<{ agentId: string; definition: AgentDefinition }, AppError>> {
   const resolvedId = await resolveCurrentAgentId(runtime);
   if (!resolvedId.ok) return Result.err(resolvedId.error);
   const agentId = resolvedId.value;
@@ -92,12 +84,15 @@ export async function resolveCurrentAgentDefinition(
   const definition = await runtime.agentRegistry.get(agentId);
   if (!definition.ok) {
     if (isAppError(definition.error, "AGENT_NOT_FOUND")) {
-      return Result.err(new AppError("AGENT_NOT_FOUND", {agentId}));
+      return Result.err(new AppError("AGENT_NOT_FOUND", { agentId }));
     }
     return Result.err(definition.error);
   }
   return Result.ok({ agentId, definition: definition.value });
 }
+
+/** {@link resolveApplicationModelIdForRun} 的解析结果：savedModelId 参与请求，workspaceModelId 供压缩评估透传。 */
+type ResolvedRunModelIds = { savedModelId: string; workspaceModelId: string };
 
 /**
  * 解析对话 Agent 的 savedModelId（agent pin → session 覆盖）。
@@ -108,19 +103,13 @@ export async function resolveCurrentAgentDefinition(
  * 五期门⑦：state / sessions 的 `Result` 失败与「模型未设置」沿 `Result.err` 回传，
  * 由 turn loop（mapResolveError）/ 调用端点收口。
  */
-export async function resolveApplicationModelIdForRun(
-  runtime: AgentRunRuntimePort,
-  definition: AgentDefinition,
-  sessionId?: string
-): Promise<Result<{ savedModelId: string; workspaceModelId: string }, AppError>> {
+export async function resolveApplicationModelIdForRun(runtime: AgentRunRuntimePort, definition: AgentDefinition, sessionId?: string): Promise<Result<ResolvedRunModelIds, AppError>> {
   const currentModel = await runtime.state.getCurrentModelId();
   if (!currentModel.ok) return Result.err(currentModel.error);
   const workspaceModelId = currentModel.value ?? "";
   let sessionModelId: string | undefined;
   if (sessionId != null && sessionId !== "") {
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-      sessionId
-    );
+    const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
     if (!sessionConfig.ok) return Result.err(sessionConfig.error);
     // modelId 可选；空串归一化为 undefined（与 workspaceModelId 同约束）
     sessionModelId = sessionConfig.value.modelId || undefined;

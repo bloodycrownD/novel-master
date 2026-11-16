@@ -2,16 +2,7 @@
  * Provider list → detail navigation.
  */
 import React, {useCallback, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {type ProviderListItem} from '@novel-master/core/provider';
@@ -121,8 +112,7 @@ export function ProvidersScreen() {
 
   const confirmBatchDelete = useBatchDeleteConfirm<string>({
     title: '删除服务商',
-    message: ids =>
-      `将同时移除其下所有已保存模型，确定删除选中的 ${ids.length} 个服务商？`,
+    message: ids => `将同时移除其下所有已保存模型，确定删除选中的 ${ids.length} 个服务商？`,
     deleteOne: deleteProviderOne,
     onDone: async () => {
       await reload();
@@ -131,22 +121,18 @@ export function ProvidersScreen() {
   });
 
   const handleDelete = (providerId: string) => {
-    Alert.alert(
-      '删除服务商',
-      '将同时移除其下所有已保存模型与采样配置，确定继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            (async () => {
-              await deleteProviders([providerId]);
-            })().catch(err => showToast(toastMessage('删除失败', err)));
-          },
+    Alert.alert('删除服务商', '将同时移除其下所有已保存模型与采样配置，确定继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          (async () => {
+            await deleteProviders([providerId]);
+          })().catch(err => showToast(toastMessage('删除失败', err)));
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -159,13 +145,7 @@ export function ProvidersScreen() {
         onCancelBatch={batch.exit}
         onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
         hint="选择要删除的服务商（将同时移除其下所有已保存模型）"
-        normalActions={
-          <PrimaryButton
-            label="添加"
-            tokens={tokens}
-            onPress={() => navigation.navigate('ProviderCreate')}
-          />
-        }
+        normalActions={<PrimaryButton label="添加" tokens={tokens} onPress={() => navigation.navigate('ProviderCreate')} />}
       />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={listScreenStyles.loader} />
@@ -181,16 +161,8 @@ export function ProvidersScreen() {
           data={rows}
           keyExtractor={item => item.id}
           contentContainerStyle={listScreenStyles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={reload} />
-          }
-          ListEmptyComponent={
-            <Text
-              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}
-            >
-              暂无服务商，点击右上角「添加」创建。
-            </Text>
-          }
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          ListEmptyComponent={<Text style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>暂无服务商，点击右上角「添加」创建。</Text>}
           renderItem={({item}) => (
             <ConfigListCard
               tokens={tokens}
@@ -202,24 +174,11 @@ export function ProvidersScreen() {
                   navigation.navigate('ProviderDetail', {providerId: item.id});
                 }
               }}
-              leading={
-                batch.active ? (
-                  <BatchCheckbox
-                    checked={batch.isSelected(item.id)}
-                    onToggle={() => batch.toggle(item.id)}
-                  />
-                ) : (
-                  <Text style={styles.icon}>🟢</Text>
-                )
-              }
+              leading={batch.active ? <BatchCheckbox checked={batch.isSelected(item.id)} onToggle={() => batch.toggle(item.id)} /> : <Text style={styles.icon}>🟢</Text>}
               title={item.displayName}
               subtitle={metaLine(item)}
-              trailingMeta={
-                <ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />
-              }
-              onMenuPress={
-                batch.active ? undefined : () => setMenuProviderId(item.id)
-              }
+              trailingMeta={<ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />}
+              onMenuPress={batch.active ? undefined : () => setMenuProviderId(item.id)}
             />
           )}
         />

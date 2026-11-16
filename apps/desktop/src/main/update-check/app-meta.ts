@@ -10,18 +10,6 @@ export const GITHUB_REPO = {
 
 const { owner, name } = GITHUB_REPO;
 
-export function githubRepoUrl(): string {
-  return `https://github.com/${owner}/${name}`;
-}
-
-export function githubReleasesUrl(): string {
-  return `${githubRepoUrl()}/releases`;
-}
-
 export function githubLatestReleaseApiUrl(): string {
   return `https://api.github.com/repos/${owner}/${name}/releases/latest`;
-}
-
-export function licenseUrl(): string {
-  return `${githubRepoUrl()}/blob/main/LICENSE`;
 }

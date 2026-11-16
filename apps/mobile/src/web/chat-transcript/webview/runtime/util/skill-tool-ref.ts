@@ -17,11 +17,7 @@ const REF_ACTIONS: Record<string, number> = {
   edit: 1,
 };
 
-export function resolveSkillToolRefFromInput(
-  name: string,
-  input: Record<string, unknown> | null | undefined,
-  projectId?: string,
-): SkillRefMeta | null {
+export function resolveSkillToolRefFromInput(name: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillRefMeta | null {
   if (name !== SKILL_TOOL_NAME) return null;
   const action = input && input.action;
   if (typeof action !== 'string' || !REF_ACTIONS[action]) return null;
@@ -30,12 +26,7 @@ export function resolveSkillToolRefFromInput(
   const rawDomain = input && input.domain;
   // domain 缺省：write/edit 补工具同款默认 project；read 缺省读生效副本，
   // 实际命中域只有工具输出知道——返回 null，等行数据透传的 skillRef。
-  const domain =
-    rawDomain === 'global' || rawDomain === 'project'
-      ? rawDomain
-      : action === 'read'
-      ? null
-      : 'project';
+  const domain = rawDomain === 'global' || rawDomain === 'project' ? rawDomain : action === 'read' ? null : 'project';
   if (domain == null) return null;
   return {
     domain,
@@ -48,14 +39,7 @@ export function resolveSkillToolRefFromInput(
  * 解析卡片跳转三元组：优先行数据透传的 skillRef（read 缺省域的命中结果），
  * 否则从 tool_use 输入解析（write/edit；pending 的 read 缺省域解析不出）。
  */
-export function skillToolRef(
-  tool: ToolCallRow,
-  projectId?: string,
-): SkillRefMeta | null {
+export function skillToolRef(tool: ToolCallRow, projectId?: string): SkillRefMeta | null {
   if (tool.skillRef != null) return tool.skillRef;
-  return resolveSkillToolRefFromInput(
-    tool.name || '',
-    tool.input || {},
-    projectId,
-  );
+  return resolveSkillToolRefFromInput(tool.name || '', tool.input || {}, projectId);
 }

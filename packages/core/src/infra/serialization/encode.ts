@@ -9,6 +9,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 
 /** Schema with optional wire encoder for {@link encode}. */
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type EncodableSchema<T> = ZodType<T> & {
   /** Wire encoder; not named `encode` to avoid clashing with Zod v4 `.encode()`. */
   readonly toWire?: (value: T) => Result<unknown, AppError>;

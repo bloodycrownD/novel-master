@@ -22,9 +22,7 @@ export async function handlePreferencesGetLlmStream(): Promise<
   }
 }
 
-export async function handlePreferencesSetLlmStream(
-  enabled: boolean,
-): Promise<IpcResult<void>> {
+export async function handlePreferencesSetLlmStream(enabled: boolean): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -53,9 +51,7 @@ export async function handlePreferencesGetSubagentStream(): Promise<
   }
 }
 
-export async function handlePreferencesSetSubagentStream(
-  enabled: boolean,
-): Promise<IpcResult<void>> {
+export async function handlePreferencesSetSubagentStream(enabled: boolean): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -84,9 +80,7 @@ export async function handlePreferencesGetThinkingContext(): Promise<
   }
 }
 
-export async function handlePreferencesSetThinkingContext(
-  enabled: boolean,
-): Promise<IpcResult<void>> {
+export async function handlePreferencesSetThinkingContext(enabled: boolean): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。

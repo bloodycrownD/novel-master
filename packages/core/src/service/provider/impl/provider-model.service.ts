@@ -11,12 +11,7 @@ import { Result } from "@/errors/either.js";
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";
 import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
-import {
-  applySavedModelSettingsPatch,
-  savedModelContextWindowTokens,
-  savedModelTokenCounterMode,
-  type SavedModelSettingsPatch,
-} from "@/domain/provider/model/saved-model-settings.js";
+import { applySavedModelSettingsPatch, savedModelContextWindowTokens, savedModelTokenCounterMode, type SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
 import { assertSavedModelSettingsPersistable } from "@/domain/provider/model/saved-model-settings-from-json.js";
 import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
@@ -32,7 +27,7 @@ import { normalizeVendorModelId } from "@/domain/provider/logic/application-mode
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";
 
-export interface DefaultProviderModelServiceDeps {
+interface DefaultProviderModelServiceDeps {
   readonly providers: ProviderService;
   readonly providerRepo: ProviderRepository;
   readonly suggestions: ModelSuggestionRepository;
@@ -42,25 +37,8 @@ export interface DefaultProviderModelServiceDeps {
   readonly conn: TdbcConnection;
 }
 
-function resolvePersistedModelName(
-  vendorModelId: string,
-  modelName?: string
-): Result<string, AppError> {
-  if (modelName === undefined) {
-    return Result.ok(vendorModelId);
-  }
-  const trimmed = modelName.trim();
-  if (trimmed.length === 0) {
-    return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" }));
-  }
-  return Result.ok(trimmed);
-}
-
 /** 解包 domain 的 Result，保持 service 对 app 的 AppError 契约（五期门⑦走返回值）。 */
-async function requireSavedModel(
-  savedModelId: string,
-  savedModels: SavedModelRepository
-): Promise<Result<SavedModel, AppError>> {
+async function requireSavedModel(savedModelId: string, savedModels: SavedModelRepository): Promise<Result<SavedModel, AppError>> {
   const asserted = await assertSavedModelUuid(savedModelId, savedModels);
   if (!asserted.ok) {
     return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: asserted.error.message, modelId: savedModelId }));
@@ -90,11 +68,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     }
     const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
-    const result = await adapter.listModels({
-      baseUrl: provider.baseUrl,
-      apiKey,
-      extraHeaders: provider.headers,
-    });
+    const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers });
 
     const seen = new Set<string>();
     for (const m of result.models) {
@@ -112,28 +86,19 @@ export class DefaultProviderModelService implements ProviderModelService {
     return Result.ok(undefined);
   }
 
-  async save(
-    providerId: string,
-    vendorModelId: string,
-    modelName?: string
-  ): Promise<Result<SavedModel, AppError>> {
+  async save(providerId: string, vendorModelId: string, modelName?: string): Promise<Result<SavedModel, AppError>> {
     const got = await this.deps.providers.get(providerId);
     if (!got.ok) return Result.err(got.error);
-    const normalizedVendorModelId = normalizeVendorModelId(
-      providerId,
-      vendorModelId
-    );
-    const persistedModelName = resolvePersistedModelName(
-      normalizedVendorModelId,
-      modelName
-    );
-    if (!persistedModelName.ok) return Result.err(persistedModelName.error);
+    const normalizedVendorModelId = normalizeVendorModelId(providerId, vendorModelId);
+    const trimmedModelName = modelName?.trim();
+    if (trimmedModelName != null && trimmedModelName.length === 0) return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" }));
+    const persistedModelName = trimmedModelName ?? normalizedVendorModelId;
     const now = Date.now();
     const model: SavedModel = {
       id: randomUUID(),
       providerId,
       vendorModelId: normalizedVendorModelId,
-      modelName: persistedModelName.value,
+      modelName: persistedModelName,
       settings: defaultSavedModelSettings(normalizedVendorModelId),
       createdAtMs: now,
       updatedAtMs: now,
@@ -142,6 +107,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     return Result.ok(model);
   }
 
+  /** nm-style: keep-public — ProviderModelService 端口 create 兼容别名（save 的旧签名），120 处调用点按端口契约消费。 */
   async create(providerId: string, vendorModelId: string): Promise<Result<SavedModel, AppError>> {
     return this.save(providerId, vendorModelId);
   }
@@ -154,14 +120,8 @@ export class DefaultProviderModelService implements ProviderModelService {
     return Result.ok(listed.value);
   }
 
-  async editSaved(
-    savedModelId: string,
-    modelName?: string
-  ): Promise<Result<SavedModel, AppError>> {
-    const found = await requireSavedModel(
-      savedModelId,
-      this.deps.savedModels
-    );
+  async editSaved(savedModelId: string, modelName?: string): Promise<Result<SavedModel, AppError>> {
+    const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
     let nextModelName = existing.modelName;
@@ -185,10 +145,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   }
 
   async deleteSaved(savedModelId: string): Promise<Result<void, AppError>> {
-    const found = await requireSavedModel(
-      savedModelId,
-      this.deps.savedModels
-    );
+    const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
     const refs = await findSavedModelReferences(this.deps.conn, savedModelId);
@@ -202,36 +159,20 @@ export class DefaultProviderModelService implements ProviderModelService {
     return Result.ok(undefined);
   }
 
-  async updateSettings(
-    savedModelId: string,
-    patch: SavedModelSettingsPatch
-  ): Promise<Result<SavedModel, AppError>> {
-    const found = await requireSavedModel(
-      savedModelId,
-      this.deps.savedModels
-    );
+  async updateSettings(savedModelId: string, patch: SavedModelSettingsPatch): Promise<Result<SavedModel, AppError>> {
+    const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
 
-    if (
-      patch.contextWindowTokens != null &&
-      (!Number.isInteger(patch.contextWindowTokens) ||
-        patch.contextWindowTokens <= 0)
-    ) {
+    if (patch.contextWindowTokens != null && (!Number.isInteger(patch.contextWindowTokens) || patch.contextWindowTokens <= 0)) {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "contextWindowTokens must be a positive integer", modelId: savedModelId, providerId: existing.providerId }));
     }
 
-    if (
-      patch.tokenCounterMode != null &&
-      !isValidTokenCounterModePref(patch.tokenCounterMode)
-    ) {
+    if (patch.tokenCounterMode != null && !isValidTokenCounterModePref(patch.tokenCounterMode)) {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId }));
     }
 
-    const mergedSettings = applySavedModelSettingsPatch(
-      existing.settings,
-      patch
-    );
+    const mergedSettings = applySavedModelSettingsPatch(existing.settings, patch);
     const persistable = assertSavedModelSettingsPersistable(mergedSettings);
     if (!persistable.ok) {
       return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: persistable.error.message }));
@@ -248,10 +189,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   }
 
   async resetContextWindowToDefault(savedModelId: string): Promise<Result<SavedModel, AppError>> {
-    const found = await requireSavedModel(
-      savedModelId,
-      this.deps.savedModels
-    );
+    const found = await requireSavedModel(savedModelId, this.deps.savedModels);
     if (!found.ok) return Result.err(found.error);
     const existing = found.value;
     const defaults = defaultSavedModelSettings(existing.vendorModelId);

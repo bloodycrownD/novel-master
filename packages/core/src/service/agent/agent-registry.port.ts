@@ -34,11 +34,7 @@ export interface AgentRegistryService {
    * 已知失败走返回值（四期门⑦）：schema / 校验 / 重名等域校验失败收
    * `Result.err`；repository 层未知异常仍抛，由边界统一收口。
    */
-  upsert(
-    agentId: string,
-    def: AgentDefinition,
-    options?: ValidateAgentDefinitionOptions
-  ): Promise<Result<void, AppError>>;
+  upsert(agentId: string, def: AgentDefinition, options?: ValidateAgentDefinitionOptions): Promise<Result<void, AppError>>;
   /**
    * 按 RFC 7396 patch 更新已有 agent：读当前定义 → 合并 → 走 upsert 校验落库。
    *

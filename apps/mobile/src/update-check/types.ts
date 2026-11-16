@@ -7,7 +7,7 @@ export type LatestRelease = {
   readonly body: string;
 };
 
-export type UpdateCheckStatus = 'up-to-date' | 'update-available';
+type UpdateCheckStatus = 'up-to-date' | 'update-available';
 
 export type UpdateCheckData = {
   readonly localVersion: string;

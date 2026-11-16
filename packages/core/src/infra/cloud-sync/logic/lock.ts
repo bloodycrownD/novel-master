@@ -22,10 +22,7 @@ export function isEffectiveLock(lock: CloudSyncLock | null): boolean {
 /**
  * 当前设备是否可抢占锁：无有效锁，或有效锁持有人为本机。
  */
-export function canAcquireLock(
-  lock: CloudSyncLock | null,
-  deviceId: string
-): boolean {
+export function canAcquireLock(lock: CloudSyncLock | null, deviceId: string): boolean {
   if (!isEffectiveLock(lock)) {
     return true;
   }
@@ -35,10 +32,7 @@ export function canAcquireLock(
 /**
  * 为本机构建新租约锁。
  */
-export function buildLease(
-  deviceId: string,
-  leaseSeconds: number = DEFAULT_LEASE_SECONDS
-): CloudSyncLock {
+export function buildLease(deviceId: string, leaseSeconds: number = DEFAULT_LEASE_SECONDS): CloudSyncLock {
   const now = Date.now();
   return {
     holderDeviceId: deviceId,
@@ -50,10 +44,7 @@ export function buildLease(
 /**
  * 续租：保留持有人与获取时间，将 `expiresAt` 延长至当前时刻 + `leaseSeconds`。
  */
-export function renewLease(
-  lock: CloudSyncLock,
-  leaseSeconds: number = DEFAULT_LEASE_SECONDS
-): CloudSyncLock {
+export function renewLease(lock: CloudSyncLock, leaseSeconds: number = DEFAULT_LEASE_SECONDS): CloudSyncLock {
   return {
     holderDeviceId: lock.holderDeviceId,
     acquiredAt: lock.acquiredAt,

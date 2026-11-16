@@ -11,7 +11,7 @@ import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/prov
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
-import { countWebTokenizerMessages, wrapSerializedPromptAsSystemMessage, type OpenAiStyleMessage } from "../logic/count-openai-style-message.js";
+import { countWebTokenizerMessages, wrapSerializedPromptAsSystemMessage } from "../logic/count-openai-style-message.js";
 import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
@@ -95,6 +95,7 @@ export class WebTokenizerCounter implements TokenCounter {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
+  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
@@ -122,20 +123,8 @@ export class WebTokenizerCounter implements TokenCounter {
   }
 }
 
-/** Claude family alias — same web tokenizer path as ST `/openai/count?model=claude`. */
-export class ClaudeWebTokenCounter extends WebTokenizerCounter {
-  constructor() {
-    super("claude");
-  }
-}
-
 export async function countWebFamilyPrompt(family: TokenizerFamily, serialized: string): Promise<TokenCountEstimate> {
   const counter = new WebTokenizerCounter(family as WebTokenizerFamily);
   const count = await counter.countSerializedPrompt(serialized);
   return { count, estimated: counter.failedLoad };
-}
-
-/** @internal test helper */
-export function messagesToOpenAiStyle(messages: readonly { role: string; content: string }[]): OpenAiStyleMessage[] {
-  return messages.map((m) => ({ role: m.role, content: m.content }));
 }

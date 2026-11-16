@@ -7,11 +7,7 @@
  * 各业务域的错误类型（VfsZipError / AppError 等）通过
  * build*Error 回调注入，避免这层反向依赖具体业务。
  */
-import {
-  isKnownType,
-  keepLocalCopy,
-  saveDocuments,
-} from '@react-native-documents/picker';
+import {isKnownType, keepLocalCopy, saveDocuments} from '@react-native-documents/picker';
 import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 import {base64ToBytes, blobFs, localUriToFsPath, toFileUri} from './rn-file-io';
 
@@ -27,9 +23,7 @@ const DEFAULT_PICKED_FILE_NAME = 'import.bin';
 export function knownTypesForExtension(ext: string): string[] {
   try {
     const info = isKnownType({kind: 'extension', value: ext});
-    return [info.mimeType].filter(
-      (value): value is string => typeof value === 'string' && value.length > 0,
-    );
+    return [info.mimeType].filter((value): value is string => typeof value === 'string' && value.length > 0);
   } catch {
     return [];
   }
@@ -48,20 +42,12 @@ export interface ExportViaPickerOptions {
  * 把内容经系统「另存为」对话框导出：先写 CacheDir 临时文件，再弹保存 UI；
  * 无论成功、取消还是失败，都在 finally 里清理临时文件，避免污染缓存。
  */
-export async function exportBytesViaDocumentPicker(
-  options: ExportViaPickerOptions,
-): Promise<'saved' | 'cancelled'> {
+export async function exportBytesViaDocumentPicker(options: ExportViaPickerOptions): Promise<'saved' | 'cancelled'> {
   const fs = blobFs();
   const tmpPath = `${fs.dirs.CacheDir}/${options.fileName}`;
   await options.write(tmpPath);
   try {
-    const [result] =
-      (await saveDocuments({
-        sourceUris: [toFileUri(tmpPath)],
-        mimeType: options.mimeType,
-        fileName: options.fileName,
-        copy: options.copy ?? true,
-      })) ?? [];
+    const [result] = (await saveDocuments({sourceUris: [toFileUri(tmpPath)], mimeType: options.mimeType, fileName: options.fileName, copy: options.copy ?? true})) ?? [];
     if (result?.error) {
       throw new Error(result.error);
     }
@@ -89,7 +75,7 @@ export interface PickLocalFileOptions {
   readonly buildCopyError?: (copyError: string | undefined) => Error;
 }
 
-export interface PickedLocalFile {
+interface PickedLocalFile {
   readonly fsPath: string;
   /**
    * **原件名**（所选项自带名；为空时退到 `fallbackLocalFileName`，再无则 undefined）。
@@ -102,31 +88,17 @@ export interface PickedLocalFile {
 }
 
 /** 选一个文档并拷入 caches 目录，返回本地 fs 路径；用户取消返回 null。 */
-export async function pickToLocalPath(
-  options: PickLocalFileOptions,
-): Promise<PickedLocalFile | null> {
+export async function pickToLocalPath(options: PickLocalFileOptions): Promise<PickedLocalFile | null> {
   const file = await pickSingleDocument({type: [...options.mimeTypes]});
   if (file == null) {
     return null;
   }
   options.assertFileName?.(file.name);
-  const originalName =
-    typeof file.name === 'string' && file.name.trim() !== ''
-      ? file.name
-      : options.fallbackLocalFileName;
-  const fileName =
-    options.localFileName ??
-    originalName ??
-    DEFAULT_PICKED_FILE_NAME;
-  const [copyResult] = await keepLocalCopy({
-    files: [{uri: file.uri, fileName}],
-    destination: 'cachesDirectory',
-  });
+  const originalName = typeof file.name === 'string' && file.name.trim() !== '' ? file.name : options.fallbackLocalFileName;
+  const fileName = options.localFileName ?? originalName ?? DEFAULT_PICKED_FILE_NAME;
+  const [copyResult] = await keepLocalCopy({files: [{uri: file.uri, fileName}], destination: 'cachesDirectory'});
   if (copyResult.status !== 'success') {
-    throw (
-      options.buildCopyError?.(copyResult.copyError) ??
-      new Error(copyResult.copyError ?? '无法读取所选文件')
-    );
+    throw options.buildCopyError?.(copyResult.copyError) ?? new Error(copyResult.copyError ?? '无法读取所选文件');
   }
   return {
     fsPath: localUriToFsPath(copyResult.localUri),
@@ -149,9 +121,7 @@ export interface PickAndReadOptions extends PickLocalFileOptions {
  * 体积，超限不进读取（避免整读巨型文件触发原生 OOM）；stat 失败容错放行，
  * 由 core 层的 bytes.length 闸门兜底。
  */
-export async function pickAndReadBytes(
-  options: PickAndReadOptions,
-): Promise<Uint8Array | null> {
+export async function pickAndReadBytes(options: PickAndReadOptions): Promise<Uint8Array | null> {
   const picked = await pickToLocalPath(options);
   if (picked == null) {
     return null;
@@ -161,7 +131,7 @@ export async function pickAndReadBytes(
 }
 
 /** `pickAndReadFileWithMeta` 的返回值：字节 + 原件名（fileName 非空保证）。 */
-export interface PickedFileWithMeta {
+interface PickedFileWithMeta {
   readonly bytes: Uint8Array;
   /** 原件名；无自带名时退 `fallbackLocalFileName`，再无则 `import.bin`。 */
   readonly fileName: string;
@@ -177,9 +147,7 @@ export interface PickedFileWithMeta {
  * `maxBytes` 预检约定与 `pickAndReadBytes` 完全一致：两者必须成对传或都不传，
  * 只传其一则预检整体不生效。
  */
-export async function pickAndReadFileWithMeta(
-  options: PickAndReadOptions,
-): Promise<PickedFileWithMeta | null> {
+export async function pickAndReadFileWithMeta(options: PickAndReadOptions): Promise<PickedFileWithMeta | null> {
   const picked = await pickToLocalPath(options);
   if (picked == null) {
     return null;
@@ -193,10 +161,7 @@ export async function pickAndReadFileWithMeta(
 }
 
 /** stat 预检：超过 maxBytes 抛业务错误；stat 失败（权限/时序等）放行走原流程。 */
-async function assertLocalFileSizeWithin(
-  fsPath: string,
-  options: PickAndReadOptions,
-): Promise<void> {
+async function assertLocalFileSizeWithin(fsPath: string, options: PickAndReadOptions): Promise<void> {
   if (options.maxBytes == null || options.buildTooLargeError == null) {
     return;
   }
@@ -207,19 +172,13 @@ async function assertLocalFileSizeWithin(
   } catch {
     return;
   }
-  if (
-    stat != null &&
-    typeof stat.size === 'number' &&
-    stat.size > options.maxBytes
-  ) {
+  if (stat != null && typeof stat.size === 'number' && stat.size > options.maxBytes) {
     throw options.buildTooLargeError(stat.size);
   }
 }
 
 /** 选一个文档并以 UTF-8 文本读出；用户取消返回 null。 */
-export async function pickAndReadText(
-  options: PickLocalFileOptions,
-): Promise<string | null> {
+export async function pickAndReadText(options: PickLocalFileOptions): Promise<string | null> {
   const picked = await pickToLocalPath(options);
   if (picked == null) {
     return null;
@@ -227,10 +186,7 @@ export async function pickAndReadText(
   return blobFs().readFile(picked.fsPath, 'utf8');
 }
 
-async function readLocalFileBytes(
-  fsPath: string,
-  buildMissingError?: (fsPath: string) => Error,
-): Promise<Uint8Array> {
+async function readLocalFileBytes(fsPath: string, buildMissingError?: (fsPath: string) => Error): Promise<Uint8Array> {
   const fs = blobFs();
   const exists = await fs.exists(fsPath);
   if (!exists) {

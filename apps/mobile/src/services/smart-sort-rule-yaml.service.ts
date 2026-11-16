@@ -11,9 +11,7 @@ import {Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {exportYamlFile, importYamlFile} from './yaml-shared';
 
-export async function exportSmartSortRuleYaml(
-  runtime: MobileNovelMasterRuntime,
-): Promise<'saved' | 'cancelled'> {
+export async function exportSmartSortRuleYaml(runtime: MobileNovelMasterRuntime): Promise<'saved' | 'cancelled'> {
   const doc = await runtime.smartSortRule.exportRules();
   const yaml = stringifyText(doc, 'yaml');
   return exportYamlFile(yaml, 'smart-sort-rules.yaml');
@@ -28,22 +26,21 @@ export async function exportSmartSortRuleYaml(
  *
  * @returns 导入成功后的规则条数（取消选择时返回 null）。
  */
-export async function importSmartSortRuleYaml(
-    runtime: MobileNovelMasterRuntime,
-): Promise<Result<number | null, Error>> {
-    let count: number | null = null;
-    const result = await importYamlFile(async yaml => {
-        try {
-            const raw = parseText(yaml, 'yaml');
-            const rules = await runtime.smartSortRule.importRules(raw);
-            if (!rules.ok) return Result.err(normalizeSmartSortImportError(rules.error));
-            count = rules.value.length;
-            return Result.ok(undefined);
-        } catch (error) {
-            // 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据在 core。
-            throw normalizeSmartSortImportError(error);
-        }
-    });
-    if (!result.ok) return Result.err(result.error);
-    return Result.ok(count);
+export async function importSmartSortRuleYaml(runtime: MobileNovelMasterRuntime): Promise<Result<number | null, Error>> {
+  let count: number | null = null;
+  const consumeYaml = async (yaml: string): Promise<Result<void, Error>> => {
+    try {
+      const raw = parseText(yaml, 'yaml');
+      const rules = await runtime.smartSortRule.importRules(raw);
+      if (!rules.ok) return Result.err(normalizeSmartSortImportError(rules.error));
+      count = rules.value.length;
+      return Result.ok(undefined);
+    } catch (error) {
+      // 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据在 core。
+      throw normalizeSmartSortImportError(error);
+    }
+  };
+  const result = await importYamlFile(consumeYaml);
+  if (!result.ok) return Result.err(result.error);
+  return Result.ok(count);
 }

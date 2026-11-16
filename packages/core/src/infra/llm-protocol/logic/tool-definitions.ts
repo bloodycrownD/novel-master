@@ -14,10 +14,7 @@ import { zodToJsonSchema } from "@/infra/serialization/zod-to-json-schema.js";
  * &#35013;&#37197;&#26399;&#35843;&#29992;&#65306;&#27599;&#20010;&#24037;&#20855;&#30340; `description` &#26159; `(ctx) => string` &#20989;&#25968;&#65292;
  * &#36825;&#37324;&#25226; ctx &#20256;&#36827;&#21435;&#27714;&#20540;&#25104;&#26368;&#32456;&#23383;&#31526;&#20018;&#12290;
  */
-export function toolsFromRegistry<Ctx>(
-  registry: ToolRegistry<Ctx>,
-  ctx: Ctx
-): LlmToolDefinition[] {
+export function toolsFromRegistry<Ctx>(registry: ToolRegistry<Ctx>, ctx: Ctx): LlmToolDefinition[] {
   return registry.list().map((name) => {
     const tool = registry.get(name)!;
     return {

@@ -4,22 +4,19 @@
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-export const AGENT_PICKER_EMPTY_MESSAGE =
-  '暂无智能体。请先在「智能体配置」中创建。';
+export const AGENT_PICKER_EMPTY_MESSAGE = '暂无智能体。请先在「智能体配置」中创建。';
 
 export interface AgentPickerRow {
   readonly agentId: string;
   readonly label: string;
 }
 
-export type AgentPickerRows = {
+type AgentPickerRows = {
   rows: AgentPickerRow[];
   currentId: string | undefined;
 };
 
-async function loadAgentRows(
-  runtime: MobileNovelMasterRuntime,
-): Promise<AgentPickerRow[]> {
+async function loadAgentRows(runtime: MobileNovelMasterRuntime): Promise<AgentPickerRow[]> {
   const ids = await runtime.agentRegistry.listAgentIds();
   const rows: AgentPickerRow[] = [];
   for (const agentId of ids) {
@@ -37,9 +34,7 @@ async function loadAgentRows(
 }
 
 /** 失败沿 `Result.err` 接力（错误通道迁移四期），调用方弹窗 formatError 收口。 */
-export async function loadAgentPickerRows(
-  runtime: MobileNovelMasterRuntime,
-): Promise<Result<AgentPickerRows, AppError>> {
+export async function loadAgentPickerRows(runtime: MobileNovelMasterRuntime): Promise<Result<AgentPickerRows, AppError>> {
   const explicitId = await runtime.state.getCurrentAgentId();
   if (!explicitId.ok) return Result.err(explicitId.error);
   const currentId = explicitId.value ?? undefined;
@@ -47,19 +42,12 @@ export async function loadAgentPickerRows(
   return Result.ok({rows, currentId});
 }
 
-export function isAgentPickerRowSelected(
-  agentId: string,
-  index: number,
-  currentId: string | undefined,
-): boolean {
+export function isAgentPickerRowSelected(agentId: string, index: number, currentId: string | undefined): boolean {
   return agentId === currentId || (!currentId && index === 0);
 }
 
 /** Persists workspace current agent pointer. */
-export async function selectWorkspaceAgent(
-  runtime: MobileNovelMasterRuntime,
-  agentId: string,
-): Promise<void> {
+export async function selectWorkspaceAgent(runtime: MobileNovelMasterRuntime, agentId: string): Promise<void> {
   await runtime.state.setCurrentAgentId(agentId);
 }
 
@@ -70,10 +58,7 @@ export async function selectWorkspaceAgent(
  * currentId 直接取 `sessionConfig.agentId`。
  * 失败沿 `Result.err` 接力（错误通道迁移四期），调用方弹窗 formatError 收口。
  */
-export async function loadSessionAgentPickerRows(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-): Promise<Result<AgentPickerRows, AppError>> {
+export async function loadSessionAgentPickerRows(runtime: MobileNovelMasterRuntime, sessionId: string): Promise<Result<AgentPickerRows, AppError>> {
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
   if (!sessionConfig.ok) return Result.err(sessionConfig.error);
   const currentId = sessionConfig.value.agentId;
@@ -87,11 +72,7 @@ export async function loadSessionAgentPickerRows(
  * 与 {@link selectWorkspaceAgent} 不同：这里只替换单个会话的 agentId，
  * 不动 workspace 全局指针。
  */
-export async function selectSessionAgent(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  agentId: string,
-): Promise<void> {
+export async function selectSessionAgent(runtime: MobileNovelMasterRuntime, sessionId: string, agentId: string): Promise<void> {
   await runtime.sessions.updateSessionAgentConfig(sessionId, {
     agentId,
   });

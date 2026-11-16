@@ -51,7 +51,7 @@ export interface ChatServicesSessionDeps {
  * 链——token 标签、prompt input 等全量 listBySession 的消费方自动受益）；
  * 缺省不传 → repository 直通同步 map，与现状逐字节等价（desktop/cli 零影响）。
  */
-export interface ChatServicesOptions {
+interface ChatServicesOptions {
   readonly yieldFn?: () => Promise<void>;
 }
 
@@ -63,11 +63,7 @@ export interface ChatServicesOptions {
  *   projects/messages 不消费此参数。
  * @param options - 可选装配项（yieldFn 列表解析让步）；缺省 = 现状行为。
  */
-export function createChatServices(
-  conn: TdbcConnection,
-  sessionDeps: ChatServicesSessionDeps,
-  options?: ChatServicesOptions
-): ChatServiceBundle {
+export function createChatServices(conn: TdbcConnection, sessionDeps: ChatServicesSessionDeps, options?: ChatServicesOptions): ChatServiceBundle {
   const projectRepo = new SqliteProjectRepository(conn);
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn, options?.yieldFn);
@@ -113,10 +109,7 @@ export function createProjectService(conn: TdbcConnection): ProjectService {
 }
 
 /** Creates a {@link SessionService} instance. */
-export function createSessionService(
-  conn: TdbcConnection,
-  sessionDeps: ChatServicesSessionDeps
-): SessionService {
+export function createSessionService(conn: TdbcConnection, sessionDeps: ChatServicesSessionDeps): SessionService {
   return createChatServices(conn, sessionDeps).sessions;
 }
 
@@ -126,9 +119,7 @@ export function createMessageService(conn: TdbcConnection): MessageService {
 }
 
 /** Creates a {@link UsageStatsService} instance. */
-export function createUsageStatsService(
-  conn: TdbcConnection
-): UsageStatsService {
+export function createUsageStatsService(conn: TdbcConnection): UsageStatsService {
   return createChatServices(conn, _stubSessionDeps()).usageStats;
 }
 

@@ -4,7 +4,7 @@
  */
 
 /** RN WebView 注入的 postMessage 桥（宿主 API）。 */
-export type ReactNativeWebViewBridge = {
+type ReactNativeWebViewBridge = {
   postMessage: (message: string) => void;
 };
 
@@ -20,11 +20,7 @@ declare global {
  * @param payload  负载（可选）
  * @param bridgeV  调用方 webview 的 BRIDGE_V，写入消息头 `v`
  */
-export function post(
-  type: string,
-  payload: Record<string, unknown> | undefined,
-  bridgeV: number,
-): void {
+export function post(type: string, payload: Record<string, unknown> | undefined, bridgeV: number): void {
   const msg = JSON.stringify({
     v: bridgeV,
     type: type,
@@ -36,10 +32,7 @@ export function post(
 }
 
 /** 绑定固定 BRIDGE_V 的 post（各 webview 域一行接入，消息头 `v` 恒为 bridgeV）。 */
-export type BoundPost = (
-  type: string,
-  payload?: Record<string, unknown>,
-) => void;
+type BoundPost = (type: string, payload?: Record<string, unknown>) => void;
 
 export function createBoundPost(bridgeV: number): BoundPost {
   return (type, payload) => {

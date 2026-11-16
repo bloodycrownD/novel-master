@@ -13,7 +13,6 @@ export {
   getRnEncoding,
   getDefaultRnEncoding,
   countTextWithDefaultEncoding,
-  DEFAULT_RN_ENCODING_NAME,
   type RnEncodingName,
   type RnTokenEncoding,
 } from "./impl/encoding-cache.js";

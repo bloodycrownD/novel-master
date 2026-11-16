@@ -33,7 +33,7 @@ const MERMAID_BAKE_TRANSITION_MS = 180;
 /** 过渡后烘焙的兜底定时器（略宽于过渡时长，防 transitionend 丢失）。 */
 const MERMAID_BAKE_FALLBACK_MS = 200;
 
-export type MermaidViewerOverlayProps = {
+type MermaidViewerOverlayProps = {
   svgClone: Element;
   onClose: () => void;
 };
@@ -50,10 +50,7 @@ type PinchSession = {
   basePan: MermaidViewerPan;
 };
 
-export function MermaidViewerOverlay({
-  svgClone,
-  onClose,
-}: MermaidViewerOverlayProps) {
+export function MermaidViewerOverlay({svgClone, onClose}: MermaidViewerOverlayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const gesture = useRef<{scale: number; pan: MermaidViewerPan}>({
@@ -164,11 +161,7 @@ export function MermaidViewerOverlay({
    */
   const unbake = () => {
     const svg = svgRef.current;
-    if (
-      bakedTotalRef.current === MERMAID_VIEWER_MIN_SCALE ||
-      !svg ||
-      !hasViewBoxRef.current
-    ) {
+    if (bakedTotalRef.current === MERMAID_VIEWER_MIN_SCALE || !svg || !hasViewBoxRef.current) {
       return;
     }
     svg.style.maxWidth = '';
@@ -209,10 +202,7 @@ export function MermaidViewerOverlay({
     };
     pendingBakeFinish.current = finish;
     viewport.addEventListener('transitionend', finish);
-    pendingBakeTimer.current = window.setTimeout(
-      finish,
-      MERMAID_BAKE_FALLBACK_MS,
-    );
+    pendingBakeTimer.current = window.setTimeout(finish, MERMAID_BAKE_FALLBACK_MS);
   };
 
   useEffect(() => {
@@ -238,19 +228,12 @@ export function MermaidViewerOverlay({
     // 内缩居中，基准渲染尺寸 = fitRatio × viewBox 尺寸（不是盒本身）；
     // 无 viewBox 时盒即内容尺寸（该分支不烘焙，仅作 clamp 布局基准）。
     const rect = svg.getBoundingClientRect();
-    const parts = viewBox
-      ? viewBox
-          .trim()
-          .split(/[\s,]+/)
-          .map(Number)
-      : null;
-    const viewBoxValid =
-      !!parts &&
-      parts.length === 4 &&
-      Number.isFinite(parts[2]) &&
-      parts[2] > 0 &&
-      Number.isFinite(parts[3]) &&
-      parts[3] > 0;
+    let parts: number[] | null = null;
+    if (viewBox) {
+      const trimmedViewBox = viewBox.trim();
+      parts = trimmedViewBox.split(/[\s,]+/).map(Number);
+    }
+    const viewBoxValid = !!parts && parts.length === 4 && Number.isFinite(parts[2]) && parts[2] > 0 && Number.isFinite(parts[3]) && parts[3] > 0;
     if (viewBoxValid && rect.width > 0 && rect.height > 0) {
       const vbWidth = parts![2];
       const vbHeight = parts![3];
@@ -284,8 +267,7 @@ export function MermaidViewerOverlay({
       const a = event.touches[0];
       const b = event.touches[1];
       pinch.current = {
-        startDist:
-          Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
+        startDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
         baseScale: gesture.current.scale,
         basePan: gesture.current.pan,
       };
@@ -310,17 +292,10 @@ export function MermaidViewerOverlay({
       const session = pinch.current;
       const {cx, cy, w, h} = stageMetrics();
       const layout = layoutSize();
-      gesture.current = computeMermaidViewerPinch(
-        {scale: session.baseScale, pan: session.basePan},
-        session.startDist,
-        Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
-        (a.clientX + b.clientX) / 2 - cx,
-        (a.clientY + b.clientY) / 2 - cy,
-        layout.width,
-        layout.height,
-        w,
-        h,
-      );
+      const pinchStart = {scale: session.baseScale, pan: session.basePan};
+      const pointerDistance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const pinchFocus = {x: (a.clientX + b.clientX) / 2 - cx, y: (a.clientY + b.clientY) / 2 - cy};
+      gesture.current = computeMermaidViewerPinch(pinchStart, session.startDist, pointerDistance, pinchFocus, layout, {width: w, height: h});
       applyTransform();
       moved.current = true;
       return;
@@ -335,13 +310,7 @@ export function MermaidViewerOverlay({
       }
       const {w, h} = stageMetrics();
       const layout = layoutSize();
-      gesture.current.pan = clampMermaidViewerPan(
-        {x: session.basePan.x + dx, y: session.basePan.y + dy},
-        layout.width * gesture.current.scale,
-        layout.height * gesture.current.scale,
-        w,
-        h,
-      );
+      gesture.current.pan = clampMermaidViewerPan({x: session.basePan.x + dx, y: session.basePan.y + dy}, layout.width * gesture.current.scale, layout.height * gesture.current.scale, w, h);
       applyTransform();
     }
   };
@@ -378,11 +347,7 @@ export function MermaidViewerOverlay({
     }
     const now = Date.now();
     // 档位判断用绝对总倍率：烘焙态 gesture.scale=1 不代表回到 fit 档
-    const decision = resolveMermaidViewerDoubleTap(
-      lastTapAt.current,
-      now,
-      bakedTotalRef.current * gesture.current.scale,
-    );
+    const decision = resolveMermaidViewerDoubleTap(lastTapAt.current, now, bakedTotalRef.current * gesture.current.scale);
     lastTapAt.current = now;
     if (decision.kind !== 'toggle') {
       return;
@@ -392,13 +357,7 @@ export function MermaidViewerOverlay({
     const layout = layoutSize();
     gesture.current = {
       scale: decision.scale,
-      pan: clampMermaidViewerPan(
-        {x: 0, y: 0},
-        layout.width * decision.scale,
-        layout.height * decision.scale,
-        w,
-        h,
-      ),
+      pan: clampMermaidViewerPan({x: 0, y: 0}, layout.width * decision.scale, layout.height * decision.scale, w, h),
     };
     const viewport = viewportRef.current;
     if (viewport) {
@@ -422,23 +381,10 @@ export function MermaidViewerOverlay({
 
   return (
     <div className="mermaid-fullscreen-backdrop">
-      <div
-        ref={stageRef}
-        className="mermaid-fullscreen-stage"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
-        onClick={onStageClick}
-      >
+      <div ref={stageRef} className="mermaid-fullscreen-stage" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} onClick={onStageClick}>
         <div ref={viewportRef} className="mermaid-fullscreen-viewport" />
       </div>
-      <button
-        type="button"
-        className="mermaid-fullscreen-close"
-        aria-label="关闭"
-        onClick={onClose}
-      >
+      <button type="button" className="mermaid-fullscreen-close" aria-label="关闭" onClick={onClose}>
         ✕
       </button>
     </div>

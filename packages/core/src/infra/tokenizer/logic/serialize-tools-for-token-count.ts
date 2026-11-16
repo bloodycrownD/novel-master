@@ -29,9 +29,7 @@ import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.
 /**
  * 序列化 tools 段；`tools` 为空/未定义时返回空串（可直接拼接）。
  */
-export function serializeToolsForTokenCount(
-  tools?: readonly LlmToolDefinition[]
-): string {
+export function serializeToolsForTokenCount(tools?: readonly LlmToolDefinition[]): string {
   if (tools == null || tools.length === 0) {
     return "";
   }

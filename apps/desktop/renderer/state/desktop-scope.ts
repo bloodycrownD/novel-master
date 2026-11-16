@@ -10,7 +10,7 @@ import {
 } from "../ipc/client";
 import type { ScopeSnapshotDto } from "@shared/ipc-types";
 
-export type DesktopScopeSnapshot = ScopeSnapshotDto;
+type DesktopScopeSnapshot = ScopeSnapshotDto;
 
 function unwrap<T>(result: { ok: boolean; data?: T; error?: { message: string } }): T {
   if (!result.ok) {

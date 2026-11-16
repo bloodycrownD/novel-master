@@ -7,10 +7,7 @@
 import type { PersistentState } from "@novel-master/core";
 import { type AppError, Result } from "@novel-master/core/errors";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const value = flags.get(key);
   return typeof value === "string" ? value : undefined;
 }
@@ -33,9 +30,7 @@ export class CliScopeResolver {
     if (fromState.value != null && fromState.value !== "") {
       return Result.ok(fromState.value);
     }
-    throw new Error(
-      "Missing --project <id> (or run: nm project use --project <id>)",
-    );
+    throw new Error("Missing --project <id> (or run: nm project use --project <id>)");
   }
 
   /** Flag `--session` > `getCurrentSessionId()`. */
@@ -49,16 +44,19 @@ export class CliScopeResolver {
     if (fromState.value != null && fromState.value !== "") {
       return Result.ok(fromState.value);
     }
-    throw new Error(
-      "Missing --session <id> (or run: nm session use --session <id>)",
-    );
+    throw new Error("Missing --session <id> (or run: nm session use --session <id>)");
   }
 
   /** Resolves both project and session scope (session vfs, snapshot). */
-  async resolveProjectSession(flags: ReadonlyMap<string, string | true>): Promise<Result<{
-    projectId: string;
-    sessionId: string;
-  }, AppError>> {
+  async resolveProjectSession(flags: ReadonlyMap<string, string | true>): Promise<
+    Result<
+      {
+        projectId: string;
+        sessionId: string;
+      },
+      AppError
+    >
+  > {
     const project = await this.resolveProjectId(flags);
     if (!project.ok) return Result.err(project.error);
     const session = await this.resolveSessionId(flags);

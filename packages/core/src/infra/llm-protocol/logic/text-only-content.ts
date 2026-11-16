@@ -35,9 +35,7 @@ export function isTextOnlyHistory(messages: readonly ChatMessageData[]): boolean
 }
 
 /** Flatten chat history to a single user string (text blocks only). */
-export function chatMessagesToTextOnly(
-  messages: readonly ChatMessageData[]
-): Result<string, AppError> {
+export function chatMessagesToTextOnly(messages: readonly ChatMessageData[]): Result<string, AppError> {
   const parts: string[] = [];
   for (const msg of messages) {
     const body = blocksToTextOnly(msg.content.blocks);

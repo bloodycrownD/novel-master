@@ -1,41 +1,19 @@
 /**
  * RN WebView wrapper for VFS file edit — postMessage via CodeEditorBridge.
  */
-import React, {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from 'react';
-import {
-  Linking,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import React, {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
+import {Linking, StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import type {ThemeTokens} from '@/theme/tokens';
-import {
-  encodeHostToCodeEditor,
-  decodeCodeEditorToHost,
-  type CodeEditorSelection,
-  type CodeEditorTheme,
-  type HostToCodeEditorMessage,
-} from './CodeEditorBridge';
-import {
-  getCodeEditorPackageDirUri,
-  getCodeEditorUri,
-} from '@/webview-host/code-editor/uri';
+import {encodeHostToCodeEditor, decodeCodeEditorToHost, type CodeEditorSelection, type CodeEditorTheme, type HostToCodeEditorMessage} from './CodeEditorBridge';
+import {getCodeEditorPackageDirUri, getCodeEditorUri} from '@/webview-host/code-editor/uri';
 import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type CodeEditorWebViewProps = {
+type CodeEditorWebViewProps = {
   readonly value: string;
   readonly path: string;
   readonly onChange: (text: string) => void;
@@ -69,13 +47,7 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
   };
 }
 
-export const CodeEditorWebView = forwardRef<
-  CodeEditorWebViewHandle,
-  CodeEditorWebViewProps
->(function CodeEditorWebView(
-  {value, path, onChange, onSelectionChange, style, testID, onFocusChange},
-  ref,
-) {
+export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorWebViewProps>(function CodeEditorWebView({value, path, onChange, onSelectionChange, style, testID, onFocusChange}, ref) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   // 回环断路器（长按连删卡顿修，同 chat 侧 webTextRef/M1 纪律）：web 侧
@@ -113,30 +85,27 @@ export const CodeEditorWebView = forwardRef<
     });
   }, [postToWeb, tokens]);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      blur: () => {
-        postToWeb({v: 1, type: 'blur', payload: {}});
-      },
-      setText: (text: string, selection?: CodeEditorSelection) => {
-        postToWeb({
-          v: 1,
-          type: 'setDocument',
-          payload:
-            selection == null
-              ? {text, path}
-              : {
-                  text,
-                  path,
-                  selectionStart: selection.start,
-                  selectionEnd: selection.end,
-                },
-        });
-      },
-    }),
-    [postToWeb, path],
-  );
+  const createEditorHandle = () => ({
+    blur: () => {
+      postToWeb({v: 1, type: 'blur', payload: {}});
+    },
+    setText: (text: string, selection?: CodeEditorSelection) => {
+      postToWeb({
+        v: 1,
+        type: 'setDocument',
+        payload:
+          selection == null
+            ? {text, path}
+            : {
+                text,
+                path,
+                selectionStart: selection.start,
+                selectionEnd: selection.end,
+              },
+      });
+    },
+  });
+  useImperativeHandle(ref, createEditorHandle, [postToWeb, path]);
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
@@ -218,20 +187,17 @@ export const CodeEditorWebView = forwardRef<
    * http/https 外跳系统浏览器并拒绝页内导航，其余 scheme 一律拒绝。
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
-  const shouldStartLoadWithRequest = useCallback(
-    (req: {url: string}): boolean => {
-      if (req.url.startsWith(getCodeEditorPackageDirUri())) {
-        return true;
-      }
-      if (/^https?:\/\//i.test(req.url)) {
-        // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
-        // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
-        void Linking.openURL(req.url).catch(() => undefined);
-      }
-      return false;
-    },
-    [],
-  );
+  const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
+    if (req.url.startsWith(getCodeEditorPackageDirUri())) {
+      return true;
+    }
+    if (/^https?:\/\//i.test(req.url)) {
+      // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
+      // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
+      void Linking.openURL(req.url).catch(() => undefined);
+    }
+    return false;
+  }, []);
 
   /**
    * iOS window.open / target="_blank" 新开窗口兜底：拒绝 WebView 内打开，外跳系统浏览器。
@@ -253,9 +219,7 @@ export const CodeEditorWebView = forwardRef<
            本体，不挂外层 wrapper View。 */
         style={[styles.fill, {backgroundColor: tokens.background}]}
         /* 首帧主题预注入（白闪 B）——见 buildThemeInjectScript 注释。 */
-        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(
-          tokens.background,
-        )}
+        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(tokens.background)}
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
@@ -265,8 +229,7 @@ export const CodeEditorWebView = forwardRef<
            `var(--editor-bg, var(--bg, #fff))`，映射真源 host-theme.ts THEME_VARS：
            background→--bg，--editor-* 为其 extraVars 派生）。B 仍在作兜底。 */
         source={{
-          uri:
-            getCodeEditorUri() + '#bg=' + encodeURIComponent(tokens.background),
+          uri: getCodeEditorUri() + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs

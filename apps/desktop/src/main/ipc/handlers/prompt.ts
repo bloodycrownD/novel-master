@@ -25,9 +25,7 @@ import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.servi
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { toIpcResult } from "../ipc-result.js";
 
-export function handlePromptRealPreview(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptPreviewTurnDto[]>> {
+export function handlePromptRealPreview(req: PromptScopeRequest): Promise<IpcResult<PromptPreviewTurnDto[]>> {
   return toIpcResult(async (): Promise<Result<PromptPreviewTurnDto[], AppError>> => {
     const built = await getDesktopRuntime();
     if (!built.ok) return Result.err(built.error);
@@ -82,9 +80,7 @@ export function handlePromptRealPreview(
  * `{ok:true, data:null}`。renderer 收到 null 必须**保留旧标签**——不清空、不显示
  * 占位（与 mobile 的空串哨兵同口径）。
  */
-export function handlePromptChatTokenLabel(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
+export function handlePromptChatTokenLabel(req: PromptScopeRequest): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
   return toIpcResult(async () => {
     const built = await getDesktopRuntime();
     if (!built.ok) return Result.err(built.error);
@@ -94,9 +90,7 @@ export function handlePromptChatTokenLabel(
   });
 }
 
-export function handlePromptAgentMeta(
-  req: PromptScopeRequest,
-): Promise<IpcResult<PromptAgentMetaResponse>> {
+export function handlePromptAgentMeta(req: PromptScopeRequest): Promise<IpcResult<PromptAgentMetaResponse>> {
   return toIpcResult(async (): Promise<Result<PromptAgentMetaResponse, AppError>> => {
     const built = await getDesktopRuntime();
     if (!built.ok) return Result.err(built.error);
@@ -150,35 +144,40 @@ export function handlePromptAgentMeta(
 }
 
 // core 侧加字段而 DTO 未跟时，下列导出 const 构造 {} 编译红（TS2741：差集键 missing）
-export type CoreGroupParityCheck = Record<
+type CoreGroupParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptToolGroupCardData,
     keyof PromptToolGroupDto
   >,
   never
 >;
-export type CoreTextParityCheck = Record<
+type CoreTextParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptTextCardData,
     keyof PromptTextCardDto
   >,
   never
 >;
-export type CoreWorkplaceParityCheck = Record<
+type CoreWorkplaceParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptWorkplaceCardData,
     keyof import("../../../../shared/ipc-types.js").PromptWorkplaceDto
   >,
   never
 >;
-export type CoreWorkplaceFileParityCheck = Record<
+type CoreWorkplaceFileParityCheck = Record<
   Exclude<
     keyof import("@novel-master/core/prompt").PromptWorkplaceFileCardData,
     keyof import("../../../../shared/ipc-types.js").PromptWorkplaceFileDto
   >,
   never
 >;
+
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_WORKPLACE_PARITY_CHECK: CoreWorkplaceParityCheck = {};
+// nm-style: keep-public — 编译期 DTO/core 字段对齐断言（构造 {} 迫使差集键为 never）
 export const CORE_WORKPLACE_FILE_PARITY_CHECK: CoreWorkplaceFileParityCheck = {};

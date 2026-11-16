@@ -4,15 +4,12 @@
 import {Platform, StyleSheet, type ViewStyle} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
 
-export type TabBarInsets = {
+type TabBarInsets = {
   bottom: number;
 };
 
 /** 与 RootNavigator 初始 tabBarStyle 等价的完整底栏样式。 */
-export function buildMainTabBarStyle(
-  tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>,
-  insets: TabBarInsets,
-): ViewStyle {
+export function buildMainTabBarStyle(tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
   return {
     backgroundColor: tokens.tabBarBackground,
     borderTopColor: tokens.borderLight,
@@ -33,11 +30,7 @@ export function buildMainTabBarStyle(
 }
 
 /** 对话态隐藏底栏；会话列表态恢复完整样式。 */
-export function resolveChatTabBarStyle(
-  chatSubview: 'sessions' | 'conversation',
-  tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>,
-  insets: TabBarInsets,
-): ViewStyle {
+export function resolveChatTabBarStyle(chatSubview: 'sessions' | 'conversation', tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>, insets: TabBarInsets): ViewStyle {
   if (chatSubview === 'conversation') {
     return {display: 'none'};
   }

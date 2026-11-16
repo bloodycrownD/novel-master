@@ -12,7 +12,12 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
 import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
-import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_INPUT_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES, CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
+import {
+  CHARACTER_CARD_MAX_FILE_COUNT,
+  CHARACTER_CARD_MAX_INPUT_BYTES,
+  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
+  CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
+} from "@/domain/character-card/logic/character-card-limits.js";
 import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -50,40 +55,34 @@ export type CharacterCardImportTestHook = {
 };
 
 /**
- * 导入失败的错误包装：保留测试钩子直抛与 AppError 原形，其余包成
- * `VFS_CHARACTER_CARD_IMPORT_FAILED`，并在消息里带上分片进度。
+ * import 的失败出口归一：测试钩子裸 Error（非域注入）维持直抛——测试按
+ * `instanceof Error` 断言回滚，不能伪装成业务失败；AppError 原形与包装后的
+ * `VFS_CHARACTER_CARD_IMPORT_FAILED` 进 `Result.err`（业务失败走返回值通道）。
  *
+ * 包装在消息里带上分片进度（`committedShards` / `failedShard` 都给时拆独立 key）。
  * 分片后**已提交片不再回滚** ⇒ 本条唯一的真实行为损失：旧内容在段 B0 就已
  * 删除，补偿只把半棵新树清掉、不恢复旧内容。
  */
-function wrapCardImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
+function failImport(error: unknown, committedShards?: number, failedShard?: number): Result<void, AppError> {
   if (error instanceof Error && error.message === "test import failure") {
-    return error;
+    throw error;
   }
   if (isAppError(error)) {
-    return error;
+    return Result.err(error);
   }
   const base = error instanceof Error ? error.message : "import transaction failed";
   // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
-  return committedShards != null && failedShard != null
-    ? new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {descriptor: {key: "error.vfs.character_card_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}, base})
-    : new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {detail: base});
-}
-
-/**
- * import 的失败出口归一：wrap 后的 AppError 进 `Result.err`（业务失败走返回值
- * 通道）；测试钩子裸 Error（非域注入）维持直抛——测试按 `instanceof Error`
- * 断言回滚，不能伪装成业务失败。
- */
-function failImport(error: unknown, committedShards?: number, failedShard?: number): Result<void, AppError> {
-  const wrapped = wrapCardImportError(error, committedShards, failedShard);
-  if (!isAppError(wrapped)) {
-    throw wrapped;
+  if (committedShards != null && failedShard != null) {
+    const failed = new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {
+      descriptor: { key: "error.vfs.character_card_import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } },
+      base,
+    });
+    return Result.err(failed);
   }
-  return Result.err(wrapped);
+  return Result.err(new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", { detail: base }));
 }
 
-export type DefaultCharacterCardImportServiceOptions = {
+type DefaultCharacterCardImportServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: CharacterCardImportTestHook;
   /**
@@ -111,7 +110,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
 
   async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
     if (options.confirmed !== true) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or confirm dialog)" }));
     }
 
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
@@ -121,7 +120,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     // wrap 对 AppError 直通：repo 查询失败原样进 Err。
     if (!directoryRow.ok) return failImport(directoryRow.error);
     if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`}));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` }));
     }
 
     // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
@@ -130,52 +129,59 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     let totalBytes = 0;
     for (const [relativePath, content] of tree) {
       if (relativePath.length === 0) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: "empty relative path in md tree"}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: "empty relative path in md tree" }));
       }
       if (relativePath.startsWith("/")) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `leading slash in md tree path: ${relativePath}`}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `leading slash in md tree path: ${relativePath}` }));
       }
       if (relativePath.includes("\\")) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `backslash in md tree path: ${relativePath}`}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `backslash in md tree path: ${relativePath}` }));
       }
       if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}` }));
       }
       if (WINDOWS_DRIVE_PATH.test(relativePath)) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `absolute Windows path in md tree: ${relativePath}`}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `absolute Windows path in md tree: ${relativePath}` }));
       }
       for (const segment of relativePath.split("/")) {
         if (segment.length === 0) {
-          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `empty segment in md tree path: ${relativePath}`}));
+          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `empty segment in md tree path: ${relativePath}` }));
         }
         if (segment === "..") {
-          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `parent segment in md tree path: ${relativePath}`}));
+          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `parent segment in md tree path: ${relativePath}` }));
         }
       }
 
       const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
       if (!logicalResult.ok) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: logicalResult.error.message }));
       }
       const logical = logicalResult.value;
       const allowed = validateLogicalPath(scope, logical);
       if (!allowed.ok) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}`}));
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}` }));
       }
 
       const sizeBytes = utf8ByteLength(content);
       if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}}}));
+        const singleFile = {
+          descriptor: { key: "error.vfs.character_card_too_large.single_file" as const, params: { logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } },
+        };
+        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", singleFile));
       }
       totalBytes += sizeBytes;
       // 超限即失败，避免对后续条目做无谓的编码累计
       if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
-        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}}}));
+        const totalContent = {
+          descriptor: { key: "error.vfs.character_card_too_large.total_content" as const, params: { total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } },
+        };
+        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", totalContent));
       }
       files.set(logical, content);
     }
     if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}}}));
+      const fileCount = { descriptor: { key: "error.vfs.character_card_too_large.file_count" as const, params: { count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT } } };
+      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", fileCount));
     }
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -194,7 +200,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           if (existing == null) {
             unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
           } else if (existing.entryKind !== "directory") {
-            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
+            throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` });
           }
         }
       });
@@ -290,12 +296,13 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
   async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
+      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or confirm dialog)" }));
     }
     // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
     // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
     if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}}));
+      const oversizedInput = { descriptor: { key: "error.vfs.character_card_too_large.input" as const, params: { size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES } } };
+      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", oversizedInput));
     }
     const parsed = parseCharacterCardToMdTree(bytes);
     if (!parsed.ok) return Result.err(parsed.error);

@@ -13,25 +13,14 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import {
-  collectMutatingPathsFromCalls,
-  extractMutatingPaths,
-} from "@/domain/vfs/logic/extract-mutating-paths.js";
-import {
-  captureMutatingPathHeadSnapshots,
-  MutatingPathRestoreCompositeError,
-  restoreMutatingPathHeads,
-} from "@/domain/vfs/logic/restore-mutating-path-heads.js";
+import { collectMutatingPathsFromCalls, extractMutatingPaths } from "@/domain/vfs/logic/extract-mutating-paths.js";
+import { captureMutatingPathHeadSnapshots, MutatingPathRestoreCompositeError, restoreMutatingPathHeads } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
 import { AppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
-import type {
-  UserVfsTurnExecuteResult,
-  UserVfsTurnOp,
-  UserVfsTurnService,
-} from "../user-vfs-turn.port.js";
+import type { UserVfsTurnExecuteResult, UserVfsTurnOp, UserVfsTurnService } from "../user-vfs-turn.port.js";
 
 /** {@link DefaultUserVfsTurnService} 依赖。 */
 export interface UserVfsTurnServiceDeps {
@@ -52,10 +41,7 @@ export interface UserVfsTurnServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly toolRunner: ToolRunner<BuiltinToolContext>;
-  readonly resolveToolCtx: (
-    sessionId: string,
-    projectId: string
-  ) => BuiltinToolContext;
+  readonly resolveToolCtx: (sessionId: string, projectId: string) => BuiltinToolContext;
   /**
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
@@ -68,20 +54,17 @@ export interface UserVfsTurnServiceDeps {
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
 
-  async executeOp(
-    sessionId: string,
-    op: UserVfsTurnOp
-  ): Promise<UserVfsTurnExecuteResult> {
+  async executeOp(sessionId: string, op: UserVfsTurnOp): Promise<UserVfsTurnExecuteResult> {
     if (op.tools.length === 0) {
-      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", {detail: "userVfsTurn.op.tools must not be empty"}) };
+      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.tools must not be empty" }) };
     }
     if (op.actionXml.trim() === "") {
-      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", {detail: "userVfsTurn.op.actionXml must not be empty"}) };
+      return { ok: false, error: new AppError("CHAT_INVALID_ARGUMENT", { detail: "userVfsTurn.op.actionXml must not be empty" }) };
     }
 
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
-      return { ok: false, error: new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${sessionId}`, kind: "session", id: sessionId}) };
+      return { ok: false, error: new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }) };
     }
 
     const toolCtx = this.deps.resolveToolCtx(sessionId, session.projectId);
@@ -90,10 +73,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       input: tool.input,
     }));
     const mutatingPaths = collectMutatingPathsFromCalls(calls);
-    const captured = await captureMutatingPathHeadSnapshots(
-      toolCtx.vfs,
-      mutatingPaths
-    );
+    const captured = await captureMutatingPathHeadSnapshots(toolCtx.vfs, mutatingPaths);
     if (!captured.ok) {
       return { ok: false, error: captured.error };
     }
@@ -127,14 +107,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         }
       }
       // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
-      await sweepSessionRevisions(
-        this.deps.revisions,
-        this.deps.entries,
-        this.deps.checkpoints,
-        session.projectId,
-        sessionId,
-        this.deps.conn
-      );
+      await sweepSessionRevisions(this.deps.revisions, this.deps.entries, this.deps.checkpoints, session.projectId, sessionId, this.deps.conn);
       await runDeferredBlobGc(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {

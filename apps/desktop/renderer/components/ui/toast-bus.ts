@@ -1,4 +1,4 @@
-export type ToastOptions = {
+type ToastOptions = {
   actionLabel?: string;
   onAction?: () => void;
 };

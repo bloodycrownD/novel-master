@@ -14,9 +14,7 @@ import {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
 
-export async function handleAppUiGet(
-  req: AppUiGetRequest,
-): Promise<AppUiGetResponse> {
+export async function handleAppUiGet(req: AppUiGetRequest): Promise<AppUiGetResponse> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -31,9 +29,7 @@ export async function handleAppUiGet(
   }
 }
 
-export async function handleAppUiSet(
-  req: AppUiSetRequest,
-): Promise<IpcResult<void>> {
+export async function handleAppUiSet(req: AppUiSetRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。

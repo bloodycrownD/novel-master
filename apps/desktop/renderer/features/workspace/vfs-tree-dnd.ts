@@ -5,7 +5,7 @@
 /** 树内 VFS 路径拖动 MIME（与 spec 钉死一致）。 */
 export const NM_VFS_PATHS_MIME = "application/x-nm-vfs-paths";
 
-export type VfsDragPayload = {
+type VfsDragPayload = {
   readonly paths: readonly string[];
 };
 
@@ -85,14 +85,4 @@ export function dropTargetDir(
     return "/";
   }
   return rowPath.slice(0, idx) || "/";
-}
-
-export function hasNmVfsMime(types: DOMStringList | readonly string[]): boolean {
-  const list = Array.from(types as ArrayLike<string>);
-  return list.includes(NM_VFS_PATHS_MIME);
-}
-
-export function hasFileDrag(types: DOMStringList | readonly string[]): boolean {
-  const list = Array.from(types as ArrayLike<string>);
-  return list.includes("Files");
 }

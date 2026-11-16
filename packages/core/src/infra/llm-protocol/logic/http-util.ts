@@ -22,10 +22,7 @@ export function joinUrl(baseUrl: string, path: string): string {
 }
 
 /** 非 2xx 响应返回 `PROVIDER_HTTP_ERROR`（失败走返回值通道；名字保留自 throw 时代）。 */
-export async function assertOk(
-  response: Response,
-  providerId?: string
-): Promise<Result<void, AppError>> {
+export async function assertOk(response: Response, providerId?: string): Promise<Result<void, AppError>> {
   if (response.ok) {
     return Result.ok(undefined);
   }
@@ -40,12 +37,7 @@ export async function assertOk(
 }
 
 /** JSON fetch with error handling. */
-export async function fetchJson(
-  fetchFn: FetchFn,
-  url: string,
-  init: RequestInit,
-  providerId?: string
-): Promise<Result<unknown, AppError>> {
+export async function fetchJson(fetchFn: FetchFn, url: string, init: RequestInit, providerId?: string): Promise<Result<unknown, AppError>> {
   const response = await fetchFn(url, init);
   const checked = await assertOk(response, providerId);
   if (!checked.ok) return checked;

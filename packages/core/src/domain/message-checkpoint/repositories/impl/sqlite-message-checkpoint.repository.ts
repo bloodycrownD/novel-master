@@ -96,12 +96,14 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     return rows.length > 0;
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.hasAnyCheckpointForSession 端口方法；内联会把 SQL 搬进调用层。 */
   async hasAnyCheckpointForSession(sessionId: string): Promise<boolean> {
     const sql2 = "SELECT 1 AS one FROM message_checkpoint\n       WHERE session_id = #{sessionId}\n       LIMIT 1";
     const rows = await queryTemplate<{ one: number }>(this.conn, this.parser, sql2, { sessionId });
     return rows.length > 0;
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.countCheckpointsForMessages 端口方法；内联会把分块计数 SQL 搬进调用层。 */
   async countCheckpointsForMessages(sessionId: string, messageIds: ReadonlyArray<string>): Promise<number> {
     if (messageIds.length === 0) {
       return 0;
@@ -156,6 +158,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.seedCheckpoints 端口方法；forkCopySeeder 经端口单点调用，内联会把三表批量 seed SQL 搬进调用层。 */
   async seedCheckpoints(sessionId: string, messages: ReadonlyArray<{ readonly id: string }>, files: ReadonlyArray<{ readonly entryId: number; readonly revisionVersion: number; readonly path: string }>, createdAtMs: number): Promise<void> {
     if (messages.length === 0 || files.length === 0) {
       return;
@@ -235,6 +238,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.findLastCheckpointedMessageId 端口方法；内联会把查询 SQL 搬进调用层。 */
   async findLastCheckpointedMessageId(sessionId: string): Promise<string | null> {
     // 形态照抄 findCheckpointMessageIdAtOrBefore，只是去掉 `cm.seq <= #{maxSeq}`
     // 条件（不拿 Number.MAX_SAFE_INTEGER 顶替——那会把一个巨大数字绑进模板，
@@ -244,6 +248,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.listFilePointersForSession 端口方法；内联会把查询 SQL 搬进调用层。 */
   async listFilePointersForSession(sessionId: string): Promise<ReadonlyArray<MessageCheckpointFile>> {
     const sql11 = "SELECT session_id, message_id, entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";
     const rows = await queryTemplate(this.conn, this.parser, sql11, { sessionId });
@@ -259,6 +264,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }));
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.listFilePointersForMessages 端口方法；内联会把查询 SQL 搬进调用层。 */
   async listFilePointersForMessages(sessionId: string, messageIds: ReadonlyArray<string>): Promise<ReadonlyArray<MessageCheckpointFile>> {
     if (messageIds.length === 0) {
       return [];
@@ -311,6 +317,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     }
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.deleteCheckpointsForSession 端口方法；内联会把多表删除 + ref 递减搬进调用层。 */
   async deleteCheckpointsForSession(sessionId: string): Promise<void> {
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
     const sql17 = "SELECT session_id, message_id, entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";

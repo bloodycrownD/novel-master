@@ -8,33 +8,21 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useNovelMaster} from '../runtime/novel-master-context';
 import {toastMessage} from '../errors/toast-message';
-import {
-  runAutoUpdateCheckFlow,
-  snoozeUpdateCheckToday,
-  type UpdateCheckResultKind,
-  type UpdateCheckSideEffects,
-} from '../services/update-check-flow';
+import {runAutoUpdateCheckFlow, snoozeUpdateCheckToday, type UpdateCheckResultKind, type UpdateCheckSideEffects} from '../services/update-check-flow';
 
 const AUTO_CHECK_DELAY_MS = 2000;
 
-export type AutoUpdateCheckUi = Pick<
-  UpdateCheckSideEffects,
-  'showToast' | 'showUpdateDetail'
->;
+type AutoUpdateCheckUi = Pick<UpdateCheckSideEffects, 'showToast' | 'showUpdateDetail'>;
 
-export type AutoUpdateCheckController = {
+type AutoUpdateCheckController = {
   resultModal: UpdateCheckResultKind | null;
   closeResultModal: () => void;
   snoozeToday: () => Promise<void>;
 };
 
-export function useAutoUpdateCheck(
-  ui: AutoUpdateCheckUi,
-): AutoUpdateCheckController {
+export function useAutoUpdateCheck(ui: AutoUpdateCheckUi): AutoUpdateCheckController {
   const {status, appUi} = useNovelMaster();
-  const [resultModal, setResultModal] = useState<UpdateCheckResultKind | null>(
-    null,
-  );
+  const [resultModal, setResultModal] = useState<UpdateCheckResultKind | null>(null);
   const ranRef = useRef(false);
   // ui 由 Host 每次渲染重建，走 ref 取最新值，避免它进了 effect deps 后
   // 在 2s 定时窗口内因引用变化被 cleanup 掉定时器。

@@ -60,14 +60,14 @@
  */
 
 /** 单池上界与命名（name 只进诊断输出，用于定位是哪层在抖）。 */
-export interface DecodedContentPoolLimits {
+interface DecodedContentPoolLimits {
   readonly name: string;
   readonly maxEntries: number;
   readonly maxChars: number;
 }
 
 /** 池快照（测试与诊断观测面）。 */
-export interface DecodedContentPoolStats {
+interface DecodedContentPoolStats {
   readonly name: string;
   readonly entries: number;
   readonly chars: number;
@@ -119,7 +119,14 @@ export class DecodedContentPool {
     }
     this.lru.set(key, value);
     this.chars += value.length;
-    this.evictOverBudget();
+    while (this.lru.size > this.limits.maxEntries || this.chars > this.limits.maxChars) {
+      const oldest = this.lru.keys().next().value;
+      if (oldest == null) {
+        return;
+      }
+      this.delete(oldest);
+      this.evictions++;
+    }
   }
 
   delete(key: string): void {
@@ -150,20 +157,6 @@ export class DecodedContentPool {
       evictions: this.evictions,
     };
   }
-
-  private evictOverBudget(): void {
-    while (
-      this.lru.size > this.limits.maxEntries ||
-      this.chars > this.limits.maxChars
-    ) {
-      const oldest = this.lru.keys().next().value;
-      if (oldest == null) {
-        return;
-      }
-      this.delete(oldest);
-      this.evictions++;
-    }
-  }
 }
 
 /**
@@ -188,6 +181,7 @@ const contentBodyPool = new DecodedContentPool({
  *
  * @remarks 传 `vfs_content_blob` / `session_file_cache_blob` 的 content_hash；
  * 不需要也不允许按会话隔离——同 hash 必同正文。
+ * nm-style: keep-public — contentBodyPool 是模块私有单例，读取必须经此入口。
  */
 export function lookupDecodedContentBody(contentHash: string): string | null {
   return contentBodyPool.get(contentHash);
@@ -200,10 +194,7 @@ export function lookupDecodedContentBody(contentHash: string): string | null {
  * 都是这么算的）；喂错键等于投毒，本层不做校验（校验就得再哈希一遍，
  * 正是本层要消灭的线性成本）。
  */
-export function rememberDecodedContentBody(
-  contentHash: string,
-  body: string
-): void {
+export function rememberDecodedContentBody(contentHash: string, body: string): void {
   contentBodyPool.set(contentHash, body);
 }
 

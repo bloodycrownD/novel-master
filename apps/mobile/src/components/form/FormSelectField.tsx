@@ -7,7 +7,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useFormOverlay} from './FormOverlayHost';
 
-export type SelectOption = {
+type SelectOption = {
   value: string;
   label: string;
   subtitle?: string;
@@ -25,24 +25,12 @@ type Props = {
   disabled?: boolean;
 };
 
-export function FormSelectField({
-  tokens,
-  value,
-  options,
-  onChange,
-  placeholder = '请选择',
-  emptyLabel = '暂无选项',
-  sheetTitle,
-  disabled = false,
-}: Props) {
+export function FormSelectField({tokens, value, options, onChange, placeholder = '请选择', emptyLabel = '暂无选项', sheetTitle, disabled = false}: Props) {
   const overlay = useFormOverlay();
   const overlayKey = useId();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const selected = useMemo(
-    () => options.find(option => option.value === value),
-    [options, value],
-  );
+  const selected = useMemo(() => options.find(option => option.value === value), [options, value]);
   const isEmpty = options.length === 0;
   const display = isEmpty ? emptyLabel : selected?.label ?? placeholder;
 
@@ -59,18 +47,10 @@ export function FormSelectField({
       return;
     }
 
-    overlay.show(
-      overlayKey,
+    const sheetNode = (
       <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          {sheetTitle ? (
-            <Text style={[styles.sheetTitle, {color: tokens.text}]}>
-              {sheetTitle}
-            </Text>
-          ) : null}
+        <Pressable style={[styles.sheet, {backgroundColor: tokens.surface}]} onPress={e => e.stopPropagation()}>
+          {sheetTitle ? <Text style={[styles.sheetTitle, {color: tokens.text}]}>{sheetTitle}</Text> : null}
           <FlatList
             data={options}
             keyExtractor={item => item.value}
@@ -80,25 +60,14 @@ export function FormSelectField({
               return (
                 <Pressable
                   disabled={item.disabled}
-                  style={[
-                    styles.row,
-                    {borderBottomColor: tokens.border},
-                    active && {backgroundColor: tokens.bgSecondary},
-                    item.disabled && !active ? {opacity: 0.45} : null,
-                  ]}
+                  style={[styles.row, {borderBottomColor: tokens.border}, active && {backgroundColor: tokens.bgSecondary}, item.disabled && !active ? {opacity: 0.45} : null]}
                   onPress={() => select(item.value)}
                 >
                   <View style={styles.rowText}>
                     <Text style={{color: tokens.text}}>{item.label}</Text>
-                    {item.subtitle ? (
-                      <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-                        {item.subtitle}
-                      </Text>
-                    ) : null}
+                    {item.subtitle ? <Text style={{color: tokens.textSecondary, fontSize: 13}}>{item.subtitle}</Text> : null}
                   </View>
-                  {active ? (
-                    <Text style={{color: tokens.primary}}>✓</Text>
-                  ) : null}
+                  {active ? <Text style={{color: tokens.primary}}>✓</Text> : null}
                 </Pressable>
               );
             }}
@@ -117,20 +86,12 @@ export function FormSelectField({
             </Pressable>
           </View>
         </Pressable>
-      </Pressable>,
+      </Pressable>
     );
+    overlay.show(overlayKey, sheetNode);
 
     return () => overlay.hide(overlayKey);
-  }, [
-    open,
-    overlay,
-    overlayKey,
-    options,
-    value,
-    tokens,
-    sheetTitle,
-    insets.bottom,
-  ]);
+  }, [open, overlay, overlayKey, options, value, tokens, sheetTitle, insets.bottom]);
 
   return (
     <Pressable
@@ -154,9 +115,7 @@ export function FormSelectField({
       >
         {display}
       </Text>
-      {!isEmpty ? (
-        <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
-      ) : null}
+      {!isEmpty ? <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text> : null}
     </Pressable>
   );
 }

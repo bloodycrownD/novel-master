@@ -1,11 +1,4 @@
-import {
-  GetObjectCommand,
-  HeadObjectCommand,
-  NotFound,
-  PutObjectCommand,
-  S3Client,
-  type S3ClientConfig,
-} from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, NotFound, PutObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import { AppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import type { ObjectStoragePort } from "@novel-master/core";
@@ -32,66 +25,17 @@ export function normalizeEtag(etag: string | undefined): string | undefined {
   return etag.replace(/^"|"$/g, "");
 }
 
-function isNotFoundError(error: unknown): boolean {
-  if (error instanceof NotFound) {
-    return true;
-  }
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error.name === "NotFound" || error.name === "NoSuchKey")
-  ) {
-    return true;
-  }
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "$metadata" in error &&
-    typeof error.$metadata === "object" &&
-    error.$metadata !== null &&
-    "httpStatusCode" in error.$metadata &&
-    error.$metadata.httpStatusCode === 404
-  ) {
-    return true;
-  }
-  return false;
-}
-
 /** 阿里云 OSS S3 兼容 API 不支持 PutObject 条件头（If-Match / If-None-Match）。 */
 export function isAliyunOssEndpoint(endpoint: string): boolean {
-  const host = endpoint
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .split("/")[0]
-    ?.toLowerCase();
+  const trimmed = endpoint.trim().replace(/^https?:\/\//, "");
+  const host = trimmed.split("/")[0]?.toLowerCase();
   return host != null && host.includes("aliyuncs.com");
 }
 
-function isPreconditionFailedError(error: unknown): boolean {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "PreconditionFailed"
-  ) {
-    return true;
-  }
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "$metadata" in error &&
-    typeof error.$metadata === "object" &&
-    error.$metadata !== null &&
-    "httpStatusCode" in error.$metadata &&
-    error.$metadata.httpStatusCode === 412
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function buildS3Client(config: S3StorageConfig): S3Client {
+/**
+ * 基于 S3 兼容 API 创建 {@link ObjectStoragePort} 实现。
+ */
+export function createS3ObjectStorage(config: S3StorageConfig, deps?: S3ObjectStorageDeps): ObjectStoragePort {
   const clientConfig: S3ClientConfig = {
     region: config.region || "us-east-1",
     endpoint: config.endpoint,
@@ -101,17 +45,7 @@ function buildS3Client(config: S3StorageConfig): S3Client {
     },
     forcePathStyle: config.forcePathStyle ?? false,
   };
-  return new S3Client(clientConfig);
-}
-
-/**
- * 基于 S3 兼容 API 创建 {@link ObjectStoragePort} 实现。
- */
-export function createS3ObjectStorage(
-  config: S3StorageConfig,
-  deps?: S3ObjectStorageDeps,
-): ObjectStoragePort {
-  const client = deps?.client ?? buildS3Client(config);
+  const client = deps?.client ?? new S3Client(clientConfig);
   const bucket = config.bucket;
   const emulateConditionalPut = isAliyunOssEndpoint(config.endpoint);
   const fileSystem = deps?.fileSystem;
@@ -119,16 +53,24 @@ export function createS3ObjectStorage(
   const storage: ObjectStoragePort = {
     async head(key) {
       try {
-        const response = await client.send(
-          new HeadObjectCommand({ Bucket: bucket, Key: key }),
-        );
+        const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
         return {
           exists: true,
           etag: normalizeEtag(response.ETag),
           bytes: response.ContentLength,
         };
       } catch (error) {
-        if (isNotFoundError(error)) {
+        if (
+          error instanceof NotFound ||
+          (typeof error === "object" && error !== null && "name" in error && (error.name === "NotFound" || error.name === "NoSuchKey")) ||
+          (typeof error === "object" &&
+            error !== null &&
+            "$metadata" in error &&
+            typeof error.$metadata === "object" &&
+            error.$metadata !== null &&
+            "httpStatusCode" in error.$metadata &&
+            error.$metadata.httpStatusCode === 404)
+        ) {
           return { exists: false };
         }
         throw error;
@@ -136,9 +78,7 @@ export function createS3ObjectStorage(
     },
 
     async get(key) {
-      const response = await client.send(
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-      );
+      const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       const etag = normalizeEtag(response.ETag);
       if (etag == null) {
         throw new Error(`S3 GetObject 未返回 ETag: ${key}`);
@@ -151,8 +91,7 @@ export function createS3ObjectStorage(
     },
 
     async put(key, body, options) {
-      const hasConditionalPut =
-        options?.ifMatch != null || options?.ifNoneMatch != null;
+      const hasConditionalPut = options?.ifMatch != null || options?.ifNoneMatch != null;
       let putOptions = options;
 
       if (emulateConditionalPut && hasConditionalPut) {
@@ -160,39 +99,40 @@ export function createS3ObjectStorage(
         const head = await this.head(key);
         if (options?.ifMatch != null) {
           if (!head.exists || head.etag !== options.ifMatch) {
-            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", { detail: "同步冲突，请重试" }));
           }
         }
         if (options?.ifNoneMatch != null) {
           if (options.ifNoneMatch === "*") {
             if (head.exists) {
-              return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+              return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", { detail: "同步冲突，请重试" }));
             }
           } else if (head.exists && head.etag === options.ifNoneMatch) {
-            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", { detail: "同步冲突，请重试" }));
           }
         }
         putOptions = undefined;
       }
 
       try {
-        const response = await client.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: body,
-            IfMatch: putOptions?.ifMatch,
-            IfNoneMatch: putOptions?.ifNoneMatch,
-          }),
-        );
+        const response = await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, IfMatch: putOptions?.ifMatch, IfNoneMatch: putOptions?.ifNoneMatch }));
         const etag = normalizeEtag(response.ETag);
         if (etag == null) {
           throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
         }
         return Result.ok({ etag });
       } catch (error) {
-        if (isPreconditionFailedError(error)) {
-          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}, {cause: error}));
+        if (
+          (typeof error === "object" && error !== null && "name" in error && error.name === "PreconditionFailed") ||
+          (typeof error === "object" &&
+            error !== null &&
+            "$metadata" in error &&
+            typeof error.$metadata === "object" &&
+            error.$metadata !== null &&
+            "httpStatusCode" in error.$metadata &&
+            error.$metadata.httpStatusCode === 412)
+        ) {
+          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", { detail: "同步冲突，请重试" }, { cause: error }));
         }
         throw error;
       }
@@ -200,7 +140,7 @@ export function createS3ObjectStorage(
 
     async putFile(key, filePath, options) {
       if (fileSystem == null) {
-        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法读取本地文件（A-26）"}));
+        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", { detail: "未注入 FileSystemPort，无法读取本地文件（A-26）" }));
       }
       const raw = await fileSystem.readFile(filePath);
       // `readFile` 的返回类型本身就是 Uint8Array，`new Uint8Array(raw)` 是
@@ -219,7 +159,7 @@ export function createS3ObjectStorage(
     async getToPath(key, destPath) {
       const { body, etag } = await storage.get(key);
       if (fileSystem == null) {
-        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法写入本地文件（A-26）"}));
+        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", { detail: "未注入 FileSystemPort，无法写入本地文件（A-26）" }));
       }
       await fileSystem.writeFile(destPath, body);
       return Result.ok({ etag });

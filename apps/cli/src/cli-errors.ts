@@ -23,18 +23,14 @@ export const OUTCOME_COMPLETED: Outcome<void> = { kind: "completed", value: unde
 /** 命令函数 `Result<void, AppError>` 的完成分支（run* 的非中断 return 共用，错误通道迁移四期）。 */
 export const RESULT_OK: Result<void, AppError> = Result.ok(undefined);
 
-/** 错误 → 用户可见中文文案：i18n 后 descriptor 模式的 message 是英文 desc，边界统一解析。 */
-function visibleMessage(error: Error): string {
-  const descriptor = userMessageOf(error);
-  return descriptor != null ? coreT(descriptor) : error.message;
-}
-
 export function formatCliError(error: unknown): string {
   // AppError 走码表 messageKey；TdbcError / SkspError 是 infra 保留类（spec-3 §3.2
   // 第 7 条口径：cli 有入口，经 userMessageOf 沿 cause 翻译，不拼 cause、不加分支——
   // SkspError 无 messageKey，输出与直出 message 逐字一致，T-A7 基线锁）。
   if (error instanceof AppError || error instanceof TdbcError || error instanceof SkspError) {
-    return visibleMessage(error);
+    // 错误 → 用户可见中文文案：i18n 后 descriptor 模式的 message 是英文 desc，边界统一解析。
+    const descriptor = userMessageOf(error);
+    return descriptor != null ? coreT(descriptor) : error.message;
   }
   return error instanceof Error ? error.message : String(error);
 }

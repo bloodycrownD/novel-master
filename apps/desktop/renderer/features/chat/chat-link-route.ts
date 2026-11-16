@@ -29,20 +29,20 @@ export type ChatLinkProbeRead = (
 ) => Promise<IpcResult<VfsReadResultDto>>;
 
 /** 链接点击的执行意图：应用内 Preview 打开 / 外部浏览器打开 / 路径未命中 / 无动作。 */
-export type ChatLinkAction =
+type ChatLinkAction =
   | { kind: "preview"; workspaceScope: "chat" | "session"; path: string }
   | { kind: "external"; url: string }
   | { kind: "not-found"; path: string }
   | { kind: "none" };
 
 /** 会话上下文：chat 域（core session 域）探测必需 projectId+sessionId。 */
-export type ChatLinkSessionContext = {
+type ChatLinkSessionContext = {
   readonly projectId: string;
   readonly sessionId: string;
 } | null;
 
 /** 非侵入日志（renderer 侧 console 语义，测试可注入捕获）。 */
-export type ChatLinkLogger = (message: string, detail?: unknown) => void;
+type ChatLinkLogger = (message: string, detail?: unknown) => void;
 
 /**
  * 解析链接点击意图。

@@ -94,12 +94,11 @@ export function ProfileTabScreen() {
     }
   }, [runtime]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshModelLabel().catch(() => setModelLabel('—'));
-      refreshAgentLabel().catch(() => setAgentLabel('—'));
-    }, [refreshModelLabel, refreshAgentLabel]),
-  );
+  const onScreenFocus = useCallback(() => {
+    refreshModelLabel().catch(() => setModelLabel('—'));
+    refreshAgentLabel().catch(() => setAgentLabel('—'));
+  }, [refreshModelLabel, refreshAgentLabel]);
+  useFocusEffect(onScreenFocus);
 
   const navigateTo = (route: keyof RootStackParamList) => {
     const parent = navigation.getParent();
@@ -111,60 +110,20 @@ export function ProfileTabScreen() {
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="profile" />
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <ListSectionTitle title="工作区" tokens={tokens} />
-        <ProfileMenuItem
-          icon={WORKSPACE_MODEL_MENU.icon}
-          label={WORKSPACE_MODEL_MENU.label}
-          value={modelLabel}
-          tokens={tokens}
-          onPress={() => setModelPickerVisible(true)}
-        />
-        <ProfileMenuItem
-          icon={WORKSPACE_AGENT_MENU.icon}
-          label={WORKSPACE_AGENT_MENU.label}
-          value={agentLabel}
-          tokens={tokens}
-          onPress={() => setAgentPickerVisible(true)}
-        />
-        <ProfileMenuItem
-          icon={WORKSPACE_GLOBAL_MENU.icon}
-          label={WORKSPACE_GLOBAL_MENU.label}
-          tokens={tokens}
-          onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)}
-        />
+        <ProfileMenuItem icon={WORKSPACE_MODEL_MENU.icon} label={WORKSPACE_MODEL_MENU.label} value={modelLabel} tokens={tokens} onPress={() => setModelPickerVisible(true)} />
+        <ProfileMenuItem icon={WORKSPACE_AGENT_MENU.icon} label={WORKSPACE_AGENT_MENU.label} value={agentLabel} tokens={tokens} onPress={() => setAgentPickerVisible(true)} />
+        <ProfileMenuItem icon={WORKSPACE_GLOBAL_MENU.icon} label={WORKSPACE_GLOBAL_MENU.label} tokens={tokens} onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)} />
         <ListSectionTitle title="配置" tokens={tokens} />
         {CONFIG_MENU.map(item => (
-          <ProfileMenuItem
-            key={item.route}
-            icon={item.icon}
-            label={item.label}
-            tokens={tokens}
-            onPress={() => navigateTo(item.route)}
-          />
+          <ProfileMenuItem key={item.route} icon={item.icon} label={item.label} tokens={tokens} onPress={() => navigateTo(item.route)} />
         ))}
         <ListSectionTitle title="应用" tokens={tokens} />
-        <ProfileMenuItem
-          icon="ℹ️"
-          label="关于 Novel Master"
-          tokens={tokens}
-          onPress={() => navigateTo('About')}
-        />
+        <ProfileMenuItem icon="ℹ️" label="关于 Novel Master" tokens={tokens} onPress={() => navigateTo('About')} />
       </ScrollView>
-      <ModelPickerModal
-        visible={modelPickerVisible}
-        onClose={() => setModelPickerVisible(false)}
-        onSelected={() => refreshModelLabel().catch(() => undefined)}
-      />
-      <AgentPickerModal
-        visible={agentPickerVisible}
-        onClose={() => setAgentPickerVisible(false)}
-        onSelected={() => refreshAgentLabel().catch(() => undefined)}
-      />
+      <ModelPickerModal visible={modelPickerVisible} onClose={() => setModelPickerVisible(false)} onSelected={() => refreshModelLabel().catch(() => undefined)} />
+      <AgentPickerModal visible={agentPickerVisible} onClose={() => setAgentPickerVisible(false)} onSelected={() => refreshAgentLabel().catch(() => undefined)} />
     </View>
   );
 }

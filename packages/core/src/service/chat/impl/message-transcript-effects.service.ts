@@ -9,20 +9,11 @@ import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
-import {
-  createTruncateTailDepsFromTx,
-  truncateTailInTransaction,
-} from "@/service/message-checkpoint/truncate-tail-wiring.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/truncate-tail-wiring.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
-import type {
-  MessageTranscriptEffectsService,
-  SetMessageFloorResult,
-} from "../message-transcript-effects.port.js";
+import type { MessageTranscriptEffectsService, SetMessageFloorResult } from "../message-transcript-effects.port.js";
 
 /** {@link DefaultMessageTranscriptEffectsService} 依赖。 */
 interface MessageTranscriptEffectsServiceDeps {
@@ -34,35 +25,19 @@ interface MessageTranscriptEffectsServiceDeps {
 /**
  * 消息 hide / show / tail 截断的统一副作用实现。
  */
-export class DefaultMessageTranscriptEffectsService
-  implements MessageTranscriptEffectsService
-{
+export class DefaultMessageTranscriptEffectsService implements MessageTranscriptEffectsService {
   constructor(private readonly deps: MessageTranscriptEffectsServiceDeps) {}
 
-  async hideMessagesInRange(
-    _projectId: string,
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number
-  ): Promise<Result<number, AppError>> {
+  async hideMessagesInRange(_projectId: string, sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     return this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
   }
 
-  async showMessagesInRange(
-    _projectId: string,
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number
-  ): Promise<Result<number, AppError>> {
+  async showMessagesInRange(_projectId: string, sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     return this.deps.messages.showRange(sessionId, fromSeq, toSeq);
   }
 
-  async truncateMessagesAfter(
-    projectId: string,
-    sessionId: string,
-    afterSeq: number,
-    options?: { sweepRevisions?: boolean }
-  ): Promise<void> {
+  /** nm-style: keep-public — MessageTranscriptEffectsService 端口方法，desktop IPC handler 经 runtime 调用；内联会拆掉端口契约。 */
+  async truncateMessagesAfter(projectId: string, sessionId: string, afterSeq: number, options?: { sweepRevisions?: boolean }): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId,
@@ -73,11 +48,7 @@ export class DefaultMessageTranscriptEffectsService
     });
   }
 
-  async setMessageFloorAtMessage(
-    _projectId: string,
-    sessionId: string,
-    messageId: string
-  ): Promise<Result<SetMessageFloorResult, AppError>> {
+  async setMessageFloorAtMessage(_projectId: string, sessionId: string, messageId: string): Promise<Result<SetMessageFloorResult, AppError>> {
     // 读路径（2026-09-29 治本）：原先全量 listBySession（大会话连解压秒级）
     // 只为找锚点 + 算 MAX(seq)——锚点单行 get，MAX(seq) 用尾部一条（含
     // hidden、按 seq 取最大，与原口径一致）。
@@ -96,9 +67,7 @@ export class DefaultMessageTranscriptEffectsService
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `set-floor anchor role must be user, got: ${anchor.role}` }));
     }
 
-    const tail = await this.deps.messages.listBySessionTail(sessionId, {
-      limit: 1,
-    });
+    const tail = await this.deps.messages.listBySessionTail(sessionId, { limit: 1 });
     const sessionMaxSeq = tail.length > 0 ? tail[0]!.seq : 0;
     const hidePrefix = anchor.seq > 1 ? { fromSeq: 1 as const, toSeq: anchor.seq - 1 } : null;
     const showSuffix = anchor.seq <= sessionMaxSeq ? { fromSeq: anchor.seq, toSeq: sessionMaxSeq } : null;
@@ -114,22 +83,14 @@ export class DefaultMessageTranscriptEffectsService
       write.register({
         name: "hide-prefix",
         execute: async () => {
-          const r = await this.deps.messages.hideRange(
-            sessionId,
-            hidePrefix.fromSeq,
-            hidePrefix.toSeq
-          );
+          const r = await this.deps.messages.hideRange(sessionId, hidePrefix.fromSeq, hidePrefix.toSeq);
           // 步骤已知失败沿 Result 回传（四期门⑦），协调器触发逆序补偿。
           if (!r.ok) return Result.err(r.error);
           hiddenCount = r.value;
           return Result.ok(undefined);
         },
         rollback: async () => {
-          const r = await this.deps.messages.showRange(
-            sessionId,
-            hidePrefix.fromSeq,
-            hidePrefix.toSeq
-          );
+          const r = await this.deps.messages.showRange(sessionId, hidePrefix.fromSeq, hidePrefix.toSeq);
           if (!r.ok) return Result.err(r.error);
           return Result.ok(undefined);
         },
@@ -139,21 +100,13 @@ export class DefaultMessageTranscriptEffectsService
       write.register({
         name: "show-suffix",
         execute: async () => {
-          const r = await this.deps.messages.showRange(
-            sessionId,
-            showSuffix.fromSeq,
-            showSuffix.toSeq
-          );
+          const r = await this.deps.messages.showRange(sessionId, showSuffix.fromSeq, showSuffix.toSeq);
           if (!r.ok) return Result.err(r.error);
           shownCount = r.value;
           return Result.ok(undefined);
         },
         rollback: async () => {
-          const r = await this.deps.messages.hideRange(
-            sessionId,
-            showSuffix.fromSeq,
-            showSuffix.toSeq
-          );
+          const r = await this.deps.messages.hideRange(sessionId, showSuffix.fromSeq, showSuffix.toSeq);
           if (!r.ok) return Result.err(r.error);
           return Result.ok(undefined);
         },
@@ -162,10 +115,7 @@ export class DefaultMessageTranscriptEffectsService
     write.register({
       name: "clear-rule-snapshot",
       execute: async () => {
-        await this.deps.sessionKkv.clearDomain(
-          sessionId,
-          SESSION_KKV_DOMAIN_RULE_SNAPSHOT
-        );
+        await this.deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT);
         return Result.ok(undefined);
       },
       rollback: async () => {
@@ -176,10 +126,7 @@ export class DefaultMessageTranscriptEffectsService
     write.register({
       name: "clear-file-cache",
       execute: async () => {
-        await this.deps.sessionKkv.clearDomain(
-          sessionId,
-          SESSION_KKV_DOMAIN_FILE_CACHE
-        );
+        await this.deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
         return Result.ok(undefined);
       },
       rollback: async () => {
@@ -191,10 +138,7 @@ export class DefaultMessageTranscriptEffectsService
     if (!ran.ok) return Result.err(ran.error);
     // 置位后上下文范围变了：API 占用双删（进程内热层 + session KKV 行），
     // 否则重启后从 KKV 读回旧值，与置位后的可见 prompt 不符。
-    await invalidateSessionApiPromptTokenEntry(
-      this.deps.sessionKkv,
-      sessionId
-    );
+    await invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
 
     return Result.ok({ hiddenCount, shownCount });
   }

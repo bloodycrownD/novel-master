@@ -14,11 +14,8 @@ import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 import type { ProviderBackupTableName } from "./provider-tables.js";
 
 /** {@link ProviderTableSnapshotError} 的判别码。 */
-export type ProviderTableSnapshotErrorCode =
-  | "INVALID_PROVIDER_ROW"
-  | "INVALID_SAVED_MODEL_ROW"
-  | "INVALID_SECRET_ROW"
-  | "DANGLING_SAVED_MODEL";
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
+export type ProviderTableSnapshotErrorCode = "INVALID_PROVIDER_ROW" | "INVALID_SAVED_MODEL_ROW" | "INVALID_SECRET_ROW" | "DANGLING_SAVED_MODEL";
 
 /**
  * restore 前快照校验失败时抛出。携带表名与行号便于定位脏数据来源。
@@ -33,11 +30,7 @@ export class ProviderTableSnapshotError extends Error {
   readonly table: ProviderBackupTableName;
   readonly rowIndex: number;
 
-  constructor(
-    code: ProviderTableSnapshotErrorCode,
-    message: string | CoreMessageDescriptor,
-    location: { table: ProviderBackupTableName; rowIndex: number }
-  ) {
+  constructor(code: ProviderTableSnapshotErrorCode, message: string | CoreMessageDescriptor, location: { table: ProviderBackupTableName; rowIndex: number }) {
     const localized = resolveLocalizedMessage(message);
     super(localized.text);
     this.name = "ProviderTableSnapshotError";

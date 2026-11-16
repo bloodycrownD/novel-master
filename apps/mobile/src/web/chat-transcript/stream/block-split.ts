@@ -21,7 +21,7 @@
  *   RN 侧 abort overlay 的全量物化依赖它）。
  */
 
-export type StreamBlockSplit = {
+type StreamBlockSplit = {
   /** 完整块列表（顺序拼接 + activeTail 还原原文）。 */
   readonly blocks: string[];
   /** 活跃尾块（未闭合语法整体在此，等待后续 delta）。 */

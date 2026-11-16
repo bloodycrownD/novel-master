@@ -37,7 +37,6 @@ import { z } from "zod";
 
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
-import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
@@ -99,51 +98,10 @@ function requireDefinition(action: "create" | "update", value: Record<string, un
   return Result.ok(value);
 }
 
-/**
- * 从装配期快照拼给 LLM 看的「当前可管理 agent 名单」（照 formatCallableList
- * 样式，额外带 mode 方便判断能否被 task 调用）。
- */
-function formatAgentEntries(agents: readonly AgentToolListEntry[]): string {
-  if (agents.length === 0) return "（暂无）";
-  const lines = agents.map((a) => {
-    const desc = a.description != null && a.description.trim().length > 0 ? `：${a.description.trim()}` : "";
-    return `- ${a.name}（mode: ${a.mode}）${desc}`;
-  });
-  return lines.join("\n");
-}
-
 /** 从宽松 definition 体尽力读取显示名（trim，与服务层 upsert 的归一一致）。 */
 function readDefinitionName(definition: Record<string, unknown>): string {
   const name = definition["name"];
   return typeof name === "string" ? name.trim() : "";
-}
-
-/**
- * 生成新 agentId：`agent-${Date.now()}`（照桌面端建空白 agent 先例），
- * 对照 `listAgentIds()` 去重——同毫秒并发建两个时加序号重试。
- */
-async function allocateAgentId(registry: AgentRegistryService): Promise<string> {
-  const existing = new Set(await registry.listAgentIds());
-  let candidate = `agent-${Date.now()}`;
-  for (let i = 1; existing.has(candidate); i++) {
-    candidate = `agent-${Date.now()}-${i}`;
-  }
-  return candidate;
-}
-
-/** 按 name 解析持久化 agentId（getRawWire 不解码，坏数据行也能读名）。 */
-async function findAgentIdByName(registry: AgentRegistryService, name: string): Promise<string | undefined> {
-  for (const id of await registry.listAgentIds()) {
-    const wire = await registry.getRawWire(id);
-    if (wire == null || typeof wire !== "object" || Array.isArray(wire)) {
-      continue;
-    }
-    const wireName = (wire as { readonly name?: unknown }).name;
-    if (typeof wireName === "string" && wireName.trim() === name) {
-      return id;
-    }
-  }
-  return undefined;
 }
 
 /** 组装 upsert 的语义校验选项（registeredToolNames / 可选 assertSavedModel）。 */
@@ -192,7 +150,7 @@ export const agentTool: Tool<AgentToolInput, AgentToolOutput, BuiltinToolContext
     return `管理 agent 定义（list / get / create / update）：可配置智能体（提示词布局 + 模型 pin + 工具策略），可在 task 工具中作为子代理调用。
 
 当前可管理 agent 名单（装配期快照，回合内变更不即时反映）：
-${formatAgentEntries(agents)}
+${agents.length === 0 ? "（暂无）" : agents.map((a) => `- ${a.name}（mode: ${a.mode}）${a.description?.trim() ? `：${a.description.trim()}` : ""}`).join("\n")}
 
 action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位，name 优先）/ create 新建（definition 必填且顶层含 name，agentId 自动生成）/ update 整体覆盖更新（定位同 get + definition 必填）。
 
@@ -289,7 +247,9 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
         const definitionResult = requireDefinition("create", input.definition);
         if (!definitionResult.ok) return Result.err(definitionResult.error);
         const definition = definitionResult.value;
-        const agentId = await allocateAgentId(agentsCtx.registry);
+        const existingAgentIds = new Set(await agentsCtx.registry.listAgentIds());
+        let agentId = `agent-${Date.now()}`;
+        for (let i = 1; existingAgentIds.has(agentId); i++) agentId = `agent-${Date.now()}-${i}`;
         // D5：schema 宽松收包，类型收窄只是把 Record 视作 AgentDefinition，
         // 字段级校验完全交 upsert → validateAgentDefinition。
         const saved = await saveWithTranslatedError(() => agentsCtx.registry.upsert(agentId, definition as unknown as AgentDefinition, buildValidateOptions(agentsCtx)));
@@ -313,7 +273,16 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
         if (hasName) {
           // name 优先（与 get 一致）：解析持久化 id；虚拟 general 无 id 单独报错。
           const targetName = input.name!.trim();
-          const resolved = await findAgentIdByName(agentsCtx.registry, targetName);
+          let resolved: string | undefined;
+          for (const id of await agentsCtx.registry.listAgentIds()) {
+            const wire = await agentsCtx.registry.getRawWire(id);
+            if (wire == null || typeof wire !== "object" || Array.isArray(wire)) continue;
+            const wireName = (wire as { readonly name?: unknown }).name;
+            if (typeof wireName === "string" && wireName.trim() === targetName) {
+              resolved = id;
+              break;
+            }
+          }
           if (resolved == null) {
             if (agentsCtx.agents.some((a) => a.name === targetName)) {
               return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `"${targetName}" 是内置 agent，不支持通过工具修改`}));

@@ -4,10 +4,8 @@
 
 function parseOverrides(overrides: string | undefined): string[] {
   if (!overrides?.trim()) return [];
-  return overrides
-    .split("|")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const parts = overrides.split("|");
+  return parts.map((t) => t.trim()).filter(Boolean);
 }
 
 function escapeRegExp(s: string): string {
@@ -17,15 +15,7 @@ function escapeRegExp(s: string): string {
 /**
  * Strips leading override tokens (case-insensitive), then trailing overrides.
  */
-export function applyTrimOverrides(
-  content: string,
-  attrs: {
-    prefix?: string;
-    suffix?: string;
-    prefixOverrides?: string;
-    suffixOverrides?: string;
-  }
-): string {
+export function applyTrimOverrides(content: string, attrs: { prefix?: string; suffix?: string; prefixOverrides?: string; suffixOverrides?: string }): string {
   let s = content;
 
   for (const token of parseOverrides(attrs.prefixOverrides)) {

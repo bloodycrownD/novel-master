@@ -34,14 +34,14 @@ import { CHARACTERS_PER_TOKEN_RATIO } from "@shared/logic/provider";
  * 读值完全由估算给出。取值口径复用 core 的中立类型（`StreamTokenSource`，与
  * session_run_state 行模型同一份声明），不再本地重写字面量联合（C-3）。
  */
-export type AgentStreamTokenSource = StreamTokenSource;
+type AgentStreamTokenSource = StreamTokenSource;
 
 /** 实时 token 估算器工厂（不注入 = 启发式；返回 null = 回退启发式）。 */
-export type AgentStreamEstimatorFactory = () =>
+type AgentStreamEstimatorFactory = () =>
   | IncrementalTokenCounter
   | null;
 
-export type AgentStreamMetricsSnapshot = {
+type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
   readonly textChars: number;
   readonly thinkingChars: number;

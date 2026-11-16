@@ -16,7 +16,7 @@ export type HydratedComposerDraft = {
 };
 
 /** 写回 payload（`serializeComposerDraftJson` 的入参；draft attach 恒空）。 */
-export type ComposerDraftPersistPayload = {
+type ComposerDraftPersistPayload = {
   readonly text: string;
   readonly attachments: readonly [];
   readonly tokenRanges?: readonly ComposerDraftTokenRange[];

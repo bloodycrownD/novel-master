@@ -31,7 +31,7 @@
 
 export const DEFAULT_TICK_MS = 32;
 
-export interface SseChunkEmitter {
+interface SseChunkEmitter {
   /**
    * 追加 XHR 切片。距上次 flush 已过 tickMs 闸门时立即同步 flush（会调用
    * onChunk）；窗口内的 append 只进缓冲、不投递。`flush()` / `dispose()`
@@ -46,10 +46,7 @@ export interface SseChunkEmitter {
   bufferedLength(): number;
 }
 
-export function createSseChunkEmitter(
-  onChunk: (chunk: string) => void,
-  options?: { tickMs?: number }
-): SseChunkEmitter {
+export function createSseChunkEmitter(onChunk: (chunk: string) => void, options?: { tickMs?: number }): SseChunkEmitter {
   const tickMs = options?.tickMs ?? DEFAULT_TICK_MS;
   let buffer = "";
   // 初始化为创建时刻（不能是 0）：若初始化为 0，首个 append 距「上次

@@ -12,10 +12,7 @@ import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 type AnthropicContentItem = Record<string, unknown>;
 
 /** NM blocks ??Anthropic message `content` array. */
-export function blocksToAnthropicContent(
-  blocks: readonly ContentBlock[],
-  toolNames?: AnthropicToolNameWire
-): AnthropicContentItem[] {
+export function blocksToAnthropicContent(blocks: readonly ContentBlock[], toolNames?: AnthropicToolNameWire): AnthropicContentItem[] {
   return blocks.map((block) => {
     switch (block.type) {
       case "text":
@@ -67,10 +64,7 @@ export function blocksToAnthropicContent(
 }
 
 /** Anthropic API `content[]` ??NM blocks (unknown types are skipped). */
-export function anthropicContentToBlocks(
-  content: readonly unknown[],
-  toolNames?: AnthropicToolNameWire
-): ContentBlock[] {
+export function anthropicContentToBlocks(content: readonly unknown[], toolNames?: AnthropicToolNameWire): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const item of content) {
     if (!isRecord(item) || typeof item.type !== "string") {
@@ -94,11 +88,7 @@ export function anthropicContentToBlocks(
             type: "image",
             source: { kind: "url", url: source.url },
           });
-        } else if (
-          source.type === "base64" &&
-          typeof source.media_type === "string" &&
-          typeof source.data === "string"
-        ) {
+        } else if (source.type === "base64" && typeof source.media_type === "string" && typeof source.data === "string") {
           blocks.push({
             type: "image",
             source: {
@@ -111,11 +101,7 @@ export function anthropicContentToBlocks(
         break;
       }
       case "tool_use":
-        if (
-          typeof item.id === "string" &&
-          typeof item.name === "string" &&
-          isRecord(item.input)
-        ) {
+        if (typeof item.id === "string" && typeof item.name === "string" && isRecord(item.input)) {
           blocks.push({
             type: "tool_use",
             id: item.id,
@@ -134,16 +120,8 @@ export function anthropicContentToBlocks(
         }
         break;
       case "thinking": {
-        const text =
-          typeof item.thinking === "string"
-            ? item.thinking
-            : typeof item.text === "string"
-            ? item.text
-            : "";
-        const signature =
-          typeof item.signature === "string" && item.signature !== ""
-            ? item.signature
-            : undefined;
+        const text = typeof item.thinking === "string" ? item.thinking : typeof item.text === "string" ? item.text : "";
+        const signature = typeof item.signature === "string" && item.signature !== "" ? item.signature : undefined;
         if (text !== "" || signature != null) {
           blocks.push({
             type: "thinking",
@@ -155,10 +133,7 @@ export function anthropicContentToBlocks(
       }
       case "redacted_thinking": {
         const data = typeof item.data === "string" ? item.data : "";
-        const signature =
-          typeof item.signature === "string" && item.signature !== ""
-            ? item.signature
-            : undefined;
+        const signature = typeof item.signature === "string" && item.signature !== "" ? item.signature : undefined;
         if (data !== "") {
           blocks.push({
             type: "redacted_thinking",
@@ -175,41 +150,12 @@ export function anthropicContentToBlocks(
   return blocks;
 }
 
-/** 相邻 user 消息合并：content 按序拼接，tool_result 块前置（D2 规则，出站单向操作，不回写内部消息列表）。 */
-function mergeAdjacentUserTurns(
-  messages: Array<{ role: string; content: AnthropicContentItem[] }>
-): Array<{ role: string; content: AnthropicContentItem[] }> {
-  const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
-  for (const msg of messages) {
-    const last = out[out.length - 1];
-    if (msg.role !== "user" || last == null || last.role !== "user") {
-      out.push({ role: msg.role, content: [...msg.content] });
-      continue;
-    }
-    const toolResultFirst = [
-      ...last.content.filter((item) => item.type === "tool_result"),
-      ...msg.content.filter((item) => item.type === "tool_result"),
-    ];
-    const rest = [
-      ...last.content.filter((item) => item.type !== "tool_result"),
-      ...msg.content.filter((item) => item.type !== "tool_result"),
-    ];
-    last.content = [...toolResultFirst, ...rest];
-  }
-  return out;
-}
-
 /** Session history ??Anthropic `messages[]` (tool_result ??user role). */
-export function chatMessagesToAnthropic(
-  messages: readonly ChatMessageData[],
-  toolNames?: AnthropicToolNameWire
-): Array<{ role: string; content: AnthropicContentItem[] }> {
+export function chatMessagesToAnthropic(messages: readonly ChatMessageData[], toolNames?: AnthropicToolNameWire): Array<{ role: string; content: AnthropicContentItem[] }> {
   const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
 
   for (const msg of messages) {
-    const toolResults = msg.content.blocks.filter(
-      (b) => b.type === "tool_result"
-    );
+    const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
     const other = msg.content.blocks.filter((b) => b.type !== "tool_result");
 
     if (toolResults.length > 0) {
@@ -226,5 +172,17 @@ export function chatMessagesToAnthropic(
     }
   }
 
-  return mergeAdjacentUserTurns(out);
+  // 相邻 user 消息合并：content 按序拼接，tool_result 块前置（D2 规则，出站单向操作，不回写内部消息列表）。
+  const merged: Array<{ role: string; content: AnthropicContentItem[] }> = [];
+  for (const msg of out) {
+    const last = merged[merged.length - 1];
+    if (msg.role !== "user" || last == null || last.role !== "user") {
+      merged.push({ role: msg.role, content: [...msg.content] });
+      continue;
+    }
+    const toolResultFirst = [...last.content.filter((item) => item.type === "tool_result"), ...msg.content.filter((item) => item.type === "tool_result")];
+    const rest = [...last.content.filter((item) => item.type !== "tool_result"), ...msg.content.filter((item) => item.type !== "tool_result")];
+    last.content = [...toolResultFirst, ...rest];
+  }
+  return merged;
 }

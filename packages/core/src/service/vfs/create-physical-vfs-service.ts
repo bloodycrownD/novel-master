@@ -13,8 +13,7 @@ import type { PhysicalVfsService } from "./physical-vfs.port.js";
  *
  * @param conn - Open connection after `bootstrapNovelMaster`
  */
-export function createPhysicalVfsService(
-  conn: TdbcConnection
-): PhysicalVfsService {
+// nm-style: keep-local — 公共组合根（cli / desktop / mobile 三端从 public/vfs 取用，生产调用点 3 处）：隔离 impl/DefaultPhysicalVfsService，port 层不暴露实现。
+export function createPhysicalVfsService(conn: TdbcConnection): PhysicalVfsService {
   return new DefaultPhysicalVfsService(conn);
 }

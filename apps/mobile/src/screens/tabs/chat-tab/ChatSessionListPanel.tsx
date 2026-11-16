@@ -36,7 +36,7 @@ import {formatRelativeTimeMs} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 
-export type ChatSessionListPanelProps = {
+type ChatSessionListPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
   sessionListPanel: SessionListPanel;

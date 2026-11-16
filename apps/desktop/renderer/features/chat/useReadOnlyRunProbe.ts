@@ -9,9 +9,9 @@ import { probeReadOnlyRunEnded } from "./readOnlyRunProbeLogic";
  * 可能丢事件，导致「生成中」永久残留。这里加一道校准：窗口重新可见为主，低频轮询为辅，
  * 主动跨进程查 main 的 in-flight 状态。
  */
-export const READONLY_RUN_PROBE_INTERVAL_MS = 30_000;
+const READONLY_RUN_PROBE_INTERVAL_MS = 30_000;
 
-export type UseReadOnlyRunProbeParams = {
+type UseReadOnlyRunProbeParams = {
   /** 仅在 readOnly 分支挂载监听。 */
   enabled: boolean;
   /** 子会话 sessionId（readOnly 子面板的 session）。 */

@@ -7,9 +7,9 @@
 import { AppError } from "../../errors/app-error.js";
 import { Result } from "../../errors/either.js";
 
-export type MacroActionKind = "comment" | "dot" | "root";
+type MacroActionKind = "comment" | "dot" | "root";
 
-export interface MacroAction {
+interface MacroAction {
   readonly kind: MacroActionKind;
   readonly start: number;
   readonly end: number;
@@ -18,46 +18,6 @@ export interface MacroAction {
 }
 
 const UNSUPPORTED_PATTERN = /\b(if|range|with|template|define)\b|:=|\|/;
-
-function parseAction(action: string, openOffset: number): Result<MacroAction, AppError> {
-  const trimmed = action.trim();
-  if (trimmed.length === 0) {
-    return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "empty macro action", offset: openOffset }));
-  }
-
-  if (trimmed.startsWith("/*")) {
-    if (!trimmed.endsWith("*/")) {
-      return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: openOffset }));
-    }
-    return Result.ok({ kind: "comment", start: openOffset, end: openOffset, path: [] });
-  }
-
-  if (UNSUPPORTED_PATTERN.test(trimmed)) {
-    return Result.err(new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported template syntax near offset ${openOffset}`, offset: openOffset }));
-  }
-
-  if (trimmed.startsWith(".")) {
-    const path = trimmed.slice(1).split(".").map((s) => s.trim()).filter((s) => s.length > 0);
-    if (path.length === 0) {
-      return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty dot path", offset: openOffset }));
-    }
-    return Result.ok({ kind: "dot", start: openOffset, end: openOffset, path });
-  }
-
-  if (trimmed.startsWith("$")) {
-    const rest = trimmed.slice(1).trim();
-    const key = rest.startsWith(".") ? rest.slice(1).trim() : rest;
-    if (key.length === 0) {
-      return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty root field", offset: openOffset }));
-    }
-    if (key.includes(".")) {
-      return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown root field: $${key}`, offset: openOffset }));
-    }
-    return Result.ok({ kind: "root", start: openOffset, end: openOffset, path: [key] });
-  }
-
-  return Result.err(new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported macro action: ${trimmed}`, offset: openOffset }));
-}
 
 /**
  * Returns macro actions in source order (comments included for span removal);
@@ -94,13 +54,45 @@ export function scanMacroActions(template: string): Result<readonly MacroAction[
       return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro", offset: open }));
     }
 
-    const inner = template.slice(open + 2, close);
-    const parsed = parseAction(inner, open);
-    if (!parsed.ok) {
-      return Result.err(parsed.error);
+    const trimmed = template.slice(open + 2, close).trim();
+    if (trimmed.length === 0) {
+      return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "empty macro action", offset: open }));
     }
-    actions.push({ ...parsed.value, start: open, end: close + 2 });
-    i = close + 2;
+    if (trimmed.startsWith("/*")) {
+      if (!trimmed.endsWith("*/")) {
+        return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "unclosed macro comment", offset: open }));
+      }
+      actions.push({ kind: "comment", start: open, end: close + 2, path: [] });
+      i = close + 2;
+      continue;
+    }
+    if (UNSUPPORTED_PATTERN.test(trimmed)) {
+      return Result.err(new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported template syntax near offset ${open}`, offset: open }));
+    }
+    if (trimmed.startsWith(".")) {
+      const parts = trimmed.slice(1).split(".");
+      const path = parts.map((s) => s.trim()).filter((s) => s.length > 0);
+      if (path.length === 0) {
+        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty dot path", offset: open }));
+      }
+      actions.push({ kind: "dot", start: open, end: close + 2, path });
+      i = close + 2;
+      continue;
+    }
+    if (trimmed.startsWith("$")) {
+      const rest = trimmed.slice(1).trim();
+      const key = rest.startsWith(".") ? rest.slice(1).trim() : rest;
+      if (key.length === 0) {
+        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: "empty root field", offset: open }));
+      }
+      if (key.includes(".")) {
+        return Result.err(new AppError("PROMPT_UNKNOWN_FIELD", { detail: `unknown root field: $${key}`, offset: open }));
+      }
+      actions.push({ kind: "root", start: open, end: close + 2, path: [key] });
+      i = close + 2;
+      continue;
+    }
+    return Result.err(new AppError("PROMPT_UNSUPPORTED_SYNTAX", { detail: `unsupported macro action: ${trimmed}`, offset: open }));
   }
 
   return Result.ok(actions);

@@ -1,7 +1,7 @@
 /**
  * Simple `key: value` rows from YAML-style front matter lines (display only).
  */
-export interface FrontMatterField {
+interface FrontMatterField {
   key: string;
   value: string;
 }

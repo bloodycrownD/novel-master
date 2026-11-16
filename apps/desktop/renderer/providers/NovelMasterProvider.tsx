@@ -18,9 +18,9 @@ import {
 } from "../ipc/client";
 import type { BootstrapStatusResponse } from "@shared/ipc-types";
 
-export type RuntimeStatus = "loading" | "ready" | "error";
+type RuntimeStatus = "loading" | "ready" | "error";
 
-export interface NovelMasterContextValue {
+interface NovelMasterContextValue {
   status: RuntimeStatus;
   dbPath: string | undefined;
   error: string | undefined;

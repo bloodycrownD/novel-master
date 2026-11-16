@@ -6,20 +6,9 @@ import { SqlTemplateError } from "./errors.js";
 import type { ContextStack } from "./context.js";
 import { mergedContextForExpression } from "./context-proxy.js";
 
-const FORBIDDEN_PATTERN =
-  /[;{}]|=>|\bfunction\b|\bnew\b|\beval\b|\bimport\b|\bconstructor\b/i;
+const FORBIDDEN_PATTERN = /[;{}]|=>|\bfunction\b|\bnew\b|\beval\b|\bimport\b|\bconstructor\b/i;
 
-const RESERVED_WORDS = new Set([
-  "true",
-  "false",
-  "null",
-  "undefined",
-  "typeof",
-  "instanceof",
-  "in",
-  "void",
-  "delete",
-]);
+const RESERVED_WORDS = new Set(["true", "false", "null", "undefined", "typeof", "instanceof", "in", "void", "delete"]);
 
 const IDENTIFIER_RE = /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b/g;
 
@@ -33,23 +22,10 @@ const IDENTIFIER_RE = /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b/g;
  */
 const compiledTestFunctionCache = new Map<string, (ctx: unknown) => unknown>();
 
-function compileTestFunction(normalized: string): (ctx: unknown) => unknown {
-  const cached = compiledTestFunctionCache.get(normalized);
-  if (cached !== undefined) return cached;
-  const fn = new Function("__ctx__", `return (${normalized});`) as (
-    ctx: unknown
-  ) => unknown;
-  compiledTestFunctionCache.set(normalized, fn);
-  return fn;
-}
-
 /**
  * Applies `transform` only to segments outside single- and double-quoted literals.
  */
-function mapOutsideStringLiterals(
-  expr: string,
-  transform: (segment: string) => string
-): string {
+function mapOutsideStringLiterals(expr: string, transform: (segment: string) => string): string {
   let result = "";
   let i = 0;
   while (i < expr.length) {
@@ -87,13 +63,11 @@ function mapOutsideStringLiterals(
  * Keywords inside string literals are left unchanged.
  */
 export function normalizeExpression(expr: string): string {
-  const trimmed = expr.trim();
-  return mapOutsideStringLiterals(trimmed, (segment) =>
-    segment
-      .replace(/\band\b/gi, "&&")
-      .replace(/\bor\b/gi, "||")
-      .replace(/\bnot\b/gi, "!")
-  );
+  return mapOutsideStringLiterals(expr.trim(), (segment) => {
+    const anded = segment.replace(/\band\b/gi, "&&");
+    const ored = anded.replace(/\bor\b/gi, "||");
+    return ored.replace(/\bnot\b/gi, "!");
+  });
 }
 
 /**
@@ -115,6 +89,7 @@ export function bindExpressionToContext(expr: string): string {
   );
 }
 
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export interface EvaluateTestOptions {
   /** Template offset of the `test` attribute value, when known. */
   offset?: number;
@@ -124,38 +99,25 @@ export interface EvaluateTestOptions {
  * Evaluates a `test` expression against the current context stack.
  * Missing properties read as `undefined` via a chained Proxy.
  */
-export function evaluateTest(
-  expr: string,
-  stack: ContextStack,
-  options?: EvaluateTestOptions
-): boolean {
+export function evaluateTest(expr: string, stack: ContextStack, options?: EvaluateTestOptions): boolean {
   const normalized = bindExpressionToContext(normalizeExpression(expr));
-  const errorOptions =
-    options?.offset !== undefined ? { offset: options.offset } : undefined;
+  const errorOptions = options?.offset !== undefined ? { offset: options.offset } : undefined;
   if (!normalized) {
-    throw new SqlTemplateError(
-      "EXPRESSION_ERROR",
-      "Empty test expression",
-      errorOptions
-    );
+    throw new SqlTemplateError("EXPRESSION_ERROR", "Empty test expression", errorOptions);
   }
   if (FORBIDDEN_PATTERN.test(normalized)) {
-    throw new SqlTemplateError(
-      "EXPRESSION_ERROR",
-      `Disallowed syntax in test expression: ${expr}`,
-      errorOptions
-    );
+    throw new SqlTemplateError("EXPRESSION_ERROR", `Disallowed syntax in test expression: ${expr}`, errorOptions);
   }
 
   const ctx = mergedContextForExpression(stack);
   try {
-    const fn = compileTestFunction(normalized);
+    let fn = compiledTestFunctionCache.get(normalized);
+    if (fn === undefined) {
+      fn = new Function("__ctx__", `return (${normalized});`) as (ctx: unknown) => unknown;
+      compiledTestFunctionCache.set(normalized, fn);
+    }
     return Boolean(fn(ctx));
   } catch (err) {
-    throw new SqlTemplateError(
-      "EXPRESSION_ERROR",
-      `Failed to evaluate test expression: ${expr}`,
-      { ...errorOptions, cause: err }
-    );
+    throw new SqlTemplateError("EXPRESSION_ERROR", `Failed to evaluate test expression: ${expr}`, { ...errorOptions, cause: err });
   }
 }

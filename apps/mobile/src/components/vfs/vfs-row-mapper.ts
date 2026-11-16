@@ -2,18 +2,12 @@
  * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
 import {type VfsListEntry} from '@novel-master/core/vfs';
-import {
-  displayStateLabel,
-  inclusionModeLabel,
-  type InclusionMode,
-  type RuleState,
-  type WorkplaceListRow,
-} from '@novel-master/core/workplace';
+import {displayStateLabel, inclusionModeLabel, type RuleState, type WorkplaceListRow} from '@novel-master/core/workplace';
 import {coreT} from '../../i18n/core';
 
-export type VfsBadgeTone = 'in' | 'follow' | 'muted';
+type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
-export interface VfsRowBadge {
+interface VfsRowBadge {
   readonly label: string;
   readonly tone: VfsBadgeTone;
 }
@@ -60,47 +54,34 @@ export function entryName(path: string): string {
  * @remarks labelByPath 由导航过程中每次 list 的合成目录行携带（label 字段），
  * 查不到的段回退原文；只影响展示，不改导航与逻辑路径。
  */
-export function pathWithLabels(
-  path: string,
-  labelByPath: ReadonlyMap<string, string>,
-): string {
+export function pathWithLabels(path: string, labelByPath: ReadonlyMap<string, string>): string {
   if (path === '/') {
     return '/';
   }
   const segments = path.split('/');
   let acc = '';
-  return segments
-    .map((seg, i) => {
-      if (i === 0) {
-        return '';
-      }
-      acc = `${acc}/${seg}`;
-      return labelByPath.get(acc) ?? seg;
-    })
-    .join('/');
+  const mappedSegments = segments.map((seg, i) => {
+    if (i === 0) {
+      return '';
+    }
+    acc = `${acc}/${seg}`;
+    return labelByPath.get(acc) ?? seg;
+  });
+  return mappedSegments.join('/');
 }
 
 /** Count file rows whose parent directory is `dirPath`. */
-export function countFilesInDir(
-  rows: readonly WorkplaceListRow[],
-  dirPath: string,
-): number {
-  return rows.filter(r => r.kind === 'file' && isDirectChild(dirPath, r.path))
-    .length;
+export function countFilesInDir(rows: readonly WorkplaceListRow[], dirPath: string): number {
+  return rows.filter(r => r.kind === 'file' && isDirectChild(dirPath, r.path)).length;
 }
 
 /** Directory rule on/off badge for list rows. */
 export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
-  return ruleEnabled
-    ? {label: '开启', tone: 'in'}
-    : {label: '关闭', tone: 'muted'};
+  return ruleEnabled ? {label: '开启', tone: 'in'} : {label: '关闭', tone: 'muted'};
 }
 
 /** Patch one directory row after rule enabled toggles (no list reload). */
-export function patchDirRuleRow(
-  row: MappedVfsRow,
-  ruleEnabled: boolean,
-): MappedVfsRow {
+export function patchDirRuleRow(row: MappedVfsRow, ruleEnabled: boolean): MappedVfsRow {
   if (row.kind !== 'dir') {
     return row;
   }
@@ -112,29 +93,12 @@ export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
   return ruleEnabled ? 'rule_on' : 'rule_off';
 }
 
-function fileBadge(mode: InclusionMode): VfsRowBadge {
-  switch (mode) {
-    case 'hide':
-      return {label: '隐藏', tone: 'muted'};
-    case 'show':
-      return {label: '展示', tone: 'in'};
-    default:
-      return {label: '跟随', tone: 'follow'};
-  }
-}
-
 /** Map a worktree row to vfs-fm subtitle + badge. */
-export function mapWorktreeRow(
-  row: WorkplaceListRow,
-  childFileCount?: number,
-): MappedVfsRow {
+export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): MappedVfsRow {
   const name = entryName(row.path);
   if (row.kind === 'dir') {
     const ruleEnabled = row.ruleState === 'rule_on';
-    const subtitle =
-      childFileCount != null && childFileCount > 0
-        ? `${childFileCount}个文件`
-        : '';
+    const subtitle = childFileCount != null && childFileCount > 0 ? `${childFileCount}个文件` : '';
     return {
       path: row.path,
       name,
@@ -148,13 +112,15 @@ export function mapWorktreeRow(
   const inclusionText = coreT(inclusionModeLabel(row.inclusionMode));
   const displayText = coreT(displayStateLabel(row.displayState));
   const subtitle = `${inclusionText}·${displayText}`;
+  const mode = row.inclusionMode;
+  const badge: VfsRowBadge = mode === 'hide' ? {label: '隐藏', tone: 'muted'} : mode === 'show' ? {label: '展示', tone: 'in'} : {label: '跟随', tone: 'follow'};
 
   return {
     path: row.path,
     name,
     kind: 'file',
     subtitle,
-    badge: fileBadge(row.inclusionMode),
+    badge,
     ruleEnabled: false,
   };
 }
@@ -187,11 +153,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
  * Re-map direct children of `parentPath` from fresh worktree metadata.
  * Keeps list order stable; updates badges/subtitles after inclusion toggles.
  */
-export function remapDirectChildRows(
-  rows: readonly MappedVfsRow[],
-  parentPath: string,
-  allRows: readonly WorkplaceListRow[],
-): MappedVfsRow[] {
+export function remapDirectChildRows(rows: readonly MappedVfsRow[], parentPath: string, allRows: readonly WorkplaceListRow[]): MappedVfsRow[] {
   const metaByPath = new Map(allRows.map(r => [r.path, r]));
   return rows.map(row => {
     if (!isDirectChild(parentPath, row.path)) {

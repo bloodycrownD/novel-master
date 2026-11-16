@@ -5,32 +5,20 @@
  *
  * @module services/vfs-character-card
  */
-import {
-  createCharacterCardImportService,
-  type VfsScope,
-} from "@novel-master/core/vfs";
+import { createCharacterCardImportService, type VfsScope } from "@novel-master/core/vfs";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
-function resolveDirectoryPath(directoryPath?: string): string {
-  if (directoryPath == null || directoryPath.trim() === "") {
-    return "/";
-  }
-  return directoryPath;
-}
+type ImportCardOptions = { readonly confirmed: boolean; readonly directoryPath?: string };
+type ImportCardResult = Promise<"imported" | "cancelled">;
 
 /**
  * 弹出文件选择框，读取 png/json 字节后调用 Core 角色卡导入。
  * 取消选文件返回 `cancelled`；解析/写库失败抛 {@link AppError}。
  */
-export async function importCharacterCardWithDialog(
-  runtime: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-  options: { readonly confirmed: boolean; readonly directoryPath?: string },
-  parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
-  const directoryPath = resolveDirectoryPath(options.directoryPath);
+export async function importCharacterCardWithDialog(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ImportCardOptions, parentWindow?: BrowserWindow | null): ImportCardResult {
+  const directoryPath = options.directoryPath == null || options.directoryPath.trim() === "" ? "/" : options.directoryPath;
   const win = parentWindow ?? undefined;
   const dialogOpts = {
     filters: [
@@ -40,9 +28,7 @@ export async function importCharacterCardWithDialog(
     ],
     properties: ["openFile" as const],
   };
-  const result = win
-    ? await dialog.showOpenDialog(win, dialogOpts)
-    : await dialog.showOpenDialog(dialogOpts);
+  const result = win ? await dialog.showOpenDialog(win, dialogOpts) : await dialog.showOpenDialog(dialogOpts);
   if (result.canceled || result.filePaths.length === 0) {
     return "cancelled";
   }

@@ -5,16 +5,9 @@
  * **禁止**划词即 createAnnotation（否则选区变蓝、抢走原生复制/批注菜单）。
  * 新建批注：RN menuItems「批注」→ inject 采集 → recogitoCreate。
  */
-import {
-  createTextAnnotator,
-  type TextAnnotator,
-  type TextAnnotationLike,
-} from '@recogito/text-annotator';
+import {createTextAnnotator, type TextAnnotator, type TextAnnotationLike} from '@recogito/text-annotator';
 import {post} from './post';
-import {
-  draftsToRecogitoAnnotations,
-  type RecogitoTextAnnotation,
-} from './annotate-recogito-map';
+import {draftsToRecogitoAnnotations, type RecogitoTextAnnotation} from './annotate-recogito-map';
 import {bindAnnotateCollectBridge} from './annotate-collect';
 
 export type AnnotateRenderMark = {
@@ -27,8 +20,7 @@ export type AnnotateRenderMark = {
 let annotateEnabled = false;
 let annotations: AnnotateRenderMark[] = [];
 // createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），变量类型与之对齐
-let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null =
-  null;
+let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null = null;
 /** 已由宿主确认并 setAnnotations 的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
 
@@ -43,23 +35,18 @@ export function setAnnotateEnabled(enabled: boolean): void {
 }
 
 export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
-  annotations = Array.isArray(next)
-    ? next
-        .map(a => ({
-          id: String(a.id ?? ''),
-          originalText: String(a.originalText ?? ''),
-          renderStart: Number(a.renderStart),
-          renderEnd: Number(a.renderEnd),
-        }))
-        .filter(
-          a =>
-            a.id.length > 0 &&
-            Number.isFinite(a.renderStart) &&
-            Number.isFinite(a.renderEnd) &&
-            a.renderStart >= 0 &&
-            a.renderEnd > a.renderStart,
-        )
-    : [];
+  if (Array.isArray(next)) {
+    annotations = next
+      .map(a => ({
+        id: String(a.id ?? ''),
+        originalText: String(a.originalText ?? ''),
+        renderStart: Number(a.renderStart),
+        renderEnd: Number(a.renderEnd),
+      }))
+      .filter(a => a.id.length > 0 && Number.isFinite(a.renderStart) && Number.isFinite(a.renderEnd) && a.renderStart >= 0 && a.renderEnd > a.renderStart);
+  } else {
+    annotations = [];
+  }
   knownDraftIds.clear();
   for (const a of annotations) {
     knownDraftIds.add(a.id);
@@ -129,13 +116,9 @@ function applyAnnotationsToAnnotator(): void {
   if (!annotator) {
     return;
   }
-  const list = draftsToRecogitoAnnotations(
-    annotations,
-  ) as RecogitoTextAnnotation[];
+  const list = draftsToRecogitoAnnotations(annotations) as RecogitoTextAnnotation[];
   // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
-  annotator.setAnnotations(
-    list as Parameters<TextAnnotator['setAnnotations']>[0],
-  );
+  annotator.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
 }
 
 function onSelectionChanged(selected: unknown): void {

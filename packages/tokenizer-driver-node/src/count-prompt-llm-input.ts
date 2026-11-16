@@ -42,32 +42,14 @@ import { Result, type AppError } from "@novel-master/core/errors";
 import { getDefaultNodeEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
-import {
-  countOpenAiStyleMessages,
-  wrapSerializedPromptAsSystemMessage,
-} from "./logic/count-openai-style-message.js";
+import { countOpenAiStyleMessages, wrapSerializedPromptAsSystemMessage } from "./logic/count-openai-style-message.js";
 
 /** 与 `register.ts` 的 NODE_DRIVER_NAME 同值（L2 计数器身份段；import 会成环，故就地重复）。 */
 const DRIVER_NAME = "node";
 
-const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "claude",
-  "llama3",
-  "qwen2",
-  "command-r",
-  "command-a",
-  "nemo",
-  "deepseek",
-  "glm",
-]);
+const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set(["claude", "llama3", "qwen2", "command-r", "command-a", "nemo", "deepseek", "glm"]);
 
-const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "llama",
-  "mistral",
-  "yi",
-  "gemma",
-  "jamba",
-]);
+const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set(["llama", "mistral", "yi", "gemma", "jamba"]);
 
 /** 最后一级降级用的字符折算计数器（仅在 cl100k 表建不起来时才会走到）。 */
 const charRatioCounter = new HeuristicTokenCounter();
@@ -81,11 +63,7 @@ const charRatioCounter = new HeuristicTokenCounter();
  * 跨会话内容共享（34.7% 重复块）都建立在这个粒度上。连接符已被句末贪吃自然
  * 并入块内，无需额外补偿（spec 实测误差已含此效应）。
  */
-function countChunksWithL2(
-  text: string,
-  scope: string,
-  encodeText: (text: string) => number,
-): number {
+function countChunksWithL2(text: string, scope: string, encodeText: (text: string) => number): number {
   let total = 0;
   for (const chunk of splitTextIntoChunks(text)) {
     const hash = chunkHash16(chunk);
@@ -119,62 +97,12 @@ function fallbackCount(text: string, scope: string): number {
   return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
 }
 
-/**
- * tiktoken 精确档的 L2 组装（overhead 不丢不重是这里的硬约束）。
- *
- * 现有数值组装结构：`countOpenAiStyleMessages(encoding, [wrap(serialized)],
- * model)` = perMessage + w(role) + w(serialized) + tail（w = core 包装后的
- * encode，0301 再 +4/-1/+9）。块流程套在 **content 层**而不是复刻 overhead：
- *
- * ```
- * 分块口径 = countOpenAiStyleMessages(encoding, [wrap("")], model)  // 纯 overhead
- *         + Σ L2(块)                                               // content 分块求和
- * ```
- *
- * 空串 content 的 `w("") === 0`（增量计数器空串短路、不调 encode），所以
- * overhead 恰好等于 perMessage + w(role) + tail——公式零复刻、零漂移（将来
- * core 公式变这里自动跟）；content 部分从 `w(serialized)` 换成块求和，正是
- * spec 计数流程第 3 步。数值与整串口径差 ≤1%（T-TC5 对拍）。
- */
-function countOpenAiStyleChunked(
-  encoding: { encode(text: string): { readonly length: number } },
-  serialized: string,
-  tiktokenModel: string,
-  scope: string,
-): number {
-  const overhead = countOpenAiStyleMessages(
-    encoding,
-    [wrapSerializedPromptAsSystemMessage("")],
-    tiktokenModel,
-  );
-  return (
-    overhead +
-    countChunksWithL2(serialized, scope, (chunk) => encoding.encode(chunk).length)
-  );
-}
-
-async function resolveVendorModelId(
-  params: CountPromptLlmInputParams,
-): Promise<string> {
-  if (params.savedModels != null) {
-    const saved = await params.savedModels.findById(params.savedModelId.trim());
-    if (saved.ok && saved.value != null) {
-      return saved.value.vendorModelId;
-    }
-  }
-  return params.savedModelId;
-}
-
 /** Full model-aware count using Node tokenizer libraries. */
-export async function countPromptLlmInput(
-  params: CountPromptLlmInputParams,
-): Promise<Result<PromptTokenCountResult, AppError>> {
+export async function countPromptLlmInput(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
   const { layout, ctx, savedModelId, registry } = params;
-  const vendorModelId = await resolveVendorModelId(params);
-  const override =
-    params.tokenizerOverride ??
-    (await registry.getTokenizerOverride?.()) ??
-    "auto";
+  const saved = params.savedModels == null ? null : await params.savedModels.findById(params.savedModelId.trim());
+  const vendorModelId = saved != null && saved.ok && saved.value != null ? saved.value.vendorModelId : params.savedModelId;
+  const override = params.tokenizerOverride ?? (await registry.getTokenizerOverride?.()) ?? "auto";
   const family = resolveTokenizerFamily(vendorModelId, override);
   // tools 段与提示词同串计数：本地估算含 tools 才与 API 的 promptTokens
   // （本身就含 tools）可比。空 tools 时拼接为恒等（helper 返回空串）。
@@ -201,45 +129,10 @@ export async function countPromptLlmInput(
     return Result.ok(pack(savedModelId, vendorModelId, family, cached.tokenCount, cached.counterKind, cached.estimated));
   }
 
-  const { tokenCount, counterKind, estimated } = await computeCount(
-    family,
-    serialized,
-    vendorModelId,
-    scope,
-  );
-
-  // miss 后写 L1（无论哪一档——WEB/SP 整串读数同样受益于「无变更重复刷新」）。
-  promptWholeCache.record("", scope, contentHash, {
-    tokenCount,
-    counterKind,
-    estimated,
-  });
-
-  return Result.ok(pack(
-    savedModelId,
-    vendorModelId,
-    family,
-    tokenCount,
-    counterKind,
-    estimated,
-  ));
-}
-
-/** 各档实际计数（L1 miss 后进入；tiktoken / 兜底档走 L2 块流程，WEB/SP 整串）。 */
-async function computeCount(
-  family: TokenizerFamily,
-  serialized: string,
-  vendorModelId: string,
-  scope: string,
-): Promise<{
-  readonly tokenCount: number;
-  readonly counterKind: TokenCounterKind;
-  readonly estimated: boolean;
-}> {
+  // 各档实际计数（L1 miss 后进入；tiktoken / 兜底档走 L2 块流程，WEB/SP 整串）。
   let tokenCount: number;
   let counterKind: TokenCounterKind;
   let estimated = false;
-
   try {
     if (family === "heuristic") {
       // 家族本身就解析不出（未知模型 / 用户强制 heuristic）→ 走默认 cl100k 近似。
@@ -258,24 +151,36 @@ async function computeCount(
         tokenCount = fallbackCount(serialized, scope);
         counterKind = "heuristic";
         estimated = true;
-        return { tokenCount, counterKind, estimated };
-      }
-      tokenCount = countOpenAiStyleChunked(encoding, serialized, tiktokenModel, scope);
-      // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
-      counterKind = "tiktoken";
-      // cr-tok-1：强制档必须如实标 estimated。当 tiktoken 身份来自 override
-      // 强制（读口对 WEB/SP 家族传 "tiktoken"，或用户显式强制）而非模型自身
-      // 解析时，这里算的是 cl100k 对非 OpenAI 家族的**近似**，不是该家族真
-      // 分词器读数——若谎报 est:false，上层会按精确档处理：标签漏掉 `gpt ≈`、
-      // 压缩阈值跳过 0.85 保守系数、L1 还会把条目收进 pendingWrites 跨重启
-      // 落 KKV（promptWholeCache 只收精确档的约束被绕过）。判定口径：auto
-      // 下模型自身解析不出 tiktoken 家族 ⇒ 身份来自强制。gpt 系模型（auto
-      // 即 tiktoken）不受影响，仍为精确档 est:false。
-      if (
-        family === "tiktoken" &&
-        resolveTokenizerFamily(vendorModelId, "auto") !== "tiktoken"
-      ) {
-        estimated = true;
+      } else {
+        // tiktoken 精确档的 L2 组装（overhead 不丢不重是这里的硬约束）：
+        // 现有数值组装结构：`countOpenAiStyleMessages(encoding, [wrap(serialized)],
+        // model)` = perMessage + w(role) + w(serialized) + tail（w = core 包装后的
+        // encode，0301 再 +4/-1/+9）。块流程套在 **content 层**而不是复刻 overhead：
+        //
+        // ```
+        // 分块口径 = countOpenAiStyleMessages(encoding, [wrap("")], model)  // 纯 overhead
+        //         + Σ L2(块)                                               // content 分块求和
+        // ```
+        //
+        // 空串 content 的 `w("") === 0`（增量计数器空串短路、不调 encode），所以
+        // overhead 恰好等于 perMessage + w(role) + tail——公式零复刻、零漂移（将来
+        // core 公式变这里自动跟）；content 部分从 `w(serialized)` 换成块求和，正是
+        // spec 计数流程第 3 步。数值与整串口径差 ≤1%（T-TC5 对拍）。
+        const overhead = countOpenAiStyleMessages(encoding, [wrapSerializedPromptAsSystemMessage("")], tiktokenModel);
+        tokenCount = overhead + countChunksWithL2(serialized, scope, (chunk) => encoding.encode(chunk).length);
+        // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
+        counterKind = "tiktoken";
+        // cr-tok-1：强制档必须如实标 estimated。当 tiktoken 身份来自 override
+        // 强制（读口对 WEB/SP 家族传 "tiktoken"，或用户显式强制）而非模型自身
+        // 解析时，这里算的是 cl100k 对非 OpenAI 家族的**近似**，不是该家族真
+        // 分词器读数——若谎报 est:false，上层会按精确档处理：标签漏掉 `gpt ≈`、
+        // 压缩阈值跳过 0.85 保守系数、L1 还会把条目收进 pendingWrites 跨重启
+        // 落 KKV（promptWholeCache 只收精确档的约束被绕过）。判定口径：auto
+        // 下模型自身解析不出 tiktoken 家族 ⇒ 身份来自强制。gpt 系模型（auto
+        // 即 tiktoken）不受影响，仍为精确档 est:false。
+        if (family === "tiktoken" && resolveTokenizerFamily(vendorModelId, "auto") !== "tiktoken") {
+          estimated = true;
+        }
       }
     } else if (WEB_FAMILIES.has(family)) {
       const web = await countWebFamilyPrompt(family, serialized);
@@ -303,17 +208,17 @@ async function computeCount(
     estimated = true;
   }
 
-  return { tokenCount, counterKind, estimated };
+  // miss 后写 L1（无论哪一档——WEB/SP 整串读数同样受益于「无变更重复刷新」）。
+  promptWholeCache.record("", scope, contentHash, {
+    tokenCount,
+    counterKind,
+    estimated,
+  });
+
+  return Result.ok(pack(savedModelId, vendorModelId, family, tokenCount, counterKind, estimated));
 }
 
-function pack(
-  savedModelId: string,
-  vendorModelId: string,
-  tokenizerFamily: TokenizerFamily,
-  tokenCount: number,
-  counterKind: TokenCounterKind,
-  estimated: boolean,
-): PromptTokenCountResult {
+function pack(savedModelId: string, vendorModelId: string, tokenizerFamily: TokenizerFamily, tokenCount: number, counterKind: TokenCounterKind, estimated: boolean): PromptTokenCountResult {
   return {
     tokenCount,
     counterKind,

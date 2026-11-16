@@ -18,8 +18,6 @@ export type RangeKind = 'today' | 'last7' | 'last30' | 'custom';
 /** 页面主结构页签：汇总（指标卡 + 服务商×模型饼图）/ 图表（按天图表钻取）/ 流水（请求分页）。 */
 export type PageTab = 'summary' | 'detail' | 'requests';
 
-export const MS_PER_DAY = 86_400_000;
-
 export const MODEL_OPTION_ALL = '__all__';
 export const MODEL_OPTION_UNLOGGED = '__unlogged__';
 
@@ -42,13 +40,7 @@ export function toLocalDayKey(ms: number): string {
 /** 日历日偏移的本地日 key：`new Date(y, m, d + offset)` 日历推进（DST 安全），
  * 不用固定毫秒加法（23/25 小时日会偏 1 小时）。 */
 export function localDayKeyOffset(base: Date, offsetDays: number): string {
-  return toLocalDayKey(
-    new Date(
-      base.getFullYear(),
-      base.getMonth(),
-      base.getDate() + offsetDays,
-    ).getTime(),
-  );
+  return toLocalDayKey(new Date(base.getFullYear(), base.getMonth(), base.getDate() + offsetDays).getTime());
 }
 
 /** 命中率（0-1），分母无 cache 数据时返回 null（展示「—」）。 */
@@ -72,11 +64,7 @@ export function isCustomRangeValid(from: Date, to: Date): boolean {
  * - custom 未选定日期时兑底回退近 7 天（切换到 custom 必经 sheet 确认，
  *   此分支仅为类型完备，正常不可达）。日偏移均走日历加法（DST 安全）。
  */
-export function resolveRangeDays(
-  kind: RangeKind,
-  customFrom: Date | null,
-  customTo: Date | null,
-): UsageStatsRange {
+export function resolveRangeDays(kind: RangeKind, customFrom: Date | null, customTo: Date | null): UsageStatsRange {
   const now = new Date();
   const today = toLocalDayKey(now.getTime());
   if (kind === 'today') {
@@ -99,10 +87,7 @@ export function formatHitRate(rate: number | null): string {
 }
 
 /** 平均 token 速率展示：`x.x tok/s`（与桌面端统计页单位一致，用户拍板 2026-09-28）；无数据时返回调用方传入的空态文案。 */
-export function formatTokensPerSecond(
-  v: number | null,
-  emptyText: string,
-): string {
+export function formatTokensPerSecond(v: number | null, emptyText: string): string {
   if (v == null) {
     return emptyText;
   }
@@ -110,10 +95,7 @@ export function formatTokensPerSecond(
 }
 
 /** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
-export function formatFirstTokenMs(
-  ms: number | null,
-  emptyText: string,
-): string {
+export function formatFirstTokenMs(ms: number | null, emptyText: string): string {
   if (ms == null) {
     return emptyText;
   }
@@ -136,11 +118,7 @@ export interface ProviderModelOption {
  * - `{providerId: P, model: null}`：{P} · 其他模型——该服务商下
  *   `model_name IS NULL` 或不在已保存模型集合内的历史行。
  */
-export type ProviderModelFilterValue =
-  | {providerId: string; model: string}
-  | {providerId: string; model: null}
-  | {providerId: null; model: undefined}
-  | undefined;
+export type ProviderModelFilterValue = {providerId: string; model: string} | {providerId: string; model: null} | {providerId: null; model: undefined} | undefined;
 
 /** 组合的稳定展示键（testID/行 key 共用）。 */
 export function providerModelKey(providerId: string, model: string): string {
@@ -152,9 +130,7 @@ export function providerModelKey(providerId: string, model: string): string {
  * 生成规则一致：未记录服务商 → unlogged 哨兵；服务商其他模型 →
  * `{providerId}::__other__`；具体组合 → providerModelKey。
  */
-export function providerModelFilterOptionKey(
-  value: Exclude<ProviderModelFilterValue, undefined>,
-): string {
+export function providerModelFilterOptionKey(value: Exclude<ProviderModelFilterValue, undefined>): string {
   if (value.providerId === null) {
     return MODEL_OPTION_UNLOGGED;
   }

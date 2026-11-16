@@ -11,28 +11,28 @@ import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
 
 export const CLOUD_SYNC_KKV_MODULE = "nm-cloud-sync";
-export const CLOUD_SYNC_SKSP_SECRET_REF = "cloud-sync/s3-secret-key";
+const CLOUD_SYNC_SKSP_SECRET_REF = "cloud-sync/s3-secret-key";
 
 /** 默认云同步路径前缀 */
 export const DEFAULT_CLOUD_SYNC_PATH_PREFIX = "novel-master/sync/";
 
-export const CLOUD_SYNC_KEY_ENDPOINT = "endpoint";
-export const CLOUD_SYNC_KEY_BUCKET = "bucket";
-export const CLOUD_SYNC_KEY_REGION = "region";
-export const CLOUD_SYNC_KEY_PATH_PREFIX = "pathPrefix";
-export const CLOUD_SYNC_KEY_ACCESS_KEY_ID = "accessKeyId";
-export const CLOUD_SYNC_KEY_FORCE_PATH_STYLE = "forcePathStyle";
-export const CLOUD_SYNC_KEY_DEVICE_ID = "deviceId";
-export const CLOUD_SYNC_KEY_DEVICE_LABEL = "deviceLabel";
-export const CLOUD_SYNC_KEY_ENABLED = "enabled";
-export const CLOUD_SYNC_KEY_LAST_SYNCED_REV = "lastSyncedRev";
-export const CLOUD_SYNC_KEY_LAST_PULL_AT = "lastPullAt";
-export const CLOUD_SYNC_KEY_LAST_PUSH_AT = "lastPushAt";
-export const CLOUD_SYNC_KEY_LAST_PULL_RESULT = "lastPullResult";
-export const CLOUD_SYNC_KEY_LAST_PUSH_RESULT = "lastPushResult";
+const CLOUD_SYNC_KEY_ENDPOINT = "endpoint";
+const CLOUD_SYNC_KEY_BUCKET = "bucket";
+const CLOUD_SYNC_KEY_REGION = "region";
+const CLOUD_SYNC_KEY_PATH_PREFIX = "pathPrefix";
+const CLOUD_SYNC_KEY_ACCESS_KEY_ID = "accessKeyId";
+const CLOUD_SYNC_KEY_FORCE_PATH_STYLE = "forcePathStyle";
+const CLOUD_SYNC_KEY_DEVICE_ID = "deviceId";
+const CLOUD_SYNC_KEY_DEVICE_LABEL = "deviceLabel";
+const CLOUD_SYNC_KEY_ENABLED = "enabled";
+const CLOUD_SYNC_KEY_LAST_SYNCED_REV = "lastSyncedRev";
+const CLOUD_SYNC_KEY_LAST_PULL_AT = "lastPullAt";
+const CLOUD_SYNC_KEY_LAST_PUSH_AT = "lastPushAt";
+const CLOUD_SYNC_KEY_LAST_PULL_RESULT = "lastPullResult";
+const CLOUD_SYNC_KEY_LAST_PUSH_RESULT = "lastPushResult";
 
 /** 从 KKV 读取的非密钥云同步配置 */
-export type CloudSyncPublicConfig = {
+type CloudSyncPublicConfig = {
   endpoint: string;
   bucket: string;
   region: string;
@@ -100,10 +100,7 @@ export interface CloudSyncConfigStore {
   recordPush(success: boolean, detail: string): Promise<void>;
 }
 
-async function kkvGet(
-  kkv: KkvService,
-  key: string,
-): Promise<Result<string | undefined, AppError>> {
+async function kkvGet(kkv: KkvService, key: string): Promise<Result<string | undefined, AppError>> {
   const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
   if (!raw.ok) {
     if (isAppError(raw.error, "KKV_NOT_FOUND")) {
@@ -117,35 +114,16 @@ async function kkvGet(
   return Result.ok(raw.value);
 }
 
-function parseBool(value: string | undefined): boolean {
-  return value === "true";
-}
-
-function parseRev(value: string | undefined): number {
-  if (value == null || value.trim() === "") {
-    return 0;
-  }
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-
 function assertNonEmpty(label: string, value: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${label}不能为空`);
   }
 }
 
-function resolveEnabledFlag(enabledRaw: string | undefined): boolean {
-  return enabledRaw === "true";
-}
-
-export function createCloudSyncConfigStore(
-  kkv: KkvService,
-  secretStore: SecretStore,
-): CloudSyncConfigStore {
+export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretStore): CloudSyncConfigStore {
   /** 14 个 KKV 键一次并行读齐；任一已知失败整包 err（错误通道迁移四期）。 */
   async function readPublicConfig(): Promise<Result<CloudSyncPublicConfig, AppError>> {
-    const results = await Promise.all([
+    const readTasks = [
       kkvGet(kkv, CLOUD_SYNC_KEY_ENDPOINT),
       kkvGet(kkv, CLOUD_SYNC_KEY_BUCKET),
       kkvGet(kkv, CLOUD_SYNC_KEY_REGION),
@@ -160,26 +138,15 @@ export function createCloudSyncConfigStore(
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_AT),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PULL_RESULT),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_RESULT),
-    ]);
+    ];
+    const results = await Promise.all(readTasks);
     for (const r of results) {
       if (!r.ok) return Result.err(r.error);
     }
-    const [
-      endpoint,
-      bucket,
-      region,
-      pathPrefix,
-      accessKeyId,
-      forcePathStyle,
-      deviceId,
-      deviceLabel,
-      enabledRaw,
-      lastSyncedRev,
-      lastPullAt,
-      lastPushAt,
-      lastPullResult,
-      lastPushResult,
-    ] = results.map((r) => (r.ok ? r.value : undefined));
+    const [endpoint, bucket, region, pathPrefix, accessKeyId, forcePathStyle, deviceId, deviceLabel, enabledRaw, lastSyncedRev, lastPullAt, lastPushAt, lastPullResult, lastPushResult] = results.map(
+      (r) => (r.ok ? r.value : undefined)
+    );
+    const parsedLastSyncedRev = lastSyncedRev == null || lastSyncedRev.trim() === "" ? 0 : Number.parseInt(lastSyncedRev, 10);
 
     return Result.ok({
       endpoint: endpoint ?? "",
@@ -187,11 +154,11 @@ export function createCloudSyncConfigStore(
       region: region ?? "",
       pathPrefix: pathPrefix ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
       accessKeyId: accessKeyId ?? "",
-      forcePathStyle: parseBool(forcePathStyle),
+      forcePathStyle: forcePathStyle === "true",
       deviceId: deviceId ?? "",
       deviceLabel: deviceLabel ?? "",
       enabledRaw,
-      lastSyncedRev: parseRev(lastSyncedRev),
+      lastSyncedRev: Number.isFinite(parsedLastSyncedRev) && parsedLastSyncedRev >= 0 ? parsedLastSyncedRev : 0,
       lastPullAt: lastPullAt ?? "",
       lastPushAt: lastPushAt ?? "",
       lastPullResult: lastPullResult ?? "",
@@ -214,16 +181,12 @@ export function createCloudSyncConfigStore(
         deviceId: publicConfig.value.deviceId,
         deviceLabel: publicConfig.value.deviceLabel,
         hasSecretKey,
-        enabled: resolveEnabledFlag(publicConfig.value.enabledRaw),
+        enabled: publicConfig.value.enabledRaw === "true",
       });
     },
 
     async setEnabled(enabled: boolean) {
-      await kkv.set(
-        CLOUD_SYNC_KKV_MODULE,
-        CLOUD_SYNC_KEY_ENABLED,
-        enabled ? "true" : "false",
-      );
+      await kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENABLED, enabled ? "true" : "false");
     },
 
     async setConfig(input) {
@@ -239,40 +202,19 @@ export function createCloudSyncConfigStore(
         throw new Error("Secret Key 不能为空");
       }
 
-      const deviceId =
-        existing.value.deviceId.trim().length > 0
-          ? existing.value.deviceId
-          : randomUUID();
+      const deviceId = existing.value.deviceId.trim().length > 0 ? existing.value.deviceId : randomUUID();
 
-      const normalizedPrefix = normalizePrefix(
-        input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
-      );
+      const normalizedPrefix = normalizePrefix(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENDPOINT, input.endpoint.trim()),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_BUCKET, input.bucket.trim()),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_REGION, input.region.trim()),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_PATH_PREFIX,
-          normalizedPrefix,
-        ),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_ACCESS_KEY_ID,
-          input.accessKeyId.trim(),
-        ),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_FORCE_PATH_STYLE,
-          input.forcePathStyle ? "true" : "false",
-        ),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_PATH_PREFIX, normalizedPrefix),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ACCESS_KEY_ID, input.accessKeyId.trim()),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_FORCE_PATH_STYLE, input.forcePathStyle ? "true" : "false"),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_DEVICE_ID, deviceId),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_DEVICE_LABEL,
-          (input.deviceLabel ?? existing.value.deviceLabel).trim(),
-        ),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_DEVICE_LABEL, (input.deviceLabel ?? existing.value.deviceLabel).trim()),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENABLED, "true"),
       ]);
 
@@ -303,32 +245,20 @@ export function createCloudSyncConfigStore(
     },
 
     async setLastSyncedRev(rev) {
-      await kkv.set(
-        CLOUD_SYNC_KKV_MODULE,
-        CLOUD_SYNC_KEY_LAST_SYNCED_REV,
-        String(rev),
-      );
+      await kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_SYNCED_REV, String(rev));
     },
 
     async recordPull(success, detail) {
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PULL_AT, new Date().toISOString()),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_LAST_PULL_RESULT,
-          `${success ? "成功" : "失败"}：${detail}`,
-        ),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PULL_RESULT, `${success ? "成功" : "失败"}：${detail}`),
       ]);
     },
 
     async recordPush(success, detail) {
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PUSH_AT, new Date().toISOString()),
-        kkv.set(
-          CLOUD_SYNC_KKV_MODULE,
-          CLOUD_SYNC_KEY_LAST_PUSH_RESULT,
-          `${success ? "成功" : "失败"}：${detail}`,
-        ),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PUSH_RESULT, `${success ? "成功" : "失败"}：${detail}`),
       ]);
     },
   };

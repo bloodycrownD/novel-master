@@ -9,15 +9,14 @@ import { TokenizerError } from "../nmtp-error.js";
 
 const drivers = new Map<string, TokenizerDriver>();
 
-const REGISTER_HINT =
-  "Call registerTokenizerNodeDriver() (CLI/Electron) or registerTokenizerRnDriver() (React Native).";
+const REGISTER_HINT = "Call registerTokenizerNodeDriver() (CLI/Electron) or registerTokenizerRnDriver() (React Native).";
 
 /** Registers a driver under {@link TokenizerDriver.name}. */
 export function registerTokenizerDriver(driver: TokenizerDriver): void {
   drivers.set(driver.name, driver);
 }
 
-/** Returns a registered driver or `undefined`. */
+/** Returns a registered driver or `undefined`. nm-style: keep-public — 模块私有 Map 的对外访问器（nmtp / tokenizer barrel 导出，测试直用）。 */
 export function getTokenizerDriver(name: string): TokenizerDriver | undefined {
   return drivers.get(name);
 }
@@ -35,10 +34,7 @@ export function resolveTokenizerDriver(explicit?: string): TokenizerDriver {
   if (explicit !== undefined) {
     const driver = getTokenizerDriver(explicit);
     if (!driver) {
-      throw new TokenizerError(
-        "NOT_REGISTERED",
-        `Tokenizer driver not registered: ${explicit}. ${REGISTER_HINT}`
-      );
+      throw new TokenizerError("NOT_REGISTERED", `Tokenizer driver not registered: ${explicit}. ${REGISTER_HINT}`);
     }
     return driver;
   }
@@ -49,16 +45,8 @@ export function resolveTokenizerDriver(explicit?: string): TokenizerDriver {
   }
 
   if (names.length === 0) {
-    throw new TokenizerError(
-      "NOT_REGISTERED",
-      `No tokenizer driver registered. ${REGISTER_HINT}`
-    );
+    throw new TokenizerError("NOT_REGISTERED", `No tokenizer driver registered. ${REGISTER_HINT}`);
   }
 
-  throw new TokenizerError(
-    "MULTIPLE_DRIVERS",
-    `Multiple tokenizer drivers registered (${names.join(
-      ", "
-    )}); specify driver name. ${REGISTER_HINT}`
-  );
+  throw new TokenizerError("MULTIPLE_DRIVERS", `Multiple tokenizer drivers registered (${names.join(", ")}); specify driver name. ${REGISTER_HINT}`);
 }

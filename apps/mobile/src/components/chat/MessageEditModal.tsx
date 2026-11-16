@@ -6,14 +6,7 @@
  * 遮罩保持 flex:1 覆盖全屏不动。readOnly 无需键盘避让。
  */
 import React, {useEffect, useMemo, useState} from 'react';
-import {
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Dimensions, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -36,19 +29,7 @@ type Props = {
   onDelete?: () => void;
 };
 
-export function MessageEditModal({
-  visible,
-  title,
-  label,
-  placeholder,
-  initialValue = '',
-  confirmLabel = '确定',
-  readOnly = false,
-  onClose,
-  onConfirm,
-  onEdit,
-  onDelete,
-}: Props) {
+export function MessageEditModal({visible, title, label, placeholder, initialValue = '', confirmLabel = '确定', readOnly = false, onClose, onConfirm, onEdit, onDelete}: Props) {
   const {tokens} = useTheme();
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
@@ -91,69 +72,57 @@ export function MessageEditModal({
 
   const displayValue = readOnly && !trimmed ? '（空说明）' : value;
 
-  const actions = readOnly ? (
-    <View style={styles.actionsRow}>
-      {onDelete ? (
-        <Pressable onPress={onDelete} style={styles.btn}>
-          <Text style={{color: tokens.danger}}>删除</Text>
-        </Pressable>
-      ) : (
-        <View />
-      )}
-      <View style={styles.actionsEnd}>
-        <Pressable onPress={onClose} style={styles.btn}>
-          <Text style={{color: tokens.textSecondary}}>关闭</Text>
-        </Pressable>
-        {onEdit ? (
-          <Pressable onPress={onEdit} style={styles.btn}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>编辑</Text>
+  let actions: React.ReactNode;
+  if (readOnly) {
+    actions = (
+      <View style={styles.actionsRow}>
+        {onDelete ? (
+          <Pressable onPress={onDelete} style={styles.btn}>
+            <Text style={{color: tokens.danger}}>删除</Text>
           </Pressable>
-        ) : null}
+        ) : (
+          <View />
+        )}
+        <View style={styles.actionsEnd}>
+          <Pressable onPress={onClose} style={styles.btn}>
+            <Text style={{color: tokens.textSecondary}}>关闭</Text>
+          </Pressable>
+          {onEdit ? (
+            <Pressable onPress={onEdit} style={styles.btn}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>编辑</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
-    </View>
-  ) : (
-    <View style={styles.actions}>
-      <Pressable onPress={onClose} style={styles.btn}>
-        <Text style={{color: tokens.textSecondary}}>取消</Text>
-      </Pressable>
-      <Pressable
-        onPress={() => handleConfirm().catch(() => undefined)}
-        style={styles.btn}
-        disabled={!canSubmit}
-      >
-        <Text
-          style={{
-            color: canSubmit ? tokens.primary : tokens.textTertiary,
-            fontWeight: '600',
-          }}
-        >
-          {saving ? '保存中…' : confirmLabel}
-        </Text>
-      </Pressable>
-    </View>
-  );
+    );
+  } else {
+    actions = (
+      <View style={styles.actions}>
+        <Pressable onPress={onClose} style={styles.btn}>
+          <Text style={{color: tokens.textSecondary}}>取消</Text>
+        </Pressable>
+        <Pressable onPress={() => handleConfirm().catch(() => undefined)} style={styles.btn} disabled={!canSubmit}>
+          <Text
+            style={{
+              color: canSubmit ? tokens.primary : tokens.textTertiary,
+              fontWeight: '600',
+            }}
+          >
+            {saving ? '保存中…' : confirmLabel}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   const modalBody = (
     <Pressable style={styles.backdrop} onPress={onClose}>
-      <Animated.View
-        style={[
-          styles.panel,
-          {backgroundColor: tokens.surface},
-          !readOnly ? panelAvoidStyle : undefined,
-        ]}
-        onStartShouldSetResponder={() => true}
-      >
+      <Animated.View style={[styles.panel, {backgroundColor: tokens.surface}, !readOnly ? panelAvoidStyle : undefined]} onStartShouldSetResponder={() => true}>
         <Pressable onPress={e => e.stopPropagation()}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-          {label ? (
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              {label}
-            </Text>
-          ) : null}
+          {label ? <Text style={[styles.label, {color: tokens.textSecondary}]}>{label}</Text> : null}
           <TextInput
-            testID={
-              readOnly ? 'message-edit-readonly-input' : 'message-edit-input'
-            }
+            testID={readOnly ? 'message-edit-readonly-input' : 'message-edit-input'}
             style={[
               styles.input,
               {
@@ -184,12 +153,7 @@ export function MessageEditModal({
   );
 
   return (
-    <AppModal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
+    <AppModal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       {modalBody}
     </AppModal>
   );

@@ -20,16 +20,7 @@
 import {Result, AppError} from '@novel-master/core/errors';
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type NativeSyntheticEvent,
-  type TextInputContentSizeChangeEventData,
-  type TextInputProps,
-} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData, type TextInputProps} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -113,10 +104,7 @@ const DESCRIPTION_INPUT_MIN_HEIGHT = 46;
 const DESCRIPTION_INPUT_MAX_HEIGHT = 120;
 
 /** 测试结果形态：idle（未测/输入已变化）→ 手动点击后才进入 ok/error。 */
-type TestOutcome =
-  | {kind: 'idle'}
-  | {kind: 'ok'; result: MatchSmartSortPatternResult}
-  | {kind: 'error'; message: string};
+type TestOutcome = {kind: 'idle'} | {kind: 'ok'; result: MatchSmartSortPatternResult} | {kind: 'error'; message: string};
 
 const IDLE_OUTCOME: TestOutcome = {kind: 'idle'};
 
@@ -139,9 +127,7 @@ function AutoGrowMultilineInput({
   const handleContentSizeChange = useCallback(
     (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
       const contentHeight = e.nativeEvent.contentSize.height;
-      setHeight(
-        Math.min(Math.max(contentHeight + 24, minHeight), maxHeight),
-      );
+      setHeight(Math.min(Math.max(contentHeight + 24, minHeight), maxHeight));
     },
     [minHeight, maxHeight],
   );
@@ -155,11 +141,7 @@ function AutoGrowMultilineInput({
       placeholder={placeholder}
       autoCapitalize="none"
       autoCorrect={false}
-      style={[
-        styles.autoGrowInput,
-        {minHeight},
-        height != null ? {height} : null,
-      ]}
+      style={[styles.autoGrowInput, {minHeight}, height != null ? {height} : null]}
       {...rest}
     />
   );
@@ -179,25 +161,23 @@ export function SmartSortRuleEditorScreen() {
 
   // 标题栏菜单位换「?」帮助按钮（照 SearchEnginesScreen 先例；useFocusEffect
   // 保证其它屏覆盖/返回后重新聚焦时按钮不丢，卸载时一并关闭帮助弹窗）。
-  useFocusEffect(
-    useCallback(() => {
-      setStackOverride({
-        showMenu: true,
-        menuIcon: <HelpIcon color={tokens.text} />,
-        onMenu: () => setHelpVisible(true),
-      });
-      return () => {
-        setStackOverride(undefined);
-        setHelpVisible(false);
-      };
-    }, [setStackOverride, tokens.text]),
-  );
+  const onScreenFocus = useCallback(() => {
+    setStackOverride({
+      showMenu: true,
+      menuIcon: <HelpIcon color={tokens.text} />,
+      onMenu: () => setHelpVisible(true),
+    });
+    return () => {
+      setStackOverride(undefined);
+      setHelpVisible(false);
+    };
+  }, [setStackOverride, tokens.text]);
+  useFocusEffect(onScreenFocus);
 
   const [draft, setDraft] = useState<DraftFields>(DEFAULT_DRAFT);
   const [testText, setTestText] = useState('');
   const [testOutcome, setTestOutcome] = useState<TestOutcome>(IDLE_OUTCOME);
-  const [captureKindPickerVisible, setCaptureKindPickerVisible] =
-    useState(false);
+  const [captureKindPickerVisible, setCaptureKindPickerVisible] = useState(false);
   const [loading, setLoading] = useState(Boolean(ruleId));
   const [saving, setSaving] = useState(false);
   // baseline 初始即对齐 DEFAULT_DRAFT 快照：加载中与加载失败（catch 只 toast，
@@ -290,12 +270,7 @@ export function SmartSortRuleEditorScreen() {
     const parsed = parsePatternInput(draft.patternInput.trim());
     setTestOutcome({
       kind: 'ok',
-      result: matchSmartSortPattern(
-        parsed.pattern,
-        parsed.flags,
-        testText,
-        draft.captureKind,
-      ),
+      result: matchSmartSortPattern(parsed.pattern, parsed.flags, testText, draft.captureKind),
     });
   }, [draft.patternInput, draft.captureKind, testText]);
 
@@ -352,8 +327,7 @@ export function SmartSortRuleEditorScreen() {
         }>,
         AppError
       >
-    > =>
-      Result.ok({rows: [...CAPTURE_KIND_OPTIONS], selectedId: draft.captureKind}),
+    > => Result.ok({rows: [...CAPTURE_KIND_OPTIONS], selectedId: draft.captureKind}),
     [draft.captureKind],
   );
 
@@ -366,40 +340,17 @@ export function SmartSortRuleEditorScreen() {
       tokens={tokens}
       footer={
         <View>
-          {dirty ? (
-            <Text style={[styles.unsaved, {color: tokens.danger}]}>
-              未保存的更改
-            </Text>
-          ) : null}
-          <StickyFormFooter
-            tokens={tokens}
-            label="保存"
-            loading={saving}
-            onPress={() => handleSave().catch(() => undefined)}
-          />
+          {dirty ? <Text style={[styles.unsaved, {color: tokens.danger}]}>未保存的更改</Text> : null}
+          <StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />
         </View>
       }
     >
       <FormSectionCard tokens={tokens}>
-        <FormSwitchRow
-          tokens={tokens}
-          label="启用规则"
-          value={draft.enabled}
-          onValueChange={v => patchDraft({enabled: v})}
-        />
+        <FormSwitchRow tokens={tokens} label="启用规则" value={draft.enabled} onValueChange={v => patchDraft({enabled: v})} />
         <FormField label="名称" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={draft.name}
-            onChangeText={v => patchDraft({name: v})}
-            placeholder="如 中文序号章节"
-          />
+          <FormTextInput tokens={tokens} value={draft.name} onChangeText={v => patchDraft({name: v})} placeholder="如 中文序号章节" />
         </FormField>
-        <FormField
-          label="正则表达式"
-          tokens={tokens}
-          hint="支持 /正则/flags 格式，如 /第(\d+)章/i"
-        >
+        <FormField label="正则表达式" tokens={tokens} hint="支持 /正则/flags 格式，如 /第(\d+)章/i">
           <AutoGrowMultilineInput
             tokens={tokens}
             value={draft.patternInput}
@@ -416,26 +367,20 @@ export function SmartSortRuleEditorScreen() {
             draft.captureKind === 'smart'
               ? '从捕获组提取序号，中文数字自动转换'
               : draft.captureKind === 'fixed_min'
-                ? '命中即排在所有序号之前（序章/楔子类）'
-                : '命中即沉底排在所有序号之后（终章/番外类）'
-          }>
+              ? '命中即排在所有序号之前（序章/楔子类）'
+              : '命中即沉底排在所有序号之后（终章/番外类）'
+          }
+        >
           <Pressable
             testID="capture-kind-value-row"
             accessibilityLabel="选择捕获数字方式"
             onPress={() => setCaptureKindPickerVisible(true)}
-            style={[
-              styles.pickerRow,
-              {borderColor: tokens.border, backgroundColor: tokens.bgSecondary},
-            ]}>
-            <Text
-              testID="capture-kind-value"
-              style={{color: tokens.text}}
-              numberOfLines={1}>
+            style={[styles.pickerRow, {borderColor: tokens.border, backgroundColor: tokens.bgSecondary}]}
+          >
+            <Text testID="capture-kind-value" style={{color: tokens.text}} numberOfLines={1}>
               {captureKindLabel(draft.captureKind)}
             </Text>
-            <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-              ›
-            </Text>
+            <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
           </Pressable>
         </FormField>
         <FormField label="描述" tokens={tokens}>
@@ -450,26 +395,11 @@ export function SmartSortRuleEditorScreen() {
         </FormField>
       </FormSectionCard>
 
-      <FormSectionCard
-        title="测试"
-        tokens={tokens}
-        hint="输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。"
-      >
+      <FormSectionCard title="测试" tokens={tokens} hint="输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。">
         <FormField label="测试文本" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            multiline
-            value={testText}
-            onChangeText={changeTestText}
-            placeholder="输入测试文本"
-          />
+          <FormTextInput tokens={tokens} multiline value={testText} onChangeText={changeTestText} placeholder="输入测试文本" />
         </FormField>
-        <SecondaryButton
-          label="测试"
-          tokens={tokens}
-          onPress={runMatchTest}
-          fullWidth
-        />
+        <SecondaryButton label="测试" tokens={tokens} onPress={runMatchTest} fullWidth />
         <FormField label="结果" tokens={tokens}>
           <View
             style={[
@@ -481,13 +411,9 @@ export function SmartSortRuleEditorScreen() {
             ]}
           >
             {testOutcome.kind === 'idle' ? (
-              <Text style={[styles.resultText, {color: tokens.textSecondary}]}>
-                点击「测试」查看匹配结果
-              </Text>
+              <Text style={[styles.resultText, {color: tokens.textSecondary}]}>点击「测试」查看匹配结果</Text>
             ) : testOutcome.kind === 'error' ? (
-              <Text style={[styles.resultText, {color: tokens.danger}]}>
-                {testOutcome.message}
-              </Text>
+              <Text style={[styles.resultText, {color: tokens.danger}]}>{testOutcome.message}</Text>
             ) : testOutcome.result.ok ? (
               <>
                 {/* 高亮渲染（fix-desc-and-highlight）：core 单源切分
@@ -495,10 +421,7 @@ export function SmartSortRuleEditorScreen() {
                     成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
                     文本在 Text 内自然换行。 */}
                 <Text style={[styles.resultText, {color: tokens.text}]}>
-                  {splitSmartSortHighlightSegments(
-                    testText,
-                    testOutcome.result.matches,
-                  ).map((seg, i) =>
+                  {splitSmartSortHighlightSegments(testText, testOutcome.result.matches).map((seg, i) =>
                     seg.matched ? (
                       <Text key={i} style={{color: tokens.primary}}>
                         {seg.text}
@@ -513,30 +436,16 @@ export function SmartSortRuleEditorScreen() {
                 {testOutcome.result.matches.length > 0 ? (
                   <View style={styles.tupleList}>
                     {testOutcome.result.matches.map((m, i) => (
-                      <Text
-                        key={`${m.index}-${i}`}
-                        style={[
-                          styles.tupleRow,
-                          {color: tokens.textSecondary},
-                        ]}>
-                        {`${m.text || '(空匹配)'} → ${
-                          m.tuple ?? '无序号'
-                        }`}
+                      <Text key={`${m.index}-${i}`} style={[styles.tupleRow, {color: tokens.textSecondary}]}>
+                        {`${m.text || '(空匹配)'} → ${m.tuple ?? '无序号'}`}
                       </Text>
                     ))}
                   </View>
                 ) : null}
-                <Text
-                  style={[styles.resultCount, {color: tokens.textSecondary}]}>
-                  {testOutcome.result.matches.length > 0
-                    ? `共 ${testOutcome.result.matches.length} 处匹配`
-                    : '无匹配'}
-                </Text>
+                <Text style={[styles.resultCount, {color: tokens.textSecondary}]}>{testOutcome.result.matches.length > 0 ? `共 ${testOutcome.result.matches.length} 处匹配` : '无匹配'}</Text>
               </>
             ) : (
-              <Text style={[styles.resultText, {color: tokens.danger}]}>
-                {`正则无效：${testOutcome.result.error}`}
-              </Text>
+              <Text style={[styles.resultText, {color: tokens.danger}]}>{`正则无效：${testOutcome.result.error}`}</Text>
             )}
           </View>
         </FormField>
@@ -551,9 +460,7 @@ export function SmartSortRuleEditorScreen() {
         renderRow={(item, selected) => (
           <>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {selected ? (
-              <Text style={{color: tokens.primary}}>当前</Text>
-            ) : null}
+            {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
           </>
         )}
         getRowProps={item => ({
@@ -570,36 +477,13 @@ export function SmartSortRuleEditorScreen() {
         onClose={() => setCaptureKindPickerVisible(false)}
       />
       {/* 使用说明弹窗：规则优先级 / 智能数字 / 固定档 / 正则格式四段，照搜索配置同款。 */}
-      <ModalShell
-        visible={helpVisible}
-        onClose={() => setHelpVisible(false)}
-        variant="center"
-        animationType="fade"
-        panelStyle={styles.helpPanel}>
+      <ModalShell visible={helpVisible} onClose={() => setHelpVisible(false)} variant="center" animationType="fade" panelStyle={styles.helpPanel}>
         <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
-        <HelpSection
-          tokens={tokens}
-          title="规则与优先级"
-          body="排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。"
-        />
-        <HelpSection
-          tokens={tokens}
-          title="智能数字"
-          body="从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。"
-        />
-        <HelpSection
-          tokens={tokens}
-          title="固定最大/最小"
-          body="命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。"
-        />
-        <HelpSection
-          tokens={tokens}
-          title="正则格式"
-          body="支持 /正则/flags 字面量（如 /第(\\d+)章/i），也可直接输入裸正则（默认无 flags）。"
-        />
-        <Pressable
-          onPress={() => setHelpVisible(false)}
-          style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
+        <HelpSection tokens={tokens} title="规则与优先级" body="排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。" />
+        <HelpSection tokens={tokens} title="智能数字" body="从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。" />
+        <HelpSection tokens={tokens} title="固定最大/最小" body="命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。" />
+        <HelpSection tokens={tokens} title="正则格式" body="支持 /正则/flags 字面量（如 /第(\\d+)章/i），也可直接输入裸正则（默认无 flags）。" />
+        <Pressable onPress={() => setHelpVisible(false)} style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
           <Text style={{color: tokens.primary, fontSize: 15}}>关闭</Text>
         </Pressable>
       </ModalShell>
@@ -622,21 +506,11 @@ function toDraft(rule: SmartSortRule): DraftFields {
 }
 
 /** 帮助弹窗一段说明：小标题 + 正文（照搜索配置同款）。 */
-function HelpSection({
-  title,
-  body,
-  tokens,
-}: {
-  title: string;
-  body: string;
-  tokens: ThemeTokens;
-}) {
+function HelpSection({title, body, tokens}: {title: string; body: string; tokens: ThemeTokens}) {
   return (
     <View style={styles.helpSection}>
       <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
-      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>
-        {body}
-      </Text>
+      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>{body}</Text>
     </View>
   );
 }

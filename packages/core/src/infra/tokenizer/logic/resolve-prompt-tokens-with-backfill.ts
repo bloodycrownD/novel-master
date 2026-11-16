@@ -11,11 +11,10 @@
 import type { ChatMessageData } from "../../../domain/chat/model/message.js";
 import type { Outcome } from "../../../errors/outcome.js";
 import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
-import {
-  resolveCurrentPromptTokens,
-  type ResolveCurrentPromptTokensOptions,
-  type ResolvedPromptTokens,
-} from "./resolve-current-prompt-tokens.js";
+import { resolveCurrentPromptTokens, type ResolveCurrentPromptTokensOptions, type ResolvedPromptTokens } from "./resolve-current-prompt-tokens.js";
+
+type PromptTokensOptions = ResolveCurrentPromptTokensOptions;
+type PromptTokensResult = Outcome<ResolvedPromptTokens>;
 
 /**
  * resolve 一次 prompt token 计数。
@@ -32,11 +31,6 @@ import {
  * 沿 `Outcome.cancelled` / `Outcome.replaced` 透传（错误通道迁移二期：哨兵
  * throw 改返回值，读口按 kind 判定收口）。
  */
-export async function resolvePromptTokensWithBackfill(
-  sessionId: string,
-  _rawMessages: readonly ChatMessageData[],
-  params: CountPromptLlmInputParams,
-  options?: ResolveCurrentPromptTokensOptions
-): Promise<Outcome<ResolvedPromptTokens>> {
-  return resolveCurrentPromptTokens(sessionId, params, options);
+export async function resolvePromptTokensWithBackfill(sessionId: string, _raw: readonly ChatMessageData[], params: CountPromptLlmInputParams, opts?: PromptTokensOptions): Promise<PromptTokensResult> {
+  return resolveCurrentPromptTokens(sessionId, params, opts);
 }

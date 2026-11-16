@@ -13,6 +13,16 @@ import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 
+/** {@link ChatAgentSession.append} 的消息选项（透传 `MessageService.append`）。 */
+interface ChatAgentSessionAppendOptions {
+  provider?: string | null;
+  modelName?: string | null;
+  raw?: Record<string, unknown> | null;
+  usage?: MessageUsage;
+  /** 结构化附件：透传给 `MessageService.append`（写 `attachments_json`）。 */
+  attachments?: readonly MessageAttachment[];
+}
+
 /**
  * Agent session adapter over {@link MessageService}.
  *
@@ -23,12 +33,7 @@ import type { AgentSession } from "@/domain/agent/session/agent-session.port.js"
  * parentSessionId 作为第三位位置参数，第四位走默认值（= childSessionId）。
  */
 export class ChatAgentSession implements AgentSession {
-  constructor(
-    private readonly messages: MessageService,
-    readonly sessionId: string,
-    readonly workplaceScopeSessionId: string = sessionId,
-    readonly kkvScopeSessionId: string = sessionId
-  ) {}
+  constructor(private readonly messages: MessageService, readonly sessionId: string, readonly workplaceScopeSessionId: string = sessionId, readonly kkvScopeSessionId: string = sessionId) {}
 
   async list(): Promise<readonly ChatMessageData[]> {
     // 可见-only 走 SQL 层过滤（`AND hidden = 0`，不解压隐藏行正文），返回集合
@@ -41,18 +46,7 @@ export class ChatAgentSession implements AgentSession {
     });
   }
 
-  async append(
-    role: string,
-    content: MessageContent,
-    options?: {
-      provider?: string | null;
-      modelName?: string | null;
-      raw?: Record<string, unknown> | null;
-      usage?: MessageUsage;
-      /** 结构化附件：透传给 `MessageService.append`（写 `attachments_json`）。 */
-      attachments?: readonly MessageAttachment[];
-    }
-  ): Promise<Result<ChatMessageData, AppError>> {
+  async append(role: string, content: MessageContent, options?: ChatAgentSessionAppendOptions): Promise<Result<ChatMessageData, AppError>> {
     // 已知失败沿返回值接力（五期门⑦）：消息仓储 `Result` 原样透传，由 agent
     // turn loop 框架级统一收口。
     return this.messages.append(this.sessionId, role, content, options);

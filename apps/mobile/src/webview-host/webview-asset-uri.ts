@@ -11,31 +11,18 @@
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
-export type WebViewAssetPackageId =
-  | 'rich-document'
-  | 'code-editor'
-  | 'composer-input'
-  | 'chat-transcript';
-
-function blobFsDirs(): typeof ReactNativeBlobUtil.fs.dirs {
-  const anyMod = ReactNativeBlobUtil as unknown as {
-    fs?: typeof ReactNativeBlobUtil.fs;
-    default?: {fs?: typeof ReactNativeBlobUtil.fs};
-  };
-  const fs = anyMod.fs ?? anyMod.default?.fs;
-  if (fs?.dirs == null) {
-    throw new Error('react-native-blob-util.fs.dirs 不可用');
-  }
-  return fs.dirs;
-}
+type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
 
 /** 解析 iOS 主 Bundle 绝对路径；空/异常时同步 throw。 */
 function iosMainBundleDir(): string {
-  const dir = blobFsDirs().MainBundleDir;
+  const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
+  const fsModule = anyMod.fs ?? anyMod.default?.fs;
+  if (fsModule?.dirs == null) {
+    throw new Error('react-native-blob-util.fs.dirs 不可用');
+  }
+  const dir = fsModule.dirs.MainBundleDir;
   if (typeof dir !== 'string' || dir.trim().length === 0) {
-    throw new Error(
-      '无法解析 iOS MainBundleDir，WebView 资产 URI 不可用（请确认 react-native-blob-util 已链接）',
-    );
+    throw new Error('无法解析 iOS MainBundleDir，WebView 资产 URI 不可用（请确认 react-native-blob-util 已链接）');
   }
   return dir.replace(/\/+$/, '');
 }

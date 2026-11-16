@@ -17,11 +17,7 @@ import type { Tiktoken } from "tiktoken";
  * - encode each message body via tiktoken
  * - +3 trailing padding (+9 extra for 0301)
  */
-export function countOpenAiMessages(
-  encoding: Tiktoken,
-  messages: readonly ChatMessage[],
-  tiktokenModel: string,
-): number {
+export function countOpenAiMessages(encoding: Tiktoken, messages: readonly ChatMessage[], tiktokenModel: string): number {
   const is0301 = isGpt0301TiktokenModel(tiktokenModel);
   const perMessageOverhead = is0301 ? 4 : 3;
   let tokens = 0;

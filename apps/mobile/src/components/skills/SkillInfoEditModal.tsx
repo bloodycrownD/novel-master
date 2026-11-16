@@ -9,20 +9,8 @@
  *   本组件不处理 invalid 态。
  */
 import React, {useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import {
-  BUILTIN_SKILL_NAMES,
-  validateSkillName,
-  type SkillDomain,
-} from '@novel-master/core/skills';
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {BUILTIN_SKILL_NAMES, validateSkillName, type SkillDomain} from '@novel-master/core/skills';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -45,13 +33,7 @@ type Props = {
   onSaved: (name: string) => void;
 };
 
-export function SkillInfoEditModal({
-  visible,
-  target,
-  currentDescription,
-  onClose,
-  onSaved,
-}: Props) {
+export function SkillInfoEditModal({visible, target, currentDescription, onClose, onSaved}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [name, setName] = useState(target.name);
@@ -73,8 +55,7 @@ export function SkillInfoEditModal({
     return null;
   }
 
-  const builtin =
-    target.domain === 'global' && BUILTIN_SKILL_NAMES.has(target.name);
+  const builtin = target.domain === 'global' && BUILTIN_SKILL_NAMES.has(target.name);
   // 判定与提交值统一先 trim（对齐 desktop：首尾空白不算变更、不带空白落盘）
   const trimmedName = name.trim();
   const trimmedDesc = description.trim();
@@ -83,11 +64,7 @@ export function SkillInfoEditModal({
   // validateSkillName 的 descriptor 经 coreT 渲染成 string（nameIssue 只做展示与空判定）
   const nameReason = nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
   const nameIssue = nameReason == null ? null : coreT(nameReason);
-  const canSubmit =
-    (nameChanged || descChanged) &&
-    nameIssue == null &&
-    name.length > 0 &&
-    !saving;
+  const canSubmit = (nameChanged || descChanged) && nameIssue == null && name.length > 0 && !saving;
 
   const handleSave = async () => {
     if (!canSubmit) {
@@ -96,19 +73,13 @@ export function SkillInfoEditModal({
     setSaving(true);
     setError(undefined);
     try {
-      await runtime.skills().updateSkillInfo(
-        {
-          domain: target.domain,
-          name: target.name,
-          ...(target.domain === 'project' && target.projectId != null
-            ? {projectId: target.projectId}
-            : {}),
-        },
-        {
-          ...(nameChanged ? {newName: trimmedName} : {}),
-          ...(descChanged ? {description: trimmedDesc} : {}),
-        },
-      );
+      const targetRef = {
+        domain: target.domain,
+        name: target.name,
+        ...(target.domain === 'project' && target.projectId != null ? {projectId: target.projectId} : {}),
+      };
+      const infoPatch = {...(nameChanged ? {newName: trimmedName} : {}), ...(descChanged ? {description: trimmedDesc} : {})};
+      await runtime.skills().updateSkillInfo(targetRef, infoPatch);
       onSaved(nameChanged ? trimmedName : target.name);
       onClose();
     } catch (err) {
@@ -119,24 +90,10 @@ export function SkillInfoEditModal({
   };
 
   return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      animationType="slide"
-      keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
-      panelStyle={styles.panel}
-    >
+    <ModalShell visible={visible} onClose={onClose} variant="bottom" animationType="slide" keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}} panelStyle={styles.panel}>
       <Text style={[styles.title, {color: tokens.text}]}>编辑信息</Text>
-      <ScrollView
-        style={styles.form}
-        contentContainerStyle={styles.formContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          {builtin ? '技能名（内置技能不可改名）' : '技能名'}
-        </Text>
+      <ScrollView style={styles.form} contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Text style={[styles.label, {color: tokens.textSecondary}]}>{builtin ? '技能名（内置技能不可改名）' : '技能名'}</Text>
         <TextInput
           testID="skill-info-name-input"
           style={[
@@ -152,26 +109,18 @@ export function SkillInfoEditModal({
           editable={!builtin}
           autoCorrect={false}
         />
-        {nameIssue ? (
-          <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text>
-        ) : null}
+        {nameIssue ? <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text> : null}
         <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
         <TextInput
           testID="skill-info-description-input"
-          style={[
-            styles.input,
-            styles.descriptionInput,
-            {color: tokens.text, borderColor: tokens.border, backgroundColor: tokens.background},
-          ]}
+          style={[styles.input, styles.descriptionInput, {color: tokens.text, borderColor: tokens.border, backgroundColor: tokens.background}]}
           value={description}
           onChangeText={setDescription}
           placeholder="进入技能索引，模型据此决定是否使用"
           placeholderTextColor={tokens.textSecondary}
           multiline
         />
-        {error ? (
-          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-        ) : null}
+        {error ? <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text> : null}
       </ScrollView>
       <View style={styles.foot}>
         <Pressable onPress={onClose} style={styles.footBtn}>
@@ -179,18 +128,11 @@ export function SkillInfoEditModal({
         </Pressable>
         <Pressable
           testID="skill-info-submit"
-          style={[
-            styles.footBtn,
-            {backgroundColor: canSubmit ? tokens.primary : tokens.border},
-          ]}
+          style={[styles.footBtn, {backgroundColor: canSubmit ? tokens.primary : tokens.border}]}
           disabled={!canSubmit}
           onPress={() => handleSave().catch(() => undefined)}
         >
-          {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={{color: '#fff', fontWeight: '600'}}>保存</Text>
-          )}
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{color: '#fff', fontWeight: '600'}}>保存</Text>}
         </Pressable>
       </View>
     </ModalShell>

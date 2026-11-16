@@ -19,20 +19,15 @@ import {h, render} from 'preact';
 
 import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
-export type MermaidViewerViewProps = {
+type MermaidViewerViewProps = {
   /** 原图 SVG 的深克隆（cloneNode(true)），由覆盖层 effect 挂入视口容器。 */
   svgClone: Element;
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 渲染全屏覆盖层。 */
-export type RenderMermaidViewerView = (
-  props: MermaidViewerViewProps | null,
-) => void;
+type RenderMermaidViewerView = (props: MermaidViewerViewProps | null) => void;
 
-export type MermaidViewerPost = (
-  type: string,
-  payload?: Record<string, unknown>,
-) => void;
+type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => void;
 
 let _renderView: RenderMermaidViewerView | null = null;
 let _post: MermaidViewerPost | null = null;
@@ -42,10 +37,6 @@ let _delegationAttached = false;
 /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
 export function registerMermaidViewerView(fn: RenderMermaidViewerView): void {
   _renderView = fn;
-}
-
-export function isMermaidViewerOpen(): boolean {
-  return _open;
 }
 
 /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
@@ -125,12 +116,7 @@ export function mountMermaidViewerPortal(portalId: string): void {
       render(null, portal);
       return;
     }
-    render(
-      h(MermaidViewerOverlay, {
-        svgClone: props.svgClone,
-        onClose: () => closeMermaidViewer(true),
-      }),
-      portal,
-    );
+    const overlay = h(MermaidViewerOverlay, {svgClone: props.svgClone, onClose: () => closeMermaidViewer(true)});
+    render(overlay, portal);
   });
 }

@@ -8,7 +8,7 @@ import {
 } from '../../runtime/render/row-logic';
 import {CollapsibleSection} from './CollapsibleSection';
 
-export type AttachGroupProps = {
+type AttachGroupProps = {
   attachments: AttachmentChip[];
   groupKey: string;
   expanded: boolean;

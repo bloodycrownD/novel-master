@@ -3,10 +3,7 @@
  */
 
 /** source 是否为 target 自身或祖先（禁止移到自身/子树）。 */
-export function isSelfOrAncestorPath(
-  sourcePath: string,
-  targetDir: string,
-): boolean {
+export function isSelfOrAncestorPath(sourcePath: string, targetDir: string): boolean {
   if (sourcePath === targetDir) {
     return true;
   }
@@ -20,12 +17,8 @@ export function isSelfOrAncestorPath(
  * 将 `sourcePath` 移动到 `targetDir` 下，保留 basename。
  * 例：/a/b.txt → /c  ⇒ /c/b.txt；/a → /  ⇒ /a
  */
-export function resolveMoveDestination(
-  sourcePath: string,
-  targetDir: string,
-): string {
-  const name =
-    sourcePath === '/' ? '' : sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
+export function resolveMoveDestination(sourcePath: string, targetDir: string): string {
+  const name = sourcePath === '/' ? '' : sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
   if (!name) {
     return targetDir;
   }
@@ -36,9 +29,6 @@ export function resolveMoveDestination(
 }
 
 /** 目标目录是否落在任一源路径自身或其子树上（不可用作移动目标）。 */
-export function isBlockedMoveTarget(
-  targetDir: string,
-  sourcePaths: readonly string[],
-): boolean {
+export function isBlockedMoveTarget(targetDir: string, sourcePaths: readonly string[]): boolean {
   return sourcePaths.some(src => isSelfOrAncestorPath(src, targetDir));
 }

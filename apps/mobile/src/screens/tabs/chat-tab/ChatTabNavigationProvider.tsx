@@ -3,29 +3,16 @@
  * context、hook 与类型定义在 navigation/ChatTabNavContext（cr-fix-spec
  * arch/C-1），本组件只负责聚合并写入，避免 components 反向依赖 screens。
  */
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, {createContext, useCallback, useContext, useMemo, useState, type ReactNode} from 'react';
 import {useChatTabContext} from './ChatTabProvider';
 import {ChatTabNavigationCtx} from '@/navigation/ChatTabNavContext';
-import type {
-  ChatTabNavigationActions,
-  ChatTabNavigationState,
-} from '@/navigation/ChatTabNavContext';
+import type {ChatTabNavigationActions, ChatTabNavigationState} from '@/navigation/ChatTabNavContext';
 
-const WorkspaceBackCtx = createContext<React.Dispatch<
-  React.SetStateAction<{
-    canGoUp: boolean;
-    goUp: () => void;
-  } | null>
-> | null>(null);
+type WorkspaceBackState = {canGoUp: boolean; goUp: () => void};
+type WorkspaceBackContextValue = React.Dispatch<React.SetStateAction<WorkspaceBackState | null>> | null;
+const WorkspaceBackCtx = createContext<WorkspaceBackContextValue>(null);
 
-export type ChatTabNavigationProviderProps = {
+type ChatTabNavigationProviderProps = {
   children: ReactNode;
   sessionBatchActive: boolean;
   onExitSessionBatch: () => void;
@@ -33,40 +20,22 @@ export type ChatTabNavigationProviderProps = {
   onOpenSessionDetail?: () => void;
 };
 
-export function ChatTabNavigationProvider({
-  children,
-  sessionBatchActive,
-  onExitSessionBatch,
-  onOpenSessionDetail,
-}: ChatTabNavigationProviderProps) {
+export function ChatTabNavigationProvider({children, sessionBatchActive, onExitSessionBatch, onOpenSessionDetail}: ChatTabNavigationProviderProps) {
   const ctx = useChatTabContext();
-  const [workspaceBackState, setWorkspaceBackState] = useState<{
-    canGoUp: boolean;
-    goUp: () => void;
-  } | null>(null);
+  const [workspaceBackState, setWorkspaceBackState] = useState<WorkspaceBackState | null>(null);
 
   const state = useMemo(
     (): ChatTabNavigationState => ({
       chatSubview: ctx.chatSubview === 'conversation' ? 'conversation' : 'list',
       sessionListPanel: ctx.scope.sessionListPanel,
       projectName: ctx.scope.currentProject?.name,
-      sessionTitle:
-        ctx.scope.currentSession?.title ?? ctx.scope.currentSession?.id,
+      sessionTitle: ctx.scope.currentSession?.title ?? ctx.scope.currentSession?.id,
       sessionDrawerOpen: ctx.sessionDrawerOpen,
       projectDrawerOpen: ctx.scope.projectDrawerOpen,
       sessionBatchActive,
       workspaceCanGoUp: workspaceBackState?.canGoUp ?? false,
     }),
-    [
-      ctx.chatSubview,
-      ctx.scope.sessionListPanel,
-      ctx.scope.currentProject,
-      ctx.scope.currentSession,
-      ctx.sessionDrawerOpen,
-      ctx.scope.projectDrawerOpen,
-      sessionBatchActive,
-      workspaceBackState,
-    ],
+    [ctx.chatSubview, ctx.scope.sessionListPanel, ctx.scope.currentProject, ctx.scope.currentSession, ctx.sessionDrawerOpen, ctx.scope.projectDrawerOpen, sessionBatchActive, workspaceBackState],
   );
 
   const actions = useMemo(
@@ -104,9 +73,7 @@ export function ChatTabNavigationProvider({
 
   return (
     <WorkspaceBackCtx.Provider value={setWorkspaceBackState}>
-      <ChatTabNavigationCtx.Provider value={value}>
-        {children}
-      </ChatTabNavigationCtx.Provider>
+      <ChatTabNavigationCtx.Provider value={value}>{children}</ChatTabNavigationCtx.Provider>
     </WorkspaceBackCtx.Provider>
   );
 }

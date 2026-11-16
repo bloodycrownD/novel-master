@@ -15,9 +15,7 @@ import { createMessageService } from "./create-chat-services.js";
  *
  * @param conn - 已 bootstrap 的数据库连接
  */
-export function createMessageTranscriptEffectsService(
-  conn: TdbcConnection
-): MessageTranscriptEffectsService {
+export function createMessageTranscriptEffectsService(conn: TdbcConnection): MessageTranscriptEffectsService {
   return new DefaultMessageTranscriptEffectsService({
     conn,
     messages: createMessageService(conn),

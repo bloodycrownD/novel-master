@@ -125,25 +125,11 @@ function isBoundaryCharCode(code: number): boolean {
     return true;
   }
   // CJK 标点（，。！？；：、（）【】《》「」『』…—· 等）
-  if (
-    (code >= 0x3001 && code <= 0x303f) ||
-    (code >= 0xff01 && code <= 0xff65) ||
-    code === 0x2026 ||
-    code === 0x2014 ||
-    code === 0x2018 ||
-    code === 0x2019 ||
-    code === 0x201c ||
-    code === 0x201d
-  ) {
+  if ((code >= 0x3001 && code <= 0x303f) || (code >= 0xff01 && code <= 0xff65) || code === 0x2026 || code === 0x2014 || code === 0x2018 || code === 0x2019 || code === 0x201c || code === 0x201d) {
     return true;
   }
   // ASCII 标点（. , ! ? ; : ) ] } …）：切在标点前，标点归下一段
-  if (
-    (code >= 0x21 && code <= 0x2f) ||
-    (code >= 0x3a && code <= 0x40) ||
-    (code >= 0x5b && code <= 0x60) ||
-    (code >= 0x7b && code <= 0x7e)
-  ) {
+  if ((code >= 0x21 && code <= 0x2f) || (code >= 0x3a && code <= 0x40) || (code >= 0x5b && code <= 0x60) || (code >= 0x7b && code <= 0x7e)) {
     return true;
   }
   return false;
@@ -295,7 +281,7 @@ export function createIncrementalTokenCounter(deps: IncrementalTokenCounterDeps)
           // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
           // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
           // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
-          log.warn('尾窗不可编码，保持上一次读值');
+          log.warn("尾窗不可编码，保持上一次读值");
         }
       }
       const current = tailTokens;

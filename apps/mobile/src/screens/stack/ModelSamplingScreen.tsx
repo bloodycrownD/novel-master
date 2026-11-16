@@ -2,8 +2,7 @@
  * 单模型设置：内部预算（上下文、计数）与生成参数（采样、思考）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {
@@ -48,22 +47,6 @@ function buildModelSubtitle(modelName: string, vendorModelId: string): string {
   return `${name}\n${vendor}`;
 }
 
-function paramsEmpty(params: ModelSamplingParams | undefined): boolean {
-  if (!params) {
-    return true;
-  }
-  if (params.protocol === 'openai') {
-    return Object.keys(params.openai).length === 0;
-  }
-  if (params.protocol === 'anthropic') {
-    return Object.keys(params.anthropic).length === 0;
-  }
-  if (params.protocol === 'gemini') {
-    return Object.keys(params.gemini).length === 0;
-  }
-  return true;
-}
-
 export function ModelSamplingScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -75,8 +58,7 @@ export function ModelSamplingScreen() {
   const [protocol, setProtocol] = useState<LlmProtocolKind>('openai');
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
   const [contextWindowTokens, setContextWindowTokens] = useState('');
-  const [tokenCounterMode, setTokenCounterMode] =
-    useState<TokenizerOverride>('auto');
+  const [tokenCounterMode, setTokenCounterMode] = useState<TokenizerOverride>('auto');
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>('off');
   const [modelName, setModelName] = useState('');
   const [vendorModelId, setVendorModelId] = useState('');
@@ -107,18 +89,11 @@ export function ModelSamplingScreen() {
       setModelName(saved.modelName);
       setInitialModelName(saved.modelName);
       setVendorModelId(saved.vendorModelId);
-      setModelSubtitle(
-        buildModelSubtitle(saved.modelName, saved.vendorModelId),
-      );
-      setContextWindowTokens(
-        String(savedModelContextWindowTokens(saved.settings)),
-      );
+      setModelSubtitle(buildModelSubtitle(saved.modelName, saved.vendorModelId));
+      setContextWindowTokens(String(savedModelContextWindowTokens(saved.settings)));
       setTokenCounterMode(savedModelTokenCounterMode(saved.settings));
       const sampling = savedModelSampling(saved.settings);
-      const stored =
-        sampling.enabled && sampling.params != null
-          ? sampling.params
-          : undefined;
+      const stored = sampling.enabled && sampling.params != null ? sampling.params : undefined;
       setParams(stored);
       setThinkingLevel(savedModelThinkingLevel(saved.settings));
     } catch (error) {
@@ -156,27 +131,21 @@ export function ModelSamplingScreen() {
     setSaving(true);
     try {
       if (trimmedName !== initialModelName.trim()) {
-        const updated = await runtime.providerModels.editSaved(
-          savedModelId,
-          trimmedName,
-        );
+        const updated = await runtime.providerModels.editSaved(savedModelId, trimmedName);
         if (!updated.ok) throw updated.error;
         setInitialModelName(updated.value.modelName);
         setModelName(updated.value.modelName);
-        setModelSubtitle(
-          buildModelSubtitle(updated.value.modelName, updated.value.vendorModelId),
-        );
+        setModelSubtitle(buildModelSubtitle(updated.value.modelName, updated.value.vendorModelId));
       }
-      const sampling =
-        paramsEmpty(params) || !params
-          ? {enabled: false as const}
-          : {enabled: true as const, params};
-      const stored = await runtime.providerModels.updateSettings(savedModelId, {
-        contextWindowTokens: contextWindow,
-        sampling,
-        tokenCounterMode,
-        thinkingLevel,
-      });
+      let paramsAreEmpty = true;
+      if (params != null) {
+        if (params.protocol === 'openai') paramsAreEmpty = Object.keys(params.openai).length === 0;
+        else if (params.protocol === 'anthropic') paramsAreEmpty = Object.keys(params.anthropic).length === 0;
+        else if (params.protocol === 'gemini') paramsAreEmpty = Object.keys(params.gemini).length === 0;
+      }
+      const sampling = paramsAreEmpty ? {enabled: false as const} : {enabled: true as const, params};
+      const settingsPatch = {contextWindowTokens: contextWindow, sampling, tokenCounterMode, thinkingLevel};
+      const stored = await runtime.providerModels.updateSettings(savedModelId, settingsPatch);
       if (!stored.ok) throw stored.error;
       showToast('已保存模型设置');
       navigation.goBack();
@@ -193,17 +162,11 @@ export function ModelSamplingScreen() {
     }
     setResetting(true);
     try {
-      const updated = await runtime.providerModels.resetContextWindowToDefault(
-        savedModelId,
-      );
+      const updated = await runtime.providerModels.resetContextWindowToDefault(savedModelId);
       if (!updated.ok) throw updated.error;
-      const cleared = await runtime.providerModels.updateSettings(savedModelId, {
-        sampling: {enabled: false},
-      });
+      const cleared = await runtime.providerModels.updateSettings(savedModelId, {sampling: {enabled: false}});
       if (!cleared.ok) throw cleared.error;
-      setContextWindowTokens(
-        String(savedModelContextWindowTokens(updated.value.settings)),
-      );
+      setContextWindowTokens(String(savedModelContextWindowTokens(updated.value.settings)));
       setParams(undefined);
       showToast('已恢复默认采样参数');
     } catch (error) {
@@ -217,56 +180,22 @@ export function ModelSamplingScreen() {
     return <ActivityIndicator style={{marginTop: 32}} />;
   }
 
-  const sectionHint = modelSubtitle
-    ? `${modelSubtitle}\n\n展示协议推荐默认值；保存后以本页为准。`
-    : '展示协议推荐默认值；保存后以本页为准。';
+  const sectionHint = modelSubtitle ? `${modelSubtitle}\n\n展示协议推荐默认值；保存后以本页为准。` : '展示协议推荐默认值；保存后以本页为准。';
 
   return (
-    <ScreenFormLayout
-      tokens={tokens}
-      footer={
-        <StickyFormFooter
-          tokens={tokens}
-          label="保存"
-          loading={saving}
-          onPress={() => handleSave().catch(() => undefined)}
-        />
-      }
-    >
+    <ScreenFormLayout tokens={tokens} footer={<StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
       <FormSectionCard title="模型" tokens={tokens}>
         <FormField label="模型名称" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={modelName}
-            onChangeText={setModelName}
-            placeholder="模型名称"
-          />
+          <FormTextInput tokens={tokens} value={modelName} onChangeText={setModelName} placeholder="模型名称" />
         </FormField>
-        {vendorModelId ? (
-          <Text style={[styles.vendorHint, {color: tokens.textSecondary}]}>
-            厂商 ID：{vendorModelId}
-          </Text>
-        ) : null}
+        {vendorModelId ? <Text style={[styles.vendorHint, {color: tokens.textSecondary}]}>厂商 ID：{vendorModelId}</Text> : null}
       </FormSectionCard>
 
-      <FormSectionCard
-        title="内部预算"
-        tokens={tokens}
-        hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。"
-      >
+      <FormSectionCard title="内部预算" tokens={tokens} hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。">
         <FormField label="上下文上限 (tokens)" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={contextWindowTokens}
-            onChangeText={setContextWindowTokens}
-            keyboardType="number-pad"
-          />
+          <FormTextInput tokens={tokens} value={contextWindowTokens} onChangeText={setContextWindowTokens} keyboardType="number-pad" />
         </FormField>
-        <FormField
-          label="计数方式"
-          tokens={tokens}
-          hint="自动按模型名匹配分词器族；保存后以本页为准。"
-        >
+        <FormField label="计数方式" tokens={tokens} hint="自动按模型名匹配分词器族；保存后以本页为准。">
           <FormSelectField
             tokens={tokens}
             value={tokenCounterMode}
@@ -283,30 +212,14 @@ export function ModelSamplingScreen() {
         tokens={tokens}
         hint={sectionHint}
         rightAction={
-          <Pressable
-            disabled={resetting}
-            style={[styles.resetLink, resetting ? styles.resetDisabled : null]}
-            onPress={() => handleResetSamplingDefaults().catch(() => undefined)}
-          >
-            <Text style={[styles.resetLinkText, {color: tokens.primary}]}>
-              {resetting ? '恢复中…' : '恢复默认'}
-            </Text>
+          <Pressable disabled={resetting} style={[styles.resetLink, resetting ? styles.resetDisabled : null]} onPress={() => handleResetSamplingDefaults().catch(() => undefined)}>
+            <Text style={[styles.resetLinkText, {color: tokens.primary}]}>{resetting ? '恢复中…' : '恢复默认'}</Text>
           </Pressable>
         }
       >
-        <SamplingForm
-          tokens={tokens}
-          protocol={protocol}
-          params={params}
-          onChange={setParams}
-        />
+        <SamplingForm tokens={tokens} protocol={protocol} params={params} onChange={setParams} />
         <FormField label="思考强度" tokens={tokens}>
-          <SegmentedControl
-            tokens={tokens}
-            value={thinkingLevel}
-            options={THINKING_LEVEL_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))}
-            onChange={setThinkingLevel}
-          />
+          <SegmentedControl tokens={tokens} value={thinkingLevel} options={THINKING_LEVEL_SELECT_OPTIONS.map(o => ({...o, label: coreT(o.label)}))} onChange={setThinkingLevel} />
         </FormField>
       </FormSectionCard>
     </ScreenFormLayout>

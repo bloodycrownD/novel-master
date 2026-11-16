@@ -12,17 +12,12 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { DefaultMessageCheckpointService } from "./impl/message-checkpoint.service.js";
 import { DefaultMessageRollbackService } from "./impl/message-rollback.service.js";
 import type { MessageCheckpointService } from "./message-checkpoint.port.js";
-import type {
-  MessageRollbackService,
-  RollbackProbe,
-} from "./message-rollback.port.js";
+import type { MessageRollbackService, RollbackProbe } from "./message-rollback.port.js";
 
 /**
  * Creates a {@link MessageCheckpointService} for the given connection.
  */
-export function createMessageCheckpointService(
-  conn: TdbcConnection
-): MessageCheckpointService {
+export function createMessageCheckpointService(conn: TdbcConnection): MessageCheckpointService {
   return new DefaultMessageCheckpointService({
     conn,
     entries: new SqliteVfsEntryRepository(conn),
@@ -44,10 +39,7 @@ export interface MessageRollbackServiceOptions {
 }
 
 /** Creates a {@link MessageRollbackService} for the given connection. */
-export function createMessageRollbackService(
-  conn: TdbcConnection,
-  options?: MessageRollbackServiceOptions
-): MessageRollbackService {
+export function createMessageRollbackService(conn: TdbcConnection, options?: MessageRollbackServiceOptions): MessageRollbackService {
   return new DefaultMessageRollbackService({
     conn,
     messages: new SqliteMessageRepository(conn, options?.yieldFn),

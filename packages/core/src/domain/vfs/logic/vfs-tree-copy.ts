@@ -327,6 +327,9 @@ export async function sweepRevisionsUnderScope(repo: VfsEntryRepository, revisio
  * 释放 scope+前缀下 live head 引用 → GC 无引用 revision → 删 entry。
  *
  * @deprecated 使用 {@link sweepRevisionsUnderScope} 替代，语义相同。
+ *
+ * nm-style: keep-public — 三个 service 事务调用点（character-card-import ×2、
+ * vfs-zip-io ×1）仍走该 @deprecated 别名，内联需改 service 目录（本轮范围外）。
  */
 export async function releaseAndDeleteVfsPrefix(repo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string): Promise<Result<void, AppError>> {
   return sweepRevisionsUnderScope(repo, revisionRepo, scopeKey, pathPrefix);

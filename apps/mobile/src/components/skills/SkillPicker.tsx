@@ -21,7 +21,7 @@ import {
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type SkillPickerProps = {
+type SkillPickerProps = {
   visible: boolean;
   projectId: string;
   onClose: () => void;

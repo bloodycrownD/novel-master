@@ -5,10 +5,9 @@ import {useFocusEffect} from '@react-navigation/native';
 export function useDismissOverlaysOnBlur(dismiss: () => void): void {
   const dismissRef = useRef(dismiss);
   dismissRef.current = dismiss;
-  useFocusEffect(
-    useCallback(() => {
-      // WHY: reset overlay state on blur so AppModal gate and BackHandler stay in sync
-      return () => dismissRef.current();
-    }, []),
-  );
+  const onScreenFocus = useCallback(() => {
+    // WHY: reset overlay state on blur so AppModal gate and BackHandler stay in sync
+    return () => dismissRef.current();
+  }, []);
+  useFocusEffect(onScreenFocus);
 }

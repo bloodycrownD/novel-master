@@ -10,7 +10,6 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import type { Row } from "@/infra/tdbc/types.js";
 import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
@@ -60,6 +59,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return max == null ? null : Number(max);
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.findMaxVersionsForEntries 端口方法；内联会把分块聚合 SQL 搬进调用层。 */
   async findMaxVersionsForEntries(entryIds: number[]): Promise<Map<number, number>> {
     const result = new Map<number, number>();
     if (entryIds.length === 0) {
@@ -91,9 +91,21 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     if (rows.length === 0) {
       return Result.ok(null);
     }
-    return await this.rowToRevision(rows[0]!);
+    const row = rows[0]!;
+    const statusRaw = String(row.status);
+    const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
+    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: nullableText(row.content_hash) });
+    if (!resolved.ok) return Result.err(resolved.error);
+    return Result.ok({
+      entryId: Number(row.entry_id),
+      version: Number(row.version),
+      content: resolved.value,
+      status,
+      mtimeMs: Number(row.mtime_ms),
+    });
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.existsByEntryAndVersion 端口方法；内联会把查询 SQL 搬进调用层。 */
   async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
     const sql54 = "SELECT 1 AS one FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
     const rows = await queryTemplate<{ one: number }>(this.conn, this.parser, sql54, { entryId, version });
@@ -208,6 +220,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }));
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysWithRefCountUnderScope 端口方法；内联会把 JOIN 扫描 SQL 搬进调用层。 */
   async listKeysWithRefCountUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number; refCount: number }>> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
@@ -243,6 +256,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return deleted;
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.adjustRefCount 端口方法；内联会把 ref_count 增减 SQL 搬进调用层。 */
   async adjustRefCount(entryId: number, version: number, delta: number): Promise<void> {
     if (delta === 0) {
       return;
@@ -319,6 +333,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return true;
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.batchRepairRefCountFloor 端口方法；内联会把分块 SELECT + batch UPDATE 搬进调用层。 */
   async batchRepairRefCountFloor(items: ReadonlyArray<{
       readonly entryId: number;
       readonly version: number;
@@ -374,6 +389,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return adjusted;
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.deleteUnreferencedUnderScope 端口方法；内联会把 COUNT + 子查询 DELETE 搬进调用层。 */
   async deleteUnreferencedUnderScope(scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<number> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
@@ -428,22 +444,5 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 常量即上方 ORPHAN_REVISION_GC_SQL（migration 退役后运行期独占）。
     const result = await executeTemplate(this.conn, this.parser, ORPHAN_REVISION_GC_SQL, {});
     return Number(result.changes);
-  }
-
-  /**
-   * 正文解出失败走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，决定权交给上层）。
-   */
-  private async rowToRevision(row: Row): Promise<Result<VfsRevision, AppError>> {
-    const statusRaw = String(row.status);
-    const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
-    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: nullableText(row.content_hash) });
-    if (!resolved.ok) return Result.err(resolved.error);
-    return Result.ok({
-      entryId: Number(row.entry_id),
-      version: Number(row.version),
-      content: resolved.value,
-      status,
-      mtimeMs: Number(row.mtime_ms),
-    });
   }
 }

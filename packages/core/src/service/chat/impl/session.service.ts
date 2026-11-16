@@ -7,10 +7,7 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import type {
-  SessionAgentConfig,
-  SessionAgentConfigPatch,
-} from "@/domain/chat/model/session-agent-config.js";
+import type { SessionAgentConfig, SessionAgentConfigPatch } from "@/domain/chat/model/session-agent-config.js";
 import { sessionAgentConfigSchema } from "@/domain/chat/model/session-agent-config.schema.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -18,10 +15,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
-import {
-  copyVfsTree,
-  deleteVfsPrefix,
-} from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { AppError } from "@/errors/app-error.js";
@@ -31,10 +25,7 @@ import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  deleteSessionFsData,
-  runDeferredBlobGc,
-} from "@/service/session-fs/create-session-fs-service.js";
+import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
@@ -52,19 +43,13 @@ function reposFor(conn: TdbcConnection) {
   };
 }
 
-function parseStoredSessionAgentConfig(json: string): Result<SessionAgentConfig, AppError> {
-  return decode(JSON.parse(json), sessionAgentConfigSchema);
-}
-
 /** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。toWire 失败沿 `Result.err` 上递（五期门⑦）。 */
-function serializeSessionAgentConfigForStorage(
-  config: SessionAgentConfig
-): Result<string, AppError> {
+function serializeSessionAgentConfigForStorage(config: SessionAgentConfig): Result<string, AppError> {
   return sessionAgentConfigSchema.toWire(config).map((wire) => JSON.stringify(wire));
 }
 
 /** Dependencies for {@link DefaultSessionService}. */
-export interface SessionServiceDeps {
+interface SessionServiceDeps {
   readonly conn: TdbcConnection;
   readonly projects: ProjectRepository;
   readonly sessions: SessionRepository;
@@ -90,7 +75,7 @@ export class DefaultSessionService implements SessionService {
   async listByProject(projectId: string): Promise<Result<ChatSession[], AppError>> {
     const project = await this.deps.projects.findById(projectId);
     if (project == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${projectId}`, kind: "project", id: projectId}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${projectId}`, kind: "project", id: projectId }));
     }
     return Result.ok(await this.deps.sessions.listByProject(projectId));
   }
@@ -98,7 +83,7 @@ export class DefaultSessionService implements SessionService {
   async get(id: string): Promise<Result<ChatSession, AppError>> {
     const session = await this.deps.sessions.findById(id);
     if (session == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${id}`, kind: "session", id }));
     }
     return Result.ok(session);
   }
@@ -106,30 +91,24 @@ export class DefaultSessionService implements SessionService {
   async create(projectId: string, title?: string | null): Promise<Result<ChatSession, AppError>> {
     const project = await this.deps.projects.findById(projectId);
     if (project == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${projectId}`, kind: "project", id: projectId}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${projectId}`, kind: "project", id: projectId }));
     }
     // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
     // 读取放在事务外：state / agentRegistry 走的是另一套表，不需要在 chat_session 事务内同步。
-    const agentIdResult = await resolveWorkspaceAgentForNewSession({
-      state: this.deps.state,
-      agentRegistry: this.deps.agentRegistry,
-    });
+    const agentIdResult = await resolveWorkspaceAgentForNewSession({ state: this.deps.state, agentRegistry: this.deps.agentRegistry });
     if (!agentIdResult.ok) return Result.err(agentIdResult.error);
     const agentId = agentIdResult.value;
     if (agentId == null || agentId === "") {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {descriptor: {key: "error.chat.session_create_agent_missing"}}));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: { key: "error.chat.session_create_agent_missing" } }));
     }
     const currentModel = await this.deps.state.getCurrentModelId();
     if (!currentModel.ok) return Result.err(currentModel.error);
     const workspaceModelId = currentModel.value;
-    const config: SessionAgentConfig =
-      workspaceModelId == null || workspaceModelId === ""
-        ? { agentId }
-        : { agentId, modelId: workspaceModelId };
+    const config: SessionAgentConfig = workspaceModelId == null || workspaceModelId === "" ? { agentId } : { agentId, modelId: workspaceModelId };
     const serialized = serializeSessionAgentConfigForStorage(config);
     if (!serialized.ok) return Result.err(serialized.error);
     const configJson = serialized.value;
-    const created = await this.deps.conn.transaction(async (tx) => {
+    const createTransaction = this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
       const session: ChatSession = {
@@ -147,14 +126,10 @@ export class DefaultSessionService implements SessionService {
       await r.sessions.setSessionAgentConfig(session.id, configJson, now);
       return session;
     });
-    return Result.ok(created);
+    return Result.ok(await createTransaction);
   }
 
-  async createSubSession(
-    parentSessionId: string,
-    projectId: string,
-    title?: string | null
-  ): Promise<Result<ChatSession, AppError>> {
+  async createSubSession(parentSessionId: string, projectId: string, title?: string | null): Promise<Result<ChatSession, AppError>> {
     // 子会话不初始化任何工作区：文件只有一个工作区（父 session VFS），子 agent
     // 的工具操作由 runChildAgent 装配期直接指向父 session scope。这里只 insert
     // session 记录（带 parentSessionId），不碰 VFS / KKV。
@@ -162,10 +137,10 @@ export class DefaultSessionService implements SessionService {
     // 父 session 校验在事务外读（对齐主 session create 的风格：校验在事务外）。
     const parent = await this.deps.sessions.findById(parentSessionId);
     if (parent == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${parentSessionId}`, kind: "session", id: parentSessionId}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${parentSessionId}`, kind: "session", id: parentSessionId }));
     }
     if (parent.projectId !== projectId) {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`}));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `createSubSession: parent projectId ${parent.projectId} !== ${projectId}` }));
     }
     const now = Date.now();
     const session: ChatSession = {
@@ -183,18 +158,14 @@ export class DefaultSessionService implements SessionService {
   async rename(id: string, title: string): Promise<Result<ChatSession, AppError>> {
     const trimmed = title.trim();
     if (trimmed.length === 0) {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "session title must not be empty"}));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "session title must not be empty" }));
     }
     const existing = await this.get(id);
     if (!existing.ok) return existing;
     const updatedAtMs = Date.now();
-    const updated = await this.deps.sessions.updateTitle(
-      id,
-      trimmed,
-      updatedAtMs
-    );
+    const updated = await this.deps.sessions.updateTitle(id, trimmed, updatedAtMs);
     if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${id}`, kind: "session", id }));
     }
     return Result.ok({ ...existing.value, title: trimmed, updatedAtMs });
   }
@@ -229,10 +200,7 @@ export class DefaultSessionService implements SessionService {
    *          （读仍**在**事务内），但会让等锁的写方有机会插队——所以它是
    *          **可选**而非必做，spec 的验收 I6 也写明「仅当修法 3 做了才立」。
    */
-  private async deleteSessionTree(
-    tx: TdbcConnection,
-    session: ChatSession
-  ): Promise<void> {
+  private async deleteSessionTree(tx: TdbcConnection, session: ChatSession): Promise<void> {
     const r = reposFor(tx);
     // 先递归删全部子 session（深度优先，避免删自己后子变孤儿）。
     const children = await r.sessions.listByParentSession(session.id);
@@ -245,14 +213,10 @@ export class DefaultSessionService implements SessionService {
     // 同事务清 run_state 行：留着孤儿 starting/running 行会在重启水合时
     // 生成幽灵 interrupted 单元（递归子会话在本函数逐层清理时一并覆盖）。
     await createSessionRunStateService(tx).deleteBySession(session.id);
-    await deleteVfsPrefix(
-      r.vfs,
-      `session:${session.projectId}:${session.id}`,
-      "/"
-    );
+    await deleteVfsPrefix(r.vfs, `session:${session.projectId}:${session.id}`, "/");
     const deleted = await r.sessions.delete(session.id);
     if (!deleted) {
-      throw new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${session.id}`, kind: "session", id: session.id});
+      throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${session.id}`, kind: "session", id: session.id });
     }
   }
 
@@ -278,10 +242,7 @@ export class DefaultSessionService implements SessionService {
     return Result.ok(await this.deps.sessions.getComposerDraftJson(id));
   }
 
-  async setComposerDraftJson(
-    id: string,
-    draftJson: string | null
-  ): Promise<Result<boolean, AppError>> {
+  async setComposerDraftJson(id: string, draftJson: string | null): Promise<Result<boolean, AppError>> {
     const r = await this.get(id);
     if (!r.ok) return Result.err(r.error);
     return Result.ok(await this.deps.sessions.setComposerDraftJson(id, draftJson));
@@ -294,25 +255,19 @@ export class DefaultSessionService implements SessionService {
     if (json == null) {
       // migration 后不应有 NULL；这里视为异常，提示运行 session-agent-config-v2。
       // C 类（不变量破坏）保留 throw：处置是跑迁移，不是调用方可分支的返回值。
-      throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "session agent config missing, run migration session-agent-config-v2"});
+      throw new AppError("CHAT_INVALID_ARGUMENT", { detail: "session agent config missing, run migration session-agent-config-v2" });
     }
-    return parseStoredSessionAgentConfig(json);
+    return decode(JSON.parse(json), sessionAgentConfigSchema);
   }
 
-  async updateSessionAgentConfig(
-    id: string,
-    patch: SessionAgentConfigPatch
-  ): Promise<Result<SessionAgentConfig, AppError>> {
+  async updateSessionAgentConfig(id: string, patch: SessionAgentConfigPatch): Promise<Result<SessionAgentConfig, AppError>> {
     const r = await this.get(id);
     if (!r.ok) return Result.err(r.error);
     // partial overlay merge：拿当前配置当基线，patch 里只覆盖出现的字段。
     const baseline = await this.getSessionAgentConfig(id);
     if (!baseline.ok) return baseline;
     // agentId：不传或空串都当作「保持」，传非空串才覆盖。
-    const agentId =
-      patch.agentId != null && patch.agentId !== ""
-        ? patch.agentId
-        : baseline.value.agentId;
+    const agentId = patch.agentId != null && patch.agentId !== "" ? patch.agentId : baseline.value.agentId;
     // modelId：undefined 保持当前；null 清除；非空串覆盖。
     let modelId: string | undefined;
     if (patch.modelId === undefined) {
@@ -322,27 +277,19 @@ export class DefaultSessionService implements SessionService {
     } else {
       modelId = patch.modelId;
     }
-    const merged: SessionAgentConfig =
-      modelId == null ? { agentId } : { agentId, modelId };
+    const merged: SessionAgentConfig = modelId == null ? { agentId } : { agentId, modelId };
     // merge 完走 schema 校验（agentId 必填）+ 规范化（含 strict）。
     const wire = sessionAgentConfigSchema.toWire(merged);
     if (!wire.ok) return Result.err(wire.error);
-    const validated = decode(
-      wire.value,
-      sessionAgentConfigSchema
-    );
+    const validated = decode(wire.value, sessionAgentConfigSchema);
     if (!validated.ok) return validated;
     const config = validated.value;
     const updatedAtMs = Date.now();
     const configJson = serializeSessionAgentConfigForStorage(config);
     if (!configJson.ok) return Result.err(configJson.error);
-    const updated = await this.deps.sessions.setSessionAgentConfig(
-      id,
-      configJson.value,
-      updatedAtMs
-    );
+    const updated = await this.deps.sessions.setSessionAgentConfig(id, configJson.value, updatedAtMs);
     if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `session not found: ${id}`, kind: "session", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${id}`, kind: "session", id }));
     }
     // 会话级「切 Agent / 切模型」改变了 prompt 的 system 段与 layout：旧的
     // api 占用按 savedModelId 指纹兜不住 agentId 变更，会以 api 口径（跳掉
@@ -350,14 +297,8 @@ export class DefaultSessionService implements SessionService {
     // 读口没有任何 agent 指纹可作第二道防线，正确性完全依赖这一个挂点。
     // 口径收窄：只比较 overlay merge 前后真正变化的字段，避免把「patch 里
     // 出现但值相同」的无效写也清掉（那会让收窄白写，还多一次 KKV 写）。
-    if (
-      config.agentId !== baseline.value.agentId ||
-      config.modelId !== baseline.value.modelId
-    ) {
-      await invalidateSessionApiPromptTokenEntry(
-        createSessionKkvService(this.deps.conn),
-        id
-      );
+    if (config.agentId !== baseline.value.agentId || config.modelId !== baseline.value.modelId) {
+      await invalidateSessionApiPromptTokenEntry(createSessionKkvService(this.deps.conn), id);
     }
     return Result.ok(config);
   }
@@ -381,9 +322,7 @@ export class DefaultSessionService implements SessionService {
     const src = source.value;
     // 事务外读：repo 绑 `this.deps.conn`（不是 tx）——在事务回调里用外层 conn
     // 会撞驱动层 AsyncMutex 不可重入，那是死锁不是报错。
-    const messages = await reposFor(this.deps.conn).messages.listBySession(
-      src.id
-    );
+    const messages = await reposFor(this.deps.conn).messages.listBySession(src.id);
     const now = Date.now();
     const copy: ChatSession = {
       id: randomUUID(),
@@ -402,39 +341,26 @@ export class DefaultSessionService implements SessionService {
       return { ...msg, id: newId, sessionId: copy.id };
     });
 
-    const copied = await this.deps.conn.transaction(async (tx) => {
+    const copyTransaction = this.deps.conn.transaction(async (tx) => {
       // 事务回调里出现的每一个 repo 都必须来自 tx。
       const r = reposFor(tx);
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 刻意不复制 composer_draft_json（维持现状）
       // agent_config_json：继承源会话配置（v2 后 agentId 必填，源不会是 NULL）
-      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(
-        src.id
-      );
+      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(src.id);
       if (sourceAgentConfigJson != null) {
-        await r.sessions.setSessionAgentConfig(
-          copy.id,
-          sourceAgentConfigJson,
-          now
-        );
+        await r.sessions.setSessionAgentConfig(copy.id, sourceAgentConfigJson, now);
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
-      await copyVfsTree(
-        r.vfs,
-        { scopeKey: `session:${src.projectId}:${src.id}` },
-        "/",
-        { scopeKey: `session:${src.projectId}:${copy.id}` },
-        "/",
-        { contentStore: new SqliteVfsContentStore(tx) }
-      );
+      await copyVfsTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", { contentStore: new SqliteVfsContentStore(tx) });
       await r.messages.batchInsert(copyMessages);
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 copy，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
       await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));
       return copy;
     });
-    return Result.ok(copied);
+    return Result.ok(await copyTransaction);
   }
 }

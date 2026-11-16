@@ -60,13 +60,7 @@ const PERSIST_MAX_ITEMS = 16;
 const PERSIST_PAYLOAD_VERSION = 2;
 
 /** 持久化条目五元组：`[hash16, scope, count, kind, est]`。 */
-type PersistItem = readonly [
-  hash16: string,
-  scope: string,
-  count: number,
-  kind: string,
-  est: boolean
-];
+type PersistItem = readonly [hash16: string, scope: string, count: number, kind: string, est: boolean];
 
 /** 会话桶：Map 迭代序即插入序——首键最旧、末键最新，LRU 据此淘汰。 */
 const buckets = new Map<string, Map<string, PromptWholeCacheEntry>>();
@@ -277,18 +271,10 @@ export const promptWholeCache = {
     const items = persistedItems.get(sessionId) ?? [];
     const merged: PersistItem[] = [];
     for (const write of batch) {
-      merged.unshift([
-        write.contentHash,
-        write.scope,
-        write.entry.tokenCount,
-        write.entry.counterKind,
-        false,
-      ]);
+      merged.unshift([write.contentHash, write.scope, write.entry.tokenCount, write.entry.counterKind, false]);
     }
     for (const item of items) {
-      if (
-        merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])
-      ) {
+      if (merged.some(([hash16, scope]) => hash16 === item[0] && scope === item[1])) {
         continue;
       }
       merged.push(item);

@@ -19,13 +19,10 @@ import React from 'react';
 import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ThemeTokens} from '@/theme/tokens';
-import {
-  SegmentedControl,
-  type SegmentOption,
-} from '@/components/ui/SegmentedControl';
+import {SegmentedControl, type SegmentOption} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
 
-export type EditorScreenShellProps<T extends string> = {
+type EditorScreenShellProps<T extends string> = {
   tokens: ThemeTokens;
   /** toolbar 底部分隔线颜色（各屏分别取 tokens.border / borderLight）。 */
   toolbarBorderColor: string;
@@ -89,24 +86,14 @@ export function EditorScreenShell<T extends string>({
 }: EditorScreenShellProps<T>) {
   const titleColor = titleDanger ? tokens.danger : tokens.textSecondary;
   /** 无标题、无动作位 → 整行不渲染：导航栏已有标题时别在页内再叠一个重复标题。 */
-  const hasToolbar =
-    save != null || title != null || titlePress != null || toggle != null;
+  const hasToolbar = save != null || title != null || titlePress != null || toggle != null;
 
   const body = (
     <>
       {hasToolbar ? (
-        <View
-          testID="editor-screen-toolbar"
-          style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}
-        >
+        <View testID="editor-screen-toolbar" style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
           {save ? (
-            <Pressable
-              testID={save.testID}
-              accessibilityLabel={save.accessibilityLabel}
-              style={styles.toolbarBtn}
-              onPress={save.onPress}
-              disabled={save.disabled}
-            >
+            <Pressable testID={save.testID} accessibilityLabel={save.accessibilityLabel} style={styles.toolbarBtn} onPress={save.onPress} disabled={save.disabled}>
               <Text
                 style={[
                   styles.toolbarText,
@@ -120,51 +107,23 @@ export function EditorScreenShell<T extends string>({
             </Pressable>
           ) : null}
           {title == null ? null : titlePress ? (
-            <Pressable
-              testID={titlePress.testID}
-              style={styles.toolbarTitle}
-              onPress={titlePress.onPress}
-              accessibilityRole="button"
-              accessibilityLabel="收起键盘"
-            >
-              <Text
-                style={[
-                  styles.toolbarTitleText,
-                  {color: titleColor, fontSize: titleFontSize},
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
+            <Pressable testID={titlePress.testID} style={styles.toolbarTitle} onPress={titlePress.onPress} accessibilityRole="button" accessibilityLabel="收起键盘">
+              <Text style={[styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
                 {title}
               </Text>
             </Pressable>
           ) : (
-            <Text
-              style={[
-                styles.toolbarTitle,
-                styles.toolbarTitleText,
-                {color: titleColor, fontSize: titleFontSize},
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
+            <Text style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor, fontSize: titleFontSize}]} numberOfLines={1} ellipsizeMode="tail">
               {title}
             </Text>
           )}
           {toggle ? (
-            <Pressable
-              testID={toggle.testID}
-              accessibilityLabel={toggle.accessibilityLabel}
-              style={styles.toolbarBtn}
-              onPress={toggle.onPress}
-            >
+            <Pressable testID={toggle.testID} accessibilityLabel={toggle.accessibilityLabel} style={styles.toolbarBtn} onPress={toggle.onPress}>
               <Text
                 style={[
                   styles.toolbarText,
                   {
-                    color: toggle.previewMode
-                      ? tokens.primary
-                      : tokens.textSecondary,
+                    color: toggle.previewMode ? tokens.primary : tokens.textSecondary,
                   },
                 ]}
               >
@@ -175,19 +134,10 @@ export function EditorScreenShell<T extends string>({
         </View>
       ) : null}
       {toolbarExtra}
-      {previewMode && segmented ? (
-        <SegmentedControl
-          options={segmented.options}
-          value={segmented.value}
-          onChange={segmented.onChange}
-          tokens={tokens}
-        />
-      ) : null}
+      {previewMode && segmented ? <SegmentedControl options={segmented.options} value={segmented.value} onChange={segmented.onChange} tokens={tokens} /> : null}
       {previewMode ? (
         /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
-        <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
-          {preview}
-        </View>
+        <View style={[styles.preview, {backgroundColor: tokens.surface}]}>{preview}</View>
       ) : (
         editor
       )}

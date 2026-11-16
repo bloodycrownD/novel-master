@@ -14,16 +14,7 @@
  * 被干预。真机行为待验收确认。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type NativeSyntheticEvent,
-  type StyleProp,
-  type TextInputSelectionChangeEventData,
-  type TextStyle,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
 import {PROMPT_INLINE_MAX_HEIGHT} from './prompt-collapse';
 
@@ -35,9 +26,7 @@ type InlineRenderContext = {
   /** 短暂受控的初始光标位置（挂载置顶用），用户交互后回到 undefined。 */
   selection?: PromptSelection;
   /** 内联输入的 selectionChange：任何回报都解除初始受控。 */
-  onSelectionChange: (
-    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
-  ) => void;
+  onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
 };
 
 type Props = {
@@ -52,16 +41,9 @@ type Props = {
   testID?: string;
 };
 
-export function ExpandablePromptInput({
-  label,
-  renderInline,
-  openEditor,
-  disabled = false,
-  testID,
-}: Props) {
+export function ExpandablePromptInput({label, renderInline, openEditor, disabled = false, testID}: Props) {
   const {tokens} = useTheme();
-  const [initialSelection, setInitialSelection] =
-    useState<PromptSelection | null>(null);
+  const [initialSelection, setInitialSelection] = useState<PromptSelection | null>(null);
 
   // 挂载后一拍才置 0：避开原生初始把光标放文末的定位过程，
   // 我们的 selection 生效后视口随光标回到顶部。
@@ -81,10 +63,7 @@ export function ExpandablePromptInput({
   return (
     <View testID={testID} style={styles.root}>
       <View style={styles.labelRow}>
-        <Text
-          style={[styles.labelText, {color: tokens.textSecondary}]}
-          numberOfLines={1}
-        >
+        <Text style={[styles.labelText, {color: tokens.textSecondary}]} numberOfLines={1}>
           {label}
         </Text>
         <Pressable
@@ -95,9 +74,7 @@ export function ExpandablePromptInput({
           style={[styles.openBtn, disabled ? styles.openBtnDisabled : null]}
           hitSlop={8}
         >
-          <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
-            ⛶
-          </Text>
+          <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>⛶</Text>
         </Pressable>
       </View>
       {renderInline({

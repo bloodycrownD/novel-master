@@ -26,19 +26,13 @@ export async function handleCompactionConditionsGet(): Promise<
   }
 }
 
-export async function handleCompactionConditionsSet(
-  req: CompactionConditionsSetRequest,
-): Promise<IpcResult<void>> {
+export async function handleCompactionConditionsSet(req: CompactionConditionsSetRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    await rt.compactionConditions.setConditions(
-      req.conditions as Parameters<
-        typeof rt.compactionConditions.setConditions
-      >[0],
-    );
+    await rt.compactionConditions.setConditions(req.conditions as Parameters<typeof rt.compactionConditions.setConditions>[0]);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

@@ -16,7 +16,7 @@ import {APP_HEADER_CONTENT_HEIGHT} from './AppHeader';
 import {useTheme} from '@/theme/ThemeProvider';
 import {registerAppToastSink} from '@/services/app-toast';
 
-export type ToastOptions = {
+type ToastOptions = {
   actionLabel?: string;
   onAction?: () => void;
 };

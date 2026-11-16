@@ -6,47 +6,25 @@ import {AppError} from '@novel-master/core/errors';
 import {useCallback} from 'react';
 import {Alert} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {
-  type ChatMessageData,
-  ChatMessage,
-  attachmentXmlCodec,
-  rollbackConfirm,
-} from '@novel-master/core/chat';
+import {type ChatMessageData, ChatMessage, attachmentXmlCodec, rollbackConfirm} from '@novel-master/core/chat';
 
 import {formatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
 import {toastMessage} from '@/errors/toast-message';
-import {
-  applyTextEditToMessage,
-  editableTextFromMessage,
-} from '@/components/chat/message-edit';
-import {
-  isRollbackRevisionBackfillRequiredError,
-  isRollbackVfsDegradableError,
-  readRollbackRevisionBackfillMissingPaths,
-} from '@novel-master/core/session-fs';
-import { chatAnnotateDraftStore } from '@novel-master/core/chat';
-import {
-  applyComposerStatusAttachmentsReplace,
-  writeChatComposerDraftState,
-} from '@/storage/chat-composer-draft';
-import {
-  projectComposerStatusForSession,
-  refreshComposerStatusAfterFloorOrCompaction,
-  refreshComposerStatusAfterSessionKkvCleared,
-} from '@/services/project-composer-status.service';
+import {applyTextEditToMessage, editableTextFromMessage} from '@/components/chat/message-edit';
+import {isRollbackRevisionBackfillRequiredError, isRollbackVfsDegradableError, readRollbackRevisionBackfillMissingPaths} from '@novel-master/core/session-fs';
+import {chatAnnotateDraftStore} from '@novel-master/core/chat';
+import {applyComposerStatusAttachmentsReplace, writeChatComposerDraftState} from '@/storage/chat-composer-draft';
+import {projectComposerStatusForSession, refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared} from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
-import {runManualCompaction} from '@/services/manual-compaction.service';
-import {
-  resetRollbackTiming,
-  rollbackTimingLog,
-} from '@/debug/run-timing';
+import {runManualCompaction, type ManualCompactionHooks} from '@/services/manual-compaction.service';
+import {resetRollbackTiming, rollbackTimingLog} from '@/debug/run-timing';
 import type {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview, ConversationPanel} from './useChatTabScope';
 
-export type UseChatTabMessageActionsParams = {
+type UseChatTabMessageActionsParams = {
   runtime: MobileNovelMasterRuntime;
   projectId: string | undefined;
   sessionId: string | undefined;
@@ -71,9 +49,7 @@ export type UseChatTabMessageActionsParams = {
   setCurrentSession: (sessionId: string) => Promise<void>;
   setChatSubview: (subview: ChatSubview) => void;
   setConversationPanel: (panel: ConversationPanel) => void;
-  setMessageEditPrompt: (
-    prompt: {messageId: string; initialText: string} | undefined,
-  ) => void;
+  setMessageEditPrompt: (prompt: {messageId: string; initialText: string} | undefined) => void;
 };
 
 export function useChatTabMessageActions({
@@ -95,7 +71,6 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
-
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
       showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
@@ -113,44 +88,33 @@ export function useChatTabMessageActions({
           // 之漂移五处），本处只留 UI 尾巴。token 读数不做显式预热（2026-10-07
           // 拍板，与置位同路径）：toast 即回，chip 由下面的 refresh 走常规
           // 两阶段（估算首帧 + 后台精确升级）自然到位。
-          void runManualCompaction(
-            runtime,
-            {projectId, sessionId},
-            {
-              // 失败出口：压缩本体明确失败（error 为 undefined）才重载消息面
-              // 并补刷 chip；抛错出口只弹提示（旧副本同款差异）。
-              onFailed: error => {
-                if (error === undefined) {
-                  void reloadMessages(true);
-                  void refreshChatTokenLabel();
-                  showToast(toastMessage('压缩失败'));
-                  return;
-                }
-                showToast(toastMessage('压缩失败', error));
-              },
-              onSucceeded: async () => {
-                await reloadMessages(true);
+          const compactionHooks: ManualCompactionHooks = {
+            // 失败出口：压缩本体明确失败（error 为 undefined）才重载消息面
+            // 并补刷 chip；抛错出口只弹提示（旧副本同款差异）。
+            onFailed: error => {
+              if (error === undefined) {
+                void reloadMessages(true);
                 void refreshChatTokenLabel();
-                await refreshComposerStatusAfterFloorOrCompaction(runtime, {
-                  projectId,
-                  sessionId,
-                });
-                showToast('已压缩');
-              },
+                showToast(toastMessage('压缩失败'));
+                return;
+              }
+              showToast(toastMessage('压缩失败', error));
             },
-          );
+            onSucceeded: async () => {
+              await reloadMessages(true);
+              void refreshChatTokenLabel();
+              await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+                projectId,
+                sessionId,
+              });
+              showToast('已压缩');
+            },
+          };
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks);
         },
       },
     ]);
-  }, [
-    agentRunning,
-    projectId,
-    sessionId,
-    runtime,
-    reloadMessages,
-    refreshChatTokenLabel,
-    showToast,
-  ]);
+  }, [agentRunning, projectId, sessionId, runtime, reloadMessages, refreshChatTokenLabel, showToast]);
 
   const handleForkFromMessage = useCallback(
     async (messageId: string) => {
@@ -181,17 +145,7 @@ export function useChatTabMessageActions({
         showToast(toastMessage('分叉失败', error));
       }
     },
-    [
-      sessionId,
-      agentRunning,
-      runtime,
-      reloadLists,
-      setCurrentSession,
-      setChatSubview,
-      setConversationPanel,
-      resetStreamingDisplay,
-      showToast,
-    ],
+    [sessionId, agentRunning, runtime, reloadLists, setCurrentSession, setChatSubview, setConversationPanel, resetStreamingDisplay, showToast],
   );
 
   const handleRollbackFromMessage = useCallback(
@@ -202,9 +156,7 @@ export function useChatTabMessageActions({
       if (agentRunning) {
         // run 在途时回滚不可用。toast 一闪即逝，用户极易错过、感知为
         // 「点了没反应/确认框迟迟不弹」——改用模态弹窗把原因说清楚。
-        Alert.alert('暂时无法回滚', 'Agent 正在运行，请先停止生成或等本轮完成后再回滚。', [
-          {text: '知道了', style: 'cancel'},
-        ]);
+        Alert.alert('暂时无法回滚', 'Agent 正在运行，请先停止生成或等本轮完成后再回滚。', [{text: '知道了', style: 'cancel'}]);
         return;
       }
 
@@ -220,8 +172,7 @@ export function useChatTabMessageActions({
       const mode = ChatMessage.from(target).isUndoSendEligible() ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
       // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
-      const attachmentsSnapshot =
-        mode === 'undo_send' ? target.attachments ?? [] : null;
+      const attachmentsSnapshot = mode === 'undo_send' ? target.attachments ?? [] : null;
 
       const applyComposerRestore = async () => {
         // Bug3：批注消息（restoreText 为 null）也要走反投影——拿掉 restoreText == null，
@@ -234,27 +185,17 @@ export function useChatTabMessageActions({
           // D1 带外路径：恢复文本没有确认区间 → **不传 tokenRanges**（undefined，
           // 非 `[]`），允许下一次水化兜底扫描一次。恢复的通常是完整历史明文，
           // 扫描升格面与旧行为相同，记入已知限制。
-          writeChatComposerDraftState(
-            sessionId,
-            {
-              text: restoreText,
-              attachments: [],
-            },
-            runtime.sessions,
-          );
+          const restoreDraft = {text: restoreText, attachments: []};
+          writeChatComposerDraftState(sessionId, restoreDraft, runtime.sessions);
         }
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
-          const restoredAnnotate =
-            attachmentXmlCodec.decodeAnnotateDrafts(attachmentsSnapshot);
+          const restoredAnnotate = attachmentXmlCodec.decodeAnnotateDrafts(attachmentsSnapshot);
           for (const draft of restoredAnnotate) {
             chatAnnotateDraftStore.add(sessionId, draft);
           }
         }
-        const status = await projectComposerStatusForSession(
-          runtime,
-          sessionId,
-        );
+        const status = await projectComposerStatusForSession(runtime, sessionId);
         applyComposerStatusAttachmentsReplace({
           sessionId,
           attachments: status,
@@ -262,65 +203,46 @@ export function useChatTabMessageActions({
         setDraftRestoreToken(t => t + 1);
       };
 
-      const runRollback = async (
-        targetMessageId: string,
-        options?: RollbackOptions,
-      ) => {
+      const runRollback = async (targetMessageId: string, options?: RollbackOptions) => {
         // 失败分流统一收口（错误通道迁移四期）：core 回滚的已知失败沿 Result
         // 到达，走同一套 backfill / 降级 / toast 分流；后段未知异常仍由下方
         // catch 进同一入口，两条通道终端一致。
         const onRollbackFailure = (error: unknown): void => {
-          if (
-            !options?.skipVfsReconcile &&
-            !options?.revisionHeadBackfill &&
-            isRollbackRevisionBackfillRequiredError(error)
-          ) {
-            const missingPaths =
-              readRollbackRevisionBackfillMissingPaths(error);
-            Alert.alert(
-              '快照丢失',
-              chatTranslator(rollbackConfirm.descriptor(mode, 'backfill', {missingPaths})),
-              [
-                {text: '取消', style: 'cancel'},
-                {
-                  text: '继续回滚',
-                  style: 'destructive',
-                  onPress: () => {
-                    void runRollback(targetMessageId, {
-                      revisionHeadBackfill: true,
-                    }).catch(err => {
-                      showToast(toastMessage('回滚失败', err));
-                    });
-                  },
+          if (!options?.skipVfsReconcile && !options?.revisionHeadBackfill && isRollbackRevisionBackfillRequiredError(error)) {
+            const missingPaths = readRollbackRevisionBackfillMissingPaths(error);
+            Alert.alert('快照丢失', chatTranslator(rollbackConfirm.descriptor(mode, 'backfill', {missingPaths})), [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '继续回滚',
+                style: 'destructive',
+                onPress: () => {
+                  void runRollback(targetMessageId, {
+                    revisionHeadBackfill: true,
+                  }).catch(err => {
+                    showToast(toastMessage('回滚失败', err));
+                  });
                 },
-              ],
-            );
+              },
+            ]);
             return;
           }
-          if (
-            !options?.skipVfsReconcile &&
-            isRollbackVfsDegradableError(error)
-          ) {
+          if (!options?.skipVfsReconcile && isRollbackVfsDegradableError(error)) {
             const errorMessage = formatError(error);
             const confirmMessage = chatTranslator(rollbackConfirm.descriptor(mode, 'degraded'));
-            Alert.alert(
-              '无法恢复工作区',
-              `${errorMessage}\n\n${confirmMessage}`,
-              [
-                {text: '取消', style: 'cancel'},
-                {
-                  text: '仅删除后续对话',
-                  style: 'destructive',
-                  onPress: () => {
-                    void runRollback(targetMessageId, {
-                      skipVfsReconcile: true,
-                    }).catch(err => {
-                      showToast(toastMessage('回滚失败', err));
-                    });
-                  },
+            Alert.alert('无法恢复工作区', `${errorMessage}\n\n${confirmMessage}`, [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '仅删除后续对话',
+                style: 'destructive',
+                onPress: () => {
+                  void runRollback(targetMessageId, {
+                    skipVfsReconcile: true,
+                  }).catch(err => {
+                    showToast(toastMessage('回滚失败', err));
+                  });
                 },
-              ],
-            );
+              },
+            ]);
             return;
           }
           showToast(toastMessage('回滚失败', error));
@@ -331,12 +253,7 @@ export function useChatTabMessageActions({
           // 生产 no-op）。core 事务内部子步由 runtime 注入的 probe 同轴输出。
           resetRollbackTiming();
           rollbackTimingLog('core rollback begin');
-          const rollbackResult = await rollbackToMessage(
-            runtime,
-            {projectId, sessionId},
-            targetMessageId,
-            options,
-          );
+          const rollbackResult = await rollbackToMessage(runtime, {projectId, sessionId}, targetMessageId, options);
           // 已知失败沿 Result 分流（错误通道迁移四期）：不再还原异常通道。
           if (!rollbackResult.ok) {
             onRollbackFailure(rollbackResult.error);
@@ -366,25 +283,17 @@ export function useChatTabMessageActions({
           resetStreamingDisplay();
           rollbackTimingLog('streaming display reset');
           const reloaded = await reloadMessages(true);
-          rollbackTimingLog(
-            Array.isArray(reloaded)
-              ? `tail reload done (rows=${reloaded.length})`
-              : 'tail reload done',
-          );
+          rollbackTimingLog(Array.isArray(reloaded) ? `tail reload done (rows=${reloaded.length})` : 'tail reload done');
           await applyComposerRestore();
           rollbackTimingLog('composer restore done');
-          showToast(
-            options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
-          );
+          showToast(options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功');
           rollbackTimingLog('toast shown');
           // token 刷新错峰（rollback-large-jank Step 5）：等「reloadMessages
           // 触发的快照末片 post + deferred actions 排空」信号之后再发起
           // token 全量重算——快照构建/post 与 token 重算不再同窗口排队；
           // 信号迟到/超时兜底照旧刷新（回到现状时机，不悬挂）。toast 先于
           // 等待发出，回滚结果反馈不被错峰推迟。
-          const tokenTrigger = snapshotCompleteSignal
-            ? await snapshotCompleteSignal.consumeNext(1500)
-            : 'no-signal';
+          const tokenTrigger = snapshotCompleteSignal ? await snapshotCompleteSignal.consumeNext(1500) : 'no-signal';
           rollbackTimingLog(`token refresh trigger=${tokenTrigger}`);
           void refreshChatTokenLabel();
           rollbackTimingLog('token refresh scheduled');
@@ -395,35 +304,20 @@ export function useChatTabMessageActions({
         }
       };
 
-      Alert.alert(
-        '回滚到此消息',
-        chatTranslator(rollbackConfirm.descriptor(mode, 'primary')),
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '回滚',
-            style: 'destructive',
-            onPress: () => {
-              void runRollback(messageId).catch(err => {
-                showToast(toastMessage('回滚失败', err));
-              });
-            },
+      Alert.alert('回滚到此消息', chatTranslator(rollbackConfirm.descriptor(mode, 'primary')), [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '回滚',
+          style: 'destructive',
+          onPress: () => {
+            void runRollback(messageId).catch(err => {
+              showToast(toastMessage('回滚失败', err));
+            });
           },
-        ],
-      );
+        },
+      ]);
     },
-    [
-      sessionId,
-      projectId,
-      agentRunning,
-      chatMessages,
-      runtime,
-      reloadMessages,
-      resetStreamingDisplay,
-      showToast,
-      setDraftRestoreToken,
-      snapshotCompleteSignal,
-    ],
+    [sessionId, projectId, agentRunning, chatMessages, runtime, reloadMessages, resetStreamingDisplay, showToast, setDraftRestoreToken, snapshotCompleteSignal],
   );
 
   const handleSetFloorFromMessage = useCallback(
@@ -439,12 +333,7 @@ export function useChatTabMessageActions({
       const runSetFloor = async () => {
         try {
           // clear rule_snapshot + file_cache 由 Core setMessageFloorAtMessage 完成
-          const result =
-            await runtime.messageTranscriptEffects.setMessageFloorAtMessage(
-              projectId,
-              sessionId,
-              messageId,
-            );
+          const result = await runtime.messageTranscriptEffects.setMessageFloorAtMessage(projectId, sessionId, messageId);
           if (!result.ok) {
             showToast(toastMessage('置位失败', result.error));
             return;
@@ -463,30 +352,17 @@ export function useChatTabMessageActions({
         }
       };
 
-      Alert.alert(
-        '置位到此消息？',
-        '此消息之前将不参与提示词，此消息及之后将恢复可见。',
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '置位',
-            onPress: () => {
-              void runSetFloor();
-            },
+      Alert.alert('置位到此消息？', '此消息之前将不参与提示词，此消息及之后将恢复可见。', [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '置位',
+          onPress: () => {
+            void runSetFloor();
           },
-        ],
-      );
+        },
+      ]);
     },
-    [
-      sessionId,
-      projectId,
-      agentRunning,
-      runtime,
-      reloadMessages,
-      bumpWorktreeUiToken,
-      refreshChatTokenLabel,
-      showToast,
-    ],
+    [sessionId, projectId, agentRunning, runtime, reloadMessages, bumpWorktreeUiToken, refreshChatTokenLabel, showToast],
   );
 
   const handleMessageMenuAction = useCallback(
@@ -518,19 +394,7 @@ export function useChatTabMessageActions({
         handleRollbackFromMessage(target.id);
       }
     },
-    [
-      handleForkFromMessage,
-      handleSetFloorFromMessage,
-      handleRollbackFromMessage,
-      sessionId,
-      projectId,
-      agentRunning,
-      runtime,
-      reloadMessages,
-      refreshChatTokenLabel,
-      setMessageEditPrompt,
-      showToast,
-    ],
+    [handleForkFromMessage, handleSetFloorFromMessage, handleRollbackFromMessage, sessionId, projectId, agentRunning, runtime, reloadMessages, refreshChatTokenLabel, setMessageEditPrompt, showToast],
   );
 
   const handleSaveMessageEdit = useCallback(
@@ -546,10 +410,7 @@ export function useChatTabMessageActions({
         return;
       }
       try {
-        await runtime.messages.updateContent(
-          messageId,
-          applyTextEditToMessage(original, trimmed),
-        );
+        await runtime.messages.updateContent(messageId, applyTextEditToMessage(original, trimmed));
         await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('保存失败', error));

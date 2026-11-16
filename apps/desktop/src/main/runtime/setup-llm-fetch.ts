@@ -16,11 +16,9 @@ export function ensureLlmFetchConfigured(): void {
   if (configured) {
     return;
   }
-  const debugLlm =
-    process.env.NM_DEBUG_LLM_FETCH === "1" || isDesktopLlmDebug();
+  const debugLlm = process.env.NM_DEBUG_LLM_FETCH === "1" || isDesktopLlmDebug();
   if (debugLlm) {
-    (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ =
-      true;
+    (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ = true;
     configureLlmFetch(createLoggingFetch(globalThis.fetch));
     log.info("LLM fetch debug enabled", {
       nmDebugLlmFetch: process.env.NM_DEBUG_LLM_FETCH === "1",

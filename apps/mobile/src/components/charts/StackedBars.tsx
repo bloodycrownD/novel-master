@@ -14,7 +14,7 @@ import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {formatTokenCount} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
 
-export interface StackedBarsDatum {
+interface StackedBarsDatum {
   key: string;
   /** 输入 token（柱下半段）。 */
   primary: number;
@@ -44,33 +44,14 @@ const BAR_GAP = 6;
 /** 外置刻度值列宽度（px）：三档刻度值右对齐恒在视口内。 */
 const GRID_LABEL_COLUMN_WIDTH = 36;
 
-export function StackedBars({
-  data,
-  selectedKey,
-  onSelect,
-  onLongPress,
-  tokens,
-  formatLabel,
-  testID,
-}: Props) {
+export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, formatLabel, testID}: Props) {
   const [containerWidth, setContainerWidth] = useState(0);
 
-  const onLayout = useCallback(
-    (e: {nativeEvent: {layout: {width: number}}}) => {
-      setContainerWidth(e.nativeEvent.layout.width);
-    },
-    [],
-  );
+  const onLayout = useCallback((e: {nativeEvent: {layout: {width: number}}}) => {
+    setContainerWidth(e.nativeEvent.layout.width);
+  }, []);
 
-  const barWidth =
-    containerWidth > 0 && data.length > 0
-      ? Math.max(
-          MIN_BAR_WIDTH,
-          Math.floor(
-            (containerWidth - BAR_GAP * (data.length - 1)) / data.length,
-          ),
-        )
-      : MIN_BAR_WIDTH;
+  const barWidth = containerWidth > 0 && data.length > 0 ? Math.max(MIN_BAR_WIDTH, Math.floor((containerWidth - BAR_GAP * (data.length - 1)) / data.length)) : MIN_BAR_WIDTH;
 
   const maxTotal = data.reduce((max, d) => {
     const total = d.primary + (d.secondary ?? 0);
@@ -119,28 +100,17 @@ export function StackedBars({
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendDot, {backgroundColor: item.color}]} />
-            <Text style={[styles.legendLabel, {color: tokens.textSecondary}]}>
-              {item.label}
-            </Text>
+            <Text style={[styles.legendLabel, {color: tokens.textSecondary}]}>{item.label}</Text>
           </View>
         ))}
       </View>
       <View style={styles.chartRow}>
         {/* 左侧滚动区：柱 + 网格线。onLayout 挂在 ScrollView 上，
             测量值即绘图区宽（不含右侧刻度列），柱宽公式输入不变。 */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chartScroll}
-          onLayout={onLayout}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll} onLayout={onLayout}>
           <View style={[styles.barsRow, {minWidth: containerWidth}]}>
             {/* 网格刻度层：绝对定位铺满内容宽（随内容滚动），不参与 flex 布局 */}
-            <View
-              testID={testID ? `${testID}-grid` : undefined}
-              pointerEvents="none"
-              style={styles.gridLayer}
-            >
+            <View testID={testID ? `${testID}-grid` : undefined} pointerEvents="none" style={styles.gridLayer}>
               {gridTiers.map(({tier, top}) => (
                 <View
                   key={tier}
@@ -157,57 +127,33 @@ export function StackedBars({
             </View>
             {data.map((datum, index) => {
               const selected = datum.key === selectedKey;
-              const label = formatLabel
-                ? formatLabel(datum.key, index)
-                : datum.key;
+              const label = formatLabel ? formatLabel(datum.key, index) : datum.key;
               const total = datum.primary + (datum.secondary ?? 0);
-              const height =
-                maxTotal > 0 && total > 0
-                  ? Math.max(2, Math.round((total / maxTotal) * CHART_HEIGHT))
-                  : 0;
-              const primaryHeight =
-                height > 0 && total > 0
-                  ? Math.max(1, Math.round((datum.primary / total) * height))
-                  : 0;
+              const height = maxTotal > 0 && total > 0 ? Math.max(2, Math.round((total / maxTotal) * CHART_HEIGHT)) : 0;
+              const primaryHeight = height > 0 && total > 0 ? Math.max(1, Math.round((datum.primary / total) * height)) : 0;
               const secondaryHeight = height - primaryHeight;
               // 读屏文案与 desktop 侧 bucketTooltip 同口径：日期 · 输入 · 输出 · 调用次数。
-              const barA11yLabel = [
-                label,
-                `输入 ${formatTokenCount(datum.primary)}`,
-                `输出 ${formatTokenCount(datum.secondary ?? 0)}`,
-                ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : []),
-              ].join(' · ');
+              const labelParts = [label, `输入 ${formatTokenCount(datum.primary)}`, `输出 ${formatTokenCount(datum.secondary ?? 0)}`, ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : [])];
+              const barA11yLabel = labelParts.join(' · ');
               return (
                 <Pressable
                   key={datum.key}
                   testID={`bar-col-${datum.key}`}
                   onPress={onSelect ? () => onSelect(datum.key) : undefined}
-                  onLongPress={
-                    onLongPress ? () => onLongPress(datum.key) : undefined
-                  }
+                  onLongPress={onLongPress ? () => onLongPress(datum.key) : undefined}
                   // 仅可点选的柱子（如按天图）标 button；无 onSelect 的柱子
                   // 标成 button 会让读屏用户以为可激活（参照 desktop/J-1 的教训）。
                   accessibilityRole={onSelect ? 'button' : undefined}
                   accessibilityLabel={barA11yLabel}
                   style={styles.barCol}
                 >
-                  <View
-                    style={{height: CHART_HEIGHT, justifyContent: 'flex-end'}}
-                  >
+                  <View style={{height: CHART_HEIGHT, justifyContent: 'flex-end'}}>
                     {/* 无数据日期也保留等宽占位，列宽与有数据日期一致 */}
                     {height === 0 ? (
                       <View style={{width: barWidth, height: 0}} />
                     ) : (
-                      <View
-                        testID={`bar-${datum.key}`}
-                        style={[
-                          styles.bar,
-                          {height, width: barWidth, overflow: 'hidden'},
-                        ]}
-                      >
-                        <View
-                          style={{flex: 1, backgroundColor: tokens.primary}}
-                        />
+                      <View testID={`bar-${datum.key}`} style={[styles.bar, {height, width: barWidth, overflow: 'hidden'}]}>
+                        <View style={{flex: 1, backgroundColor: tokens.primary}} />
                         {secondaryHeight > 0 ? (
                           <View
                             style={{
@@ -219,14 +165,7 @@ export function StackedBars({
                       </View>
                     )}
                   </View>
-                  <Text
-                    testID={`bar-label-${datum.key}`}
-                    style={[
-                      styles.barLabel,
-                      {color: selected ? tokens.primary : tokens.textSecondary},
-                    ]}
-                    numberOfLines={1}
-                  >
+                  <Text testID={`bar-label-${datum.key}`} style={[styles.barLabel, {color: selected ? tokens.primary : tokens.textSecondary}]} numberOfLines={1}>
                     {label}
                   </Text>
                 </Pressable>
@@ -238,14 +177,7 @@ export function StackedBars({
           刻度值恒在视口内。 */}
         <View pointerEvents="none" style={styles.gridLabelColumn}>
           {gridTiers.map(({tier, top, translateY, text}) => (
-            <Text
-              key={tier}
-              testID={`grid-label-${tier}`}
-              style={[
-                styles.gridLabel,
-                {top, transform: [{translateY}], color: tokens.textTertiary},
-              ]}
-            >
+            <Text key={tier} testID={`grid-label-${tier}`} style={[styles.gridLabel, {top, transform: [{translateY}], color: tokens.textTertiary}]}>
               {text}
             </Text>
           ))}

@@ -14,10 +14,6 @@ import type { SessionRunStateService } from "./session-run-state.port.js";
  *
  * @param conn - 已 {@link bootstrapNovelMaster} 的连接（可为事务连接）
  */
-export function createSessionRunStateService(
-  conn: TdbcConnection
-): SessionRunStateService {
-  return new DefaultSessionRunStateService(
-    new SqliteSessionRunStateRepository(conn)
-  );
+export function createSessionRunStateService(conn: TdbcConnection): SessionRunStateService {
+  return new DefaultSessionRunStateService(new SqliteSessionRunStateRepository(conn));
 }

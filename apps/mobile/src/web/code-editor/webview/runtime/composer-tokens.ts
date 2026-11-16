@@ -13,20 +13,14 @@
  * 只在 composer 伪路径下挂载：文件编辑（prompt.md 等真/伪文件）里 `$xx`
  * 是普通文本，不该被胶囊化。
  */
-import {
-  Decoration,
-  EditorView,
-  ViewPlugin,
-  type DecorationSet,
-  type ViewUpdate,
-} from '@codemirror/view';
+import {Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate} from '@codemirror/view';
 import {composerTokenRanges} from '@/components/chat/composer-highlight';
 
 /**
  * composer 变体伪路径：激活胶囊扩展（语言仍按 .md → markdown 高亮）。
  * RN 侧 `PromptEditorScreen.COMPOSER_EDITOR_PATH` 是同值镜像，改这里必须同步。
  */
-export const COMPOSER_TOKEN_PATH = 'composer.md';
+const COMPOSER_TOKEN_PATH = 'composer.md';
 
 const tokenMark = Decoration.mark({class: 'cm-composer-token'});
 
@@ -37,32 +31,26 @@ function buildTokenDecorations(view: EditorView): DecorationSet {
     return Decoration.none;
   }
   // composerTokenRanges 保证按序不重叠；sort 参数兜底防御
-  return Decoration.set(
-    ranges.map(range => tokenMark.range(range.start, range.end)),
-    true,
-  );
+  const marks = ranges.map(range => tokenMark.range(range.start, range.end));
+  return Decoration.set(marks, true);
 }
 
-export const composerTokenHighlight = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = buildTokenDecorations(view);
+class ComposerTokenHighlighter {
+  decorations: DecorationSet;
+  constructor(view: EditorView) {
+    this.decorations = buildTokenDecorations(view);
+  }
+  update(update: ViewUpdate) {
+    if (update.docChanged) {
+      this.decorations = buildTokenDecorations(update.view);
     }
-    update(update: ViewUpdate) {
-      if (update.docChanged) {
-        this.decorations = buildTokenDecorations(update.view);
-      }
-    }
-  },
-  {
-    decorations: value => value.decorations,
-    provide: plugin =>
-      EditorView.atomicRanges.of(
-        view => view.plugin(plugin)?.decorations ?? Decoration.none,
-      ),
-  },
-);
+  }
+}
+
+export const composerTokenHighlight = ViewPlugin.fromClass(ComposerTokenHighlighter, {
+  decorations: value => value.decorations,
+  provide: plugin => EditorView.atomicRanges.of(view => view.plugin(plugin)?.decorations ?? Decoration.none),
+});
 
 /** 路径是否挂 composer-token 胶囊扩展（伪路径判定）。 */
 export function composerTokenEnabled(path: string): boolean {

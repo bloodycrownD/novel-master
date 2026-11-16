@@ -5,14 +5,8 @@
  */
 
 import type { SessionRunStateRepository } from "@/domain/session-run-state/repositories/session-run-state.port.js";
-import type {
-  SessionRunState,
-  SessionRunStatus,
-} from "@/domain/session-run-state/model/session-run-state.js";
-import type {
-  SessionRunStateService,
-  SessionRunStateSettleInput,
-} from "../session-run-state.port.js";
+import type { SessionRunState, SessionRunStatus } from "@/domain/session-run-state/model/session-run-state.js";
+import type { SessionRunStateService, SessionRunStateSettleInput } from "../session-run-state.port.js";
 
 /**
  * 委托 {@link SessionRunStateRepository} 的会话 run 状态服务。
@@ -38,9 +32,7 @@ export class DefaultSessionRunStateService implements SessionRunStateService {
     });
   }
 
-  listByStatuses(
-    statuses: readonly SessionRunStatus[]
-  ): Promise<SessionRunState[]> {
+  listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]> {
     return this.repo.listByStatuses(statuses);
   }
 

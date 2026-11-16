@@ -11,7 +11,7 @@ import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {StyleProp, ViewStyle} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type CollapsibleCardProps = {
+type CollapsibleCardProps = {
   /** 头部主内容（始终可见；调用方自带样式）。 */
   title: React.ReactNode;
   /** 收起态摘要（仅收起时渲染在 title 下方）。 */
@@ -60,15 +60,14 @@ export function CollapsibleCard({
   const [expandedInternal, setExpandedInternal] = useState(defaultExpanded);
   const isExpanded = expandedProp ?? expandedInternal;
 
-  const handleToggle = collapsible
-    ? () => {
-        const next = !isExpanded;
-        if (expandedProp == null) {
-          setExpandedInternal(next);
-        }
-        onToggle?.(next);
-      }
-    : undefined;
+  const toggleHandler = () => {
+    const next = !isExpanded;
+    if (expandedProp == null) {
+      setExpandedInternal(next);
+    }
+    onToggle?.(next);
+  };
+  const handleToggle = collapsible ? toggleHandler : undefined;
 
   const headerNode = (
     <View style={styles.headerText}>
@@ -77,13 +76,9 @@ export function CollapsibleCard({
     </View>
   );
 
-  const chevronNode = showChevron ? (
-    <Text style={[styles.chevron, {color: tokens.textTertiary}, chevronStyle]}>
-      {isExpanded ? '▼' : '▶'}
-    </Text>
-  ) : null;
+  const chevronNode = showChevron ? <Text style={[styles.chevron, {color: tokens.textTertiary}, chevronStyle]}>{isExpanded ? '▼' : '▶'}</Text> : null;
 
-  const contentNode = isExpanded ? (
+  const expandedContent = (
     <View
       style={[
         showDividerBelow && {
@@ -97,7 +92,8 @@ export function CollapsibleCard({
     >
       {children}
     </View>
-  ) : null;
+  );
+  const contentNode = isExpanded ? expandedContent : null;
 
   if (pressArea === 'card') {
     return (

@@ -34,23 +34,8 @@ const FORWARDED_EVENTS = [
 ] as const;
 
 /** 注册如何解析用于事件转发的 renderer webContents。 */
-export function setEventBusForwardTarget(
-  resolver: () => WebContents | undefined,
-): void {
+export function setEventBusForwardTarget(resolver: () => WebContents | undefined): void {
   getTargetWebContents = resolver;
-}
-
-function forwardEvent(type: string, payload: unknown): void {
-  if (type === EVENT_AGENT_RUN_FAILED) {
-    const failed = payload as { sessionId?: string; projectId?: string; error?: string };
-    log.error("agent run failed (forwarding to renderer)", {
-      sessionId: failed.sessionId,
-      projectId: failed.projectId,
-      error: failed.error,
-    });
-  }
-  const envelope: AgentStreamEventPayload = { type, payload };
-  getTargetWebContents?.()?.send(IPC_CHANNELS.AGENT_STREAM, envelope);
 }
 
 /**
@@ -61,7 +46,16 @@ export function attachEventBusForwarder(eventBus: SimpleEventBus): () => void {
 
   for (const eventType of FORWARDED_EVENTS) {
     const sub = eventBus.subscribe(eventType, (payload: unknown) => {
-      forwardEvent(eventType, payload);
+      if (eventType === EVENT_AGENT_RUN_FAILED) {
+        const failed = payload as { sessionId?: string; projectId?: string; error?: string };
+        log.error("agent run failed (forwarding to renderer)", {
+          sessionId: failed.sessionId,
+          projectId: failed.projectId,
+          error: failed.error,
+        });
+      }
+      const envelope: AgentStreamEventPayload = { type: eventType, payload };
+      getTargetWebContents?.()?.send(IPC_CHANNELS.AGENT_STREAM, envelope);
     });
     subscriptions.push(sub);
   }

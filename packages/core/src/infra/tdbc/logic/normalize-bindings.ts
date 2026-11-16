@@ -7,9 +7,7 @@
 /**
  * Returns a new array with each `undefined` or `null` replaced by `null`.
  */
-export function normalizeBindings(
-  parameters?: readonly unknown[]
-): unknown[] | undefined {
+export function normalizeBindings(parameters?: readonly unknown[]): unknown[] | undefined {
   if (parameters === undefined) {
     return undefined;
   }

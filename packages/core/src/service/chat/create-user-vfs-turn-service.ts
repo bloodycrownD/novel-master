@@ -30,9 +30,7 @@ export interface UserVfsTurnServiceBundle {
 /**
  * 鍒涘缓鐢ㄦ埛 VFS turn 鏈嶅姟涓庢ˉ鎺?append 闂寘锛堝叡浜繛鎺ヤ笌 repo锛夈€?
  */
-export function createUserVfsTurnServiceBundle(
-  conn: TdbcConnection
-): UserVfsTurnServiceBundle {
+export function createUserVfsTurnServiceBundle(conn: TdbcConnection): UserVfsTurnServiceBundle {
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn);
   const vfsRepo = new SqliteVfsEntryRepository(conn);
@@ -53,30 +51,6 @@ export function createUserVfsTurnServiceBundle(
   const toolRunner = new ToolRunner(registry);
   const sessionKkv = createSessionKkvService(conn);
 
-  const resolveToolCtx = (
-    sessionId: string,
-    projectId: string
-  ): BuiltinToolContext => ({
-    vfs: createScopedVfsService(conn, {
-      kind: "session",
-      projectId,
-      sessionId,
-    }),
-    projectId,
-    sessionId,
-    sessionKkv,
-    // 目录规则默认启用：与 agent 链路（runAgentTurn）同款注入 session scope
-    // workplace，保证 write / mkdir 的补规则行为在两条链路一致。
-    workplace: createWorkplaceService(conn, {
-      kind: "session",
-      projectId,
-      sessionId,
-    }),
-    // A-14 path policy：用户 VFS turn 走 toolCtx 也走默认不限制语义；
-    // 后续根据 agent 定义 / project 策略收紧时在此注入。
-    allowedPaths: undefined,
-  });
-
   const userVfsTurn = new DefaultUserVfsTurnService({
     conn,
     sessions: sessionRepo,
@@ -87,7 +61,18 @@ export function createUserVfsTurnServiceBundle(
     entries: vfsRepo,
     revisions: revisionRepo,
     toolRunner,
-    resolveToolCtx,
+    resolveToolCtx: (sessionId: string, projectId: string): BuiltinToolContext => ({
+      vfs: createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
+      projectId,
+      sessionId,
+      sessionKkv,
+      // 目录规则默认启用：与 agent 链路（runAgentTurn）同款注入 session scope
+      // workplace，保证 write / mkdir 的补规则行为在两条链路一致。
+      workplace: createWorkplaceService(conn, { kind: "session", projectId, sessionId }),
+      // A-14 path policy：用户 VFS turn 走 toolCtx 也走默认不限制语义；
+      // 后续根据 agent 定义 / project 策略收紧时在此注入。
+      allowedPaths: undefined,
+    }),
     messageCheckpoint: createMessageCheckpointService(conn),
   });
 
@@ -97,8 +82,6 @@ export function createUserVfsTurnServiceBundle(
 }
 
 /** 鍒涘缓 {@link UserVfsTurnService} 瀹炰緥銆?*/
-export function createUserVfsTurnService(
-  conn: TdbcConnection
-): UserVfsTurnService {
+export function createUserVfsTurnService(conn: TdbcConnection): UserVfsTurnService {
   return createUserVfsTurnServiceBundle(conn).userVfsTurn;
 }

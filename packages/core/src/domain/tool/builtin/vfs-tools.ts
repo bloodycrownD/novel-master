@@ -143,10 +143,10 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const totalLines = lines.length;
 
       if (offset > 1 && totalLines === 0) {
-        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (0 lines)`}));
+        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: "read", detail: `offset ${offset} exceeds file length (0 lines)` }));
       }
       if (totalLines > 0 && offset > totalLines) {
-        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (${totalLines} lines)`}));
+        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: "read", detail: `offset ${offset} exceeds file length (${totalLines} lines)` }));
       }
 
       const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(lines, offset, limit);
@@ -222,14 +222,24 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const logicalPath = resolved.value;
       // B-1：仅新建文件时补父链规则——编辑已有文件不得静默把存量无行目录翻成 rule_on。
       // 未注入 workplace 时无补规则可谈，连探测也一并跳过（旧 ctx 的 vfs 可能没有 read）。
-      const isNewFile = ctx.workplace != null && (await probeFileAbsentForWrite(ctx, logicalPath));
+      // 探测原语用 vfs.read：NOT_FOUND → 新建；其余结果（读到内容、撞目录行、探测自身出错）
+      // 一律保守视作「已存在」跳过补规则——宁可少补、不可误翻存量。
+      let isNewFile = false;
+      if (ctx.workplace != null) {
+        const probe = await ctx.vfs.read(logicalPath);
+        if (!probe.ok) {
+          if (isAppError(probe.error, "VFS_NOT_FOUND")) isNewFile = true;
+          else log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error: probe.error });
+        }
+      }
       const result = await ctx.vfs.write(logicalPath, input.content);
       if (!result.ok) return Result.err(result.error);
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
       if (isNewFile) {
-        await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
+        const slash = logicalPath.lastIndexOf("/");
+        await ensureDirRulesForNewPath(ctx, slash <= 0 ? "/" : logicalPath.slice(0, slash));
       }
       return Result.ok(result.value);
     },
@@ -430,32 +440,6 @@ export async function upsertFileCacheAfterWrite(ctx: BuiltinToolContext, logical
   }
   const key = fileCacheKey("full", logicalPath);
   await ctx.sessionKkv.set(ctx.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body: content, mtimeMs: Date.now() }));
-}
-
-/** 取逻辑路径的父目录（`/a/b/c.md` → `/a/b`；顶层则回 `/`）。 */
-function parentDirOfLogicalPath(logicalPath: string): string {
-  const idx = logicalPath.lastIndexOf("/");
-  return idx <= 0 ? "/" : logicalPath.slice(0, idx);
-}
-
-/**
- * write 前探测目标文件是否不存在（即本次是否为新建）。
- *
- * WHY（B-1）：只有新建文件才补父链默认目录规则，编辑已有文件不得静默
- * 把存量无行目录翻成 rule_on。探测原语用 `vfs.read`（工具上下文内唯一
- * 可用的存在性探测）：NOT_FOUND → 新建；其余结果（读到内容、撞目录行、
- * 探测自身出错）一律保守视作「已存在」跳过补规则——宁可少补、不可误翻存量。
- */
-async function probeFileAbsentForWrite(ctx: BuiltinToolContext, logicalPath: string): Promise<boolean> {
-  const read = await ctx.vfs.read(logicalPath);
-  if (read.ok) {
-    return false;
-  }
-  if (isAppError(read.error, "VFS_NOT_FOUND")) {
-    return true;
-  }
-  log.debug(`write 前探测 ${logicalPath} 失败，保守跳过补规则`, { error: read.error });
-  return false;
 }
 
 /**

@@ -3,7 +3,18 @@
  *
  * @module services/agent-run
  */
-import { AGENT_RUN_RESOLVE_KEYS, AgentTurnError, isAppError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
+import {
+  AGENT_RUN_RESOLVE_KEYS,
+  AgentTurnError,
+  isAppError,
+  resolveApplicationModelIdForRun,
+  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
+  resolveCurrentAgentId as resolveCoreAgentId,
+  runAgentTurn as coreRunAgentTurn,
+  type AgentDefinition,
+  type AgentRunResult,
+  type AgentTurnScope,
+} from "@novel-master/core/agent";
 import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
 import type { AppError } from "@novel-master/core/agent";
@@ -34,12 +45,7 @@ function mapResolveError<T>(fn: () => Promise<unknown>): Promise<T> {
   return fn()
     .then((value) => {
       // Result 形状按运行时判定（core 侧签名 Result 化后部分 resolver 仍走 throw）
-      if (
-        value != null &&
-        typeof value === "object" &&
-        "ok" in value &&
-        ((value as { ok: unknown }).ok === true || (value as { ok: unknown }).ok === false)
-      ) {
+      if (value != null && typeof value === "object" && "ok" in value && ((value as { ok: unknown }).ok === true || (value as { ok: unknown }).ok === false)) {
         const result = value as Result<unknown, AppError>;
         if (!result.ok) return transcode(result.error);
         return result.value as T;
@@ -49,43 +55,30 @@ function mapResolveError<T>(fn: () => Promise<unknown>): Promise<T> {
     .catch((error: unknown) => transcode(error));
 }
 
-export async function resolveCurrentAgentId(
-  runtime: DesktopNovelMasterRuntime,
-): Promise<string | undefined> {
+export async function resolveCurrentAgentId(runtime: DesktopNovelMasterRuntime): Promise<string | undefined> {
   // 错误通道迁移五期：core resolveCurrentAgentId 沿 Result 回传；infra 失败
   // (非 resolve key) 原样上抛，成功解包取值。
   return mapResolveError(() => resolveCoreAgentId(runtime));
 }
 
-export async function resolveCurrentAgentDefinition(
-  runtime: DesktopNovelMasterRuntime,
-): Promise<{ agentId: string; definition: AgentDefinition }> {
+export async function resolveCurrentAgentDefinition(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-export async function resolveDesktopSavedModelId(
-  runtime: DesktopNovelMasterRuntime,
-  definition: AgentDefinition,
-  sessionId: string,
-): Promise<{ savedModelId: string; workspaceModelId: string }> {
-  return mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition, sessionId),
-  );
+export async function resolveDesktopSavedModelId(runtime: DesktopNovelMasterRuntime, definition: AgentDefinition, sessionId: string): Promise<{ savedModelId: string; workspaceModelId: string }> {
+  return mapResolveError(() => resolveApplicationModelIdForRun(runtime, definition, sessionId));
 }
 
-export async function runAgentTurn(
-  runtime: DesktopNovelMasterRuntime,
-  scope: AgentRunScope,
-  userContent: string,
-  options?: {
-    readonly stream?: boolean;
-    readonly allowResumeWithoutInput?: boolean;
-    readonly attachments?: readonly MessageAttachment[];
-    readonly annotateDrafts?: readonly AnnotateDraft[];
-    readonly signal?: AbortSignal;
-    readonly onUserMessageAppended?: () => void | Promise<void>;
-  },
-): Promise<Result<AgentRunResult, AppError>> {
+type RunAgentTurnOptions = {
+  readonly stream?: boolean;
+  readonly allowResumeWithoutInput?: boolean;
+  readonly attachments?: readonly MessageAttachment[];
+  readonly annotateDrafts?: readonly AnnotateDraft[];
+  readonly signal?: AbortSignal;
+  readonly onUserMessageAppended?: () => void | Promise<void>;
+};
+
+export async function runAgentTurn(runtime: DesktopNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
     onAfterResolveModel: async (ctx) => {
@@ -96,8 +89,8 @@ export async function runAgentTurn(
       // unknown 收——恢复四期前 `saved?.providerId ?? "unknown"` 的口径，debug
       // 日志钩子不允许杀死整轮 run（core 对本回调的抛错无 catch，会直接判负）。
       const saved = await runtime.providerModels.getSavedById(ctx.savedModelId);
-      const providerId = saved.ok ? (saved.value?.providerId ?? "unknown") : "unknown";
-      const vendorModelId = saved.ok ? (saved.value?.vendorModelId ?? ctx.savedModelId) : ctx.savedModelId;
+      const providerId = saved.ok ? saved.value?.providerId ?? "unknown" : "unknown";
+      const vendorModelId = saved.ok ? saved.value?.vendorModelId ?? ctx.savedModelId : ctx.savedModelId;
       try {
         const provider = await runtime.providers.get(providerId);
         // 已知失败与未知异常同一出口（warn 后返回，不杀 run）。

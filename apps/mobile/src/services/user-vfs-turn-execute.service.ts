@@ -12,9 +12,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {projectComposerStatusForSession} from './project-composer-status.service';
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */
-export function isSessionVfsScope(
-  scope: VfsScope,
-): scope is Extract<VfsScope, {kind: 'session'}> {
+export function isSessionVfsScope(scope: VfsScope): scope is Extract<VfsScope, {kind: 'session'}> {
   return scope.kind === 'session';
 }
 
@@ -32,12 +30,7 @@ export type ExecuteSessionUserVfsOpOptions = {
  * 经 userVfsTurn 执行；失败沿 `Result.err` 接力（错误通道迁移四期），调用方
  * UI 事件收口 formatError → toast。默认成功后轻量投影状态条。
  */
-export async function executeSessionUserVfsOp(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  op: UserVfsTurnOp,
-  options: ExecuteSessionUserVfsOpOptions = {},
-): Promise<Result<void, unknown>> {
+export async function executeSessionUserVfsOp(runtime: MobileNovelMasterRuntime, sessionId: string, op: UserVfsTurnOp, options: ExecuteSessionUserVfsOpOptions = {}): Promise<Result<void, unknown>> {
   const result = await runtime.userVfsTurn.executeOp(sessionId, op);
   if (!result.ok) {
     return Result.err(result.error);
@@ -50,10 +43,7 @@ export async function executeSessionUserVfsOp(
 }
 
 /** 批次结束后补一次状态条投影（仅 annotate，无净 diff）。 */
-export async function refreshComposerStatusAfterUserVfsOps(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-): Promise<void> {
+export async function refreshComposerStatusAfterUserVfsOps(runtime: MobileNovelMasterRuntime, sessionId: string): Promise<void> {
   const attachments = await projectComposerStatusForSession(runtime, sessionId);
   applyComposerStatusAttachmentsReplace({sessionId, attachments});
 }

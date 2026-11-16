@@ -4,14 +4,10 @@
  * @module infra/llm-protocol/logic/tool-arguments-parse
  */
 
-export type TryParseToolArgumentsResult =
-  | { readonly ok: true; readonly value: Record<string, unknown> }
-  | { readonly ok: false; readonly raw: string };
+type TryParseToolArgumentsResult = { readonly ok: true; readonly value: Record<string, unknown> } | { readonly ok: false; readonly raw: string };
 
 /** finish 路径：非法 JSON 返回 `{ ok: false, raw }`，不抛错。 */
-export function tryParseToolArgumentsJson(
-  raw: string
-): TryParseToolArgumentsResult {
+export function tryParseToolArgumentsJson(raw: string): TryParseToolArgumentsResult {
   if (raw === "") {
     return { ok: true, value: {} };
   }
@@ -21,4 +17,3 @@ export function tryParseToolArgumentsJson(
     return { ok: false, raw };
   }
 }
-

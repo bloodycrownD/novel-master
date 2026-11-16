@@ -6,24 +6,15 @@
 
 import type { PersistentState } from "@novel-master/core";
 import { type AppError, Result } from "@novel-master/core/errors";
-import {
-  assertSavedModelUuid,
-  type ProviderServiceBundle,
-} from "@novel-master/core/provider";
+import { assertSavedModelUuid, type ProviderServiceBundle } from "@novel-master/core/provider";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const value = flags.get(key);
   return typeof value === "string" ? value : undefined;
 }
 
 /** Resolves provider id: flag > state > error. */
-export async function resolveProviderId(
-  flags: ReadonlyMap<string, string | true>,
-  state: PersistentState,
-): Promise<Result<string, AppError>> {
+export async function resolveProviderId(flags: ReadonlyMap<string, string | true>, state: PersistentState): Promise<Result<string, AppError>> {
   const fromFlag = flagString(flags, "providerId");
   if (fromFlag != null) {
     return Result.ok(fromFlag);
@@ -33,9 +24,7 @@ export async function resolveProviderId(
   if (fromState.value != null && fromState.value !== "") {
     return Result.ok(fromState.value);
   }
-  throw new Error(
-    "Missing --providerId <uuid> (or run: nm provider use --providerId <uuid>)",
-  );
+  throw new Error("Missing --providerId <uuid> (or run: nm provider use --providerId <uuid>)");
 }
 
 /** Unwraps the Result-based saved-model lookup at the CLI boundary.
@@ -48,11 +37,7 @@ async function requireSavedModelId(savedModelId: string, savedModels: ProviderSe
 }
 
 /** Resolves saved model UUID: flag > state > error. */
-export async function resolveModelId(
-  flags: ReadonlyMap<string, string | true>,
-  state: PersistentState,
-  savedModels: ProviderServiceBundle["savedModelRepo"],
-): Promise<Result<string, AppError>> {
+export async function resolveModelId(flags: ReadonlyMap<string, string | true>, state: PersistentState, savedModels: ProviderServiceBundle["savedModelRepo"]): Promise<Result<string, AppError>> {
   const fromFlag = flagString(flags, "modelId");
   if (fromFlag != null) {
     return requireSavedModelId(fromFlag, savedModels);
@@ -62,15 +47,11 @@ export async function resolveModelId(
   if (fromState.value != null && fromState.value !== "") {
     return requireSavedModelId(fromState.value, savedModels);
   }
-  throw new Error(
-    "Missing --modelId <uuid> (or run: nm model use --modelId <uuid>)",
-  );
+  throw new Error("Missing --modelId <uuid> (or run: nm model use --modelId <uuid>)");
 }
 
 /** Requires explicit `--providerId` (no state fallback). */
-export function requireProviderId(
-  flags: ReadonlyMap<string, string | true>,
-): string {
+export function requireProviderId(flags: ReadonlyMap<string, string | true>): string {
   const fromFlag = flagString(flags, "providerId");
   if (fromFlag != null) {
     return fromFlag;

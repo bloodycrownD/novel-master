@@ -2,14 +2,7 @@
  * Left-side project drawer (examples/mobile .side-drawer.project-drawer).
  */
 import React, {useEffect, useState} from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {type ChatProject} from '@novel-master/core/chat';
 import {ModalShell} from '../ui/ModalShell';
@@ -27,9 +20,7 @@ import {pickEntityIcon} from '../../utils/entity-icon';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
 
-type NamePromptState =
-  | {mode: 'create'}
-  | {mode: 'rename'; projectId: string; initialName: string};
+type NamePromptState = {mode: 'create'} | {mode: 'rename'; projectId: string; initialName: string};
 
 type Props = {
   visible: boolean;
@@ -42,16 +33,7 @@ type Props = {
   onDeleteSelected: (projectIds: string[]) => void | Promise<void>;
 };
 
-export function ProjectDrawer({
-  visible,
-  projects,
-  currentProjectId,
-  onClose,
-  onSelect,
-  onCreateProject,
-  onRenameProject,
-  onDeleteSelected,
-}: Props) {
+export function ProjectDrawer({visible, projects, currentProjectId, onClose, onSelect, onCreateProject, onRenameProject, onDeleteSelected}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const insets = useSafeAreaInsets();
@@ -75,22 +57,18 @@ export function ProjectDrawer({
     if (ids.length === 0) {
       return;
     }
-    Alert.alert(
-      '确认删除',
-      `确定删除选中的 ${ids.length} 个项目？将同时移除其下所有会话。`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            void Promise.resolve(onDeleteSelected(ids)).then(() => {
-              batch.exit();
-            });
-          },
+    Alert.alert('确认删除', `确定删除选中的 ${ids.length} 个项目？将同时移除其下所有会话。`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void Promise.resolve(onDeleteSelected(ids)).then(() => {
+            batch.exit();
+          });
         },
-      ],
-    );
+      },
+    ]);
   };
 
   return (
@@ -116,23 +94,11 @@ export function ProjectDrawer({
           onCancelBatch={batch.exit}
           onDelete={confirmBatchDelete}
           hint="选择要删除的项目（将同时移除其下所有会话）"
-          normalActions={
-            <PrimaryButton
-              label="新建"
-              tokens={tokens}
-              onPress={() => setNamePrompt({mode: 'create'})}
-            />
-          }
+          normalActions={<PrimaryButton label="新建" tokens={tokens} onPress={() => setNamePrompt({mode: 'create'})} />}
         />
-        <ScrollView
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-        >
+        <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
           {projects.length === 0 ? (
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              暂无项目，点击「新建」开始。
-            </Text>
+            <Text style={[styles.empty, {color: tokens.textSecondary}]}>暂无项目，点击「新建」开始。</Text>
           ) : (
             projects.map((project, index) => {
               const isCurrent = project.id === currentProjectId;
@@ -144,9 +110,7 @@ export function ProjectDrawer({
                     styles.projectCard,
                     {
                       backgroundColor: tokens.surfaceElevated,
-                      borderColor: selected
-                        ? tokens.primary
-                        : tokens.borderLight,
+                      borderColor: selected ? tokens.primary : tokens.borderLight,
                       borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
                     },
                   ]}
@@ -159,39 +123,15 @@ export function ProjectDrawer({
                     }
                   }}
                 >
-                  {batch.active ? (
-                    <BatchCheckbox
-                      checked={selected}
-                      onToggle={() => batch.toggle(project.id)}
-                    />
-                  ) : (
-                    <Text style={styles.projectIcon}>
-                      {pickEntityIcon(project.id, PROJECT_ICONS)}
-                    </Text>
-                  )}
+                  {batch.active ? <BatchCheckbox checked={selected} onToggle={() => batch.toggle(project.id)} /> : <Text style={styles.projectIcon}>{pickEntityIcon(project.id, PROJECT_ICONS)}</Text>}
                   <View style={styles.projectInfo}>
-                    <Text
-                      style={[styles.projectName, {color: tokens.text}]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.projectName, {color: tokens.text}]} numberOfLines={1}>
                       {project.name}
                     </Text>
-                    <Text
-                      style={[
-                        styles.projectMeta,
-                        {color: tokens.textSecondary},
-                      ]}
-                    >
-                      更新于 {formatRelativeTimeMs(project.updatedAtMs)}
-                    </Text>
+                    <Text style={[styles.projectMeta, {color: tokens.textSecondary}]}>更新于 {formatRelativeTimeMs(project.updatedAtMs)}</Text>
                   </View>
                   {isCurrent && !batch.active ? (
-                    <View
-                      style={[
-                        styles.currentBadge,
-                        {backgroundColor: tokens.primary},
-                      ]}
-                    >
+                    <View style={[styles.currentBadge, {backgroundColor: tokens.primary}]}>
                       <Text style={styles.currentBadgeText}>当前</Text>
                     </View>
                   ) : null}
@@ -205,20 +145,9 @@ export function ProjectDrawer({
                           setMenuProjectId(project.id);
                         }}
                       >
-                        <Text
-                          style={[
-                            styles.menuDots,
-                            {color: tokens.textSecondary},
-                          ]}
-                        >
-                          ⋮
-                        </Text>
+                        <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>⋮</Text>
                       </Pressable>
-                      <Text
-                        style={[styles.chevron, {color: tokens.textTertiary}]}
-                      >
-                        ›
-                      </Text>
+                      <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
                     </>
                   ) : null}
                 </Pressable>
@@ -247,22 +176,16 @@ export function ProjectDrawer({
             return;
           }
           if (action === 'delete' && project) {
-            Alert.alert(
-              '确认删除',
-              `确定删除项目「${project.name}」？将同时移除其下所有会话。`,
-              [
-                {text: '取消', style: 'cancel'},
-                {
-                  text: '删除',
-                  style: 'destructive',
-                  onPress: () => {
-                    void Promise.resolve(onDeleteSelected([project.id])).catch(
-                      err => showToast(toastMessage('删除失败', err)),
-                    );
-                  },
+            Alert.alert('确认删除', `确定删除项目「${project.name}」？将同时移除其下所有会话。`, [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '删除',
+                style: 'destructive',
+                onPress: () => {
+                  void Promise.resolve(onDeleteSelected([project.id])).catch(err => showToast(toastMessage('删除失败', err)));
                 },
-              ],
-            );
+              },
+            ]);
           }
         }}
       />
@@ -272,9 +195,7 @@ export function ProjectDrawer({
         title={namePrompt?.mode === 'rename' ? '重命名项目' : '新建项目'}
         label="项目名称"
         placeholder="如 科幻小说创作"
-        initialValue={
-          namePrompt?.mode === 'rename' ? namePrompt.initialName : ''
-        }
+        initialValue={namePrompt?.mode === 'rename' ? namePrompt.initialName : ''}
         confirmLabel={namePrompt?.mode === 'rename' ? '保存' : '创建'}
         onClose={() => setNamePrompt(null)}
         onConfirm={async values => {

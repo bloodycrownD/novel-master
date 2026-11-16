@@ -1,16 +1,6 @@
 import sanitizeHtml from 'sanitize-html';
 
-const DISALLOWED_TAGS = [
-  'script',
-  'iframe',
-  'object',
-  'embed',
-  'form',
-  'input',
-  'textarea',
-  'select',
-  'button',
-] as const;
+const DISALLOWED_TAGS = ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'] as const;
 
 /**
  * 内联 style 属性白名单：仅放行纯展示类 CSS 属性。
@@ -35,6 +25,9 @@ const ALLOWED_CSS_PROPERTIES = new Set([
 /**
  * 按顶层分号切分 style 声明：逐字符扫描并跟踪引号与括号深度，
  * 保证 url("a;b") 这类值内的分号/逗号/引号不会被误当声明分隔符。
+ */
+/**
+ * nm-style: keep-local — CSS 声明分词状态机：引号 / url() 括号深度是循环内不变量，内联进 sanitize 循环会打散解析边界。
  */
 function splitStyleDeclarations(style: string): string[] {
   const declarations: string[] = [];
@@ -111,28 +104,14 @@ export function filterInlineStyle(style: string): string | undefined {
  * 伪造 app 界面的布局属性。
  */
 export function sanitizeRichHtml(html: string): string {
+  const defaultAllowedTags = sanitizeHtml.defaults.allowedTags.concat(['img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td']);
   return sanitizeHtml(html, {
     // 伪标签须可见：escape 为 &lt;tag&gt;；危险标签同样不可执行
     disallowedTagsMode: 'escape',
     // PostCSS 依赖 Node；Hermes 无法解析内联 style — 保留 style 属性原样
     parseStyleAttributes: false,
     nonTextTags: ['script', 'textarea', 'option'],
-    allowedTags: sanitizeHtml.defaults.allowedTags
-      .concat([
-        'img',
-        'div',
-        'span',
-        'table',
-        'thead',
-        'tbody',
-        'tr',
-        'th',
-        'td',
-      ])
-      .filter(
-        (tag: string) =>
-          !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number]),
-      ),
+    allowedTags: defaultAllowedTags.filter((tag: string) => !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number])),
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,
       '*': ['style', 'class', 'id'],

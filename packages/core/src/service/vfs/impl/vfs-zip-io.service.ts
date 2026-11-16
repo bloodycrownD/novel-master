@@ -45,22 +45,6 @@ export type VfsZipImportTestHook = {
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
-function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
-  const base = prefix === "/" ? prefix : prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-  if (fullPath === base) {
-    return "";
-  }
-  // 根目录前缀 / 的特殊处理：fullPath 必定以 / 开头
-  if (base === "/") {
-    return fullPath.slice(1);
-  }
-  const withSlash = `${base}/`;
-  if (!fullPath.startsWith(withSlash)) {
-    throw new AppError("VFS_INVARIANT_VIOLATION", {detail: `[invariant] Path ${fullPath} is not under prefix ${prefix}`});
-  }
-  return fullPath.slice(withSlash.length);
-}
-
 /**
  * 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：本函数只在 `import` 段 B0 的
  * `conn.transaction` 回调内调用，失败靠抛错回滚。
@@ -77,7 +61,7 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
     return;
   }
   if (existing.entryKind !== "directory") {
-    throw new AppError("VFS_NOT_A_DIRECTORY", {path: logical, detail: `Not a directory: ${logical}`});
+    throw new AppError("VFS_NOT_A_DIRECTORY", { path: logical, detail: `Not a directory: ${logical}` });
   }
 }
 
@@ -98,21 +82,21 @@ function wrapImportError(error: unknown, committedShards?: number, failedShard?:
   const base = error instanceof Error ? error.message : "import transaction failed";
   // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
   if (committedShards != null && failedShard != null) {
-    return new AppError("VFS_ZIP_IMPORT_FAILED", {descriptor: {key: "error.vfs.zip_import_failed.with_progress", params: {committed: committedShards, failed_shard: failedShard}}});
+    return new AppError("VFS_ZIP_IMPORT_FAILED", { descriptor: { key: "error.vfs.zip_import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } } });
   }
-  return new AppError("VFS_ZIP_IMPORT_FAILED", {detail: base});
+  return new AppError("VFS_ZIP_IMPORT_FAILED", { detail: base });
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<Result<void, AppError>> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (!existing.ok) return Result.err(existing.error);
   if (existing.value != null && existing.value.entryKind === "file") {
-    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", {detail: `ZIP target path is a file, not a directory: ${directoryPath}`}));
+    return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP target path is a file, not a directory: ${directoryPath}` }));
   }
   return Result.ok(undefined);
 }
 
-export type DefaultVfsZipIoServiceOptions = {
+type DefaultVfsZipIoServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: VfsZipImportTestHook;
   /**
@@ -163,12 +147,14 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     const directoryZipNames: string[] = [];
     const entriesUnderScope = await this.repo.listEntriesUnderPrefix(sk, directoryPath);
+    // 目标目录自身跳过；越出目标前缀即不变量破坏。
+    const basePrefix = directoryPath === "/" ? directoryPath : directoryPath.endsWith("/") ? directoryPath.slice(0, -1) : directoryPath;
     for (const entry of entriesUnderScope) {
-      if (entry.kind !== "directory") {
+      if (entry.kind !== "directory" || entry.path === basePrefix) {
         continue;
       }
-      if (relativeUnderPhysicalPrefix(entry.path, directoryPath).length === 0) {
-        continue;
+      if (basePrefix !== "/" && !entry.path.startsWith(`${basePrefix}/`)) {
+        throw new AppError("VFS_INVARIANT_VIOLATION", { detail: `[invariant] Path ${entry.path} is not under prefix ${directoryPath}` });
       }
       const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
       if (!directoryNameResult.ok) return Result.err(directoryNameResult.error);
@@ -183,7 +169,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     //（本方法自四期起已是 Result 签名，段 B0 之前的路径全部 Result.err）。
     // 导入事务链（段 B0 起）仍按边界抛出，由 wrapImportError 收口。
     if (options.confirmed !== true) {
-      return Result.err(new AppError("VFS_ZIP_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"}));
+      return Result.err(new AppError("VFS_ZIP_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)" }));
     }
 
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
@@ -200,21 +186,6 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     const { files, directories } = validated.value;
     const sk = scopeKey(scope);
     const fileEntries = [...files];
-
-    // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。
-    // 跑在**独立事务**里，整体吞错只记 warn——补偿失败不掩盖主错误。
-    // 口径写死用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC
-    // 无引用 revision），**不得**用裸 `deleteVfsPrefix`（不减 ref、也不 GC
-    // ⇒ 会留下一批 ref_count=1 的孤儿 revision 与永不回收的 blob）。
-    const compensate = async (): Promise<void> => {
-      try {
-        await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
-        });
-      } catch (error) {
-        log.warn("import compensation failed", { error });
-      }
-    };
 
     // 段 B0（独立短事务）：删旧子树 + 目标目录行 + 全部显式目录行。
     try {
@@ -263,7 +234,17 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         committedShards += 1;
         shardIndex += 1;
       } catch (error) {
-        await compensate();
+        // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。跑在**独立事务**里，
+        // 整体吞错只记 warn——补偿失败不掩盖主错误。口径写死用 `releaseAndDeleteVfsPrefix`
+        // （减 live ref + 删 entry + GC 无引用 revision），**不得**用裸 `deleteVfsPrefix`
+        // （不减 ref、也不 GC ⇒ 会留下一批 ref_count=1 的孤儿 revision 与永不回收的 blob）。
+        try {
+          await this.conn.transaction(async (tx) => {
+            await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
+          });
+        } catch (compensateError) {
+          log.warn("import compensation failed", { error: compensateError });
+        }
         throw wrapImportError(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。

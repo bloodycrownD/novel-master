@@ -2,10 +2,7 @@ import {defaultKeymap, history, historyKeymap} from '@codemirror/commands';
 import {EditorView, drawSelection, keymap} from '@codemirror/view';
 import {Compartment, EditorState, type Extension} from '@codemirror/state';
 import {languageExtensionForPath} from './language-for-path';
-import {
-  composerTokenEnabled,
-  composerTokenHighlight,
-} from './composer-tokens';
+import {composerTokenEnabled, composerTokenHighlight} from './composer-tokens';
 import {editorSyntaxHighlighting, editorTheme} from './theme';
 import {post} from './post';
 
@@ -71,9 +68,7 @@ function buildExtensions(path: string): Extension[] {
     drawSelection(),
     history(),
     languageCompartment.of(languageExtensionForPath(path)),
-    tokenCompartment.of(
-      composerTokenEnabled(path) ? composerTokenHighlight : [],
-    ),
+    tokenCompartment.of(composerTokenEnabled(path) ? composerTokenHighlight : []),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.updateListener.of(update => {
       // 选区上报（typeahead 的活跃查询判定在 RN 侧，需要光标位置）。
@@ -142,7 +137,7 @@ function bindCaretRevealOnResize(): () => void {
 let unbindCaretReveal: (() => void) | null = null;
 
 /** 外部受控选区（程序化写入一次落位；坐标为 plain 文本偏移）。 */
-export type EditorSelectionRange = {
+type EditorSelectionRange = {
   readonly start: number;
   readonly end: number;
 };
@@ -153,10 +148,7 @@ function clampIndex(value: number, length: number): number {
 }
 
 /** 转成 CM 选区 spec；无选区期望时返回 undefined（事务里等价于不设）。 */
-function selectionSpec(
-  text: string,
-  selection?: EditorSelectionRange,
-): {anchor: number; head: number} | undefined {
+function selectionSpec(text: string, selection?: EditorSelectionRange): {anchor: number; head: number} | undefined {
   if (selection == null) {
     return undefined;
   }
@@ -168,20 +160,10 @@ function selectionSpec(
 
 /** path 变化时的两仓重配（语言 + 胶囊扩展）；无变化返回 undefined。 */
 function reconfigureEffects(path: string) {
-  return [
-    languageCompartment.reconfigure(languageExtensionForPath(path)),
-    tokenCompartment.reconfigure(
-      composerTokenEnabled(path) ? composerTokenHighlight : [],
-    ),
-  ];
+  return [languageCompartment.reconfigure(languageExtensionForPath(path)), tokenCompartment.reconfigure(composerTokenEnabled(path) ? composerTokenHighlight : [])];
 }
 
-export function mountEditor(
-  parent: HTMLElement,
-  text: string,
-  path: string,
-  selection?: EditorSelectionRange,
-): void {
+export function mountEditor(parent: HTMLElement, text: string, path: string, selection?: EditorSelectionRange): void {
   if (view) {
     destroyEditor();
   }
@@ -194,9 +176,7 @@ export function mountEditor(
       // 不点编辑器直接按 @/$ 时，token 要插在草稿末尾而不是整篇开头（RN 侧
       // cursor 初值同步落文末，见 PromptEditorScreen）。
       // 文件编辑保持现状（不传 selection → CM 落 0），「文件编辑也落文末」待拍板。
-      selection:
-        selectionSpec(text, selection) ??
-        (composerTokenEnabled(path) ? {anchor: text.length} : undefined),
+      selection: selectionSpec(text, selection) ?? (composerTokenEnabled(path) ? {anchor: text.length} : undefined),
     }),
     parent,
   });
@@ -221,11 +201,7 @@ export function destroyEditor(): void {
   currentPath = '';
 }
 
-export function setDocument(
-  text: string,
-  path: string,
-  selection?: EditorSelectionRange,
-): void {
+export function setDocument(text: string, path: string, selection?: EditorSelectionRange): void {
   if (!view) return;
 
   // 外部替换前丢掉挂起的上行快照：它描述的是被替换前的旧文档，

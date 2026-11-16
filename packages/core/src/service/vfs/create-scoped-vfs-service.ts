@@ -18,14 +18,8 @@ import type { VfsService } from "./vfs.port.js";
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  * @param scope - Visibility scope (logical paths only)
  */
-export function createScopedVfsService(
-  conn: TdbcConnection,
-  scope: VfsScope
-): VfsService {
+export function createScopedVfsService(conn: TdbcConnection, scope: VfsScope): VfsService {
   const entryRepo = new SqliteVfsEntryRepository(conn);
-  const inner = new RevisionAwareVfsService(
-    conn,
-    new DefaultVfsService(entryRepo)
-  );
+  const inner = new RevisionAwareVfsService(conn, new DefaultVfsService(entryRepo));
   return new ScopedVfsService(inner, scope);
 }

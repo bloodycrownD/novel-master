@@ -5,12 +5,7 @@
  */
 
 /** Discriminant codes for {@link SkspError}. */
-export type SkspErrorCode =
-  | "NOT_REGISTERED"
-  | "ENCRYPT_FAILED"
-  | "DECRYPT_FAILED"
-  | "DB_ERROR"
-  | "INVALID_REF";
+export type SkspErrorCode = "NOT_REGISTERED" | "ENCRYPT_FAILED" | "DECRYPT_FAILED" | "DB_ERROR" | "INVALID_REF";
 
 /**
  * Unified error for SKSP driver and composite operations.
@@ -20,11 +15,7 @@ export class SkspError extends Error {
   readonly ref?: string;
   readonly cause?: unknown;
 
-  constructor(
-    code: SkspErrorCode,
-    message: string,
-    options?: { ref?: string; cause?: unknown }
-  ) {
+  constructor(code: SkspErrorCode, message: string, options?: { ref?: string; cause?: unknown }) {
     super(message);
     this.name = "SkspError";
     this.code = code;

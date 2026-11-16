@@ -27,26 +27,20 @@ export type CloudSyncStatus = {
   lock: CloudSyncLock | null;
 };
 
-const lockSchema = z
-  .object({
-    holderDeviceId: z.string().min(1),
-    acquiredAt: z.string().min(1),
-    expiresAt: z.string().min(1),
-  })
-  .strict();
+const lockSchema = z.object({ holderDeviceId: z.string().min(1), acquiredAt: z.string().min(1), expiresAt: z.string().min(1) }).strict();
 
-const cloudSyncStatusSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    rev: z.number().int().nonnegative(),
-    snapshotKey: z.string().min(1).optional(),
-    snapshotSha256: z.string().min(1).optional(),
-    snapshotBytes: z.number().int().nonnegative().optional(),
-    uploadedAt: z.string().min(1).optional(),
-    uploadedByDeviceId: z.string().min(1).optional(),
-    lock: z.union([lockSchema, z.null()]),
-  })
-  .strict();
+const cloudSyncStatusShape = {
+  schemaVersion: z.literal(1),
+  rev: z.number().int().nonnegative(),
+  snapshotKey: z.string().min(1).optional(),
+  snapshotSha256: z.string().min(1).optional(),
+  snapshotBytes: z.number().int().nonnegative().optional(),
+  uploadedAt: z.string().min(1).optional(),
+  uploadedByDeviceId: z.string().min(1).optional(),
+  lock: z.union([lockSchema, z.null()]),
+};
+
+const cloudSyncStatusSchema = z.object(cloudSyncStatusShape).strict();
 
 /** rev=0 且无快照时的默认远端状态 */
 export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
@@ -61,7 +55,7 @@ export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
 export function parseCloudSyncStatus(raw: unknown): Result<CloudSyncStatus, AppError> {
   const result = cloudSyncStatusSchema.safeParse(raw);
   if (!result.success) {
-    return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.schema_invalid"}}, {cause: result.error}));
+    return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", { descriptor: { key: "error.cloud_sync.invalid_status.schema_invalid" } }, { cause: result.error }));
   }
   return Result.ok(result.data);
 }

@@ -69,70 +69,6 @@ function isAsciiDigitCode(code: number): boolean {
 }
 
 /**
- * Full-width ASCII range → half-width (mirrors legado `fullToHalf`, including
- * the full-width space U+3000). Chinese numerals are unaffected.
- */
-function fullWidthToHalf(s: string): string {
-  let out = "";
-  for (let i = 0; i < s.length; i++) {
-    const code = s.charCodeAt(i);
-    if (code >= 0xff01 && code <= 0xff5e) {
-      out += String.fromCharCode(code - 0xfee0);
-    } else if (code === 0x3000) {
-      out += " ";
-    } else {
-      out += s[i];
-    }
-  }
-  return out;
-}
-
-/**
- * Chinese numeral string → number, power form ("一千零二十五" → 1025, including
- * unit abbreviations like "一千二" → 1200 and 亿-level carry).
- *
- * Returns `null` when any character is not a recognized Chinese numeral
- * (legado returns -1 there; `null` keeps the caller from conflating it with a
- * real value).
- */
-function chineseNumToIntPowerForm(s: string): number | null {
-  let result = 0;
-  let tmp = 0;
-  let billion = 0;
-  const chars = Array.from(s);
-  for (let i = 0; i < chars.length; i++) {
-    const value = CHN_NUM_VALUE[chars[i]];
-    if (value === undefined) {
-      return null;
-    }
-    if (value === 100000000) {
-      result += tmp;
-      result *= value;
-      billion = billion * 100000000 + result;
-      result = 0;
-      tmp = 0;
-    } else if (value === 10000) {
-      result += tmp;
-      result *= value;
-      tmp = 0;
-    } else if (value >= 10) {
-      if (tmp === 0) {
-        tmp = 1;
-      }
-      result += value * tmp;
-      tmp = 0;
-    } else {
-      // Single digit. A trailing digit directly after a 百/千/万/亿 unit is
-      // the abbreviated form: "一千二" → 2 * 1000 / 10 = 200 (legado rule:
-      // i >= 2, last char, previous char's unit > 10).
-      const prevUnit = i >= 2 && i === chars.length - 1 ? CHN_NUM_VALUE[chars[i - 1]] : undefined;
-      tmp = prevUnit !== undefined && prevUnit > 10 ? (value * prevUnit) / 10 : tmp * 10 + value;
-    }
-  }
-  return result + tmp + billion;
-}
-
-/**
  * Parses a captured group into a number (legado `stringToInt` semantics).
  *
  * Whitespace is stripped and full-width digits are folded to half-width first;
@@ -148,7 +84,14 @@ function chineseNumToIntPowerForm(s: string): number | null {
  * and `formatSortTupleForDisplay`'s sentinel-only-±Infinity premise holds.
  */
 export function parseChineseNum(input: string): number | null {
-  const s = fullWidthToHalf(input).replace(/\s+/g, "");
+  // Full-width ASCII range → half-width（legado `fullToHalf`）；U+3000 随后被
+  // `\s+` 一并剥掉，无需单独映射。
+  let folded = "";
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+    folded += code >= 0xff01 && code <= 0xff5e ? String.fromCharCode(code - 0xfee0) : input[i];
+  }
+  const s = folded.replace(/\s+/g, "");
   if (s === "") {
     return null;
   }
@@ -162,7 +105,41 @@ export function parseChineseNum(input: string): number | null {
     }
     parsed = Number(digits);
   } else {
-    parsed = chineseNumToIntPowerForm(s);
+    // Chinese numeral power form（"一千零二十五" → 1025，含 "一千二" → 1200 与亿级进位）。
+    // 任一字符不是可识别中文数字时返回 null（legado 此处返回 -1）。
+    let result = 0;
+    let tmp = 0;
+    let billion = 0;
+    const chars = Array.from(s);
+    for (let i = 0; i < chars.length; i++) {
+      const value = CHN_NUM_VALUE[chars[i]];
+      if (value === undefined) {
+        return null;
+      }
+      if (value === 100000000) {
+        result += tmp;
+        result *= value;
+        billion = billion * 100000000 + result;
+        result = 0;
+        tmp = 0;
+      } else if (value === 10000) {
+        result += tmp;
+        result *= value;
+        tmp = 0;
+      } else if (value >= 10) {
+        if (tmp === 0) {
+          tmp = 1;
+        }
+        result += value * tmp;
+        tmp = 0;
+      } else {
+        // 单位后紧跟个位数是缩写形式："一千二" → 2 * 1000 / 10 = 200
+        //（legado 规则：i >= 2、末字符、前一字符单位 > 10）。
+        const prevUnit = i >= 2 && i === chars.length - 1 ? CHN_NUM_VALUE[chars[i - 1]] : undefined;
+        tmp = prevUnit !== undefined && prevUnit > 10 ? (value * prevUnit) / 10 : tmp * 10 + value;
+      }
+    }
+    parsed = result + tmp + billion;
   }
   return parsed !== null && Number.isFinite(parsed) ? parsed : null;
 }
@@ -213,17 +190,6 @@ function compareNatural(a: string, b: string): number {
       }
     } else if (x !== y) {
       return x < y ? -1 : 1;
-    }
-  }
-  return a.length - b.length;
-}
-
-/** Number tuple order: element-wise; equal prefix → shorter tuple first. */
-function compareNumberTuples(a: readonly number[], b: readonly number[]): number {
-  const common = Math.min(a.length, b.length);
-  for (let i = 0; i < common; i++) {
-    if (a[i] !== b[i]) {
-      return a[i] < b[i] ? -1 : 1;
     }
   }
   return a.length - b.length;
@@ -349,7 +315,15 @@ export function compareSmartBasenames(a: string, b: string, order: SortOrder, ca
   const keyB = cache?.get(b) ?? null;
   let cmp: number;
   if (keyA !== null && keyB !== null) {
-    cmp = compareNumberTuples(keyA, keyB);
+    // Number tuple order: element-wise; equal prefix → shorter tuple first.
+    const common = Math.min(keyA.length, keyB.length);
+    cmp = keyA.length - keyB.length;
+    for (let i = 0; i < common; i++) {
+      if (keyA[i] !== keyB[i]) {
+        cmp = keyA[i] < keyB[i] ? -1 : 1;
+        break;
+      }
+    }
     if (cmp === 0) {
       cmp = compareNatural(a, b);
     }

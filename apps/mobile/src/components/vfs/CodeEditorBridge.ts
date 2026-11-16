@@ -41,7 +41,7 @@ export type HostToCodeEditorMessage =
   | BridgeEnvelope<'blur', Record<string, never>>;
 
 /** Code editor WebView → host */
-export type CodeEditorToHostMessage =
+type CodeEditorToHostMessage =
   | BridgeEnvelope<'ready', {version: number}>
   | BridgeEnvelope<'change', {text: string}>
   /** 光标/选区上报（typeahead 的活跃查询判定在 RN 侧）。 */
@@ -55,15 +55,13 @@ export type CodeEditorSelection = {
   readonly end: number;
 };
 
-export function encodeHostToCodeEditor(
-  message: HostToCodeEditorMessage,
-): string {
+// nm-style: keep-public — code-editor 桥编码 API（webview 契约）
+export function encodeHostToCodeEditor(message: HostToCodeEditorMessage): string {
   return JSON.stringify(message);
 }
 
-export function encodeCodeEditorToHost(
-  message: CodeEditorToHostMessage,
-): string {
+// nm-style: keep-public — code-editor 桥对称编码 API（协议契约对称面）
+export function encodeCodeEditorToHost(message: CodeEditorToHostMessage): string {
   return JSON.stringify(message);
 }
 

@@ -9,33 +9,20 @@
 import type {AppUiPreferences} from './app-ui-prefs';
 
 /** Reads an enum pref; missing/invalid values and KKV errors fall back. */
-export async function readEnumPref<T extends string>(
-  appUi: AppUiPreferences | null | undefined,
-  key: string,
-  allowed: readonly T[],
-  fallback: T,
-): Promise<T> {
+export async function readEnumPref<T extends string>(appUi: AppUiPreferences | null | undefined, key: string, allowed: readonly T[], fallback: T): Promise<T> {
   if (appUi == null) {
     return fallback;
   }
   // 读失败按未配置处理，回退默认值（错误通道迁移四期：get 走 Result）。
   const raw = await appUi.get(key);
-  if (
-    raw.ok &&
-    raw.value != null &&
-    (allowed as readonly string[]).includes(raw.value)
-  ) {
+  if (raw.ok && raw.value != null && (allowed as readonly string[]).includes(raw.value)) {
     return raw.value as T;
   }
   return fallback;
 }
 
 /** Reads a `'true' | 'false'` pref; missing/invalid values and KKV errors fall back. */
-export async function readBoolPref(
-  appUi: AppUiPreferences | null | undefined,
-  key: string,
-  fallback: boolean,
-): Promise<boolean> {
+export async function readBoolPref(appUi: AppUiPreferences | null | undefined, key: string, fallback: boolean): Promise<boolean> {
   if (appUi == null) {
     return fallback;
   }
@@ -55,11 +42,7 @@ export async function readBoolPref(
  * 写失败仍然 reject：AboutScreen / ChatConfigScreen 等调用方依赖 reject 做
  * 失败提示或回滚，吞掉会让持久化失败静默。
  */
-export async function writeBoolPref(
-  appUi: AppUiPreferences,
-  key: string,
-  value: boolean,
-): Promise<void> {
+export async function writeBoolPref(appUi: AppUiPreferences, key: string, value: boolean): Promise<void> {
   try {
     await appUi.set(key, value ? 'true' : 'false');
   } catch (error) {

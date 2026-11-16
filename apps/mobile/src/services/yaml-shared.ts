@@ -9,7 +9,7 @@
 export {normalizeYamlError} from '@novel-master/core/common';
 
 import {Result, AppError} from '@novel-master/core/errors';
-import {exportBytesViaDocumentPicker, pickAndReadText} from './document-io';
+import {exportBytesViaDocumentPicker, pickAndReadText, type PickLocalFileOptions} from './document-io';
 import {blobFs} from './rn-file-io';
 import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
 
@@ -19,10 +19,7 @@ import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
  * 内部先写入 CacheDir 的临时文件，再走 `saveDocuments` 弹出系统保存 UI；
  * 不管保存成功还是取消，都会在 finally 里清理临时文件，避免污染缓存。
  */
-export async function exportYamlFile(
-  yaml: string,
-  fileName: string,
-): Promise<'saved' | 'cancelled'> {
+export async function exportYamlFile(yaml: string, fileName: string): Promise<'saved' | 'cancelled'> {
   return exportBytesViaDocumentPicker({
     fileName,
     mimeType: 'application/yaml',
@@ -42,15 +39,14 @@ export async function exportYamlFile(
  * 错误类型是 `Error`：core normalizeYamlError 的归一产物含普通 Error
  * （字符串前缀分支），不强升 AppError。
  */
-export async function importYamlFile(
-  consume: (yamlText: string) => Promise<Result<void, Error>>,
-): Promise<Result<void, Error>> {
-  const yaml = await pickAndReadText({
+export async function importYamlFile(consume: (yamlText: string) => Promise<Result<void, Error>>): Promise<Result<void, Error>> {
+  const pickOptions: PickLocalFileOptions = {
     mimeTypes: yamlImportPickTypes(),
     fallbackLocalFileName: 'yaml-import.yaml',
     assertFileName: assertYamlFileName,
     buildCopyError: copyError => new Error(copyError ?? '无法读取 YAML 文件'),
-  });
+  };
+  const yaml = await pickAndReadText(pickOptions);
   if (yaml == null) {
     return Result.ok(undefined);
   }

@@ -5,14 +5,10 @@
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {
-  formatStatusChipLabelFromAttachment,
-  composerChips,
-  type MessageAttachment,
-} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment, composerChips, type MessageAttachment} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
 
-export type AttachmentDraftChipsProps = {
+type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachment[];
   disabled?: boolean;
   accessibilityLabel?: string;
@@ -23,16 +19,12 @@ export type AttachmentDraftChipsProps = {
 /**
  * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。
  */
+// nm-style: keep-public — chip 文案契约：core formatStatusChipLabelFromAttachment 的命名收口
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
   return formatStatusChipLabelFromAttachment(a);
 }
 
-export function AttachmentDraftChips({
-  attachments,
-  disabled,
-  accessibilityLabel,
-  transparentRow = false,
-}: AttachmentDraftChipsProps) {
+function AttachmentDraftChips({attachments, disabled, accessibilityLabel, transparentRow = false}: AttachmentDraftChipsProps) {
   const {tokens} = useTheme();
   if (attachments.length === 0) {
     return null;
@@ -58,10 +50,7 @@ export function AttachmentDraftChips({
               },
             ]}
           >
-            <Text
-              style={[styles.label, {color: tokens.text}]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.label, {color: tokens.text}]} numberOfLines={1}>
               {label}
             </Text>
           </View>
@@ -72,22 +61,9 @@ export function AttachmentDraftChips({
 }
 
 /** 状态 chip（无叉）：放在输入框内顶部。 */
-export function ComposerStatusChips({
-  attachments,
-  disabled,
-}: {
-  attachments: readonly MessageAttachment[];
-  disabled?: boolean;
-}) {
+export function ComposerStatusChips({attachments, disabled}: {attachments: readonly MessageAttachment[]; disabled?: boolean}) {
   const {status} = composerChips.partition(attachments);
-  return (
-    <AttachmentDraftChips
-      attachments={status}
-      disabled={disabled}
-      transparentRow
-      accessibilityLabel="状态附件"
-    />
-  );
+  return <AttachmentDraftChips attachments={status} disabled={disabled} transparentRow accessibilityLabel="状态附件" />;
 }
 
 const styles = StyleSheet.create({

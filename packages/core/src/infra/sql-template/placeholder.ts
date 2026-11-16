@@ -5,7 +5,7 @@
 import { resolvePath } from "./context.js";
 import type { ContextStack } from "./context.js";
 
-export interface BindResult {
+interface BindResult {
   fragment: string;
   parameters: unknown[];
 }
@@ -13,12 +13,7 @@ export interface BindResult {
 /**
  * Renders a `#{path}` or `${path}` bind node.
  */
-export function renderBind(
-  kind: "hash" | "dollar",
-  path: string,
-  stack: ContextStack,
-  placeholder: string
-): BindResult {
+export function renderBind(kind: "hash" | "dollar", path: string, stack: ContextStack, placeholder: string): BindResult {
   const value = resolvePath(stack, path);
   if (kind === "hash") {
     return { fragment: placeholder, parameters: [value] };

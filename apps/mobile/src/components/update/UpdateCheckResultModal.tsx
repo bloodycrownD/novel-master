@@ -12,9 +12,9 @@ import type {UpdateCheckResultKind} from '@/services/update-check-flow';
 
 export type {UpdateCheckResultKind};
 
-export const UPDATE_CHECK_RESULT_TITLE = '版本检查';
-export const UPDATE_CHECK_UP_TO_DATE_MESSAGE = '当前已是最新版本';
-export const UPDATE_CHECK_FAILED_MESSAGE = '无法检查更新，请检查网络';
+const UPDATE_CHECK_RESULT_TITLE = '版本检查';
+const UPDATE_CHECK_UP_TO_DATE_MESSAGE = '当前已是最新版本';
+const UPDATE_CHECK_FAILED_MESSAGE = '无法检查更新，请检查网络';
 
 type Props = {
   visible: boolean;
@@ -23,44 +23,17 @@ type Props = {
   onSnoozeToday: () => void | Promise<void>;
 };
 
-function messageForKind(kind: UpdateCheckResultKind): string {
-  return kind === 'up-to-date'
-    ? UPDATE_CHECK_UP_TO_DATE_MESSAGE
-    : UPDATE_CHECK_FAILED_MESSAGE;
-}
-
-export function UpdateCheckResultModal({
-  visible,
-  kind,
-  onClose,
-  onSnoozeToday,
-}: Props) {
+export function UpdateCheckResultModal({visible, kind, onClose, onSnoozeToday}: Props) {
   const {tokens} = useTheme();
 
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.panel, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          <Text style={[styles.title, {color: tokens.text}]}>
-            {UPDATE_CHECK_RESULT_TITLE}
-          </Text>
-          <Text style={[styles.message, {color: tokens.textSecondary}]}>
-            {messageForKind(kind)}
-          </Text>
+        <Pressable style={[styles.panel, {backgroundColor: tokens.surface}]} onPress={e => e.stopPropagation()}>
+          <Text style={[styles.title, {color: tokens.text}]}>{UPDATE_CHECK_RESULT_TITLE}</Text>
+          <Text style={[styles.message, {color: tokens.textSecondary}]}>{kind === 'up-to-date' ? UPDATE_CHECK_UP_TO_DATE_MESSAGE : UPDATE_CHECK_FAILED_MESSAGE}</Text>
           <View style={styles.actions}>
-            <Pressable
-              testID="update-check-result-close"
-              onPress={onClose}
-              style={styles.btn}
-            >
+            <Pressable testID="update-check-result-close" onPress={onClose} style={styles.btn}>
               <Text style={{color: tokens.textSecondary}}>关闭</Text>
             </Pressable>
             <Pressable
@@ -70,9 +43,7 @@ export function UpdateCheckResultModal({
               }}
               style={styles.btn}
             >
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                今日不再提醒
-              </Text>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>今日不再提醒</Text>
             </Pressable>
           </View>
         </Pressable>

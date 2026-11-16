@@ -65,9 +65,7 @@ export function registerHighlightLanguages(): void {
 }
 
 /** fence 原始语言名 → 规范名；不在清单（如 rust/mermaid）或无语言返回 null。 */
-export function normalizeFenceLang(
-  lang: string | null | undefined,
-): string | null {
+export function normalizeFenceLang(lang: string | null | undefined): string | null {
   if (!lang) {
     return null;
   }
@@ -75,24 +73,17 @@ export function normalizeFenceLang(
 }
 
 /**
- * 表外回退：按小写查 hljs 注册表（语言模块内置别名 mjs/cjs/mts/cts/xhtml 等随注册进入）。
- * 与 desktop rehype-highlight 的 AST 层判定同一注册表、同一逻辑（MF-1 双端统一）。
- */
-function lookupRegisteredLang(lang: string): string | null {
-  const lower = lang.toLowerCase();
-  return hljs.getLanguage(lower) ? lower : null;
-}
-
-/**
  * 源码 → 高亮 HTML（hljs 自带转义）；不支持的语言返回 ''（调用方走默认 escape）。
  *
- * 高亮语言判定：归一化表命中用规范名；表外回退 hljs 注册表查原始 lang
- * （内置别名命中即高亮，与 desktop rehype-highlight 行为一致）。语言标签
- * （data-lang）由调用方按归一化表单独决定——表外语言高亮但不出标签。
+ * 高亮语言判定：归一化表命中用规范名；表外回退 hljs 注册表查原始 lang（按小写查，
+ * 语言模块内置别名 mjs/cjs/mts/cts/xhtml 等随注册进入；与 desktop rehype-highlight
+ * 的 AST 层判定同一注册表、同一逻辑，MF-1 双端统一）。语言标签（data-lang）由
+ * 调用方按归一化表单独决定——表外语言高亮但不出标签。
  */
 export function resolveHighlight(code: string, lang: string): string {
   registerHighlightLanguages();
-  const target = normalizeFenceLang(lang) ?? lookupRegisteredLang(lang);
+  const lowerLang = lang.toLowerCase();
+  const target = normalizeFenceLang(lang) ?? (hljs.getLanguage(lowerLang) ? lowerLang : null);
   if (!target || !hljs.getLanguage(target)) {
     return '';
   }

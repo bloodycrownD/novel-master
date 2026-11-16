@@ -5,13 +5,7 @@ import {formatTokenCount} from '@novel-master/core/common';
 import {StackedBars} from '../../../components/charts/StackedBars';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
-import {
-  formatFirstTokenMs,
-  formatHitRate,
-  formatTokensPerSecond,
-  hitRate,
-  toLocalDayKey,
-} from './format';
+import {formatFirstTokenMs, formatHitRate, formatTokensPerSecond, hitRate, toLocalDayKey} from './format';
 import {styles} from './styles';
 
 /**
@@ -66,20 +60,11 @@ export function DetailTab({
     }));
   }, [hourlyBuckets]);
 
-  const selectedDayBucket =
-    selectedDay != null
-      ? dailyBuckets.find(b => toLocalDayKey(b.bucketStartMs) === selectedDay)
-      : undefined;
+  const selectedDayBucket = selectedDay != null ? dailyBuckets.find(b => toLocalDayKey(b.bucketStartMs) === selectedDay) : undefined;
 
   // 长按检视的柱：分别往两图数据里找（key 域不同：daily 为日期、hourly 为序号）
-  const dailyInspected =
-    inspectedKey != null
-      ? dailyData.find(d => d.key === inspectedKey)
-      : undefined;
-  const hourlyInspected =
-    inspectedKey != null
-      ? hourlyData.find(d => d.key === inspectedKey)
-      : undefined;
+  const dailyInspected = inspectedKey != null ? dailyData.find(d => d.key === inspectedKey) : undefined;
+  const hourlyInspected = inspectedKey != null ? hourlyData.find(d => d.key === inspectedKey) : undefined;
 
   return (
     <>
@@ -102,10 +87,7 @@ export function DetailTab({
           {dailyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {dailyInspected.key.slice(8)} 日 · 输入{' '}
-                {formatTokenCount(dailyInspected.primary)} · 输出{' '}
-                {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用{' '}
-                {dailyInspected.calls ?? 0} 次
+                {dailyInspected.key.slice(8)} 日 · 输入 {formatTokenCount(dailyInspected.primary)} · 输出 {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用 {dailyInspected.calls ?? 0} 次
               </Text>
             </View>
           ) : null}
@@ -113,41 +95,19 @@ export function DetailTab({
       )}
       {selectedDay != null && selectedDayBucket != null ? (
         <View style={styles.dayDetail}>
-          <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>
-            {selectedDay} · 按小时分布
-          </Text>
-          <Text
-            style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}
-          >
-            输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{' '}
-            {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{' '}
-            {formatHitRate(
-              hitRate(
-                selectedDayBucket.cacheReadTokens,
-                selectedDayBucket.billedInputTokens,
-              ),
-            )}{' '}
-            · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
-            {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} ·
-            平均首字延迟{' '}
-            {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
+          <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>{selectedDay} · 按小时分布</Text>
+          <Text style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}>
+            输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出 {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{' '}
+            {formatHitRate(hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
+            {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · 平均首字延迟 {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
           </Text>
           <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
-            <StackedBars
-              testID="hourly-chart"
-              data={hourlyData}
-              onLongPress={onSetInspectedKey}
-              tokens={tokens}
-              formatLabel={key => `${Number(key)}时`}
-            />
+            <StackedBars testID="hourly-chart" data={hourlyData} onLongPress={onSetInspectedKey} tokens={tokens} formatLabel={key => `${Number(key)}时`} />
           </View>
           {hourlyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {Number(hourlyInspected.key)}时 · 输入{' '}
-                {formatTokenCount(hourlyInspected.primary)} · 输出{' '}
-                {formatTokenCount(hourlyInspected.secondary ?? 0)} · 调用{' '}
-                {hourlyInspected.calls ?? 0} 次
+                {Number(hourlyInspected.key)}时 · 输入 {formatTokenCount(hourlyInspected.primary)} · 输出 {formatTokenCount(hourlyInspected.secondary ?? 0)} · 调用 {hourlyInspected.calls ?? 0} 次
               </Text>
             </View>
           ) : null}

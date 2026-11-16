@@ -5,9 +5,9 @@
  */
 import {post} from './post';
 
-export type AnnotateCollectMode = 'plain' | 'markdown';
+type AnnotateCollectMode = 'plain' | 'markdown';
 
-export type AnnotateSelectionCollectPayload = {
+type AnnotateSelectionCollectPayload = {
   readonly originalText: string;
   readonly mode: AnnotateCollectMode;
   readonly selectionStart?: number;
@@ -21,24 +21,14 @@ const CONTEXT_CHARS = 64;
 /**
  * 选区在 element 文本内容中的 0-based 半开偏移（原始未 trim；与 Desktop 量测同构）。
  */
-export function getSelectionOffsetsInElement(
-  element: Element,
-  selection: Selection | null | undefined = typeof window !== 'undefined'
-    ? window.getSelection()
-    : null,
-): {readonly start: number; readonly end: number} | null {
-  if (
-    selection == null ||
-    selection.rangeCount === 0 ||
-    selection.isCollapsed
-  ) {
+type SelectionOffsets = {readonly start: number; readonly end: number};
+
+export function getSelectionOffsetsInElement(element: Element, selection: Selection | null | undefined = typeof window !== 'undefined' ? window.getSelection() : null): SelectionOffsets | null {
+  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
     return null;
   }
   const selRange = selection.getRangeAt(0);
-  if (
-    !element.contains(selRange.startContainer) ||
-    !element.contains(selRange.endContainer)
-  ) {
+  if (!element.contains(selRange.startContainer) || !element.contains(selRange.endContainer)) {
     return null;
   }
   const doc = element.ownerDocument;
@@ -57,9 +47,7 @@ export function getSelectionOffsetsInElement(
  * @deprecated 测用 / 工具层残留；MD 新建批注请用 {@link reportRecogitoCreateFromSelection}。
  * 采集当前选区；失败时仍尽量回传 originalText。
  */
-export function collectAnnotateSelection(
-  mode: AnnotateCollectMode,
-): AnnotateSelectionCollectPayload | null {
+export function collectAnnotateSelection(mode: AnnotateCollectMode): AnnotateSelectionCollectPayload | null {
   const sel = typeof window !== 'undefined' ? window.getSelection() : null;
   const raw = (sel?.toString() ?? '').replace(/\u00a0/g, ' ');
   const originalText = raw.trim();
@@ -90,14 +78,8 @@ export function collectAnnotateSelection(
   if (offsets == null) {
     return {originalText, mode};
   }
-  const contextBefore = full.slice(
-    Math.max(0, offsets.start - CONTEXT_CHARS),
-    offsets.start,
-  );
-  const contextAfter = full.slice(
-    offsets.end,
-    Math.min(full.length, offsets.end + CONTEXT_CHARS),
-  );
+  const contextBefore = full.slice(Math.max(0, offsets.start - CONTEXT_CHARS), offsets.start);
+  const contextAfter = full.slice(offsets.end, Math.min(full.length, offsets.end + CONTEXT_CHARS));
   return {
     originalText,
     mode,

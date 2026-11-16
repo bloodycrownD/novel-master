@@ -7,17 +7,9 @@
 import { readFile } from "node:fs/promises";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { resolveAgentToolRegistry } from "@novel-master/core/agent";
-import {
-  formatPromptLlmInputForCliFromLayout,
-  type AgentPromptLayout,
-  type PromptSkillIndexEntry,
-} from "@novel-master/core/prompt";
+import { formatPromptLlmInputForCliFromLayout, type PromptSkillIndexEntry } from "@novel-master/core/prompt";
 
-import {
-  countPromptLlmInput,
-  isSavedModelUuidFormat,
-  serializePromptLlmInput,
-} from "@novel-master/core/provider";
+import { countPromptLlmInput, isSavedModelUuidFormat, serializePromptLlmInput } from "@novel-master/core/provider";
 
 import { assembleWorkplaceDisplay, type Outcome } from "@novel-master/core/workplace";
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
@@ -37,12 +29,10 @@ const SKILL_TOOL_NAME = "skill";
  * 注入**，所以 `apps/cli/test/` 下能不拉起整套 CLI 就把这两条路径各自钉住——
  * 这段逻辑原先只存在于 `prompt-tokens-e2e.test.ts` 里，而那个套件是长期基线
  * 5/5 红、这段分支在 CI 里从未被执行过。
+ *
+ * nm-style: keep-public — `apps/cli/test/prompt-token-fallback.test.ts` 直接 import 校验两条计数路径；测试不在本目录可改范围，撤导出会断测试契约。
  */
-export function resolveCliPromptTokens(
-  serialized: string,
-  countReal: (text: string) => number | null,
-  countByCharRatio: (text: string) => number,
-): number {
+export function resolveCliPromptTokens(serialized: string, countReal: (text: string) => number | null, countByCharRatio: (text: string) => number): number {
   return countReal(serialized) ?? countByCharRatio(serialized);
 }
 
@@ -52,6 +42,8 @@ export function resolveCliPromptTokens(
  * 抽成纯函数是为了让测试能**直接断言**「兜底读数切换不改 `counter` /
  * `estimated` 两个字段的口径」——它们是 CLI 取证/调试面的对外契约。字段名、
  * 字段顺序、字段值三者与抽取前完全一致，输出 JSON 逐字节相同。
+ *
+ * nm-style: keep-public — `apps/cli/test/prompt-token-fallback.test.ts` 直接 import 断言 JSON 口径；测试不在本目录可改范围，撤导出会断测试契约。
  */
 export function buildCliNoModelTokenDiagnostic(tokenCount: number): {
   tokenCount: number;
@@ -69,71 +61,17 @@ export function buildCliNoModelTokenDiagnostic(tokenCount: number): {
   };
 }
 
-/**
- * 预算提示词技能索引（与 desktop/mobile 的 prompt-preview.service 同模式）。
- *
- * CLI 的 YAML 只含 prompts 三区、无 tools policy，壳 definition 走
- * resolveAgentToolRegistry 的「无 policy → 全量工具」分支；不含
- * skill（D4）时返回 undefined，预览不出现技能索引段。
- */
-async function budgetSkillsIndex(
-  rt: Pick<NovelMasterRuntime, "skills">,
-  projectId: string,
-  layout: AgentPromptLayout,
-): Promise<readonly PromptSkillIndexEntry[] | undefined> {
-  const probe = new ToolRegistry();
-  registerBuiltinTools(probe);
-  const registry = resolveAgentToolRegistry(probe, {
-    name: "cli-prompt-preview",
-    prompts: layout,
-  });
-  if (!registry.list().includes(SKILL_TOOL_NAME)) {
-    return undefined;
-  }
-  const effective = await rt.skills().effectiveSkills(projectId);
-  if (!effective.ok) {
-    // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
-    const failure = effective.error;
-    throw failure;
-  }
-  return effective.value
-    .filter((s) => s.effective)
-    .map((s) => ({
-      name: s.name,
-      description: s.description ?? "",
-      domain: s.domain,
-    }));
-}
+type PromptRuntime = Pick<NovelMasterRuntime, "messages" | "scope" | "workplace" | "sessionKkv" | "sessionVfs" | "state" | "tokenCounters" | "providerModels" | "savedModels" | "skills">;
 
-export async function runPrompt(
-  rt: Pick<
-    NovelMasterRuntime,
-    | "messages"
-    | "scope"
-    | "workplace"
-    | "sessionKkv"
-    | "sessionVfs"
-    | "state"
-    | "tokenCounters"
-    | "providerModels"
-    | "savedModels"
-    | "skills"
-  >,
-  subcommand: string,
-  args: readonly string[],
-): Promise<Outcome<void>> {
+export async function runPrompt(rt: PromptRuntime, subcommand: string, args: readonly string[]): Promise<Outcome<void>> {
   if (subcommand !== "render") {
-    throw new Error(
-      "Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]",
-    );
+    throw new Error("Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]");
   }
 
   const { flags } = parseCliArgs(args);
   const path = flags.get("path");
   if (typeof path !== "string") {
-    throw new Error(
-      "Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]",
-    );
+    throw new Error("Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]");
   }
 
   const source = await readFile(path, "utf8");
@@ -147,12 +85,7 @@ export async function runPrompt(
   const messages = allMessages.filter((m) => !m.hidden);
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
-  const assembled = await assembleWorkplaceDisplay(wtScope, {
-    sessionKkv: rt.sessionKkv,
-    workplace: rt.workplace(wtScope),
-    vfs,
-    layout,
-  });
+  const assembled = await assembleWorkplaceDisplay(wtScope, { sessionKkv: rt.sessionKkv, workplace: rt.workplace(wtScope), vfs, layout });
   if (assembled.kind !== "completed") {
     // 本调用无 shouldStop 判据，中断分支恒不到；failed 与 cancelled/replaced
     // 都沿 Outcome 交回 main 边界——failed 汇入 catch 统一出口，中断走
@@ -161,7 +94,19 @@ export async function runPrompt(
   }
   const { workplaceDisplay } = assembled.value;
   // 技能索引预算：与双端预览同模式（probe + resolve 判 skill，D4 联动）。
-  const skillsIndex = await budgetSkillsIndex(rt, projectId, layout);
+  // CLI 的 YAML 只含 prompts 三区、无 tools policy，壳 definition 走
+  // resolveAgentToolRegistry 的「无 policy → 全量工具」分支；不含 skill（D4）时
+  // 预览不出现技能索引段。
+  let skillsIndex: readonly PromptSkillIndexEntry[] | undefined;
+  const probe = new ToolRegistry();
+  registerBuiltinTools(probe);
+  const registry = resolveAgentToolRegistry(probe, { name: "cli-prompt-preview", prompts: layout });
+  if (registry.list().includes(SKILL_TOOL_NAME)) {
+    const effective = await rt.skills().effectiveSkills(projectId);
+    // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
+    if (!effective.ok) throw effective.error;
+    skillsIndex = effective.value.filter((s) => s.effective).map((s) => ({ name: s.name, description: s.description ?? "", domain: s.domain }));
+  }
   const ctx = {
     workplaceDisplay,
     messages,
@@ -197,49 +142,31 @@ export async function runPrompt(
       // `counter: "heuristic"` / `estimated: true` 不变——变的只是读数本身：
       // cl100k 对任意模型都只是近似，报成精确档反而是误导。编码表建不起来
       // （ranks 资源缺失）时才有最后一级折算兜底。
-      const tokenCount = resolveCliPromptTokens(
-        serialized.value,
-        countTextWithDefaultEncoding,
-        (text) => rt.tokenCounters.heuristic.countText(text),
-      );
-      console.error(
-        JSON.stringify(buildCliNoModelTokenDiagnostic(tokenCount)),
-      );
+      const tokenCount = resolveCliPromptTokens(serialized.value, countTextWithDefaultEncoding, (text) => rt.tokenCounters.heuristic.countText(text));
+      console.error(JSON.stringify(buildCliNoModelTokenDiagnostic(tokenCount)));
       return OUTCOME_COMPLETED;
     }
 
     if (!isSavedModelUuidFormat(savedModelId)) {
-      console.error(
-        `warning: invalid saved model id ${savedModelId}; using heuristic counter`,
-      );
+      console.error(`warning: invalid saved model id ${savedModelId}; using heuristic counter`);
     }
 
-    const counterMode = await rt.providerModels.getTokenCounterMode(
-      savedModelId,
-    );
+    const counterMode = await rt.providerModels.getTokenCounterMode(savedModelId);
     if (!counterMode.ok) return { kind: "failed", error: counterMode.error };
     const tokenizerOverride = counterMode.value;
     // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
     // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
-    const result = await countPromptLlmInput({
-      layout,
-      ctx,
-      savedModelId,
-      registry: rt.tokenCounters,
-      tokenizerOverride,
-      savedModels: rt.savedModels,
-    });
+    const result = await countPromptLlmInput({ layout, ctx, savedModelId, registry: rt.tokenCounters, tokenizerOverride, savedModels: rt.savedModels });
     if (!result.ok) return { kind: "failed", error: result.error };
 
-    console.error(
-      JSON.stringify({
-        tokenCount: result.value.tokenCount,
-        model: savedModelId,
-        counter: result.value.counterKind,
-        estimated: result.value.estimated,
-        tokenizerFamily: result.value.tokenizerFamily,
-      }),
-    );
+    const diagnostic = {
+      tokenCount: result.value.tokenCount,
+      model: savedModelId,
+      counter: result.value.counterKind,
+      estimated: result.value.estimated,
+      tokenizerFamily: result.value.tokenizerFamily,
+    };
+    console.error(JSON.stringify(diagnostic));
   }
   return OUTCOME_COMPLETED;
 }

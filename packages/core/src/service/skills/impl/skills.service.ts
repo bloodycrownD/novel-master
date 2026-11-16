@@ -22,11 +22,7 @@ import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
-import {
-  SKILL_ENTRY_FILE,
-  SKILLS_ROOT,
-  resolveSkillRelPathCore,
-} from "@/domain/skills/logic/skill-paths.js";
+import { SKILL_ENTRY_FILE, SKILLS_ROOT, resolveSkillRelPathCore } from "@/domain/skills/logic/skill-paths.js";
 import { withSkillFrontMatterValues } from "@/domain/skills/logic/with-skill-front-matter-values.js";
 import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
@@ -36,19 +32,10 @@ import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
-import type {
-  SkillEditMatch,
-  SkillFileContent,
-  SkillInfoChanges,
-  SkillListItem,
-  SkillListScope,
-  SkillLocation,
-  SkillService,
-  SkillWriteOptions,
-} from "../skills.port.js";
+import type { SkillEditMatch, SkillFileContent, SkillInfoChanges, SkillListItem, SkillListScope, SkillLocation, SkillService, SkillWriteOptions } from "../skills.port.js";
 
 /** Dependencies for {@link SkillsService}。 */
-export interface SkillsServiceDeps {
+interface SkillsServiceDeps {
   readonly conn: TdbcConnection;
   /** global-meta 域 VFS 惰性工厂（技能存储，逻辑前缀 /meta/skills/）。 */
   readonly globalMetaVfs: () => VfsService;
@@ -85,7 +72,7 @@ function vfsScopeKeyOfLocation(location: SkillLocation): Result<string, AppError
     return Result.ok("global:meta");
   }
   if (location.projectId == null || location.projectId.length === 0) {
-    return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, skillName: location.name }));
+    return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: { key: "error.skill.missing_project_id", params: { skill_name: location.name } }, skillName: location.name }));
   }
   return Result.ok(`project:${location.projectId}:meta`);
 }
@@ -110,6 +97,10 @@ function assertValidSkillName(name: string): Result<void, AppError> {
   return Result.ok(undefined);
 }
 
+/** writeSkillFile / editSkillFile 的返回通道（端口契约）。 */
+type WriteSkillResult = Promise<Result<{ version: number }, AppError>>;
+type EditSkillResult = Promise<Result<{ version: number; replacements: number }, AppError>>;
+
 /**
  * Default {@link SkillService}。
  */
@@ -117,10 +108,7 @@ export class SkillsService implements SkillService {
   constructor(private readonly deps: SkillsServiceDeps) {}
 
   private get disabledRules(): SkillDisabledRuleRepository {
-    return (
-      this.deps.disabledRules ??
-      new SqliteSkillDisabledRuleRepository(this.deps.conn)
-    );
+    return this.deps.disabledRules ?? new SqliteSkillDisabledRuleRepository(this.deps.conn);
   }
 
   private vfsForDomain(domain: SkillDomain, projectId?: string): Result<VfsService, AppError> {
@@ -128,44 +116,9 @@ export class SkillsService implements SkillService {
       return Result.ok(this.deps.globalMetaVfs());
     }
     if (projectId == null || projectId.length === 0) {
-      return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: ""}}, skillName: "" }));
+      return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: { key: "error.skill.missing_project_id", params: { skill_name: "" } }, skillName: "" }));
     }
     return Result.ok(this.deps.projectMetaVfs(projectId));
-  }
-
-  private vfsForScope(scope: SkillListScope): {
-    vfs: VfsService;
-    domain: SkillDomain;
-  } {
-    if (scope === "global") {
-      return { vfs: this.deps.globalMetaVfs(), domain: "global" };
-    }
-    return {
-      vfs: this.deps.projectMetaVfs(scope.projectId),
-      domain: "project",
-    };
-  }
-
-  /**
-   * 探测另一域是否存在同名同路径的技能文件（仅用于错误文案提示）。
-   *
-   * @returns `true/false` = 存在/不存在；`null` = **无法确认**（project 域缺
-   * projectId 时无从探测）。三态不可并成两态：把「查不了」说成「没有」会误导
-   * 调用方去错误的方向新建。
-   */
-  private async skillFileExistsInDomain(domain: SkillDomain, name: string, path: string, projectId?: string): Promise<boolean | null> {
-    if (domain === "project" && (projectId == null || projectId.length === 0)) {
-      return null;
-    }
-    const vfsRes = this.vfsForDomain(domain, projectId);
-    if (!vfsRes.ok) {
-      return null;
-    }
-    // 错误通道迁移四期适配：vfs.read 已改返回 Result、不再以 throw 报 NOT_FOUND——
-    // 旧的 try/catch 判定会永远走 return true（探测恒真），错误提示「切另一域」。
-    const vfs = vfsRes.value;
-    const read = await vfs.read(`${SKILLS_ROOT}/${name}/${path}`);
-    return read.ok;
   }
 
   /**
@@ -175,34 +128,42 @@ export class SkillsService implements SkillService {
    * 裸 VfsError 会把 `Path not found: /meta/skills/...` 抛给调用方，既泄漏内部
    * 逻辑路径，也看不出该补 domain 参数——模型据此无法自我修复。
    *
-   * @returns SKILL_NOT_FOUND（调用方包进 `Result.err`）；非 NOT_FOUND 的错误
-   * 原样抛出（未知异常走 throw 通道）。
-   * （返回错误而非声明 `Promise<never>`：`await` 一个 `Promise<never>` 不足以让
-   * tsc 认定外层函数在此终止，会误报 TS2366。）
+   * 另一域探测是三态：`true/false` = 存在/不存在；`null` = **无法确认**（project
+   * 域缺 projectId 时无从探测）。把「查不了」说成「没有」会误导调用方去错误的
+   * 方向新建，所以三态不可并成两态。
    */
   private async toWriteNotFoundError(error: unknown, name: string, path: string, domain: SkillDomain, projectId?: string): Promise<AppError<"SKILL_NOT_FOUND">> {
     if (!isAppError(error, "VFS_NOT_FOUND")) {
       throw error;
     }
     const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
-    const exists = await this.skillFileExistsInDomain(otherDomain, name, path, projectId);
+    let exists: boolean | null;
+    if (otherDomain === "project" && (projectId == null || projectId.length === 0)) {
+      exists = null;
+    } else {
+      // 错误通道迁移四期适配：vfs.read 已改返回 Result、不再以 throw 报 NOT_FOUND——
+      // 旧的 try/catch 判定会永远走 return true（探测恒真），错误提示「切另一域」。
+      const otherVfs = this.vfsForDomain(otherDomain, projectId);
+      exists = otherVfs.ok ? (await otherVfs.value.read(`${SKILLS_ROOT}/${name}/${path}`)).ok : null;
+    }
     // 写失败文案必须带命中域与另一域存在性（hint 嵌套 descriptor，spec G1.4）：
     // 裸 VFS 的 `Path not found: /meta/skills/...` 既认不出是域选错，也无从知道
     // 该补什么。exists: null 表示**无法确认**另一域（如未提供 projectId），
     // 此时不得断言该域没有该技能 → probe_failed hint。
     let hint: CoreMessageDescriptor;
     if (exists === true) {
-      hint = {key: "error.skill.not_found_in_domain_hint.other_domain", params: {other_domain: otherDomain}};
+      hint = { key: "error.skill.not_found_in_domain_hint.other_domain", params: { other_domain: otherDomain } };
     } else if (exists === false) {
-      hint = {key: "error.skill.not_found_in_domain_hint.neither_domain", params: {domain, other_domain: otherDomain}};
+      hint = { key: "error.skill.not_found_in_domain_hint.neither_domain", params: { domain, other_domain: otherDomain } };
     } else {
-      hint = {key: "error.skill.not_found_in_domain_hint.probe_failed", params: {other_domain: otherDomain}};
+      hint = { key: "error.skill.not_found_in_domain_hint.probe_failed", params: { other_domain: otherDomain } };
     }
-    return new AppError("SKILL_NOT_FOUND", { descriptor: {key: "error.skill.not_found_in_domain", params: {name, domain, path, hint}}, skillName: name, path, domain });
+    return new AppError("SKILL_NOT_FOUND", { descriptor: { key: "error.skill.not_found_in_domain", params: { name, domain, path, hint } }, skillName: name, path, domain });
   }
 
   async listSkills(scope: SkillListScope): Promise<Result<SkillListItem[], AppError>> {
-    const { vfs, domain } = this.vfsForScope(scope);
+    const vfs = scope === "global" ? this.deps.globalMetaVfs() : this.deps.projectMetaVfs(scope.projectId);
+    const domain: SkillDomain = scope === "global" ? "global" : "project";
     const listed = await vfs.list(SKILLS_ROOT, { recursive: true });
     let entries: VfsListEntry[];
     if (listed.ok) {
@@ -239,42 +200,37 @@ export class SkillsService implements SkillService {
 
     const items: SkillListItem[] = [];
     for (const [name, files] of filesBySkill) {
-      items.push(await this.summarizeSkill(vfs, domain, name, files));
+      // 读取 SKILL.md 解析 front matter，拼清单条目（读不到按无效处理）。
+      let source: string | null = null;
+      if (files.includes(SKILL_ENTRY_FILE)) {
+        const read = await vfs.read(`${SKILLS_ROOT}/${name}/${SKILL_ENTRY_FILE}`);
+        if (read.ok) {
+          source = read.value.content;
+        }
+      }
+      if (source == null) {
+        items.push({
+          name,
+          description: null,
+          domain,
+          valid: false,
+          invalidReason: { key: "error.skill.entry_file_missing" },
+          files: [...files].sort(),
+        });
+        continue;
+      }
+      const parsed = parseSkillFrontMatter(source);
+      items.push({
+        name,
+        description: parsed.description,
+        domain,
+        valid: parsed.valid,
+        ...(parsed.invalidReason != null ? { invalidReason: parsed.invalidReason } : {}),
+        files: [...files].sort(),
+      });
     }
     items.sort((a, b) => a.name.localeCompare(b.name));
     return Result.ok(items);
-  }
-
-  /** 读取 SKILL.md 解析 front matter，拼清单条目（读不到按无效处理）。 */
-  private async summarizeSkill(vfs: VfsService, domain: SkillDomain, name: string, files: string[]): Promise<SkillListItem> {
-    let source: string | null = null;
-    if (files.includes(SKILL_ENTRY_FILE)) {
-      const read = await vfs.read(`${SKILLS_ROOT}/${name}/${SKILL_ENTRY_FILE}`);
-      if (read.ok) {
-        source = read.value.content;
-      }
-    }
-    if (source == null) {
-      return {
-        name,
-        description: null,
-        domain,
-        valid: false,
-        invalidReason: { key: "error.skill.entry_file_missing" },
-        files: [...files].sort(),
-      };
-    }
-    const parsed = parseSkillFrontMatter(source);
-    return {
-      name,
-      description: parsed.description,
-      domain,
-      valid: parsed.valid,
-      ...(parsed.invalidReason != null
-        ? { invalidReason: parsed.invalidReason }
-        : {}),
-      files: [...files].sort(),
-    };
   }
 
   async effectiveSkills(projectId: string): Promise<Result<EffectiveSkill[], AppError>> {
@@ -315,9 +271,9 @@ export class SkillsService implements SkillService {
     return Result.err(new AppError("SKILL_NOT_FOUND", { detail: `Skill file not found: ${name}/${relPath}`, skillName: name, path: relPath }));
   }
 
-  async writeSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, content: string, projectId?: string, options?: SkillWriteOptions): Promise<Result<{ version: number }, AppError>> {
+  async writeSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, content: string, projectId?: string, options?: SkillWriteOptions): WriteSkillResult {
     if (domain == null) {
-      return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: {key: "error.skill.missing_domain", params: {skill_name: name}}, skillName: name }));
+      return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: { key: "error.skill.missing_domain", params: { skill_name: name } }, skillName: name }));
     }
     const nameOk = assertValidSkillName(name);
     if (!nameOk.ok) return Result.err(nameOk.error);
@@ -343,9 +299,10 @@ export class SkillsService implements SkillService {
     return Result.err(await this.toWriteNotFoundError(written.error, name, rel.value, domain, projectId));
   }
 
-  async editSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, match: SkillEditMatch, projectId?: string): Promise<Result<{ version: number; replacements: number }, AppError>> {
+  /** nm-style: keep-public — SkillService 端口方法；skill-tool 的 edit 动作单点消费。 */
+  async editSkillFile(domain: SkillDomain | undefined, name: string, path: string | undefined, match: SkillEditMatch, projectId?: string): EditSkillResult {
     if (domain == null) {
-      return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: {key: "error.skill.missing_domain", params: {skill_name: name}}, skillName: name }));
+      return Result.err(new AppError("SKILL_MISSING_DOMAIN", { descriptor: { key: "error.skill.missing_domain", params: { skill_name: name } }, skillName: name }));
     }
     const nameOk = assertValidSkillName(name);
     if (!nameOk.ok) return Result.err(nameOk.error);
@@ -379,11 +336,8 @@ export class SkillsService implements SkillService {
     const nameOk = assertValidSkillName(location.name);
     if (!nameOk.ok) return Result.err(nameOk.error);
     // D2①：global 域内置名不可删（project 域历史同名副本仍可删）。
-    if (
-      location.domain === "global" &&
-      BUILTIN_SKILL_NAMES.has(location.name)
-    ) {
-      return Result.err(new AppError("SKILL_BUILTIN", { descriptor: {key: "error.skill.builtin_not_deletable", params: {skill_name: location.name}}, skillName: location.name }));
+    if (location.domain === "global" && BUILTIN_SKILL_NAMES.has(location.name)) {
+      return Result.err(new AppError("SKILL_BUILTIN", { descriptor: { key: "error.skill.builtin_not_deletable", params: { skill_name: location.name } }, skillName: location.name }));
     }
     // VFS 清理用 meta 域 key；负清单行的 scopeKey 仍是 project:{pid}，两者分开取
     const scopeKeyRes = vfsScopeKeyOfLocation(location);
@@ -405,7 +359,7 @@ export class SkillsService implements SkillService {
       const ruleRepo = new SqliteSkillDisabledRuleRepository(tx);
       if (location.domain === "project") {
         if (location.projectId == null || location.projectId.length === 0) {
-          throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: location.name}}, skillName: location.name });
+          throw new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: { key: "error.skill.missing_project_id", params: { skill_name: location.name } }, skillName: location.name });
         }
         await ruleRepo.remove(disabledScopeKeyOfProject(location.projectId), location.name);
       } else {
@@ -449,12 +403,8 @@ export class SkillsService implements SkillService {
     }
     // 校验链 2：内置源门（仅改名提交时）：global 域内置技能不可改名；
     // 仅改描述（含 newName 同值提交）放行，T-S2⑨ 防回归
-    if (
-      renaming &&
-      location.domain === "global" &&
-      BUILTIN_SKILL_NAMES.has(location.name)
-    ) {
-      return Result.err(new AppError("SKILL_BUILTIN_RENAME", { descriptor: {key: "error.skill.builtin_rename_forbidden", params: {skill_name: location.name}}, skillName: location.name }));
+    if (renaming && location.domain === "global" && BUILTIN_SKILL_NAMES.has(location.name)) {
+      return Result.err(new AppError("SKILL_BUILTIN_RENAME", { descriptor: { key: "error.skill.builtin_rename_forbidden", params: { skill_name: location.name } }, skillName: location.name }));
     }
     // 校验链 3：目标保留名门（仅改名提交时）：目标名撞内置名且目标目录
     // 不存在（= 新建语义）拒；目录已存在（历史同名副本）由查重门接管
@@ -482,7 +432,7 @@ export class SkillsService implements SkillService {
         if (renaming) {
           const conflict = await this.skillDirExists(new SqliteVfsEntryRepository(tx), vfsScopeKey, newPrefix);
           if (conflict) {
-            throw new AppError("SKILL_ALREADY_EXISTS", { descriptor: {key: "error.skill.already_exists", params: {skill_name: newName!}}, skillName: newName! });
+            throw new AppError("SKILL_ALREADY_EXISTS", { descriptor: { key: "error.skill.already_exists", params: { skill_name: newName! } }, skillName: newName! });
           }
         }
 
@@ -554,12 +504,12 @@ export class SkillsService implements SkillService {
       return Result.ok(undefined);
     }
     if (domain === "project" && (projectId == null || projectId.length === 0)) {
-      return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: {key: "error.skill.missing_project_id", params: {skill_name: name}}, skillName: name }));
+      return Result.err(new AppError("SKILL_MISSING_PROJECT_ID", { descriptor: { key: "error.skill.missing_project_id", params: { skill_name: name } }, skillName: name }));
     }
     const scopeKey = domain === "global" ? "global:meta" : `project:${projectId}:meta`;
     const dirExists = await this.skillDirExists(new SqliteVfsEntryRepository(this.deps.conn), scopeKey, `${SKILLS_ROOT}/${name}`);
     if (!dirExists) {
-      return Result.err(new AppError("SKILL_BUILTIN_NAME_RESERVED", { descriptor: {key: "error.skill.builtin_name_reserved", params: {skill_name: name}}, skillName: name }));
+      return Result.err(new AppError("SKILL_BUILTIN_NAME_RESERVED", { descriptor: { key: "error.skill.builtin_name_reserved", params: { skill_name: name } }, skillName: name }));
     }
     return Result.ok(undefined);
   }
@@ -567,9 +517,7 @@ export class SkillsService implements SkillService {
   /** 技能目录存在性判定（目录行或其下任一 entry 存在即视为存在）。 */
   private async skillDirExists(entryRepo: SqliteVfsEntryRepository, scopeKey: string, prefix: string): Promise<boolean> {
     const entries = await entryRepo.listEntriesUnderPrefix(scopeKey, prefix);
-    return entries.some(
-      (entry) => entry.path === prefix || entry.path.startsWith(`${prefix}/`)
-    );
+    return entries.some((entry) => entry.path === prefix || entry.path.startsWith(`${prefix}/`));
   }
 
   /** 技能目录不存在时返回 Err(SKILL_NOT_FOUND)（存在性判定与 writeSkillFile 新建拦截同源）。 */

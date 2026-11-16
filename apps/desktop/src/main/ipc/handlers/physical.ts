@@ -19,18 +19,13 @@ import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.ipc.physical");
 
-/** VfsListEntry.kind → WorkplaceListRowDto.kind */
-function toRowKind(kind: string): "dir" | "file" {
-  return kind === "directory" ? "dir" : "file";
-}
-
 /** 物理树行 DTO：规则类字段对物理树无意义，恒为缺省值。 */
 function toPhysicalRow(entry: {
   path: string;
   kind: string;
   label?: string;
 }): WorkplaceListRowDto {
-  if (toRowKind(entry.kind) === "dir") {
+  if (entry.kind === "directory") {
     return entry.label == null
       ? { kind: "dir", path: entry.path, ruleState: "rule_off" }
       : {
@@ -60,9 +55,7 @@ const ROOT_SCOPE_DIRS = ["/meta", "/template", "/projects"];
  * NOT_FOUND（如项目/会话被并发删除）或其他异常时跳过该子树，
  * 其余域行照常返回，不再一个子树失败拖垮整树（ok:false 整树空白）。
  */
-export async function handlePhysicalList(
-  req: PhysicalListRequest,
-): Promise<IpcResult<WorkplaceListRowDto[]>> {
+export async function handlePhysicalList(req: PhysicalListRequest): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -97,9 +90,7 @@ export async function handlePhysicalList(
 }
 
 /** 读物理路径文件内容：前缀解析后走对应域单 scope read（只读，无保存通道）。 */
-export async function handlePhysicalRead(
-  req: PhysicalReadRequest,
-): Promise<IpcResult<VfsReadResultDto>> {
+export async function handlePhysicalRead(req: PhysicalReadRequest): Promise<IpcResult<VfsReadResultDto>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。

@@ -4,7 +4,7 @@
 import type {StreamWireChunk} from './stream-wire-queue';
 import {wireQueueCharCount} from './stream-wire-queue';
 
-export type StreamApplyBufferOptions = {
+type StreamApplyBufferOptions = {
   readonly flushIntervalMs?: number;
   readonly maxCharsPerBuffer?: number;
 };
@@ -19,10 +19,7 @@ export type StreamApplyBuffer = {
   dispose: () => void;
 };
 
-export function createStreamApplyBuffer(
-  onFlush: (segments: StreamWireChunk[]) => void,
-  options?: StreamApplyBufferOptions,
-): StreamApplyBuffer {
+export function createStreamApplyBuffer(onFlush: (segments: StreamWireChunk[]) => void, options?: StreamApplyBufferOptions): StreamApplyBuffer {
   const flushIntervalMs = options?.flushIntervalMs ?? 64;
   const maxCharsPerBuffer = options?.maxCharsPerBuffer ?? 4_096;
   const queue: StreamWireChunk[] = [];

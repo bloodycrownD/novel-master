@@ -4,12 +4,7 @@
  */
 import {BRIDGE_V, type DocumentPayload} from './document-model';
 import {post} from './post';
-import {
-  setAnnotateEnabled,
-  setAnnotations,
-  clearAnnotateSelection,
-  type AnnotateRenderMark,
-} from './annotate';
+import {setAnnotateEnabled, setAnnotations, clearAnnotateSelection, type AnnotateRenderMark} from './annotate';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {applyHostTheme} from '@web/shared/host-theme';
@@ -19,7 +14,7 @@ import type {HostTheme} from '@web/shared/host-theme';
  * P0-3：setDocument 视图刷新注册门面。
  * Preact DocumentApp 由 main 注册；本文件只持有实现引用。
  */
-export type SetDocumentView = (payload: DocumentPayload) => void;
+type SetDocumentView = (payload: DocumentPayload) => void;
 
 let _setDocumentView: SetDocumentView | null = null;
 
@@ -31,9 +26,7 @@ export function registerSetDocumentView(fn: SetDocumentView): void {
 /**
  * 调用已注册实现；未注册时返回 false。
  */
-export function invokeRegisteredSetDocumentView(
-  payload: DocumentPayload,
-): boolean {
+export function invokeRegisteredSetDocumentView(payload: DocumentPayload): boolean {
   if (!_setDocumentView) return false;
   _setDocumentView(payload);
   return true;
@@ -70,9 +63,7 @@ export function handleHostMessage(raw: unknown): void {
   }
   if (msg.type === 'setAnnotations') {
     const rawList = msg.payload?.annotations;
-    const list = Array.isArray(rawList)
-      ? (rawList as AnnotateRenderMark[])
-      : [];
+    const list = Array.isArray(rawList) ? (rawList as AnnotateRenderMark[]) : [];
     setAnnotations(list);
     return;
   }

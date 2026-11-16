@@ -14,11 +14,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 // prettier 必拆回；按可读性保留拆行。
 import {buildAgentDefinitionFromForm} from '@/config-forms/agent';
 import {PROMPT_REGION_LABELS} from '@/config-forms/agent';
-import {
-  STORED_CONFIG_LABELS,
-  buildDefaultAgentDefinitionPreservingName,
-  storedConfigInvalidReason,
-} from '@novel-master/core/stored-config-validity';
+import {STORED_CONFIG_LABELS, buildDefaultAgentDefinitionPreservingName, storedConfigInvalidReason} from '@novel-master/core/stored-config-validity';
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 
 import {FormField} from '../form/FormField';
@@ -42,10 +38,7 @@ import {AgentEditorModelSection} from './agent-editor/AgentEditorModelSection';
 import {AgentEditorToolsSection} from './agent-editor/AgentEditorToolsSection';
 import {PromptLayoutSection} from './agent-editor/PromptLayoutSection';
 import {styles} from './agent-editor/agent-editor-form.styles';
-import {
-  agentDisplayNameFromWire,
-  useAgentEditorFormState,
-} from './agent-editor/useAgentEditorFormState';
+import {agentDisplayNameFromWire, useAgentEditorFormState} from './agent-editor/useAgentEditorFormState';
 import {coreT} from '@/i18n/core';
 
 type StackNav = NativeStackNavigationProp<RootStackParamList>;
@@ -66,13 +59,7 @@ type Props = {
 
 export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — 五键解构单行化超 80 列；拆两行会牺牲可读性
-  const {
-    onDirtyChange,
-    onSaved,
-    agentId,
-    readOnly = false,
-    initialDefinition,
-  } = props;
+  const {onDirtyChange, onSaved, agentId, readOnly = false, initialDefinition} = props;
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const navigation = useNavigation<StackNav>();
@@ -145,39 +132,35 @@ export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const handleOverwriteDefault = useCallback(() => {
     // nm-style: keep-local — 确认文案是长中文串，外提成 const 会因宽度被 prettier 拆行
-    Alert.alert(
-      '覆盖为默认模板',
-      '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '覆盖并保存',
-          onPress: () => {
-            void (async () => {
-              setRecovering(true);
-              try {
-                const raw = await runtime.agentRegistry.getRawWire(agentId);
-                const displayName = agentDisplayNameFromWire(raw, agentId);
-                const baseName = displayName.trim() || agentId;
-                const def = buildDefaultAgentDefinitionPreservingName(baseName);
-                const probe = new ToolRegistry();
-                registerBuiltinTools(probe);
-                await runtime.agentRegistry.upsert(agentId, def, {
-                  registeredToolNames: probe.list(),
-                });
-                await loadAgent();
-                await onSaved?.();
-                showToast('已用默认模板覆盖并保存');
-              } catch (error) {
-                showToast(toastMessage('覆盖默认失败', error));
-              } finally {
-                setRecovering(false);
-              }
-            })();
-          },
+    Alert.alert('覆盖为默认模板', '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '覆盖并保存',
+        onPress: () => {
+          void (async () => {
+            setRecovering(true);
+            try {
+              const raw = await runtime.agentRegistry.getRawWire(agentId);
+              const displayName = agentDisplayNameFromWire(raw, agentId);
+              const baseName = displayName.trim() || agentId;
+              const def = buildDefaultAgentDefinitionPreservingName(baseName);
+              const probe = new ToolRegistry();
+              registerBuiltinTools(probe);
+              await runtime.agentRegistry.upsert(agentId, def, {
+                registeredToolNames: probe.list(),
+              });
+              await loadAgent();
+              await onSaved?.();
+              showToast('已用默认模板覆盖并保存');
+            } catch (error) {
+              showToast(toastMessage('覆盖默认失败', error));
+            } finally {
+              setRecovering(false);
+            }
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [agentId, loadAgent, onSaved, runtime, setRecovering, showToast]);
 
   // nm-style: keep-local — 保存编排（构建 → 模型校验 → upsert → 基线/回调收尾）逾 20 行，
@@ -284,9 +267,7 @@ export function AgentEditorForm(props: Props) {
         detail={detail}
         recovering={recovering}
         onBack={() => navigation.goBack()}
-        onOverwriteDefault={
-          invalidConfig != null ? handleOverwriteDefault : undefined
-        }
+        onOverwriteDefault={invalidConfig != null ? handleOverwriteDefault : undefined}
         onDelete={handleDeleteBrokenAgent}
       />
     );
@@ -298,9 +279,7 @@ export function AgentEditorForm(props: Props) {
       {readOnly ? (
         <View style={styles.unsavedWrap}>
           <FormSectionCard tokens={tokens}>
-            <Text style={[styles.unsaved, {color: tokens.textSecondary}]}>
-              内置智能体，不可编辑
-            </Text>
+            <Text style={[styles.unsaved, {color: tokens.textSecondary}]}>内置智能体，不可编辑</Text>
           </FormSectionCard>
         </View>
       ) : null}
@@ -308,25 +287,11 @@ export function AgentEditorForm(props: Props) {
       {isDirty ? (
         <View style={styles.unsavedWrap}>
           <FormSectionCard tokens={tokens}>
-            <Text style={[styles.unsaved, {color: tokens.danger}]}>
-              有未保存的更改
-            </Text>
+            <Text style={[styles.unsaved, {color: tokens.danger}]}>有未保存的更改</Text>
           </FormSectionCard>
         </View>
       ) : null}
-      <ScreenFormLayout
-        tokens={tokens}
-        footer={
-          readOnly ? undefined : (
-            <StickyFormFooter
-              tokens={tokens}
-              label="保存"
-              loading={saving}
-              onPress={() => handleSave().catch(() => undefined)}
-            />
-          )
-        }
-      >
+      <ScreenFormLayout tokens={tokens} footer={readOnly ? undefined : <StickyFormFooter tokens={tokens} label="保存" loading={saving} onPress={() => handleSave().catch(() => undefined)} />}>
         <AgentEditorBasicSection
           tokens={tokens}
           name={form.name}
@@ -342,27 +307,11 @@ export function AgentEditorForm(props: Props) {
           readOnly={readOnly}
         />
 
-        <AgentEditorModelSection
-          tokens={tokens}
-          value={form.modelEnabled ? form.savedModelId : ''}
-          onChange={handleModelSelect}
-          options={modelSelectOptions}
-          readOnly={readOnly}
-        />
+        <AgentEditorModelSection tokens={tokens} value={form.modelEnabled ? form.savedModelId : ''} onChange={handleModelSelect} options={modelSelectOptions} readOnly={readOnly} />
 
         <FormSectionCard title="运行时" tokens={tokens}>
-          <FormField
-            label={PROMPT_REGION_LABELS.maxStepsLabel}
-            tokens={tokens}
-            hint={PROMPT_REGION_LABELS.maxStepsHint}
-          >
-            <FormTextInput
-              tokens={tokens}
-              value={form.maxSteps}
-              onChangeText={value => patch({maxSteps: value})}
-              keyboardType="number-pad"
-              disabled={readOnly}
-            />
+          <FormField label={PROMPT_REGION_LABELS.maxStepsLabel} tokens={tokens} hint={PROMPT_REGION_LABELS.maxStepsHint}>
+            <FormTextInput tokens={tokens} value={form.maxSteps} onChangeText={value => patch({maxSteps: value})} keyboardType="number-pad" disabled={readOnly} />
           </FormField>
         </FormSectionCard>
 

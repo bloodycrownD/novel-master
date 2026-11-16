@@ -8,7 +8,7 @@
  */
 
 /** Pattern accepted by strict Anthropic-compatible gateways. */
-export const ANTHROPIC_WIRE_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const ANTHROPIC_WIRE_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export interface AnthropicToolNameWire {
   readonly toWire: (canonical: string) => string;
@@ -24,9 +24,7 @@ export function toAnthropicWireToolName(canonical: string): string {
 }
 
 /** Builds bidirectional mapping for a request's declared/historical tools. */
-export function createAnthropicToolNameWire(
-  canonicalNames: readonly string[]
-): AnthropicToolNameWire {
+export function createAnthropicToolNameWire(canonicalNames: readonly string[]): AnthropicToolNameWire {
   const wireToCanonical = new Map<string, string>();
   for (const canonical of canonicalNames) {
     wireToCanonical.set(toAnthropicWireToolName(canonical), canonical);
@@ -38,10 +36,6 @@ export function createAnthropicToolNameWire(
 }
 
 /** True when any tool name would be rejected by strict wire validators. */
-export function anthropicToolsNeedWireEncoding(
-  canonicalNames: readonly string[]
-): boolean {
-  return canonicalNames.some(
-    (name) => !ANTHROPIC_WIRE_TOOL_NAME_PATTERN.test(name)
-  );
+export function anthropicToolsNeedWireEncoding(canonicalNames: readonly string[]): boolean {
+  return canonicalNames.some((name) => !ANTHROPIC_WIRE_TOOL_NAME_PATTERN.test(name));
 }

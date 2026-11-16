@@ -3,7 +3,7 @@
  */
 import { composerAtPath, type AtPathRef } from "./composer-at-path";
 
-export type AtPathTypeaheadProps = {
+type AtPathTypeaheadProps = {
   open: boolean;
   candidates: readonly AtPathRef[];
   onSelect: (token: string) => void;

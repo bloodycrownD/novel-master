@@ -136,7 +136,9 @@ function sanitizeValue(value: unknown, depth: number, seen: Set<object>): unknow
     for (const key of keys.slice(0, OBJECT_MAX_KEYS)) {
       const entryValue = source[key];
       // key 切词：camelCase / PascalCase 边界与 `_` / `-` 都算分隔。
-      const tokens = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").split(/[^A-Za-z0-9]+/).filter((token) => token.length > 0).map((token) => token.toLowerCase());
+      const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+      const words = spaced.split(/[^A-Za-z0-9]+/);
+      const tokens = words.filter((token) => token.length > 0).map((token) => token.toLowerCase());
       const sensitive = SECRET_WHOLE_KEYS.has(tokens.join("")) || tokens.some((token, index) => SECRET_WORDS.has(token) || (index > 0 && SECRET_KEY_PAIRS.has(`${tokens[index - 1]}${token}`)));
       if (sensitive) {
         out[key] = "[redacted]";

@@ -7,10 +7,7 @@
  * 本模块不再持有本地实现，文案统一经 core 的 `buildStreamMetricsLine`
  * （内部调用 core 的 `formatStreamElapsed`）生成。
  */
-import {
-  buildStreamMetricsLine,
-  type StreamTokenSource,
-} from '@novel-master/core/format';
+import {buildStreamMetricsLine, type StreamTokenSource} from '@novel-master/core/format';
 import {coreT} from '@/i18n/core';
 
 /**
@@ -20,10 +17,10 @@ import {coreT} from '@/i18n/core';
  * 复用 core 的中立类型（别名，不再本地重声明联合字面量）——新增来源时
  * 单点改 core，消费端不会漏改。
  */
-export type AgentStreamTokenSource = StreamTokenSource;
+type AgentStreamTokenSource = StreamTokenSource;
 
 /** 指标快照：历时与 token 计数（文案消费的最小集）。 */
-export type AgentStreamMetricsSnapshot = {
+type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
   readonly completionTokens: number;
   readonly tokenSource: AgentStreamTokenSource;
@@ -36,18 +33,12 @@ export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
 };
 
 /** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
-export function toAgentStreamMetricsView(
-  running: boolean,
-  snap: AgentStreamMetricsSnapshot,
-  tokensPerSecond: number | null = null,
-): AgentStreamMetricsView {
+export function toAgentStreamMetricsView(running: boolean, snap: AgentStreamMetricsSnapshot, tokensPerSecond: number | null = null): AgentStreamMetricsView {
   return {...snap, running, tokensPerSecond};
 }
 
 /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
-export function buildChatStreamMetricsLine(
-  metrics: AgentStreamMetricsView,
-): string {
+export function buildChatStreamMetricsLine(metrics: AgentStreamMetricsView): string {
   const parts = buildStreamMetricsLine(metrics);
   return `${coreT(parts.prefix)} · ${parts.elapsed} · ${coreT(parts.body)}`;
 }

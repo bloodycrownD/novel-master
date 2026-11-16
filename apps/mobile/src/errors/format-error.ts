@@ -17,16 +17,6 @@ export function formatVfsErrorForUser(error: unknown, scope?: Parameters<typeof 
   return coreT(vfsUserMessage(error, scope));
 }
 
-function formatCause(cause: unknown): string | undefined {
-  if (cause instanceof Error && cause.message) {
-    return cause.message;
-  }
-  if (cause != null) {
-    return String(cause);
-  }
-  return undefined;
-}
-
 function readCause(error: Error): unknown {
   return (error as Error & {cause?: unknown}).cause;
 }
@@ -69,7 +59,8 @@ export function formatError(error: unknown): string {
   }
   // 6. TdbcError：message + cause。
   if (error instanceof TdbcError) {
-    const inner = formatCause(readCause(error));
+    const causeValue = readCause(error);
+    const inner = causeValue instanceof Error && causeValue.message ? causeValue.message : causeValue != null ? String(causeValue) : undefined;
     return inner ? `${error.message}\n${inner}` : error.message;
   }
   // 7. AgentTurnError（infra 保留类）→ AGENT_RUN_FAILED 语义；message 直读与 desktop 同口径。

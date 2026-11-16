@@ -6,7 +6,7 @@
  * 对象型 raw 直通（宿主直接 postMessage 对象时不丢消息）。
  */
 
-export type HostMessage = {
+type HostMessage = {
   v?: number;
   type?: string;
   payload?: Record<string, unknown>;
@@ -27,10 +27,7 @@ export function parseHostMessage(raw: unknown): HostMessage | null {
 }
 
 /** 解析 + 版本与 type 校验：任一不满足返回 null（消息丢弃）。 */
-export function matchHostMessage(
-  raw: unknown,
-  bridgeV: number,
-): HostMessage | null {
+export function matchHostMessage(raw: unknown, bridgeV: number): HostMessage | null {
   const msg = parseHostMessage(raw);
   if (!msg || msg.v !== bridgeV || !msg.type) {
     return null;
@@ -38,7 +35,7 @@ export function matchHostMessage(
   return msg;
 }
 
-export type HostMessageHandler = (raw: unknown) => void;
+type HostMessageHandler = (raw: unknown) => void;
 
 /** 统一 document + window 双注册（每 webview 入口调用一次）。 */
 export function bindHostMessageChannel(handler: HostMessageHandler): void {

@@ -1,16 +1,10 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
-import {
-  popupShellSubmenu,
-  syncTitleBarOverlay,
-} from "../../shell-menu.js";
+import { popupShellSubmenu, syncTitleBarOverlay } from "../../shell-menu.js";
 import type { IpcResult, ShellMenuPopupRequest, ShellMenuId } from "../../../../shared/ipc-types.js";
 
 const MENU_IDS = new Set<ShellMenuId>(["file", "edit", "view", "window", "help"]);
 
-export function handleShellMenuPopup(
-  event: IpcMainInvokeEvent,
-  req: ShellMenuPopupRequest,
-): IpcResult<null> {
+export function handleShellMenuPopup(event: IpcMainInvokeEvent, req: ShellMenuPopupRequest): IpcResult<null> {
   if (!MENU_IDS.has(req.menuId)) {
     return { ok: false, error: { code: "IPC_INVALID_MENU", message: "未知菜单" } };
   }
@@ -22,10 +16,7 @@ export function handleShellMenuPopup(
   return { ok: true, data: null };
 }
 
-export function handleShellSetTitleBarTheme(
-  event: IpcMainInvokeEvent,
-  theme: "light" | "dark",
-): IpcResult<null> {
+export function handleShellSetTitleBarTheme(event: IpcMainInvokeEvent, theme: "light" | "dark"): IpcResult<null> {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window) {
     return { ok: false, error: { code: "IPC_NO_WINDOW", message: "窗口不可用" } };

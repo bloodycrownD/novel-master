@@ -18,7 +18,7 @@ export function registerDriver(driver: TdbcDriver): void {
 }
 
 /**
- * Returns a registered driver or `undefined`.
+ * Returns a registered driver or `undefined`. nm-style: keep-public — 模块私有 Map 的对外访问器（core 根 barrel 导出）。
  */
 export function getDriver(name: string): TdbcDriver | undefined {
   return drivers.get(name);
@@ -47,13 +47,9 @@ export function resolveDriver(explicit?: string): TdbcDriver {
   if (explicit !== undefined) {
     const driver = getDriver(explicit);
     if (!driver) {
-      throw new TdbcError(
-        "UNKNOWN_DRIVER",
-        `Driver not registered: ${explicit}`,
-        {
-          driver: explicit,
-        }
-      );
+      throw new TdbcError("UNKNOWN_DRIVER", `Driver not registered: ${explicit}`, {
+        driver: explicit,
+      });
     }
     return driver;
   }
@@ -63,10 +59,5 @@ export function resolveDriver(explicit?: string): TdbcDriver {
     return getDriver(names[0]!)!;
   }
 
-  throw new TdbcError(
-    "UNKNOWN_DRIVER",
-    names.length === 0
-      ? "No TDBC driver registered"
-      : "Multiple drivers registered; specify options.driver"
-  );
+  throw new TdbcError("UNKNOWN_DRIVER", names.length === 0 ? "No TDBC driver registered" : "Multiple drivers registered; specify options.driver");
 }

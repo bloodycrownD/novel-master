@@ -14,12 +14,9 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {toastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
-import {
-  PickerListModal,
-  type PickerListLoadResult,
-} from '../ui/PickerListModal';
+import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
 
-export interface SavedModelRow {
+interface SavedModelRow {
   readonly savedModelId: string;
   readonly label: string;
   readonly subtitle?: string;
@@ -40,31 +37,19 @@ function modelNameKey(providerId: string, modelName: string): string {
   return `${providerId}\0${modelName}`;
 }
 
-export function ModelPickerModal({
-  visible,
-  onClose,
-  onSelected,
-  sessionId,
-}: Props) {
+export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
 
-  const load = useCallback(async (): Promise<
-    Result<PickerListLoadResult<SavedModelRow>, AppError>
-  > => {
+  const load = useCallback(async (): Promise<Result<PickerListLoadResult<SavedModelRow>, AppError>> => {
     let selectedId: string | undefined;
     if (sessionId != null) {
       // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
       // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
-      const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-        sessionId,
-      );
+      const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
       if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-      selectedId =
-        sessionConfig.value.modelId && sessionConfig.value.modelId.length > 0
-          ? sessionConfig.value.modelId
-          : undefined;
+      selectedId = sessionConfig.value.modelId && sessionConfig.value.modelId.length > 0 ? sessionConfig.value.modelId : undefined;
     } else {
       // workspace 全局：用 workspace 当前模型高亮。
       const workspaceModel = await runtime.state.getCurrentModelId();
@@ -74,9 +59,7 @@ export function ModelPickerModal({
     const loadedProviders = await runtime.providers.list();
     if (!loadedProviders.ok) return Result.err(loadedProviders.error);
     const providers = loadedProviders.value;
-    const nameById = new Map(
-      providers.map(provider => [provider.id, provider.displayName]),
-    );
+    const nameById = new Map(providers.map(provider => [provider.id, provider.displayName]));
     const allModels: Array<{
       id: string;
       providerId: string;
@@ -101,17 +84,11 @@ export function ModelPickerModal({
       nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
     }
     const collected: SavedModelRow[] = allModels.map(model => {
-      const duplicate =
-        (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) >
-        1;
-      const providerDisplayName =
-        nameById.get(model.providerId) ?? '未知服务商';
+      const duplicate = (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) > 1;
+      const providerDisplayName = nameById.get(model.providerId) ?? '未知服务商';
       return {
         savedModelId: model.id,
-        label: formatSavedModelDisplayName(
-          providerDisplayName,
-          model.modelName,
-        ),
+        label: formatSavedModelDisplayName(providerDisplayName, model.modelName),
         subtitle: duplicate ? model.vendorModelId : undefined,
       };
     });
@@ -125,20 +102,12 @@ export function ModelPickerModal({
       // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
       try {
         if (sessionId != null) {
-          const current = await runtime.sessions.getSessionAgentConfig(
-            sessionId,
-          );
+          const current = await runtime.sessions.getSessionAgentConfig(sessionId);
           if (!current.ok) {
             showToast(toastMessage('设置失败', current.error));
             return;
           }
-          const updated = await runtime.sessions.updateSessionAgentConfig(
-            sessionId,
-            {
-              agentId: current.value.agentId,
-              modelId: savedModelId,
-            },
-          );
+          const updated = await runtime.sessions.updateSessionAgentConfig(sessionId, {agentId: current.value.agentId, modelId: savedModelId});
           if (!updated.ok) {
             showToast(toastMessage('设置失败', updated.error));
             return;
@@ -166,11 +135,7 @@ export function ModelPickerModal({
         <>
           <View style={styles.rowText}>
             <Text style={{color: tokens.text}}>{item.label}</Text>
-            {item.subtitle ? (
-              <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-                {item.subtitle}
-              </Text>
-            ) : null}
+            {item.subtitle ? <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>{item.subtitle}</Text> : null}
           </View>
           {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
         </>

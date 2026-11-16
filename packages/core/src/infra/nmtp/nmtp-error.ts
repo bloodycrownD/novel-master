@@ -5,6 +5,7 @@
  */
 
 /** Discriminant codes for {@link TokenizerError}. */
+// nm-style: keep-public — @novel-master/core/nmtp 子入口再导出的公共类型契约（无生产直引）
 export type TokenizerErrorCode = "NOT_REGISTERED" | "MULTIPLE_DRIVERS";
 
 /**

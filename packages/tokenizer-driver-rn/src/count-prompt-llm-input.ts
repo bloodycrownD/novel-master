@@ -34,40 +34,15 @@ import {
   type TokenizerFamily,
 } from "@novel-master/core/provider";
 import { Result, type AppError } from "@novel-master/core/errors";
-import {
-  PromptCountCancelledError,
-  countPromptViaNative,
-  isNativeTokenizerAvailable,
-  type NativeCountRequest,
-} from "./android-native-bridge.js";
-import {
-  getDefaultRnEncoding,
-  getRnEncoding,
-  type RnEncodingName,
-  type RnTokenEncoding,
-} from "./impl/encoding-cache.js";
+import { PromptCountCancelledError, countPromptViaNative, isNativeTokenizerAvailable, type NativeCountRequest } from "./android-native-bridge.js";
+import { getDefaultRnEncoding, getRnEncoding, type RnEncodingName, type RnTokenEncoding } from "./impl/encoding-cache.js";
 import { getEncodingNameForModel } from "js-tiktoken/lite";
 
 /** WEB JSON families — M1 native on Android. */
-const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "claude",
-  "llama3",
-  "qwen2",
-  "command-r",
-  "command-a",
-  "nemo",
-  "deepseek",
-  "glm",
-]);
+const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set(["claude", "llama3", "qwen2", "command-r", "command-a", "nemo", "deepseek", "glm"]);
 
 /** SentencePiece families — M1 native on Android. */
-const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "llama",
-  "mistral",
-  "yi",
-  "gemma",
-  "jamba",
-]);
+const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set(["llama", "mistral", "yi", "gemma", "jamba"]);
 
 function heuristicCount(text: string): number {
   return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
@@ -93,13 +68,7 @@ interface ProbeStats {
 type CountResult = SerializedCountResult;
 
 /** countSerialized 的位置参数元组（测试直调边界，保持位置传参）。 */
-type CountArgs = [
-  family: TokenizerFamily,
-  serialized: string,
-  vendorModelId: string,
-  chunkScope?: string,
-  sessionId?: string
-];
+type CountArgs = [family: TokenizerFamily, serialized: string, vendorModelId: string, chunkScope?: string, sessionId?: string];
 
 /** 编码名三态：undefined = 模型名不被认识，null = 认识但出界。 */
 type MaybeRnEncoding = RnEncodingName | null | undefined;
@@ -174,12 +143,7 @@ function probeLog(message: string): void {
  * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
  * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
  */
-function countChunksWithL2({
-  text,
-  scope,
-  encodeText,
-  probe,
-}: ChunkCountArgs): number {
+function countChunksWithL2({ text, scope, encodeText, probe }: ChunkCountArgs): number {
   let total = 0;
   for (const chunk of splitTextIntoChunks(text)) {
     const hash = chunkHash16(chunk);
@@ -276,10 +240,7 @@ function resolveRnEncodingName(id: string, model: string): RnEncodingOrNull {
     return null;
   }
   const direct = tryResolveEncodingName(trimmed);
-  if (
-    direct === undefined &&
-    resolveTokenizerFamily(trimmed, "auto") === "tiktoken"
-  ) {
+  if (direct === undefined && resolveTokenizerFamily(trimmed, "auto") === "tiktoken") {
     const mapped = tryResolveEncodingName(model);
     if (mapped !== undefined) {
       return mapped;
@@ -297,18 +258,11 @@ function resolveRnEncodingName(id: string, model: string): RnEncodingOrNull {
 let encodingSourceForTests: EncodingSource = null;
 
 function resolveEncoding(name: RnEncodingName): RnTokenEncoding | null {
-  return encodingSourceForTests == null
-    ? getRnEncoding(name)
-    : encodingSourceForTests(name);
+  return encodingSourceForTests == null ? getRnEncoding(name) : encodingSourceForTests(name);
 }
 
 // nm-style: keep-local — 表源解析、overhead 公式与 L2 分块计数共享 encoding/probe，内联会拆散精确档三段回退和探针状态。
-async function countTiktoken({
-  serialized,
-  vendorModelId,
-  scope,
-  probe,
-}: CountTiktokenArgs): Promise<SerializedCountResult> {
+async function countTiktoken({ serialized, vendorModelId, scope, probe }: CountTiktokenArgs): Promise<SerializedCountResult> {
   const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
   // 取到的是共享单例句柄（impl/encoding-cache → registry）：绝不 free()，
@@ -328,7 +282,7 @@ async function countTiktoken({
     // message-token-cache L2 块流程（与 node 精确档同构）：overhead 经 core
     // 下沉版 countOpenAiStyleMessages 对**空 content** 求得（per-message
     // overhead 公式零复刻——空串在增量计数器里短路不调 encode，恰剩
-    // perMessage + w(role) + tail，与 node 侧 countOpenAiStyleChunked 同一
+    // perMessage + w(role) + tail，与 node 侧 tiktoken 精确档同一
     // 组装），content 部分按 splitTextIntoChunks 块求和过 L2。数值与整串
     // 口径差 ≤1%（T-TC5）。
     const msg = wrapSerializedPromptAsSystemMessage("");
@@ -364,12 +318,7 @@ async function countTiktoken({
  * 返回 null 一律表示「这一轮不归原生管」，由调用方落回 [countTiktoken]。
  */
 // nm-style: keep-local — 三层回退（编码名出界 / 表缺失 / 原生失败）与 overhead 前置校验共享 encName/probe，内联会打散回退顺序。
-async function countGptViaNative({
-  serialized,
-  vendorModelId,
-  sessionId,
-  probe,
-}: GptNativeArgs): Promise<SerializedCountResult | null> {
+async function countGptViaNative({ serialized, vendorModelId, sessionId, probe }: GptNativeArgs): Promise<SerializedCountResult | null> {
   if (!isNativeTokenizerAvailable()) {
     return null;
   }
@@ -441,12 +390,7 @@ let nativeRequestSeq = 0;
  * requestId 形态 `${sessionId}:${seq}`：sessionId 缺失时不出 requestId
  * （桥内判据 `requestId != null` 会让这一轮走旧三参 = 现状）。
  */
-function buildNativeCountRequest({
-  serialized,
-  family,
-  vendorModelId,
-  sessionId,
-}: NativeRequestArgs): NativeCountRequest {
+function buildNativeCountRequest({ serialized, family, vendorModelId, sessionId }: NativeRequestArgs): NativeCountRequest {
   if (sessionId == null) {
     return { serialized, family, vendorModelId };
   }
@@ -488,31 +432,20 @@ async function countSerialized(...args: CountArgs): Promise<CountResult> {
     const head = `[nm-tok-js] family=${family} chars=${serialized.length}`;
     const ms = ` ms=${Date.now() - probeT0}`;
     const route = ` route=${probe.route} kind=${result.counterKind} est=${result.estimated}`;
-    const l2 = ` l2Hit=${probe.chunkTotal - probe.chunkMisses}/${
-      probe.chunkTotal
-    }`;
+    const l2 = ` l2Hit=${probe.chunkTotal - probe.chunkMisses}/${probe.chunkTotal}`;
     probeLog(head + ms + route + l2);
     return result;
   } catch (error) {
     const head = `[nm-tok-js] family=${family} chars=${serialized.length}`;
     const ms = ` ms=${Date.now() - probeT0}`;
-    const route = ` route=${probe.route} thrown=${
-      error instanceof Error ? error.name : "unknown"
-    }`;
+    const route = ` route=${probe.route} thrown=${error instanceof Error ? error.name : "unknown"}`;
     probeLog(head + ms + route);
     throw error;
   }
 }
 
 // nm-style: keep-local — scope 拼装、原生三层路由与兜底分支共享 probe/scope，内联会把这套状态机叠进探针壳。
-async function countSerializedImpl({
-  family,
-  serialized,
-  vendorModelId,
-  chunkScope,
-  sessionId,
-  probe,
-}: ImplArgs): Promise<SerializedCountResult> {
+async function countSerializedImpl({ family, serialized, vendorModelId, chunkScope, sessionId, probe }: ImplArgs): Promise<SerializedCountResult> {
   // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
   // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
   // 各自独立、语义一致，不会互串。
@@ -620,11 +553,7 @@ async function countSerializedImpl({
  * 非 OpenAI 消息包装）、**标签保持 heuristic/estimated:true**（换的只是算力，
  * 不是口径）。原生不可用 / 失败（非取消）→ null 落回 JS [fallbackCount]。
  */
-async function countHeuristicViaNative({
-  serialized,
-  sessionId,
-  probe,
-}: HeuristicArgs): Promise<SerializedCountResult | null> {
+async function countHeuristicViaNative({ serialized, sessionId, probe }: HeuristicArgs): Promise<SerializedCountResult | null> {
   if (!isNativeTokenizerAvailable()) {
     return null;
   }
@@ -702,13 +631,7 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
     });
   }
 
-  const countArgs: CountArgs = [
-    family,
-    serialized,
-    vendorModelId,
-    scope,
-    params.sessionId,
-  ];
+  const countArgs: CountArgs = [family, serialized, vendorModelId, scope, params.sessionId];
   const { count, counterKind, estimated } = await countSerialized(...countArgs);
 
   // miss 后写 L1（JS 档与 native 档都写：native 档靠它挡「无变更重复过桥」）。

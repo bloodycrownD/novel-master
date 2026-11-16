@@ -41,10 +41,7 @@ export function resolveLogicalPathForToolCard(input: unknown): string {
   return normalizePathForToolCard('/' + trimmed);
 }
 
-export function resolveVfsToolFilePath(
-  name: string,
-  input: Record<string, unknown> | null | undefined,
-): string | null {
+export function resolveVfsToolFilePath(name: string, input: Record<string, unknown> | null | undefined): string | null {
   if (name.indexOf('vfs.') === 0) name = name.slice(4);
   if (!VFS_FILE_TOOLS[name]) return null;
   // Bug1 加固：与 core 镜像保持一致，兼容 file_path 字段名。
@@ -57,9 +54,7 @@ export function resolveVfsToolFilePath(
   }
 }
 
-export function vfsToolFilePath(
-  name: string,
-  input: Record<string, unknown> | null | undefined,
-): string | null {
+// nm-style: keep-public — 工具卡片跳转路径解析（message-blocks / ToolGroup 消费）
+export function vfsToolFilePath(name: string, input: Record<string, unknown> | null | undefined): string | null {
   return resolveVfsToolFilePath(name, input);
 }

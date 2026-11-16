@@ -15,7 +15,7 @@ export type ChatTranscriptScrollSnapshot = {
 };
 
 /** @deprecated v1 inverted list snapshot — rejected by transcript cache. */
-export type LegacyChatListScrollSnapshot = {
+type LegacyChatListScrollSnapshot = {
   readonly offsetY: number;
   readonly nearBottom: boolean;
 };
@@ -24,34 +24,25 @@ const cache = createScopeKeyCache<ChatTranscriptScrollSnapshot>({
   maxEntries: 500,
 });
 
+// nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
 export function scrollCacheKey(projectId: string, sessionId: string): string {
   return cache.key(projectId, sessionId);
 }
 
-export function getTranscriptScrollSnapshot(
-  key: string,
-): ChatTranscriptScrollSnapshot | undefined {
+// nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
+export function getTranscriptScrollSnapshot(key: string): ChatTranscriptScrollSnapshot | undefined {
   return cache.get(key);
 }
 
-export function setTranscriptScrollSnapshot(
-  key: string,
-  snap: ChatTranscriptScrollSnapshot,
-): void {
+export function setTranscriptScrollSnapshot(key: string, snap: ChatTranscriptScrollSnapshot): void {
   if (snap.schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
     return;
   }
   cache.set(key, snap);
 }
 
-export function clearTranscriptScrollSnapshot(key: string): void {
-  cache.clear(key);
-}
-
 /** 项目删除后按前缀清理其全部会话快照。 */
-export function clearTranscriptScrollSnapshotsByProject(
-  projectId: string,
-): void {
+export function clearTranscriptScrollSnapshotsByProject(projectId: string): void {
   cache.clearByProjectPrefix(projectId);
 }
 
@@ -63,16 +54,11 @@ export function clearTranscriptScrollSnapshotsByProject(
  * （v1 的唯一写入者 `MessageList` 已删），故返回值就是快照本身——原先配套的
  * `discardedLegacy` 标志与 `legacy_cache_discarded` 遥测一并退场。
  */
-export function normalizeScrollSnapshot(
-  snap: LegacyChatListScrollSnapshot | ChatTranscriptScrollSnapshot | undefined,
-): ChatTranscriptScrollSnapshot | undefined {
+export function normalizeScrollSnapshot(snap: LegacyChatListScrollSnapshot | ChatTranscriptScrollSnapshot | undefined): ChatTranscriptScrollSnapshot | undefined {
   if (snap == null) {
     return undefined;
   }
-  if (
-    'schemaVersion' in snap &&
-    snap.schemaVersion === CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION
-  ) {
+  if ('schemaVersion' in snap && snap.schemaVersion === CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
     return snap;
   }
   return undefined;

@@ -117,12 +117,7 @@ export function installApplicationMenu(): void {
   Menu.setApplicationMenu(buildApplicationMenu());
 }
 
-export function popupShellSubmenu(
-  menuId: ShellMenuId,
-  window: BrowserWindow,
-  x: number,
-  y: number,
-): void {
+export function popupShellSubmenu(menuId: ShellMenuId, window: BrowserWindow, x: number, y: number): void {
   const item = appMenu?.getMenuItemById(menuId);
   const submenu = item?.submenu;
   if (!submenu) return;
@@ -136,10 +131,7 @@ export function configureWindowChrome(window: BrowserWindow): void {
   }
 }
 
-export function syncTitleBarOverlay(
-  window: BrowserWindow,
-  theme: "light" | "dark",
-): void {
+export function syncTitleBarOverlay(window: BrowserWindow, theme: "light" | "dark"): void {
   if (process.platform !== "win32" || window.isDestroyed()) return;
   try {
     window.setTitleBarOverlay(titleBarOverlayOptions(theme));

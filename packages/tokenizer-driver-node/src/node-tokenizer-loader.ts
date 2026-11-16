@@ -42,9 +42,7 @@ export function setNodeTokenizerLoader(loader: TokenizerLoader): void {
 /** Returns the active loader set by {@link registerTokenizerNodeDriver}. */
 export function getNodeTokenizerLoader(): TokenizerLoader {
   if (activeLoader == null) {
-    throw new Error(
-      "Node tokenizer loader not installed. Call registerTokenizerNodeDriver() first.",
-    );
+    throw new Error("Node tokenizer loader not installed. Call registerTokenizerNodeDriver() first.");
   }
   return activeLoader;
 }

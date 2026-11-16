@@ -27,7 +27,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
  * `ok` 为真即表示这一轮手动压缩成功（core 侧已清 `rule_snapshot` +
  * `file_cache` 两域），调用方据此刷新预览/workplace。
  */
-export type ManualCompactionOutcome = {
+type ManualCompactionOutcome = {
   /** 压缩本体是否成功。 */
   readonly ok: boolean;
   /**
@@ -41,15 +41,11 @@ export type ManualCompactionOutcome = {
 /** 手动压缩的 UI 尾巴钩子（全部可选）。 */
 export type ManualCompactionHooks = {
   /** 压缩失败（明确失败或抛错）时的尾巴。 */
-  readonly onFailed?: (
-    error: unknown,
-  ) => void | Promise<void>;
+  readonly onFailed?: (error: unknown) => void | Promise<void>;
   /** 压缩成功后的尾巴。 */
   readonly onSucceeded?: () => void | Promise<void>;
   /** 成功与失败都会跑的尾巴。 */
-  readonly onFinally?: (
-    outcome: ManualCompactionOutcome,
-  ) => void | Promise<void>;
+  readonly onFinally?: (outcome: ManualCompactionOutcome) => void | Promise<void>;
 };
 
 /**
@@ -62,41 +58,26 @@ export type ManualCompactionHooks = {
  * 本函数**不外抛异常**：所有出口（成功 / 明确失败 / 抛错 / 尾巴自身抛错）都在
  * 内部收口，调用方可以直接 `void` 掉它。
  */
-export async function runManualCompaction(
-  runtime: MobileNovelMasterRuntime,
-  scope: {readonly projectId: string; readonly sessionId: string},
-  hooks: ManualCompactionHooks = {},
-): Promise<void> {
+export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<void> {
   const {projectId, sessionId} = scope;
   let ok = false;
   // `null` 表示「压缩本体明确返回失败」（无错误详情）；`{error}` 表示抛错。
   let failure: {readonly error: unknown} | null = null;
   try {
-    const hiddenDepth =
-      await runtime.compactionConditionEvaluator.getHideStartDepth();
+    const hiddenDepth = await runtime.compactionConditionEvaluator.getHideStartDepth();
     if (!hiddenDepth.ok) {
       // 读深度失败（错误通道迁移四期）：与抛错出口同收场（error 非空），
       // UI 尾巴按「压缩链抛错」口径处理。
       failure = {error: hiddenDepth.error};
     } else {
-      const result = await runCompaction(
-        {
-          sessionKkv: runtime.sessionKkv,
-          messages: runtime.messages,
-          messageTranscriptEffects: runtime.messageTranscriptEffects,
-        },
-        // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
-        // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
-        // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
-        // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
-        // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
-        {
-          sessionId,
-          projectId,
-          hideStartDepth: hiddenDepth.value,
-          trigger: 'manual',
-        },
-      );
+      const compactionDeps = {sessionKkv: runtime.sessionKkv, messages: runtime.messages, messageTranscriptEffects: runtime.messageTranscriptEffects};
+      // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
+      // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
+      // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
+      // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
+      // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
+      const compactionOptions = {sessionId, projectId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
+      const result = await runCompaction(compactionDeps, compactionOptions);
       ok = result.ok;
     }
   } catch (error) {

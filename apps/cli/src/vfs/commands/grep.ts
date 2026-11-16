@@ -11,8 +11,7 @@ export async function runGrep(vfs: VfsService, args: readonly string[]): Promise
   }
 
   const prefixFlag = flags.get("path-prefix");
-  const pathPrefix =
-    typeof prefixFlag === "string" ? prefixFlag : undefined;
+  const pathPrefix = typeof prefixFlag === "string" ? prefixFlag : undefined;
   const grepResult = await vfs.grep(pattern, { pathPrefix });
   if (!grepResult.ok) return Result.err(grepResult.error);
   for (const match of grepResult.value) {

@@ -5,13 +5,8 @@
  */
 
 /** Discriminant codes for {@link TdbcError}. */
-export type TdbcErrorCode =
-  | "UNKNOWN_DRIVER"
-  | "INVALID_URL"
-  | "CONNECTION_CLOSED"
-  | "SQLITE_ERROR"
-  | "BATCH_FAILED"
-  | "NESTED_TRANSACTION";
+// nm-style: keep-public — packages/core/src/index.ts 与 @novel-master/core/tdbc 再导出的公共类型契约（无生产直引）
+export type TdbcErrorCode = "UNKNOWN_DRIVER" | "INVALID_URL" | "CONNECTION_CLOSED" | "SQLITE_ERROR" | "BATCH_FAILED" | "NESTED_TRANSACTION";
 
 /**
  * Unified error for TDBC protocol, registry, and driver operations.
@@ -22,11 +17,7 @@ export class TdbcError extends Error {
   readonly sqliteCode?: number;
   declare readonly cause?: unknown;
 
-  constructor(
-    code: TdbcErrorCode,
-    message: string,
-    options?: { driver?: string; sqliteCode?: number; cause?: unknown }
-  ) {
+  constructor(code: TdbcErrorCode, message: string, options?: { driver?: string; sqliteCode?: number; cause?: unknown }) {
     super(message, { cause: options?.cause });
     this.name = "TdbcError";
     this.code = code;

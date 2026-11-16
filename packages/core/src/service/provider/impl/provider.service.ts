@@ -10,10 +10,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import {
-  providerApiKeyRef,
-  resolveProviderApiKeySecretRef,
-} from "@/domain/provider/model/provider.js";
+import { providerApiKeyRef, resolveProviderApiKeySecretRef } from "@/domain/provider/model/provider.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { findSavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -21,14 +18,9 @@ import type { ModelSuggestionRepository } from "@/domain/provider/repositories/m
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { providerApiKeyIsConfigured } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
-import type {
-  CreateProviderInput,
-  EditProviderPatch,
-  ProviderListItem,
-  ProviderService,
-} from "../provider.port.js";
+import type { CreateProviderInput, EditProviderPatch, ProviderListItem, ProviderService } from "../provider.port.js";
 
-export interface DefaultProviderServiceDeps {
+interface DefaultProviderServiceDeps {
   readonly providers: ProviderRepository;
   readonly suggestions: ModelSuggestionRepository;
   readonly savedModels: SavedModelRepository;
@@ -45,7 +37,7 @@ export interface DefaultProviderServiceDeps {
 function requireNonEmptyDisplayName(raw: string, providerId?: string): Result<string, AppError> {
   const trimmed = raw.trim();
   if (trimmed === "") {
-    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: {key: "error.provider.display_name_required"}, ...(providerId != null ? {providerId} : {}) }));
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: { key: "error.provider.display_name_required" }, ...(providerId != null ? { providerId } : {}) }));
   }
   return Result.ok(trimmed);
 }
@@ -58,12 +50,8 @@ export class DefaultProviderService implements ProviderService {
     // 已知失败走返回值（六期门⑦）：storage 失败收 Result.err，决定权交给上层。
     const rows = await this.deps.providers.list();
     if (!rows.ok) return Result.err(rows.error);
-    const items = await Promise.all(
-      rows.value.map(async (p) => ({
-        ...p,
-        apiKeyStatus: await this.apiKeyStatus(p),
-      }))
-    );
+    const { secretStore } = this.deps;
+    const items = await Promise.all(rows.value.map(async (p): Promise<ProviderListItem> => ({ ...p, apiKeyStatus: (await providerApiKeyIsConfigured(p, secretStore)) ? "set" : "not set" })));
     return Result.ok(items);
   }
 
@@ -143,9 +131,7 @@ export class DefaultProviderService implements ProviderService {
     // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
     // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
     const originalSecretRef = resolveProviderApiKeySecretRef(provider);
-    const originalSecretValue = await this.deps.secretStore.get(
-      originalSecretRef
-    );
+    const originalSecretValue = await this.deps.secretStore.get(originalSecretRef);
 
     let secretRef = provider.secretRef;
     let secretOp: "set" | "delete" | "noop" = "noop";
@@ -161,18 +147,13 @@ export class DefaultProviderService implements ProviderService {
       }
     }
 
-    const displayNameResult =
-      patch.displayName !== undefined
-        ? requireNonEmptyDisplayName(patch.displayName, id)
-        : Result.ok(provider.displayName);
+    const displayNameResult = patch.displayName !== undefined ? requireNonEmptyDisplayName(patch.displayName, id) : Result.ok(provider.displayName);
     if (!displayNameResult.ok) return Result.err(displayNameResult.error);
     const displayName = displayNameResult.value;
     const updated: LlmProvider = {
       ...provider,
       protocol: patch.protocol ?? provider.protocol,
-      baseUrl: patch.baseUrl
-        ? normalizeBaseUrl(patch.baseUrl)
-        : provider.baseUrl,
+      baseUrl: patch.baseUrl ? normalizeBaseUrl(patch.baseUrl) : provider.baseUrl,
       displayName,
       headers: patch.headers ?? provider.headers,
       bodyParams: patch.bodyParams ?? provider.bodyParams,
@@ -198,10 +179,7 @@ export class DefaultProviderService implements ProviderService {
         },
         rollback: async () => {
           if (originalSecretValue != null) {
-            await this.deps.secretStore.set(
-              originalSecretRef,
-              originalSecretValue
-            );
+            await this.deps.secretStore.set(originalSecretRef, originalSecretValue);
           } else if (secretOp === "set") {
             // 原本没有 secret：删掉新写的，避免留孤儿凭据。
             if (await this.deps.secretStore.has(secretRef!)) {
@@ -278,7 +256,8 @@ export class DefaultProviderService implements ProviderService {
         // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
         // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
         // 新造码只会让前端拿不到已处理的文案。
-        return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor: {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, providerId: id }));
+        const descriptor = { key: "error.provider.saved_model_in_use", params: { model_name: m.modelName, blocking_refs: blockingRefs.join("、") } } as const;
+        return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor, providerId: id }));
       }
     }
 
@@ -339,13 +318,5 @@ export class DefaultProviderService implements ProviderService {
     const ran = await write.run();
     if (!ran.ok) return Result.err(ran.error);
     return Result.ok(undefined);
-  }
-
-  private async apiKeyStatus(
-    provider: LlmProvider
-  ): Promise<"set" | "not set"> {
-    return (await providerApiKeyIsConfigured(provider, this.deps.secretStore))
-      ? "set"
-      : "not set";
   }
 }

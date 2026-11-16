@@ -145,7 +145,7 @@ export class DefaultVfsService implements InternalVfsService {
     const cwd = options?.cwd;
 
     const matched = paths.filter((entryPath) => {
-      if (cwd != null && !pathUnderDir(entryPath, cwd)) {
+      if (cwd != null && cwd !== "/" && entryPath !== cwd && !entryPath.startsWith(`${cwd}/`)) {
         return false;
       }
       return matchGlob(pattern, entryPath);
@@ -182,6 +182,7 @@ export class DefaultVfsService implements InternalVfsService {
     return Result.err(new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}` }));
   }
 
+  /** nm-style: keep-public — InternalVfsService 端口方法；无 revision 层时与物理 delete 等价。 */
   hardDelete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
     // 无墓碑可 append 时与物理 delete 一致
     return this.delete(scopeKey, path, options);
@@ -196,11 +197,4 @@ export class DefaultVfsService implements InternalVfsService {
   async renamePrefix(_scopeKey: string, oldDirLogical: string, _newDirLogical: string): Promise<Result<void, AppError>> {
     return Result.err(new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePrefix is unsupported without revision history: ${oldDirLogical}` }));
   }
-}
-
-function pathUnderDir(entryPath: string, dir: string): boolean {
-  if (dir === "/") {
-    return true;
-  }
-  return entryPath === dir || entryPath.startsWith(`${dir}/`);
 }

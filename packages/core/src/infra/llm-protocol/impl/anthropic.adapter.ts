@@ -9,30 +9,10 @@
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import type {
-  FetchFn,
-  LlmChatRequest,
-  LlmChatResult,
-  LlmListModelsResult,
-  LlmProtocolAdapter,
-  LlmToolDefinition,
-} from "../ports/adapter.port.js";
-import {
-  anthropicContentToBlocks,
-  blocksToAnthropicContent,
-  chatMessagesToAnthropic,
-} from "../logic/anthropic-content-mapper.js";
-import {
-  createAnthropicSseParserState,
-  feedAnthropicSseChunk,
-  finishAnthropicSse,
-  finishAnthropicSsePartial,
-} from "../logic/anthropic-sse-parser.js";
-import {
-  anthropicToolsNeedWireEncoding,
-  createAnthropicToolNameWire,
-  type AnthropicToolNameWire,
-} from "../logic/anthropic-tool-names.js";
+import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter, LlmToolDefinition } from "../ports/adapter.port.js";
+import { anthropicContentToBlocks, blocksToAnthropicContent, chatMessagesToAnthropic } from "../logic/anthropic-content-mapper.js";
+import { createAnthropicSseParserState, feedAnthropicSseChunk, finishAnthropicSse, finishAnthropicSsePartial } from "../logic/anthropic-sse-parser.js";
+import { anthropicToolsNeedWireEncoding, createAnthropicToolNameWire, type AnthropicToolNameWire } from "../logic/anthropic-tool-names.js";
 import { ANTHROPIC_API_VERSION } from "../logic/anthropic-api-version.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
@@ -40,20 +20,7 @@ import { isRequestAborted } from "../logic/request-abort.js";
 import { applyAnthropicThinkingToBody } from "../logic/apply-thinking-to-body.js";
 import { parseAnthropicUsage } from "../logic/usage-parser.js";
 
-function anthropicTools(
-  tools: readonly LlmToolDefinition[],
-  toolNames?: AnthropicToolNameWire
-): unknown[] {
-  return tools.map((t) => ({
-    name: toolNames?.toWire(t.name) ?? t.name,
-    description: t.description,
-    input_schema: t.inputSchema,
-  }));
-}
-
-function resolveAnthropicToolNameWire(
-  req: LlmChatRequest
-): AnthropicToolNameWire | undefined {
+function resolveAnthropicToolNameWire(req: LlmChatRequest): AnthropicToolNameWire | undefined {
   const names = new Set<string>();
   for (const tool of req.tools ?? []) {
     names.add(tool.name);
@@ -76,51 +43,72 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
-  async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
-  ): Promise<LlmListModelsResult> {
-    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers: { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders } });
+  async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
+    const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders };
+    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string; display_name?: string }> };
     const models = (data.data ?? [])
       .filter((m) => typeof m.id === "string")
       .map((m) => ({
         vendorModelId: m.id!,
-        displayName:
-          typeof m.display_name === "string" ? m.display_name : undefined,
+        displayName: typeof m.display_name === "string" ? m.display_name : undefined,
       }));
     return { models };
   }
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.stream) {
-      return this.chatStream(req);
+      const toolNames = resolveAnthropicToolNameWire(req);
+      const url = joinUrl(req.baseUrl, "/v1/messages");
+      const state = createAnthropicSseParserState();
+
+      try {
+        const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
+        const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.signal };
+        await postSse(url, init, (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.signal });
+      } catch (error) {
+        if (!isRequestAborted(error, req.signal)) {
+          throw error;
+        }
+      }
+
+      const aborted = req.signal?.aborted === true;
+      const finishResult = aborted ? finishAnthropicSsePartial(state, req.onStream, toolNames) : finishAnthropicSse(state, req.onStream, toolNames);
+      const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
+      const assistantText = messageBodyTextFromBlocks(blocks);
+      const usage = parseAnthropicUsage(streamRaw);
+      const result: LlmChatResult = {
+        assistantText,
+        blocks,
+        raw: streamRaw ?? { streamed: true },
+        usage,
+        ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
+      };
+      req.onStream?.({ type: "done", result });
+      return result;
     }
-    return this.chatNonStream(req);
+
+    const toolNames = resolveAnthropicToolNameWire(req);
+    const url = joinUrl(req.baseUrl, "/v1/messages");
+    const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
+    const record = raw as { content?: unknown[] };
+    const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
+    const assistantText = messageBodyTextFromBlocks(blocks);
+    const usage = parseAnthropicUsage(raw);
+    return { assistantText, blocks, raw, usage };
   }
 
-  private buildMessages(
-    req: LlmChatRequest,
-    toolNames?: AnthropicToolNameWire
-  ) {
-    return req.history != null && req.history.length > 0
-      ? chatMessagesToAnthropic(req.history, toolNames)
-      : [
-          {
-            role: "user",
-            content: blocksToAnthropicContent(
-              textBlocks(req.userContent).blocks,
-              toolNames
-            ),
-          },
-        ];
-  }
-
-  private buildBody(
-    req: LlmChatRequest,
-    stream: boolean,
-    toolNames?: AnthropicToolNameWire
-  ): Record<string, unknown> {
+  private buildBody(req: LlmChatRequest, stream: boolean, toolNames?: AnthropicToolNameWire): Record<string, unknown> {
+    let messages: unknown[];
+    if (req.history != null && req.history.length > 0) {
+      messages = chatMessagesToAnthropic(req.history, toolNames);
+    } else {
+      messages = [{ role: "user", content: blocksToAnthropicContent(textBlocks(req.userContent).blocks, toolNames) }];
+    }
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
       // 与 UI 采样默认值同源（`ANTHROPIC_SAMPLING_DEFAULTS.max_tokens`）。
@@ -129,14 +117,14 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       // 刻意**不经** `resolve-thinking-wire.ts` 中转：它与 `thinking-level-presets.ts`
       // 已构成一对既存循环依赖，为一个数字把整对循环拖进 adapter 启动链不划算。
       max_tokens: ANTHROPIC_SAMPLING_DEFAULTS.max_tokens,
-      messages: this.buildMessages(req, toolNames),
+      messages,
       stream,
     };
     if (req.system != null && req.system !== "") {
       body.system = req.system;
     }
     if (req.tools != null && req.tools.length > 0) {
-      body.tools = anthropicTools(req.tools, toolNames);
+      body.tools = req.tools.map((t: LlmToolDefinition) => ({ name: toolNames?.toWire(t.name) ?? t.name, description: t.description, input_schema: t.inputSchema }));
     }
     if (req.sampling?.protocol === "anthropic") {
       const s = req.sampling.anthropic;
@@ -149,65 +137,5 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
     Object.assign(body, req.extraBody);
     return body;
-  }
-
-  private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
-    const toolNames = resolveAnthropicToolNameWire(req);
-    const url = joinUrl(req.baseUrl, "/v1/messages");
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers: { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders }, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.signal });
-    if (!fetched.ok) throw fetched.error;
-    const raw = fetched.value;
-    const record = raw as { content?: unknown[] };
-    const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
-    const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseAnthropicUsage(raw);
-    return { assistantText, blocks, raw, usage };
-  }
-
-  private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
-    const toolNames = resolveAnthropicToolNameWire(req);
-    const url = joinUrl(req.baseUrl, "/v1/messages");
-    const state = createAnthropicSseParserState();
-
-    try {
-      await postSse(
-        url,
-        {
-          method: "POST",
-          headers: {
-            "x-api-key": req.apiKey,
-            "anthropic-version": ANTHROPIC_API_VERSION,
-            "Content-Type": "application/json",
-            ...req.extraHeaders,
-          },
-          body: JSON.stringify(this.buildBody(req, true, toolNames)),
-          signal: req.signal,
-        },
-        (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream),
-        undefined,
-        { fetchFn: this.fetchFn, signal: req.signal }
-      );
-    } catch (error) {
-      if (!isRequestAborted(error, req.signal)) {
-        throw error;
-      }
-    }
-
-    const aborted = req.signal?.aborted === true;
-    const finishResult = aborted
-      ? finishAnthropicSsePartial(state, req.onStream, toolNames)
-      : finishAnthropicSse(state, req.onStream, toolNames);
-    const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-    const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseAnthropicUsage(streamRaw);
-    const result: LlmChatResult = {
-      assistantText,
-      blocks,
-      raw: streamRaw ?? { streamed: true },
-      usage,
-      ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
-    };
-    req.onStream?.({ type: "done", result });
-    return result;
   }
 }

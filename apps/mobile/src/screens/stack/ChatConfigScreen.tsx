@@ -2,10 +2,7 @@
  * 聊天相关偏好：父会话流式、子会话流式、思考提示词、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
-import {
-  DEFAULT_HIDE_START_DEPTH,
-  type CompactionConditions,
-} from '@novel-master/core/compaction';
+import {DEFAULT_HIDE_START_DEPTH, type CompactionConditions} from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
 import {Platform, StyleSheet, Switch} from 'react-native';
 import {ProfileSwitchItem} from '../../components/profile/ProfileSwitchItem';
@@ -16,20 +13,14 @@ import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {
-  readMessageNotificationEnabled,
-  writeMessageNotificationEnabled,
-} from '../../storage/message-notification-pref';
+import {readMessageNotificationEnabled, writeMessageNotificationEnabled} from '../../storage/message-notification-pref';
 import {
   ensureAgentNotificationPermission,
   getAgentNotificationPermissionStatus,
   requestAgentNotificationPermissionManually,
   setKeepAliveResidentEnabled,
 } from '../../services/agent-finished-notification';
-import {
-  readChatRichTextEnabled,
-  writeChatRichTextEnabled,
-} from '../../storage/chat-rich-text-pref';
+import {readChatRichTextEnabled, writeChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
@@ -50,18 +41,13 @@ export function ChatConfigScreen() {
   const [subagentStreamEnabled, setSubagentStreamEnabled] = useState(true);
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [messageNotificationEnabled, setMessageNotificationEnabled] =
-    useState(false);
+  const [messageNotificationEnabled, setMessageNotificationEnabled] = useState(false);
   // 「通知权限」行三态：checking 兼作首帧占位与手动申请中的防重入标记。
-  const [notificationPermission, setNotificationPermission] = useState<
-    'authorized' | 'denied' | 'checking'
-  >('checking');
+  const [notificationPermission, setNotificationPermission] = useState<'authorized' | 'denied' | 'checking'>('checking');
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
-  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState(
-    String(DEFAULT_HIDE_START_DEPTH),
-  );
+  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState(String(DEFAULT_HIDE_START_DEPTH));
 
   const refreshStreamPref = useCallback(async () => {
     const pref = await runtime.preferences.getLlmStreamEnabled();
@@ -101,9 +87,7 @@ export function ChatConfigScreen() {
     if (appUi == null) {
       return;
     }
-    setMessageNotificationEnabled(
-      await readMessageNotificationEnabled(appUi),
-    );
+    setMessageNotificationEnabled(await readMessageNotificationEnabled(appUi));
   }, [appUi]);
 
   const refreshNotificationPermission = useCallback(async () => {
@@ -128,32 +112,19 @@ export function ChatConfigScreen() {
     const c = stored.value ?? DEFAULT_CONDITIONS;
     setCompactionEnabled(c.enabled);
     setCompactionTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
-    setCompactionHideStartDepth(
-      c.hideStartDepth != null
-        ? String(c.hideStartDepth)
-        : String(DEFAULT_HIDE_START_DEPTH),
-    );
+    setCompactionHideStartDepth(c.hideStartDepth != null ? String(c.hideStartDepth) : String(DEFAULT_HIDE_START_DEPTH));
   }, [runtime]);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshStreamPref().catch(() => undefined);
-      refreshSubagentStreamPref().catch(() => undefined);
-      refreshThinkingContextPref().catch(() => undefined);
-      refreshChatRichTextPref().catch(() => undefined);
-      refreshMessageNotificationPref().catch(() => undefined);
-      refreshNotificationPermission().catch(() => undefined);
-      refreshCompaction().catch(() => undefined);
-    }, [
-      refreshStreamPref,
-      refreshSubagentStreamPref,
-      refreshThinkingContextPref,
-      refreshChatRichTextPref,
-      refreshMessageNotificationPref,
-      refreshNotificationPermission,
-      refreshCompaction,
-    ]),
-  );
+  const onScreenFocus = useCallback(() => {
+    refreshStreamPref().catch(() => undefined);
+    refreshSubagentStreamPref().catch(() => undefined);
+    refreshThinkingContextPref().catch(() => undefined);
+    refreshChatRichTextPref().catch(() => undefined);
+    refreshMessageNotificationPref().catch(() => undefined);
+    refreshNotificationPermission().catch(() => undefined);
+    refreshCompaction().catch(() => undefined);
+  }, [refreshStreamPref, refreshSubagentStreamPref, refreshThinkingContextPref, refreshChatRichTextPref, refreshMessageNotificationPref, refreshNotificationPermission, refreshCompaction]);
+  useFocusEffect(onScreenFocus);
 
   const handleNotificationPermissionPress = useCallback(() => {
     // 防重入：申请中（checking）不重复发起；已授权（authorized）无需操作。
@@ -162,9 +133,8 @@ export function ChatConfigScreen() {
     }
     setNotificationPermission('checking');
     // 权限弹窗关闭不触发 navigation focus，回执是状态更新的可靠源。
-    requestAgentNotificationPermissionManually()
-      .then(setNotificationPermission)
-      .catch(() => setNotificationPermission('denied'));
+    const permissionRequest = requestAgentNotificationPermissionManually();
+    permissionRequest.then(setNotificationPermission).catch(() => setNotificationPermission('denied'));
   }, [notificationPermission]);
 
   // 四个偏好开关采用「乐观更新 + 失败回滚」：先立即翻转开关保证跟手，
@@ -186,11 +156,7 @@ export function ChatConfigScreen() {
   // 从「即将生效的值」组装完整 conditions；校验失败或写库失败返回 false，
   // 由调用方决定回滚（开关回滚到原值；输入框保留用户输入待下次提交）。
   const persistCompaction = useCallback(
-    async (next?: {
-      enabled?: boolean;
-      tokenRatio?: string;
-      hideStartDepth?: string;
-    }): Promise<boolean> => {
+    async (next?: {enabled?: boolean; tokenRatio?: string; hideStartDepth?: string}): Promise<boolean> => {
       const enabled = next?.enabled ?? compactionEnabled;
       const ratioText = next?.tokenRatio ?? compactionTokenRatio;
       const hideText = next?.hideStartDepth ?? compactionHideStartDepth;
@@ -222,13 +188,7 @@ export function ChatConfigScreen() {
         return false;
       }
     },
-    [
-      compactionEnabled,
-      compactionTokenRatio,
-      compactionHideStartDepth,
-      runtime,
-      showToast,
-    ],
+    [compactionEnabled, compactionTokenRatio, compactionHideStartDepth, runtime, showToast],
   );
 
   return (
@@ -236,9 +196,7 @@ export function ChatConfigScreen() {
       <ProfileSwitchItem
         icon="⚡"
         label="父会话流式"
-        subtitle={
-          llmStreamEnabled ? '主对话回复边生成边显示（推荐）' : '主对话回复完成后一次性显示'
-        }
+        subtitle={llmStreamEnabled ? '主对话回复边生成边显示（推荐）' : '主对话回复完成后一次性显示'}
         value={llmStreamEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -252,11 +210,7 @@ export function ChatConfigScreen() {
       <ProfileSwitchItem
         icon="🤖"
         label="子会话流式"
-        subtitle={
-          subagentStreamEnabled
-            ? '子智能体回复边生成边显示'
-            : '子智能体回复完成后一次性显示'
-        }
+        subtitle={subagentStreamEnabled ? '子智能体回复边生成边显示' : '子智能体回复完成后一次性显示'}
         value={subagentStreamEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -284,11 +238,7 @@ export function ChatConfigScreen() {
       <ProfileSwitchItem
         icon="📝"
         label="富文本消息"
-        subtitle={
-          chatRichTextEnabled
-            ? '用户与助手消息解析 Markdown/HTML'
-            : '聊天消息显示为纯文本'
-        }
+        subtitle={chatRichTextEnabled ? '用户与助手消息解析 Markdown/HTML' : '聊天消息显示为纯文本'}
         value={chatRichTextEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -305,11 +255,7 @@ export function ChatConfigScreen() {
       <ProfileSwitchItem
         icon="🔔"
         label="消息通知"
-        subtitle={
-          messageNotificationEnabled
-            ? '进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒'
-            : '无常驻通知、无提醒（生成行为不受影响）'
-        }
+        subtitle={messageNotificationEnabled ? '进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒' : '无常驻通知、无提醒（生成行为不受影响）'}
         value={messageNotificationEnabled}
         tokens={tokens}
         onValueChange={enabled => {
@@ -340,23 +286,13 @@ export function ChatConfigScreen() {
         <ProfileMenuItem
           icon="🔔"
           label="通知权限"
-          value={
-            notificationPermission === 'authorized'
-              ? '已授权'
-              : notificationPermission === 'denied'
-                ? '未授权'
-                : '申请中…'
-          }
+          value={notificationPermission === 'authorized' ? '已授权' : notificationPermission === 'denied' ? '未授权' : '申请中…'}
           onPress={handleNotificationPermissionPress}
           tokens={tokens}
         />
       ) : null}
 
-      <FormSectionCard
-        title="压缩配置"
-        tokens={tokens}
-        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。"
-      >
+      <FormSectionCard title="压缩配置" tokens={tokens} hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
         <FormField label="隐藏起始深度" tokens={tokens} row>
           <FormTextInput
             tokens={tokens}

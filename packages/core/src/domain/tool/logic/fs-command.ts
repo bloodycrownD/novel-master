@@ -55,7 +55,7 @@ export type FsCommandResult = { readonly ok: true } | FsLsOutput;
 
 function requireField(value: string | undefined, field: string): Result<string, AppError> {
   if (typeof value !== "string" || value === "") {
-    return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: missing or empty ${field}`}));
+    return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: "fs", detail: `Invalid fs command: missing or empty ${field}` }));
   }
   return Result.ok(value);
 }
@@ -104,7 +104,7 @@ export function parseFsCommand(input: FsToolInput): Result<FsCommand, AppError> 
       return Result.ok({ kind: "ls", dir, recursive: input.recursive === true });
     }
     default:
-      return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: ${typeof action === "string" && action !== "" ? `unknown action: ${action}` : "missing action"}`}));
+      return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: "fs", detail: `Invalid fs command: ${typeof action === "string" && action !== "" ? `unknown action: ${action}` : "missing action"}` }));
   }
 }
 
@@ -117,66 +117,26 @@ export function isMutatingFsCommand(input: unknown): boolean {
   return classifyFsCommand(input).mutating;
 }
 
-function formatListEntry(entry: VfsListEntry): string {
-  return `${entry.path}\t${entry.kind}`;
-}
-
-function formatLsOutput(entries: readonly VfsListEntry[]): FsLsOutput {
-  const lines = entries.map(formatListEntry);
-  const capped = capUtf8Bytes(lines, TOOL_OUTPUT_MAX_BYTES);
-  const formattedEntries = capped.lines.map((line) => {
-    const tab = line.indexOf("\t");
-    const path = tab >= 0 ? line.slice(0, tab) : line;
-    const kind = tab >= 0 ? line.slice(tab + 1) : "file";
-    return {
-      path,
-      kind: kind as VfsListEntry["kind"],
-    };
-  });
-  const truncated = capped.truncated;
-  const omitted = truncated ? entries.length - formattedEntries.length : undefined;
-  return {
-    entries: formattedEntries,
-    total: entries.length,
-    truncated,
-    ...(omitted != null && omitted > 0 ? { omitted } : {}),
-  };
-}
-
-/** `rm` 未带 `-r` 时，若目标是目录则自动递归删除（兼容 Agent 常见用法）。 */
-async function rmRecursiveWhenTargetIsDirectory(vfs: VfsService, path: string, recursive: boolean): Promise<Result<boolean, AppError>> {
-  if (recursive) {
-    return Result.ok(true);
-  }
-  const read = await vfs.read(path);
-  if (read.ok) {
-    return Result.ok(false);
-  }
-  if (read.error.key === "VFS_IS_DIRECTORY") {
-    return Result.ok(true);
-  }
-  if (read.error.key !== "VFS_NOT_FOUND") {
-    return Result.err(read.error);
-  }
-  const entries = await vfs.list(path);
-  if (entries.ok) {
-    return Result.ok(entries.value.length > 0);
-  }
-  if (entries.error.key === "VFS_NOT_FOUND") {
-    return Result.ok(false);
-  }
-  return Result.err(entries.error);
-}
-
 /** Executes a parsed fs command against the injected VFS instance.
  * 已知失败走返回值通道（四期门⑦）：VFS `Result` 失败原样接力，由调用方工具闭包 → tool-runner 框架级统一收口。
  */
 export async function executeFsCommand(vfs: VfsService, parsed: FsCommand): Promise<Result<FsCommandResult, AppError>> {
   switch (parsed.kind) {
     case "rm": {
-      const recursiveWhenDirectory = await rmRecursiveWhenTargetIsDirectory(vfs, parsed.path, parsed.recursive);
-      if (!recursiveWhenDirectory.ok) return Result.err(recursiveWhenDirectory.error);
-      const deleted = await vfs.delete(parsed.path, { recursive: recursiveWhenDirectory.value });
+      // `rm` 未带 `-r` 时，若目标是目录则自动递归删除（兼容 Agent 常见用法）。
+      let recursive = parsed.recursive;
+      if (!recursive) {
+        const read = await vfs.read(parsed.path);
+        if (read.ok) recursive = false;
+        else if (read.error.key === "VFS_IS_DIRECTORY") recursive = true;
+        else if (read.error.key !== "VFS_NOT_FOUND") return Result.err(read.error);
+        else {
+          const entries = await vfs.list(parsed.path);
+          if (entries.ok) recursive = entries.value.length > 0;
+          else if (entries.error.key !== "VFS_NOT_FOUND") return Result.err(entries.error);
+        }
+      }
+      const deleted = await vfs.delete(parsed.path, { recursive });
       if (!deleted.ok) return Result.err(deleted.error);
       return Result.ok({ ok: true as const });
     }
@@ -205,7 +165,24 @@ export async function executeFsCommand(vfs: VfsService, parsed: FsCommand): Prom
       const listOptions = { recursive: parsed.recursive };
       const entries = await vfs.list(parsed.dir, listOptions);
       if (!entries.ok) return Result.err(entries.error);
-      return Result.ok(formatLsOutput(entries.value));
+      const lines = entries.value.map((entry) => `${entry.path}\t${entry.kind}`);
+      const capped = capUtf8Bytes(lines, TOOL_OUTPUT_MAX_BYTES);
+      const formattedEntries = capped.lines.map((line) => {
+        const tab = line.indexOf("\t");
+        const path = tab >= 0 ? line.slice(0, tab) : line;
+        const kind = tab >= 0 ? line.slice(tab + 1) : "file";
+        return {
+          path,
+          kind: kind as VfsListEntry["kind"],
+        };
+      });
+      const omitted = capped.truncated ? entries.value.length - formattedEntries.length : undefined;
+      return Result.ok({
+        entries: formattedEntries,
+        total: entries.value.length,
+        truncated: capped.truncated,
+        ...(omitted != null && omitted > 0 ? { omitted } : {}),
+      });
     }
   }
 }

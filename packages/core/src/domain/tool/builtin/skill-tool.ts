@@ -23,7 +23,6 @@
 
 import { z } from "zod";
 
-import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -151,20 +150,6 @@ const SKILL_FIELD_LABELS: Partial<Record<keyof SkillToolInput, string>> = {
   domain: '技能域 domain（"global" 或 "project"）——edit 必须显式指定改哪一份副本',
 };
 
-/** 必填字段缺失时按 action 补 issue（superRefine 回调，zod 4 签名）。 */
-function refineRequiredFields(input: { action: SkillToolInput["action"] } & Record<string, unknown>, ctx: z.RefinementCtx): void {
-  for (const field of SKILL_ACTION_REQUIRED_FIELDS[input.action] ?? []) {
-    const value = input[field];
-    if (value === undefined || value === "") {
-      ctx.addIssue({
-        code: "custom",
-        path: [field],
-        message: `skill 的 ${input.action} 动作必须提供${SKILL_FIELD_LABELS[field] ?? String(field)}`,
-      });
-    }
-  }
-}
-
 /**
  * 必填字段类型收窄。
  *
@@ -173,16 +158,9 @@ function refineRequiredFields(input: { action: SkillToolInput["action"] } & Reco
  */
 function requiredField<T>(value: T | undefined, field: string): T {
   if (value === undefined) {
-    throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用`});
+    throw new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用` });
   }
   return value;
-}
-
-/** 从装配期预算好的生效清单拼给 LLM 看的「可用技能」文案（照 formatCallableList）。 */
-function formatEffectiveSkills(effective: readonly EffectiveSkill[]): string {
-  const usable = effective.filter((s) => s.effective);
-  if (usable.length === 0) return "（暂无可用技能）";
-  return usable.map((s) => (s.description != null && s.description.trim().length > 0 ? `- ${s.name}：${s.description.trim()}` : `- ${s.name}`)).join("\n");
 }
 
 /** load 已在提示词中时的短提示（与 $ 引用的 alreadyReferenced 同语义）。 */
@@ -208,16 +186,23 @@ const skillInputObjectSchema = z.object({
   limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
 });
 
-const skillInputSchema = skillInputObjectSchema.superRefine(refineRequiredFields);
+/** 必填字段缺失时按 action 补 issue（superRefine 回调，zod 4 签名）。 */
+const skillInputSchema = skillInputObjectSchema.superRefine((input, ctx) => {
+  for (const field of SKILL_ACTION_REQUIRED_FIELDS[input.action] ?? []) {
+    const value = input[field];
+    if (value === undefined || value === "") ctx.addIssue({ code: "custom", path: [field], message: `skill 的 ${input.action} 动作必须提供${SKILL_FIELD_LABELS[field] ?? String(field)}` });
+  }
+});
 
 export const skillTool: Tool<SkillToolInput, SkillToolOutput, BuiltinToolContext> = {
   name: SKILL_TOOL_NAME,
   description: (ctx) => {
-    const effective = ctx.skills?.effective ?? [];
+    const usable = (ctx.skills?.effective ?? []).filter((s) => s.effective);
+    const availableSkills = usable.length === 0 ? "（暂无可用技能）" : usable.map((s) => (s.description != null && s.description.trim().length > 0 ? `- ${s.name}：${s.description.trim()}` : `- ${s.name}`)).join("\n");
     return `读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。
 
 当前可用技能（装配期快照，回合内变更不即时反映）：
-${formatEffectiveSkills(effective)}
+${availableSkills}
 
 action 说明：
 - load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示
@@ -294,7 +279,7 @@ action 说明：
   async run(input, ctx): Promise<Result<SkillToolOutput, AppError>> {
     const skills = ctx.skills;
     if (skills == null) {
-      return Result.err(new AppError("TOOL_FAILED", {toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）"}));
+      return Result.err(new AppError("TOOL_FAILED", { toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）" }));
     }
     const service: SkillService = skills.service;
 
@@ -351,7 +336,7 @@ action 说明：
         // 报错文案与「推导前先判定」逐字一致。
         const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.value.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
-          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`}));
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)` }));
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
         return Result.ok({

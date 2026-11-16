@@ -2,7 +2,7 @@
  * Mobile 划词批注入口门闩（P1-D2）：仅预览态 + 聊天会话工作区。
  */
 
-export type FileAnnotateScopeKind =
+type FileAnnotateScopeKind =
   | 'global'
   | 'project'
   | 'session'

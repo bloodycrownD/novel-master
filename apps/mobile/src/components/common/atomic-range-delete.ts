@@ -18,11 +18,7 @@ export type AtomicDeleteRange = {
  *
  * @returns 整段删除后的新串；无需原子删拦截时返回 null
  */
-export function tryAtomicRangeDelete(
-  prev: string,
-  next: string,
-  ranges: readonly AtomicDeleteRange[],
-): string | null {
+export function tryAtomicRangeDelete(prev: string, next: string, ranges: readonly AtomicDeleteRange[]): string | null {
   if (next.length >= prev.length) {
     return null;
   }
@@ -40,9 +36,7 @@ export function tryAtomicRangeDelete(
     return null;
   }
 
-  const hitRange = ranges.find(
-    range => deleteStart < range.end && deleteEnd > range.start,
-  );
+  const hitRange = ranges.find(range => deleteStart < range.end && deleteEnd > range.start);
   if (hitRange == null) {
     return null;
   }

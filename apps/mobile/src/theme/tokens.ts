@@ -51,7 +51,7 @@ export const lightTheme: ThemeTokens = {
   danger: '#FF3B30',
 };
 
-export const darkTheme: ThemeTokens = {
+const darkTheme: ThemeTokens = {
   background: '#000000',
   bgSecondary: '#1C1C1E',
   surface: '#1C1C1E',

@@ -23,34 +23,27 @@ type AppInfoSeams = {
 let seamsOverride: AppInfoSeams | null = null;
 let defaultSeamsPromise: Promise<AppInfoSeams> | null = null;
 
-async function loadDefaultSeams(): Promise<AppInfoSeams> {
-  const [{ app, shell }, { runUpdateCheck }] = await Promise.all([
-    import("electron"),
-    import("../../services/update-check.service.js"),
-  ]);
-  return {
-    getVersion: () => app.getVersion(),
-    getName: () => app.getName(),
-    getPlatform: () => process.platform,
-    runUpdateCheck,
-    openExternal: (url) => shell.openExternal(url),
-  };
-}
-
 async function getSeams(): Promise<AppInfoSeams> {
   if (seamsOverride) {
     return seamsOverride;
   }
   if (!defaultSeamsPromise) {
-    defaultSeamsPromise = loadDefaultSeams();
+    defaultSeamsPromise = (async () => {
+      const [{ app, shell }, { runUpdateCheck }] = await Promise.all([import("electron"), import("../../services/update-check.service.js")]);
+      return {
+        getVersion: () => app.getVersion(),
+        getName: () => app.getName(),
+        getPlatform: () => process.platform,
+        runUpdateCheck,
+        openExternal: (url) => shell.openExternal(url),
+      };
+    })();
   }
   return defaultSeamsPromise;
 }
 
 /** @internal Test seam for handler unit tests. */
-export function __setAppInfoSeamsForTests(
-  overrides: Partial<AppInfoSeams> | null,
-): void {
+export function __setAppInfoSeamsForTests(overrides: Partial<AppInfoSeams> | null): void {
   if (overrides === null) {
     seamsOverride = null;
     defaultSeamsPromise = null;
@@ -102,9 +95,7 @@ export async function handleAppCheckForUpdates(): Promise<AppCheckForUpdatesResp
   }
 }
 
-export async function handleAppOpenExternal(
-  req: AppOpenExternalRequest,
-): Promise<IpcResult<void>> {
+export async function handleAppOpenExternal(req: AppOpenExternalRequest): Promise<IpcResult<void>> {
   try {
     const url = req.url?.trim();
     if (!url || !/^https?:\/\//i.test(url)) {

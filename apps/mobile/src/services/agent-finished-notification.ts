@@ -12,11 +12,7 @@
  *
  * @module services/agent-finished-notification
  */
-import notifee, {
-  AndroidImportance,
-  AuthorizationStatus,
-  EventType,
-} from '@notifee/react-native';
+import notifee, {AndroidImportance, AuthorizationStatus, EventType} from '@notifee/react-native';
 import {AppState, Platform} from 'react-native';
 import type {navigationContainerRef as NavigationContainerRef} from '@/navigation/navigation-container-ref';
 import {timingLog} from '@/debug/run-timing';
@@ -82,7 +78,7 @@ let keepAliveDisplayedVersion = -1;
 let keepAliveChain: Promise<void> = Promise.resolve();
 
 /** 保活通知的内容标签：项目名 + 会话名（取不到时对应字段缺省）。 */
-export interface AgentKeepAliveLabel {
+interface AgentKeepAliveLabel {
   readonly projectName?: string;
   readonly sessionTitle?: string;
 }
@@ -152,10 +148,7 @@ async function reconcileKeepAlive(): Promise<void> {
     keepAliveDisplayedVersion = keepAliveLabelsVersion;
     return;
   }
-  if (
-    keepAliveDesired === keepAliveRunning &&
-    keepAliveDisplayedVersion === keepAliveLabelsVersion
-  ) {
+  if (keepAliveDesired === keepAliveRunning && keepAliveDisplayedVersion === keepAliveLabelsVersion) {
     return;
   }
   if (!keepAliveDesired && !keepAliveRunning) {
@@ -231,9 +224,7 @@ export async function ensureAgentNotificationPermission(): Promise<boolean> {
     return false;
   }
   const settings = await notifee.requestPermission();
-  const granted =
-    settings.authorizationStatus === AuthorizationStatus.AUTHORIZED ||
-    settings.authorizationStatus === AuthorizationStatus.PROVISIONAL;
+  const granted = settings.authorizationStatus === AuthorizationStatus.AUTHORIZED || settings.authorizationStatus === AuthorizationStatus.PROVISIONAL;
   if (!granted) {
     permissionDenied = true;
   }
@@ -247,10 +238,7 @@ export function resetAgentNotificationPermissionStateForTests(): void {
 
 /** 授权态归一：AUTHORIZED / PROVISIONAL 视为 authorized，DENIED 视为 denied。 */
 function isAuthorizationGranted(status: number): boolean {
-  return (
-    status === AuthorizationStatus.AUTHORIZED ||
-    status === AuthorizationStatus.PROVISIONAL
-  );
+  return status === AuthorizationStatus.AUTHORIZED || status === AuthorizationStatus.PROVISIONAL;
 }
 
 /**
@@ -260,16 +248,12 @@ function isAuthorizationGranted(status: number): boolean {
  * 范围），均恒 authorized；Android 13+ 经 notifee.getNotificationSettings()
  * 读取 authorizationStatus 判定。
  */
-export async function getAgentNotificationPermissionStatus(): Promise<
-  'authorized' | 'denied'
-> {
+export async function getAgentNotificationPermissionStatus(): Promise<'authorized' | 'denied'> {
   if (Platform.OS !== 'android' || Platform.Version < 33) {
     return 'authorized';
   }
   const settings = await notifee.getNotificationSettings();
-  return isAuthorizationGranted(settings.authorizationStatus)
-    ? 'authorized'
-    : 'denied';
+  return isAuthorizationGranted(settings.authorizationStatus) ? 'authorized' : 'denied';
 }
 
 /**
@@ -281,9 +265,7 @@ export async function getAgentNotificationPermissionStatus(): Promise<
  * channelId），由用户手动开启——notifee 9.1.8 无法区分软拒绝/永久拒绝，
  * 采用「手动申请被拒即跳设置页」的行为推断，无需三态区分。
  */
-export async function requestAgentNotificationPermissionManually(): Promise<
-  'authorized' | 'denied'
-> {
+export async function requestAgentNotificationPermissionManually(): Promise<'authorized' | 'denied'> {
   if (Platform.OS !== 'android' || Platform.Version < 33) {
     return 'authorized';
   }
@@ -315,11 +297,7 @@ export function resetFailedNotifyMergeStateForTests(): void {
  * 前台（AppState active）不发；失败通知按会话 5 分钟窗口合并抑制。
  * 通知 data 携带 sessionId，点按路径据此直达会话。
  */
-export async function notifyAgentRunFinished(input: {
-  readonly sessionId: string;
-  readonly sessionTitle: string | null | undefined;
-  readonly status: 'finished' | 'failed';
-}): Promise<void> {
+export async function notifyAgentRunFinished(input: {readonly sessionId: string; readonly sessionTitle: string | null | undefined; readonly status: 'finished' | 'failed'}): Promise<void> {
   if (Platform.OS !== 'android') {
     return;
   }
@@ -341,9 +319,7 @@ export async function notifyAgentRunFinished(input: {
     title: input.status === 'finished' ? '生成完成' : '生成失败',
     body:
       input.sessionTitle != null && input.sessionTitle !== ''
-        ? `「${input.sessionTitle}」${
-            input.status === 'finished' ? '生成结束' : '的生成已中断'
-          }`
+        ? `「${input.sessionTitle}」${input.status === 'finished' ? '生成结束' : '的生成已中断'}`
         : input.status === 'finished'
         ? '本次生成已结束'
         : '本次生成已中断',
@@ -367,10 +343,7 @@ export async function notifyAgentRunFinished(input: {
  * 无标签 start（受理段）在常驻模式下同样 no-op：受理时该会话无标签，
  * delete 不改版本，reconcile 不刷新。
  */
-export function startAgentKeepAliveService(
-  sessionId?: string,
-  label?: AgentKeepAliveLabel,
-): Promise<void> {
+export function startAgentKeepAliveService(sessionId?: string, label?: AgentKeepAliveLabel): Promise<void> {
   if (Platform.OS !== 'android') {
     return Promise.resolve();
   }
@@ -414,10 +387,7 @@ export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
   return enqueueKeepAliveSync(false);
 }
 
-function labelEquals(
-  a: AgentKeepAliveLabel | undefined,
-  b: AgentKeepAliveLabel | undefined,
-): boolean {
+function labelEquals(a: AgentKeepAliveLabel | undefined, b: AgentKeepAliveLabel | undefined): boolean {
   if (a === b) {
     return true;
   }
@@ -438,14 +408,8 @@ function buildKeepAliveContent(): {
     return {title: 'novel master · 空闲'};
   }
   const latest = labels[labels.length - 1];
-  const scopeText =
-    latest == null
-      ? ''
-      : [latest.projectName, latest.sessionTitle].filter(Boolean).join(' · ');
-  const title =
-    latest?.sessionTitle != null
-      ? `正在生成 · ${latest.sessionTitle}`
-      : '正在生成';
+  const scopeText = latest == null ? '' : [latest.projectName, latest.sessionTitle].filter(Boolean).join(' · ');
+  const title = latest?.sessionTitle != null ? `正在生成 · ${latest.sessionTitle}` : '正在生成';
   const lines: string[] = [];
   if (scopeText !== '') {
     lines.push(scopeText);
@@ -464,9 +428,7 @@ function buildKeepAliveContent(): {
  * 在 dispose 时退订；app 被杀后点通知属冷启动场景，PRD 未承诺
  * （杀 app 后 run 已终止）。
  */
-export function registerAgentNotificationTapHandling(
-  onTapSession: (sessionId: string) => void | Promise<void>,
-): () => void {
+export function registerAgentNotificationTapHandling(onTapSession: (sessionId: string) => void | Promise<void>): () => void {
   tapHandler = onTapSession;
   return notifee.onForegroundEvent(({type, detail}) => {
     if (type !== EventType.PRESS) {
@@ -484,19 +446,13 @@ export function navigateToChatTabFromNotification(): void {
   // 惰性 require：本模块对 navigation-container-ref 的顶层 import 在特定
   // 依赖解析顺序下会构成 metro 运行时 require-cycle 报错（点按导航链），
   // 调用时导航模块早已初始化完毕，按需引入即可打破初始化期环。
-  const {navigationContainerRef} =
-    require('@/navigation/navigation-container-ref') as {
-      navigationContainerRef: typeof NavigationContainerRef;
-    };
+  const {navigationContainerRef} = require('@/navigation/navigation-container-ref') as {navigationContainerRef: typeof NavigationContainerRef};
   const ref = navigationContainerRef;
   if (!ref.isReady()) {
     return;
   }
   // MainTabs 的参数为 NavigatorScreenParams；无类型参数时用泛型安全的裸 navigate。
-  (ref.navigate as (name: string, params?: {screen?: string}) => void)(
-    'MainTabs',
-    {screen: 'Chat'},
-  );
+  (ref.navigate as (name: string, params?: {screen?: string}) => void)('MainTabs', {screen: 'Chat'});
 }
 
 // 前台服务 runner：常驻 promise（既不 resolve 也不 reject），

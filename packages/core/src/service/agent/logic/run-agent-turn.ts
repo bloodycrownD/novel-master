@@ -192,6 +192,12 @@ export class AgentTurnError extends Error {
   }
 }
 
+/** 装配期工具注册表（`BuiltinToolContext` 绑定；主 / 子装配点共用）。 */
+type AgentToolRegistry = ToolRegistry<BuiltinToolContext>;
+
+/** {@link assembleAgentsToolContext} 的返回：工具不可用时为 undefined。 */
+type AgentsToolContext = BuiltinToolAgentsContext | undefined;
+
 /**
  * 预算并装配 `skill` 工具上下文（主 / 子两个装配点共用，D2）。
  *
@@ -202,11 +208,7 @@ export class AgentTurnError extends Error {
  *
  * 注：skillsIndex（提示词技能索引）的 D4 置空联动属 Step 10，不在本函数范围。
  */
-export async function assembleSkillsToolContext(
-  runtime: Pick<AgentTurnRuntimePort, "skills">,
-  projectId: string,
-  registry: ToolRegistry<BuiltinToolContext>
-): Promise<BuiltinToolSkillsContext | undefined> {
+export async function assembleSkillsToolContext(runtime: Pick<AgentTurnRuntimePort, "skills">, projectId: string, registry: AgentToolRegistry): Promise<BuiltinToolSkillsContext | undefined> {
   const service = runtime.skills?.();
   if (service == null) return undefined;
   if (!registry.list().includes(SKILL_TOOL_NAME)) return undefined;
@@ -277,12 +279,7 @@ export async function assembleSearchToolContext(store: SearchConfigStore): Promi
  * 注：`agentRegistry.list()` 返回 Promise，而工具 description lambda 是同步
  * 求值——所以快照必须装配期预算（照 skills / task 同款模式），不能 lambda 现查。
  */
-export function assembleAgentsToolContext(
-  agentRegistry: AgentRegistryService,
-  allDefs: readonly AgentDefinition[],
-  probeNames: readonly string[],
-  registry: ToolRegistry<BuiltinToolContext>
-): BuiltinToolAgentsContext | undefined {
+export function assembleAgentsToolContext(agentRegistry: AgentRegistryService, allDefs: readonly AgentDefinition[], probeNames: readonly string[], registry: AgentToolRegistry): AgentsToolContext {
   if (!registry.list().includes(AGENT_TOOL_NAME)) return undefined;
   return {
     registry: agentRegistry,
@@ -382,7 +379,7 @@ function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, w
   const savedModelId = def.model ?? fallbackSavedModelId;
   if (savedModelId == null || savedModelId === "") {
     // missingKey（subagent/grandchild_model_missing）走 descriptor 通道接管 messageKey，码表文案模板保持既有。
-    return Result.err(new AppError("AGENT_MODEL_NOT_SET", {descriptor: {key: missingKey}}));
+    return Result.err(new AppError("AGENT_MODEL_NOT_SET", { descriptor: { key: missingKey } }));
   }
   return Result.ok({ savedModelId, workspaceModelId });
 }
@@ -1174,7 +1171,7 @@ async function runChildAgent(args: {
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
       // 五期门⑦：claim 失败（同一子会话已有 in-flight run）沿 `Result.err` 交回，
       // task 工具按 `!ok` 转给模型（child_session_busy 可重试）。
-      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", descriptor: {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}}}));
+      return Result.err(new AppError("TOOL_FAILED", { toolName: "task", descriptor: { key: "error.agent.child_session_busy", params: { child_session_id: childSessionId } } }));
     }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。
@@ -1243,12 +1240,13 @@ async function runChildAgent(args: {
     // 纯空白串（" "），若只按 prompt 判空，这条 user 消息连同已物化的 fileAttachment
     // 会一起不落库——task 却照常「正常」返回，附件静默蒸发、模型毫不知情。
     if ((opts.prompt != null && opts.prompt.trim().length > 0) || (opts.attachments != null && opts.attachments.length > 0)) {
-      const appended = await session.append("user", textBlocks(opts.prompt ?? ""), {
+      const appendOptions = {
         // fileAttachment 预算内物化的附件（spec G5）：与主会话附件同链路——
         // `content:null` 落库、view-time hydrate、alreadyReferenced 去重都复用既有
         // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
         ...(opts.attachments != null && opts.attachments.length > 0 ? { attachments: opts.attachments } : {}),
-      });
+      };
+      const appended = await session.append("user", textBlocks(opts.prompt ?? ""), appendOptions);
       // prompt / 附件落库失败必须中断子 run：静默返回会让附件蒸发、模型毫不知情。
       if (!appended.ok) rethrowRunFailure(appended.error);
     }
@@ -1347,7 +1345,7 @@ async function runChildAgent(args: {
     }
 
     const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-    const childResult = await runner.run({
+    const childRunInput = {
       definition: def,
       sessionId: childSessionId,
       projectId: parentProjectId,
@@ -1359,7 +1357,8 @@ async function runChildAgent(args: {
       publishRunLifecycle: true,
       stream: childStream,
       signal: childController.signal,
-    });
+    };
+    const childResult = await runner.run(childRunInput);
     // 子 run 已知失败沿返回值到达（五期门⑦）：转异常冒泡（本函数无 catch，
     // 反注册 finally 照跑），与旧 throw 通道逐字一致。
     if (!childResult.ok) rethrowRunFailure(childResult.error);

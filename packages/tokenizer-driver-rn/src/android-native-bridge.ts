@@ -35,21 +35,12 @@ export type NativeCountResponse = {
 };
 
 type NovelMasterTokenizerNative = {
-  countPrompt: (
-    serialized: string,
-    family: string,
-    vendorModelId: string,
-  ) => Promise<NativeCountResponse>;
+  countPrompt: (serialized: string, family: string, vendorModelId: string) => Promise<NativeCountResponse>;
   /**
    * 可取消计数（Step 1 新增的独立方法，既有 `countPrompt` 签名逐字节不动——
    * RN 0.85 双路径对方法 arity 硬校验，加参会让新旧混态双向硬抛）。
    */
-  countPromptCancelable: (
-    serialized: string,
-    family: string,
-    vendorModelId: string,
-    requestId: string,
-  ) => Promise<NativeCountResponse>;
+  countPromptCancelable: (serialized: string, family: string, vendorModelId: string, requestId: string) => Promise<NativeCountResponse>;
   /** 下发取消标记，fire-and-forget 无 Promise。 */
   cancelCount: (requestId: string) => void;
 };
@@ -58,9 +49,7 @@ type NovelMasterTokenizerNative = {
 // NativeModules，本模块又被 chat-prompt-tokens.service 静态 import——顶层直读
 // 会让这些套件 require 期整炸（merge 后小 CR P1）。真实运行时 NativeModules
 // 恒在，可选链不改变其行为。
-const nativeModule = NativeModules?.NovelMasterTokenizer as
-  | NovelMasterTokenizerNative
-  | undefined;
+const nativeModule = NativeModules?.NovelMasterTokenizer as NovelMasterTokenizerNative | undefined;
 
 /** Kotlin 侧取消 reject 的专属 code（区别于 `TOKENIZER_COUNT_FAILED`）。 */
 const NATIVE_CANCELLED_CODE = "TOKENIZER_COUNT_CANCELLED";
@@ -91,38 +80,9 @@ export class PromptCountCancelledError extends Error {
 const inFlightCounts = new Map<string, { sessionId: string }>();
 const inFlightCountsBySession = new Map<string, Set<string>>();
 
-function registerInFlightCount(requestId: string, sessionId: string): void {
-  inFlightCounts.set(requestId, { sessionId });
-  let sessionSet = inFlightCountsBySession.get(sessionId);
-  if (sessionSet == null) {
-    sessionSet = new Set<string>();
-    inFlightCountsBySession.set(sessionId, sessionSet);
-  }
-  sessionSet.add(requestId);
-}
-
-function unregisterInFlightCount(requestId: string): void {
-  const entry = inFlightCounts.get(requestId);
-  if (entry == null) {
-    return;
-  }
-  inFlightCounts.delete(requestId);
-  const sessionSet = inFlightCountsBySession.get(entry.sessionId);
-  if (sessionSet == null) {
-    return;
-  }
-  sessionSet.delete(requestId);
-  if (sessionSet.size === 0) {
-    inFlightCountsBySession.delete(entry.sessionId);
-  }
-}
-
 /** True when the Android native tokenizer module is linked. */
 export function isNativeTokenizerAvailable(): boolean {
-  return (
-    Platform.OS === "android" &&
-    typeof nativeModule?.countPrompt === "function"
-  );
+  return Platform.OS === "android" && typeof nativeModule?.countPrompt === "function";
 }
 
 /**
@@ -133,36 +93,24 @@ export function isNativeTokenizerAvailable(): boolean {
  * 同时禁止 spread 组装（bridgeless 下 NativeModules 不可枚举展开）。
  */
 export function countPromptCancelableAvailable(): boolean {
-  return (
-    Platform.OS === "android" &&
-    typeof nativeModule?.countPromptCancelable === "function"
-  );
+  return Platform.OS === "android" && typeof nativeModule?.countPromptCancelable === "function";
 }
 
 /** 独立探测取消指令下发方法（同上口径，旧壳缺失即 no-op 不抛）。 */
 export function cancelCountAvailable(): boolean {
-  return (
-    Platform.OS === "android" &&
-    typeof nativeModule?.cancelCount === "function"
-  );
+  return Platform.OS === "android" && typeof nativeModule?.cancelCount === "function";
 }
 
 function isNativeCancelledError(error: unknown): boolean {
   if (typeof error !== "object" || error == null) {
-    return (
-      typeof error === "string" &&
-      error.startsWith(NATIVE_CANCELLED_MESSAGE_PREFIX)
-    );
+    return typeof error === "string" && error.startsWith(NATIVE_CANCELLED_MESSAGE_PREFIX);
   }
   const code = (error as { code?: unknown }).code;
   if (typeof code === "string" && code === NATIVE_CANCELLED_CODE) {
     return true;
   }
   const message = (error as { message?: unknown }).message;
-  return (
-    typeof message === "string" &&
-    message.startsWith(NATIVE_CANCELLED_MESSAGE_PREFIX)
-  );
+  return typeof message === "string" && message.startsWith(NATIVE_CANCELLED_MESSAGE_PREFIX);
 }
 
 /**
@@ -171,43 +119,44 @@ function isNativeCancelledError(error: unknown): boolean {
  * 二分口径：sessionId 与 requestId 均在场且原生侧可取消方法存在 → 四参新方法
  * （并在过桥调用**前**登记 in-flight）；否则走既有三参 `countPrompt`（= 现状，不可取消）。
  */
-export async function countPromptViaNative(
-  request: NativeCountRequest,
-): Promise<NativeCountResponse | null> {
+export async function countPromptViaNative(request: NativeCountRequest): Promise<NativeCountResponse | null> {
   if (!isNativeTokenizerAvailable() || nativeModule == null) {
     return null;
   }
   const sessionId = request.sessionId;
   const requestId = request.requestId;
-  if (
-    sessionId != null &&
-    requestId != null &&
-    countPromptCancelableAvailable()
-  ) {
+  if (sessionId != null && requestId != null && countPromptCancelableAvailable()) {
     // 登记点=过桥调用前：注销点在 finally（Kotlin 侧 cancelCount 之后才到达）
-    registerInFlightCount(requestId, sessionId);
+    inFlightCounts.set(requestId, { sessionId });
+    let sessionSet = inFlightCountsBySession.get(sessionId);
+    if (sessionSet == null) {
+      sessionSet = new Set<string>();
+      inFlightCountsBySession.set(sessionId, sessionSet);
+    }
+    sessionSet.add(requestId);
     try {
-      return await nativeModule.countPromptCancelable(
-        request.serialized,
-        request.family,
-        request.vendorModelId,
-        requestId,
-      );
+      return await nativeModule.countPromptCancelable(request.serialized, request.family, request.vendorModelId, requestId);
     } catch (error) {
       if (isNativeCancelledError(error)) {
         throw new PromptCountCancelledError();
       }
       return null;
     } finally {
-      unregisterInFlightCount(requestId);
+      const entry = inFlightCounts.get(requestId);
+      if (entry != null) {
+        inFlightCounts.delete(requestId);
+        const sessionSet = inFlightCountsBySession.get(entry.sessionId);
+        if (sessionSet != null) {
+          sessionSet.delete(requestId);
+          if (sessionSet.size === 0) {
+            inFlightCountsBySession.delete(entry.sessionId);
+          }
+        }
+      }
     }
   }
   try {
-    return await nativeModule.countPrompt(
-      request.serialized,
-      request.family,
-      request.vendorModelId,
-    );
+    return await nativeModule.countPrompt(request.serialized, request.family, request.vendorModelId);
   } catch (error) {
     if (isNativeCancelledError(error)) {
       throw new PromptCountCancelledError();
@@ -223,9 +172,7 @@ export async function countPromptViaNative(
  * 外部清理踩掉 finally 会楔死估算档（本函数绝不碰表）。
  * sessionId 为 null/undefined、取消方法缺失、无在途记录时均为 no-op 不抛。
  */
-export function cancelSessionNativeCounts(
-  sessionId: string | null | undefined,
-): void {
+export function cancelSessionNativeCounts(sessionId: string | null | undefined): void {
   if (sessionId == null) {
     return;
   }

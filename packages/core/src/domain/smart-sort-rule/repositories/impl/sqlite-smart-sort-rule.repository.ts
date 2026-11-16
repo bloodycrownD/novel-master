@@ -49,11 +49,32 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
   }
 
   async insert(rule: SmartSortRule): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms) VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder}, #{createdAtMs}, #{updatedAtMs})`, { ruleId: rule.ruleId, name: rule.name, pattern: rule.pattern, flags: rule.flags, captureKind: rule.captureKind, description: rule.description, enabled: rule.enabled ? 1 : 0, sortOrder: rule.sortOrder, createdAtMs: rule.createdAtMs, updatedAtMs: rule.updatedAtMs });
+    await executeTemplate(this.conn, this.parser, `INSERT INTO smart_sort_rule (rule_id, name, pattern, flags, capture_kind, description, enabled, sort_order, created_at_ms, updated_at_ms) VALUES (#{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled}, #{sortOrder}, #{createdAtMs}, #{updatedAtMs})`, {
+      ruleId: rule.ruleId,
+      name: rule.name,
+      pattern: rule.pattern,
+      flags: rule.flags,
+      captureKind: rule.captureKind,
+      description: rule.description,
+      enabled: rule.enabled ? 1 : 0,
+      sortOrder: rule.sortOrder,
+      createdAtMs: rule.createdAtMs,
+      updatedAtMs: rule.updatedAtMs,
+    });
   }
 
   async update(rule: SmartSortRule): Promise<void> {
-    await executeTemplate(this.conn, this.parser, `UPDATE smart_sort_rule SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind}, description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs} WHERE rule_id = #{ruleId}`, { ruleId: rule.ruleId, name: rule.name, pattern: rule.pattern, flags: rule.flags, captureKind: rule.captureKind, description: rule.description, enabled: rule.enabled ? 1 : 0, sortOrder: rule.sortOrder, updatedAtMs: rule.updatedAtMs });
+    await executeTemplate(this.conn, this.parser, `UPDATE smart_sort_rule SET name = #{name}, pattern = #{pattern}, flags = #{flags}, capture_kind = #{captureKind}, description = #{description}, enabled = #{enabled}, sort_order = #{sortOrder}, updated_at_ms = #{updatedAtMs} WHERE rule_id = #{ruleId}`, {
+      ruleId: rule.ruleId,
+      name: rule.name,
+      pattern: rule.pattern,
+      flags: rule.flags,
+      captureKind: rule.captureKind,
+      description: rule.description,
+      enabled: rule.enabled ? 1 : 0,
+      sortOrder: rule.sortOrder,
+      updatedAtMs: rule.updatedAtMs,
+    });
   }
 
   /**
@@ -63,6 +84,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
    */
   private static readonly SORT_ORDER_CHUNK = 200;
 
+  /** nm-style: keep-public — 实现 SmartSortRuleRepository.updateSortOrders 端口方法；内联会把分块 CASE/IN 批量更新 SQL 搬进调用层。 */
   async updateSortOrders(pairs: readonly { readonly ruleId: string; readonly sortOrder: number }[]): Promise<void> {
     // 空数组直接返回，不发 SQL（照 batchInsert 的空数组约定）。
     if (pairs.length === 0) {
@@ -93,10 +115,12 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
     await executeTemplate(this.conn, this.parser, `DELETE FROM smart_sort_rule WHERE rule_id = #{ruleId}`, { ruleId });
   }
 
+  /** nm-style: keep-public — 实现 SmartSortRuleRepository.deleteAll 端口方法；内联会把删除 SQL 搬进调用层。 */
   async deleteAll(): Promise<void> {
     await executeTemplate(this.conn, this.parser, `DELETE FROM smart_sort_rule`, {});
   }
 
+  /** nm-style: keep-public — 实现 SmartSortRuleRepository.nextSortOrder 端口方法；内联会把 MAX 查询 SQL 搬进调用层。 */
   async nextSortOrder(): Promise<number> {
     const rows = await queryTemplate(this.conn, this.parser, `SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM smart_sort_rule`, {});
     const max = Number(rows[0]?.max_sort ?? 0);

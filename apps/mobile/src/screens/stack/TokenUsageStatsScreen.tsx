@@ -29,29 +29,14 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import type {
-  UsageStatsBucket,
-  UsageStatsFilter,
-  UsageStatsModelRow,
-  UsageStatsRequestRow,
-  UsageStatsSummary,
-} from '@novel-master/core/chat';
+import type {UsageStatsBucket, UsageStatsFilter, UsageStatsModelRow, UsageStatsRequestRow, UsageStatsSummary} from '@novel-master/core/chat';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
-import type {
-  PageTab,
-  ProviderModelFilterValue,
-  ProviderModelOption,
-  RangeKind,
-} from './token-usage/format';
-import {
-  REQUESTS_PAGE_SIZE,
-  isCustomRangeValid,
-  resolveRangeDays,
-} from './token-usage/format';
+import type {PageTab, ProviderModelFilterValue, ProviderModelOption, RangeKind} from './token-usage/format';
+import {REQUESTS_PAGE_SIZE, isCustomRangeValid, resolveRangeDays} from './token-usage/format';
 import {styles} from './token-usage/styles';
 import {StatsFilterBar} from './token-usage/StatsFilterBar';
 import {SummaryTab} from './token-usage/SummaryTab';
@@ -68,18 +53,13 @@ export function TokenUsageStatsScreen() {
   const [customTo, setCustomTo] = useState<Date | null>(null);
   const [rangeSheetVisible, setRangeSheetVisible] = useState(false);
   const [pageTab, setPageTab] = useState<PageTab>('summary');
-  const [comboFilter, setComboFilter] =
-    useState<ProviderModelFilterValue>(undefined);
+  const [comboFilter, setComboFilter] = useState<ProviderModelFilterValue>(undefined);
   const [combos, setCombos] = useState<ProviderModelOption[]>([]);
   // providerId → 展示名（服务商已删除时缺失，展示层兑底「未知服务商」）。
-  const [providerLabels, setProviderLabels] = useState<Record<string, string>>(
-    {},
-  );
+  const [providerLabels, setProviderLabels] = useState<Record<string, string>>({});
   // 全量服务商（含未配置模型者，按展示名排序）：StatsFilterBar 据此生成
   // 每服务商的「{服务商} · 其他模型」归并选项。
-  const [providers, setProviders] = useState<
-    ReadonlyArray<{id: string; label: string}>
-  >([]);
+  const [providers, setProviders] = useState<ReadonlyArray<{id: string; label: string}>>([]);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
@@ -93,9 +73,7 @@ export function TokenUsageStatsScreen() {
   const reqDirtyRef = useRef(true);
   const reqSeqRef = useRef(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucket[] | null>(
-    null,
-  );
+  const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucket[] | null>(null);
   // 长按详情：记录当前长按检视的柱 key（daily/hourly 共用；详情以图下方
   // 固定行呈现而非浮层，规避长按与横向滚动的手势冲突）。
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
@@ -112,8 +90,7 @@ export function TokenUsageStatsScreen() {
   // 服务商其他模型 / 未记录服务商）见 ProviderModelFilterValue，这里拆成
   // core UsageStatsFilter 的 model/providerId 两字段。
   const comboModel = comboFilter === undefined ? undefined : comboFilter.model;
-  const comboProviderId =
-    comboFilter === undefined ? undefined : comboFilter.providerId;
+  const comboProviderId = comboFilter === undefined ? undefined : comboFilter.providerId;
   // 主查询 filter：时间区间由 RangeKind 在应用层算出自然日闭区间
   // （resolveRangeDays：today={D,D}、last7={D-6,D}、last30={D-29,D}、
   // custom 由 MonthRangePickerSheet 结果产日期字符串），日偏移均为
@@ -132,11 +109,7 @@ export function TokenUsageStatsScreen() {
     setLoading(true);
     try {
       const usage = runtime.usageStats;
-      const [nextSummary, nextBuckets, nextRows] = await Promise.all([
-        usage.getSummary(filter),
-        usage.getDailyBuckets(filter),
-        usage.getModelBreakdown(filter),
-      ]);
+      const [nextSummary, nextBuckets, nextRows] = await Promise.all([usage.getSummary(filter), usage.getDailyBuckets(filter), usage.getModelBreakdown(filter)]);
       // 已知失败走 Result 收口（错误通道迁移四期），与 catch 同终端。
       const failLoad = (err: unknown): void => {
         if (seq !== reloadSeqRef.current) {
@@ -170,9 +143,7 @@ export function TokenUsageStatsScreen() {
       // 取本轮 filter 窗口终点而非回包时重新取日期（desktop/B-2·X-1：
       // 查询发起于昨日深夜、回包落在今日零点后时，重新取时会选中不在
       // 本轮 daily 数据里的天，与查询窗口错位；today 路径 range 恒存在）。
-      setSelectedDay(
-        rangeKind === 'today' ? filter.range?.toDay ?? null : null,
-      );
+      setSelectedDay(rangeKind === 'today' ? filter.range?.toDay ?? null : null);
       setHourlyBuckets(null);
       setLoadError(null);
     } catch (err) {
@@ -192,11 +163,10 @@ export function TokenUsageStatsScreen() {
   // 刷新单通道（mobile/B-2）：只挂 useFocusEffect（依赖 reload），不再并挂
   // useEffect——挂载由首焦覆盖，筛选变化由 reload 引用刷新驱动，避免双通道
   // 重复三连查询放大 cross/B-1 竞态窗口（与 StorageConfigScreen 惯例一致）。
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(() => undefined);
-    }, [reload]),
-  );
+  const onScreenFocus = useCallback(() => {
+    reload().catch(() => undefined);
+  }, [reload]);
+  useFocusEffect(onScreenFocus);
 
   // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页/点页码按页号取整页替换。
   const loadRequests = useCallback(
@@ -206,10 +176,7 @@ export function TokenUsageStatsScreen() {
       try {
         // 流水跟随时间（需求①勘误后）：查询用含 range 的完整 filter——
         // 与汇总/图表同窗口，模型/服务商筛选叠加。
-        const result = await runtime.usageStats.listRequestUsage(filter, {
-          offset: page * REQUESTS_PAGE_SIZE,
-          limit: REQUESTS_PAGE_SIZE,
-        });
+        const result = await runtime.usageStats.listRequestUsage(filter, {offset: page * REQUESTS_PAGE_SIZE, limit: REQUESTS_PAGE_SIZE});
         if (!result.ok) {
           if (seq === reqSeqRef.current) {
             // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
@@ -288,16 +255,8 @@ export function TokenUsageStatsScreen() {
         }
       }
       setProviderLabels(labels);
-      setProviders(
-        providerEntries.sort((a, b) => a.label.localeCompare(b.label)),
-      );
-      setCombos(
-        options.sort(
-          (a, b) =>
-            a.providerLabel.localeCompare(b.providerLabel) ||
-            a.model.localeCompare(b.model),
-        ),
-      );
+      setProviders(providerEntries.sort((a, b) => a.label.localeCompare(b.label)));
+      setCombos(options.sort((a, b) => a.providerLabel.localeCompare(b.providerLabel) || a.model.localeCompare(b.model)));
     } catch {
       setCombos([]);
       setProviderLabels({});
@@ -305,11 +264,10 @@ export function TokenUsageStatsScreen() {
     }
   }, [runtime]);
 
-  useFocusEffect(
-    useCallback(() => {
-      reloadModels().catch(() => undefined);
-    }, [reloadModels]),
-  );
+  const onModelsFocus = useCallback(() => {
+    reloadModels().catch(() => undefined);
+  }, [reloadModels]);
+  useFocusEffect(onModelsFocus);
 
   // 选中天后加载 24 小时桶（应用模型+服务商组合筛选，时间由天本身界定，
   // range 不参与——完整 filter 直接传入，小时窗口由天划定）。
@@ -319,8 +277,8 @@ export function TokenUsageStatsScreen() {
       return;
     }
     let cancelled = false;
-    runtime.usageStats
-      .getHourlyBuckets(selectedDay, filter)
+    const hourlyPromise = runtime.usageStats.getHourlyBuckets(selectedDay, filter);
+    hourlyPromise
       .then(buckets => {
         if (!cancelled) {
           if (buckets.ok) {
@@ -363,25 +321,27 @@ export function TokenUsageStatsScreen() {
   };
 
   const providerLabelOf = (id: string) => providerLabels[id] ?? '未知服务商';
-  const modelFilterLabel =
-    comboFilter === undefined
-      ? '全部模型'
-      : comboFilter.providerId === null
-      ? '未记录服务商'
-      : comboFilter.model === null
-      ? `${providerLabelOf(comboFilter.providerId)}/其他模型`
-      : `${providerLabelOf(comboFilter.providerId)}/${comboFilter.model}`;
+  let modelFilterLabel: string;
+  if (comboFilter === undefined) {
+    modelFilterLabel = '全部模型';
+  } else if (comboFilter.providerId === null) {
+    modelFilterLabel = '未记录服务商';
+  } else if (comboFilter.model === null) {
+    modelFilterLabel = `${providerLabelOf(comboFilter.providerId)}/其他模型`;
+  } else {
+    modelFilterLabel = `${providerLabelOf(comboFilter.providerId)}/${comboFilter.model}`;
+  }
 
-  const rangeLabel =
-    rangeKind === 'custom' && customFrom && customTo
-      ? `${customFrom.getMonth() + 1}/${customFrom.getDate()} — ${
-          customTo.getMonth() + 1
-        }/${customTo.getDate()}`
-      : rangeKind === 'today'
-      ? '今天'
-      : rangeKind === 'last30'
-      ? '近 30 天'
-      : '近 7 天';
+  let rangeLabel: string;
+  if (rangeKind === 'custom' && customFrom && customTo) {
+    rangeLabel = `${customFrom.getMonth() + 1}/${customFrom.getDate()} — ${customTo.getMonth() + 1}/${customTo.getDate()}`;
+  } else if (rangeKind === 'today') {
+    rangeLabel = '今天';
+  } else if (rangeKind === 'last30') {
+    rangeLabel = '近 30 天';
+  } else {
+    rangeLabel = '近 7 天';
+  }
 
   // 空态区分（mobile/A-1）：库全空（配置侧无任何服务商×模型组合且已
   // 落地一轮查询）显示
@@ -390,15 +350,10 @@ export function TokenUsageStatsScreen() {
   // 窗口空（库非空）时与其他页签统一显示区间空态。summary 非空条件避免
   // 首查在途时闪现空态。
   const libraryEmpty = combos.length === 0 && summary != null;
-  const rangeEmpty =
-    summary != null && summary.calls === 0 && summary.totalTokens === 0;
+  const rangeEmpty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
   return (
-    <ScrollView
-      style={[styles.scroll, {backgroundColor: tokens.background}]}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       {/* 筛选栏置顶：时间范围 + 模型筛选，页签共享（状态由本层持有）。 */}
       <StatsFilterBar
         rangeKind={rangeKind}
@@ -442,46 +397,26 @@ export function TokenUsageStatsScreen() {
       {/* 常驻错误条（mobile/C-orch-2）：失败保留旧数据；首查失败无旧数据时
           内容区整体让位，不再渲染一排 0 值卡片。 */}
       {loadError != null ? (
-        <View
-          testID="load-error"
-          style={[styles.errorBar, {borderColor: tokens.danger}]}
-        >
+        <View testID="load-error" style={[styles.errorBar, {borderColor: tokens.danger}]}>
           <Text style={{color: tokens.danger}}>{loadError}</Text>
         </View>
       ) : null}
       {loadError != null && summary == null ? null : libraryEmpty ? (
         <View style={styles.empty} testID="empty-cold-start">
           <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-            Token
-            用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
+            Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
           </Text>
         </View>
       ) : rangeEmpty ? (
         // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
         // 窗口空（库非空）时与其他页签统一显示区间空态。
         <View style={styles.empty} testID="empty-range">
-          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
-            该区间无数据
-          </Text>
+          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>该区间无数据</Text>
         </View>
       ) : pageTab === 'summary' ? (
-        <SummaryTab
-          summary={summary}
-          modelRows={modelRows}
-          providerLabels={providerLabels}
-          rangeLabel={rangeLabel}
-          tokens={tokens}
-        />
+        <SummaryTab summary={summary} modelRows={modelRows} providerLabels={providerLabels} rangeLabel={rangeLabel} tokens={tokens} />
       ) : pageTab === 'requests' ? (
-        <RequestsTab
-          reqRows={reqRows}
-          reqTotal={reqTotal}
-          reqPage={reqPage}
-          reqLoading={reqLoading}
-          reqDirty={reqDirtyRef.current}
-          onLoadRequests={loadRequests}
-          tokens={tokens}
-        />
+        <RequestsTab reqRows={reqRows} reqTotal={reqTotal} reqPage={reqPage} reqLoading={reqLoading} reqDirty={reqDirtyRef.current} onLoadRequests={loadRequests} tokens={tokens} />
       ) : (
         <DetailTab
           dailyBuckets={dailyBuckets}
@@ -489,9 +424,7 @@ export function TokenUsageStatsScreen() {
           selectedDay={selectedDay}
           inspectedKey={inspectedKey}
           // 重复点选同一天 toggle 取消选中（与桌面端一致，mobile/C-orch-1）。
-          onSelectDay={key =>
-            setSelectedDay(prev => (prev === key ? null : key))
-          }
+          onSelectDay={key => setSelectedDay(prev => (prev === key ? null : key))}
           onSetInspectedKey={setInspectedKey}
           tokens={tokens}
           todayMode={rangeKind === 'today'}

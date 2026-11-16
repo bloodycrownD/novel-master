@@ -11,28 +11,23 @@ export type DecodeLiteralHtmlEntitiesOptions = {
  * @param text 输入文本
  * @param options.preserveAngleBrackets 出口路径传 true，保留尖括号实体
  */
-export function decodeLiteralHtmlEntities(
-  text: string,
-  options?: DecodeLiteralHtmlEntitiesOptions,
-): string {
+export function decodeLiteralHtmlEntities(text: string, options?: DecodeLiteralHtmlEntitiesOptions): string {
   const preserveAngleBrackets = options?.preserveAngleBrackets === true;
   let current = text;
   let previous = '';
   let pass = 0;
   while (current !== previous && pass < 3) {
     previous = current;
-    current = current
-      .replace(/&amp;/gi, '&')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#(?:0*34|x0*22);/gi, '"')
-      .replace(/&apos;/gi, "'")
-      .replace(/&#(?:0*39|x0*27);/gi, "'");
+    current = current.replace(/&amp;/gi, '&');
+    current = current.replace(/&quot;/gi, '"');
+    current = current.replace(/&#(?:0*34|x0*22);/gi, '"');
+    current = current.replace(/&apos;/gi, "'");
+    current = current.replace(/&#(?:0*39|x0*27);/gi, "'");
     if (!preserveAngleBrackets) {
-      current = current
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&#(?:0*60|x0*3c);/gi, '<')
-        .replace(/&#(?:0*62|x0*3e);/gi, '>');
+      current = current.replace(/&lt;/gi, '<');
+      current = current.replace(/&gt;/gi, '>');
+      current = current.replace(/&#(?:0*60|x0*3c);/gi, '<');
+      current = current.replace(/&#(?:0*62|x0*3e);/gi, '>');
     }
     pass += 1;
   }
@@ -40,6 +35,7 @@ export function decodeLiteralHtmlEntities(
 }
 
 /** Markdown 入口：完整解码实体（含尖括号），供 markdown-it 解析。 */
+// nm-style: keep-public — markdown 入口契约（与 web/shared/decode-entities 真源对齐）
 export function decodeForMarkdownInput(text: string): string {
   return decodeLiteralHtmlEntities(text);
 }

@@ -20,25 +20,14 @@ export { normalizeYamlError } from "@novel-master/core/common";
  * 弹出保存对话框后再写到用户选定的路径；不管成功还是取消，
  * 都会在 finally 里清理临时文件。
  */
-export async function exportYamlWithDialog(
-  yaml: string,
-  fileName: string,
-  parentWindow?: BrowserWindow | null,
-): Promise<"saved" | "cancelled"> {
+export async function exportYamlWithDialog(yaml: string, fileName: string, parentWindow?: BrowserWindow | null): Promise<"saved" | "cancelled"> {
   const tmpPath = join(tmpdir(), fileName);
   await writeFile(tmpPath, yaml, "utf8");
 
   const win = parentWindow ?? undefined;
   try {
-    const result = win
-      ? await dialog.showSaveDialog(win, {
-          defaultPath: fileName,
-          filters: [{ name: "YAML", extensions: ["yaml", "yml"] }],
-        })
-      : await dialog.showSaveDialog({
-          defaultPath: fileName,
-          filters: [{ name: "YAML", extensions: ["yaml", "yml"] }],
-        });
+    const saveDialogOptions: Electron.SaveDialogOptions = { defaultPath: fileName, filters: [{ name: "YAML", extensions: ["yaml", "yml"] }] };
+    const result = win ? await dialog.showSaveDialog(win, saveDialogOptions) : await dialog.showSaveDialog(saveDialogOptions);
     if (result.canceled || result.filePath == null) {
       return "cancelled";
     }
@@ -55,20 +44,10 @@ export async function exportYamlWithDialog(
  * 打开对话框 + readFile 之后，decode/validate/persist 的逻辑
  * 全部由调用方在 `consume` 里完成，方便按各 schema 自己处理。
  */
-export async function importYamlWithDialog(
-  consume: (yamlText: string) => Promise<void>,
-  parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
+export async function importYamlWithDialog(consume: (yamlText: string) => Promise<void>, parentWindow?: BrowserWindow | null): Promise<"imported" | "cancelled"> {
   const win = parentWindow ?? undefined;
-  const result = win
-    ? await dialog.showOpenDialog(win, {
-        filters: [{ name: "YAML", extensions: ["yaml", "yml"] }],
-        properties: ["openFile"],
-      })
-    : await dialog.showOpenDialog({
-        filters: [{ name: "YAML", extensions: ["yaml", "yml"] }],
-        properties: ["openFile"],
-      });
+  const openDialogOptions: Electron.OpenDialogOptions = { filters: [{ name: "YAML", extensions: ["yaml", "yml"] }], properties: ["openFile"] };
+  const result = win ? await dialog.showOpenDialog(win, openDialogOptions) : await dialog.showOpenDialog(openDialogOptions);
   if (result.canceled || result.filePaths.length === 0) {
     return "cancelled";
   }

@@ -17,13 +17,6 @@ export function defaultVfsMarkdownPreviewEngine(): VfsMarkdownPreviewEngine {
   return DEFAULT_ENGINE;
 }
 
-export async function readVfsMarkdownPreviewEngine(
-  appUi: AppUiPreferences | null | undefined,
-): Promise<VfsMarkdownPreviewEngine> {
-  return readEnumPref(
-    appUi,
-    APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE,
-    ALLOWED_ENGINES,
-    DEFAULT_ENGINE,
-  );
+export async function readVfsMarkdownPreviewEngine(appUi: AppUiPreferences | null | undefined): Promise<VfsMarkdownPreviewEngine> {
+  return readEnumPref(appUi, APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
 }

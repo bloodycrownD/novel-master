@@ -43,7 +43,7 @@ export function renderComposerAtPathHighlightHtml(text: string): string {
   return html;
 }
 
-export type ComposerAtPathInputProps = {
+type ComposerAtPathInputProps = {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (text: string) => void;

@@ -12,10 +12,7 @@ import type { NovelMasterRuntime } from "../runtime.js";
 import { runWorkplace } from "../workplace/run-workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-export async function runProjectWorkplace(
-  rt: NovelMasterRuntime,
-  args: readonly string[],
-): Promise<Outcome<void>> {
+export async function runProjectWorkplace(rt: NovelMasterRuntime, args: readonly string[]): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
   const resolvedProject = await rt.scope.resolveProjectId(flags);
   if (!resolvedProject.ok) return { kind: "failed", error: resolvedProject.error };

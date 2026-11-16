@@ -42,11 +42,3 @@ export async function runMermaidScan(): Promise<void> {
     skip: code => !!code.closest('#stream-tail'),
   });
 }
-
-/** 测试隔离：取消挂起的防抖扫描。 */
-export function cancelPendingMermaidScanForTests(): void {
-  if (scanTimer != null && typeof window !== 'undefined') {
-    window.clearTimeout(scanTimer);
-    scanTimer = null;
-  }
-}

@@ -54,9 +54,7 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
     throw new Error('Headers 必须是 JSON 对象');
   }
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(
-    parsed as Record<string, unknown>,
-  )) {
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof value !== 'string') {
       throw new Error(`Header ${key} 必须是字符串`);
     }
@@ -69,9 +67,7 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
  * 自定义参数：必须是 JSON 对象，值任意 JSON（boolean/number/嵌套对象均可）。
  * 空文本返回显式空对象（保存即可清空，区别于 headers 的「空文本不修改」）。
  */
-export function parseBodyParamsJson(
-  raw: string,
-): Record<string, unknown> {
+export function parseBodyParamsJson(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) {
     return {};
@@ -137,14 +133,7 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
   return patch;
 }
 
-export function ProviderForm({
-  mode,
-  initial,
-  isBuiltin = false,
-  apiKeyStatus,
-  saving = false,
-  onSubmit,
-}: Props) {
+export function ProviderForm({mode, initial, isBuiltin = false, apiKeyStatus, saving = false, onSubmit}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const [values, setValues] = useState<ProviderFormValues>({
@@ -162,11 +151,7 @@ export function ProviderForm({
 
   const canSave = useMemo(() => {
     if (mode === 'create') {
-      return (
-        values.displayName.trim().length > 0 &&
-        values.baseUrl.trim().length > 0 &&
-        values.apiKey.trim().length > 0
-      );
+      return values.displayName.trim().length > 0 && values.baseUrl.trim().length > 0 && values.apiKey.trim().length > 0;
     }
     return values.displayName.trim().length > 0;
   }, [mode, values.apiKey, values.baseUrl, values.displayName]);
@@ -194,68 +179,31 @@ export function ProviderForm({
             <ActivityIndicator color={tokens.primary} />
           </View>
         ) : (
-          <StickyFormFooter
-            tokens={tokens}
-            label={mode === 'create' ? '创建' : '保存'}
-            disabled={!canSave}
-            onPress={() => handleSave().catch(() => undefined)}
-          />
+          <StickyFormFooter tokens={tokens} label={mode === 'create' ? '创建' : '保存'} disabled={!canSave} onPress={() => handleSave().catch(() => undefined)} />
         )
       }
     >
       <FormSectionCard title="连接" tokens={tokens}>
         <FormField label="服务商名称" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={values.displayName}
-            onChangeText={text => patch({displayName: text})}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="例如 智谱"
-          />
+          <FormTextInput tokens={tokens} value={values.displayName} onChangeText={text => patch({displayName: text})} autoCapitalize="none" autoCorrect={false} placeholder="例如 智谱" />
         </FormField>
         <FormField label="协议" tokens={tokens}>
-          <FormChipGroup
-            tokens={tokens}
-            value={values.protocol}
-            onChange={p => patch({protocol: p})}
-            options={protocolOptions}
-          />
+          <FormChipGroup tokens={tokens} value={values.protocol} onChange={p => patch({protocol: p})} options={protocolOptions} />
         </FormField>
         <FormField label="Base URL" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={values.baseUrl}
-            onChangeText={text => patch({baseUrl: text})}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="https://api.example.com/v1"
-          />
+          <FormTextInput tokens={tokens} value={values.baseUrl} onChangeText={text => patch({baseUrl: text})} autoCapitalize="none" autoCorrect={false} placeholder="https://api.example.com/v1" />
         </FormField>
       </FormSectionCard>
 
       <FormSectionCard title="认证" tokens={tokens}>
         {mode === 'edit' && apiKeyStatus != null ? (
           <View style={styles.statusRow}>
-            <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>
-              当前状态
-            </Text>
+            <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>当前状态</Text>
             <ApiKeyStatusTag status={apiKeyStatus} tokens={tokens} />
           </View>
         ) : null}
-        <FormField
-          label="API Key"
-          tokens={tokens}
-          hint={mode === 'edit' ? '留空则不修改' : '必填，写入 SKSP 安全存储'}
-        >
-          <FormTextInput
-            tokens={tokens}
-            value={values.apiKey}
-            onChangeText={text => patch({apiKey: text})}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-          />
+        <FormField label="API Key" tokens={tokens} hint={mode === 'edit' ? '留空则不修改' : '必填，写入 SKSP 安全存储'}>
+          <FormTextInput tokens={tokens} value={values.apiKey} onChangeText={text => patch({apiKey: text})} autoCapitalize="none" autoCorrect={false} secureTextEntry />
         </FormField>
       </FormSectionCard>
 
@@ -271,11 +219,7 @@ export function ProviderForm({
             placeholder='{"X-Custom":"value"}'
           />
         </FormField>
-        <FormField
-          label="自定义参数"
-          tokens={tokens}
-          hint="JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除"
-        >
+        <FormField label="自定义参数" tokens={tokens} hint="JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除">
           <FormTextInput
             tokens={tokens}
             value={values.bodyParamsJson}

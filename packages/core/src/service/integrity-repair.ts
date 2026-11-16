@@ -32,7 +32,7 @@
 import { AppError } from "@/errors/app-error.js";
 
 /** 兜底种类：修复 / 重命名引用迁移 / 补缺。 */
-export type IntegrityRepairKind = "repair" | "rename" | "backfill";
+type IntegrityRepairKind = "repair" | "rename" | "backfill";
 
 /** detect 阶段的检测结果。 */
 export interface IntegrityRepairDetection {
@@ -60,7 +60,7 @@ export interface IntegrityRepairOperation {
 }
 
 /** 单次操作跑完后的报告条目。 */
-export interface IntegrityRepairReport {
+interface IntegrityRepairReport {
   readonly name: string;
   readonly kind: IntegrityRepairKind;
   readonly detection: IntegrityRepairDetection;
@@ -96,21 +96,13 @@ export class IntegrityRepairRegistry {
 
   /** 登记一个操作；同名重复登记直接抛错，防止悄悄覆盖。 */
   register(op: IntegrityRepairOperation): this {
-    if (
-      !op ||
-      typeof op.detect !== "function" ||
-      typeof op.repair !== "function"
-    ) {
-      throw new TypeError(
-        `IntegrityRepairRegistry.register: 操作 ${
-          op?.name ?? "<匿名>"
-        } 缺少 detect/repair`
-      );
+    if (!op || typeof op.detect !== "function" || typeof op.repair !== "function") {
+      throw new TypeError(`IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`);
     }
-      if (this.operations.has(op.name)) {
-        const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
-        throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: duplicated });
-      }
+    if (this.operations.has(op.name)) {
+      const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
+      throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: duplicated });
+    }
     this.operations.set(op.name, op);
     return this;
   }
@@ -142,6 +134,7 @@ export class IntegrityRepairRegistry {
    *
    * 任何操作的 detect / repair 抛错都不会中断其他操作，错误挂在返回报告的 `error` 字段。
    */
+  /** nm-style: keep-public — 公共编排入口；bootstrap 装配链单点调用（runByFilter 保持私有阶段）。 */
   async runAll(): Promise<IntegrityRepairReport[]> {
     return this.runByFilter(() => true);
   }
@@ -151,9 +144,7 @@ export class IntegrityRepairRegistry {
     return this.runByFilter((op) => op.kind === kind);
   }
 
-  private async runByFilter(
-    predicate: (op: IntegrityRepairOperation) => boolean
-  ): Promise<IntegrityRepairReport[]> {
+  private async runByFilter(predicate: (op: IntegrityRepairOperation) => boolean): Promise<IntegrityRepairReport[]> {
     const reports: IntegrityRepairReport[] = [];
     for (const op of this.operations.values()) {
       if (!predicate(op)) continue;
@@ -169,9 +160,7 @@ export class IntegrityRepairRegistry {
  * detect 抛错时保守地视为 needsRepair=true（让 repair 阶段再尝试）；
  * repair 抛错时挂到报告的 `error` 字段，不向上传播。
  */
-export async function runIntegrityRepair(
-  op: IntegrityRepairOperation
-): Promise<IntegrityRepairReport> {
+export async function runIntegrityRepair(op: IntegrityRepairOperation): Promise<IntegrityRepairReport> {
   let detection: IntegrityRepairDetection;
   try {
     detection = await op.detect();
@@ -179,9 +168,7 @@ export async function runIntegrityRepair(
     // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
     detection = {
       needsRepair: true,
-      details: `detect 阶段抛错：${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}`,
     };
   }
 

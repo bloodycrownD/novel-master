@@ -8,12 +8,7 @@
  * @module service/vfs/logic/clear-session-prompt-caches
  */
 
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  SESSION_KKV_DOMAIN_USAGE_STATS,
-  USAGE_STATS_TOOL_USE_COUNT_KEY,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -30,10 +25,7 @@ const log = createLogger("vfs.clear-session-prompt-caches");
  * 错乱，裸 await 上抛是刻意的（压缩自 2026-10-05 起同样吞错 warn——见
  * run-compaction 头注释，压缩侧的清域也是 best-effort）。
  */
-export async function clearSessionPromptCaches(
-  sessionId: string,
-  sessionKkv: SessionKkvService
-): Promise<void> {
+export async function clearSessionPromptCaches(sessionId: string, sessionKkv: SessionKkvService): Promise<void> {
   try {
     await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT);
     await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
@@ -43,12 +35,7 @@ export async function clearSessionPromptCaches(
     // 工具调用数缓存一并失效（导入可能带入含 tool_use 的消息，best-effort）。
     // 写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：读口回填前按原值复核，
     // 哨兵与该协议配套）。
-    await sessionKkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_USAGE_STATS,
-      USAGE_STATS_TOOL_USE_COUNT_KEY,
-      ""
-    );
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY, "");
   } catch (error) {
     log.warn(`best-effort 清空提示词缓存失败（session=${sessionId}）`, { error });
   }

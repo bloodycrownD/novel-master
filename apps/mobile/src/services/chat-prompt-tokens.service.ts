@@ -18,21 +18,13 @@
 
 import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
 
-import {
-  resolvePromptTokensWithBackfill,
-  resolveTokenCounterModeForModel,
-  serializePromptLlmInput,
-  type Interrupt,
-} from '@novel-master/core/provider';
+import {resolvePromptTokensWithBackfill, resolveTokenCounterModeForModel, serializePromptLlmInput, type CountPromptLlmInputParams, type Interrupt} from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
 // 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
 // nm-style: keep-local — 三条具名导入（tokenizer 驱动子路径 / core 符号名较长）
 // 单行化后均超 80 列，prettier 必拆回；按可读性保留拆行。
-import {
-  cancelSessionNativeCounts,
-  PromptCountCancelledError,
-} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
+import {cancelSessionNativeCounts, PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
@@ -47,6 +39,9 @@ import type {SessionPromptScope} from './session-prompt-input.service';
 
 /** 会话身份（可空）：延迟计时/在途取消的统一入参形态。 */
 type SessionId = string | null | undefined;
+
+/** 弃权判据：真值即本轮刷新让路。 */
+type BailCheck = () => boolean;
 
 /**
  * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
@@ -94,13 +89,8 @@ function formatLabel(r: TokenLabelResult): string {
  * {@link loadChatPromptTokenLabelResilient}；本函数留给单测与一次性取数场景。
  */
 // nm-style: keep-local — 导出签名（runtime 长类型 + scope 类型）单行化超 80 列
-export async function loadChatPromptTokenLabel(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<Result<string, AppError>> {
-  return (await loadChatTokenLabelWithFlag(runtime, scope, false)).map(
-    frame => frame.label,
-  );
+export async function loadChatPromptTokenLabel(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> {
+  return (await loadChatTokenLabelWithFlag(runtime, scope, false)).map(frame => frame.label);
 }
 
 /**
@@ -110,21 +100,11 @@ export async function loadChatPromptTokenLabel(
  * 收口——漏了弃权错误会逃逸成外层 rejection 并回落 fallback（重算一遍，
  * 恰是要避免的）。
  */
-function isChipBailError(error: unknown): boolean {
-  return error instanceof ChatPromptBuildBailedError;
-}
-
 /**
  * 估算首帧是否值得后台升级：只有「resolve 走了本地估算档」才升级（api 命中
  * 已精确、无模型/构建失败路径没有更好的档位可升）。
  */
-// nm-style: keep-local — 四参签名（runtime 长类型 + 可选 bail 回调）单行化超 80 列
-async function loadChatTokenLabelWithFlag(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-  preferEstimate: boolean,
-  shouldBail?: () => boolean,
-): Promise<Result<TokenLabelFrame, AppError>> {
+async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, preferEstimate: boolean, shouldBail?: BailCheck): Promise<Result<TokenLabelFrame, AppError>> {
   // chip 链分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip]）：2026-09-30 停止
   // 失灵/压缩跳变两轮定位的关键读数（build=整串装配 / resolve=读口含 KKV）。
   const t0 = Date.now();
@@ -132,13 +112,12 @@ async function loadChatTokenLabelWithFlag(
   // resolve 读口的弃权判据（错误通道迁移二期）：core 读口不再抛哨兵、改收
   // Interrupt——run 在途即本轮刷新被在途 run 取代，收成 replaced。无判据时
   // 恒 null（与不传同义，core 恒不弃权）。
-  const resolveBail = (): Interrupt | null =>
-    shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null;
+  const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
   let bundle;
   try {
     bundle = await buildSessionPromptInput(runtime, scope, undefined, opt);
   } catch (error) {
-    if (isChipBailError(error)) {
+    if (error instanceof ChatPromptBuildBailedError) {
       // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
       // 不写 meta），不走 fallback——fallback 会再算一遍，恰是要避免的。
       if (__DEV__) {
@@ -203,32 +182,28 @@ async function loadChatTokenLabelWithFlag(
   // fallback（重算一遍恰是要避免的竞争）；其余异常仍走外层 catch。
   let result;
   try {
-    // nm-style: keep-local — 三实参（会话 / 大对象 / 选项对象）无法单行，且拆对象会改动调用顺序形态
-    const resultPromise = resolvePromptTokensWithBackfill(
-      scope.sessionId,
-      rawMessages,
-      {
-        layout,
-        ctx,
-        savedModelId,
-        registry: runtime.tokenCounters,
-        tokenizerOverride: mode,
-        savedModels: {
-          findById: async id => {
-            const saved = await runtime.providerModels.getSavedById(id);
-            return saved;
-          },
+    const resolveRequest: CountPromptLlmInputParams = {
+      layout,
+      ctx,
+      savedModelId,
+      registry: runtime.tokenCounters,
+      tokenizerOverride: mode,
+      savedModels: {
+        findById: async id => {
+          const saved = await runtime.providerModels.getSavedById(id);
+          return saved;
         },
       },
-      {
-        sessionKkv: runtime.sessionKkv,
-        ...(preferEstimate ? {preferEstimate: true} : {}),
-        // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
-        // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
-        // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
-        shouldBail: resolveBail,
-      },
-    );
+    };
+    const resolveOptions: Parameters<typeof resolvePromptTokensWithBackfill>[3] = {
+      sessionKkv: runtime.sessionKkv,
+      ...(preferEstimate ? {preferEstimate: true} : {}),
+      // r3-chip-1：resolve 段的弃权判据透传给 core 读口。core 在两处整串级
+      // 重活之前（preferEstimate 序列化之前 / countPromptLlmInput 之前）检查
+      // 它，命中沿 Outcome.cancelled/replaced 返回——按 kind 收成空串哨兵。
+      shouldBail: resolveBail,
+    };
+    const resultPromise = resolvePromptTokensWithBackfill(scope.sessionId, rawMessages, resolveRequest, resolveOptions);
     const outcome = await resultPromise;
     if (outcome.kind === 'failed') {
       // core 读口的已知失败（现无产出路径）：沿 Result 通道上抛，不吞成弃权。
@@ -279,10 +254,7 @@ async function loadChatTokenLabelWithFlag(
  * `delete`，会把新轮的标记一起抹掉（后续升级请求全部被当成「无在途」而并发
  * 堆叠）。按轮次号比对后，旧轮只能摘自己的标记。
  */
-const preciseUpgradeInflight = new Map<
-  string,
-  {round: number; savedModelId: string}
->();
+const preciseUpgradeInflight = new Map<string, {round: number; savedModelId: string}>();
 
 /** 读数链路开发期留痕（错误通道迁移四期新增两处 Result 失败留痕走 logger，不占裸 console 基线）。 */
 const upgradeLog = createLogger('chat.prompt-tokens');
@@ -316,10 +288,7 @@ export function __setPreciseUpgradeDelayForTests(ms: number): void {
 }
 
 /** 升级轮启动延迟计时器（按 sessionId）：由 {@link cancelPreciseUpgradeDelay} 收口。 */
-const preciseUpgradeDelayTimers = new Map<
-  string,
-  ReturnType<typeof setTimeout>
->();
+const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
  * 收口某会话**仍挂起**的精确升级延迟计时（换会话 / hook 卸载时调用）。
@@ -475,9 +444,7 @@ async function runPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
   // 丢弃，于是在 build 分段与整串计数之前就弃权，切模型的旧轮不再白跑一整轮
   // 装配（真机实证：白跑轮 `settle gen=4 current=5` 烧掉 1004ms）。这是纯增量
   // 判据，run 在途与视图切走的既有弃权照旧。
-  const shouldBail = () =>
-    request.shouldBail?.() === true ||
-    (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
+  const shouldBail = () => request.shouldBail?.() === true || (sessionRefreshGen.get(sessionId) ?? 0) !== gen;
   try {
     if (shouldBail()) {
       if (__DEV__) {
@@ -486,12 +453,7 @@ async function runPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
       return;
     }
     // nm-style: keep-local — 四实参（request 深字段）无法单行；单实参调用 + 多行拆分
-    const precisePromise = loadChatTokenLabelWithFlag(
-      request.runtime,
-      request.scope,
-      false,
-      shouldBail,
-    );
+    const precisePromise = loadChatTokenLabelWithFlag(request.runtime, request.scope, false, shouldBail);
     const precise = await precisePromise;
     if (!precise.ok) {
       // 升级失败保持首帧估算标签（错误通道迁移四期：与旧 catch 同款留痕，
@@ -545,22 +507,21 @@ async function runPreciseUpgrade(sessionId: string, request: UpgradeRequest) {
  * 在途期间的新首帧排进补跑槽（见 {@link startPreciseUpgrade}）——精确标签
  * 不会因为「恰好撞上另一次刷新」而永远不到。
  */
-// nm-style: keep-local — 导出签名（4 参 + 内联 options 类型）单行化超 80 列
-export async function loadChatPromptTokenLabelResilient(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-  onPreciseUpgrade?: (label: string) => void,
-  options?: {
-    readonly shouldBail?: () => boolean;
-    /**
-     * 精确升级轮的追加弃权判据（2026-10-01 侧滑退出被堵实锤）：升级是秒级
-     * 后台重活，视图已切走（退出会话/切到别的会话）时继续跑纯属浪费，且它
-     * 占着 JS 线程与原生模块队列，正是堵返回键的那只手。首帧轮不受此判据
-     * 影响——首帧是 chip 显示的必要首拍且轻（估算档）。
-     */
-    readonly shouldBailPrecise?: () => boolean;
-  },
-): Promise<Result<string, AppError>> {
+// nm-style: keep-public — 类型位置经 namespace 访问：useChatTabScope.ts:175 promptTokens.TokenLabelOptions
+export type TokenLabelOptions = {
+  /** 首帧估算档的后台精确升级回填。 */
+  readonly onPreciseUpgrade?: (label: string) => void;
+  readonly shouldBail?: BailCheck;
+  /**
+   * 精确升级轮的追加弃权判据（2026-10-01 侧滑退出被堵实锤）：升级是秒级
+   * 后台重活，视图已切走（退出会话/切到别的会话）时继续跑纯属浪费，且它
+   * 占着 JS 线程与原生模块队列，正是堵返回键的那只手。首帧轮不受此判据
+   * 影响——首帧是 chip 显示的必要首拍且轻（估算档）。
+   */
+  readonly shouldBailPrecise?: BailCheck;
+};
+
+export async function loadChatPromptTokenLabelResilient(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope, options?: TokenLabelOptions): Promise<Result<string, AppError>> {
   let first: Result<TokenLabelFrame, AppError>;
   const bail = options?.shouldBail;
   try {
@@ -594,6 +555,7 @@ export async function loadChatPromptTokenLabelResilient(
   // 可兑现，用户连点 15 次无效）。run 在途时跳过升级（chip 保持估算档），run
   // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
   const runInFlight = runtime.abortRegistry.has(sessionId);
+  const onPreciseUpgrade = options?.onPreciseUpgrade;
   if (frame.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
     const request: UpgradeRequest = {
       runtime,
@@ -603,9 +565,7 @@ export async function loadChatPromptTokenLabelResilient(
       // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
       // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
       // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
-      shouldBail: () =>
-        runtime.abortRegistry.has(scope.sessionId) ||
-        options?.shouldBailPrecise?.() === true,
+      shouldBail: () => runtime.abortRegistry.has(scope.sessionId) || options?.shouldBailPrecise?.() === true,
       round: ++preciseUpgradeRoundSeq,
       savedModelId: frame.savedModelId ?? '',
     };
@@ -642,10 +602,7 @@ export async function loadChatPromptTokenLabelResilient(
  */
 // nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
 // catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
-async function loadChatPromptTokenLabelFallback(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<Result<string, AppError>> {
+async function loadChatPromptTokenLabelFallback(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> {
   const all = await runtime.messages.listBySession(scope.sessionId);
   const visible = all.filter(m => !m.hidden);
   const bodyText = messageBodyTextFromBlocks;
@@ -662,12 +619,8 @@ async function loadChatPromptTokenLabelFallback(
     if (!built.ok) {
       savedModelId = workspaceModelId || undefined;
     } else {
-      const conf = await runtime.sessions.getSessionAgentConfig(
-        scope.sessionId,
-      );
-      savedModelId = conf.ok
-        ? built.value.definition.model ?? conf.value.modelId
-        : workspaceModelId || undefined;
+      const conf = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
+      savedModelId = conf.ok ? built.value.definition.model ?? conf.value.modelId : workspaceModelId || undefined;
     }
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
@@ -685,13 +638,6 @@ async function loadChatPromptTokenLabelFallback(
     }
   }
 
-  return Result.ok(
-    formatLabel({
-      tokenCount: count,
-      estimated: true,
-      counterKind: 'heuristic',
-      source: 'local',
-      contextWindow,
-    }),
-  );
+  const label = formatLabel({tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local', contextWindow});
+  return Result.ok(label);
 }

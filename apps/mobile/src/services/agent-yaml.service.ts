@@ -1,22 +1,12 @@
 import {decode, encode, parseText, stringifyText} from '@novel-master/core';
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {
-  agentDefinitionSchema,
-  validateAgentDefinition,
-  type AgentDefinition,
-} from '@novel-master/core/agent';
+import {agentDefinitionSchema, validateAgentDefinition, type AgentDefinition} from '@novel-master/core/agent';
 import {Result, type AppError} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {
-  exportYamlFile,
-  importYamlFile,
-  normalizeYamlError,
-} from './yaml-shared';
+import {exportYamlFile, importYamlFile, normalizeYamlError} from './yaml-shared';
 
-export function decodeAgentYamlText(
-  yaml: string,
-): Result<AgentDefinition, AppError> {
+export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
   // 错误通道迁移四期：parseText / decode 的已知失败沿 Result 接力；导入侧
   // 由唯一调用方 importAgentYaml 统一走 normalizeYamlError 贴标签。
   const parsed = parseText(yaml, 'yaml');
@@ -31,10 +21,7 @@ export function encodeAgentYamlText(def: AgentDefinition): string {
   return stringifyText(doc, 'yaml');
 }
 
-export async function exportAgentYaml(
-  runtime: MobileNovelMasterRuntime,
-  agentId: string,
-): Promise<'saved' | 'cancelled'> {
+export async function exportAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<'saved' | 'cancelled'> {
   const def = await runtime.agentRegistry.get(agentId);
   if (!def.ok) {
     // 导出调用方只有 throw 通道：registry 已知失败转 throw 交调用方 catch 收口。
@@ -46,10 +33,7 @@ export async function exportAgentYaml(
 }
 
 /** 校验失败套「YAML 无效」前缀沿 Result 接力（错误通道迁移四期）；decode/upsert 的平台异常仍走 reject。 */
-export async function importAgentYaml(
-  runtime: MobileNovelMasterRuntime,
-  agentId: string,
-): Promise<Result<void, Error>> {
+export async function importAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<Result<void, Error>> {
   return importYamlFile(async yaml => {
     try {
       const decoded = decodeAgentYamlText(yaml);
@@ -63,9 +47,7 @@ export async function importAgentYaml(
       if (!validation.ok) {
         return Result.err(normalizeYamlError(validation.error, 'Agent YAML 无效'));
       }
-      const saved = await runtime.agentRegistry.upsert(agentId, def, {
-        registeredToolNames: probe.list(),
-      });
+      const saved = await runtime.agentRegistry.upsert(agentId, def, {registeredToolNames: probe.list()});
       if (!saved.ok) {
         return Result.err(normalizeYamlError(saved.error, 'Agent YAML 无效'));
       }

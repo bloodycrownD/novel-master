@@ -43,7 +43,12 @@ export async function inferLlmProtocolFromSavedModelId(savedModelId: string, sav
   }
 }
 
-/** @deprecated 请用 {@link inferLlmProtocolFromSavedModelId}。 */
+/**
+ * @deprecated 请用 {@link inferLlmProtocolFromSavedModelId}。
+ *
+ * nm-style: keep-public — `public/provider.ts` 仍导出该兼容别名，撤除需同步 public
+ * barrel（本轮只改 domain 范围）；生产/测试零调用，收口轮随 barrel 一并删除。
+ */
 export async function inferLlmProtocolFromApplicationModelId(savedModelId: string, savedModels: Pick<SavedModelRepository, "findById">, providers?: Pick<ProviderRepository, "findById">): Promise<LlmProtocolKind> {
   return inferLlmProtocolFromSavedModelId(savedModelId, savedModels, providers);
 }

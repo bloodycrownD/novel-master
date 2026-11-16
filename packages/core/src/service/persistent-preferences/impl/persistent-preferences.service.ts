@@ -9,13 +9,7 @@ import { Result } from "@/errors/either.js";
 import { formatBoolean, parseBoolean } from "@/infra/kkv-value-codec.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
-import {
-  PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SUBAGENT_STREAM,
-  PREF_KEY_CHAT_THINKING_CONTEXT,
-  PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
-  PREFERENCES_MODULE,
-} from "./preference-keys.js";
+import { PREF_KEY_CHAT_LLM_STREAM, PREF_KEY_CHAT_SUBAGENT_STREAM, PREF_KEY_CHAT_THINKING_CONTEXT, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, PREFERENCES_MODULE } from "./preference-keys.js";
 
 export class DefaultPersistentPreferences implements PersistentPreferences {
   constructor(private readonly kkv: KkvService) {}
@@ -25,13 +19,10 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setLlmStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_CHAT_LLM_STREAM,
-      formatBoolean(enabled)
-    );
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_LLM_STREAM, formatBoolean(enabled));
   }
 
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetLlmStreamEnabled(): Promise<Result<void, AppError>> {
     return this.deletePref(PREF_KEY_CHAT_LLM_STREAM);
   }
@@ -41,13 +32,10 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setSubagentStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_CHAT_SUBAGENT_STREAM,
-      formatBoolean(enabled)
-    );
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_SUBAGENT_STREAM, formatBoolean(enabled));
   }
 
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetSubagentStreamEnabled(): Promise<Result<void, AppError>> {
     return this.deletePref(PREF_KEY_CHAT_SUBAGENT_STREAM);
   }
@@ -57,13 +45,10 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setThinkingContextEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_CHAT_THINKING_CONTEXT,
-      formatBoolean(enabled)
-    );
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_THINKING_CONTEXT, formatBoolean(enabled));
   }
 
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetThinkingContextEnabled(): Promise<Result<void, AppError>> {
     return this.deletePref(PREF_KEY_CHAT_THINKING_CONTEXT);
   }
@@ -72,14 +57,12 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return this.getBooleanPref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, true);
   }
 
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 写入单点消费。 */
   async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
-      formatBoolean(enabled)
-    );
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, formatBoolean(enabled));
   }
 
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetUserVfsUnifiedToolTurn(): Promise<Result<void, AppError>> {
     return this.deletePref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN);
   }
@@ -110,7 +93,8 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     if (!raw.ok) return Result.err(raw.error);
     if (raw.value === undefined) return Result.ok(defaultValue);
     const parsed = parseBoolean(raw.value);
-    if (!parsed.ok) return Result.err(new AppError("PREFERENCES_INVALID_VALUE", { detail: `Preference key "${key}" expected boolean, got: ${raw.value}`, key, expectedType: "boolean", actualValue: raw.value }));
+    if (!parsed.ok)
+      return Result.err(new AppError("PREFERENCES_INVALID_VALUE", { detail: `Preference key "${key}" expected boolean, got: ${raw.value}`, key, expectedType: "boolean", actualValue: raw.value }));
     return Result.ok(parsed.value);
   }
 

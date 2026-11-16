@@ -15,7 +15,7 @@
  *      可在 migration 之外（如未来运行时 id 重写）复用。
  *
  * 注意：本模块只校验 provider 自身的双身份键一致性，不碰 vfs 的两套 ref_count——
- * 那是 {@link createRevisionRefCountRepairOperation} 的职责，两套计数器各自独立。
+ * 那是 `revision-ref-count.ts` 的职责，两套计数器各自独立。
  *
  * @module domain/provider/logic/provider-identity-repair
  */

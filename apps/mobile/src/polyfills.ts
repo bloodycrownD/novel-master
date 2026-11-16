@@ -46,13 +46,8 @@ if (typeof globalThis.Node === 'undefined') {
 }
 
 /** AWS SDK fetch 响应体为 Blob 时，RN 自带 arrayBuffer 可能异常；有 FileReader 时强制走 FileReader */
-if (
-  typeof globalThis.Blob !== 'undefined' &&
-  typeof FileReader === 'function'
-) {
-  globalThis.Blob.prototype.arrayBuffer = function arrayBufferPolyfill(
-    this: Blob,
-  ): Promise<ArrayBuffer> {
+if (typeof globalThis.Blob !== 'undefined' && typeof FileReader === 'function') {
+  globalThis.Blob.prototype.arrayBuffer = function arrayBufferPolyfill(this: Blob): Promise<ArrayBuffer> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -62,20 +57,12 @@ if (
         }
         reject(new Error('Blob.arrayBuffer polyfill: 无法读取 ArrayBuffer'));
       };
-      reader.onerror = () =>
-        reject(reader.error ?? new Error('FileReader 失败'));
+      reader.onerror = () => reject(reader.error ?? new Error('FileReader 失败'));
       reader.readAsArrayBuffer(this);
     });
   };
-} else if (
-  typeof globalThis.Blob !== 'undefined' &&
-  typeof globalThis.Blob.prototype.arrayBuffer !== 'function'
-) {
-  globalThis.Blob.prototype.arrayBuffer = function arrayBufferPolyfill(
-    this: Blob,
-  ): Promise<ArrayBuffer> {
-    return Promise.reject(
-      new Error('Blob.arrayBuffer polyfill: FileReader 不可用'),
-    );
+} else if (typeof globalThis.Blob !== 'undefined' && typeof globalThis.Blob.prototype.arrayBuffer !== 'function') {
+  globalThis.Blob.prototype.arrayBuffer = function arrayBufferPolyfill(this: Blob): Promise<ArrayBuffer> {
+    return Promise.reject(new Error('Blob.arrayBuffer polyfill: FileReader 不可用'));
   };
 }

@@ -13,7 +13,7 @@ import {AppError} from '@novel-master/core/errors';
 import {showAppToast} from '../services/app-toast';
 import {toastMessage} from '../errors/toast-message';
 
-export interface BatchDeleteConfirmOptions<T> {
+interface BatchDeleteConfirmOptions<T> {
   title: string;
   /** 确认弹窗正文；入参为本次待删条目（文案可按条目数/名称分化）。 */
   message: (items: readonly T[]) => string;

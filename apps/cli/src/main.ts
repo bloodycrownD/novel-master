@@ -6,7 +6,6 @@
 
 import { PACKAGE_NAME } from "@novel-master/core";
 
-
 import { type VfsService } from "@novel-master/core/vfs";
 import { type AppError, type Result } from "@novel-master/core/errors";
 import { type Outcome } from "@novel-master/core/workplace";
@@ -23,13 +22,7 @@ import { runCompactionConditions } from "./compaction-conditions/commands.js";
 import { runSortRule } from "./sort-rule/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
-import {
-  CANCELLED_MESSAGE,
-  EXIT_CANCELLED,
-  EXIT_USAGE,
-  exitCodeForError,
-  formatCliError,
-} from "./cli-errors.js";
+import { CANCELLED_MESSAGE, EXIT_CANCELLED, EXIT_USAGE, exitCodeForError, formatCliError } from "./cli-errors.js";
 import { runDelete } from "./vfs/commands/delete.js";
 import { runMkdir } from "./vfs/commands/mkdir.js";
 import { runGlob } from "./vfs/commands/glob.js";
@@ -45,10 +38,7 @@ import { extractDbPath, parseCliArgs } from "./vfs/parse-args.js";
 import { installCliLogSink } from "./log/cli-log-sink.js";
 import { extractLogFilePath } from "./log/parse-log-file-arg.js";
 
-const GLOBAL_VFS_COMMANDS: Record<
-  string,
-  (vfs: VfsService, args: readonly string[]) => Promise<Result<void, AppError>>
-> = {
+const GLOBAL_VFS_COMMANDS: Record<string, (vfs: VfsService, args: readonly string[]) => Promise<Result<void, AppError>>> = {
   list: runList,
   mkdir: runMkdir,
   read: runRead,
@@ -73,61 +63,6 @@ function failExit(error: unknown): number {
   return code;
 }
 
-async function runVfs(argv: string[]): Promise<number> {
-  const { rest } = extractDbPath(argv);
-  const subcommand = rest[0];
-  const subArgs = rest.slice(1);
-
-  if (subcommand === "workplace") {
-    const created = await createNovelMasterRuntime(argv);
-    if (!created.ok) return failExit(created.error);
-    const rt = created.value;
-    try {
-      const outcome = await runVfsWorkplace(rt, subArgs);
-      if (outcome.kind === "cancelled" || outcome.kind === "replaced") {
-        console.error(CANCELLED_MESSAGE);
-        return EXIT_CANCELLED;
-      }
-      if (outcome.kind === "failed") return failExit(outcome.error);
-      return 0;
-    } finally {
-      await rt.conn.close();
-    }
-  }
-
-  const created = await createNovelMasterRuntime(argv);
-  if (!created.ok) return failExit(created.error);
-  const rt = created.value;
-  try {
-    if (subcommand === "export-zip") {
-      const r = await runExportZip(rt.conn, { kind: "global" }, subArgs);
-      if (!r.ok) return failExit(r.error);
-      return 0;
-    }
-    if (subcommand === "import-zip") {
-      const r = await runImportZip(rt.conn, { kind: "global" }, subArgs);
-      if (!r.ok) return failExit(r.error);
-      return 0;
-    }
-    if (subcommand === "import-character-card") {
-      const r = await runImportCharacterCard(rt.conn, { kind: "global" }, subArgs);
-      if (!r.ok) return failExit(r.error);
-      return 0;
-    }
-    if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
-      console.error(
-        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|import-character-card|workplace> ...",
-      );
-      return EXIT_USAGE;
-    }
-    const r = await GLOBAL_VFS_COMMANDS[subcommand]!(rt.globalVfs(), subArgs);
-    if (!r.ok) return failExit(r.error);
-    return 0;
-  } finally {
-    await rt.conn.close();
-  }
-}
-
 // nm-style: keep-public — CLI 进程入口（`src/index.ts` 唯一调用）；命令分发不是可内联的局部 helper。
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   // `--log-file` 是全局参数：先摘掉再分发，子命令的参数解析不该看到它。
@@ -136,15 +71,63 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   const top = args[0];
 
   if (top === "config" || top === "kkv") {
-    console.error(
-      `Unknown command: ${top}. Use 'nm preferences' for settings; workspace pointers are set via project/session/provider/model use.`,
-    );
+    console.error(`Unknown command: ${top}. Use 'nm preferences' for settings; workspace pointers are set via project/session/provider/model use.`);
     return EXIT_USAGE;
   }
 
   if (top === "vfs") {
     try {
-      return await runVfs(args.slice(1));
+      const argv = args.slice(1);
+      const { rest } = extractDbPath(argv);
+      const subcommand = rest[0];
+      const subArgs = rest.slice(1);
+
+      if (subcommand === "workplace") {
+        const created = await createNovelMasterRuntime(argv);
+        if (!created.ok) return failExit(created.error);
+        const rt = created.value;
+        try {
+          const outcome = await runVfsWorkplace(rt, subArgs);
+          if (outcome.kind === "cancelled" || outcome.kind === "replaced") {
+            console.error(CANCELLED_MESSAGE);
+            return EXIT_CANCELLED;
+          }
+          if (outcome.kind === "failed") return failExit(outcome.error);
+          return 0;
+        } finally {
+          await rt.conn.close();
+        }
+      }
+
+      const created = await createNovelMasterRuntime(argv);
+      if (!created.ok) return failExit(created.error);
+      const rt = created.value;
+      try {
+        if (subcommand === "export-zip") {
+          const r = await runExportZip(rt.conn, { kind: "global" }, subArgs);
+          if (!r.ok) return failExit(r.error);
+          return 0;
+        }
+        if (subcommand === "import-zip") {
+          const r = await runImportZip(rt.conn, { kind: "global" }, subArgs);
+          if (!r.ok) return failExit(r.error);
+          return 0;
+        }
+        if (subcommand === "import-character-card") {
+          const r = await runImportCharacterCard(rt.conn, { kind: "global" }, subArgs);
+          if (!r.ok) return failExit(r.error);
+          return 0;
+        }
+        if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
+          console.error("Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|import-character-card|workplace> ...");
+          return EXIT_USAGE;
+        }
+        const r = await GLOBAL_VFS_COMMANDS[subcommand]!(rt.globalVfs(), subArgs);
+        if (!r.ok) return failExit(r.error);
+        return 0;
+      } finally {
+        await rt.conn.close();
+      }
     } catch (error) {
       return failExit(error);
     }
@@ -188,12 +171,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
             const { flags } = parseCliArgs(rest);
             const resolvedProject = await rt.scope.resolveProjectId(flags);
             if (!resolvedProject.ok) return failExit(resolvedProject.error);
-            const r = await runProjectVfs(
-              rt.conn,
-              (id) => rt.projectVfs(id),
-              resolvedProject.value,
-              rest,
-            );
+            const r = await runProjectVfs(rt.conn, (id) => rt.projectVfs(id), resolvedProject.value, rest);
             if (!r.ok) return failExit(r.error);
           } else {
             outcome = await runProject(rt, sub, rest);

@@ -17,7 +17,7 @@
  */
 
 /** 单次 SSE 响应的分发状态：首包标记需要跨 chunk 复用。 */
-export interface SseDispatchState {
+interface SseDispatchState {
   /** 是否已投递过至少一个非空 chunk（首包日志只打一次）。 */
   firstChunkDelivered: boolean;
 }
@@ -40,12 +40,7 @@ export function createSseDispatchState(): SseDispatchState {
  * @param emit 投递 sink：fetch 传 onChunk，XHR 传 emitter.append
  * @param onFirstChunk 首个非空 chunk 的回调，用来打日志
  */
-export function dispatchSseChunk(
-  chunk: string,
-  state: SseDispatchState,
-  emit: (text: string) => void,
-  onFirstChunk?: (bytes: number) => void
-): void {
+export function dispatchSseChunk(chunk: string, state: SseDispatchState, emit: (text: string) => void, onFirstChunk?: (bytes: number) => void): void {
   if (chunk.length === 0) {
     return;
   }

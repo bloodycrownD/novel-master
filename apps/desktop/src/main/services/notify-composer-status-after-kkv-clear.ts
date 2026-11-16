@@ -14,10 +14,7 @@ import { projectComposerStatusForSession } from "./project-composer-status.servi
  * Undo rewind / 手动重置 / undo_send：直接空状态条。
  * Renderer 侧仍会 ∪ annotate store（若有）。
  */
-export async function notifyComposerStatusAfterSessionKkvCleared(
-  _rt: DesktopNovelMasterRuntime,
-  sessionId: string,
-): Promise<void> {
+export async function notifyComposerStatusAfterSessionKkvCleared(_rt: DesktopNovelMasterRuntime, sessionId: string): Promise<void> {
   notifyComposerAttachmentsSuggestToRenderer({
     sessionId,
     attachments: [],
@@ -29,10 +26,7 @@ export async function notifyComposerStatusAfterSessionKkvCleared(
  * Annotate chip 由 renderer `unionComposerStatusWithAnnotate` 合并。
  * （Undo undo_send / rewind 走 {@link notifyComposerStatusAfterSessionKkvCleared} 推空。）
  */
-export async function notifyComposerStatusAfterFloorOrCompaction(
-  rt: DesktopNovelMasterRuntime,
-  sessionId: string,
-): Promise<void> {
+export async function notifyComposerStatusAfterFloorOrCompaction(rt: DesktopNovelMasterRuntime, sessionId: string): Promise<void> {
   const attachments = await projectComposerStatusForSession(rt, sessionId);
   notifyComposerAttachmentsSuggestToRenderer({
     sessionId,

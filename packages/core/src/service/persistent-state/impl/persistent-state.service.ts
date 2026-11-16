@@ -11,14 +11,7 @@ import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/se
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
-import {
-  KEY_CURRENT_AGENT_ID,
-  KEY_CURRENT_MODEL_ID,
-  KEY_CURRENT_PROJECT_ID,
-  KEY_CURRENT_PROVIDER_ID,
-  KEY_CURRENT_SESSION_ID,
-  WORKSPACE_STATE_MODULE,
-} from "./workspace-state-keys.js";
+import { KEY_CURRENT_AGENT_ID, KEY_CURRENT_MODEL_ID, KEY_CURRENT_PROJECT_ID, KEY_CURRENT_PROVIDER_ID, KEY_CURRENT_SESSION_ID, WORKSPACE_STATE_MODULE } from "./workspace-state-keys.js";
 
 const MODULE = WORKSPACE_STATE_MODULE;
 
@@ -29,10 +22,7 @@ export class DefaultPersistentState implements PersistentState {
    *   占用（进程内热层 + `prompt_tokens` 域行双删）。可选——缺省时失效只
    *   退化为清进程内热层，不因装配缺失而报错。
    */
-  constructor(
-    private readonly kkv: KkvService,
-    private readonly sessionKkv?: SessionKkvService | null
-  ) {}
+  constructor(private readonly kkv: KkvService, private readonly sessionKkv?: SessionKkvService | null) {}
 
   getCurrentProjectId(): Promise<Result<string | undefined, AppError>> {
     return this.get(KEY_CURRENT_PROJECT_ID);
@@ -62,6 +52,7 @@ export class DefaultPersistentState implements PersistentState {
     return this.get(KEY_CURRENT_PROVIDER_ID);
   }
 
+  /** nm-style: keep-public — PersistentState 端口方法；CLI `nm provider use` 单点消费（apps 禁调）。 */
   setCurrentProviderId(id: string): Promise<void> {
     return this.set(KEY_CURRENT_PROVIDER_ID, id);
   }
@@ -93,6 +84,7 @@ export class DefaultPersistentState implements PersistentState {
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_AGENT_ID, id);
   }
 
+  /** nm-style: keep-public — PersistentState 端口方法；agent 删除链单点消费。 */
   resetCurrentAgentId(): Promise<void> {
     return this.reset(KEY_CURRENT_AGENT_ID);
   }

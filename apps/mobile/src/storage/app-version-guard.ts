@@ -5,15 +5,7 @@
  */
 import {Result, AppError} from '@novel-master/core/errors';
 import type {AppUiPreferences} from './app-ui-prefs';
-import {
-  APP_UI_KEY_LAST_RUN_VERSION,
-  APP_UI_KEY_RICH_RENDER_EPOCH,
-} from './app-ui-keys';
-
-function parseEpoch(raw: string | undefined): number {
-  const n = Number.parseInt(raw ?? '0', 10);
-  return Number.isNaN(n) ? 0 : n;
-}
+import {APP_UI_KEY_LAST_RUN_VERSION, APP_UI_KEY_RICH_RENDER_EPOCH} from './app-ui-keys';
 
 /**
  * Compares `currentVersion` to stored last-run version; on change increments epoch.
@@ -22,15 +14,13 @@ function parseEpoch(raw: string | undefined): number {
  * 失败通道（错误通道迁移四期）：读失败沿 `Result.err` 接力给 bootstrap——
  * 与旧异常通道同终端（bootstrap catch → 错误屏），不在 storage 层吞成 0。
  */
-export async function syncAppVersionForRichRender(
-  appUi: AppUiPreferences,
-  currentVersion: string,
-): Promise<Result<number, AppError>> {
+export async function syncAppVersionForRichRender(appUi: AppUiPreferences, currentVersion: string): Promise<Result<number, AppError>> {
   const lastRun = await appUi.get(APP_UI_KEY_LAST_RUN_VERSION);
   if (!lastRun.ok) return Result.err(lastRun.error);
   const storedEpoch = await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH);
   if (!storedEpoch.ok) return Result.err(storedEpoch.error);
-  let epoch = parseEpoch(storedEpoch.value);
+  const parsedEpoch = Number.parseInt(storedEpoch.value ?? '0', 10);
+  let epoch = Number.isNaN(parsedEpoch) ? 0 : parsedEpoch;
 
   if (lastRun.value !== currentVersion) {
     epoch += 1;

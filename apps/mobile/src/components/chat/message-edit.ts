@@ -3,12 +3,7 @@
  * 消息操作菜单的条目构建已随 MessageActionMenu 退役（chat-webview-unify Step 8，
  * 2026-10-01）——web 侧 menu.ts 的 buildMenuItems 是唯一真源。
  */
-import {
-  type ChatMessageData,
-  type ContentBlock,
-  type MessageContent,
-  ChatMessage,
-} from '@novel-master/core/chat';
+import {type ChatMessageData, type ContentBlock, type MessageContent, ChatMessage} from '@novel-master/core/chat';
 
 /** Re-export Core 规则。 */
 export function editableTextFromMessage(message: ChatMessageData): string | null {
@@ -18,10 +13,7 @@ export function editableTextFromMessage(message: ChatMessageData): string | null
 /**
  * Merges edited text into the first text-block slot; non-text blocks keep original order.
  */
-export function applyTextEditToMessage(
-  message: ChatMessageData,
-  newText: string,
-): MessageContent {
+export function applyTextEditToMessage(message: ChatMessageData, newText: string): MessageContent {
   const blocks = message.content.blocks ?? [];
   const result: ContentBlock[] = [];
   let textReplaced = false;

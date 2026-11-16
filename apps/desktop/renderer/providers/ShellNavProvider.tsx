@@ -80,7 +80,7 @@ import {
 
 
 
-export interface ShellNavContextValue {
+interface ShellNavContextValue {
 
   viewId: NavViewId;
 

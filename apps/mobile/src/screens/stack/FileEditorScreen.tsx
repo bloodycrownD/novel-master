@@ -2,16 +2,8 @@
  * Full-screen file editor: read VFS, save via scoped vfs.write (no checkpoint).
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  } from 'react-native';
-import {useRoute,
-  type RouteProp} from '@react-navigation/native';
+import {ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -21,16 +13,10 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
 import {takeFileEditorOnSessionVfsSaved} from '../../components/agent/file-editor-saved-callback';
-import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
-import {
-  FileMarkdownPreview,
-  isMarkdownPreviewPath,
-} from '../../components/vfs/FileMarkdownPreview';
+import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
+import {FileMarkdownPreview, isMarkdownPreviewPath} from '../../components/vfs/FileMarkdownPreview';
 import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
-import {
-  CodeEditorWebView,
-  type CodeEditorWebViewHandle,
-} from '../../components/vfs/CodeEditorWebView';
+import {CodeEditorWebView, type CodeEditorWebViewHandle} from '../../components/vfs/CodeEditorWebView';
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
 import {formatCharCount} from '@novel-master/core/format';
 
@@ -66,9 +52,7 @@ export function FileEditorScreen() {
   // 渲染体里——本屏挂载后加载完成必然触发一次 setContent，那之后的任何一次
   // 重渲染都会再 take 一次、拿到 null 覆盖局部变量 ⇒ 回调事实上永不生效，
   // 正好复现原病灶。范式见 PromptEditorScreen。
-  const onSessionVfsSavedRef = useRef<(() => void) | null>(
-    takeFileEditorOnSessionVfsSaved(),
-  );
+  const onSessionVfsSavedRef = useRef<(() => void) | null>(takeFileEditorOnSessionVfsSaved());
 
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
@@ -77,9 +61,7 @@ export function FileEditorScreen() {
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(true);
   const [editorFocused, setEditorFocused] = useState(false);
-  const [previewRenderKind, setPreviewRenderKind] = useState<
-    'markdown' | 'txt'
-  >('markdown');
+  const [previewRenderKind, setPreviewRenderKind] = useState<'markdown' | 'txt'>('markdown');
   const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
 
   const isDirty = content !== savedContent;
@@ -135,10 +117,7 @@ export function FileEditorScreen() {
 
   // 保存路径专用：physical 分支类型层面无写方法且保存已禁用，
   // 其余分支均为单 scope 可写 VFS，收窄仅为满足写接口签名。
-  const resolveWritableVfs = useCallback(
-    () => resolveVfs() as VfsService,
-    [resolveVfs],
-  );
+  const resolveWritableVfs = useCallback(() => resolveVfs() as VfsService, [resolveVfs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,19 +171,8 @@ export function FileEditorScreen() {
     setSaving(true);
     try {
       const vfs = resolveWritableVfs();
-      if (
-        scopeKind === 'session' &&
-        sessionId &&
-        userVfsUnifiedToolTurnFlag.isEnabled()
-      ) {
-        const saved = await sessionSaveVfsFile(
-          runtime,
-          sessionId,
-          vfs,
-          path,
-          content,
-          savedContent,
-        );
+      if (scopeKind === 'session' && sessionId && userVfsUnifiedToolTurnFlag.isEnabled()) {
+        const saved = await sessionSaveVfsFile(runtime, sessionId, vfs, path, content, savedContent);
         if (!saved.ok) {
           showToast(toastMessage('保存失败', saved.error));
           return;
@@ -271,38 +239,26 @@ export function FileEditorScreen() {
     );
   }
 
-  const statsRow =
-    mtimeMs != null ? (
-      editorFocused && !previewMode ? (
-        <Pressable
-          testID="file-editor-dismiss-stats"
-          style={[styles.statsRow, {borderBottomColor: tokens.border}]}
-          onPress={dismissEditor}
-          accessibilityRole="button"
-          accessibilityLabel="收起键盘"
-        >
-          <Text
-            style={[styles.statsText, {color: tokens.textSecondary}]}
-            numberOfLines={1}
-          >
-            更新于 {formatFileMtime(mtimeMs)} ·{' '}
-            {formatCharCount(content.length)} 字
-            {isDirty ? ' · 编辑中未保存' : ''}
+  let statsRow: React.ReactNode = null;
+  if (mtimeMs != null) {
+    if (editorFocused && !previewMode) {
+      statsRow = (
+        <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel="收起键盘">
+          <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
+            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </Pressable>
-      ) : (
+      );
+    } else {
+      statsRow = (
         <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
-          <Text
-            style={[styles.statsText, {color: tokens.textSecondary}]}
-            numberOfLines={1}
-          >
-            更新于 {formatFileMtime(mtimeMs)} ·{' '}
-            {formatCharCount(content.length)} 字
-            {isDirty ? ' · 编辑中未保存' : ''}
+          <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
+            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </View>
-      )
-    ) : null;
+      );
+    }
+  }
 
   // 预览无软键盘；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
   return (
@@ -318,11 +274,7 @@ export function FileEditorScreen() {
       title={isDirty ? '未保存' : vfsBasename(path)}
       titleDanger={isDirty}
       titleFontSize={14}
-      titlePress={
-        editorFocused && !previewMode
-          ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor}
-          : undefined
-      }
+      titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}
       toggle={isReadOnly ? undefined : {previewMode, onPress: togglePreview}}
       toolbarExtra={statsRow}
       segmented={{
@@ -351,17 +303,7 @@ export function FileEditorScreen() {
           </View>
         )
       }
-      editor={
-        <CodeEditorWebView
-          ref={codeEditorRef}
-          testID="file-editor-input"
-          value={content}
-          path={path}
-          onChange={setContent}
-          onFocusChange={setEditorFocused}
-          style={styles.editor}
-        />
-      }
+      editor={<CodeEditorWebView ref={codeEditorRef} testID="file-editor-input" value={content} path={path} onChange={setContent} onFocusChange={setEditorFocused} style={styles.editor} />}
     />
   );
 }

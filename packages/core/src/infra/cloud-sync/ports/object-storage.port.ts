@@ -8,6 +8,7 @@ import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 
 /** Head 对象结果 */
+// nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type ObjectStorageHeadResult = {
   exists: boolean;
   etag?: string;

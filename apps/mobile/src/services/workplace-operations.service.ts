@@ -3,12 +3,7 @@
  */
 import {type VfsScope} from '@novel-master/core/vfs';
 
-import {
-  type InclusionMode,
-  type SetDirRuleInput,
-  type WorkplaceDirRule,
-  type WorkplaceService,
-} from '@novel-master/core/workplace';
+import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService} from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
 import {AppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
@@ -18,33 +13,18 @@ function workplaceRootLogicalPath(_scope: VfsScope): string {
   return '/';
 }
 
-function isWorkplaceRootPath(scope: VfsScope, logicalPath: string): boolean {
-  return logicalPath === workplaceRootLogicalPath(scope);
-}
-
 const INCLUSION_CYCLE: InclusionMode[] = ['auto', 'show', 'hide'];
 
 /** Cycle file inclusion auto → show → hide. */
-export async function cycleFileInclusion(
-  workplace: WorkplaceService,
-  logicalPath: string,
-  currentMode: InclusionMode,
-): Promise<InclusionMode> {
-  const next =
-    INCLUSION_CYCLE[
-      (INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length
-    ];
+export async function cycleFileInclusion(workplace: WorkplaceService, logicalPath: string, currentMode: InclusionMode): Promise<InclusionMode> {
+  const next = INCLUSION_CYCLE[(INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length];
   await workplace.setFileRule({logicalPath, inclusionMode: next});
   return next;
 }
 
 /** Set directory rule enabled; root cannot be disabled（守卫沿 Result.err 上行，五期）. */
-export async function setDirRuleEnabled(
-  workplace: WorkplaceService,
-  logicalPath: string,
-  enabled: boolean,
-): Promise<Result<void, AppError>> {
-  if (!enabled && isWorkplaceRootPath(workplace.scope, logicalPath)) {
+export async function setDirRuleEnabled(workplace: WorkplaceService, logicalPath: string, enabled: boolean): Promise<Result<void, AppError>> {
+  if (!enabled && logicalPath === workplaceRootLogicalPath(workplace.scope)) {
     return Result.err(new AppError('WORKPLACE_ROOT_RULE_LOCKED', {detail: '根目录规则不可关闭'}));
   }
   return workplace.setDirRule({
@@ -54,11 +34,7 @@ export async function setDirRuleEnabled(
 }
 
 /** Toggle directory rule on/off; root directory cannot be disabled. */
-export async function toggleDirRuleEnabled(
-  workplace: WorkplaceService,
-  logicalPath: string,
-  currentlyEnabled: boolean,
-): Promise<Result<boolean, AppError>> {
+export async function toggleDirRuleEnabled(workplace: WorkplaceService, logicalPath: string, currentlyEnabled: boolean): Promise<Result<boolean, AppError>> {
   const nextEnabled = !currentlyEnabled;
   const ruled = await setDirRuleEnabled(workplace, logicalPath, nextEnabled);
   if (!ruled.ok) return Result.err(ruled.error);
@@ -68,12 +44,8 @@ export async function toggleDirRuleEnabled(
 /**
  * Batch enable/disable rules on selected directory rows; skips files and root when disabling.
  */
-export async function batchSetDirRulesEnabled(
-  workplace: WorkplaceService,
-  paths: readonly string[],
-  dirPaths: ReadonlySet<string>,
-  enabled: boolean,
-): Promise<{applied: number; skipped: number}> {
+// nm-style: keep-public — 测试契约：apps/mobile/__tests__/vfs-file-manager.*.test.tsx 动态 import 解构直引
+export async function batchSetDirRulesEnabled(workplace: WorkplaceService, paths: readonly string[], dirPaths: ReadonlySet<string>, enabled: boolean): Promise<{applied: number; skipped: number}> {
   let applied = 0;
   let skipped = 0;
   for (const path of paths) {
@@ -137,6 +109,7 @@ export function emptyDirRuleForm(logicalPath: string) {
 }
 
 /** Scope root path for navigation (unified logical `/` for all domains). */
+// nm-style: keep-public — VFS 根路径解析公开入口（VfsFileManager 消费）
 export function vfsScopeRootPath(scope: WorkplaceService['scope']): string {
   return workplaceRootLogicalPath(scope);
 }
@@ -149,11 +122,7 @@ function pathUnderDir(dirPath: string, candidate: string): boolean {
  * Copy workplace dir/file rules from oldDir prefix onto newDir after a VFS rename.
  * Old rule rows may remain until Core exposes delete; new paths get matching rules.
  */
-export async function migrateWorkplaceDirRename(
-  workplace: WorkplaceService,
-  oldDir: string,
-  newDir: string,
-): Promise<void> {
+export async function migrateWorkplaceDirRename(workplace: WorkplaceService, oldDir: string, newDir: string): Promise<void> {
   // 一条 SQL UPDATE 批量重命名规则路径，替代逐条 get+set 循环。
   // 旧实现 70 文件目录要 ~1s（每个文件单独 getDirRule + setDirRule）；
   // 批量 UPDATE 只需几 ms，且不会残留旧路径规则（rename 而非 copy）。

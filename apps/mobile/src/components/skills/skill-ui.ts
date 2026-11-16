@@ -18,10 +18,7 @@ export {withSkillFrontMatterValues} from '@novel-master/core/skills';
 // 见文件末尾的 buildNewSkillDoc。
 
 /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
-export function skillDomainBadgeLabel(
-  domain: SkillDomain,
-  overridden: boolean,
-): string {
+export function skillDomainBadgeLabel(domain: SkillDomain, overridden: boolean): string {
   if (domain === 'global') {
     return '全局';
   }
@@ -29,22 +26,8 @@ export function skillDomainBadgeLabel(
 }
 
 /** 域徽标前景色（区分两域；覆盖态沿用项目色 + 文案区分）。 */
-export function skillDomainBadgeColor(
-  domain: SkillDomain,
-  tokens: {primary: string; textSecondary: string},
-): string {
+export function skillDomainBadgeColor(domain: SkillDomain, tokens: {primary: string; textSecondary: string}): string {
   return domain === 'global' ? tokens.textSecondary : tokens.primary;
-}
-
-/** 详情页 / 编辑器顶栏的域说明文案（项目域附项目名）。 */
-export function skillDomainHintLabel(
-  domain: SkillDomain,
-  projectName?: string,
-): string {
-  if (domain === 'global') {
-    return '全局域 · 所有项目生效';
-  }
-  return `项目域 · ${projectName ?? '当前项目'}`;
 }
 
 /**

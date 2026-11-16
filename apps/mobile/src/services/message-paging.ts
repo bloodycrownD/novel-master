@@ -5,10 +5,7 @@ import {type ChatMessageData} from '@novel-master/core/chat';
  *
  * WHY: paging fetch returns older history; chat timeline is ascending by `seq`.
  */
-export function prependOlderMessages(
-  current: readonly ChatMessageData[],
-  older: readonly ChatMessageData[],
-): ChatMessageData[] {
+export function prependOlderMessages(current: readonly ChatMessageData[], older: readonly ChatMessageData[]): ChatMessageData[] {
   if (older.length === 0) {
     return [...current];
   }

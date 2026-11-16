@@ -6,13 +6,7 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
-import type {
-  SetDirRuleInput,
-  SetFileRuleInput,
-  WorkplaceDirRule,
-  WorkplaceListRow,
-  WorkplaceScope,
-} from "@/domain/workplace/model/workplace-types.js";
+import type { SetDirRuleInput, SetFileRuleInput, WorkplaceDirRule, WorkplaceListRow, WorkplaceScope } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRuleView } from "@/domain/workplace/model/workplace-rule-view.js";
 import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.js";
 import type { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
@@ -75,10 +69,7 @@ export interface WorkplaceService {
    *
    * 一条 SQL UPDATE 替代逐条 get+set，70 文件目录从 ~1s 降到几 ms。
    */
-  renameRulesUnderLogicalPrefix(
-    oldPrefix: string,
-    newPrefix: string
-  ): Promise<Result<void, AppError>>;
+  renameRulesUnderLogicalPrefix(oldPrefix: string, newPrefix: string): Promise<Result<void, AppError>>;
 
   /**
    * 向后兼容：组合 {@link materializeLiveView} 与 {@link materializePersistBlock}。

@@ -10,9 +10,10 @@ import type { TemplatePullService } from "./template-pull.port.js";
 
 /**
  * Creates a {@link TemplatePullService} for the given connection.
+ *
+ * nm-style: keep-public — 公共 barrel（@novel-master/core/workplace）暴露的装配入口，11 处测试经它构造服务；
+ * 生产侧 chat session.service 直接 new impl。撤导出需同步 barrel 与测试，超出本片目录。
  */
-export function createTemplatePullService(
-  conn: TdbcConnection
-): TemplatePullService {
+export function createTemplatePullService(conn: TdbcConnection): TemplatePullService {
   return new DefaultTemplatePullService(conn);
 }

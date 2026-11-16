@@ -4,7 +4,7 @@
 import { formatStatusChipLabelFromAttachment } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
-export type MessageAttachmentGroupCardProps = {
+type MessageAttachmentGroupCardProps = {
   attachments: readonly MessageAttachmentDto[];
   dimmed?: boolean;
 };

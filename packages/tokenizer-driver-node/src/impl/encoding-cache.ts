@@ -35,19 +35,8 @@
  * @module tokenizer-driver-node/impl/encoding-cache
  */
 
-import {
-  clearForTests,
-  countTextWithIncrementalTokenizer,
-  getEncoding,
-  setFactoryForTests,
-} from "@novel-master/core/provider";
-import {
-  get_encoding,
-  get_encoding_name_for_model,
-  type Tiktoken,
-  type TiktokenEncoding,
-  type TiktokenModel,
-} from "tiktoken";
+import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/provider";
+import { get_encoding, get_encoding_name_for_model, type Tiktoken, type TiktokenEncoding, type TiktokenModel } from "tiktoken";
 
 /**
  * 默认编码名：拿不到模型信息（或模型名不被 tiktoken 认识）时的兜底表。
@@ -57,23 +46,13 @@ import {
  * 正文低估 82%~84%），近似估算在这里是净收益。正因为只是近似，调用方必须继续
  * 报 `counterKind: "heuristic"`。
  */
-export const DEFAULT_NODE_ENCODING_NAME: TiktokenEncoding = "cl100k_base";
+const DEFAULT_NODE_ENCODING_NAME: TiktokenEncoding = "cl100k_base";
 
 /**
  * 测试钩子的构造器形态：入参为**编码名**（如 `cl100k_base`，不带 `enc:` 前缀），
  * 抛错视为构造失败。`model:` 键废除后这里不再出现模型名形态的键。
  */
 export type NodeEncodingFactory = (encodingName: string) => Tiktoken;
-
-/**
- * WASM 构造注入：按编码名建整张表。
- *
- * `Tiktoken` 结构上满足 registry 的 `EncodingHandle` 契约（`encode` 返回带
- * `length` 的序列），无需适配层。
- */
-function buildWasmEncoding(encodingName: string): Tiktoken {
-  return get_encoding(encodingName as TiktokenEncoding);
-}
 
 /**
  * 按**模型名**取（单例）编码表；模型名不被 tiktoken 认识时返回 `null`。
@@ -85,29 +64,24 @@ function buildWasmEncoding(encodingName: string): Tiktoken {
  * 模型名解析失败（不被认识）在进 registry 前就返回 `null`：解析只是查一张
  * 静态映射表、零建表开销，不值得为它占 TTL 失败缓存。
  *
- * 取到的是**共享单例**，调用方不得 `free()`。
+ * 取到的是**共享单例**，调用方不得 `free()`。WASM 构造注入直接交给
+ * `get_encoding`（Tiktoken 结构上满足 registry 的 `EncodingHandle` 契约：
+ * `encode` 返回带 `length` 的序列，无需适配层）。
  */
-export function getNodeEncodingForModel(
-  tiktokenModel: TiktokenModel | string,
-): Tiktoken | null {
+export function getNodeEncodingForModel(tiktokenModel: TiktokenModel | string): Tiktoken | null {
   let encodingName: TiktokenEncoding;
   try {
     encodingName = get_encoding_name_for_model(tiktokenModel as TiktokenModel);
   } catch (err) {
-    console.warn(
-      `[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`,
-      err,
-    );
+    console.warn(`[novel-master/tokenizer-driver-node] tiktoken model not recognized (${tiktokenModel})`, err);
     return null;
   }
-  return getEncoding(encodingName, () => buildWasmEncoding(encodingName));
+  return getEncoding(encodingName, () => get_encoding(encodingName as TiktokenEncoding));
 }
 
 /** 按**编码名**取（单例）编码表；失败返回 `null`（TTL 内不重试，见模块头注释）。 */
-export function getNodeEncodingByName(
-  name: TiktokenEncoding | string,
-): Tiktoken | null {
-  return getEncoding(name, () => buildWasmEncoding(name));
+export function getNodeEncodingByName(name: TiktokenEncoding | string): Tiktoken | null {
+  return getEncoding(name, () => get_encoding(name as TiktokenEncoding));
 }
 
 /** 默认（cl100k）编码表取用口。 */
@@ -127,10 +101,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
   if (encoding == null) {
     return null;
   }
-  return countTextWithIncrementalTokenizer(
-    (chunk) => encoding.encode(chunk).length,
-    text,
-  );
+  return countTextWithIncrementalTokenizer((chunk) => encoding.encode(chunk).length, text);
 }
 
 /**
@@ -146,8 +117,6 @@ export function clearNodeEncodingCacheForTests(): void {
  * 测试钩子：覆盖编码表构造器（传 `null` 还原真实实现）。
  * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
  */
-export function __setNodeEncodingFactoryForTests(
-  factory: NodeEncodingFactory | null,
-): void {
+export function __setNodeEncodingFactoryForTests(factory: NodeEncodingFactory | null): void {
   setFactoryForTests(factory);
 }

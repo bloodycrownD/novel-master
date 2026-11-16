@@ -9,7 +9,7 @@ import {
 } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
-export type AttachmentDraftChipsProps = {
+type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachmentDto[];
   /**
    * 是否显示叉号。默认 `false`：Composer 唯一合法路径为无叉状态 chip
@@ -35,7 +35,7 @@ export function attachmentChipClassName(): string {
   return 'chat-composer__chip';
 }
 
-export function AttachmentDraftChips({
+function AttachmentDraftChips({
   attachments,
   showRemove = false,
   onRemove,

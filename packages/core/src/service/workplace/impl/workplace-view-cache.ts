@@ -17,10 +17,7 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
-import type {
-  WorkplaceRuleContext,
-  WorkplaceRuleView,
-} from "@/domain/workplace/model/workplace-rule-view.js";
+import type { WorkplaceRuleContext, WorkplaceRuleView } from "@/domain/workplace/model/workplace-rule-view.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /** 读时校验用的校验值三元组（vfs 聚合签名 + 规则表/智能规则表序列化签名）。 */
@@ -44,7 +41,7 @@ export interface WorkplaceViewCacheValue {
  *
  * 可变对象：`inFlight` 由 service 在起算时挂载、完成时清除（跨实例并发去重）。
  */
-export interface WorkplaceViewCacheEntry {
+interface WorkplaceViewCacheEntry {
   /** 计算开始前采样的校验值——发布与读取都以它为准；undefined = 尚未发布过。 */
   sigs: WorkplaceViewSigs | undefined;
   ctx?: WorkplaceRuleContext;
@@ -54,27 +51,17 @@ export interface WorkplaceViewCacheEntry {
   inFlight?: Promise<Result<WorkplaceViewCacheValue, AppError>>;
 }
 
-let cache = new WeakMap<
-  TdbcConnection,
-  Map<string, WorkplaceViewCacheEntry>
->();
+let cache = new WeakMap<TdbcConnection, Map<string, WorkplaceViewCacheEntry>>();
 
-function connScopeMap(conn: TdbcConnection): Map<string, WorkplaceViewCacheEntry> {
+/**
+ * ensure 语义：取（无则建）scope 的缓存条目，供 service 挂载/清除 inFlight。
+ */
+export function ensureWorkplaceViewEntry(conn: TdbcConnection, scopeKey: string): WorkplaceViewCacheEntry {
   let scopes = cache.get(conn);
   if (scopes == null) {
     scopes = new Map();
     cache.set(conn, scopes);
   }
-  return scopes;
-}
-/**
- * ensure 语义：取（无则建）scope 的缓存条目，供 service 挂载/清除 inFlight。
- */
-export function ensureWorkplaceViewEntry(
-  conn: TdbcConnection,
-  scopeKey: string
-): WorkplaceViewCacheEntry {
-  const scopes = connScopeMap(conn);
   let entry = scopes.get(scopeKey);
   if (entry == null) {
     entry = { sigs: undefined };
@@ -87,12 +74,7 @@ export function ensureWorkplaceViewEntry(
  * 发布：以**计算开始前**采样的校验值写入（若计算期间有写，下一个读者比对
  * 当前签名不匹配即重算——脏结果最多存活一次读取）。
  */
-export function publishWorkplaceView(
-  conn: TdbcConnection,
-  scopeKey: string,
-  sigs: WorkplaceViewSigs,
-  value: WorkplaceViewCacheValue
-): void {
+export function publishWorkplaceView(conn: TdbcConnection, scopeKey: string, sigs: WorkplaceViewSigs, value: WorkplaceViewCacheValue): void {
   const entry = ensureWorkplaceViewEntry(conn, scopeKey);
   entry.sigs = sigs;
   entry.ctx = value.ctx;
@@ -104,23 +86,11 @@ export function publishWorkplaceView(
  * 命中读取：entry 已发布（sigs 有值 + 三件套齐全）且校验值与刚采样的相等时
  * 返回缓存结果，否则返回 undefined（miss，由调用方走计算路径）。
  */
-export function getCachedWorkplaceView(
-  entry: WorkplaceViewCacheEntry,
-  sigs: WorkplaceViewSigs
-): WorkplaceViewCacheValue | undefined {
-  if (
-    entry.sigs == null ||
-    entry.ctx == null ||
-    entry.view == null ||
-    entry.filetreeDisplay == null
-  ) {
+export function getCachedWorkplaceView(entry: WorkplaceViewCacheEntry, sigs: WorkplaceViewSigs): WorkplaceViewCacheValue | undefined {
+  if (entry.sigs == null || entry.ctx == null || entry.view == null || entry.filetreeDisplay == null) {
     return undefined;
   }
-  if (
-    entry.sigs.vfs !== sigs.vfs ||
-    entry.sigs.rules !== sigs.rules ||
-    entry.sigs.smartRules !== sigs.smartRules
-  ) {
+  if (entry.sigs.vfs !== sigs.vfs || entry.sigs.rules !== sigs.rules || entry.sigs.smartRules !== sigs.smartRules) {
     return undefined;
   }
   return {
@@ -131,6 +101,7 @@ export function getCachedWorkplaceView(
 }
 
 /** 测试专用：清空全部连接的缓存（不进 public 导出面）。 */
+// nm-style: keep-public — 测试支持 API：重置模块级弱引用缓存以隔离用例；生产零调用、不进 public allowlist，无法内联（11 处测试调用点）。
 export function clearAllWorkplaceViewCache(): void {
   // WeakMap 不可枚举：整体换新实例，旧 map 丢引用后连同各 conn 的条目一起
   // 可回收，语义上等价于清空且不阻止 conn 本身被 GC。

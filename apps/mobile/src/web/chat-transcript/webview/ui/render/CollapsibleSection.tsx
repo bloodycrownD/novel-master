@@ -7,7 +7,7 @@
  */
 import type {ComponentChildren} from 'preact';
 
-export type CollapsibleHeaderProps = {
+type CollapsibleHeaderProps = {
   /** header 基础 class（tool-group-header / thinking-header）。 */
   headerClass: string;
   title: string;
@@ -52,7 +52,7 @@ export function CollapsibleHeader({
   );
 }
 
-export type CollapsibleSectionProps = {
+type CollapsibleSectionProps = {
   title: string;
   /** data-action 委托动作（toggle-tool-group / toggle-attach-group）。 */
   action: string;

@@ -8,21 +8,11 @@
 
 import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type {
-  DegradedToolCall,
-  LlmStreamEvent,
-} from "../ports/adapter.port.js";
-import {
-  openAiStreamAccumulatorsToBlocks,
-  openAiStreamDeltaToEvents,
-} from "./openai-content-mapper.js";
+import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import { openAiStreamAccumulatorsToBlocks, openAiStreamDeltaToEvents } from "./openai-content-mapper.js";
 import { feedSseLines } from "./sse-line-buffer.js";
 import { parseSseDataLine } from "./sse-data-line.js";
-import {
-  assertSseParseSucceededOrThrow,
-  recordMalformedSseLine,
-  type SseParseDiagnostics,
-} from "./sse-parse-errors.js";
+import { assertSseParseSucceededOrThrow, recordMalformedSseLine, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 
 type ToolCallAccumulator = {
   id: string;
@@ -31,7 +21,7 @@ type ToolCallAccumulator = {
 };
 
 /** Mutable accumulator state for one OpenAI SSE response. */
-export type OpenAiSseParserState = SseParseDiagnostics & {
+type OpenAiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -59,11 +49,7 @@ export function createOpenAiSseParserState(): OpenAiSseParserState {
 /**
  * Feed one UTF-8 text chunk (may split mid-line); emits stream events via `onStream`.
  */
-export function feedOpenAiSseChunk(
-  state: OpenAiSseParserState,
-  chunk: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
+export function feedOpenAiSseChunk(state: OpenAiSseParserState, chunk: string, onStream?: (event: LlmStreamEvent) => void): void {
   feedSseLines(state, chunk, (line) => {
     const payload = parseSseDataLine(line);
     if (payload == null) {
@@ -96,21 +82,11 @@ export function feedOpenAiSseChunk(
 }
 
 /** Finalize parser state into content blocks and the last raw SSE event. */
-export function finishOpenAiSse(
-  state: OpenAiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
+export function finishOpenAiSse(state: OpenAiSseParserState, onStream?: (event: LlmStreamEvent) => void): SseFinishResult {
   if (state.buffer !== "") {
     feedOpenAiSseChunk(state, "\n", onStream);
   }
-  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(
-    state,
-    onStream
-  );
+  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(state, onStream);
   // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
   const asserted = assertSseParseSucceededOrThrow(state, blocks, "openai");
   if (!asserted.ok) throw asserted.error;
@@ -122,10 +98,7 @@ export function finishOpenAiSse(
 }
 
 /** Read a fetch `ReadableStream` body and parse OpenAI SSE incrementally. */
-export async function parseOpenAiSseStream(
-  body: ReadableStream<Uint8Array>,
-  onStream?: (event: LlmStreamEvent) => void
-): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
+export async function parseOpenAiSseStream(body: ReadableStream<Uint8Array>, onStream?: (event: LlmStreamEvent) => void): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   const state = createOpenAiSseParserState();
@@ -135,11 +108,7 @@ export async function parseOpenAiSseStream(
     if (done) {
       break;
     }
-    feedOpenAiSseChunk(
-      state,
-      decoder.decode(value, { stream: true }),
-      onStream
-    );
+    feedOpenAiSseChunk(state, decoder.decode(value, { stream: true }), onStream);
   }
 
   return finishOpenAiSse(state, onStream);

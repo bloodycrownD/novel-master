@@ -30,13 +30,10 @@ import type {AppUiPreferences} from './app-ui-prefs';
  * 引擎取值。`'legacy-rn'` 只为**兼容既有 KKV 存量**而保留在联合类型里——
  * 它已不再是可选分支，代码里不应再出现按它分支的判断。
  */
-export type ChatTranscriptEngine = 'legacy-rn' | 'webview';
+type ChatTranscriptEngine = 'legacy-rn' | 'webview';
 
 const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
-const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = [
-  'legacy-rn',
-  'webview',
-];
+const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = ['legacy-rn', 'webview'];
 
 /** 恒为 `webview`（引擎开关已退役，见文件头）。 */
 export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
@@ -49,14 +46,7 @@ export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
  * 保留读动作是为了让这个键有个显式消费点（理由见文件头），返回值不带任何
  * 分支语义——调用方拿到的永远是 `DEFAULT_ENGINE`。
  */
-export async function readChatTranscriptEngine(
-  appUi: AppUiPreferences | null | undefined,
-): Promise<ChatTranscriptEngine> {
-  await readEnumPref(
-    appUi,
-    APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE,
-    ALLOWED_ENGINES,
-    DEFAULT_ENGINE,
-  );
+export async function readChatTranscriptEngine(appUi: AppUiPreferences | null | undefined): Promise<ChatTranscriptEngine> {
+  await readEnumPref(appUi, APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE, ALLOWED_ENGINES, DEFAULT_ENGINE);
   return DEFAULT_ENGINE;
 }

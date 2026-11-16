@@ -44,9 +44,7 @@ export async function handleProvidersList(): Promise<
   }
 }
 
-export async function handleProvidersGet(
-  req: ProviderIdRequest,
-): Promise<IpcResult<ProviderDetailDto>> {
+export async function handleProvidersGet(req: ProviderIdRequest): Promise<IpcResult<ProviderDetailDto>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -76,9 +74,7 @@ export async function handleProvidersGet(
   }
 }
 
-export async function handleProvidersCreate(
-  req: ProviderCreateRequest,
-): Promise<IpcResult<{ providerId: string }>> {
+export async function handleProvidersCreate(req: ProviderCreateRequest): Promise<IpcResult<{ providerId: string }>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -92,9 +88,7 @@ export async function handleProvidersCreate(
   }
 }
 
-export async function handleProvidersEdit(
-  req: ProviderEditRequest,
-): Promise<IpcResult<void>> {
+export async function handleProvidersEdit(req: ProviderEditRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -109,9 +103,7 @@ export async function handleProvidersEdit(
   }
 }
 
-export async function handleProvidersDelete(
-  req: ProviderIdRequest,
-): Promise<IpcResult<void>> {
+export async function handleProvidersDelete(req: ProviderIdRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。

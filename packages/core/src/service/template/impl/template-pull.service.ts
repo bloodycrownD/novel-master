@@ -24,6 +24,7 @@ import type { TemplatePullService } from "../template-pull.port.js";
 export class DefaultTemplatePullService implements TemplatePullService {
   constructor(private readonly conn: TdbcConnection) {}
 
+  /** nm-style: keep-public — TemplatePullService 端口方法；chat session.service 单点消费。 */
   async sessionTemplatePull(sessionId: string): Promise<Result<void, AppError>> {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
@@ -47,6 +48,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — TemplatePullService 端口方法；chat session.service 单点消费。 */
   async sessionTemplatePush(sessionId: string): Promise<Result<void, AppError>> {
     // 推送与拉取同一套校验/事务/GC 骨架，只是方向对调（session → project）。
     const sessions = new SqliteSessionRepository(this.conn);

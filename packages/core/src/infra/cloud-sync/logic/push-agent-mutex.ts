@@ -27,7 +27,7 @@ export type PushAgentLockHandle = {
   readonly acquiredAt: number;
 };
 
-export type PushAgentMutexAcquireOptions = {
+type PushAgentMutexAcquireOptions = {
   /** 排队等待的最长时间；超时 reject `AGENT_BUSY` 的 AppError（调用方据此降级拒绝）。 */
   timeoutMs: number;
 };
@@ -50,12 +50,12 @@ export class PushAgentMutex {
   private nextId = 1;
   private readonly waiters: Waiter[] = [];
 
-  /** 当前是否被持有（调试/状态查询用）。 */
+  /** 当前是否被持有（调试/状态查询用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
   isHeld(): boolean {
     return this.heldBy != null;
   }
 
-  /** 当前排队等待者数量（调试/监控用）。 */
+  /** 当前排队等待者数量（调试/监控用）。nm-style: keep-public — 对外状态断言 API，core 测试直接消费。 */
   waiterCount(): number {
     return this.waiters.length;
   }
@@ -63,10 +63,9 @@ export class PushAgentMutex {
   /**
    * 申请锁。空闲时立即返回；否则进入 FIFO 等待队列，
    * 在 `timeoutMs` 内被唤醒则拿到锁，超时则从队列移除并抛 TIMEOUT。
+   * nm-style: keep-public — 互斥锁的对外申请入口（coordinator 与 core 测试消费）。
    */
-  async acquire(
-    options: PushAgentMutexAcquireOptions
-  ): Promise<PushAgentLockHandle> {
+  async acquire(options: PushAgentMutexAcquireOptions): Promise<PushAgentLockHandle> {
     if (this.heldBy == null) {
       const handle = this.createHandle();
       this.heldBy = handle;
@@ -83,7 +82,7 @@ export class PushAgentMutex {
         const idx = this.waiters.indexOf(waiter);
         if (idx >= 0) {
           this.waiters.splice(idx, 1);
-          reject(new AppError("AGENT_BUSY", {detail: "等待 push/agent 互斥锁超时"}));
+          reject(new AppError("AGENT_BUSY", { detail: "等待 push/agent 互斥锁超时" }));
         }
       }, options.timeoutMs);
       this.waiters.push(waiter);

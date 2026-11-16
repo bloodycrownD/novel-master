@@ -13,16 +13,11 @@ import {readBoolPref, writeBoolPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 
 /** 读取「消息通知」总开关（默认关）。 */
-export async function readMessageNotificationEnabled(
-  appUi: AppUiPreferences,
-): Promise<boolean> {
+export async function readMessageNotificationEnabled(appUi: AppUiPreferences): Promise<boolean> {
   return readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false);
 }
 
 /** 持久化「消息通知」总开关。 */
-export async function writeMessageNotificationEnabled(
-  appUi: AppUiPreferences,
-  enabled: boolean,
-): Promise<void> {
+export async function writeMessageNotificationEnabled(appUi: AppUiPreferences, enabled: boolean): Promise<void> {
   await writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
 }

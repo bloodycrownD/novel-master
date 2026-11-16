@@ -27,9 +27,7 @@ function mapReleaseJson(json: GitHubLatestReleaseJson): LatestRelease {
   }
   const expectedPrefix = `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.name}/`;
   if (!htmlUrl.startsWith(expectedPrefix)) {
-    throw new Error(
-      `发行版链接域名校验失败（预期 ${expectedPrefix}，实际 ${htmlUrl}）`,
-    );
+    throw new Error(`发行版链接域名校验失败（预期 ${expectedPrefix}，实际 ${htmlUrl}）`);
   }
   const version = parseReleaseTag(tagName);
   return {
@@ -40,16 +38,11 @@ function mapReleaseJson(json: GitHubLatestReleaseJson): LatestRelease {
   };
 }
 
-export async function resolveLatestRelease(
-  fetchFn: FetchFn = fetch,
-): Promise<LatestRelease> {
+export async function resolveLatestRelease(fetchFn: FetchFn = fetch): Promise<LatestRelease> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetchFn(githubLatestReleaseApiUrl(), {
-      signal: controller.signal,
-      headers: {Accept: 'application/vnd.github+json'},
-    });
+    const response = await fetchFn(githubLatestReleaseApiUrl(), {signal: controller.signal, headers: {Accept: 'application/vnd.github+json'}});
     if (response.status === 404) {
       throw new Error('未找到任何发行版');
     }

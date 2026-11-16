@@ -17,10 +17,7 @@
  * @param env  环境变量字典；调用方显式注入，便于测试与 RN/CLI 自定义来源。
  * @returns 非空 env 值；若未设置或仅空白则返回 null。
  */
-export function resolveSkspEnvOverride(
-  name: string,
-  env: Record<string, string | undefined>
-): string | null {
+export function resolveSkspEnvOverride(name: string, env: Record<string, string | undefined>): string | null {
   const v = env[name];
   // undefined / 空串 / 仅空白 一律视为不覆盖 DB
   if (v === undefined || v === "" || v.trim() === "") {

@@ -1,21 +1,13 @@
 /**
  * Theme from {@link AppUiPreferences} (`theme` key), default light until loaded.
  */
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, {createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode} from 'react';
 import {useColorScheme} from 'react-native';
 import {useNovelMaster} from '../runtime/novel-master-context';
 import {APP_UI_KEY_THEME} from '../storage/app-ui-keys';
 import {tokensForMode, type ThemeMode, type ThemeTokens} from './tokens';
 
-export interface ThemeContextValue {
+interface ThemeContextValue {
   mode: ThemeMode;
   tokens: ThemeTokens;
   loaded: boolean;
@@ -37,8 +29,8 @@ export function ThemeProvider({children}: {children: ReactNode}) {
       return;
     }
     let cancelled = false;
-    appUi
-      .get(APP_UI_KEY_THEME)
+    const themePref = appUi.get(APP_UI_KEY_THEME);
+    themePref
       .then(raw => {
         if (cancelled) {
           return;
@@ -95,9 +87,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
     [mode, loaded, setMode, toggleMode],
   );
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {

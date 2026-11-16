@@ -18,19 +18,12 @@ export function sha256Hex(bytes: Uint8Array): string {
 /** 分块读取文件并计算 SHA-256 十六进制 */
 export async function hashSnapshotFile(path: string): Promise<string> {
   const hasher = sha256.create();
-  const stream = await ReactNativeBlobUtil.fs.readStream(
-    path,
-    'base64',
-    CHUNK_SIZE,
-  );
+  const stream = await ReactNativeBlobUtil.fs.readStream(path, 'base64', CHUNK_SIZE);
 
   await new Promise<void>((resolve, reject) => {
     stream.open();
     stream.onData((chunk: string | number[]) => {
-      const base64 =
-        typeof chunk === 'string'
-          ? chunk
-          : Buffer.from(chunk).toString('base64');
+      const base64 = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('base64');
       hasher.update(Buffer.from(base64, 'base64'));
     });
     stream.onError((error: unknown) => {

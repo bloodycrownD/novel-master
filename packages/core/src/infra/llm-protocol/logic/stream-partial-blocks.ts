@@ -10,7 +10,7 @@
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 
-export type StreamPartialToolUse = {
+type StreamPartialToolUse = {
   readonly id: string;
   readonly name: string;
   readonly input: Record<string, unknown>;
@@ -23,7 +23,7 @@ export type StreamPartialToolUse = {
   readonly thinkingSignature?: string;
 };
 
-export type StreamPartialInput = {
+type StreamPartialInput = {
   readonly text: string;
   readonly thinking: string;
   /**
@@ -40,10 +40,7 @@ export type StreamPartialInput = {
  * Build NM blocks from stream accumulators when the request was aborted.
  * Returns `[]` when nothing was streamed.
  */
-export function buildStreamPartialBlocks(
-  input: StreamPartialInput,
-  onStream?: (event: LlmStreamEvent) => void
-): ContentBlock[] {
+export function buildStreamPartialBlocks(input: StreamPartialInput, onStream?: (event: LlmStreamEvent) => void): ContentBlock[] {
   const text = input.text;
   const thinking = input.thinking;
   const blocks: ContentBlock[] = [];
@@ -55,9 +52,7 @@ export function buildStreamPartialBlocks(
     blocks.push({
       type: "thinking",
       text: thinking,
-      ...(input.thinkingSignature != null
-        ? { thinkingSignature: input.thinkingSignature }
-        : {}),
+      ...(input.thinkingSignature != null ? { thinkingSignature: input.thinkingSignature } : {}),
     });
   }
   if (text.length > 0) {
@@ -69,9 +64,7 @@ export function buildStreamPartialBlocks(
       id: tu.id,
       name: tu.name,
       input: tu.input,
-      ...(tu.thinkingSignature != null
-        ? { thinkingSignature: tu.thinkingSignature }
-        : {}),
+      ...(tu.thinkingSignature != null ? { thinkingSignature: tu.thinkingSignature } : {}),
     });
     // 流事件侧不带签名：`LlmStreamEvent` 的 tool-use 变体没有该字段（不扩它）。
     onStream?.({

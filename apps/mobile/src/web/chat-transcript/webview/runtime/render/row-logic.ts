@@ -6,7 +6,7 @@
 import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import type {TranscriptFlags} from '../state/state';
 
-export type RenderRowsView = () => void;
+type RenderRowsView = () => void;
 
 let _renderRowsView: RenderRowsView | null = null;
 

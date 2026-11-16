@@ -13,48 +13,18 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { refreshRuleSnapshot } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import {
-  getWorkplaceForScope,
-  resolveVfsScopeFromRequest,
-} from "../resolve-vfs-scope.js";
-import {
-  notifyWorkspaceMutatedToRenderer,
-  workspaceMutatedPayloadFromRequest,
-} from "../forward-workspace-mutated.js";
+import { getWorkplaceForScope, resolveVfsScopeFromRequest } from "../resolve-vfs-scope.js";
+import { notifyWorkspaceMutatedToRenderer, workspaceMutatedPayloadFromRequest } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
-
-function toIpcFillPolicy(
-  fillPolicy: string | undefined,
-): WorkplaceSetDirRuleRequest["fillPolicy"] {
-  if (fillPolicy === "full") {
-    return "hidden";
-  }
-  if (
-    fillPolicy === "hidden" ||
-    fillPolicy === "filename" ||
-    fillPolicy === "header"
-  ) {
-    return fillPolicy;
-  }
-  return undefined;
-}
 
 /**
  * 规则保存后：evaluate→写 rule_snapshot canon→clear file_cache。
  * workplace 差集 suggest 已废止。
  */
-async function refreshRuleSnapshotAfterRuleChange(
-  rt: DesktopNovelMasterRuntime,
-  req: { projectId?: string; sessionId?: string },
-): Promise<void> {
-  if (
-    req.sessionId == null ||
-    req.sessionId === "" ||
-    req.projectId == null ||
-    req.projectId === ""
-  ) {
+async function refreshRuleSnapshotAfterRuleChange(rt: DesktopNovelMasterRuntime, req: { projectId?: string; sessionId?: string }): Promise<void> {
+  if (req.sessionId == null || req.sessionId === "" || req.projectId == null || req.projectId === "") {
     return;
   }
   await refreshRuleSnapshot(req.sessionId, {
@@ -67,9 +37,7 @@ async function refreshRuleSnapshotAfterRuleChange(
   });
 }
 
-export async function handleWorkplaceBuildListRows(
-  req: WorkplaceBuildListRowsRequest,
-): Promise<IpcResult<WorkplaceListRowDto[]>> {
+export async function handleWorkplaceBuildListRows(req: WorkplaceBuildListRowsRequest): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -86,9 +54,7 @@ export async function handleWorkplaceBuildListRows(
   }
 }
 
-export async function handleWorkplaceSetDirRule(
-  req: WorkplaceSetDirRuleRequest,
-): Promise<IpcResult<void>> {
+export async function handleWorkplaceSetDirRule(req: WorkplaceSetDirRuleRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -115,9 +81,7 @@ export async function handleWorkplaceSetDirRule(
   }
 }
 
-export async function handleWorkplaceSetFileRule(
-  req: WorkplaceSetFileRuleRequest,
-): Promise<IpcResult<void>> {
+export async function handleWorkplaceSetFileRule(req: WorkplaceSetFileRuleRequest): Promise<IpcResult<void>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -139,9 +103,7 @@ export async function handleWorkplaceSetFileRule(
   }
 }
 
-export async function handleWorkplaceGetDirRule(
-  req: WorkplaceGetDirRuleRequest,
-): Promise<IpcResult<WorkplaceSetDirRuleRequest | null>> {
+export async function handleWorkplaceGetDirRule(req: WorkplaceGetDirRuleRequest): Promise<IpcResult<WorkplaceSetDirRuleRequest | null>> {
   try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
@@ -156,6 +118,13 @@ export async function handleWorkplaceGetDirRule(
     if (rule.value == null) {
       return { ok: true, data: null };
     }
+    const rawFillPolicy = rule.value.fillPolicy;
+    let fillPolicy: WorkplaceSetDirRuleRequest["fillPolicy"];
+    if (rawFillPolicy === "full") {
+      fillPolicy = "hidden";
+    } else if (rawFillPolicy === "hidden" || rawFillPolicy === "filename" || rawFillPolicy === "header") {
+      fillPolicy = rawFillPolicy;
+    }
     return {
       ok: true,
       data: {
@@ -168,7 +137,7 @@ export async function handleWorkplaceGetDirRule(
         sortOrder: rule.value.sortOrder,
         headCount: rule.value.headCount,
         tailCount: rule.value.tailCount,
-        fillPolicy: toIpcFillPolicy(rule.value.fillPolicy),
+        fillPolicy,
       },
     };
   } catch (err) {

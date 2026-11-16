@@ -18,7 +18,7 @@ import {handleHostMessage, post} from './bridge';
 import {mountComposerEditor} from './editor';
 import {BRIDGE_V} from './model';
 
-export type ComposerRuntimeOptions = {
+type ComposerRuntimeOptions = {
   /**
    * 高度上报开关（默认 true = 旧包行为）。
    * false 时闸门在 editor 的 `scheduleMeasure` 一层就关掉整条测高链：逐键调用
@@ -32,7 +32,7 @@ export type ComposerRuntimeOptions = {
   readonly emitReady?: boolean;
 };
 
-export type ComposerRuntimeHandle = {
+type ComposerRuntimeHandle = {
   /** 解析出的挂载点；null = host 未命中（此时只走绑定/ready，与旧 main.ts 一致）。 */
   readonly parent: HTMLElement | null;
   /** 是否真的挂载了编辑器（parent 命中即 true）。 */
@@ -49,9 +49,7 @@ export type ComposerRuntimeHandle = {
  * 模块内私有：全仓只有本工厂自用（cr1-P1-1 收回导出——外部零消费方的 export 是
  * 死面，留着只会让人以为它是一条可依赖的公开契约）。
  */
-function resolveComposerHost(
-  host: HTMLElement | string,
-): HTMLElement | null {
+function resolveComposerHost(host: HTMLElement | string): HTMLElement | null {
   if (typeof host === 'string') {
     return document.querySelector(host);
   }
@@ -63,10 +61,7 @@ function resolveComposerHost(
  * @param host    挂载点元素或选择器；未命中时跳过挂载（不抛，与旧 main.ts 的 null 守卫同口径）
  * @param options 三个开关，缺省即旧包现行为
  */
-export function createComposerRuntime(
-  host: HTMLElement | string,
-  options: ComposerRuntimeOptions = {},
-): ComposerRuntimeHandle {
+export function createComposerRuntime(host: HTMLElement | string, options: ComposerRuntimeOptions = {}): ComposerRuntimeHandle {
   const heightReport = options.heightReport !== false;
   const bindChannel = options.bindChannel !== false;
   const emitReady = options.emitReady !== false;

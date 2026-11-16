@@ -1,25 +1,14 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import {
-  type AgentDefinition,
-  resolveAgentForProject,
-} from '@novel-master/core/agent';
+import {type AgentDefinition, resolveAgentForProject} from '@novel-master/core/agent';
 
-import {
-  promptAssembler,
-  type ChatMessageData,
-} from '@novel-master/core/chat';
-import {
-  buildPromptLlmInputFromLayout,
-  type AgentPromptLayout,
-  type PromptLlmInput,
-  type PromptRenderContext,
-} from '@novel-master/core/prompt';
+import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
+import {buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
 import type {Interrupt} from '@novel-master/core/workplace';
 import {Result, AppError} from '@novel-master/core/errors';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import type {MobileNovelMasterRuntime as MobileRuntime} from '@/runtime/types';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -45,7 +34,7 @@ export class ChatPromptBuildBailedError extends Error {
   }
 }
 
-export interface BuildSessionPromptInputOptions {
+interface BuildSessionPromptInputOptions {
   /** 分段间防御性退出判定；真值即抛 {@link ChatPromptBuildBailedError}。 */
   readonly shouldBail?: () => boolean;
 }
@@ -69,12 +58,9 @@ export interface SessionPromptInputBundle {
  * 给调用方；bail 弃权哨兵（{@link ChatPromptBuildBailedError}，控制流类）
  * 仍走 throw——调用方 chip 读口紧邻 catch 收成空串哨兵，判定不变。
  */
-export async function buildSessionPromptInput(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-  definition?: AgentDefinition,
-  options?: BuildSessionPromptInputOptions,
-): Promise<Result<SessionPromptInputBundle, AppError>> {
+type SessionPromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
+
+export async function buildSessionPromptInput(runtime: MobileRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: BuildSessionPromptInputOptions): SessionPromptInputResult {
   // 分段弃权 + 分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip-build]；长期保留的诊断日志）：
   // 2026-09-30 回滚竞态里一次 build 墙钟 18.9s，靠分段读数定位被谁拖住。
   const shouldBail = options?.shouldBail;
@@ -104,10 +90,7 @@ export async function buildSessionPromptInput(
   // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
   // 曾实测 700+ 条会话秒级卡顿。rawMessages 透传给 resolve 的回填参数已
   // 废弃（仅签名兼容），可见口径对其无影响。
-  const visibleMessages = await runtime.messages.listBySession(
-    scope.sessionId,
-    {includeHidden: false},
-  );
+  const visibleMessages = await runtime.messages.listBySession(scope.sessionId, {includeHidden: false});
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] messages(n=${visibleMessages.length}) +${Date.now() - diagT0}ms`);
@@ -124,19 +107,9 @@ export async function buildSessionPromptInput(
   // 本刷新在第一个文件边界就死；错误通道迁移二期起中止沿 Outcome.cancelled/
   // replaced 返回，此处转抛 build 的统一哨兵，读口 catch 的判定不变。
   // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
-  const assembled = await assembleWorkplaceDisplay(
-    wtScope,
-    {
-      sessionKkv: runtime.sessionKkv,
-      workplace: wt,
-      vfs,
-      layout: resolved.prompts,
-    },
-    {
-      shouldStop: (): Interrupt | null =>
-        shouldBail?.() === true ? {kind: 'replaced'} : null,
-    },
-  );
+  const workplaceContext = {sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts};
+  const stopOptions = {shouldStop: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
+  const assembled = await assembleWorkplaceDisplay(wtScope, workplaceContext, stopOptions);
   if (assembled.kind === 'failed') {
     // 组装内的已知失败（如路径解析）：沿 Result 通道接力，不吞成弃权。
     return Result.err(assembled.error);

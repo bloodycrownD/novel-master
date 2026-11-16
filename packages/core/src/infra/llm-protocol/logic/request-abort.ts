@@ -8,19 +8,12 @@ import { isAppError } from "@/errors/app-error.js";
 
 /** Abort-shaped failure without referencing global `DOMException` (missing on Hermes). */
 export function isAbortLikeError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error != null &&
-    "name" in error &&
-    (error as { name: string }).name === "AbortError"
-  );
+  return typeof error === "object" && error != null && "name" in error && (error as { name: string }).name === "AbortError";
 }
 
 /** Creates an abort error in Node (DOMException) or RN (Error + name). */
 export function createAbortError(message = "Request aborted"): Error {
-  const DOMEx = (
-    globalThis as { DOMException?: new (msg: string, name: string) => Error }
-  ).DOMException;
+  const DOMEx = (globalThis as { DOMException?: new (msg: string, name: string) => Error }).DOMException;
   if (typeof DOMEx === "function") {
     return new DOMEx(message, "AbortError");
   }
@@ -30,10 +23,7 @@ export function createAbortError(message = "Request aborted"): Error {
 }
 
 /** True when `signal` was aborted or `error` is an abort-shaped failure. */
-export function isRequestAborted(
-  error: unknown,
-  signal?: AbortSignal
-): boolean {
+export function isRequestAborted(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted === true) {
     return true;
   }

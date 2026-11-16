@@ -21,27 +21,24 @@ export function attachCodeCopyDelegation(post: PostToHost): void {
     return;
   }
   attached = true;
-  document.addEventListener(
-    'click',
-    event => {
-      const target = event.target as Element | null;
-      if (!target || typeof target.closest !== 'function') {
-        return;
-      }
-      const btn = target.closest('.code-copy');
-      if (!btn) {
-        return;
-      }
-      event.stopPropagation();
-      const code = btn.closest('pre')?.querySelector('code');
-      const text = code?.textContent ?? '';
-      if (!text) {
-        return;
-      }
-      post('copyCode', {code: text});
-      btn.classList.add('copied');
-      window.setTimeout(() => btn.classList.remove('copied'), COPY_FEEDBACK_MS);
-    },
-    true,
-  );
+  const onClick = (event: Event) => {
+    const target = event.target as Element | null;
+    if (!target || typeof target.closest !== 'function') {
+      return;
+    }
+    const btn = target.closest('.code-copy');
+    if (!btn) {
+      return;
+    }
+    event.stopPropagation();
+    const code = btn.closest('pre')?.querySelector('code');
+    const text = code?.textContent ?? '';
+    if (!text) {
+      return;
+    }
+    post('copyCode', {code: text});
+    btn.classList.add('copied');
+    window.setTimeout(() => btn.classList.remove('copied'), COPY_FEEDBACK_MS);
+  };
+  document.addEventListener('click', onClick, true);
 }

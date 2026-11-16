@@ -11,32 +11,12 @@ import { parseMarkdownFrontMatter } from "./front-matter.js";
 
 /**
  * Formats epoch ms as local `yyyy-MM-dd HH:mm:ss`.
+ *
+ * nm-style: keep-public — `public/workplace.ts` 仍导出该兼容别名，撤除需同步
+ * public barrel（本轮只改 domain 范围）；实现已是 infra 单源 `formatLocalDateTime`。
  */
 export function formatLocalMtime(mtimeMs: number): string {
   return formatLocalDateTime(mtimeMs);
-}
-
-function basename(logicalPath: string): string {
-  const idx = logicalPath.lastIndexOf("/");
-  return idx >= 0 ? logicalPath.slice(idx + 1) : logicalPath;
-}
-
-function contentLines(display: DisplayState, logicalPath: string, content: string): string[] {
-  switch (display) {
-    case "full": {
-      const lines = content.split(/\r?\n/);
-      if (lines.length === 1 && lines[0] === "") {
-        return [];
-      }
-      return lines.map((line, idx) => `${idx + 1}|${line}`);
-    }
-    case "filename":
-      return [`1|${basename(logicalPath)}`];
-    case "header":
-      return parseMarkdownFrontMatter(content);
-    default:
-      return [];
-  }
 }
 
 /**
@@ -44,7 +24,23 @@ function contentLines(display: DisplayState, logicalPath: string, content: strin
  * 供消息增量 `userAttach` / `workplaceChange` JSON `content` 使用。
  */
 export function renderFileBlockBody(params: { readonly logicalPath: string; readonly display: DisplayState; readonly content: string }): string {
-  return contentLines(params.display, params.logicalPath, params.content).join("\n");
+  switch (params.display) {
+    case "full": {
+      const lines = params.content.split(/\r?\n/);
+      if (lines.length === 1 && lines[0] === "") {
+        return "";
+      }
+      return lines.map((line, idx) => `${idx + 1}|${line}`).join("\n");
+    }
+    case "filename": {
+      const idx = params.logicalPath.lastIndexOf("/");
+      return `1|${idx >= 0 ? params.logicalPath.slice(idx + 1) : params.logicalPath}`;
+    }
+    case "header":
+      return parseMarkdownFrontMatter(params.content).join("\n");
+    default:
+      return "";
+  }
 }
 
 /** Renders a single visible file block. */

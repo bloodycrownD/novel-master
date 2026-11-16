@@ -12,22 +12,11 @@
  * 兼容约束：老 Android WebView 解析期即报 SyntaxError，禁用 lookbehind 等 ES2018 之后
  * 的正则/语法特性；target es2018（build-webview.mjs）。
  */
-import {
-  composerTokenRanges,
-  splitComposerTokenSegments,
-} from '@/components/chat/composer-highlight';
-import {
-  tryAtomicRangeDelete,
-  type AtomicDeleteRange,
-} from '@/components/common/atomic-range-delete';
+import {composerTokenRanges, splitComposerTokenSegments} from '@/components/chat/composer-highlight';
+import {tryAtomicRangeDelete, type AtomicDeleteRange} from '@/components/common/atomic-range-delete';
 import {findWhitelistMacroRanges} from '@/components/agent/prompt-macro-input';
 import {post} from './bridge';
-import type {
-  ComposerMetrics,
-  ComposerMode,
-  ComposerTheme,
-  InitPayload,
-} from './model';
+import type {ComposerMetrics, ComposerMode, ComposerTheme, InitPayload} from './model';
 
 /** 高度上报死区：变化不超过该值不发消息（防亚像素抖动刷消息）。 */
 const HEIGHT_EPSILON = 0.5;
@@ -50,11 +39,7 @@ const DEFAULT_METRICS: ComposerMetrics = {
  * ------------------------------------------------------------------ */
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /** 高亮段统一形状（token 与宏两源归一，渲染只有一份）。 */
@@ -64,10 +49,7 @@ type HighlightSegment = {
 };
 
 /** 按区间切分正文：区间外照原文，区间内标高亮（区间互不重叠且按序）。 */
-function segmentsFromRanges(
-  text: string,
-  ranges: readonly AtomicDeleteRange[],
-): HighlightSegment[] {
+function segmentsFromRanges(text: string, ranges: readonly AtomicDeleteRange[]): HighlightSegment[] {
   if (ranges.length === 0) {
     return [{highlighted: false, text}];
   }
@@ -93,10 +75,7 @@ function segmentsFromRanges(
 }
 
 /** 双模式分段来源：token 走 splitComposerTokenSegments，宏走 findWhitelistMacroRanges。 */
-function highlightSegments(
-  text: string,
-  mode: ComposerMode,
-): readonly HighlightSegment[] {
+function highlightSegments(text: string, mode: ComposerMode): readonly HighlightSegment[] {
   if (mode === 'prompt-macro') {
     return segmentsFromRanges(text, findWhitelistMacroRanges(text));
   }
@@ -117,9 +96,7 @@ export function renderHighlightHtml(text: string, mode: ComposerMode): string {
   }
   let html = '';
   for (const segment of highlightSegments(text, mode)) {
-    html += segment.highlighted
-      ? `<span class="composer-input__token">${escapeHtml(segment.text)}</span>`
-      : escapeHtml(segment.text);
+    html += segment.highlighted ? `<span class="composer-input__token">${escapeHtml(segment.text)}</span>` : escapeHtml(segment.text);
   }
   if (text.endsWith('\n')) {
     html += '<br/>';
@@ -128,24 +105,15 @@ export function renderHighlightHtml(text: string, mode: ComposerMode): string {
 }
 
 /** 按 mode 取原子删候选区间：chat 链 = token 区间，宏链 = 白名单宏区间。 */
-export function atomicDeleteRanges(
-  text: string,
-  mode: ComposerMode,
-): readonly AtomicDeleteRange[] {
-  return mode === 'prompt-macro'
-    ? findWhitelistMacroRanges(text)
-    : composerTokenRanges(text);
+export function atomicDeleteRanges(text: string, mode: ComposerMode): readonly AtomicDeleteRange[] {
+  return mode === 'prompt-macro' ? findWhitelistMacroRanges(text) : composerTokenRanges(text);
 }
 
 /**
  * 单次删除命中高亮区间时整段摘除（web 侧原子删，RN 侧零变换逻辑）。
  * @returns 整段删除后的新串；无需拦截时返回 null（走内核默认差分）
  */
-export function resolveAtomicDelete(
-  prev: string,
-  next: string,
-  mode: ComposerMode,
-): string | null {
+export function resolveAtomicDelete(prev: string, next: string, mode: ComposerMode): string | null {
   return tryAtomicRangeDelete(prev, next, atomicDeleteRanges(prev, mode));
 }
 
@@ -165,23 +133,12 @@ function commonPrefixLength(a: string, b: string): number {
  * `prev↔resolved` 的前缀长 = 被摘除区间的起点（区间整段消失，差异必从此处开始）。
  * 命中区间时两者都合法，取前不会把光标推到被删内容右侧。
  */
-export function resolveAtomicCaret(
-  prev: string,
-  raw: string,
-  resolved: string,
-): number {
-  return Math.min(
-    commonPrefixLength(prev, raw),
-    commonPrefixLength(prev, resolved),
-  );
+export function resolveAtomicCaret(prev: string, raw: string, resolved: string): number {
+  return Math.min(commonPrefixLength(prev, raw), commonPrefixLength(prev, resolved));
 }
 
 /** change 上报闸门：suppressChange 期间、或文本与上次真源相同 → 短路（防回环）。 */
-export function shouldReportChange(
-  next: string,
-  last: string,
-  suppress: boolean,
-): boolean {
+export function shouldReportChange(next: string, last: string, suppress: boolean): boolean {
   return !suppress && next !== last;
 }
 
@@ -190,17 +147,11 @@ export function shouldReportChange(
  * @returns 需上报的高度；null 表示本帧不上报（maxHeight=null 的不限高模式
  * 无生产消费方，不下发）
  */
-export function resolveReportedHeight(
-  contentHeight: number,
-  metrics: ComposerMetrics,
-): number | null {
+export function resolveReportedHeight(contentHeight: number, metrics: ComposerMetrics): number | null {
   if (metrics.maxHeight == null) {
     return null;
   }
-  return Math.min(
-    metrics.maxHeight,
-    Math.max(metrics.minHeight, contentHeight),
-  );
+  return Math.min(metrics.maxHeight, Math.max(metrics.minHeight, contentHeight));
 }
 
 /* ------------------------------------------------------------------ *
@@ -229,7 +180,7 @@ type ComposerEditorState = {
 };
 
 /** 挂载选项：仅 heightReport 一项（其余装配口径不变）。 */
-export type MountComposerEditorOptions = {
+type MountComposerEditorOptions = {
   /**
    * 是否上报 heightChange（缺省 true = 旧包行为）。
    * 关闭后闸门在 `scheduleMeasure` 一层就关掉整条测高链：input / keyup / applyText
@@ -242,11 +193,7 @@ export type MountComposerEditorOptions = {
 let editor: ComposerEditorState | null = null;
 let unbindStack: Array<() => void> = [];
 
-function listen(
-  target: EventTarget,
-  type: string,
-  handler: (event: Event) => void,
-): () => void {
+function listen(target: EventTarget, type: string, handler: (event: Event) => void): () => void {
   const listener = handler as EventListener;
   target.addEventListener(type, listener);
   return () => target.removeEventListener(type, listener);
@@ -266,19 +213,13 @@ function coerceMetrics(value: unknown): ComposerMetrics {
     paddingV: finiteOr(raw.paddingV, DEFAULT_METRICS.paddingV),
     minHeight: finiteOr(raw.minHeight, DEFAULT_METRICS.minHeight),
     // null = 不限高（全屏）为显式语义，只在字段缺失时才回落默认封顶
-    maxHeight:
-      raw.maxHeight === null
-        ? null
-        : finiteOr(raw.maxHeight, DEFAULT_MAX_HEIGHT),
+    maxHeight: raw.maxHeight === null ? null : finiteOr(raw.maxHeight, DEFAULT_MAX_HEIGHT),
   };
 }
 
 /** 高亮重渲：内容与滚动位置一起对齐（渲染后行宽可能变化）。 */
 function renderHighlight(state: ComposerEditorState): void {
-  state.highlight.innerHTML = renderHighlightHtml(
-    state.input.value,
-    state.mode,
-  );
+  state.highlight.innerHTML = renderHighlightHtml(state.input.value, state.mode);
   syncScroll(state);
 }
 
@@ -298,17 +239,11 @@ function measureByClamp(state: ComposerEditorState): void {
   if (!state.initialized) {
     return;
   }
-  const reported = resolveReportedHeight(
-    state.highlight.scrollHeight,
-    state.metrics,
-  );
+  const reported = resolveReportedHeight(state.highlight.scrollHeight, state.metrics);
   if (reported == null) {
     return;
   }
-  if (
-    state.lastHeight != null &&
-    Math.abs(reported - state.lastHeight) <= HEIGHT_EPSILON
-  ) {
+  if (state.lastHeight != null && Math.abs(reported - state.lastHeight) <= HEIGHT_EPSILON) {
     return;
   }
   state.lastHeight = reported;
@@ -384,14 +319,10 @@ export function applyMetrics(metrics: ComposerMetrics): void {
   state.input.style.padding = padding;
   state.highlight.style.minHeight = `${metrics.minHeight}px`;
   // 不限高（全屏）时交给 flex 全高容器：去掉封顶，textarea 自身仍可内滚
-  state.highlight.style.maxHeight =
-    metrics.maxHeight == null ? 'none' : `${metrics.maxHeight}px`;
+  state.highlight.style.maxHeight = metrics.maxHeight == null ? 'none' : `${metrics.maxHeight}px`;
   // 容器高度=内容高度的流式布局在限高模式正确；全屏须显式撑满视口，否则
   // 触摸区只到内容底部（`.composer-input` 默认无高度，靠 CSS 类补 height:100%）。
-  state.root.classList.toggle(
-    'composer-input--unbounded',
-    resolveUnbounded(metrics),
-  );
+  state.root.classList.toggle('composer-input--unbounded', resolveUnbounded(metrics));
   scheduleMeasure(state);
 }
 
@@ -455,11 +386,7 @@ export function applyMode(mode: ComposerMode): void {
  * 外部写入（水化 / 点选 / chips / 清空 / 回填）：内容相同短路，suppressChange 包裹。
  * @param selectionStart 省略则保持内核写值后的光标位置
  */
-export function applyText(
-  text: string,
-  selectionStart?: number,
-  selectionEnd?: number,
-): void {
+export function applyText(text: string, selectionStart?: number, selectionEnd?: number): void {
   const state = editor;
   if (state == null) {
     return;
@@ -478,9 +405,7 @@ export function applyText(
     // 外部写入后广播文本变化：同文档内的合成包 dock 靠它重渲 typeahead 浮层
     // （否则 setText 之后浮层停在旧候选上）。纯本地 CustomEvent，不走 postMessage
     // 跨桥；旧包内没有监听方，空发无害。
-    document.dispatchEvent(
-      new CustomEvent('composer:text-changed', {detail: next}),
-    );
+    document.dispatchEvent(new CustomEvent('composer:text-changed', {detail: next}));
   }
   if (selectionStart != null) {
     applySelection(selectionStart, selectionEnd ?? selectionStart);
@@ -502,9 +427,7 @@ export function applySelection(start: number, end: number): void {
   rememberSelection(state);
 }
 
-export function applyInit(
-  payload: Partial<InitPayload> | null | undefined,
-): void {
+export function applyInit(payload: Partial<InitPayload> | null | undefined): void {
   const state = editor;
   if (state == null) {
     return;
@@ -561,7 +484,7 @@ function bindEditorEvents(state: ComposerEditorState): Array<() => void> {
     syncScroll(state);
   };
 
-  unbind.push(
+  const unsubscribers = [
     listen(input, 'input', onInput),
     listen(input, 'focus', onFocus),
     listen(input, 'blur', onBlur),
@@ -576,7 +499,8 @@ function bindEditorEvents(state: ComposerEditorState): Array<() => void> {
         reportSelection(state);
       }
     }),
-  );
+  ];
+  unbind.push(...unsubscribers);
 
   // 测高闸门（scheduleMeasure 那层）之外的第二处：heightReport:false 时干脆不注册
   // RO——否则每次布局变化都产出一条只会立刻早退的空回调，Android WebView 上是纯开销。
@@ -613,12 +537,7 @@ function bindViewportCaretGuard(state: ComposerEditorState): Array<() => void> {
       }
       const {input} = state;
       const heightChanged = input.clientHeight !== lastClientHeight;
-      if (
-        heightChanged &&
-        document.activeElement === input &&
-        input.scrollTop === 0 &&
-        lastScrollTop > 0
-      ) {
+      if (heightChanged && document.activeElement === input && input.scrollTop === 0 && lastScrollTop > 0) {
         input.scrollTop = lastScrollTop;
       }
       lastScrollTop = input.scrollTop;
@@ -628,16 +547,10 @@ function bindViewportCaretGuard(state: ComposerEditorState): Array<() => void> {
     });
   };
 
-  const unbind = [
-    listen(window, 'resize', apply),
-    listen(window, 'orientationchange', apply),
-  ];
+  const unbind = [listen(window, 'resize', apply), listen(window, 'orientationchange', apply)];
   const viewport = window.visualViewport;
   if (viewport != null) {
-    unbind.push(
-      listen(viewport, 'resize', apply),
-      listen(viewport, 'scroll', apply),
-    );
+    unbind.push(listen(viewport, 'resize', apply), listen(viewport, 'scroll', apply));
   }
   return unbind;
 }
@@ -645,10 +558,7 @@ function bindViewportCaretGuard(state: ComposerEditorState): Array<() => void> {
 /* ---- 生命周期 ---- */
 
 /** 装配高亮层 + 透明 textarea（单实例；重复调用先拆旧实例）。 */
-export function mountComposerEditor(
-  parent: HTMLElement,
-  options: MountComposerEditorOptions = {},
-): void {
+export function mountComposerEditor(parent: HTMLElement, options: MountComposerEditorOptions = {}): void {
   destroyComposerEditor();
   const heightReport = options.heightReport !== false;
 

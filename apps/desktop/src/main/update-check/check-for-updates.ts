@@ -10,10 +10,7 @@ import { type AppError, Result } from "@novel-master/core/errors";
 import { resolveLatestRelease, type FetchFn } from "./resolve-latest-release.js";
 import type { UpdateCheckData } from "./types.js";
 
-export async function checkForUpdates(
-  localVersion: string,
-  fetchFn?: FetchFn,
-): Promise<Result<UpdateCheckData, AppError>> {
+export async function checkForUpdates(localVersion: string, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
   // e2e 专用 hook（与 NOVEL_MASTER_DB 同类先例）：桌面端 e2e 环境置此 env 让更新检查
   // 立即失败——砍掉每次启动 10s 的 GitHub fetch 超时等待与升级弹窗判定窗口。
   // 仅在编排入口短路，不改 UI 错误呈现路径：renderer 收到错误照常处理（s3-update

@@ -33,10 +33,6 @@ import {
 } from "../../services/smart-sort-rule-yaml.service.js";
 import { toIpcResult } from "../ipc-result.js";
 
-function parentWindow(): BrowserWindow | null {
-  return BrowserWindow.getFocusedWindow();
-}
-
 export async function handleSmartSortRuleList(): Promise<IpcResult<SmartSortRuleDto[]>> {
   return toIpcResult(async () => {
     const built = await getDesktopRuntime();
@@ -53,14 +49,15 @@ export async function handleSmartSortRuleCreate(req: SmartSortRuleCreateRequest)
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const rule = await rt.smartSortRule.createRule({
+    const patch = {
       name: req.name,
       pattern: req.pattern,
       ...(req.flags != null ? { flags: req.flags } : {}),
       ...(req.captureKind != null ? { captureKind: req.captureKind } : {}),
       ...(req.description != null ? { description: req.description } : {}),
       ...(req.enabled != null ? { enabled: req.enabled } : {}),
-    });
+    };
+    const rule = await rt.smartSortRule.createRule(patch);
     return rule.map((value) => value as SmartSortRuleDto);
   });
 }
@@ -174,7 +171,7 @@ export async function handleSmartSortRuleYamlExport(): Promise<IpcResult<SmartSo
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    return Result.ok(await exportSmartSortRuleYamlWithDialog(rt, parentWindow()));
+    return Result.ok(await exportSmartSortRuleYamlWithDialog(rt, BrowserWindow.getFocusedWindow()));
   });
 }
 
@@ -184,6 +181,6 @@ export async function handleSmartSortRuleYamlImport(): Promise<IpcResult<SmartSo
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    return Result.ok(await importSmartSortRuleYamlWithDialog(rt, parentWindow()));
+    return Result.ok(await importSmartSortRuleYamlWithDialog(rt, BrowserWindow.getFocusedWindow()));
   });
 }

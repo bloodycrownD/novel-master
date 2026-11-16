@@ -13,15 +13,9 @@ import { parseCliArgs } from "../vfs/parse-args.js";
  * scope / pullTemplate 的 `Result` 失败沿返回值交给上层（错误通道迁移四期），
  * 由 runSession 转 `Outcome.failed` 交回 main 边界统一出口。
  */
-export async function runSessionTemplate(
-  rt: Pick<NovelMasterRuntime, "sessions" | "scope">,
-  sub: string,
-  args: readonly string[],
-): Promise<Result<void, AppError>> {
+export async function runSessionTemplate(rt: Pick<NovelMasterRuntime, "sessions" | "scope">, sub: string, args: readonly string[]): Promise<Result<void, AppError>> {
   if (sub !== "pull") {
-    throw new Error(
-      "Usage: nm session template pull [--project <id>] [--session <id>]",
-    );
+    throw new Error("Usage: nm session template pull [--project <id>] [--session <id>]");
   }
   const { flags } = parseCliArgs(args);
   const resolvedSession = await rt.scope.resolveSessionId(flags);

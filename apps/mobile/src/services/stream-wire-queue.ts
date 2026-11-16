@@ -10,10 +10,7 @@ export type StreamWireChunk = {
 };
 
 /** 追加 wire 块；与队尾同 kind 时合并 delta，禁止 kind 重排。 */
-export function appendWireChunk(
-  queue: StreamWireChunk[],
-  chunk: StreamWireChunk,
-): void {
+export function appendWireChunk(queue: StreamWireChunk[], chunk: StreamWireChunk): void {
   if (chunk.delta.length === 0) {
     return;
   }
@@ -29,9 +26,7 @@ export function appendWireChunk(
 }
 
 /** 合并队列中相邻同 kind 段，返回新数组（输入顺序不变）。 */
-export function coalesceWireQueue(
-  queue: readonly StreamWireChunk[],
-): StreamWireChunk[] {
+export function coalesceWireQueue(queue: readonly StreamWireChunk[]): StreamWireChunk[] {
   if (queue.length === 0) {
     return [];
   }

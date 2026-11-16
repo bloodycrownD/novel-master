@@ -15,11 +15,7 @@ import { parseCliArgs } from "../vfs/parse-args.js";
  * repo 写 / 删 / 复制的 `Result` 失败转 `Outcome.failed` 沿管线交回 main 边界
  * （错误通道迁移四期），由统一出口换算 exit code。
  */
-export async function runProject(
-  rt: NovelMasterRuntime,
-  subcommand: string,
-  args: readonly string[],
-): Promise<Outcome<void>> {
+export async function runProject(rt: NovelMasterRuntime, subcommand: string, args: readonly string[]): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -55,9 +51,7 @@ export async function runProject(
       if (!currentProject.ok) return { kind: "failed", error: currentProject.error };
       const id = currentProject.value;
       if (id == null || id === "") {
-        throw new Error(
-          "No current project (run: nm project use --project <id> or --name <name>)",
-        );
+        throw new Error("No current project (run: nm project use --project <id> or --name <name>)");
       }
       const p = await rt.projects.get(id);
       if (!p.ok) return { kind: "failed", error: p.error };
@@ -91,8 +85,6 @@ export async function runProject(
     case "workplace":
       return runProjectWorkplace(rt, args);
     default:
-      throw new Error(
-        "Usage: nm project <list|create|use|current|delete|copy|vfs|workplace> ...",
-      );
+      throw new Error("Usage: nm project <list|create|use|current|delete|copy|vfs|workplace> ...");
   }
 }

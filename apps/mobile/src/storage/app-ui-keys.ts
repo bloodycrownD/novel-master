@@ -18,8 +18,7 @@ export const APP_UI_KEY_MESSAGE_NOTIFICATION = 'messageNotification';
 /** `legacy-rn` | `webview` — transcript rendering engine (default `webview`). */
 export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
 /** `rn` | `webview` — VFS markdown preview engine (default `webview`). */
-export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE =
-  'vfsMarkdownPreviewEngine';
+export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE = 'vfsMarkdownPreviewEngine';
 /** Last app version seen at bootstrap (package version). */
 export const APP_UI_KEY_LAST_RUN_VERSION = 'app.lastRunVersion';
 /** Integer string; bumped when app version changes to remount rich text. */
@@ -29,8 +28,7 @@ export const APP_UI_KEY_RICH_RENDER_EPOCH = 'app.richRenderEpoch';
 export const APP_UI_KEY_UPDATES_AUTO_CHECK = 'updates.autoCheck';
 export const APP_UI_KEY_UPDATES_LAST_CHECK_AT = 'updates.lastCheckAt';
 export const APP_UI_KEY_UPDATES_LAST_CHECK_STATUS = 'updates.lastCheckStatus';
-export const APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
-  'updates.lastCheckRemoteVersion';
+export const APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION = 'updates.lastCheckRemoteVersion';
 export const APP_UI_KEY_UPDATES_DISMISSED_VERSION = 'updates.dismissedVersion';
 /** ISO-8601 — suppress auto-check result modal until this instant. */
 export const APP_UI_KEY_UPDATES_SNOOZE_UNTIL = 'updates.snoozeUntil';

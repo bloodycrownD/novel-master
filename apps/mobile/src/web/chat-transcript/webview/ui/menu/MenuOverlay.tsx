@@ -5,19 +5,13 @@
  * 挂载由 main `render` 到 `#menu-portal`（Portal 等价）。
  */
 import {useLayoutEffect, useRef, useState} from 'preact/hooks';
-import {
-  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
-  MESSAGE_ACTION_MENU_ITEM_COUNT,
-} from '@web/shared/constants';
+import type {JSX} from 'preact';
+import {ANCHORED_MENU_ITEM_LAYOUT_HEIGHT, MESSAGE_ACTION_MENU_ITEM_COUNT} from '@web/shared/constants';
 import type {MenuAnchor, MenuItem} from '../../runtime/state/state';
-import {
-  computeContextMenuWidth,
-  layoutContextMenu,
-  type ContextMenuLayout,
-} from '../../runtime/menu/menu';
+import {computeContextMenuWidth, layoutContextMenu, type ContextMenuLayout} from '../../runtime/menu/menu';
 import {ContextMenu} from './ContextMenu';
 
-export type MenuOverlayProps = {
+type MenuOverlayProps = {
   messageId: string;
   items: MenuItem[];
   anchor: MenuAnchor;
@@ -41,10 +35,7 @@ export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
 
     // 只读 measure；结果经 setLayout，不写 menuEl.style / className
     const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
-    const contentHeight =
-      measuredHeight > 0
-        ? measuredHeight
-        : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
+    const contentHeight = measuredHeight > 0 ? measuredHeight : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
     let next = layoutContextMenu(anchor, contentHeight, menuWidth);
     if (items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
       next = {
@@ -59,34 +50,32 @@ export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
   }, [layout, messageId, items, anchor, menuWidth]);
 
   const placed = layout !== null;
-  const className =
-    placed && layout.scrollable ? 'context-menu scrollable' : 'context-menu';
-  const style = placed
-    ? {
-        position: 'fixed' as const,
-        left: layout.left + 'px',
-        top: layout.top + 'px',
-        width: layout.width + 'px',
-        height: 'auto',
-        maxHeight: layout.scrollable ? layout.maxHeight + 'px' : 'none',
-        visibility: 'visible' as const,
-      }
-    : {
-        position: 'fixed' as const,
-        visibility: 'hidden' as const,
-        left: '0',
-        top: '0',
-        width: menuWidth + 'px',
-        maxHeight: 'none',
-      };
+  const className = placed && layout.scrollable ? 'context-menu scrollable' : 'context-menu';
+  let style: JSX.CSSProperties;
+  if (layout !== null) {
+    style = {
+      position: 'fixed',
+      left: layout.left + 'px',
+      top: layout.top + 'px',
+      width: layout.width + 'px',
+      height: 'auto',
+      maxHeight: layout.scrollable ? layout.maxHeight + 'px' : 'none',
+      visibility: 'visible',
+    };
+  } else {
+    style = {
+      position: 'fixed',
+      visibility: 'hidden',
+      left: '0',
+      top: '0',
+      width: menuWidth + 'px',
+      maxHeight: 'none',
+    };
+  }
 
   return (
     <>
-      <div
-        id="menu-backdrop"
-        className="menu-backdrop"
-        data-action="close-menu"
-      />
+      <div id="menu-backdrop" className="menu-backdrop" data-action="close-menu" />
       <div ref={menuRef} id="context-menu" className={className} style={style}>
         <ContextMenu messageId={messageId} items={items} />
       </div>

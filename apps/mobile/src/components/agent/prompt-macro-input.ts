@@ -11,53 +11,34 @@
  */
 const ALLOWED_DYNAMIC_ROOT_MACROS = ['time', 'week_cn', 'filetree'] as const;
 
-export type PromptInsertableMacro = {
+type PromptInsertableMacro = {
   readonly label: string;
   readonly token: string;
 };
 
 /** dynamic 区可插入的 Prompt 宏（白名单 $ 根键）。 */
-export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] =
-  ALLOWED_DYNAMIC_ROOT_MACROS.map(key => ({
-    label: `$${key}`,
-    token: `{{$${key}}}`,
-  }));
+export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] = ALLOWED_DYNAMIC_ROOT_MACROS.map(key => ({
+  label: `$${key}`,
+  token: `{{$${key}}}`,
+}));
 
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 
-export type PromptMacroSegment =
-  | {readonly kind: 'text'; readonly value: string}
-  | {readonly kind: 'macro'; readonly value: string};
+type PromptMacroSegment = {readonly kind: 'text'; readonly value: string} | {readonly kind: 'macro'; readonly value: string};
 
-export type WhitelistMacroRange = {
+type WhitelistMacroRange = {
   readonly start: number;
   readonly end: number;
   readonly value: string;
 };
 
 /** 判断 `{{ ... }}` 内文（trim 后）是否为白名单 `$` 根宏。 */
-function isWhitelistRootMacroInner(inner: string): boolean {
-  const trimmed = inner.trim();
-  if (!trimmed.startsWith('$')) {
-    return false;
-  }
-  const rest = trimmed.slice(1).trim();
-  if (rest.length === 0 || rest.startsWith('.')) {
-    return false;
-  }
-  if (rest.includes('.')) {
-    return false;
-  }
-  return ALLOWED_ROOT_MACRO_KEYS.has(rest);
-}
 
 /**
  * 扫描全文，返回已闭合且内文为白名单根宏的 span（含手输与芯片插入形态）。
  * 未闭合 `{{`、非白名单、残缺 token 均不纳入。
  */
-export function findWhitelistMacroRanges(
-  text: string,
-): readonly WhitelistMacroRange[] {
+export function findWhitelistMacroRanges(text: string): readonly WhitelistMacroRange[] {
   const ranges: WhitelistMacroRange[] = [];
   let index = 0;
 
@@ -74,7 +55,10 @@ export function findWhitelistMacroRanges(
 
     const value = text.slice(open, close + 2);
     const inner = text.slice(open + 2, close);
-    if (isWhitelistRootMacroInner(inner)) {
+    const trimmedInner = inner.trim();
+    const macroInner = trimmedInner.startsWith('$') ? trimmedInner.slice(1).trim() : '';
+    const isWhitelistRoot = trimmedInner.startsWith('$') && macroInner.length > 0 && !macroInner.startsWith('.') && !macroInner.includes('.') && ALLOWED_ROOT_MACRO_KEYS.has(macroInner);
+    if (isWhitelistRoot) {
       ranges.push({start: open, end: close + 2, value});
     }
 
@@ -85,9 +69,7 @@ export function findWhitelistMacroRanges(
 }
 
 /** 将纯文本拆分为字面量段与白名单完整宏 token。 */
-export function splitPromptMacroSegments(
-  text: string,
-): readonly PromptMacroSegment[] {
+export function splitPromptMacroSegments(text: string): readonly PromptMacroSegment[] {
   if (text === '') {
     return [];
   }
@@ -119,10 +101,7 @@ export function splitPromptMacroSegments(
  * 单次连续删除若碰到白名单宏区间，整段删掉。
  * @returns 新的纯文本；无需原子删时返回 null
  */
-export function tryAtomicMacroDelete(
-  prevValue: string,
-  changedValue: string,
-): string | null {
+export function tryAtomicMacroDelete(prevValue: string, changedValue: string): string | null {
   if (changedValue.length >= prevValue.length) {
     return null;
   }
@@ -142,9 +121,7 @@ export function tryAtomicMacroDelete(
     return null;
   }
 
-  const hitRange = findWhitelistMacroRanges(prevValue).find(
-    range => deleteStart < range.end && deleteEnd > range.start,
-  );
+  const hitRange = findWhitelistMacroRanges(prevValue).find(range => deleteStart < range.end && deleteEnd > range.start);
   if (hitRange == null) {
     return null;
   }
@@ -157,14 +134,14 @@ export function tryAtomicMacroDelete(
   return prevValue.slice(0, hitRange.start) + prevValue.slice(hitRange.end);
 }
 
-export function insertTextAtSelection(
-  value: string,
-  selection: {readonly start: number; readonly end: number},
-  insert: string,
-): {
+type TextSelectionRange = {readonly start: number; readonly end: number};
+
+type TextInsertionResult = {
   readonly next: string;
-  readonly selection: {readonly start: number; readonly end: number};
-} {
+  readonly selection: TextSelectionRange;
+};
+
+export function insertTextAtSelection(value: string, selection: TextSelectionRange, insert: string): TextInsertionResult {
   const start = Math.max(0, Math.min(selection.start, value.length));
   const end = Math.max(start, Math.min(selection.end, value.length));
   const next = value.slice(0, start) + insert + value.slice(end);

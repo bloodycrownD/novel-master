@@ -21,28 +21,13 @@ import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/
 /**
  * 用当前 session 工作区整树覆盖 project 模板（文件 + workplace 规则）。
  */
-export async function pushSessionWorkspace(
-  tx: TdbcConnection,
-  projectId: string,
-  sessionId: string
-): Promise<void> {
+export async function pushSessionWorkspace(tx: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
   const vfs = new SqliteVfsEntryRepository(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);
-  await replaceVfsSubtree(
-    vfs,
-    { scopeKey: `session:${projectId}:${sessionId}` },
-    "/",
-    { scopeKey: `project:${projectId}` },
-    "/",
-    {
-      revisions,
-      contentStore: new SqliteVfsContentStore(tx),
-    }
-  );
-  await worktree.copyScope(
-    workplaceScopeKey({ kind: "session", projectId, sessionId }),
-    workplaceScopeKey({ kind: "project", projectId }),
-    mapSessionWorkplacePathToProject
-  );
+  await replaceVfsSubtree(vfs, { scopeKey: `session:${projectId}:${sessionId}` }, "/", { scopeKey: `project:${projectId}` }, "/", {
+    revisions,
+    contentStore: new SqliteVfsContentStore(tx),
+  });
+  await worktree.copyScope(workplaceScopeKey({ kind: "session", projectId, sessionId }), workplaceScopeKey({ kind: "project", projectId }), mapSessionWorkplacePathToProject);
 }

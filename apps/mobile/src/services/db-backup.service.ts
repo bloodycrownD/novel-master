@@ -12,30 +12,16 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {
-  dumpProviderTableSnapshot,
-  open,
-  restoreProviderTableSnapshot,
-  scrubProviderTablesInDatabase,
-  type TdbcConnection,
-} from '@novel-master/core';
+import {dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
-import {
-  checkpointMobileDatabase,
-  closeMobileConnection,
-  getMobileConnection,
-  registerMobileOpSqliteDriver,
-} from '../db/connection';
+import {checkpointMobileDatabase, closeMobileConnection, getMobileConnection, registerMobileOpSqliteDriver} from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
-import {
-  acquireMobileDbMaintenanceBusy,
-  releaseMobileDbMaintenanceBusy,
-} from './db-maintenance-busy';
-import {exportBytesViaDocumentPicker, pickToLocalPath} from './document-io';
+import {acquireMobileDbMaintenanceBusy, releaseMobileDbMaintenanceBusy} from './db-maintenance-busy';
+import {exportBytesViaDocumentPicker, pickToLocalPath, type ExportViaPickerOptions} from './document-io';
 import {blobFs, bytesToAsciiString} from './rn-file-io';
 
 const SQLITE_MAGIC = 'SQLite format 3';
@@ -44,21 +30,6 @@ const EXPORT_ATTACH_ALIAS = 'export_db';
 /** 分块落盘，避免 100MB+ Uint8Array → 单次 base64 撑爆 Hermes 堆。 */
 const WRITE_CHUNK_BYTES = 256 * 1024;
 
-function backupFileName(): string {
-  return 'nmbackup.db';
-}
-
-function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
-  if (bytes.length < 16) {
-    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
-  }
-  const header = String.fromCharCode(...bytes.subarray(0, 16));
-  if (!header.startsWith(SQLITE_MAGIC)) {
-    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'}));
-  }
-  return Result.ok(undefined);
-}
-
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
@@ -66,7 +37,7 @@ function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
  * {@link DatabaseReplacedError}——函数抛错时返回值送不到调用方，
  * 「已换代」信号必须由异常类型承载。
  */
-export type DbImportOutcome = {
+type DbImportOutcome = {
   /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
   databaseReplaced: boolean;
   /** 服务商三表是否已在本机恢复成功（false ⇒ 数据库已换但三表丢失，需 UI 提示）。 */
@@ -81,10 +52,7 @@ export type DbImportOutcome = {
 export class DatabaseReplacedError extends Error {
   readonly databaseReplaced = true as const;
 
-  constructor(
-    message: string,
-    readonly providerTablesRestored: boolean,
-  ) {
+  constructor(message: string, readonly providerTablesRestored: boolean) {
     super(message);
     this.name = 'DatabaseReplacedError';
   }
@@ -95,70 +63,19 @@ function errorDetail(error: unknown): string {
 }
 
 /**
- * 仅校验路径存在且体积足够；魔数交给替换后 open（失败则 bak 回滚）。
- * 注意：`fs.readFile(path, enc, 16)` 的第三参会被忽略，会整包读入，大备份必 OOM。
- */
-async function assertSqliteBackupAtPath(srcPath: string): Promise<Result<void, AppError>> {
-  const fs = blobFs();
-  const exists = await fs.exists(srcPath);
-  if (!exists) {
-    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: `数据库文件不存在: ${srcPath}`}));
-  }
-  const info = await fs.stat(srcPath);
-  if (Number(info.size) < 16) {
-    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
-  }
-  return Result.ok(undefined);
-}
-
-/** 分块 ascii 写入，避免整包 `String.fromCharCode` / `btoa`。 */
-async function writeBytesToFileChunked(
-  destPath: string,
-  bytes: Uint8Array,
-): Promise<void> {
-  const stream = await blobFs().writeStream(destPath, 'ascii', false);
-  try {
-    for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
-      const end = Math.min(offset + WRITE_CHUNK_BYTES, bytes.length);
-      const slice = bytes.subarray(offset, end);
-      await stream.write(bytesToAsciiString(slice));
-    }
-  } finally {
-    await stream.close();
-  }
-}
-
-/**
- * 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
- */
-async function openDbForProviderRestore(): Promise<TdbcConnection> {
-  // 必须走 db/connection 的单点注册：驱动注册表是 last-wins，直接调
-  // 无参的 registerOpSqliteDriver() 会把带后台探测的版本覆盖掉。
-  registerMobileOpSqliteDriver();
-  return open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
-}
-
-/**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商表），无分享对话框。
  * 调用方负责 Agent 守卫与目标路径管理。
  *
  * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
  * 也能被覆盖，期间归一/压缩后台循环让路。
  */
-export async function exportDatabaseBackupToPath(
-  runtime: MobileNovelMasterRuntime,
-  destPath: string,
-): Promise<void> {
+export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string): Promise<void> {
   acquireMobileDbMaintenanceBusy();
   try {
     await checkpointMobileDatabase(runtime.conn);
     const dbPath = await resolveMobileDatabaseFilePath();
     await blobFs().cp(dbPath, destPath);
-    await scrubProviderTablesInDatabase(
-      runtime.conn,
-      destPath,
-      EXPORT_ATTACH_ALIAS,
-    );
+    await scrubProviderTablesInDatabase(runtime.conn, destPath, EXPORT_ATTACH_ALIAS);
   } finally {
     releaseMobileDbMaintenanceBusy();
   }
@@ -179,13 +96,16 @@ export async function exportDatabaseBackupToPath(
  * - 回滚失败**不得静默**：与原错误合并成一条可读信息，并保留 bak 副本
  *   （mobile 从不删 bak，用户还能手工救回）。
  */
-export async function importDatabaseBackupFromPath(
-  srcPath: string,
-): Promise<Result<DbImportOutcome, AppError>> {
+export async function importDatabaseBackupFromPath(srcPath: string): Promise<Result<DbImportOutcome, AppError>> {
   acquireMobileDbMaintenanceBusy();
   try {
-    const checked = await assertSqliteBackupAtPath(srcPath);
-    if (!checked.ok) return Result.err(checked.error);
+    // 仅校验路径存在且体积足够；魔数交给替换后 open（失败则 bak 回滚）。
+    // 注意：`fs.readFile(path, enc, 16)` 的第三参会被忽略，会整包读入，大备份必 OOM。
+    const backupFs = blobFs();
+    const srcExists = await backupFs.exists(srcPath);
+    if (!srcExists) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: `数据库文件不存在: ${srcPath}`}));
+    const srcInfo = await backupFs.stat(srcPath);
+    if (Number(srcInfo.size) < 16) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
 
     const dbPath = await resolveMobileDatabaseFilePath();
     const bakPath = `${dbPath}.nmbackup.bak`;
@@ -207,7 +127,11 @@ export async function importDatabaseBackupFromPath(
       await fs.cp(srcPath, dbPath);
       databaseReplaced = true;
 
-      const restoreConn = await openDbForProviderRestore();
+      // 必须走 db/connection 的单点注册：驱动注册表是 last-wins，直接调
+      // 无参的 registerOpSqliteDriver() 会把带后台探测的版本覆盖掉。
+      // 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
+      registerMobileOpSqliteDriver();
+      const restoreConn = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       try {
         await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
       } finally {
@@ -216,10 +140,7 @@ export async function importDatabaseBackupFromPath(
     } catch (error) {
       if (databaseReplaced) {
         // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」如实报上去。
-        throw new DatabaseReplacedError(
-          `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}`,
-          false,
-        );
+        throw new DatabaseReplacedError(`数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}`, false);
       }
 
       // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
@@ -232,7 +153,8 @@ export async function importDatabaseBackupFromPath(
         }
       }
       if (rollbackError != null) {
-        throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}（原始错误：${errorDetail(error)}）`}, {cause: [error, rollbackError]});
+        const rollbackFailureDetail = `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}（原始错误：${errorDetail(error)}）`;
+        throw new AppError('INFRA_UNEXPECTED_ERROR', {detail: rollbackFailureDetail}, {cause: [error, rollbackError]});
       }
       throw error;
     }
@@ -249,17 +171,26 @@ export async function importDatabaseBackupFromPath(
  * busy 互斥由内部 `importDatabaseBackupFromPath` 的底层 acquire/release
  * 覆盖（含落盘窗口），本函数无需再叠加。
  */
-export async function importDatabaseBackupFromBytes(
-  bytes: Uint8Array,
-): Promise<Result<DbImportOutcome, AppError>> {
+export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<Result<DbImportOutcome, AppError>> {
   // 内存态校验：失败沿 Result.err（与 FromPath 同口径）。
-  const checked = assertSqliteFile(bytes);
-  if (!checked.ok) return Result.err(checked.error);
+  if (bytes.length < 16) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
+  const header = String.fromCharCode(...bytes.subarray(0, 16));
+  if (!header.startsWith(SQLITE_MAGIC)) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'}));
 
   const fs = blobFs();
   const tmpPath = `${fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;
   try {
-    await writeBytesToFileChunked(tmpPath, bytes);
+    // 分块 ascii 写入，避免整包 `String.fromCharCode` / `btoa`。
+    const stream = await blobFs().writeStream(tmpPath, 'ascii', false);
+    try {
+      for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
+        const end = Math.min(offset + WRITE_CHUNK_BYTES, bytes.length);
+        const slice = bytes.subarray(offset, end);
+        await stream.write(bytesToAsciiString(slice));
+      }
+    } finally {
+      await stream.close();
+    }
     // 委托 FromPath：DbImportOutcome 必须原样透传（含 DatabaseReplacedError 的
     // 类型），漏了这一层委托就拿不到「已换代」信号。
     return await importDatabaseBackupFromPath(tmpPath);
@@ -272,9 +203,7 @@ export async function importDatabaseBackupFromBytes(
  * 导出全量应用数据库为可分享的 `.nmbackup` 文件（副本不含服务商表）。
  * @returns `'saved'` 用户完成分享；`'cancelled'` 用户取消选择器。
  */
-export async function exportDatabaseBackup(
-  runtime: MobileNovelMasterRuntime,
-): Promise<Result<'saved' | 'cancelled', AppError>> {
+export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): Promise<Result<'saved' | 'cancelled', AppError>> {
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'}));
   }
@@ -284,12 +213,13 @@ export async function exportDatabaseBackup(
   // acquire/release，嵌套计数不会互相提前清位。
   acquireMobileDbMaintenanceBusy();
   try {
-    const saved = await exportBytesViaDocumentPicker({
-      fileName: backupFileName(),
+    const exportOptions: ExportViaPickerOptions = {
+      fileName: 'nmbackup.db',
       mimeType: 'application/octet-stream',
       copy: Platform.OS === 'ios',
       write: destPath => exportDatabaseBackupToPath(runtime, destPath),
-    });
+    };
+    const saved = await exportBytesViaDocumentPicker(exportOptions);
     return Result.ok(saved);
   } finally {
     releaseMobileDbMaintenanceBusy();
@@ -301,9 +231,7 @@ export async function exportDatabaseBackup(
  * 大文件仅 keepLocalCopy + 路径级 cp，不读入 JS 堆。
  * 调用方须在成功后执行 `onRebootstrap`（例如 NovelMasterProvider.retry）。
  */
-export async function importDatabaseBackup(
-  onRebootstrap: () => void,
-): Promise<Result<void, AppError>> {
+export async function importDatabaseBackup(onRebootstrap: () => void): Promise<Result<void, AppError>> {
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'}));
   }
@@ -315,10 +243,7 @@ export async function importDatabaseBackup(
   // 一步执行，故清位必然发生在 rebootstrap 完成之后。
   acquireMobileDbMaintenanceBusy();
   try {
-    const picked = await pickToLocalPath({
-      mimeTypes: [types.allFiles],
-      localFileName: 'import.nmbackup',
-    });
+    const picked = await pickToLocalPath({mimeTypes: [types.allFiles], localFileName: 'import.nmbackup'});
     if (picked == null) {
       return Result.ok(undefined);
     }

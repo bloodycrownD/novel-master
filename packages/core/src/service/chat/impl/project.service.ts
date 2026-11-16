@@ -7,11 +7,7 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
-import {
-  DEFAULT_PROJECT_AGENT_CONFIG,
-  type ProjectAgentConfig,
-  type ProjectAgentConfigPatch,
-} from "@/domain/chat/model/project-agent-config.js";
+import { DEFAULT_PROJECT_AGENT_CONFIG, type ProjectAgentConfig, type ProjectAgentConfigPatch } from "@/domain/chat/model/project-agent-config.js";
 import { projectAgentConfigSchema } from "@/domain/chat/model/project-agent-config.schema.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
@@ -20,11 +16,7 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import {
-  copyVfsTree,
-  deleteVfsPrefix,
-  sweepRevisionsUnderScope,
-} from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { copyVfsTree, deleteVfsPrefix, sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -34,10 +26,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  deleteSessionFsData,
-  runDeferredBlobGc,
-} from "@/service/session-fs/create-session-fs-service.js";
+import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
@@ -54,43 +43,8 @@ function reposFor(conn: TdbcConnection) {
   };
 }
 
-function parseStoredAgentConfig(json: string): Result<ProjectAgentConfig, AppError> {
-  return decode(JSON.parse(json), projectAgentConfigSchema);
-}
-
-function mergeAgentConfigPatch(
-  current: ProjectAgentConfig,
-  patch: ProjectAgentConfigPatch
-): ProjectAgentConfig {
-  return {
-    mode: patch.mode ?? current.mode,
-    ...(patch.definition !== undefined
-      ? { definition: patch.definition }
-      : current.definition !== undefined
-      ? { definition: current.definition }
-      : {}),
-  };
-}
-
-/** 纯 follow 且无草稿时存 NULL；否则存 wire JSON。toWire 门禁失败沿 `Result.err` 上递（五期门⑦）。 */
-function serializeAgentConfigForStorage(
-  config: ProjectAgentConfig
-): Result<string | null, AppError> {
-  if (config.mode === "follow" && config.definition == null) {
-    return Result.ok(null);
-  }
-  const wire = projectAgentConfigSchema.toWire(config);
-  if (!wire.ok) return Result.err(wire.error);
-  return Result.ok(JSON.stringify(wire.value));
-}
-
-/** Deep-clones stored JSON for project copy. */
-function deepCloneAgentConfigJson(json: string): string {
-  return JSON.stringify(JSON.parse(json));
-}
-
 /** Dependencies for {@link DefaultProjectService}. */
-export interface ProjectServiceDeps {
+interface ProjectServiceDeps {
   readonly conn: TdbcConnection;
   readonly projects: ProjectRepository;
   readonly sessions: SessionRepository;
@@ -111,7 +65,7 @@ export class DefaultProjectService implements ProjectService {
   async get(id: string): Promise<Result<ChatProject, AppError>> {
     const project = await this.deps.projects.findById(id);
     if (project == null) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id }));
     }
     return Result.ok(project);
   }
@@ -119,7 +73,7 @@ export class DefaultProjectService implements ProjectService {
   async create(name: string): Promise<Result<ChatProject, AppError>> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"}));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "project name must not be empty" }));
     }
     const now = Date.now();
     const project: ChatProject = {
@@ -135,18 +89,14 @@ export class DefaultProjectService implements ProjectService {
   async rename(id: string, name: string): Promise<Result<ChatProject, AppError>> {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: "project name must not be empty"}));
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "project name must not be empty" }));
     }
     const existing = await this.get(id);
     if (!existing.ok) return existing;
     const updatedAtMs = Date.now();
-    const updated = await this.deps.projects.updateName(
-      id,
-      trimmed,
-      updatedAtMs
-    );
+    const updated = await this.deps.projects.updateName(id, trimmed, updatedAtMs);
     if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id }));
     }
     return Result.ok({ ...existing.value, name: trimmed, updatedAtMs });
   }
@@ -156,7 +106,7 @@ export class DefaultProjectService implements ProjectService {
       const r = reposFor(tx);
       const project = await r.projects.findById(id);
       if (project == null) {
-        throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
+        throw new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id });
       }
       const sessionList = await r.sessions.listByProject(id);
       const sessionKkv = createSessionKkvService(tx);
@@ -188,9 +138,7 @@ export class DefaultProjectService implements ProjectService {
       await r.sessions.deleteByProject(id);
       // 项目 scope 只剩 template（会话都有自己的 scope）；技能负清单行一并清理，
       // 避免留下指向已删项目的孤儿禁用行。
-      await new SqliteSkillDisabledRuleRepository(tx).removeScope(
-        `project:${id}`
-      );
+      await new SqliteSkillDisabledRuleRepository(tx).removeScope(`project:${id}`);
       // 项目 scope：copy/模板推送会在此 scope 下种下 ref_count=1 的 live-head
       // revision（seedLiveHeadRevisionsUnderPrefix），裸 deleteVfsPrefix 只删 entry、
       // 既不释放 live ref 也不 GC revision ⇒ 每「种下一次再删项目」就永久泄漏一批
@@ -199,15 +147,10 @@ export class DefaultProjectService implements ProjectService {
       await sweepRevisionsUnderScope(r.vfs, r.revisions, `project:${id}`, "/");
       // 技能已重定位到独立 meta 域：scope_key 精确匹配，不补这条会留下
       // project:{pid}:meta 的孤儿 entry 行（同样要 sweep，见上一条注释）
-      await sweepRevisionsUnderScope(
-        r.vfs,
-        r.revisions,
-        `project:${id}:meta`,
-        "/"
-      );
+      await sweepRevisionsUnderScope(r.vfs, r.revisions, `project:${id}:meta`, "/");
       const deleted = await r.projects.delete(id);
       if (!deleted) {
-        throw new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id});
+        throw new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id });
       }
     });
     await runDeferredBlobGc(this.deps.conn);
@@ -226,28 +169,24 @@ export class DefaultProjectService implements ProjectService {
     if (json == null) {
       return Result.ok(DEFAULT_PROJECT_AGENT_CONFIG);
     }
-    return parseStoredAgentConfig(json);
+    return decode(JSON.parse(json), projectAgentConfigSchema);
   }
 
   /**
    * @deprecated 项目智能体已下线，保留用于 DB 历史数据读取兼容。
    */
-  async updateAgentConfig(
-    id: string,
-    patch: ProjectAgentConfigPatch,
-    options: ValidateAgentDefinitionOptions = {}
-  ): Promise<Result<ProjectAgentConfig, AppError>> {
+  async updateAgentConfig(id: string, patch: ProjectAgentConfigPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<ProjectAgentConfig, AppError>> {
     const r = await this.get(id);
     if (!r.ok) return Result.err(r.error);
     const current = await this.getAgentConfig(id);
     if (!current.ok) return current;
-    const merged = mergeAgentConfigPatch(current.value, patch);
+    const merged: ProjectAgentConfig = {
+      mode: patch.mode ?? current.value.mode,
+      ...(patch.definition !== undefined ? { definition: patch.definition } : current.value.definition !== undefined ? { definition: current.value.definition } : {}),
+    };
     const wire = projectAgentConfigSchema.toWire(merged);
     if (!wire.ok) return Result.err(wire.error);
-    const validated = decode(
-      wire.value,
-      projectAgentConfigSchema
-    );
+    const validated = decode(wire.value, projectAgentConfigSchema);
     if (!validated.ok) return validated;
     const config = validated.value;
     if (config.mode === "custom") {
@@ -255,15 +194,16 @@ export class DefaultProjectService implements ProjectService {
       if (!validation.ok) return Result.err(validation.error);
     }
     const updatedAtMs = Date.now();
-    const configJson = serializeAgentConfigForStorage(config);
-    if (!configJson.ok) return Result.err(configJson.error);
-    const updated = await this.deps.projects.updateAgentConfig(
-      id,
-      configJson.value,
-      updatedAtMs
-    );
+    // 纯 follow 且无草稿时存 NULL；否则存 wire JSON。toWire 门禁失败沿 Result.err 上递（五期门⑦）。
+    let configJson: string | null = null;
+    if (config.mode !== "follow" || config.definition != null) {
+      const configWire = projectAgentConfigSchema.toWire(config);
+      if (!configWire.ok) return Result.err(configWire.error);
+      configJson = JSON.stringify(configWire.value);
+    }
+    const updated = await this.deps.projects.updateAgentConfig(id, configJson, updatedAtMs);
     if (!updated) {
-      return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id }));
     }
     return Result.ok(config);
   }
@@ -273,7 +213,7 @@ export class DefaultProjectService implements ProjectService {
     if (!source.ok) return source;
     const src = source.value;
     const sourceAgentConfigJson = await this.deps.projects.getAgentConfig(id);
-    const copied = await this.deps.conn.transaction(async (tx) => {
+    const copyTransaction = this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
       const copy: ChatProject = {
@@ -284,49 +224,20 @@ export class DefaultProjectService implements ProjectService {
       };
       await r.projects.insert(copy);
       if (sourceAgentConfigJson != null) {
-        const clonedJson = deepCloneAgentConfigJson(sourceAgentConfigJson);
+        const clonedJson = JSON.stringify(JSON.parse(sourceAgentConfigJson));
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
       // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
       // 技能已重定位到独立 meta 域（project:{id}:meta），复制时单独整树拷贝
       // （D1：项目复制携带技能文件）；负清单行不往 VFS，需按 scope_key 显式复制。
       const contentStore = new SqliteVfsContentStore(tx);
-      await copyVfsTree(
-        r.vfs,
-        { scopeKey: `project:${id}` },
-        "/",
-        { scopeKey: `project:${copy.id}` },
-        "/",
-        { contentStore }
-      );
-      await copyVfsTree(
-        r.vfs,
-        { scopeKey: `project:${id}:meta` },
-        "/",
-        { scopeKey: `project:${copy.id}:meta` },
-        "/",
-        { contentStore }
-      );
-      await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(
-        `project:${id}`,
-        `project:${copy.id}`
-      );
-      await seedLiveHeadRevisionsUnderPrefix(
-        r.vfs,
-        r.revisions,
-        `project:${copy.id}`,
-        "/",
-        contentStore
-      );
-      await seedLiveHeadRevisionsUnderPrefix(
-        r.vfs,
-        r.revisions,
-        `project:${copy.id}:meta`,
-        "/",
-        contentStore
-      );
+      await copyVfsTree(r.vfs, { scopeKey: `project:${id}` }, "/", { scopeKey: `project:${copy.id}` }, "/", { contentStore });
+      await copyVfsTree(r.vfs, { scopeKey: `project:${id}:meta` }, "/", { scopeKey: `project:${copy.id}:meta` }, "/", { contentStore });
+      await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(`project:${id}`, `project:${copy.id}`);
+      await seedLiveHeadRevisionsUnderPrefix(r.vfs, r.revisions, `project:${copy.id}`, "/", contentStore);
+      await seedLiveHeadRevisionsUnderPrefix(r.vfs, r.revisions, `project:${copy.id}:meta`, "/", contentStore);
       return copy;
     });
-    return Result.ok(copied);
+    return Result.ok(await copyTransaction);
   }
 }

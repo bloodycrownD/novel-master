@@ -8,19 +8,12 @@
 
 import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type {
-  DegradedToolCall,
-  LlmStreamEvent,
-} from "../ports/adapter.port.js";
+import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
 import { parseSseDataLine } from "./sse-data-line.js";
-import {
-  assertSseParseSucceededOrThrow,
-  recordMalformedSseLine,
-  type SseParseDiagnostics,
-} from "./sse-parse-errors.js";
+import { assertSseParseSucceededOrThrow, recordMalformedSseLine, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 import { parseAnthropicUsage } from "./usage-parser.js";
 
@@ -36,7 +29,7 @@ type ActiveBlock =
   | { type: "redacted_thinking"; data: string; signature?: string }
   | { type: "tool_use"; index: number };
 
-export type AnthropicSseParserState = SseParseDiagnostics & {
+type AnthropicSseParserState = SseParseDiagnostics & {
   buffer: string;
   blocks: ContentBlock[];
   active: ActiveBlock | null;
@@ -64,34 +57,7 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
   };
 }
 
-/**
- * message_delta 到达时同步 emit 流中 usage 事件（输出侧累计口径）。
- *
- * 数据已在手（messageDeltaRaw 覆盖存储点），仅加 emit；累计 output_tokens
- * 与上次 emit 相同（或缺失）时不发——协议层不节流，事件量由上层合批吸收。
- */
-function emitAnthropicUsage(
-  state: AnthropicSseParserState,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
-  const usage = parseAnthropicUsage(state.messageDeltaRaw);
-  const completionTokens = usage?.completionTokens;
-  if (
-    usage == null ||
-    completionTokens == null ||
-    completionTokens === state.lastEmittedCompletionTokens
-  ) {
-    return;
-  }
-  state.lastEmittedCompletionTokens = completionTokens;
-  onStream?.({ type: "usage", usage });
-}
-
-function flushActiveBlock(
-  state: AnthropicSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire
-): void {
+function flushActiveBlock(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): void {
   const active = state.active;
   if (active == null) {
     return;
@@ -121,9 +87,7 @@ function flushActiveBlock(
       state.blocks.push({
         type: "redacted_thinking",
         data: active.data,
-        ...(active.signature != null
-          ? { thinkingSignature: active.signature }
-          : {}),
+        ...(active.signature != null ? { thinkingSignature: active.signature } : {}),
       });
       break;
     }
@@ -164,24 +128,7 @@ function flushActiveBlock(
   state.active = null;
 }
 
-function ensureActiveText(
-  state: AnthropicSseParserState
-): Extract<ActiveBlock, { type: "text" }> {
-  if (state.active?.type === "text") {
-    return state.active;
-  }
-  flushActiveBlock(state);
-  const active: Extract<ActiveBlock, { type: "text" }> = {
-    type: "text",
-    parts: [],
-  };
-  state.active = active;
-  return active;
-}
-
-function ensureActiveThinking(
-  state: AnthropicSseParserState
-): Extract<ActiveBlock, { type: "thinking" }> {
+function ensureActiveThinking(state: AnthropicSseParserState): Extract<ActiveBlock, { type: "thinking" }> {
   if (state.active?.type === "thinking") {
     return state.active;
   }
@@ -195,103 +142,91 @@ function ensureActiveThinking(
   return active;
 }
 
-function processAnthropicSseLine(
-  state: AnthropicSseParserState,
-  line: string,
-  onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire
-): void {
-  const payload = parseSseDataLine(line);
-  if (payload == null) {
-    return;
-  }
-  if (payload === "[DONE]") {
-    return;
-  }
-  let event: Record<string, unknown>;
-  try {
-    event = JSON.parse(payload) as Record<string, unknown>;
-  } catch {
-    recordMalformedSseLine(state, payload);
-    return;
-  }
-  const type = event.type;
-  if (type === "message_start") {
-    state.messageStartRaw = event;
-  } else if (type === "message_delta") {
-    state.messageDeltaRaw = event;
-    emitAnthropicUsage(state, onStream);
-  }
-  if (type === "content_block_start") {
-    flushActiveBlock(state, onStream, toolNames);
-    const block = event.content_block;
-    if (!isRecord(block) || typeof block.type !== "string") {
-      return;
-    }
-    if (block.type === "tool_use") {
-      state.toolUses.push({
-        id: typeof block.id === "string" ? block.id : "",
-        name: typeof block.name === "string" ? block.name : "",
-        inputJson: "",
-      });
-      state.active = { type: "tool_use", index: state.toolUses.length - 1 };
-    } else if (block.type === "thinking") {
-      state.active = { type: "thinking", text: [], signature: [] };
-    } else if (block.type === "redacted_thinking") {
-      const data = typeof block.data === "string" ? block.data : "";
-      const signature =
-        typeof block.signature === "string" && block.signature !== ""
-          ? block.signature
-          : undefined;
-      state.active = { type: "redacted_thinking", data, signature };
-    } else if (block.type === "text") {
-      state.active = { type: "text", parts: [] };
-    }
-  } else if (type === "content_block_delta") {
-    const delta = event.delta;
-    if (!isRecord(delta)) {
-      return;
-    }
-    if (delta.type === "text_delta" && typeof delta.text === "string") {
-      ensureActiveText(state).parts.push(delta.text);
-      onStream?.({ type: "text-delta", text: delta.text });
-    } else if (
-      delta.type === "thinking_delta" &&
-      typeof delta.thinking === "string"
-    ) {
-      ensureActiveThinking(state).text.push(delta.thinking);
-      onStream?.({ type: "thinking-delta", text: delta.thinking });
-    } else if (
-      delta.type === "signature_delta" &&
-      typeof delta.signature === "string"
-    ) {
-      // Claude 4+ streams opaque signature fragments before content_block_stop.
-      ensureActiveThinking(state).signature.push(delta.signature);
-    } else if (
-      delta.type === "input_json_delta" &&
-      typeof delta.partial_json === "string" &&
-      state.active?.type === "tool_use"
-    ) {
-      const tu = state.toolUses[state.active.index]!;
-      tu.inputJson += delta.partial_json;
-    }
-  } else if (type === "content_block_stop") {
-    flushActiveBlock(state, onStream, toolNames);
-  }
-}
-
 /**
  * Feed one UTF-8 text chunk (may split mid-line); emits stream events via `onStream`.
+ *
+ * message_delta 到达时同步 emit 流中 usage 事件（输出侧累计口径）：数据已在手，
+ * 累计 output_tokens 与上次 emit 相同（或缺失）时不发——协议层不节流，事件量由上层合批吸收。
  */
-export function feedAnthropicSseChunk(
-  state: AnthropicSseParserState,
-  chunk: string,
-  onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire
-): void {
-  feedSseLines(state, chunk, (line) =>
-    processAnthropicSseLine(state, line, onStream, toolNames)
-  );
+export function feedAnthropicSseChunk(state: AnthropicSseParserState, chunk: string, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): void {
+  feedSseLines(state, chunk, (line) => {
+    const payload = parseSseDataLine(line);
+    if (payload == null) {
+      return;
+    }
+    if (payload === "[DONE]") {
+      return;
+    }
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(payload) as Record<string, unknown>;
+    } catch {
+      recordMalformedSseLine(state, payload);
+      return;
+    }
+    const type = event.type;
+    if (type === "message_start") {
+      state.messageStartRaw = event;
+    } else if (type === "message_delta") {
+      state.messageDeltaRaw = event;
+      const usage = parseAnthropicUsage(state.messageDeltaRaw);
+      const completionTokens = usage?.completionTokens;
+      if (usage != null && completionTokens != null && completionTokens !== state.lastEmittedCompletionTokens) {
+        state.lastEmittedCompletionTokens = completionTokens;
+        onStream?.({ type: "usage", usage });
+      }
+    }
+    if (type === "content_block_start") {
+      flushActiveBlock(state, onStream, toolNames);
+      const block = event.content_block;
+      if (!isRecord(block) || typeof block.type !== "string") {
+        return;
+      }
+      if (block.type === "tool_use") {
+        state.toolUses.push({
+          id: typeof block.id === "string" ? block.id : "",
+          name: typeof block.name === "string" ? block.name : "",
+          inputJson: "",
+        });
+        state.active = { type: "tool_use", index: state.toolUses.length - 1 };
+      } else if (block.type === "thinking") {
+        state.active = { type: "thinking", text: [], signature: [] };
+      } else if (block.type === "redacted_thinking") {
+        const data = typeof block.data === "string" ? block.data : "";
+        const signature = typeof block.signature === "string" && block.signature !== "" ? block.signature : undefined;
+        state.active = { type: "redacted_thinking", data, signature };
+      } else if (block.type === "text") {
+        state.active = { type: "text", parts: [] };
+      }
+    } else if (type === "content_block_delta") {
+      const delta = event.delta;
+      if (!isRecord(delta)) {
+        return;
+      }
+      if (delta.type === "text_delta" && typeof delta.text === "string") {
+        // 非 text active 先收尾，再切到新的 text 块。
+        let activeText = state.active;
+        if (activeText?.type !== "text") {
+          flushActiveBlock(state);
+          activeText = { type: "text", parts: [] };
+          state.active = activeText;
+        }
+        activeText.parts.push(delta.text);
+        onStream?.({ type: "text-delta", text: delta.text });
+      } else if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
+        ensureActiveThinking(state).text.push(delta.thinking);
+        onStream?.({ type: "thinking-delta", text: delta.thinking });
+      } else if (delta.type === "signature_delta" && typeof delta.signature === "string") {
+        // Claude 4+ streams opaque signature fragments before content_block_stop.
+        ensureActiveThinking(state).signature.push(delta.signature);
+      } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string" && state.active?.type === "tool_use") {
+        const tu = state.toolUses[state.active.index]!;
+        tu.inputJson += delta.partial_json;
+      }
+    } else if (type === "content_block_stop") {
+      flushActiveBlock(state, onStream, toolNames);
+    }
+  });
 }
 
 /**
@@ -318,19 +253,10 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
   } else if (typeof start.model === "string") {
     merged.model = start.model;
   }
-  const startUsage = isRecord(startMessage?.usage)
-    ? startMessage!.usage
-    : isRecord(start.usage)
-    ? start.usage
-    : undefined;
+  const startUsage = isRecord(startMessage?.usage) ? startMessage!.usage : isRecord(start.usage) ? start.usage : undefined;
   const usage: Record<string, unknown> = {};
   if (startUsage != null) {
-    const inputSideKeys = [
-      "input_tokens",
-      "cache_read_input_tokens",
-      "cache_creation_input_tokens",
-      "cache_creation",
-    ];
+    const inputSideKeys = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "cache_creation"];
     for (const key of inputSideKeys) {
       if (startUsage[key] != null) {
         usage[key] = startUsage[key];
@@ -347,15 +273,7 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
 }
 
 /** Finalize parser state into content blocks (normal stream end). */
-export function finishAnthropicSse(
-  state: AnthropicSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
+export function finishAnthropicSse(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): SseFinishResult {
   if (state.buffer !== "") {
     feedAnthropicSseChunk(state, "\n", onStream, toolNames);
   }
@@ -373,75 +291,38 @@ export function finishAnthropicSse(
 }
 
 /** Partial snapshot when the user aborted mid-stream. */
-export function finishAnthropicSsePartial(
-  state: AnthropicSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire
-): {
-  blocks: ContentBlock[];
-  streamRaw: unknown;
-  degradedToolCalls: DegradedToolCall[];
-} {
+export function finishAnthropicSsePartial(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): SseFinishResult {
   if (state.buffer !== "") {
     feedAnthropicSseChunk(state, "\n", onStream, toolNames);
   }
 
   flushActiveBlock(state, onStream, toolNames);
 
-  const text = state.blocks
-    .filter(
-      (b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text"
-    )
-    .map((b) => b.text)
-    .join("");
-  const thinking = state.blocks
-    .filter(
-      (b): b is Extract<ContentBlock, { type: "thinking" }> =>
-        b.type === "thinking"
-    )
-    .map((b) => b.text)
-    .join("");
+  const stateTextBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text");
+  const text = stateTextBlocks.map((b) => b.text).join("");
+  const stateThinkingBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking");
+  const thinking = stateThinkingBlocks.map((b) => b.text).join("");
   // thinking 文本级签名：取**最后一个非空** thinkingSignature（与 gemini 的
   // `state.thinkingSignature`「后到覆盖」语义一致）。
-  const thinkingSignature = state.blocks
-    .filter(
-      (b): b is Extract<ContentBlock, { type: "thinking" }> =>
-        b.type === "thinking"
-    )
-    .reduce<string | undefined>(
-      (acc, b) => (b.thinkingSignature != null ? b.thinkingSignature : acc),
-      undefined
-    );
+  const thinkingSignature = stateThinkingBlocks.reduce<string | undefined>((acc, b) => (b.thinkingSignature != null ? b.thinkingSignature : acc), undefined);
   const toolUses = state.blocks
-    .filter(
-      (b): b is Extract<ContentBlock, { type: "tool_use" }> =>
-        b.type === "tool_use"
-    )
+    .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
     .map((b) => ({
       id: b.id,
       name: b.name,
       input: b.input,
       // 块上本就带签名，partial 侧必须透传（不传 ⇒ 中断收尾的 tool_use 比
       // 正常收尾少签名，回传时 400）。
-      ...(b.thinkingSignature != null
-        ? { thinkingSignature: b.thinkingSignature }
-        : {}),
+      ...(b.thinkingSignature != null ? { thinkingSignature: b.thinkingSignature } : {}),
     }));
-  const otherBlocks = state.blocks.filter(
-    (b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use"
-  );
+  const otherBlocks = state.blocks.filter((b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use");
 
-  const blocks = buildStreamPartialBlocks(
-    { text, thinking, thinkingSignature, toolUses },
-    onStream
-  );
+  const blocks = buildStreamPartialBlocks({ text, thinking, thinkingSignature, toolUses }, onStream);
   blocks.push(...otherBlocks);
 
   return {
     blocks,
-    streamRaw:
-      mergeAnthropicStreamRaw(state) ??
-      ({ streamed: true, aborted: true } as Record<string, unknown>),
+    streamRaw: mergeAnthropicStreamRaw(state) ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
     degradedToolCalls: [],
   };
 }

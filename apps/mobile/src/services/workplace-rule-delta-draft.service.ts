@@ -9,11 +9,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 /**
  * 规则变更后刷新会话规则快照并清空 file_cache。
  */
-export async function refreshRuleSnapshotAfterRuleChange(
-  runtime: MobileNovelMasterRuntime,
-  workplace: WorkplaceService,
-  sessionId: string,
-): Promise<void> {
+export async function refreshRuleSnapshotAfterRuleChange(runtime: MobileNovelMasterRuntime, workplace: WorkplaceService, sessionId: string): Promise<void> {
   await refreshRuleSnapshot(sessionId, {
     sessionKkv: runtime.sessionKkv,
     workplace,

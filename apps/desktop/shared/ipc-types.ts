@@ -224,13 +224,13 @@ export type IpcErrorPayload = {
 
 export type IpcResult<T> = { readonly ok: true; readonly data: T } | { readonly ok: false; readonly error: IpcErrorPayload };
 
-export type BootstrapStatusReady = {
+type BootstrapStatusReady = {
   readonly ok: true;
   readonly status: "ready";
   readonly dbPath: string;
 };
 
-export type BootstrapStatusFailed = {
+type BootstrapStatusFailed = {
   readonly ok: false;
   readonly error: IpcErrorPayload;
 };
@@ -374,7 +374,7 @@ export type AppUiSetRequest = {
 
 export type AppUiGetResponse = IpcResult<string | undefined>;
 
-export type AppGetInfoData = {
+type AppGetInfoData = {
   readonly version: string;
   readonly platform: NodeJS.Platform;
   readonly name: string;
@@ -493,7 +493,7 @@ export type VfsFileExportRequest = VfsScopeRequest & {
 /** 与 {@link VfsZipExportResult} 同构，便于 Renderer 共用 toast 分支。 */
 export type VfsFileExportResult = "saved" | "cancelled";
 
-export type VfsBatchConflictDto = {
+type VfsBatchConflictDto = {
   readonly logicalPath: string;
   readonly reason: "exists";
 };
@@ -580,11 +580,11 @@ export type VfsReadResultDto = {
   readonly mtimeMs: number;
 };
 
-export type WorkplaceRuleState = "rule_on" | "rule_off";
+type WorkplaceRuleState = "rule_on" | "rule_off";
 
-export type WorkplaceInclusionMode = "auto" | "show" | "hide";
+type WorkplaceInclusionMode = "auto" | "show" | "hide";
 
-export type WorkplaceDisplayState = "hidden" | "full" | "header" | "filename";
+type WorkplaceDisplayState = "hidden" | "full" | "header" | "filename";
 
 export type WorkplaceListRowDto =
   | {
@@ -689,7 +689,7 @@ export type ContentBlockDto =
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
-export type MessageMetadataDto = {
+type MessageMetadataDto = {
   readonly source?: "user";
   readonly actor?: "user";
   readonly synthetic?: boolean;
@@ -801,7 +801,7 @@ export type AgentResolveCurrentResponse = {
   readonly hasDedicatedModel: boolean;
 };
 
-export type AgentPickerRowDto = {
+type AgentPickerRowDto = {
   readonly agentId: string;
   readonly label: string;
 };
@@ -815,7 +815,7 @@ export type AgentSetCurrentRequest = {
   readonly agentId: string;
 };
 
-export type ModelPickerRowDto = {
+type ModelPickerRowDto = {
   readonly savedModelId: string;
   readonly label: string;
 };
@@ -847,7 +847,7 @@ export type PromptToolGroupStatusDto = "ok" | "error" | "lost";
  *
  * 形状与 core 的 `PromptToolGroupResultData` 逐字段一致。
  */
-export type PromptToolGroupResultDto = {
+type PromptToolGroupResultDto = {
   readonly toolUseId: string;
   readonly ok: boolean;
   /**
@@ -904,6 +904,7 @@ export type PromptTextCardDto = {
 };
 
 /** workplace 单文件格（形状与 core 的 `PromptWorkplaceFileCardData` 逐字段一致）。 */
+// nm-style: keep-public — prompt.ts 的 CORE_WORKPLACE_FILE_PARITY_CHECK 经 import() 类型查询消费（编译期字段对齐断言）
 export type PromptWorkplaceFileDto = {
   /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
   readonly path: string;
@@ -1010,7 +1011,7 @@ export type PromptChatTokenStatsResponse = {
 };
 
 /** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
-export type UsageStatsRangeDto = {
+type UsageStatsRangeDto = {
   readonly fromDay: string;
   readonly toDay: string;
 };
@@ -1104,7 +1105,7 @@ export type UsageStatsRequestPageDto = {
  * 会话详情 · 最近一次请求（metric-detail-sheet 弹窗；cache 列 nullable——
  * OpenAI/Gemini 等协议无 cache_creation 概念，展示层出「—」）。
  */
-export type SessionUsageLastRequestDto = {
+type SessionUsageLastRequestDto = {
   readonly seq: number;
   readonly modelName: string | null;
   readonly provider: string | null;
@@ -1173,7 +1174,7 @@ export type WorkspaceMutatedPayload = {
 };
 
 /** 与 Core `MessageAttachmentAction` 对齐。 */
-export type MessageAttachmentActionDto = "delete" | "write" | "edit" | "mkdir" | "rename" | "move" | "workplaceChange" | "userAttach" | "annotate" | "skillAttach";
+type MessageAttachmentActionDto = "delete" | "write" | "edit" | "mkdir" | "rename" | "move" | "workplaceChange" | "userAttach" | "annotate" | "skillAttach";
 
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
@@ -1189,7 +1190,7 @@ export type MessageAttachmentDto = {
 };
 
 /** 与 Core `AnnotateDraft` 对齐（App → main → runAgentTurn）。 */
-export type AnnotateDraftDto = {
+type AnnotateDraftDto = {
   readonly id: string;
   readonly path: string;
   /** Recogito quote（划词原文）。 */
@@ -1368,7 +1369,7 @@ export type ProviderModelsResetContextWindowRequest = {
 };
 
 /** 存储配置失效摘要（列表/编辑 assess 结果）。 */
-export type StoredConfigInvalidDto = {
+type StoredConfigInvalidDto = {
   readonly code: "outdated_version" | "broken_wire" | "removed_feature";
   readonly message: string;
   readonly storedSchemaVersion?: number;
@@ -1505,7 +1506,7 @@ export type SmartSortRuleReorderRequest = {
 /** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
  *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'；tuple = 提取元组
  *  展示文案，D13，null 显「无序号」）。 */
-export type SmartSortRuleMatchDto = {
+type SmartSortRuleMatchDto = {
   readonly text: string;
   readonly index: number;
   readonly groups: readonly (string | null)[];

@@ -19,10 +19,7 @@ import type { WorkplaceService } from "./workplace.port.js";
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  * @param scope - global, project, or session VFS scope
  */
-export function createWorkplaceService(
-  conn: TdbcConnection,
-  scope: WorkplaceScope
-): WorkplaceService {
+export function createWorkplaceService(conn: TdbcConnection, scope: WorkplaceScope): WorkplaceService {
   // smart 规则装配统一走 SmartSortRuleService.listCompiledRules（core/C-2），
   // 与管理页/CLI 同源，消除工厂内联「listOrdered→filter→compile」平行实现。
   const smartSortRuleService = createSmartSortRuleService(conn);

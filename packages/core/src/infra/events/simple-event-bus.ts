@@ -8,14 +8,14 @@ import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("events.bus");
 
-export type EventHandler<T = unknown> = (payload: T) => void;
+type EventHandler<T = unknown> = (payload: T) => void;
 
 export interface EventSubscription {
   unsubscribe(): void;
 }
 
 /** 同步 handler 抛错时的回调（可选）。 */
-export interface SimpleEventBusOptions {
+interface SimpleEventBusOptions {
   /** handler 同步抛错时调用；默认走 core logger（scope `events.bus`） */
   readonly onHandlerError?: (eventType: string, error: unknown) => void;
 }
@@ -26,11 +26,7 @@ export class SimpleEventBus {
   private readonly onHandlerError: (eventType: string, error: unknown) => void;
 
   constructor(options?: SimpleEventBusOptions) {
-    this.onHandlerError =
-      options?.onHandlerError ??
-      ((eventType, err) => {
-        log.error("handler failed", { eventType, error: err });
-      });
+    this.onHandlerError = options?.onHandlerError ?? ((eventType, err) => log.error("handler failed", { eventType, error: err }));
   }
 
   /** 注册 handler，返回用于取消订阅的对象。 */
@@ -72,4 +68,5 @@ export class SimpleEventBus {
   }
 }
 
+// nm-style: keep-public — @novel-master/core/events 子入口再导出的公共类型契约（无生产直引）
 export type EventBus = SimpleEventBus;

@@ -12,7 +12,7 @@ import {vfsToolFilePath} from '../../runtime/util/vfs-tool-path';
 import {skillToolRef} from '../../runtime/util/skill-tool-ref';
 import {CollapsibleSection} from './CollapsibleSection';
 
-export type ToolGroupProps = {
+type ToolGroupProps = {
   tools: ToolCallRow[];
   groupKey: string;
   expanded: boolean;

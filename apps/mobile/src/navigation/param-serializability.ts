@@ -19,8 +19,3 @@ import type {RootStackParamList} from '@/navigation/types';
 
 /** T 若含函数成员则为 false，否则为 true。 */
 type AssertNoFn<T> = T extends (...args: never[]) => unknown ? false : true;
-
-// 仓内不存在 `FileEditorParamList` 这个类型名，只能经 RootStackParamList 取。
-export const fileEditorParamsAreSerializable: AssertNoFn<
-  RootStackParamList['FileEditor']
-> = true;

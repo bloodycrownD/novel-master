@@ -11,9 +11,7 @@ import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { projectComposerStatusForSession } from "./project-composer-status.service.js";
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */
-export function isSessionVfsScope(
-  scope: VfsScope,
-): scope is Extract<VfsScope, { kind: "session" }> {
+export function isSessionVfsScope(scope: VfsScope): scope is Extract<VfsScope, { kind: "session" }> {
   return scope.kind === "session";
 }
 
@@ -26,11 +24,7 @@ export function isSessionVfsScope(
  * 是异构形态），转码统一走 formatIpcError。成功后轻量 refresh：读 main 侧
  * annotate store 投影推送（无净 diff preview）。
  */
-export async function executeSessionUserVfsOp(
-  rt: DesktopNovelMasterRuntime,
-  sessionId: string,
-  op: UserVfsTurnOp,
-): Promise<Result<void, unknown>> {
+export async function executeSessionUserVfsOp(rt: DesktopNovelMasterRuntime, sessionId: string, op: UserVfsTurnOp): Promise<Result<void, unknown>> {
   const result = await rt.userVfsTurn.executeOp(sessionId, op);
   if (!result.ok) return Result.err(result.error);
   const attachments = await projectComposerStatusForSession(rt, sessionId);

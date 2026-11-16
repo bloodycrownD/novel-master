@@ -22,11 +22,7 @@ export type ChatLinkProbeVfs = {
 };
 
 /** 链接点击的执行意图：应用内打开文件 / 外跳系统浏览器 / 路径未命中 / 无动作。 */
-export type ChatLinkOpenIntent =
-  | {kind: 'file'; scope: 'session' | 'project'; path: string}
-  | {kind: 'external'; url: string}
-  | {kind: 'not-found'; path: string}
-  | {kind: 'none'};
+type ChatLinkOpenIntent = {kind: 'file'; scope: 'session' | 'project'; path: string} | {kind: 'external'; url: string} | {kind: 'not-found'; path: string} | {kind: 'none'};
 
 /**
  * 解析链接点击意图。
@@ -36,10 +32,7 @@ export type ChatLinkOpenIntent =
  * 命中文件返回打开意图；双未命中返回 not-found（调用方弹「路径不存在」
  * 提示——用户拍板，不再静默无动作）。
  */
-export async function resolveChatLinkIntent(
-  href: string,
-  deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null},
-): Promise<ChatLinkOpenIntent> {
+export async function resolveChatLinkIntent(href: string, deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null}): Promise<ChatLinkOpenIntent> {
   const trimmed = href.trim();
   if (chatLinkResolver.isHttp(trimmed)) {
     return {kind: 'external', url: trimmed};
@@ -59,10 +52,7 @@ export async function resolveChatLinkIntent(
 }
 
 /** 在单个工作区探测归一化路径是否为已存在的文件（目录不算命中）。 */
-async function probeFileIn(
-  vfs: ChatLinkProbeVfs | null,
-  normalizedPath: string,
-): Promise<boolean> {
+async function probeFileIn(vfs: ChatLinkProbeVfs | null, normalizedPath: string): Promise<boolean> {
   if (vfs == null) {
     return false;
   }
@@ -73,7 +63,5 @@ async function probeFileIn(
     // 父目录 NOT_FOUND 及一切探测失败按不存在处理
     return false;
   }
-  return listed.value.some(
-    entry => entry.path === normalizedPath && entry.kind === 'file',
-  );
+  return listed.value.some(entry => entry.path === normalizedPath && entry.kind === 'file');
 }

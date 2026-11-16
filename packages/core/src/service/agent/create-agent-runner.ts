@@ -66,13 +66,11 @@ export interface CreateAgentRunnerDeps {
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
-  readonly preferences?: Pick<
-    PersistentPreferences,
-    "getThinkingContextEnabled"
-  >;
+  readonly preferences?: Pick<PersistentPreferences, "getThinkingContextEnabled">;
 }
 
 /** Creates an agent runner with injected dependencies. */
+// nm-style: keep-public — public/agent.ts 门面导出的装配入口；生产调用点覆盖本目录两轨与 apps 层，且测试直接构造依赖后调用，删除需跨目录改多处调用方。
 export function createAgentRunner(deps: CreateAgentRunnerDeps): AgentRunner {
   return new DefaultAgentRunner(deps);
 }

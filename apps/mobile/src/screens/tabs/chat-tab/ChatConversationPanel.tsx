@@ -67,7 +67,7 @@ import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 import {useChatTabController} from './useChatTabController';
 
-export type ChatConversationPanelProps = {
+type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
   /**

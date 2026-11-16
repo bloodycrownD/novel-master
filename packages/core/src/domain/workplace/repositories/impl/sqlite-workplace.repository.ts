@@ -55,7 +55,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     const resolved = normalizePath(rule.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
-        const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
+    const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
         head_count, tail_count, fill_policy
       ) VALUES (
@@ -69,35 +69,37 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         head_count = excluded.head_count,
         tail_count = excluded.tail_count,
         fill_policy = excluded.fill_policy`;
-await executeTemplate(this.conn, this.parser, sql28, {
-        scopeKey: rule.scopeKey,
-        logicalPath,
-        ruleEnabled: rule.ruleEnabled ? 1 : 0,
-        sortField: rule.sortField,
-        sortOrder: rule.sortOrder,
-        headCount: rule.headCount,
-        tailCount: rule.tailCount,
-        fillPolicy: rule.fillPolicy,
-      });
+    await executeTemplate(this.conn, this.parser, sql28, {
+      scopeKey: rule.scopeKey,
+      logicalPath,
+      ruleEnabled: rule.ruleEnabled ? 1 : 0,
+      sortField: rule.sortField,
+      sortOrder: rule.sortOrder,
+      headCount: rule.headCount,
+      tailCount: rule.tailCount,
+      fillPolicy: rule.fillPolicy,
+    });
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 WorkplaceRepository.upsertFileRule 端口方法；内联会把 upsert SQL 搬进调用层。 */
   async upsertFileRule(rule: WorkplaceFileRule): Promise<Result<void, AppError>> {
     const resolved = normalizePath(rule.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
-        const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
+    const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
        ON CONFLICT(scope_key, logical_path) DO UPDATE SET
          inclusion_mode = excluded.inclusion_mode`;
-await executeTemplate(this.conn, this.parser, sql29, {
-        scopeKey: rule.scopeKey,
-        logicalPath,
-        inclusionMode: rule.inclusionMode,
-      });
+    await executeTemplate(this.conn, this.parser, sql29, {
+      scopeKey: rule.scopeKey,
+      logicalPath,
+      inclusionMode: rule.inclusionMode,
+    });
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 WorkplaceRepository.batchUpsertDirRules 端口方法；内联会把批量 upsert SQL 搬进调用层。 */
   async batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<Result<void, AppError>> {
     // 空数组直接返回：copyScope 在源 scope 无目录规则时不用特殊判断，
     // 也避免驱动对空 parametersList 的行为分歧。
@@ -128,6 +130,7 @@ await executeTemplate(this.conn, this.parser, sql29, {
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 WorkplaceRepository.batchUpsertFileRules 端口方法；内联会把批量 upsert SQL 搬进调用层。 */
   async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<Result<void, AppError>> {
     if (rules.length === 0) {
       return Result.ok(undefined);
@@ -147,34 +150,35 @@ await executeTemplate(this.conn, this.parser, sql29, {
     return Result.ok(undefined);
   }
 
+  /** nm-style: keep-public — 实现 WorkplaceRepository.deleteScope 端口方法；内联会把双表删除 SQL 搬进调用层。 */
   async deleteScope(scopeKey: string): Promise<void> {
     await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
     await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
   }
 
   async listDirRules(scopeKey: string): Promise<WorkplaceDirRule[]> {
-        const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
+    const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
-const rows = await queryTemplate(this.conn, this.parser, sql30, { scopeKey });
+    const rows = await queryTemplate(this.conn, this.parser, sql30, { scopeKey });
     return rows.map(rowToDirRule);
   }
 
   async listFileRules(scopeKey: string): Promise<WorkplaceFileRule[]> {
-        const sql31 = `SELECT scope_key, logical_path, inclusion_mode
+    const sql31 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
-const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
+    const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
     return rows.map(rowToFileRule);
   }
 
   async findDirRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceDirRule | null, AppError>> {
-        const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
+    const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = normalizePath(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
-const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
+    const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -182,12 +186,12 @@ const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logi
   }
 
   async findFileRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceFileRule | null, AppError>> {
-        const sql33 = `SELECT scope_key, logical_path, inclusion_mode
+    const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
     const resolved = normalizePath(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
-const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
+    const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: resolved.value });
     if (rows.length === 0) {
       return Result.ok(null);
     }
@@ -224,14 +228,14 @@ const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logi
     const base = resolved.value;
     const escaped = escapeLike(base);
     const childPattern = `${escaped}/%`;
-        const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
+    const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
-await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
-        const sql35 = `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
+    await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
+    const sql35 = `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
-await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
+    await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
     return Result.ok(undefined);
   }
 

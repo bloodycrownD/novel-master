@@ -5,7 +5,7 @@ import {handleRowWindowScroll} from '../render/row-windowing';
 /**
  * 滚动锚点、贴底与加载更早消息。
  */
-export const SCROLL_TOP_LOAD_OLDER = 24;
+const SCROLL_TOP_LOAD_OLDER = 24;
 
 export function offsetFromBottom(el: HTMLElement): number {
   return Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -75,7 +75,7 @@ export function emitScrollSnapshot(): void {
   });
 }
 
-export let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function requestLoadOlder(): void {
   if (!state.hasMore || !state.loadOlderArmed) return;

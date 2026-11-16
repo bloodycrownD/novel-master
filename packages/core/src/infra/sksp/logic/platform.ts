@@ -9,8 +9,8 @@
  * @module infra/sksp/logic/platform
  */
 
-import {AppError} from "@/errors/app-error.js";
-import {Result} from "@/errors/either.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /** 平台对应的 SKSP driver 名称。 */
 export type PlatformSkspName = "windows" | "macos" | "linux";
@@ -23,9 +23,7 @@ export type PlatformSkspName = "windows" | "macos" | "linux";
  * - `linux`   → `linux`
  * - 其它平台 → `Result.err`（INFRA_UNSUPPORTED_PLATFORM）
  */
-export function resolveSkspNameFromPlatform(
-  platform: string
-): Result<PlatformSkspName, AppError> {
+export function resolveSkspNameFromPlatform(platform: string): Result<PlatformSkspName, AppError> {
   switch (platform) {
     case "darwin":
       return Result.ok("macos");

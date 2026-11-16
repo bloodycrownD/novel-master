@@ -16,10 +16,7 @@ import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 
 /** SentencePiece 家族（`constructor` 与 `countSentencePieceFamilyPrompt` 的 cast 共用）。 */
-type SentencePieceFamily = Extract<
-  TokenizerFamily,
-  "llama" | "mistral" | "yi" | "gemma" | "jamba"
->;
+type SentencePieceFamily = Extract<TokenizerFamily, "llama" | "mistral" | "yi" | "gemma" | "jamba">;
 
 /** 家族 prompt 计数结果（真计数或加载失败后的兜底估算）。 */
 type TokenCountEstimate = { readonly count: number; readonly estimated: boolean };
@@ -42,7 +39,7 @@ function fallbackCount(text: string): number {
 }
 
 /** SentencePiece `.model` counter — encodes plain serialized prompt text (ST body path). */
-export class SentencePieceTokenCounter implements TokenCounter {
+class SentencePieceTokenCounter implements TokenCounter {
   readonly kind: TokenizerFamily;
   private processor: SentencePieceProcessor | null = null;
   private loadError = false;
@@ -82,6 +79,7 @@ export class SentencePieceTokenCounter implements TokenCounter {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
+  /** nm-style: keep-public — TokenCounter 端口实现（经接口分发调用，检查器按方法名计数漏计）。 */
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {

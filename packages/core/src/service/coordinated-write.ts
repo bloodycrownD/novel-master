@@ -30,7 +30,7 @@ import { AppError } from "@/errors/app-error.js";
  * 已知失败走返回值（四期门⑦）：`execute` / `rollback` 收 `Result`，Err 即失败
  * 并触发逆序补偿；未知异常仍可抛，由 run() 的 catch 同口收编。
  */
-export interface WriteStep {
+interface WriteStep {
   /** 步骤名，仅用于错误上下文，便于排查。 */
   name: string;
   /** 正向执行。任一 `execute` 返回 Err 即视为整组失败。 */
@@ -49,19 +49,10 @@ export class CoordinatedWriteRollbackError extends Error {
   /** 回滚阶段（按逆序）收集到的错误，可能与 `cause` 一一对应，也可能为空。 */
   readonly rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>;
 
-  constructor(
-    cause: unknown,
-    rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>
-  ) {
+  constructor(cause: unknown, rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>) {
     const causeMessage = cause instanceof Error ? cause.message : String(cause);
-    const rolledBackNames = rollbackErrors
-      .map((entry) => entry.step)
-      .join(", ");
-    super(
-      `CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${
-        rolledBackNames || "<无>"
-      }）`
-    );
+    const rolledBackNames = rollbackErrors.map((entry) => entry.step).join(", ");
+    super(`CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${rolledBackNames || "<无>"}）`);
     this.name = "CoordinatedWriteRollbackError";
     this.cause = cause;
     this.rollbackErrors = rollbackErrors;
@@ -101,14 +92,10 @@ export class CoordinatedWrite {
   /** 注册一个步骤，返回 `this` 以便链式调用。 */
   register(step: WriteStep): this {
     if (!step || typeof step.execute !== "function") {
-      throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`
-      );
+      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`);
     }
     if (typeof step.rollback !== "function") {
-      throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`
-      );
+      throw new TypeError(`CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`);
     }
     this.steps.push(step);
     return this;

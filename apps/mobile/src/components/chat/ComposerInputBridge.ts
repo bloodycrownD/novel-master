@@ -5,7 +5,7 @@
  * 两侧 BRIDGE_V 必须同为 1（`__tests__/composer-input-bridge.test.ts` 有一致性断言）。
  * decode 走抛错口径（坏信封 = JSON 坏 / v 不符 / type 缺失），由宿主 try/catch 静默丢弃。
  */
-import { isRecord } from '@novel-master/core/common';
+import {isRecord} from '@novel-master/core/common';
 
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
@@ -57,7 +57,7 @@ export type ComposerInputInitPayload = {
   readonly placeholder: string;
 };
 
-export type ComposerInputSetTextPayload = {
+type ComposerInputSetTextPayload = {
   readonly text: string;
   /** 省略时光标保持内核写值后的位置（value 赋值后落末位）。 */
   readonly selectionStart?: number;
@@ -82,21 +82,17 @@ export type ComposerInputToHostMessage =
   | BridgeEnvelope<'blur', Record<string, never>>
   | BridgeEnvelope<'heightChange', {height: number}>;
 
-export function encodeHostToComposerInput(
-  message: HostToComposerInputMessage,
-): string {
+// nm-style: keep-public — ComposerInput 桥编码 API（webview 契约，调用方在 WebView 组件）
+export function encodeHostToComposerInput(message: HostToComposerInputMessage): string {
   return JSON.stringify(message);
 }
 
-export function encodeComposerInputToHost(
-  message: ComposerInputToHostMessage,
-): string {
+// nm-style: keep-public — ComposerInput 桥对称编码 API（协议契约对称面）
+export function encodeComposerInputToHost(message: ComposerInputToHostMessage): string {
   return JSON.stringify(message);
 }
 
-export function decodeComposerInputToHost(
-  raw: string,
-): ComposerInputToHostMessage {
+export function decodeComposerInputToHost(raw: string): ComposerInputToHostMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
     throw new Error('Invalid composer-input bridge envelope version');
@@ -107,9 +103,7 @@ export function decodeComposerInputToHost(
   return parsed as ComposerInputToHostMessage;
 }
 
-export function decodeHostToComposerInput(
-  raw: string,
-): HostToComposerInputMessage {
+export function decodeHostToComposerInput(raw: string): HostToComposerInputMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
     throw new Error('Invalid composer-input bridge envelope version');

@@ -18,9 +18,7 @@ function notifyListeners(active: boolean): void {
 /**
  * 订阅 Agent 运行状态变化；返回取消订阅函数。
  */
-export function subscribeMobileAgentActivity(
-  listener: AgentActivityListener,
-): () => void {
+export function subscribeMobileAgentActivity(listener: AgentActivityListener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);

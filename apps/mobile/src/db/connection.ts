@@ -2,24 +2,14 @@
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
 import {AppState} from 'react-native';
-import {
-  bootstrapNovelMaster,
-  open,
-  type TdbcConnection,
-} from '@novel-master/core';
+import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
 import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
-import {
-  clearMobileDatabaseFilePathCache,
-  probeAndCacheMobileDatabaseFilePath,
-} from './db-file-path';
+import {clearMobileDatabaseFilePathCache, probeAndCacheMobileDatabaseFilePath} from './db-file-path';
 
-export {
-  getMobileDatabaseFilePath,
-  probeAndCacheMobileDatabaseFilePath,
-} from './db-file-path';
+export {getMobileDatabaseFilePath, probeAndCacheMobileDatabaseFilePath} from './db-file-path';
 
 let conn: TdbcConnection | undefined;
 let initPromise: Promise<TdbcConnection> | undefined;
@@ -53,10 +43,7 @@ function logCauseChain(label: string, err: unknown): void {
  * （如 db-backup 的服务商表恢复短连接）都必须调本函数。
  */
 export function registerMobileOpSqliteDriver(): void {
-  registerOpSqliteDriver(
-    undefined,
-    () => AppState.currentState === 'background',
-  );
+  registerOpSqliteDriver(undefined, () => AppState.currentState === 'background');
 }
 
 /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
@@ -105,8 +92,6 @@ export async function closeMobileConnection(): Promise<void> {
 }
 
 /** WAL checkpoint before file-level copy (export backup). */
-export async function checkpointMobileDatabase(
-  connection: TdbcConnection,
-): Promise<void> {
+export async function checkpointMobileDatabase(connection: TdbcConnection): Promise<void> {
   await connection.execute('PRAGMA wal_checkpoint(FULL)');
 }

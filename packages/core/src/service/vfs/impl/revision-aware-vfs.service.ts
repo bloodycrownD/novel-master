@@ -101,7 +101,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      return Result.err(new AppError("VFS_INVALID_PATH", {path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root`}));
+      return Result.err(new AppError("VFS_INVALID_PATH", { path, reason: "cannot delete root", detail: `Invalid path ${path}: cannot delete root` }));
     }
 
     // 事务回调内仍按「失败靠抛错回滚」抛；到本方法边界把**域失败**收进 Err——
@@ -113,7 +113,37 @@ export class RevisionAwareVfsService implements InternalVfsService {
       await runInTransactionOrConn(this.conn, async (tx) => {
         const entryRepo = new SqliteVfsEntryRepository(tx);
         const revisionRepo = new SqliteVfsRevisionRepository(tx);
-        await deleteWithRevision(entryRepo, revisionRepo, scopeKey, normalized, options?.recursive === true);
+        const recursive = options?.recursive === true;
+        // 本回调内的 repo 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+        const entry = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
+        if (entry == null) {
+          if (!recursive) {
+            throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `Path not found: ${normalized}` });
+          }
+          // WHY: Worktree 可从子文件推断目录，但 vfs_entry 未必有 directory 行。
+          const under = await entryRepo.listEntriesUnderPrefix(scopeKey, normalized);
+          if (under.length === 0) {
+            return;
+          }
+          await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, normalized);
+          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
+          return;
+        }
+        if (entry.entryKind === "file") {
+          // 墓碑 revision：nextVersionFor 避开 checkpoint 钉住的占号版本；append 后 +1、旧 head −1。
+          const deletedVersion = await nextVersionFor(revisionRepo, entry.entryId, entry.version);
+          await revisionRepo.append({ entryId: entry.entryId, version: deletedVersion, content: null, status: "deleted", mtimeMs: Date.now() });
+          await adjustRef(revisionRepo, entry.entryId, deletedVersion, +1);
+          await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
+          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
+          return;
+        }
+        if (recursive) {
+          await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, normalized);
+          unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: true }));
+          return;
+        }
+        unwrapOrRollback(await entryRepo.delete(scopeKey, normalized, { recursive: false }));
       });
     } catch (cause) {
       const domain = unwrapTxDomainError(cause);
@@ -141,16 +171,16 @@ export class RevisionAwareVfsService implements InternalVfsService {
         const existing = unwrapOrRollback(await entryRepo.findByPath(scopeKey, normalized));
         // entry 缺失（已被 hardDelete 且 revision 无 entry 可挂）时直接抛 NOT_FOUND。
         if (existing == null) {
-          throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}`});
+          throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: entry missing for ${normalized}` });
         }
         const entryId = existing.entryId;
 
         const rev = unwrapOrRollback(await revisionRepo.findByEntryAndVersion(entryId, version));
         if (rev == null || rev.status === "deleted") {
-          throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`});
+          throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}` });
         }
         if (rev.content == null) {
-          throw new AppError("VFS_NOT_FOUND", {path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`});
+          throw new AppError("VFS_NOT_FOUND", { path: normalized, detail: `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}` });
         }
 
         // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
@@ -177,7 +207,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
     if (normalized === "/") {
-      return Result.err(new AppError("VFS_INVALID_PATH", {path, reason: "cannot hardDelete root", detail: `Invalid path ${path}: cannot hardDelete root`}));
+      return Result.err(new AppError("VFS_INVALID_PATH", { path, reason: "cannot hardDelete root", detail: `Invalid path ${path}: cannot hardDelete root` }));
     }
 
     // 事务回调内仍按「失败靠抛错回滚」抛；到本方法边界把**域失败**收进 Err——
@@ -299,60 +329,13 @@ async function appendDeletedRevisionsForSubtree(entryRepo: VfsEntryRepository, r
   await revisionRepo.batchAdjustRefCount(oldPointers, -1);
 
   const mtimeMs = Date.now();
-  await revisionRepo.batchAppendWithRefCount(
-    liveHeads.map((h) => ({
-      entryId: h.entryId,
-      version: Math.max(h.headVersion, maxVersionMap.get(h.entryId) ?? 0) + 1,
-      contentHash: null,
-      status: "deleted",
-      mtimeMs,
-      refCount: 1,
-    }))
-  );
-}
-
-async function deleteWithRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, recursive: boolean): Promise<void> {
-  // 本函数只在 `delete` 的 `runInTransactionOrConn` 回调内调用；repo 解包走
-  // unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
-  const entry = unwrapOrRollback(await entryRepo.findByPath(scopeKey, path));
-  if (entry == null) {
-    if (!recursive) {
-      throw new AppError("VFS_NOT_FOUND", {path, detail: `Path not found: ${path}`});
-    }
-    // WHY: Worktree 可从子文件推断目录，但 vfs_entry 未必有 directory 行。
-    const under = await entryRepo.listEntriesUnderPrefix(scopeKey, path);
-    if (under.length === 0) {
-      return;
-    }
-    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, path);
-    unwrapOrRollback(await entryRepo.delete(scopeKey, path, { recursive: true }));
-    return;
-  }
-
-  if (entry.entryKind === "file") {
-    await appendDeletedRevision(revisionRepo, entry.entryId, entry.version);
-    await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
-    unwrapOrRollback(await entryRepo.delete(scopeKey, path, { recursive: false }));
-    return;
-  }
-
-  if (recursive) {
-    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, path);
-    unwrapOrRollback(await entryRepo.delete(scopeKey, path, { recursive: true }));
-    return;
-  }
-
-  unwrapOrRollback(await entryRepo.delete(scopeKey, path, { recursive: false }));
-}
-
-async function appendDeletedRevision(revisionRepo: VfsRevisionRepository, entryId: number, currentHeadVersion: number): Promise<void> {
-  const deletedVersion = await nextVersionFor(revisionRepo, entryId, currentHeadVersion);
-  await revisionRepo.append({
-    entryId,
-    version: deletedVersion,
-    content: null,
+  const deletedRows = liveHeads.map((h) => ({
+    entryId: h.entryId,
+    version: Math.max(h.headVersion, maxVersionMap.get(h.entryId) ?? 0) + 1,
+    contentHash: null,
     status: "deleted",
-    mtimeMs: Date.now(),
-  });
-  await adjustRef(revisionRepo, entryId, deletedVersion, +1);
+    mtimeMs,
+    refCount: 1,
+  }));
+  await revisionRepo.batchAppendWithRefCount(deletedRows);
 }

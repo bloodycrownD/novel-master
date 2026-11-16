@@ -42,9 +42,7 @@ import type {
   VfsScope,
   VfsService,
 } from "@novel-master/core/vfs";
-import type {
-  WorkplaceService,
-} from "@novel-master/core/workplace";
+import type { WorkplaceService } from "@novel-master/core/workplace";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { SkillService } from "@novel-master/core/skills";

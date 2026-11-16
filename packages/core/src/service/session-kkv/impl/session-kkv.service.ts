@@ -13,29 +13,16 @@ import type { SessionKkvService } from "../session-kkv.port.js";
 export class DefaultSessionKkvService implements SessionKkvService {
   constructor(private readonly repo: SessionKkvRepository) {}
 
-  async get(
-    sessionId: string,
-    domain: string,
-    key: string
-  ): Promise<string | null> {
+  async get(sessionId: string, domain: string, key: string): Promise<string | null> {
     const entry = await this.repo.get(sessionId, domain, key);
     return entry?.value ?? null;
   }
 
-  getMany(
-    sessionId: string,
-    domain: string,
-    keys: readonly string[]
-  ): Promise<Map<string, string>> {
+  getMany(sessionId: string, domain: string, keys: readonly string[]): Promise<Map<string, string>> {
     return this.repo.getMany(sessionId, domain, keys);
   }
 
-  set(
-    sessionId: string,
-    domain: string,
-    key: string,
-    value: string
-  ): Promise<void> {
+  set(sessionId: string, domain: string, key: string, value: string): Promise<void> {
     return this.repo.set(sessionId, domain, key, value);
   }
 

@@ -10,37 +10,24 @@
  * Supports `*`, `**`, and `?`. Path and pattern use POSIX `/` segments.
  */
 export function matchGlob(pattern: string, path: string): boolean {
-  const patternSegments = splitPattern(pattern);
+  const trimmed = pattern.startsWith("/") ? pattern.slice(1) : pattern;
+  const patternSegments: string[] = [];
+  for (const part of trimmed.split("/")) {
+    if (part === "**") {
+      if (patternSegments.at(-1) !== "**") {
+        patternSegments.push("**");
+      }
+      continue;
+    }
+    patternSegments.push(part);
+  }
   const pathSegments = path === "/" ? [] : path.split("/").filter(Boolean);
 
   return matchSegments(patternSegments, pathSegments, 0, 0);
 }
 
-function splitPattern(pattern: string): string[] {
-  const trimmed = pattern.startsWith("/") ? pattern.slice(1) : pattern;
-  if (trimmed.length === 0) {
-    return [];
-  }
-  const segments: string[] = [];
-  const parts = trimmed.split("/");
-  for (const part of parts) {
-    if (part === "**") {
-      if (segments.at(-1) !== "**") {
-        segments.push("**");
-      }
-      continue;
-    }
-    segments.push(part);
-  }
-  return segments;
-}
-
-function matchSegments(
-  pattern: string[],
-  path: string[],
-  pi: number,
-  si: number
-): boolean {
+// nm-style: keep-local — 回溯匹配的自递归函数：内联后 `**` / `*` 分支失去自身引用。
+function matchSegments(pattern: string[], path: string[], pi: number, si: number): boolean {
   if (pi === pattern.length) {
     return si === path.length;
   }
@@ -70,6 +57,7 @@ function matchSegments(
   return matchSegments(pattern, path, pi + 1, si + 1);
 }
 
+// nm-style: keep-local — 段内通配回溯的自递归函数：`*` 分支内联后失去自身引用。
 function matchSegment(pattern: string, segment: string): boolean {
   let pi = 0;
   let si = 0;

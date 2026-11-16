@@ -35,10 +35,7 @@ export type TokenizerOverride = TokenizerFamily | "auto" | "heuristic";
  * @param vendorModelId Provider model name (case-insensitive substring match).
  * @param override When not `auto`, skips substring table.
  */
-export function resolveTokenizerFamily(
-  vendorModelId: string,
-  override: TokenizerOverride = "auto"
-): TokenizerFamily {
+export function resolveTokenizerFamily(vendorModelId: string, override: TokenizerOverride = "auto"): TokenizerFamily {
   if (override === "heuristic") {
     return "heuristic";
   }
@@ -48,12 +45,7 @@ export function resolveTokenizerFamily(
 
   const id = vendorModelId.toLowerCase();
 
-  if (
-    id === "o1" ||
-    id.includes("o1-preview") ||
-    id.includes("o1-mini") ||
-    id.includes("o3-mini")
-  ) {
+  if (id === "o1" || id.includes("o1-preview") || id.includes("o1-mini") || id.includes("o3-mini")) {
     return "tiktoken";
   }
   if (id.includes("o3") || id.includes("o4-mini")) {
@@ -149,12 +141,7 @@ export function mapVendorModelIdToTiktokenModel(vendorModelId: string): string {
   if (id.includes("gpt-4-32k")) {
     return "gpt-4-32k";
   }
-  if (
-    id.includes("o1-preview") ||
-    id.includes("o1-mini") ||
-    id.includes("o3-mini") ||
-    id.includes("o4-mini")
-  ) {
+  if (id.includes("o1-preview") || id.includes("o1-mini") || id.includes("o3-mini") || id.includes("o4-mini")) {
     return "o1";
   }
   if (hasStandaloneToken(id, "o1") || hasStandaloneToken(id, "o3")) {

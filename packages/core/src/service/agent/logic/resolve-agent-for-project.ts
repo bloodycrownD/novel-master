@@ -12,9 +12,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
-import {
-  type AgentRunRuntimePort,
-} from "./agent-run-shared.js";
+import { type AgentRunRuntimePort } from "./agent-run-shared.js";
 
 /**
  * 项目域 Agent 解析结果；runner 仅消费 definition。
@@ -43,11 +41,7 @@ export interface ResolveAgentForProjectRuntimePort extends AgentRunRuntimePort {
  * @breaking `sessionId` 在 chat-session-detail-page 迭代由可选升为必填，
  * 所有调用点（core 内 `run-agent-turn.ts` + apps 多处）需同步透传。
  */
-export async function resolveAgentForProject(
-  runtime: ResolveAgentForProjectRuntimePort,
-  projectId: string,
-  sessionId: string
-): Promise<Result<ResolvedAgentForProject, AppError>> {
+export async function resolveAgentForProject(runtime: ResolveAgentForProjectRuntimePort, projectId: string, sessionId: string): Promise<Result<ResolvedAgentForProject, AppError>> {
   void projectId;
   void runtime.projects;
   // 会话独立持有 agentId，去 registry 取 definition。
@@ -59,7 +53,7 @@ export async function resolveAgentForProject(
     // registry.get 失败归一化为 AGENT_REFERENCED_NOT_FOUND（模板 error.agent.referenced_not_found），
     // 保留原始错误消息便于诊断。
     const detail = definition.error instanceof Error ? definition.error.message : String(definition.error);
-    return Result.err(new AppError("AGENT_REFERENCED_NOT_FOUND", {agentId, detail}));
+    return Result.err(new AppError("AGENT_REFERENCED_NOT_FOUND", { agentId, detail }));
   }
   return Result.ok({ source: "session", agentId, definition: definition.value });
 }

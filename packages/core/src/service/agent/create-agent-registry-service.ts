@@ -16,10 +16,7 @@ import type { AgentRegistryService } from "./agent-registry.port.js";
  * @param conn - {@link bootstrapNovelMaster} 之后已打开的连接
  * @param state - 可选；注入时 {@link AgentRegistryService.delete} 会重置当前指针
  */
-export function createAgentRegistryService(
-  conn: TdbcConnection,
-  state?: PersistentState
-): AgentRegistryService {
+export function createAgentRegistryService(conn: TdbcConnection, state?: PersistentState): AgentRegistryService {
   const repository = new SqliteAgentDefinitionRepository(conn);
   return new DefaultAgentRegistryService({ repository, state });
 }

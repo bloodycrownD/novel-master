@@ -9,29 +9,13 @@ import { type LlmStreamEvent, type ModelRequestService } from "@novel-master/cor
 import { Result } from "@novel-master/core/errors";
 
 type RequestResult = Awaited<ReturnType<ModelRequestService["request"]>>;
-type RequestOptions = NonNullable<
-  Parameters<ModelRequestService["request"]>[2]
->;
+type RequestOptions = NonNullable<Parameters<ModelRequestService["request"]>[2]>;
 
-const SCENARIOS = [
-  "continue",
-  "run",
-  "vfs",
-  "stream",
-  "doom",
-  "compaction",
-] as const;
+const SCENARIOS = ["continue", "run", "vfs", "stream", "doom", "compaction"] as const;
 
 type MockScenario = (typeof SCENARIOS)[number];
 
-function isCompactionRequest(options?: RequestOptions): boolean {
-  return options?.tools == null || options.tools.length === 0;
-}
-
-async function emitStream(
-  text: string,
-  options?: RequestOptions,
-): Promise<void> {
+async function emitStream(text: string, options?: RequestOptions): Promise<void> {
   if (!options?.stream || options.onStream == null) {
     return;
   }
@@ -53,13 +37,12 @@ function textResult(text: string): RequestResult {
  * Returns a deterministic mock LLM for the active `NM_AGENT_MOCK_SCENARIO`.
  */
 export function createAgentMockModelRequests(): ModelRequestService {
-  const scenario = (process.env.NM_AGENT_MOCK_SCENARIO ??
-    "continue") as MockScenario;
+  const scenario = (process.env.NM_AGENT_MOCK_SCENARIO ?? "continue") as MockScenario;
   let callIndex = 0;
 
   return {
     async request(_applicationModelId, _userContent, options) {
-      if (isCompactionRequest(options)) {
+      if (options?.tools == null || options.tools.length === 0) {
         return textResult("summary text");
       }
 
@@ -68,9 +51,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
       switch (scenario) {
         case "continue": {
           const reportModel = process.env.NM_AGENT_MOCK_REPORT_MODEL === "1";
-          const text = reportModel
-            ? `Assistant reply (model: ${_applicationModelId}).`
-            : "Assistant reply (single step).";
+          const text = reportModel ? `Assistant reply (model: ${_applicationModelId}).` : "Assistant reply (single step).";
           await emitStream(text, options);
           return textResult(text);
         }

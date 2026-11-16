@@ -37,9 +37,7 @@ export async function handleCloudSyncGetConfig(): Promise<
   }
 }
 
-export async function handleCloudSyncSetConfig(
-  req: CloudSyncSetConfigRequest,
-): Promise<IpcResult<void>> {
+export async function handleCloudSyncSetConfig(req: CloudSyncSetConfigRequest): Promise<IpcResult<void>> {
   try {
     const serviceR = await getDesktopCloudSyncService();
     if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
@@ -52,9 +50,7 @@ export async function handleCloudSyncSetConfig(
   }
 }
 
-export async function handleCloudSyncSetEnabled(
-  enabled: boolean,
-): Promise<IpcResult<void>> {
+export async function handleCloudSyncSetEnabled(enabled: boolean): Promise<IpcResult<void>> {
   try {
     const serviceR = await getDesktopCloudSyncService();
     if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
@@ -136,14 +132,7 @@ export async function handleCloudSyncPull(): Promise<
       // 只会让人对着一个内部布尔名发懵。要判断成没成，看这里的中文措辞即可；
       // 字段值本身只进日志。
       log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.providerTablesRestored });
-      return {
-        ok: false,
-        error: formatIpcError(
-          new Error(
-            `${err.message}（服务商配置未能恢复，请检查模型服务商设置）`,
-          ),
-        ),
-      };
+      return { ok: false, error: formatIpcError(new Error(`${err.message}（服务商配置未能恢复，请检查模型服务商设置）`)) };
     }
     return { ok: false, error: formatIpcError(err) };
   } finally {
@@ -151,16 +140,12 @@ export async function handleCloudSyncPull(): Promise<
   }
 }
 
-export async function handleCloudSyncPush(
-  req?: CloudSyncPushRequest,
-): Promise<IpcResult<CloudSyncPushResult>> {
+export async function handleCloudSyncPush(req?: CloudSyncPushRequest): Promise<IpcResult<CloudSyncPushResult>> {
   try {
     const serviceR = await getDesktopCloudSyncService();
     if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
     const service = serviceR.value;
-    const pushed = await service.push({
-      forceOverwriteRemote: req?.forceOverwriteRemote,
-    });
+    const pushed = await service.push({ forceOverwriteRemote: req?.forceOverwriteRemote });
     if (!pushed.ok) return ipcErr(formatIpcError(pushed.error));
     return { ok: true, data: pushed.value };
   } catch (err) {

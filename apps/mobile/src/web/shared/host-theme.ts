@@ -57,19 +57,14 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
  * 顺序即 `THEME_VARS` 的写入顺序（条件式写入按此表顺序，见 `applyHostTheme`），
  * 两个消费端的双端同序断言依赖这一点。
  */
-export const HOST_THEME_KEYS: readonly (keyof HostTheme)[] = THEME_VARS.map(
-  entry => entry.key,
-);
+export const HOST_THEME_KEYS: readonly (keyof HostTheme)[] = THEME_VARS.map(entry => entry.key);
 
-export type ApplyHostThemeOptions = {
+type ApplyHostThemeOptions = {
   /** 字段存在时额外同步写入的派生变量（如 code-editor 的 --editor-*）。 */
   extraVars?: Partial<Record<keyof HostTheme, string[]>>;
 };
 
-export function applyHostTheme(
-  theme: HostTheme | null | undefined,
-  opts: ApplyHostThemeOptions = {},
-): void {
+export function applyHostTheme(theme: HostTheme | null | undefined, opts: ApplyHostThemeOptions = {}): void {
   if (!theme) return;
   const root = document.documentElement;
   for (const {key, cssVar} of THEME_VARS) {

@@ -7,20 +7,11 @@
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {createBoundPost} from '@web/shared/post';
 import {BRIDGE_V, type ComposerTheme, type InitPayload} from './model';
-import {
-  applyDisabled,
-  applyInit,
-  applySelection,
-  applyText,
-  applyTheme,
-  blurComposerInput,
-} from './editor';
+import {applyDisabled, applyInit, applySelection, applyText, applyTheme, blurComposerInput} from './editor';
 
 export const post = createBoundPost(BRIDGE_V);
 
-function payloadOf(msg: {
-  payload?: Record<string, unknown>;
-}): Record<string, unknown> {
+function payloadOf(msg: {payload?: Record<string, unknown>}): Record<string, unknown> {
   return msg.payload ?? {};
 }
 
@@ -40,22 +31,13 @@ export function handleHostMessage(raw: unknown): void {
     case 'setText': {
       const payload = payloadOf(msg);
       const text = String(payload.text ?? '');
-      const start =
-        typeof payload.selectionStart === 'number'
-          ? payload.selectionStart
-          : undefined;
-      const end =
-        typeof payload.selectionEnd === 'number'
-          ? payload.selectionEnd
-          : undefined;
+      const start = typeof payload.selectionStart === 'number' ? payload.selectionStart : undefined;
+      const end = typeof payload.selectionEnd === 'number' ? payload.selectionEnd : undefined;
       applyText(text, start, end);
       return;
     }
     case 'setSelection':
-      applySelection(
-        Number(payloadOf(msg).start ?? 0),
-        Number(payloadOf(msg).end ?? 0),
-      );
+      applySelection(Number(payloadOf(msg).start ?? 0), Number(payloadOf(msg).end ?? 0));
       return;
     case 'setDisabled':
       applyDisabled(payloadOf(msg).disabled === true);

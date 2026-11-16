@@ -21,7 +21,7 @@
 /** 流空闲超时默认值：距上一 chunk 的最长静默间隔。 */
 export const STREAM_IDLE_TIMEOUT_MS = 30_000;
 
-export interface StreamWatchdog {
+interface StreamWatchdog {
   /**
    * 收到任何响应数据时调用（含空 chunk）：重置空闲定时器。
    * onTimeout 触发或 dispose 后调用为空操作（看门狗已进入终态）。
@@ -31,7 +31,7 @@ export interface StreamWatchdog {
   dispose(): void;
 }
 
-export interface StreamWatchdogOptions {
+interface StreamWatchdogOptions {
   /** 流空闲超时阈值，默认 {@link STREAM_IDLE_TIMEOUT_MS}。 */
   readonly idleTimeoutMs?: number;
   /** 空闲 deadline 到点时回调一次；此后看门狗进入终态，不再触发。 */
@@ -42,9 +42,7 @@ export interface StreamWatchdogOptions {
  * 创建空闲看门狗。构造时不启动定时器——首个 {@link StreamWatchdog.noteActivity}
  * 才武装空闲 deadline。纯 `setTimeout` 实现，fake timers 可直测。
  */
-export function createStreamWatchdog(
-  options: StreamWatchdogOptions
-): StreamWatchdog {
+export function createStreamWatchdog(options: StreamWatchdogOptions): StreamWatchdog {
   const idleTimeoutMs = options.idleTimeoutMs ?? STREAM_IDLE_TIMEOUT_MS;
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;

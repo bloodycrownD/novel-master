@@ -5,7 +5,7 @@
  */
 import type {JSX} from 'preact';
 
-export type TrustedHtmlProps = {
+type TrustedHtmlProps = {
   html: string;
   className?: string;
 } & Omit<

@@ -21,14 +21,11 @@ import {registerRenderRows} from './render/row-logic';
 import {measureRowWindow} from './render/row-windowing';
 import {startTranscriptBoot} from './boot/boot-transcript';
 import {post} from './bridge';
-import {
-  attachMermaidViewerDelegation,
-  mountMermaidViewerPortal,
-} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {attachMermaidViewerDelegation, mountMermaidViewerPortal} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {MenuOverlay} from '../ui/menu/MenuOverlay';
 import {RowList} from '../ui/render/RowList';
 
-export type TranscriptRuntimeOptions = {
+type TranscriptRuntimeOptions = {
   /** 是否自绑宿主 message 通道（旧包默认 true；合成包传 false 由入口单次注册）。 */
   bindChannel?: boolean;
   /** 是否由本 runtime 上抛 ready（旧包默认 true；合成包传 false 由入口发单条）。 */
@@ -39,9 +36,7 @@ export type TranscriptRuntimeOptions = {
  * 装配 chat-transcript runtime 的全部顶层副作用。
  * 旧包以默认参数调用 → 与拆分前 main.ts 逐行等价（行为零变化）。
  */
-export function createTranscriptRuntime(
-  options: TranscriptRuntimeOptions = {},
-): void {
+export function createTranscriptRuntime(options: TranscriptRuntimeOptions = {}): void {
   const {bindChannel = true, emitReady = true} = options;
 
   const menuPortal = document.getElementById('menu-portal');

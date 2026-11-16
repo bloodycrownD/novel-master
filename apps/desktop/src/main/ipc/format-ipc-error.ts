@@ -30,25 +30,6 @@ const FIELD_LABELS: Record<string, string> = {
   name: "名称",
 };
 
-function formatZodIssues(err: ZodError): string {
-  const parts = err.issues.map((issue) => {
-    const pathKey = issue.path.map(String).join(".");
-    const label = FIELD_LABELS[pathKey] ?? pathKey;
-    const msg = issue.message;
-    if (msg.includes("expected number") && msg.includes("null")) {
-      return label ? `${label}须为非负整数或留空` : "须为非负整数或留空";
-    }
-    return label ? `${label}：${msg}` : msg;
-  });
-  return parts.filter(Boolean).join("；") || err.message;
-}
-
-function sessionFsMissingPaths(err: unknown): readonly string[] | undefined {
-  const details = (err as {details?: unknown}).details as { missingLogicalPaths?: readonly string[] } | undefined;
-  const paths = details?.missingLogicalPaths;
-  return paths != null && paths.length > 0 ? paths : undefined;
-}
-
 /**
  * Maps a thrown value to an {@link IpcErrorPayload} for IPC responses.
  * `code` 只产 ErrorKey；未知错误统一 INFRA_UNEXPECTED_ERROR（name 不进 code）。
@@ -56,7 +37,16 @@ function sessionFsMissingPaths(err: unknown): readonly string[] | undefined {
 export function formatIpcError(err: unknown): IpcErrorPayload {
   // 1. ZodError：参数校验（desktop 独有入口；镜像门对本条豁免）。
   if (err instanceof ZodError) {
-    return { code: "INFRA_VALIDATION_FAILED", message: formatZodIssues(err) };
+    const parts = err.issues.map((issue) => {
+      const pathKey = issue.path.map(String).join(".");
+      const label = FIELD_LABELS[pathKey] ?? pathKey;
+      const msg = issue.message;
+      if (msg.includes("expected number") && msg.includes("null")) {
+        return label ? `${label}须为非负整数或留空` : "须为非负整数或留空";
+      }
+      return label ? `${label}：${msg}` : msg;
+    });
+    return { code: "INFRA_VALIDATION_FAILED", message: parts.filter(Boolean).join("；") || err.message };
   }
   // 2. VFS_*：AppError 且 code 落 VFS 域段（102 VFS + 103 VFS_CHARACTER_CARD），
   //    域判定走 domainOf（spec-3 §3.7），不依赖 key 命名约定。core service 已直抛
@@ -85,7 +75,9 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   }
   // 6. 其余 AppError 通配（SESSION_FS_* 的 missingLogicalPaths 在此透传）。
   if (isAppError(err)) {
-    const missingLogicalPaths = sessionFsMissingPaths(err);
+    const details = (err as { details?: unknown }).details as { missingLogicalPaths?: readonly string[] } | undefined;
+    const paths = details?.missingLogicalPaths;
+    const missingLogicalPaths = paths != null && paths.length > 0 ? paths : undefined;
     return {
       code: err.key,
       message: visibleMessage(err, err.message),

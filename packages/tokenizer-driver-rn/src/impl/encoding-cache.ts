@@ -25,12 +25,7 @@
  *
  * @module tokenizer-driver-rn/impl/encoding-cache
  */
-import {
-  clearForTests,
-  countTextWithIncrementalTokenizer,
-  getEncoding,
-  setFactoryForTests,
-} from "@novel-master/core/provider";
+import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/provider";
 import { Tiktoken } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
 import * as o200kRanksModule from "js-tiktoken/ranks/o200k_base";
@@ -52,7 +47,7 @@ export interface RnTokenEncoding {
  * tokenizer，js-tiktoken 给不出真值，但**任何真分词器都比字符折算强**
  * （折算对中文低估 82%~84%），近似估算在这里是净收益。
  */
-export const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
+const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
 
 /**
  * ranks 命名空间取默认导出兼容形态。
@@ -65,18 +60,12 @@ function unwrapRanksModule(mod: unknown): unknown {
   return candidate?.default ?? mod;
 }
 
-/** js-tiktoken 构造注入：按编码名取对应 ranks 建表。 */
-function buildJsTiktokenEncoding(name: RnEncodingName): RnTokenEncoding {
-  const ranks =
-    name === "o200k_base"
-      ? unwrapRanksModule(o200kRanksModule)
-      : unwrapRanksModule(cl100kRanksModule);
-  return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
-}
-
 /** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
 export function getRnEncoding(name: RnEncodingName): RnTokenEncoding | null {
-  return getEncoding(name, () => buildJsTiktokenEncoding(name));
+  return getEncoding(name, () => {
+    const ranks = name === "o200k_base" ? unwrapRanksModule(o200kRanksModule) : unwrapRanksModule(cl100kRanksModule);
+    return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
+  });
 }
 
 /** 默认（cl100k）编码表取用口。 */
@@ -101,10 +90,7 @@ export function countTextWithDefaultEncoding(text: string): number | null {
   if (encoding == null) {
     return null;
   }
-  return countTextWithIncrementalTokenizer(
-    (chunk) => encoding.encode(chunk).length,
-    text,
-  );
+  return countTextWithIncrementalTokenizer((chunk) => encoding.encode(chunk).length, text);
 }
 
 /**
@@ -120,14 +106,8 @@ export function __resetRnEncodingCacheForTests(): void {
  * 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。
  * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
  */
-export function __setRnEncodingFactoryForTests(
-  factory: ((name: RnEncodingName) => RnTokenEncoding) | null,
-): void {
+export function __setRnEncodingFactoryForTests(factory: ((name: RnEncodingName) => RnTokenEncoding) | null): void {
   // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
   // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
-  setFactoryForTests(
-    factory == null
-      ? null
-      : (encodingName: string) => factory(encodingName as RnEncodingName),
-  );
+  setFactoryForTests(factory == null ? null : (encodingName: string) => factory(encodingName as RnEncodingName));
 }

@@ -2,7 +2,7 @@
  * Scope-keyed in-memory cache factory (`projectId:sessionId` keys).
  * 可选 `maxEntries` 启用 LRU：读取刷新新鲜度，插入超限时淘汰最旧条目。
  */
-export type ScopeKeyCache<T> = {
+type ScopeKeyCache<T> = {
   /** 当前条目数（测试/诊断用）。 */
   readonly size: number;
   key(projectId: string, sessionId: string): string;
@@ -16,9 +16,7 @@ export type ScopeKeyCache<T> = {
 
 const KEY_SEPARATOR = ':';
 
-export function createScopeKeyCache<T>(
-  options: {readonly maxEntries?: number} = {},
-): ScopeKeyCache<T> {
+export function createScopeKeyCache<T>(options: {readonly maxEntries?: number} = {}): ScopeKeyCache<T> {
   const {maxEntries} = options;
   const entries = new Map<string, T>();
   return {

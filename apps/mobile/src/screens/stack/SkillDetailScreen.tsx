@@ -9,19 +9,11 @@
  */
 import React, {useCallback, useRef, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-  type RouteProp,
-} from '@react-navigation/native';
+import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
-import {
-  VfsFileManager,
-  type VfsFileManagerHandle,
-} from '@/components/vfs/VfsFileManager';
+import {VfsFileManager, type VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useVfsBackNavigation} from '@/hooks/useVfsBackNavigation';
 import type {RootStackParamList} from '@/navigation/types';
@@ -48,9 +40,7 @@ export function SkillDetailScreen() {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await runtime
-        .skills()
-        .listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
+      const list = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
       if (!list.ok) throw list.error;
       const found = list.value.find(entry => entry.name === name) ?? null;
       setItem(found);
@@ -73,24 +63,17 @@ export function SkillDetailScreen() {
     title: name,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(() => undefined);
-    }, [reload]),
-  );
+  const onScreenFocus = useCallback(() => {
+    reload().catch(() => undefined);
+  }, [reload]);
+  useFocusEffect(onScreenFocus);
 
   const skillRoot = `/meta/skills/${name}`;
   // 技能域直接复用 VfsFileManager（workplace 不传，纳入/目录规则菜单自动隐藏）。
   // 技能已重定位到独立 meta 域，这里取 meta 域 vfs/scope（逻辑路径 /meta/skills 不变）。
   // SKILL.md 是技能入口，拦截删除/重命名/移动，其余文件全功能开放（含新建目录）。
-  const fileScope: VfsScope =
-    domain === 'global'
-      ? {kind: 'global-meta'}
-      : {kind: 'project-meta', projectId: projectId!};
-  const fileVfs =
-    domain === 'global'
-      ? runtime.globalMetaVfs()
-      : runtime.projectMetaVfs(projectId!);
+  const fileScope: VfsScope = domain === 'global' ? {kind: 'global-meta'} : {kind: 'project-meta', projectId: projectId!};
+  const fileVfs = domain === 'global' ? runtime.globalMetaVfs() : runtime.projectMetaVfs(projectId!);
 
   const openFile = useCallback(
     (fullPath: string) => {
@@ -109,13 +92,7 @@ export function SkillDetailScreen() {
 
   if (loading && item == null) {
     return (
-      <View
-        style={[
-          styles.root,
-          styles.center,
-          {backgroundColor: tokens.background},
-        ]}
-      >
+      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
         <ActivityIndicator color={tokens.primary} />
       </View>
     );
@@ -123,13 +100,7 @@ export function SkillDetailScreen() {
 
   if (item == null) {
     return (
-      <View
-        style={[
-          styles.root,
-          styles.center,
-          {backgroundColor: tokens.background},
-        ]}
-      >
+      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
         <Text style={{color: tokens.textSecondary}}>技能不存在或已被删除</Text>
       </View>
     );
@@ -145,14 +116,8 @@ export function SkillDetailScreen() {
         vfs={fileVfs}
         rootPath={skillRoot}
         onOpenFile={openFile}
-        isProtectedPath={path =>
-          path === `${skillRoot}/SKILL.md`
-            ? 'SKILL.md 是技能入口文件，不能删除或重命名'
-            : null
-        }
-        pathLabel={path =>
-          path === skillRoot ? '/' : path.slice(skillRoot.length)
-        }
+        isProtectedPath={path => (path === `${skillRoot}/SKILL.md` ? 'SKILL.md 是技能入口文件，不能删除或重命名' : null)}
+        pathLabel={path => (path === skillRoot ? '/' : path.slice(skillRoot.length))}
       />
     </View>
   );

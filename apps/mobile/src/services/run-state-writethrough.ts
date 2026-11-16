@@ -29,10 +29,10 @@ export const RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS = 1_000;
  * 大载荷阈值（字符数近似 1MB）：partial 全量覆盖写下，行体积主要由
  * partial_text/partial_thinking 贡献，按字符量估算足以触发降频。
  */
-export const RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS = 1_000_000;
+const RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS = 1_000_000;
 
 /** 实际落库函数（manager 注入 runState 服务的 upsert 窄口）。 */
-export type RunStateWritethroughWriteFn = (state: SessionRunState) => Promise<void>;
+type RunStateWritethroughWriteFn = (state: SessionRunState) => Promise<void>;
 
 /** 写通 coalescer 实例（三态语义见模块注释）。 */
 export interface RunStateWritethrough {
@@ -49,32 +49,19 @@ export interface RunStateWritethrough {
 }
 
 /** 估算单次载荷大小（字符数）：partial 两段 + pending 链接 JSON。 */
-function estimatePayloadChars(state: SessionRunState): number {
-  return (
-    (state.partialText?.length ?? 0) +
-    (state.partialThinking?.length ?? 0) +
-    (state.pendingChildrenJson?.length ?? 0)
-  );
-}
+type RunStateWritethroughOptions = {
+  /** 正常档间隔（测试可覆盖）。 */
+  readonly intervalMs?: number;
+  /** 慢档间隔（测试可覆盖）。 */
+  readonly slowIntervalMs?: number;
+  /** 大载荷阈值字符数（测试可覆盖）。 */
+  readonly largePayloadChars?: number;
+};
 
-export function createRunStateWritethrough(
-  write: RunStateWritethroughWriteFn,
-  options?: {
-    /** 正常档间隔（测试可覆盖）。 */
-    readonly intervalMs?: number;
-    /** 慢档间隔（测试可覆盖）。 */
-    readonly slowIntervalMs?: number;
-    /** 大载荷阈值字符数（测试可覆盖）。 */
-    readonly largePayloadChars?: number;
-  },
-): RunStateWritethrough {
-  const intervalMs =
-    options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
-  const slowIntervalMs =
-    options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
-  const largePayloadChars =
-    options?.largePayloadChars ??
-    RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
+export function createRunStateWritethrough(write: RunStateWritethroughWriteFn, options?: RunStateWritethroughOptions): RunStateWritethrough {
+  const intervalMs = options?.intervalMs ?? RUN_STATE_WRITETHROUGH_INTERVAL_MS;
+  const slowIntervalMs = options?.slowIntervalMs ?? RUN_STATE_WRITETHROUGH_SLOW_INTERVAL_MS;
+  const largePayloadChars = options?.largePayloadChars ?? RUN_STATE_WRITETHROUGH_LARGE_PAYLOAD_CHARS;
 
   let pending: SessionRunState | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -100,10 +87,7 @@ export function createRunStateWritethrough(
     const state = pending;
     pending = null;
     write(state).catch(err => {
-      console.error(
-        '[novel-master/run-state-writethrough] write failed',
-        err,
-      );
+      console.error('[novel-master/run-state-writethrough] write failed', err);
     });
   };
 
@@ -113,10 +97,8 @@ export function createRunStateWritethrough(
         return;
       }
       pending = state;
-      const wantMs =
-        estimatePayloadChars(state) > largePayloadChars
-          ? slowIntervalMs
-          : intervalMs;
+      const payloadChars = (state.partialText?.length ?? 0) + (state.partialThinking?.length ?? 0) + (state.pendingChildrenJson?.length ?? 0);
+      const wantMs = payloadChars > largePayloadChars ? slowIntervalMs : intervalMs;
       if (timer == null) {
         timer = setTimeout(writeNow, wantMs);
         scheduledMs = wantMs;

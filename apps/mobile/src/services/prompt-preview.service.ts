@@ -2,11 +2,7 @@
  * Real prompt preview: agent prompts + structured turns.
  */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {
-  resolveAgentForProject,
-  resolveAgentToolRegistry,
-  type AgentDefinition,
-} from '@novel-master/core/agent';
+import {resolveAgentForProject, resolveAgentToolRegistry, type AgentDefinition} from '@novel-master/core/agent';
 import {
   applyThinkingContextForLlm,
   buildPromptPreviewTurnsFromLayout,
@@ -19,7 +15,7 @@ import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 
-export interface PromptPreviewScope {
+interface PromptPreviewScope {
   readonly projectId: string;
   readonly sessionId: string;
 }
@@ -33,11 +29,7 @@ const SKILL_TOOL_NAME = 'skill';
  * D4 联动：resolve 后 registry 不含 skill（policy 禁用）时返回 undefined，
  * 预览不出现技能索引段——工具与索引同进退。
  */
-async function budgetSkillsIndex(
-  runtime: MobileNovelMasterRuntime,
-  projectId: string,
-  definition: AgentDefinition,
-): Promise<readonly PromptSkillIndexEntry[] | undefined> {
+async function budgetSkillsIndex(runtime: MobileNovelMasterRuntime, projectId: string, definition: AgentDefinition): Promise<readonly PromptSkillIndexEntry[] | undefined> {
   const probe = new ToolRegistry();
   registerBuiltinTools(probe);
   const registry = resolveAgentToolRegistry(probe, definition);
@@ -65,38 +57,26 @@ async function budgetSkillsIndex(
  * core 侧钉死，本地不再二次加工。
  * 失败沿 `Result.err` 接力（错误通道迁移四期），调用方屏幕收口 formatError。
  */
-export async function buildRealPromptPreviewTurns(
-  runtime: MobileNovelMasterRuntime,
-  scope: PromptPreviewScope,
-): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
-  const resolved = await resolveAgentForProject(
-    runtime,
-    scope.projectId,
-    scope.sessionId,
-  );
+export async function buildRealPromptPreviewTurns(runtime: MobileNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
+  const resolved = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
   if (!resolved.ok) return Result.err(resolved.error);
   const {definition} = resolved.value;
   const built = await buildSessionPromptInput(runtime, scope, definition);
   if (!built.ok) return Result.err(built.error);
   const {layout, ctx} = built.value;
-  const skillsIndex = await budgetSkillsIndex(
-    runtime,
-    scope.projectId,
-    definition,
-  );
+  const skillsIndex = await budgetSkillsIndex(runtime, scope.projectId, definition);
   // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；
   // 判定链已下沉 core（resolvePreviewThinkingContext），本地不再持有副本。
-  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-    scope.sessionId,
-  );
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(scope.sessionId);
   if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-  const thinking = await resolvePreviewThinkingContext({
+  const thinkingContext = {
     preferences: runtime.preferences,
     savedModels: runtime.savedModelRepo,
     providers: runtime.providerRepo,
     agentModelId: definition.model,
     sessionModelId: sessionConfig.value.modelId,
-  });
+  };
+  const thinking = await resolvePreviewThinkingContext(thinkingContext);
   if (!thinking.ok) return Result.err(thinking.error);
   const {enabled, protocol, requestThinkingEnabled} = thinking.value;
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
@@ -107,13 +87,8 @@ export async function buildRealPromptPreviewTurns(
     retainProtocolMinimum: false,
     requestThinkingEnabled,
   });
-  const previewCtx: PromptRenderContext =
-    skillsIndex != null
-      ? {...ctx, skillsIndex, messages: filteredMessages}
-      : {...ctx, messages: filteredMessages};
-  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
-    includeThinkingBlocks: enabled,
-  });
+  const previewCtx: PromptRenderContext = skillsIndex != null ? {...ctx, skillsIndex, messages: filteredMessages} : {...ctx, messages: filteredMessages};
+  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {includeThinkingBlocks: enabled});
   if (!turns.ok) return Result.err(turns.error);
   return Result.ok(turns.value);
 }

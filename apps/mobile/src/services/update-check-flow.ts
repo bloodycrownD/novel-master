@@ -21,23 +21,14 @@ export type UpdateCheckResultKind = 'up-to-date' | 'error';
 
 export type UpdateCheckSideEffects = {
   /** toast 通道（带「查看」动作按钮的场景）。 */
-  readonly showToast: (
-    message: string,
-    options?: {actionLabel: string; onAction: () => void},
-  ) => void;
+  readonly showToast: (message: string, options?: {actionLabel: string; onAction: () => void}) => void;
   /** 展示版本详情（Alert + 外跳下载页），onLater 为「稍后」回调。 */
-  readonly showUpdateDetail: (
-    data: UpdateCheckData,
-    onLater: () => void,
-  ) => void;
+  readonly showUpdateDetail: (data: UpdateCheckData, onLater: () => void) => void;
   /** 首屏结果弹窗（已最新 / 检查失败）。 */
   readonly showResultModal: (kind: UpdateCheckResultKind) => void;
 };
 
-export async function runAutoUpdateCheckFlow(
-  appUi: AppUiPreferences,
-  fx: UpdateCheckSideEffects,
-): Promise<void> {
+export async function runAutoUpdateCheckFlow(appUi: AppUiPreferences, fx: UpdateCheckSideEffects): Promise<void> {
   // snoozed 提到失败收口外：读偏好失败时未知静音状态，按未静音处理，
   // 保证用户能看到失败反馈而不是静默吞错。
   let snoozed = false;
@@ -115,8 +106,6 @@ export async function runAutoUpdateCheckFlow(
 }
 
 /** 「今日不再提醒」：写入今日静音截止，弹窗关闭交给调用方。 */
-export async function snoozeUpdateCheckToday(
-  appUi: AppUiPreferences,
-): Promise<void> {
+export async function snoozeUpdateCheckToday(appUi: AppUiPreferences): Promise<void> {
   await writeSnoozeUntil(appUi);
 }

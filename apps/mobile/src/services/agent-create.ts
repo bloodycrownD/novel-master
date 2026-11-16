@@ -1,12 +1,7 @@
 /**
  * Creates a blank agent in the registry (shared by Agents settings screen).
  */
-import {
-  allocateAgentDisplayName,
-  createDefaultAgentEditorPrompts,
-  layoutFromFormInput,
-  type AgentMode,
-} from '@/config-forms/agent';
+import {allocateAgentDisplayName, createDefaultAgentEditorPrompts, layoutFromFormInput, type AgentMode} from '@/config-forms/agent';
 import {AppError, Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -18,11 +13,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
  * 子 tab → "subagent"）；不传则维持既有行为（缺省 all，双侧可见）。
  */
 // nm-style: keep-local — 导出签名（3 参 + runtime 长类型 + 模板默认值）单行化超 80 列
-export async function createBlankAgent(
-  runtime: MobileNovelMasterRuntime,
-  id = `agent-${Date.now()}`,
-  mode?: AgentMode,
-): Promise<Result<string, AppError>> {
+export async function createBlankAgent(runtime: MobileNovelMasterRuntime, id = `agent-${Date.now()}`, mode?: AgentMode): Promise<Result<string, AppError>> {
   const ids = await runtime.agentRegistry.listAgentIds();
   const slots = [];
   for (const id of ids) {
@@ -30,12 +21,8 @@ export async function createBlankAgent(
     slots.push(def.ok ? {id, name: def.value.name} : {id, name: id});
   }
   const name = allocateAgentDisplayName(slots);
-  const saved = await runtime.agentRegistry.upsert(id, {
-    name,
-    ...(mode != null ? {mode} : {}),
-    runtime: {maxSteps: 20},
-    prompts: layoutFromFormInput(createDefaultAgentEditorPrompts()),
-  });
+  const definition = {name, ...(mode != null ? {mode} : {}), runtime: {maxSteps: 20}, prompts: layoutFromFormInput(createDefaultAgentEditorPrompts())};
+  const saved = await runtime.agentRegistry.upsert(id, definition);
   if (!saved.ok) return Result.err(saved.error);
   return Result.ok(id);
 }

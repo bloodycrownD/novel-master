@@ -16,7 +16,7 @@ export function bindHostMessageEvents(): void {
  * boot 可选动作开关（Step 1 / chat-webview-unify 工厂化）。
  * 缺省 = 拆分前 main.ts 行为（旧包行为零变化）。
  */
-export type TranscriptBootOptions = {
+type TranscriptBootOptions = {
   /** 是否自绑宿主 message 通道；false 时由合成入口单次注册统一通道。 */
   bindChannel?: boolean;
   /** 是否由本 runtime 上抛 ready；false 时由合成入口发单条 v2 ready。 */

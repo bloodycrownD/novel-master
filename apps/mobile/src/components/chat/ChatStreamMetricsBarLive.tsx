@@ -18,15 +18,9 @@
  * （见 session-stream-unit 的 rateSampler），本组件只读不采样。
  */
 import React, {useEffect, useState} from 'react';
-import {
-  type AgentStreamMetricsView,
-  toAgentStreamMetricsView,
-} from '@/hooks/useAgentStreamMetrics';
+import {type AgentStreamMetricsView, toAgentStreamMetricsView} from '@/hooks/useAgentStreamMetrics';
 import {useRuntime} from '@/hooks/useRuntime';
-import {
-  isSessionStreamUnitSettled,
-  type SessionStreamUnitView,
-} from '@/services/session-stream-unit';
+import {isSessionStreamUnitSettled, type SessionStreamUnitView} from '@/services/session-stream-unit';
 import {timingLog} from '@/debug/run-timing';
 import {MetricDetailSheet} from '../sheet/MetricDetailSheet';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
@@ -53,20 +47,10 @@ type Props = {
  * 同一中断态出现两次标识（cr-fix-spec mobile-metrics/C-4）。
  */
 export function hasVisibleSettledMetrics(view: SessionStreamUnitView): boolean {
-  return (
-    isSessionStreamUnitSettled(view.status) &&
-    (view.startedAtMs > 0 ||
-      view.metrics.textChars > 0 ||
-      view.metrics.thinkingChars > 0 ||
-      view.metrics.completionTokens > 0)
-  );
+  return isSessionStreamUnitSettled(view.status) && (view.startedAtMs > 0 || view.metrics.textChars > 0 || view.metrics.thinkingChars > 0 || view.metrics.completionTokens > 0);
 }
 
-export function ChatStreamMetricsBarLive({
-  agentRunning,
-  sessionId,
-  contextTokenLabel,
-}: Props) {
+export function ChatStreamMetricsBarLive({agentRunning, sessionId, contextTokenLabel}: Props) {
   const runtime = useRuntime();
   const manager = runtime.sessionStreamUnitManager;
   const [, setTick] = useState(0);
@@ -111,52 +95,23 @@ export function ChatStreamMetricsBarLive({
       // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
       // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
       interrupted = view.status === 'interrupted';
-      const elapsedMs =
-        view.elapsedMs != null
-          ? view.elapsedMs
-          : view.startedAtMs > 0
-            ? Math.max(
-                0,
-                (view.settledAtMs ?? Date.now()) - view.startedAtMs,
-              )
-            : 0;
+      const elapsedMs = view.elapsedMs != null ? view.elapsedMs : view.startedAtMs > 0 ? Math.max(0, (view.settledAtMs ?? Date.now()) - view.startedAtMs) : 0;
       // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
-      metrics = toAgentStreamMetricsView(
-        false,
-        {
-          elapsedMs,
-          completionTokens: view.metrics.completionTokens,
-          tokenSource: view.metrics.tokenSource,
-        },
-        manager.rateTokensPerSecond(sessionId, Date.now()),
-      );
+      const frozenSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
+      metrics = toAgentStreamMetricsView(false, frozenSample, manager.rateTokensPerSecond(sessionId, Date.now()));
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
       // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
       // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。
       const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
-      metrics = toAgentStreamMetricsView(
-        true,
-        {
-          elapsedMs,
-          completionTokens: view.metrics.completionTokens,
-          tokenSource: view.metrics.tokenSource,
-        },
-        manager.rateTokensPerSecond(sessionId, Date.now()),
-      );
+      const startingSample = {elapsedMs, completionTokens: view.metrics.completionTokens, tokenSource: view.metrics.tokenSource};
+      metrics = toAgentStreamMetricsView(true, startingSample, manager.rateTokensPerSecond(sessionId, Date.now()));
     }
   }
   if (metrics == null && sessionId != null) {
     const lastRun = manager.getSettledProjection(sessionId);
     if (lastRun != null) {
-      metrics = toAgentStreamMetricsView(
-        false,
-        {
-          elapsedMs: lastRun.elapsedMs,
-          completionTokens: lastRun.metrics.completionTokens,
-          tokenSource: lastRun.metrics.tokenSource,
-        },
-        lastRun.rateTokensPerSecond,
-      );
+      const settledSample = {elapsedMs: lastRun.elapsedMs, completionTokens: lastRun.metrics.completionTokens, tokenSource: lastRun.metrics.tokenSource};
+      metrics = toAgentStreamMetricsView(false, settledSample, lastRun.rateTokensPerSecond);
     }
   }
 
@@ -166,19 +121,8 @@ export function ChatStreamMetricsBarLive({
 
   return (
     <>
-      <ChatStreamMetricsBar
-        metrics={metrics}
-        interrupted={interrupted}
-        onPress={() => setDetailOpen(true)}
-      />
-      {sessionId != null ? (
-        <MetricDetailSheet
-          visible={detailOpen}
-          sessionId={sessionId}
-          contextTokenLabel={contextTokenLabel}
-          onClose={() => setDetailOpen(false)}
-        />
-      ) : null}
+      <ChatStreamMetricsBar metrics={metrics} interrupted={interrupted} onPress={() => setDetailOpen(true)} />
+      {sessionId != null ? <MetricDetailSheet visible={detailOpen} sessionId={sessionId} contextTokenLabel={contextTokenLabel} onClose={() => setDetailOpen(false)} /> : null}
     </>
   );
 }

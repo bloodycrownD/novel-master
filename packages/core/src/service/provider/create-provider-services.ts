@@ -32,10 +32,7 @@ export interface ProviderServiceBundle {
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  * @param secretStore - SKSP composite store
  */
-export function createProviderServices(
-  conn: TdbcConnection,
-  secretStore: SecretStore
-): ProviderServiceBundle {
+export function createProviderServices(conn: TdbcConnection, secretStore: SecretStore): ProviderServiceBundle {
   const providerRepo = new SqliteProviderRepository(conn);
   const kkv = createKkvService(conn);
   const suggestionRepo = new KkvModelSuggestionRepository(kkv);

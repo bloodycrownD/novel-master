@@ -21,14 +21,14 @@ import type {
 } from "@shared/ipc-types";
 
 /** 悬挂 tool_use（`result === null`）的占位文案，槽位保留不隐藏。 */
-export const LOST_RESULT_PLACEHOLDER = "未返回结果";
+const LOST_RESULT_PLACEHOLDER = "未返回结果";
 
 /**
  * 状态点配色走主题 CSS 变量（success/danger/中性，深浅主题自动跟随；
  * 对齐 app 工具卡先例 `.tool-call-card__status` 的语义色体系）。
  * 状态文案用主题正文色（`.prompt-tool-group__status` 的 `var(--text)`），状态点做辅助区分。
  */
-export const TOOL_GROUP_STATUS_COLORS: Record<
+const TOOL_GROUP_STATUS_COLORS: Record<
   PromptToolGroupStatusDto,
   string
 > = {
@@ -38,7 +38,7 @@ export const TOOL_GROUP_STATUS_COLORS: Record<
 };
 
 /** 状态文案（三态可读）。 */
-export const TOOL_GROUP_STATUS_LABELS: Record<
+const TOOL_GROUP_STATUS_LABELS: Record<
   PromptToolGroupStatusDto,
   string
 > = {

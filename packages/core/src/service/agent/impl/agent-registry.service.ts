@@ -16,7 +16,7 @@ import { DEFAULT_SUBAGENT_DEFINITION } from "../default-subagent-definition.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 
-export interface DefaultAgentRegistryServiceDeps {
+interface DefaultAgentRegistryServiceDeps {
   readonly repository: AgentDefinitionRepository;
   /** 注入时，删除当前 Agent 会清空工作区指针。 */
   readonly state?: PersistentState;

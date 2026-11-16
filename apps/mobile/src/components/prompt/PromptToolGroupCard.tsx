@@ -31,16 +31,6 @@ const LOST_RESULT_TEXT = '未返回结果';
  * 状态点配色走主题 token（成功/危险/中性，对齐 app 工具卡先例 ToolCallCard 的
  * statusColor 语义色体系，深浅主题自动跟随）；状态文字仍为正文色（见 statusLabel）。
  */
-const statusDotColor = (
-  tokens: ReturnType<typeof useTheme>['tokens'],
-  status: PromptToolGroupCardData['status'],
-) =>
-  status === 'ok'
-    ? tokens.success
-    : status === 'error'
-      ? tokens.danger
-      : tokens.textTertiary;
-
 /** 状态点旁的状态文案（三态可读，不只靠颜色区分）。 */
 const STATUS_LABEL: Record<PromptToolGroupCardData['status'], string> = {
   ok: '成功',
@@ -59,10 +49,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
   // 解析+收缩是纯函数重活（大 JSON 实测 ~90ms 量级），memo 住防展开态重渲染重跑。
-  const usePreviewJson = useMemo(
-    () => formatToolUsePreviewJson(card.inputJson),
-    [card.inputJson],
-  );
+  const usePreviewJson = useMemo(() => formatToolUsePreviewJson(card.inputJson), [card.inputJson]);
 
   const handleToggle = useCallback(() => {
     onToggle(card.id);
@@ -96,48 +83,40 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
           borderColor: tokens.border,
           borderLeftColor: tokens.primary,
         },
-      ]}>
+      ]}
+    >
       <Pressable
         testID="prompt-tool-group-head"
         accessibilityRole="button"
         accessibilityLabel={`${expanded ? '收起' : '展开'}工具调用 ${card.toolName}`}
         accessibilityState={{expanded}}
         onPress={handleToggle}
-        style={styles.head}>
+        style={styles.head}
+      >
         <View testID="prompt-tool-group-status" style={styles.headLeft}>
           <View
             testID={`prompt-tool-group-dot-${card.status}`}
-            style={[styles.dot, {backgroundColor: statusDotColor(tokens, card.status)}]}
+            style={[styles.dot, {backgroundColor: card.status === 'ok' ? tokens.success : card.status === 'error' ? tokens.danger : tokens.textTertiary}]}
           />
-          <Text
-            testID="prompt-tool-group-name"
-            style={[styles.name, {color: tokens.text}]}
-            numberOfLines={1}>
+          <Text testID="prompt-tool-group-name" style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
             {card.toolName}
           </Text>
           {card.parallel ? (
             <Text
               testID="prompt-tool-group-parallel"
               // 对齐 desktop 的中性色虚线徽标（role 徽标与状态三色是唯一的语义色留白）。
-              style={[
-                styles.parallel,
-                {color: tokens.textTertiary, borderColor: tokens.borderLight},
-              ]}>
+              style={[styles.parallel, {color: tokens.textTertiary, borderColor: tokens.borderLight}]}
+            >
               并行
             </Text>
           ) : null}
           {/* 状态文案用主题正文色：语义色浅底对比 1.86~2.54:1 低于 3:1 门槛，
               仅用于装饰性状态点（上面的 dot）；tokens 化另开迭代。 */}
-          <Text
-            testID="prompt-tool-group-status-label"
-            style={[styles.statusLabel, {color: tokens.text}]}
-            numberOfLines={1}>
+          <Text testID="prompt-tool-group-status-label" style={[styles.statusLabel, {color: tokens.text}]} numberOfLines={1}>
             {STATUS_LABEL[card.status]}
           </Text>
         </View>
-        <Text
-          testID="prompt-tool-group-chevron"
-          style={[styles.chevron, {color: tokens.textTertiary}]}>
+        <Text testID="prompt-tool-group-chevron" style={[styles.chevron, {color: tokens.textTertiary}]}>
           {expanded ? '⌄' : '›'}
         </Text>
       </Pressable>
@@ -155,20 +134,12 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 borderColor: tokens.borderLight,
                 borderLeftColor: tokens.primary,
               },
-            ]}>
-            <Text
-              testID="prompt-tool-group-use-label"
-              style={[
-                styles.cellLabel,
-                {color: tokens.textSecondary, borderColor: tokens.borderLight},
-              ]}
-              numberOfLines={1}>
+            ]}
+          >
+            <Text testID="prompt-tool-group-use-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
               tool use
             </Text>
-            <Text
-              testID="prompt-tool-group-use-preview"
-              style={[styles.code, {color: tokens.text}]}
-              numberOfLines={24}>
+            <Text testID="prompt-tool-group-use-preview" style={[styles.code, {color: tokens.text}]} numberOfLines={24}>
               {usePreviewJson}
             </Text>
           </Pressable>
@@ -185,23 +156,12 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 borderColor: tokens.borderLight,
                 borderLeftColor: tokens.primary,
               },
-            ]}>
-            <Text
-              testID="prompt-tool-group-result-label"
-              style={[
-                styles.cellLabel,
-                {color: tokens.textSecondary, borderColor: tokens.borderLight},
-              ]}
-              numberOfLines={1}>
+            ]}
+          >
+            <Text testID="prompt-tool-group-result-label" style={[styles.cellLabel, {color: tokens.textSecondary, borderColor: tokens.borderLight}]} numberOfLines={1}>
               tool result
             </Text>
-            <Text
-              testID="prompt-tool-group-result-preview"
-              style={[
-                styles.code,
-                card.result == null && {color: tokens.textTertiary},
-              ]}
-              numberOfLines={24}>
+            <Text testID="prompt-tool-group-result-preview" style={[styles.code, card.result == null && {color: tokens.textTertiary}]} numberOfLines={24}>
               {card.result == null ? LOST_RESULT_TEXT : card.result.body}
             </Text>
           </Pressable>

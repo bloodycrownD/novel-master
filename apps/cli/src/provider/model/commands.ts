@@ -4,12 +4,7 @@
  * @module provider/model/commands
  */
 
-import {
-  assertSavedModelUuid,
-  isValidTokenCounterModePref,
-  savedModelDisplayName,
-  type TokenizerOverride,
-} from "@novel-master/core/provider";
+import { assertSavedModelUuid, isValidTokenCounterModePref, savedModelDisplayName, type TokenizerOverride } from "@novel-master/core/provider";
 import { type SavedModelSettingsPatch } from "@novel-master/core/provider";
 import { type AppError, Result } from "@novel-master/core/errors";
 import type { NovelMasterRuntime } from "../../runtime.js";
@@ -18,10 +13,7 @@ import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 import { runProviderModelSampling } from "./sampling-commands.js";
 
-function flagString(
-  flags: ReadonlyMap<string, string | true>,
-  key: string,
-): string | undefined {
+function flagString(flags: ReadonlyMap<string, string | true>, key: string): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
 }
@@ -29,10 +21,7 @@ function flagString(
 /**
  * 解析的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 main.ts 统一出口收口。
  */
-async function requireSavedModelId(
-  rt: NovelMasterRuntime,
-  flags: ReadonlyMap<string, string | true>,
-): Promise<Result<string, AppError>> {
+async function requireSavedModelId(rt: NovelMasterRuntime, flags: ReadonlyMap<string, string | true>): Promise<Result<string, AppError>> {
   const modelId = flagString(flags, "modelId");
   if (modelId == null) {
     throw new Error("Missing --modelId <uuid>");
@@ -42,11 +31,7 @@ async function requireSavedModelId(
   return Result.ok(saved.value.id);
 }
 
-export async function runProviderModel(
-  rt: NovelMasterRuntime,
-  subcommand: string,
-  args: readonly string[],
-): Promise<Result<void, AppError>> {
+export async function runProviderModel(rt: NovelMasterRuntime, subcommand: string, args: readonly string[]): Promise<Result<void, AppError>> {
   const { flags } = parseCliArgs(args);
 
   if (subcommand === "suggest") {
@@ -60,9 +45,7 @@ export async function runProviderModel(
     const list = await rt.providerModels.suggestList(providerId);
     if (!list.ok) return Result.err(list.error);
     for (const s of list.value) {
-      console.log(
-        `${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`,
-      );
+      console.log(`${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`);
     }
     return RESULT_OK;
   }
@@ -70,9 +53,7 @@ export async function runProviderModel(
   if (subcommand === "sampling") {
     const samplingSub = args[0];
     if (samplingSub == null) {
-      throw new Error(
-        "Usage: nm provider model sampling <show|set|clear> --modelId <uuid>",
-      );
+      throw new Error("Usage: nm provider model sampling <show|set|clear> --modelId <uuid>");
     }
     return runProviderModelSampling(rt, samplingSub, args.slice(1));
   }
@@ -90,24 +71,16 @@ export async function runProviderModel(
     case "save": {
       const vendorModelId = flagString(flags, "vendorModelId");
       if (!vendorModelId) {
-        throw new Error(
-          "Usage: nm provider model save --vendorModelId <id> [--modelName <name>]",
-        );
+        throw new Error("Usage: nm provider model save --vendorModelId <id> [--modelName <name>]");
       }
-      const savedModel = await rt.providerModels.save(
-        providerId,
-        vendorModelId,
-        flagString(flags, "modelName"),
-      );
+      const savedModel = await rt.providerModels.save(providerId, vendorModelId, flagString(flags, "modelName"));
       if (!savedModel.ok) return Result.err(savedModel.error);
       return RESULT_OK;
     }
     case "create": {
       const vendorModelId = flagString(flags, "vendorModelId");
       if (!vendorModelId) {
-        throw new Error(
-          "Usage: nm provider model create --vendorModelId <id>",
-        );
+        throw new Error("Usage: nm provider model create --vendorModelId <id>");
       }
       const created = await rt.providerModels.create(providerId, vendorModelId);
       if (!created.ok) return Result.err(created.error);
@@ -119,9 +92,7 @@ export async function runProviderModel(
       const provider = await rt.providers.get(providerId);
       if (!provider.ok) return Result.err(provider.error);
       for (const m of list.value) {
-        console.log(
-          `${m.id}\t${savedModelDisplayName(m, provider.value.displayName)}\t${m.vendorModelId}`,
-        );
+        console.log(`${m.id}\t${savedModelDisplayName(m, provider.value.displayName)}\t${m.vendorModelId}`);
       }
       return RESULT_OK;
     }
@@ -129,19 +100,10 @@ export async function runProviderModel(
       const resolvedSavedModel = await requireSavedModelId(rt, flags);
       if (!resolvedSavedModel.ok) return Result.err(resolvedSavedModel.error);
       const savedModelId = resolvedSavedModel.value;
-      if (
-        !flags.has("modelName") &&
-        !flags.has("resetContextWindow") &&
-        flagString(flags, "contextWindowTokens") == null &&
-        flagString(flags, "tokenCounterMode") == null
-      ) {
-        throw new Error(
-          "Usage: nm provider model edit --modelId <uuid> [--modelName <name>] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]",
-        );
+      if (!flags.has("modelName") && !flags.has("resetContextWindow") && flagString(flags, "contextWindowTokens") == null && flagString(flags, "tokenCounterMode") == null) {
+        throw new Error("Usage: nm provider model edit --modelId <uuid> [--modelName <name>] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]");
       }
-      const modelName = flags.has("modelName")
-        ? (flagString(flags, "modelName") ?? null)
-        : undefined;
+      const modelName = flags.has("modelName") ? flagString(flags, "modelName") ?? null : undefined;
       if (modelName !== undefined) {
         const edited = await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
         if (!edited.ok) return Result.err(edited.error);
@@ -162,9 +124,7 @@ export async function runProviderModel(
         let tokenCounterMode: TokenizerOverride | undefined;
         if (tokenCounterModeRaw != null) {
           if (!isValidTokenCounterModePref(tokenCounterModeRaw)) {
-            throw new Error(
-              `--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`,
-            );
+            throw new Error(`--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`);
           }
           tokenCounterMode = tokenCounterModeRaw as TokenizerOverride;
         }
@@ -187,8 +147,6 @@ export async function runProviderModel(
       return RESULT_OK;
     }
     default:
-      throw new Error(
-        "Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete|sampling> ...",
-      );
+      throw new Error("Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete|sampling> ...");
   }
 }

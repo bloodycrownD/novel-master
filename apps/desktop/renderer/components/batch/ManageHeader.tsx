@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /** 批量模式次操作（如「启用」/「禁用」）：主操作（删除）右侧依次渲染。 */
-export type ManageHeaderBatchAction = {
+type ManageHeaderBatchAction = {
   label: string;
   onClick: () => void;
   tone?: 'danger' | 'primary';

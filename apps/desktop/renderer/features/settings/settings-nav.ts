@@ -131,7 +131,7 @@ export function isSameSkillRef(
   );
 }
 
-export interface SettingsNavGuardInput {
+interface SettingsNavGuardInput {
   /** 当前挂载的 view */
   readonly currentViewId: SettingsViewId;
   /** dirty 上报集合（nav.dirtyViews） */

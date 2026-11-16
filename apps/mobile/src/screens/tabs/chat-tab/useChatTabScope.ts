@@ -1,14 +1,7 @@
 /**
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
 import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -22,11 +15,7 @@ import * as promptTokens from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // nm-style: keep-local — 三具名 + service 路径单行化超 80 列
-import {
-  clearSessionViewCache,
-  clearSessionViewCachesByProject,
-  sessionViewCacheKey,
-} from '@/services/chat-session-view-cache';
+import {clearSessionViewCache, clearSessionViewCachesByProject, sessionViewCacheKey} from '@/services/chat-session-view-cache';
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
@@ -66,7 +55,7 @@ type ChatMetaInflight = {
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-export type UseChatTabScopeParams = {
+type UseChatTabScopeParams = {
   runtime: MobileNovelMasterRuntime;
   projectId: string | undefined;
   sessionId: string | undefined;
@@ -77,21 +66,10 @@ export type UseChatTabScopeParams = {
   navigation: Nav;
 };
 
-export function useChatTabScope({
-  runtime,
-  projectId,
-  sessionId,
-  setCurrentProject,
-  setCurrentSession,
-  refreshScope,
-  showToast,
-  navigation,
-}: UseChatTabScopeParams) {
+export function useChatTabScope({runtime, projectId, sessionId, setCurrentProject, setCurrentSession, refreshScope, showToast, navigation}: UseChatTabScopeParams) {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentProject, setCurrentProjectMeta] = useState<
-    ChatProject | undefined
-  >();
+  const [currentProject, setCurrentProjectMeta] = useState<ChatProject | undefined>();
   const [panel, setPanel] = useState<SessionListPanel>('sessions');
   const [chatSubview, setSubview] = useState<ChatSubview>('sessions');
   // chatSubview 的同步镜像：chip 精确升级轮的弃权判据要在异步链里同步读
@@ -109,9 +87,7 @@ export function useChatTabScope({
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [vfsRefreshKey, setVfsKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
-  const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
-    {sessionId: string; initialTitle: string} | undefined
-  >();
+  const [sessionRenamePrompt, setSessionRenamePrompt] = useState<{sessionId: string; initialTitle: string} | undefined>();
   // agentMeta 未加载窗口用 undefined 表达（au/B-1）：undefined = 锁定/占位，
   // 绝不用 source:'none' 占位冒充「已删待重选」——none 仅在 loadChatAgentMeta
   // 归一（agent 解析失败）成功落位后才出现。
@@ -150,9 +126,7 @@ export function useChatTabScope({
   // 才走一遍，这次额外渲染的代价可忽略。
   useLayoutEffect(() => {
     tokenLabelSessionRef.current = sessionId ?? null;
-    setAgentMeta(prev =>
-      prev == null || sessionId == null ? prev : {...prev, tokenLabel: '…'},
-    );
+    setAgentMeta(prev => (prev == null || sessionId == null ? prev : {...prev, tokenLabel: '…'}));
   }, [sessionId]);
 
   // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
@@ -190,62 +164,46 @@ export function useChatTabScope({
     // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
     // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
     const slot = chatTokenLabelDebounceRef.current;
-    if (
-      slot.key === `${projectId}#${sessionId}` &&
-      slot.hasLabel &&
-      runtime.abortRegistry.has(sessionId)
-    ) {
+    if (slot.key === `${projectId}#${sessionId}` && slot.hasLabel && runtime.abortRegistry.has(sessionId)) {
       return;
     }
     // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
     // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
     // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
-    setAgentMeta(prev =>
-      prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'},
-    );
+    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'}));
     try {
-      // nm-style: keep-local — 四实参（runtime / scope / 升级回调 / 弃权选项）无法单行
-      const tokenLabelPromise = promptTokens.loadChatPromptTokenLabelResilient(
-        runtime,
-        {projectId, sessionId},
+      const tokenLabelOptions: promptTokens.TokenLabelOptions = {
         // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
         // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
         // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。写回前过会话
         // 身份闸：本回调发起后若已切到别的会话，旧会话的标签就地丢弃。
-        upgraded => {
+        onPreciseUpgrade: upgraded => {
           if (tokenLabelSessionRef.current !== sessionId) {
             return;
           }
-          setAgentMeta(prev =>
-            prev == null ? prev : {...prev, tokenLabel: upgraded},
-          );
+          setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: upgraded}));
         },
-        {
-          // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
-          // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
-          // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
-          // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
-          shouldBail: () =>
-            // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
-            // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
-            // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
-            chatSubviewRef.current !== 'conversation' ||
-            (chatTokenLabelDebounceRef.current.hasLabel &&
-              runtime.abortRegistry.has(sessionId)),
-          // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
-          // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
-          // 线程与原生模块队列，正是堵返回键的那只手。
-          //
-          // 双条件（cr2-E-2）：只看视图不够——会话 A→B 切换时 chatSubview 仍是
-          // conversation，A 的挂起升级会越窗照跑（build 0.7~1.2s + 整串计数，
-          // 合计 2.2s 堵 JS），恰好落在本轮要消灭的「切会话后卡」窗口；快速
-          // 进出同一会话同理。这里闭包里的 sessionId 是**发起这一轮**的身份，
-          // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
-          shouldBailPrecise: () =>
-            chatSubviewRef.current !== 'conversation' ||
-            tokenLabelSessionRef.current !== sessionId,
-        },
-      );
+        // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
+        // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
+        // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
+        // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
+        shouldBail: () =>
+          // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
+          // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
+          // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
+          chatSubviewRef.current !== 'conversation' || (chatTokenLabelDebounceRef.current.hasLabel && runtime.abortRegistry.has(sessionId)),
+        // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
+        // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
+        // 线程与原生模块队列，正是堵返回键的那只手。
+        //
+        // 双条件（cr2-E-2）：只看视图不够——会话 A→B 切换时 chatSubview 仍是
+        // conversation，A 的挂起升级会越窗照跑（build 0.7~1.2s + 整串计数，
+        // 合计 2.2s 堵 JS），恰好落在本轮要消灭的「切会话后卡」窗口；快速
+        // 进出同一会话同理。这里闭包里的 sessionId 是**发起这一轮**的身份，
+        // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
+        shouldBailPrecise: () => chatSubviewRef.current !== 'conversation' || tokenLabelSessionRef.current !== sessionId,
+      };
+      const tokenLabelPromise = promptTokens.loadChatPromptTokenLabelResilient(runtime, {projectId, sessionId}, tokenLabelOptions);
       const labelResult = await tokenLabelPromise;
       // 真失败（错误通道迁移四期：build/resolve/fallback 的已知失败走
       // Result.err）：清标签同样过闸——旧会话的失败不得抹掉新会话的显示。
@@ -253,9 +211,7 @@ export function useChatTabScope({
       // 也不留一个可能过时的精确值（原 catch 注释口径不变）。
       if (!labelResult.ok) {
         if (tokenLabelSessionRef.current === sessionId) {
-          setAgentMeta(prev =>
-            prev == null ? prev : {...prev, tokenLabel: ''},
-          );
+          setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
         }
         return;
       }
@@ -274,9 +230,7 @@ export function useChatTabScope({
       if (tokenLabel && tokenLabelSessionRef.current === sessionId && !frozen) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
         // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
-        if (
-          chatTokenLabelDebounceRef.current.key === `${projectId}#${sessionId}`
-        ) {
+        if (chatTokenLabelDebounceRef.current.key === `${projectId}#${sessionId}`) {
           chatTokenLabelDebounceRef.current.hasLabel = true;
         }
       }
@@ -343,9 +297,7 @@ export function useChatTabScope({
         const deferred = slot.deferred;
         slot.deferred = null;
         const previousRun = slot.running;
-        const run = (
-          previousRun ? previousRun.catch(() => undefined) : Promise.resolve()
-        ).then(() => runRefresh());
+        const run = (previousRun ? previousRun.catch(() => undefined) : Promise.resolve()).then(() => runRefresh());
         slot.running = run;
         const settle = () => {
           if (slot.running === run) {
@@ -423,8 +375,7 @@ export function useChatTabScope({
     }
     const round = ++refreshChatMetaRoundRef.current;
     // 落地权判据：在途槽里还是这一轮（中途没被别的会话/参数的轮次顶掉）。
-    const isCurrentRound = () =>
-      refreshChatMetaInflightRef.current?.round === round;
+    const isCurrentRound = () => refreshChatMetaInflightRef.current?.round === round;
     const promise = (async () => {
       // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
       // projectId/sessionId），并行发起；两路赋值顺序保持
@@ -497,12 +448,7 @@ export function useChatTabScope({
     promise.then(settleInflight, settleInflight);
     return promise;
   };
-  const metaRefreshDeps = [
-    runtime,
-    projectId,
-    sessionId,
-    refreshChatTokenLabel,
-  ];
+  const metaRefreshDeps = [runtime, projectId, sessionId, refreshChatTokenLabel];
   const refreshChatMeta = useCallback(metaRefreshImpl, metaRefreshDeps);
 
   // nm-style: keep-local — 回调承载项目/会话列表装载状态链，内联回 useCallback 会让调用参数跨行
@@ -691,8 +637,7 @@ export function useChatTabScope({
         {
           text: '删除',
           style: 'destructive',
-          onPress: () =>
-            handleDeleteSession(targetSessionId).catch(() => undefined),
+          onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
         },
       ]);
     },
@@ -866,13 +811,7 @@ export function useChatTabScope({
     [navigation],
   );
 
-  const sessionVfs = useMemo(
-    () =>
-      projectId != null && sessionId != null
-        ? runtime.sessionVfs(projectId, sessionId)
-        : null,
-    [runtime, projectId, sessionId],
-  );
+  const sessionVfs = useMemo(() => (projectId != null && sessionId != null ? runtime.sessionVfs(projectId, sessionId) : null), [runtime, projectId, sessionId]);
   const sessionWorktree = useMemo(
     () =>
       projectId != null && sessionId != null
@@ -884,10 +823,7 @@ export function useChatTabScope({
         : null,
     [runtime, projectId, sessionId],
   );
-  const projectVfs = useMemo(
-    () => (projectId != null ? runtime.projectVfs(projectId) : null),
-    [runtime, projectId],
-  );
+  const projectVfs = useMemo(() => (projectId != null ? runtime.projectVfs(projectId) : null), [runtime, projectId]);
 
   // 聊天 markdown 链接点击（webview 上抛 linkClick）：只做意图执行。
   // 识别与探测在 chat-link-nav 纯函数内完成（session 先、project 后，仅文件命中）；
@@ -915,13 +851,7 @@ export function useChatTabScope({
     },
     [sessionVfs, projectVfs, openFileEditor],
   );
-  const projectWorktree = useMemo(
-    () =>
-      projectId != null
-        ? runtime.workplace({kind: 'project', projectId})
-        : null,
-    [runtime, projectId],
-  );
+  const projectWorktree = useMemo(() => (projectId != null ? runtime.workplace({kind: 'project', projectId}) : null), [runtime, projectId]);
 
   return {
     agentMeta,
@@ -972,5 +902,3 @@ export function useChatTabScope({
     projectWorktree,
   };
 }
-
-export type UseChatTabScopeResult = ReturnType<typeof useChatTabScope>;

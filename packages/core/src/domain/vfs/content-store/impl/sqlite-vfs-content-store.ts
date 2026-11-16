@@ -165,67 +165,56 @@ export class SqliteVfsContentStore implements VfsContentStore {
         result.set(contentHash, plain);
       }
       // blob 未命中的 hash 落 member 侧批量解析；全部命中时零额外查询。
+      // member 命中按 pack_id 聚合、pack 流每组只取回一次：zlib-concat 组整组只解压
+      // 一次，fossil 组沿链一次走到所需最大段号、中间明文组内共享（详见 pack-codec）。
+      // 缺失 hash 不出现在结果中（调用方 resolveScanRows 的缺失升级语义不变）。
       const missing = chunk.filter((hash) => !result.has(hash));
       if (missing.length > 0) {
-        const packed = await this.appendPackMemberPlaintexts(missing, result);
-        if (!packed.ok) return Result.err(packed.error);
+        const missList = [...new Set(missing)];
+        const memberPlaceholders = missList.map(() => `?`).join(`,`);
+        const sql21 = `SELECT content_hash, pack_id, offset, length
+       FROM vfs_content_pack_member
+       WHERE content_hash IN (${memberPlaceholders})`;
+        const memberRows = await this.conn.query<{ content_hash: string; pack_id: number; offset: number; length: number }>(sql21, missList);
+        if (memberRows.length > 0) {
+          const packIds = [...new Set(memberRows.map((row) => Number(row.pack_id)))];
+          const packPlaceholders = packIds.map(() => `?`).join(`,`);
+          const packRows = await this.conn.query<{ pack_id: number; format: string; bytes: SqlValue }>(`SELECT pack_id, format, bytes FROM vfs_content_pack WHERE pack_id IN (${packPlaceholders})`, packIds);
+          const packById = new Map<number, { format: string; bytes: SqlValue }>(packRows.map((row) => [Number(row.pack_id), { format: String(row.format), bytes: row.bytes }]));
+
+          const membersByPack = new Map<number, Array<{ contentHash: string; span: VfsPackSpan }>>();
+          for (const row of memberRows) {
+            const packId = Number(row.pack_id);
+            const list = membersByPack.get(packId) ?? [];
+            list.push({
+              contentHash: String(row.content_hash),
+              span: { offset: Number(row.offset), length: Number(row.length) },
+            });
+            membersByPack.set(packId, list);
+          }
+
+          const packDecoder = new TextDecoder();
+          for (const [packId, members] of membersByPack) {
+            const pack = packById.get(packId);
+            if (pack == null) {
+              return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId }));
+            }
+            const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
+            if (!packBytes.ok) return Result.err(packBytes.error);
+            const spans = members.map((member) => member.span);
+            const decoded = decodePackMembers(pack.format, packBytes.value, spans);
+            if (!decoded.ok) return Result.err(decoded.error);
+            const plains = decoded.value;
+            members.forEach((member, index) => {
+              const plain = packDecoder.decode(plains[index]!);
+              rememberDecodedContentBody(member.contentHash, plain);
+              result.set(member.contentHash, plain);
+            });
+          }
+        }
       }
     }
     return Result.ok(result);
-  }
-
-  /**
-   * 把 blob 侧未命中的 hash 从 pack 容器批量解析进 result。
-   *
-   * member 命中按 pack_id 聚合、pack 流每组只取回一次：zlib-concat 组整组只解压
-   * 一次，fossil 组沿链一次走到所需最大段号、中间明文组内共享（详见 pack-codec）。
-   * 缺失 hash 不出现在结果中（调用方 resolveScanRows 的缺失升级语义不变）。
-   */
-  private async appendPackMemberPlaintexts(missing: ReadonlyArray<string>, result: Map<string, string>): Promise<Result<void, AppError>> {
-    const missList = [...new Set(missing)];
-    const memberPlaceholders = missList.map(() => `?`).join(`,`);
-    const sql21 = `SELECT content_hash, pack_id, offset, length
-       FROM vfs_content_pack_member
-       WHERE content_hash IN (${memberPlaceholders})`;
-    const memberRows = await this.conn.query<{ content_hash: string; pack_id: number; offset: number; length: number }>(sql21, missList);
-    if (memberRows.length === 0) {
-      return Result.ok(undefined);
-    }
-    const packIds = [...new Set(memberRows.map((row) => Number(row.pack_id)))];
-    const packPlaceholders = packIds.map(() => `?`).join(`,`);
-    const packRows = await this.conn.query<{ pack_id: number; format: string; bytes: SqlValue }>(`SELECT pack_id, format, bytes FROM vfs_content_pack WHERE pack_id IN (${packPlaceholders})`, packIds);
-    const packById = new Map<number, { format: string; bytes: SqlValue }>(packRows.map((row) => [Number(row.pack_id), { format: String(row.format), bytes: row.bytes }]));
-
-    const membersByPack = new Map<number, Array<{ contentHash: string; span: VfsPackSpan }>>();
-    for (const row of memberRows) {
-      const packId = Number(row.pack_id);
-      const list = membersByPack.get(packId) ?? [];
-      list.push({
-        contentHash: String(row.content_hash),
-        span: { offset: Number(row.offset), length: Number(row.length) },
-      });
-      membersByPack.set(packId, list);
-    }
-
-    const decoder = new TextDecoder();
-    for (const [packId, members] of membersByPack) {
-      const pack = packById.get(packId);
-      if (pack == null) {
-        return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `vfs_content_pack 缺失（member 引用了不存在的 pack）: ${packId}`, packId }));
-      }
-      const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
-      if (!packBytes.ok) return Result.err(packBytes.error);
-      const spans = members.map((member) => member.span);
-      const decoded = decodePackMembers(pack.format, packBytes.value, spans);
-      if (!decoded.ok) return Result.err(decoded.error);
-      const plains = decoded.value;
-      members.forEach((member, index) => {
-        const plain = decoder.decode(plains[index]!);
-        rememberDecodedContentBody(member.contentHash, plain);
-        result.set(member.contentHash, plain);
-      });
-    }
-    return Result.ok(undefined);
   }
 
   /**
@@ -294,6 +283,8 @@ export class SqliteVfsContentStore implements VfsContentStore {
    * @returns 回收的无引用 blob / pack member / 空 pack 行数合计（三张表删除行数
    *   之和，非字节数、也不含被引用而保留的行）——调用方只能把它当「回收计数」用，
    *   想看省了多少空间得另查 byte_len。
+   *
+   * nm-style: keep-public — 实现 VfsContentStore.gc 端口方法；内联会把三条清扫 SQL 搬进调用层。
    */
   async gc(): Promise<number> {
     // 一条 NOT IN 子查询清扫孤立 blob：子查询里显式过滤 NULL content_hash，

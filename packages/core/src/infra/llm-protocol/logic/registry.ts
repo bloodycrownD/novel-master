@@ -8,26 +8,12 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
-import type {
-  FetchFn,
-  LlmProtocolAdapter,
-  LlmProtocolKind,
-} from "../ports/adapter.port.js";
+import type { FetchFn, LlmProtocolAdapter, LlmProtocolKind } from "../ports/adapter.port.js";
 import { AnthropicProtocolAdapter } from "../impl/anthropic.adapter.js";
 import { GeminiProtocolAdapter } from "../impl/gemini.adapter.js";
 import { OpenAiProtocolAdapter } from "../impl/openai.adapter.js";
 
 const adapters = new Map<LlmProtocolKind, LlmProtocolAdapter>();
-
-function ensureDefaults(fetchFn?: FetchFn): void {
-  if (adapters.size > 0) {
-    return;
-  }
-  const fn = fetchFn ?? globalThis.fetch;
-  adapters.set("openai", new OpenAiProtocolAdapter(fn));
-  adapters.set("anthropic", new AnthropicProtocolAdapter(fn));
-  adapters.set("gemini", new GeminiProtocolAdapter(fn));
-}
 
 /**
  * Replaces protocol adapters (call once at app startup before any LLM request).
@@ -41,11 +27,13 @@ export function configureLlmFetch(fetchFn: FetchFn = globalThis.fetch): void {
 }
 
 /** Returns the adapter for a protocol kind. */
-export function getProtocolAdapter(
-  kind: LlmProtocolKind,
-  fetchFn?: FetchFn
-): LlmProtocolAdapter {
-  ensureDefaults(fetchFn);
+export function getProtocolAdapter(kind: LlmProtocolKind, fetchFn?: FetchFn): LlmProtocolAdapter {
+  if (adapters.size === 0) {
+    const fn = fetchFn ?? globalThis.fetch;
+    adapters.set("openai", new OpenAiProtocolAdapter(fn));
+    adapters.set("anthropic", new AnthropicProtocolAdapter(fn));
+    adapters.set("gemini", new GeminiProtocolAdapter(fn));
+  }
   const adapter = adapters.get(kind);
   if (!adapter) {
     throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: `No LLM protocol adapter for: ${kind}` });

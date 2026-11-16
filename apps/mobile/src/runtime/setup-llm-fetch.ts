@@ -13,11 +13,7 @@
  * @module runtime/setup-llm-fetch
  */
 
-import {
-  configureLlmFetch,
-  createLoggingFetch,
-  registerSseTransport,
-} from '@novel-master/core/provider';
+import {configureLlmFetch, createLoggingFetch, registerSseTransport} from '@novel-master/core/provider';
 import {registerNativeSseTransportWith} from '@novel-master/llm-sse-native/native';
 import {createMobileLlmFetch} from '../services/llm-native-fetch-shim';
 
@@ -31,9 +27,5 @@ export function ensureLlmFetchConfigured(): void {
   configured = true;
   registerNativeSseTransportWith(registerSseTransport);
   const shim = createMobileLlmFetch();
-  configureLlmFetch(
-    typeof __DEV__ !== 'undefined' && __DEV__
-      ? createLoggingFetch(shim)
-      : shim,
-  );
+  configureLlmFetch(typeof __DEV__ !== 'undefined' && __DEV__ ? createLoggingFetch(shim) : shim);
 }

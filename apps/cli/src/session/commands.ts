@@ -26,10 +26,7 @@ import { runSessionWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 /** Session VFS subcommands except `write`（write 无版本参数）。 */
-const SESSION_VFS_COMMANDS: Record<
-  string,
-  (vfs: VfsService, args: readonly string[]) => Promise<Result<void, AppError>>
-> = {
+const SESSION_VFS_COMMANDS: Record<string, (vfs: VfsService, args: readonly string[]) => Promise<Result<void, AppError>>> = {
   list: runList,
   mkdir: runMkdir,
   read: runRead,
@@ -39,27 +36,13 @@ const SESSION_VFS_COMMANDS: Record<
   delete: runDelete,
 };
 
-type SessionDeps = Pick<
-  NovelMasterRuntime,
-  | "conn"
-  | "state"
-  | "sessions"
-  | "sessionFs"
-  | "sessionVfs"
-  | "sessionKkv"
-  | "scope"
-  | "workplace"
->;
+type SessionDeps = Pick<NovelMasterRuntime, "conn" | "state" | "sessions" | "sessionFs" | "sessionVfs" | "sessionKkv" | "scope" | "workplace">;
 
 /**
  * repo 读 / 删 / 复制的 `Result` 失败转 `Outcome.failed` 沿管线交回 main 边界
  * （错误通道迁移四期），由统一出口换算 exit code。
  */
-export async function runSession(
-  deps: SessionDeps,
-  subcommand: string,
-  args: readonly string[],
-): Promise<Outcome<void>> {
+export async function runSession(deps: SessionDeps, subcommand: string, args: readonly string[]): Promise<Outcome<void>> {
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -78,8 +61,7 @@ export async function runSession(
       const resolvedProject = await deps.scope.resolveProjectId(flags);
       if (!resolvedProject.ok) return { kind: "failed", error: resolvedProject.error };
       const projectId = resolvedProject.value;
-      const title =
-        typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
+      const title = typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
       const s = await deps.sessions.create(projectId, title);
       if (!s.ok) return { kind: "failed", error: s.error };
       // Set current project and session
@@ -92,11 +74,7 @@ export async function runSession(
       const currentProject = await deps.state.getCurrentProjectId();
       if (!currentProject.ok) return { kind: "failed", error: currentProject.error };
       const currentProjectId = currentProject.value;
-      const resolvedSessionId = await resolveSessionUseId(
-        deps.sessions,
-        flags,
-        currentProjectId,
-      );
+      const resolvedSessionId = await resolveSessionUseId(deps.sessions, flags, currentProjectId);
       if (!resolvedSessionId.ok) return { kind: "failed", error: resolvedSessionId.error };
       const id = resolvedSessionId.value;
       const session = await deps.sessions.get(id);
@@ -111,9 +89,7 @@ export async function runSession(
       if (!currentSession.ok) return { kind: "failed", error: currentSession.error };
       const id = currentSession.value;
       if (id == null || id === "") {
-        throw new Error(
-          "No current session (run: nm session use --session <id> or --title <title>)",
-        );
+        throw new Error("No current session (run: nm session use --session <id> or --title <title>)");
       }
       const s = await deps.sessions.get(id);
       if (!s.ok) return { kind: "failed", error: s.error };
@@ -144,8 +120,34 @@ export async function runSession(
       return OUTCOME_COMPLETED;
     }
     case "vfs": {
-      const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
-      const r = await runSessionVfs(deps, vfsRest);
+      const vfsArgs = args[0] === "vfs" ? args.slice(1) : args;
+      // vfs 子命令的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由本命令转
+      // `Outcome.failed` 交回 main 边界。
+      const { positional, flags } = parseCliArgs(vfsArgs);
+      const resolvedScope = await deps.scope.resolveProjectSession(flags);
+      if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
+      const { projectId, sessionId } = resolvedScope.value;
+      const group = positional[0];
+      const idx = vfsArgs.indexOf(group);
+      const subArgs = vfsArgs.slice(idx + 1);
+      let r: Result<void, AppError>;
+      if (group === "export-zip") {
+        r = await runExportZip(deps.conn, { kind: "session", projectId, sessionId }, subArgs);
+      } else if (group === "import-zip") {
+        r = await runImportZip(deps.conn, { kind: "session", projectId, sessionId }, subArgs);
+      } else if (group === "import-character-card") {
+        r = await runImportCharacterCard(deps.conn, { kind: "session", projectId, sessionId }, subArgs);
+      } else {
+        const vfs = deps.sessionVfs(projectId, sessionId);
+        if (group === "write") {
+          // 版本比对已从 VFS 底层移除：last-write-wins。
+          r = await runWrite(vfs, subArgs);
+        } else if (group == null || !(group in SESSION_VFS_COMMANDS)) {
+          throw new Error("Usage: nm session vfs <list|read|write|export-zip|import-zip|import-character-card|...>");
+        } else {
+          r = await SESSION_VFS_COMMANDS[group]!(vfs, subArgs);
+        }
+      }
       if (!r.ok) return { kind: "failed", error: r.error };
       return OUTCOME_COMPLETED;
     }
@@ -163,9 +165,7 @@ export async function runSession(
     case "rollback": {
       const messageId = flags.get("message");
       if (typeof messageId !== "string" || messageId === "") {
-        throw new Error(
-          "Usage: nm session rollback [--project <id>] [--session <id>] --message <messageId>",
-        );
+        throw new Error("Usage: nm session rollback [--project <id>] [--session <id>] --message <messageId>");
       }
       const resolvedScope = await deps.scope.resolveProjectSession(flags);
       if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
@@ -175,62 +175,6 @@ export async function runSession(
       return OUTCOME_COMPLETED;
     }
     default:
-      throw new Error(
-        "Usage: nm session <list|create|use|current|delete|copy|vfs|workplace|template|rollback> ...",
-      );
+      throw new Error("Usage: nm session <list|create|use|current|delete|copy|vfs|workplace|template|rollback> ...");
   }
-}
-
-/**
- * vfs 子命令的 `Result` 失败沿返回值交给上层（错误通道迁移四期），由 runSession 转
- * `Outcome.failed` 交回 main 边界。
- */
-async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promise<Result<void, AppError>> {
-  const { positional, flags } = parseCliArgs(args);
-  const resolvedScope = await deps.scope.resolveProjectSession(flags);
-  if (!resolvedScope.ok) return Result.err(resolvedScope.error);
-  const { projectId, sessionId } = resolvedScope.value;
-  const group = positional[0];
-
-  if (group === "export-zip") {
-    const idx = args.indexOf(group);
-    return runExportZip(
-      deps.conn,
-      { kind: "session", projectId, sessionId },
-      args.slice(idx + 1),
-    );
-  }
-  if (group === "import-zip") {
-    const idx = args.indexOf(group);
-    return runImportZip(
-      deps.conn,
-      { kind: "session", projectId, sessionId },
-      args.slice(idx + 1),
-    );
-  }
-  if (group === "import-character-card") {
-    const idx = args.indexOf(group);
-    return runImportCharacterCard(
-      deps.conn,
-      { kind: "session", projectId, sessionId },
-      args.slice(idx + 1),
-    );
-  }
-
-  const vfs = deps.sessionVfs(projectId, sessionId);
-  const idx = args.indexOf(group);
-  const subArgs = args.slice(idx + 1);
-
-  if (group === "write") {
-    // 版本比对已从 VFS 底层移除：last-write-wins。
-    return runWrite(vfs, subArgs);
-  }
-
-  if (group == null || !(group in SESSION_VFS_COMMANDS)) {
-    throw new Error(
-      "Usage: nm session vfs <list|read|write|export-zip|import-zip|import-character-card|...>",
-    );
-  }
-
-  return SESSION_VFS_COMMANDS[group]!(vfs, subArgs);
 }

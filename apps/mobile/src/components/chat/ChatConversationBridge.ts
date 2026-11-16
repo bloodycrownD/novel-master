@@ -117,7 +117,7 @@ export type ConversationDockAction =
  * 下行消息清单（v2 信封 · D4c 收口后纯转录域）
  * ------------------------------------------------------------------ */
 
-export type ConversationInitPayload = {
+type ConversationInitPayload = {
   readonly theme: ConversationTheme;
   readonly flags: TranscriptFlags;
   /** 转录渲染层文案（spec §2.2.8）；缺省时 web 回退内置中文常量。 */
@@ -131,7 +131,7 @@ export type ConversationInitPayload = {
 };
 
 /** `sessionSnapshot` 分片载荷（字段分布约定与旧包逐字一致，见 ChatTranscriptBridge 注释）。 */
-export type ConversationSnapshotPayload = {
+type ConversationSnapshotPayload = {
   readonly sessionKey: string;
   readonly rows: readonly TranscriptRow[];
   readonly hasMore: boolean;
@@ -146,7 +146,7 @@ export type ConversationSnapshotPayload = {
 };
 
 /** 下行信封（v2）。 */
-export type ConversationEnvelope<T extends string, P> = {
+type ConversationEnvelope<T extends string, P> = {
   readonly v: typeof CONVERSATION_BRIDGE_V;
   readonly type: T;
   readonly payload: P;
@@ -192,16 +192,16 @@ export type ConversationHostMessage =
  * **不做按 type 的载荷收窄**——收窄放在消费点（`ChatConversationWebView`），与旧
  * 宿主「先 decode 再 if-type 分发」的写法同款。
  */
-export type ConversationUpstreamEnvelope = {
+type ConversationUpstreamEnvelope = {
   readonly v?: number;
   readonly type: string;
   readonly payload: Record<string, unknown>;
 };
 
 /** 解码失败的原因（`ready` 单独一类：它是被 v 号判定的，不是形状问题）。 */
-export type ConversationDecodeFailure = 'malformed' | 'stale-ready';
+type ConversationDecodeFailure = 'malformed' | 'stale-ready';
 
-export type ConversationDecodeResult =
+type ConversationDecodeResult =
   | {readonly ok: true; readonly message: ConversationUpstreamEnvelope}
   | {readonly ok: false; readonly reason: ConversationDecodeFailure};
 

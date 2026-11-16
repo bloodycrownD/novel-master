@@ -36,21 +36,17 @@ export function hydrateWindowFromCache(entry: SessionViewCache): SessionViewCach
 
 const cache = createScopeKeyCache<SessionViewCache>({maxEntries: 500});
 
-export function sessionViewCacheKey(
-  projectId: string,
-  sessionId: string,
-): string {
+// nm-style: keep-public — scoped cache 的 key 收口（隐藏 cache 对象）
+export function sessionViewCacheKey(projectId: string, sessionId: string): string {
   return cache.key(projectId, sessionId);
 }
 
+// nm-style: keep-public — scoped cache 的读取收口（隐藏 cache 对象）
 export function getSessionViewCache(key: string): SessionViewCache | undefined {
   return cache.get(key);
 }
 
-export function setSessionViewCache(
-  key: string,
-  entry: SessionViewCache,
-): void {
+export function setSessionViewCache(key: string, entry: SessionViewCache): void {
   cache.set(key, entry);
 }
 

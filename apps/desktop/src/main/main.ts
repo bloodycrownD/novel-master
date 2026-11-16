@@ -9,9 +9,7 @@ import { createLogger } from "@novel-master/core/log";
 import { installDesktopLogSink } from "./log/desktop-log-sink.js";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
-import {
-  attachAgentRunLifecycleListeners,
-} from "./ipc/handlers/agent.js";
+import { attachAgentRunLifecycleListeners } from "./ipc/handlers/agent.js";
 import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
@@ -44,15 +42,6 @@ let detachEventBusForwarder: (() => void) | undefined;
 let detachAgentActivityForwarder: (() => void) | undefined;
 let detachAgentRunLifecycleListeners: (() => void) | undefined;
 
-function resolvePreloadPath(): string {
-  // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
-  return path.join(__dirname, "../preload/preload.cjs");
-}
-
-function resolveRendererIndex(): string {
-  return path.join(app.getAppPath(), "dist/renderer/index.html");
-}
-
 function createMainWindow(): BrowserWindow {
   const iconPath = resolveAppIconPath();
   const window = new BrowserWindow({
@@ -74,7 +63,8 @@ function createMainWindow(): BrowserWindow {
         : {}),
     ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
     webPreferences: {
-      preload: resolvePreloadPath(),
+      // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
+      preload: path.join(__dirname, "../preload/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -152,7 +142,7 @@ function createMainWindow(): BrowserWindow {
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
   } else {
-    void window.loadFile(resolveRendererIndex());
+    void window.loadFile(path.join(app.getAppPath(), "dist/renderer/index.html"));
   }
 
   return window;
@@ -167,29 +157,23 @@ function detachMainEventBusListeners(): void {
   detachAgentActivityForwarder = undefined;
 }
 
-async function bootstrapMainServices(): Promise<void> {
-  registerIpcHandlers();
-  const built = await getDesktopRuntime();
-  // 装配的已知失败在进程级边界收口（错误通道迁移七期）：落日志后继续，
-  // 窗口仍在（与旧 catch 的未知异常分支同一终点）；未知异常仍走下方 catch。
-  if (!built.ok) {
-    log.error("bootstrap failed", { error: built.error });
-    return;
-  }
-  const runtime = built.value;
-  detachMainEventBusListeners();
-  detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
-  detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(
-    runtime.eventBus,
-  );
-  detachAgentActivityForwarder = attachAgentActivityForwarder();
-}
-
 app.whenReady().then(async () => {
   installApplicationMenu();
   createMainWindow();
   try {
-    await bootstrapMainServices();
+    registerIpcHandlers();
+    const built = await getDesktopRuntime();
+    // 装配的已知失败在进程级边界收口（错误通道迁移七期）：落日志后继续，
+    // 窗口仍在（与旧 catch 的未知异常分支同一终点）；未知异常仍走下方 catch。
+    if (!built.ok) {
+      log.error("bootstrap failed", { error: built.error });
+    } else {
+      const runtime = built.value;
+      detachMainEventBusListeners();
+      detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
+      detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(runtime.eventBus);
+      detachAgentActivityForwarder = attachAgentActivityForwarder();
+    }
   } catch (error) {
     log.error("bootstrap failed", { error });
   }

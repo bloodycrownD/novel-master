@@ -13,11 +13,7 @@ import type { LlmStreamEvent } from "../ports/adapter.port.js";
  * 将正文 delta 原样写入累加器并发出 `text-delta`。
  * 不做 per-chunk 内嵌 thinking 拆分。
  */
-export function emitDirectTextDelta(
-  state: { textParts: string[] },
-  text: string,
-  onStream?: (event: LlmStreamEvent) => void
-): void {
+export function emitDirectTextDelta(state: { textParts: string[] }, text: string, onStream?: (event: LlmStreamEvent) => void): void {
   if (text === "") {
     return;
   }

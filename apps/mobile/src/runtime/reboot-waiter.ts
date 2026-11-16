@@ -64,7 +64,7 @@ export function createRebootWaiterSlot<T>(): RebootWaiterSlot<T> {
  * - `joined`：槽已被占用，本次调用挂到了既有 waiter 上 —— 调用方**不得**
  *   推进代号，否则在途的那一代会变成谁也兑现不了的孤儿代。
  */
-export type ArmRebootWaiterOutcome = 'armed' | 'joined';
+type ArmRebootWaiterOutcome = 'armed' | 'joined';
 
 /**
  * 登记一个等待方。
@@ -72,11 +72,7 @@ export type ArmRebootWaiterOutcome = 'armed' | 'joined';
  * 槽已被占用时**一律复用**（追加到 `settlers`），永不覆盖、不改既有代号：
  * 覆盖会让先到那个调用方的 promise 失主。
  */
-export function armRebootWaiter<T>(
-  slot: RebootWaiterSlot<T>,
-  generation: number,
-  settler: RebootSettler<T>,
-): ArmRebootWaiterOutcome {
+export function armRebootWaiter<T>(slot: RebootWaiterSlot<T>, generation: number, settler: RebootSettler<T>): ArmRebootWaiterOutcome {
   const existing = slot.current;
   if (existing != null) {
     existing.settlers.push(settler);
@@ -97,10 +93,7 @@ export function armRebootWaiter<T>(
  *
  * 槽为空时返回 false（无等待方需要改绑）。
  */
-export function rebindRebootWaiterGeneration<T>(
-  slot: RebootWaiterSlot<T>,
-  generation: number,
-): boolean {
+export function rebindRebootWaiterGeneration<T>(slot: RebootWaiterSlot<T>, generation: number): boolean {
   const waiter = slot.current;
   if (waiter == null) {
     return false;
@@ -115,10 +108,7 @@ export function rebindRebootWaiterGeneration<T>(
  * 代号不符（调用方是被取代的旧代）时返回 null 且**完全不动槽**，这是
  * 「旧代不得碰新代 waiter」这条规则的落点。
  */
-export function claimRebootWaiter<T>(
-  slot: RebootWaiterSlot<T>,
-  generation: number,
-): RebootWaiter<T> | null {
+export function claimRebootWaiter<T>(slot: RebootWaiterSlot<T>, generation: number): RebootWaiter<T> | null {
   const waiter = slot.current;
   if (waiter == null || waiter.generation !== generation) {
     return null;
@@ -128,9 +118,7 @@ export function claimRebootWaiter<T>(
 }
 
 /** `settleRebootWaiter` 的兑现内容。 */
-export type RebootOutcome<T> =
-  | {kind: 'resolve'; runtime: T}
-  | {kind: 'reject'; error: unknown};
+type RebootOutcome<T> = {kind: 'resolve'; runtime: T} | {kind: 'reject'; error: unknown};
 
 /**
  * 按代号兑现挂起的等待方。
@@ -139,11 +127,7 @@ export type RebootOutcome<T> =
  * 代号不一致或槽已空 → 返回 false 且不动槽（被取代的旧代 effect 到这里
  * 就是安全的 no-op）。
  */
-export function settleRebootWaiter<T>(
-  slot: RebootWaiterSlot<T>,
-  generation: number,
-  outcome: RebootOutcome<T>,
-): boolean {
+export function settleRebootWaiter<T>(slot: RebootWaiterSlot<T>, generation: number, outcome: RebootOutcome<T>): boolean {
   const waiter = claimRebootWaiter(slot, generation);
   if (waiter == null) {
     return false;

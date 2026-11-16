@@ -9,10 +9,7 @@
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
-import type {
-  ModelRetryPolicy,
-  ModelRetryPolicyService,
-} from "../model-retry-policy.port.js";
+import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
 
 /** KKV module for global model retry policy (provider transient failures). */
 const MODULE = "nm-model-retry";
@@ -32,11 +29,7 @@ function validatePolicy(input: ModelRetryPolicy): Result<void, AppError<"PROVIDE
   if (input.maxDelayMs < input.baseDelayMs) {
     return invalid("maxDelayMs must be >= baseDelayMs");
   }
-  if (
-    !Number.isFinite(input.jitterRatio) ||
-    input.jitterRatio < 0 ||
-    input.jitterRatio > 1
-  ) {
+  if (!Number.isFinite(input.jitterRatio) || input.jitterRatio < 0 || input.jitterRatio > 1) {
     return invalid("jitterRatio must be in [0, 1]");
   }
   return Result.ok<void>(undefined);
@@ -46,6 +39,7 @@ function validatePolicy(input: ModelRetryPolicy): Result<void, AppError<"PROVIDE
 export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
   constructor(private readonly kkv: KkvService) {}
 
+  /** nm-style: keep-public — ModelRetryPolicyService 端口读口；DefaultModelRequestService 单点消费。 */
   async getPolicy(): Promise<Result<ModelRetryPolicy | null, AppError>> {
     const raw = await this.kkv.get(MODULE, KEY);
     if (!raw.ok) {

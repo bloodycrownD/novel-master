@@ -4,7 +4,7 @@
  * @module tokenizer-driver-rn/native
  */
 
-export { registerTokenizerRnDriver, RN_DRIVER_NAME } from "./register.js";
+export { registerTokenizerRnDriver } from "./register.js";
 export {
   countPromptViaNative,
   isNativeTokenizerAvailable,

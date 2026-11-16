@@ -19,10 +19,7 @@ import type {RootStackParamList} from '@/navigation/types';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import {EditorScreenShell} from '@/components/chrome/EditorScreenShell';
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
-import {
-  takePromptTurnDetail,
-  type PromptTurnDetail,
-} from '@/components/prompt/prompt-turn-callback';
+import {takePromptTurnDetail, type PromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 import {useTheme} from '@/theme/ThemeProvider';
 
 /** 轮 id 缺失时的占位（route params 可选，不影响渲染）。 */
@@ -43,8 +40,7 @@ export function PromptTurnDetailScreen() {
   const leafId = detailRef.current?.leafId;
   // 伪 path：叶子形态稳定。防御性——若将来详情页支持页内切换内容，key 让组件
   // 重挂载；当前页是终态、挂载后不再换内容。
-  const path =
-    leafId === undefined ? `turn-${turnId}` : `turn-${turnId}-leaf-${leafId}`;
+  const path = leafId === undefined ? `turn-${turnId}` : `turn-${turnId}-leaf-${leafId}`;
 
   useEffect(() => {
     if (!title) {
@@ -59,15 +55,7 @@ export function PromptTurnDetailScreen() {
       tokens={tokens}
       toolbarBorderColor={tokens.borderLight}
       previewMode
-      preview={
-        <FileMarkdownPreview
-          path={path}
-          content={body}
-          tokens={tokens}
-          previewFill
-          renderKind="txt"
-        />
-      }
+      preview={<FileMarkdownPreview path={path} content={body} tokens={tokens} previewFill renderKind="txt" />}
       editor={null}
     />
   );

@@ -9,26 +9,16 @@
  * {@link PromptChatTokenUpdatedPayload}。
  */
 import type { WebContents } from "electron";
-import {
-  IPC_CHANNELS,
-  type PromptChatTokenUpdatedPayload,
-} from "../../../shared/ipc-types.js";
+import { IPC_CHANNELS, type PromptChatTokenUpdatedPayload } from "../../../shared/ipc-types.js";
 
 let getTargetWebContents: (() => WebContents | undefined) | undefined;
 
 /** 与 workspaceMutated / composer 建议共用同一窗口解析器。 */
-export function setPromptChatTokenUpdatedForwardTarget(
-  resolver: () => WebContents | undefined,
-): void {
+export function setPromptChatTokenUpdatedForwardTarget(resolver: () => WebContents | undefined): void {
   getTargetWebContents = resolver;
 }
 
 /** 通知 renderer：某会话的 prompt 占用已有精确读数（覆盖当前估算档）。 */
-export function notifyPromptChatTokenUpdatedToRenderer(
-  payload: PromptChatTokenUpdatedPayload,
-): void {
-  getTargetWebContents?.()?.send(
-    IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED,
-    payload,
-  );
+export function notifyPromptChatTokenUpdatedToRenderer(payload: PromptChatTokenUpdatedPayload): void {
+  getTargetWebContents?.()?.send(IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED, payload);
 }

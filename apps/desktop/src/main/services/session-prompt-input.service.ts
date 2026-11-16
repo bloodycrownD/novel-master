@@ -34,7 +34,7 @@ export class ChatPromptBuildBailedError extends Error {
   }
 }
 
-export interface BuildSessionPromptInputOptions {
+interface PromptBuildOptions {
   /** 分段间防御性退出判定；真值即抛 {@link ChatPromptBuildBailedError}。 */
   readonly shouldBail?: () => boolean;
 }
@@ -52,12 +52,9 @@ export interface SessionPromptInputBundle {
   readonly rawMessages: readonly ChatMessageData[];
 }
 
-export async function buildSessionPromptInput(
-  runtime: DesktopNovelMasterRuntime,
-  scope: SessionPromptScope,
-  definition?: AgentDefinition,
-  options?: BuildSessionPromptInputOptions,
-): Promise<Result<SessionPromptInputBundle, AppError>> {
+type PromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
+
+export async function buildSessionPromptInput(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: PromptBuildOptions): PromptInputResult {
   // 分段弃权：每段之间看一眼「run 是不是已经起步了」。mobile 真机实锤过
   // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
   // 连接），desktop main 是同进程同连接，问题一模一样。
@@ -83,10 +80,7 @@ export async function buildSessionPromptInput(
   // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
   // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
   // 在大会话上是秒级卡顿（与 mobile 同款修法）。
-  const visibleMessages = await runtime.messages.listBySession(
-    scope.sessionId,
-    { includeHidden: false },
-  );
+  const visibleMessages = await runtime.messages.listBySession(scope.sessionId, { includeHidden: false });
   bail();
   const wtScope = {
     kind: "session" as const,
@@ -101,19 +95,9 @@ export async function buildSessionPromptInput(
   // Outcome.cancelled/replaced 返回，此处转抛 build 的统一哨兵，读口 catch
   // 的判定不变。fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
   // 重复序列化/计数。
-  const assembled = await assembleWorkplaceDisplay(
-    wtScope,
-    {
-      sessionKkv: runtime.sessionKkv,
-      workplace: wt,
-      vfs,
-      layout: resolved.prompts,
-    },
-    {
-      shouldStop: (): Interrupt | null =>
-        shouldBail?.() === true ? { kind: "replaced" } : null,
-    },
-  );
+  const workplaceArgs = { sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts };
+  const assembleOptions = { shouldStop: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
+  const assembled = await assembleWorkplaceDisplay(wtScope, workplaceArgs, assembleOptions);
   if (assembled.kind === "failed") {
     // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），
     // 不吞成弃权；收口在 token 读口的 resilient（err → fallback 降级）与

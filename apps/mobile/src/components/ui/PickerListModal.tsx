@@ -27,7 +27,7 @@ export type PickerListLoadResult<T> = {
   selectedId?: string;
 };
 
-export type PickerRowProps = {
+type PickerRowProps = {
   testID?: string;
   accessibilityLabel?: string;
   /** 行常态透明度（如已关闭技能 0.55）；按压淡化优先于它。 */
