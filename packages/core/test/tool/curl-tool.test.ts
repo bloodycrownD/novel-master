@@ -285,7 +285,7 @@ describe("curl 工具", () => {
     assert.ok(kept.length > 0);
   });
 
-  it("T-CT4: 超时（默认 30s）→ ToolError FAILED，文案含 timed out 与 URL", async () => {
+  it("T-CT4: 超时（默认 30s）→ Result.err TOOL_FAILED，文案含 timed out 与 URL", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const { runner } = makeRunner();
     const fetchFn = mock.fn(
@@ -298,20 +298,18 @@ describe("curl 工具", () => {
         })
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow" }, makeCtx(fetchFn)).then(
-      () => assert.fail("超时应抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow" }, makeCtx(fetchFn));
     // flush 微任务：让 run 进入 fetch、abort listener 已挂好。
     await new Promise((resolve) => setImmediate(resolve));
     mock.timers.tick(30_000);
 
-    const err = await pending;
-    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-    assert.equal(err.key, "TOOL_FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out/);
-    assert.match(message, /https:\/\/example\.com\/slow/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = formatToolErrorForLlm(err);
+      assert.match(message, /timed out/);
+      assert.match(message, /https:\/\/example\.com\/slow/);
+    });
   });
 
   it("T-CT14: body 下载阶段慢滴流挂起 → 超时中断，不无限挂起回合", async () => {
@@ -328,20 +326,18 @@ describe("curl 工具", () => {
       )
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow-body" }, makeCtx(fetchFn)).then(
-      () => assert.fail("慢 body 应超时抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow-body" }, makeCtx(fetchFn));
     // flush 微任务：让 run 拿到响应头并进入 text()，abort listener 已挂好。
     await new Promise((resolve) => setImmediate(resolve));
     mock.timers.tick(30_000);
 
-    const err = await pending;
-    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-    assert.equal(err.key, "TOOL_FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out/);
-    assert.match(message, /https:\/\/example\.com\/slow-body/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = formatToolErrorForLlm(err);
+      assert.match(message, /timed out/);
+      assert.match(message, /https:\/\/example\.com\/slow-body/);
+    });
   });
 
   it("T-CT5: 网络错误 → ToolError FAILED 且 cause 文案可读", async () => {
@@ -725,41 +721,33 @@ describe("curl 工具", () => {
         })
     ) as unknown as typeof fetch;
 
-    const pending = runner.call("curl", { url: "https://example.com/slow", timeout: 2 }, makeCtx(fetchFn)).then(
-      () => assert.fail("超时应抛 ToolError"),
-      (err: unknown) => err
-    );
+    const pending = runner.call("curl", { url: "https://example.com/slow", timeout: 2 }, makeCtx(fetchFn));
     await new Promise((resolve) => setImmediate(resolve));
     // 推进 2 秒（默认 30 秒未到）：参数驱动的超时应在 2s 到点即中断。
     mock.timers.tick(2_000);
 
-    const err = await pending;
-    assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
-    assert.equal(err.key, "TOOL_FAILED");
-    const message = formatToolErrorForLlm(err);
-    assert.match(message, /timed out after 2000ms/);
-    assert.match(message, /https:\/\/example\.com\/slow/);
+    await rejectsErr(pending, (err) => {
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      assert.equal(err.key, "TOOL_FAILED");
+      const message = formatToolErrorForLlm(err);
+      assert.match(message, /timed out after 2000ms/);
+      assert.match(message, /https:\/\/example\.com\/slow/);
+    });
   });
 
-  it("T-CT18: ctx.signal 进入时已 aborted → 不发请求直接拒绝，错误文案为取消（B-2，工具直调面）", async () => {
+  it("T-CT18: ctx.signal 进入时已 aborted → 不发请求，Result.err TOOL_CANCELLED（B-2，工具直调面）", async () => {
     const fetchFn = mock.fn(async () => fakeResponse({ body: "unreachable" })) as unknown as typeof fetch;
     const controller = new AbortController();
     controller.abort(); // 预取消：run 应在创建 controller 前早退，fetchFn 零调用。
     // 经 ToolRunner.call 时 B-1 的 runner 层早退先拦（见 tool-runner-abort 套件），
     // 本用例按 fix-spec B-2 口径直调 tool.run，锁 curl 自身的裸暴露面。
-    let thrown: unknown;
-    try {
-      await curlTool.run({ url: "https://example.com/pre-aborted" }, { ...makeCtx(fetchFn), signal: controller.signal });
-      assert.fail("预取消应直接拒绝");
-    } catch (e: unknown) {
-      thrown = e;
-    }
-    assert.ok(isAppError(thrown) && thrown.key.startsWith("TOOL_"));
-    // 错误通道迁移二期：取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为
-    // 中性文案（不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
-    assert.equal(thrown.key, "TOOL_CANCELLED");
-    const llmMessage = formatToolErrorForLlm(thrown);
-    assert.equal(llmMessage, "工具调用已取消");
+    await rejectsErr(() => curlTool.run({ url: "https://example.com/pre-aborted" }, { ...makeCtx(fetchFn), signal: controller.signal }), (err) => {
+      assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
+      // 取消统一 TOOL_CANCELLED 控制流码；formatter 渲染为中性文案
+      // （不带 Error 前缀、不携带 URL，UI 卡片不弹错误）。
+      assert.equal(err.key, "TOOL_CANCELLED");
+      assert.equal(formatToolErrorForLlm(err), "工具调用已取消");
+    });
     assert.equal(fetchFn.mock.callCount(), 0, "预取消不得发起任何请求");
   });
 });

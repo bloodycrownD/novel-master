@@ -204,8 +204,9 @@ ${engineSection}
 
     for (const [i, entry] of candidates.entries()) {
       // 用户取消（点停止 / 回合中断）：在途 fetch 已被 signal abort，这里再兜底
-      // 拦一道，避免取消后仍去尝试链上剩余引擎。
-      if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
+      // 拦一道，避免取消后仍去尝试链上剩余引擎。取消走返回值通道（七期），
+      // 不再 throw——runner 收成取消 outcome。
+      if (signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
       if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
@@ -213,8 +214,8 @@ ${engineSection}
         const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
         if (!response.ok) {
           // 引擎已知失败（四期门⑦沿 Result 回来）：取消重判后记降级行，
-          // 尝试链中下一个引擎（钉死时仅一员，自然止）。
-          if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
+          // 尝试链中下一个引擎（钉死时仅一员，自然止）；取消沿 Result.err 返回。
+          if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
           recordEngineFailure(entry, response.error);
           continue;
         }
@@ -223,8 +224,9 @@ ${engineSection}
         success = attempts == null ? response.value : { ...response.value, attempts };
         break;
       } catch (e) {
-        // 未知异常（非 abort 的 fetch 错误 / 编程错误）：取消重判 + 同口收编为降级行。
-        if (ctx.signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
+        // 未知异常（非 abort 的 fetch 错误 / 编程错误）：取消重判 + 同口收编为降级行；
+        // 取消沿 Result.err 返回，不再 throw。
+        if (ctx.signal?.aborted === true) return Result.err(new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME}));
         recordEngineFailure(entry, e);
         // 循环继续：尝试链中下一个引擎（钉死时仅一员，自然止）。
       }

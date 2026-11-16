@@ -4,8 +4,8 @@
  * @module bootstrap/schema-migrations
  */
 
+import { assert } from "@/common/assert.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";
@@ -58,9 +58,7 @@ export async function runPendingSchemaMigrations(tx: TdbcConnection): Promise<vo
 
   const seen = new Set<string>();
   for (const migration of SCHEMA_MIGRATIONS) {
-    if (seen.has(migration.id)) {
-      throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: `重复的 schema migration id: ${migration.id}` });
-    }
+    assert(!seen.has(migration.id), `重复的 schema migration id: ${migration.id}`);
     seen.add(migration.id);
 
     if (applied.has(migration.id)) {

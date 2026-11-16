@@ -2,7 +2,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
+import { isSessionFsError } from "../../src/errors/guards.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

@@ -15,7 +15,13 @@ export async function importCharacterCard(runtime: MobileNovelMasterRuntime, sco
   const pickOptions: PickAndReadOptions = {
     mimeTypes: characterCardImportPickTypes(),
     fallbackLocalFileName: 'character-card.json',
-    assertFileName: assertCharacterCardFileName,
+    // assertFileName 槽位只认 throw：校验失败从 Result 原样解包成 throw 中止导入。
+    assertFileName: name => {
+      const check = assertCharacterCardFileName(name);
+      if (!check.ok) {
+        throw check.error;
+      }
+    },
     // 读取前 stat 预检：巨型卡片不进整读/解析链，避免原生 OOM；
     // 与 core 层 importFromBytes 的 bytes.length 闸门同阈值双保险。
     maxBytes: CHARACTER_CARD_MAX_INPUT_BYTES,

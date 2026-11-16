@@ -26,7 +26,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
-import { isSessionFsError } from "@/errors/session-fs-errors.js";
+import { isSessionFsError } from "@/errors/guards.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";

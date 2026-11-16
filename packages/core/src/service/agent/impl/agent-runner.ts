@@ -4,6 +4,7 @@
  * @module service/agent/impl/agent-runner
  */
 
+import { assert } from "@/common/assert.js";
 import { truncateText } from "@/common/text.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
@@ -450,10 +451,7 @@ export class DefaultAgentRunner implements AgentRunner {
             // includeCompactionOrchestrator:true 时与 compactionConditions 同注入。
             const messages = this.deps.messages;
             const messageTranscriptEffects = this.deps.messageTranscriptEffects;
-            if (messages == null || messageTranscriptEffects == null) {
-              const missingDeps = "compaction requires messages + transcript effects";
-              throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: missingDeps });
-            }
+            assert(messages != null && messageTranscriptEffects != null, "compaction requires messages + transcript effects");
             const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
             if (!hiddenDepth.ok) raiseRunError(hiddenDepth.error);
             const hideStartDepth = hiddenDepth.value;

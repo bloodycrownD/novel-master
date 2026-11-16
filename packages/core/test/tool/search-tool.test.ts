@@ -719,21 +719,19 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
       });
     }) as typeof globalThis.fetch;
 
-    // 直调 searchTool.run（不经 ToolRunner）：runner 的取消竞速会先以「工具调用已取消」
-    // reject 调用方，本套件要锁的是工具自身的取消分支（「搜索已取消」短路降级链）。
-    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
+    // 直调 searchTool.run（不经 ToolRunner）：本套件要锁的是工具自身的取消分支
+    // （取消沿 Result.err 返回，短路降级链）。
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
     // 等链首请求挂起后再取消（中途时序）。
     await new Promise((resolve) => setImmediate(resolve));
     controller.abort();
     const result = await pending;
     assert.equal(result.ok, false);
-    const err = result.error;
-    assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码（不再经 toolFailed 的 cause 文案）");
-    // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
-    assert.equal(err.message.includes("串行搜索链"), false);
+    if (!result.ok) {
+      assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码（不再经 toolFailed 的 cause 文案）");
+      // 取消短路：不是「串行搜索链全部尝试失败」聚合错误。
+      assert.equal(result.error.message.includes("串行搜索链"), false);
+    }
     // fetch 收到的 init.signal 已 aborted（在途请求同步取消）。
     assert.equal(inFlightSignals[0]?.aborted, true);
     // 第二引擎零请求（降级链被取消短路）。
@@ -754,10 +752,9 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
       return bochaResponse();
     }) as typeof globalThis.fetch;
 
-    await assert.rejects(searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })), (err: unknown) => {
-      assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
-      return true;
-    });
+    const result = await searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
     assert.equal(fetchCalls, 0, "取消先于链首请求：任何引擎都不该被请求");
   });
 
@@ -782,18 +779,17 @@ describe("search 工具：取消传播（G-1，用户点停止 → 在途 fetch 
       });
     }) as typeof globalThis.fetch;
 
-    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal })).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
+    const pending = searchTool.run({ params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn, signal: controller.signal }));
     // 等 bocha 401 处理完、tavily 请求挂起（「首个引擎 401 后」的中途时序）。
     for (let spin = 0; spin < 50 && urls.length < 2; spin += 1) await new Promise((resolve) => setImmediate(resolve));
     assert.equal(urls.length, 2, "前置：bocha 401 已处理、tavily 请求已挂起");
     controller.abort();
     const result = await pending;
     assert.equal(result.ok, false);
-    assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
-    assert.equal(result.error.message.includes("串行搜索链"), false, "取消后不再聚合链错误");
+    if (!result.ok) {
+      assert.ok(isAppError(result.error, "TOOL_CANCELLED"), "取消统一为 TOOL_CANCELLED 码");
+      assert.equal(result.error.message.includes("串行搜索链"), false, "取消后不再聚合链错误");
+    }
     assert.equal(inFlightSignals[0]?.aborted, true, "在途的 tavily 请求已被同步 abort");
     // 第三引擎（链上已无）与重复请求都不会发生。
     assert.equal(urls.length, 2);

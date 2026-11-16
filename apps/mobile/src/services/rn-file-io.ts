@@ -41,7 +41,8 @@ export function blobFs(): typeof ReactNativeBlobUtil.fs {
   const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
   const fs = anyMod.fs ?? anyMod.default?.fs;
   if (fs == null) {
-    throw new AppError('INFRA_INVARIANT_VIOLATION', {detail: 'react-native-blob-util.fs unavailable'});
+    // 平台能力缺失（native 模块未注入），不是程序不变量破坏。
+    throw new AppError('INFRA_UNSUPPORTED_PLATFORM', {detail: 'react-native-blob-util.fs unavailable'});
   }
   return fs;
 }

@@ -24,11 +24,16 @@ describe('yaml-document-pick', () => {
   });
 
   it('assertYamlFileName accepts .yaml and .yml', () => {
-    expect(() => assertYamlFileName('a.agent.yaml')).not.toThrow();
-    expect(() => assertYamlFileName('events.config.yml')).not.toThrow();
+    expect(assertYamlFileName('a.agent.yaml').ok).toBe(true);
+    expect(assertYamlFileName('events.config.yml').ok).toBe(true);
   });
 
   it('assertYamlFileName rejects non-yaml names', () => {
-    expect(() => assertYamlFileName('notes.txt')).toThrow(/\.yaml/);
+    const rejected = assertYamlFileName('notes.txt');
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) {
+      expect(rejected.error.key).toBe('INFRA_VALIDATION_FAILED');
+      expect(rejected.error.message).toMatch(/\.yaml/);
+    }
   });
 });

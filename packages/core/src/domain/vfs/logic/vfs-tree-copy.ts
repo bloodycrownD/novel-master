@@ -8,6 +8,7 @@
  * @module domain/vfs/vfs-tree-copy
  */
 
+import { assert } from "@/common/assert.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsContentStore } from "../content-store/vfs-content-store.port.js";
@@ -35,9 +36,7 @@ function relativeUnderPrefix(fullPath: string, prefix: string): string {
     return "";
   }
   const slashSuffix = base === "/" ? base : `${base}/`;
-  if (!fullPath.startsWith(slashSuffix)) {
-    throw new AppError("VFS_INVARIANT_VIOLATION", { detail: `[invariant] Path ${fullPath} is not under prefix ${prefix}` });
-  }
+  assert(fullPath.startsWith(slashSuffix), `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
   return fullPath.slice(slashSuffix.length);
 }
 

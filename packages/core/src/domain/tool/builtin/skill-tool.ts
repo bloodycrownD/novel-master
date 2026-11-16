@@ -5,7 +5,7 @@
  * 工具内部经 `ctx.skills` 闭包调 {@link SkillService}，**不直接持有 vfs**；
  * 参数校验（各 action 条件必填 + path 禁 `..`）全部由 `inputSchema` 承担，
  * 失败经 {@link ToolRunner} 统一产出 `INVALID_ARGUMENT` + zod issue；
- * `run()` 里的 `requiredField` 只做类型收窄，不是给模型看的报错路径。
+ * `run()` 里的 `missingField` 只防御 schema 与本函数脱节，不是给模型看的报错路径。
  * 服务层 `resolveSkillRelPath` 对 path 另行兜底。
  *
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期预算好的
@@ -151,16 +151,13 @@ const SKILL_FIELD_LABELS: Partial<Record<keyof SkillToolInput, string>> = {
 };
 
 /**
- * 必填字段类型收窄。
+ * 必填字段缺失的防御性失败。
  *
- * @remarks 缺参已由 schema 的 `superRefine` 拦下并报给模型；这里再抛一次只是
- * 防御「schema 与本函数脱节」，不是给模型看的路径。
+ * @remarks 缺参已由 schema 的 `superRefine` 拦下并报给模型；这条分支只防御
+ * 「schema 与本函数脱节」，不是给模型看的常规路径。
  */
-function requiredField<T>(value: T | undefined, field: string): T {
-  if (value === undefined) {
-    throw new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用` });
-  }
-  return value;
+function missingField(field: string): Result<never, AppError> {
+  return Result.err(new AppError("TOOL_INVALID_ARGUMENT", { toolName: SKILL_TOOL_NAME, detail: `skill 内部校验不一致：schema 放行了缺 ${field} 的调用` }));
 }
 
 /** load 已在提示词中时的短提示（与 $ 引用的 alreadyReferenced 同语义）。 */
@@ -285,7 +282,8 @@ action 说明：
 
     switch (input.action) {
       case "load": {
-        const name = requiredField(input.name, "name");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
         const result = await service.readSkillFile(undefined, name, undefined, skills.projectId);
         if (!result.ok) return Result.err(result.error);
         // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
@@ -324,7 +322,8 @@ action 说明：
         });
       }
       case "read": {
-        const name = requiredField(input.name, "name");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
         const result = await service.readSkillFile(input.domain, name, input.path, skills.projectId);
         if (!result.ok) return Result.err(result.error);
         const offset = input.offset ?? 1;
@@ -355,8 +354,10 @@ action 说明：
         });
       }
       case "write": {
-        const name = requiredField(input.name, "name");
-        const content = requiredField(input.content, "content");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
+        const content = input.content;
+        if (content === undefined) return missingField("content");
         // write 保留缺省 project：写向项目域=建项目覆盖副本，是明确且安全的语义
         // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
         const domain = input.domain ?? "project";
@@ -367,12 +368,16 @@ action 说明：
         return Result.ok({ action: "write", domain, name, path, version });
       }
       case "edit": {
-        const name = requiredField(input.name, "name");
-        const oldString = requiredField(input.oldString, "oldString");
-        const newString = requiredField(input.newString, "newString");
+        const name = input.name;
+        if (name === undefined) return missingField("name");
+        const oldString = input.oldString;
+        if (oldString === undefined) return missingField("oldString");
+        const newString = input.newString;
+        if (newString === undefined) return missingField("newString");
         // domain 必填（schema 保证）：同名技能可能同时有项目副本与全局本体，
         // 缺省猜 project 会把「改我刚 load 的那个」打到空域上。
-        const domain = requiredField(input.domain, "domain");
+        const domain = input.domain;
+        if (domain === undefined) return missingField("domain");
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const result = await service.editSkillFile(domain, name, input.path, { oldString, newString, replaceAll: input.replaceAll }, skills.projectId);
         if (!result.ok) return Result.err(result.error);

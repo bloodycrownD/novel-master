@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result, type ResultWire } from "../../src/errors/either.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+import { isVfsError } from "../../src/errors/guards.js";
 import { AppError } from "../../src/errors/app-error.js";
 
 // vfsNotFound 工厂已退役（统一 new AppError）；本文件只是把 VFS 错误当 Result

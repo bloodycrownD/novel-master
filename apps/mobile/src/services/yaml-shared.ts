@@ -43,7 +43,13 @@ export async function importYamlFile(consume: (yamlText: string) => Promise<Resu
   const pickOptions: PickLocalFileOptions = {
     mimeTypes: yamlImportPickTypes(),
     fallbackLocalFileName: 'yaml-import.yaml',
-    assertFileName: assertYamlFileName,
+    // assertFileName 槽位只认 throw：校验失败从 Result 原样解包成 throw 中止导入。
+    assertFileName: name => {
+      const check = assertYamlFileName(name);
+      if (!check.ok) {
+        throw check.error;
+      }
+    },
     buildCopyError: copyError => new Error(copyError ?? '无法读取 YAML 文件'),
   };
   const yaml = await pickAndReadText(pickOptions);

@@ -26,8 +26,7 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { isSessionFsError } from "@/errors/session-fs-errors.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { isSessionFsError, isVfsError } from "@/errors/guards.js";
 import { userMessageOf } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcError } from "@/infra/tdbc/index.js";

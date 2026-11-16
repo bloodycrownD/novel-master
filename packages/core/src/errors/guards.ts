@@ -1,12 +1,14 @@
 /**
  * AppError 结构守卫统一入口（错误通道迁移「guards 统一」）。
  *
- * 「isAppError + 域判定 + cause 链回溯」此前在 isVfsError / isSessionFsError
- * 各写一遍，现收进本文件：域判定唯一走 {@link inDomain}（isVfsError /
- * isSessionFsError 在各自模块退化成它的一行组合），key 判定的对偶是
- * {@link isAppErrorWithKey}；{@link domainOf} 段判定也随迁到这里（spec-3 §3.7
- * 的唯一实现，public/errors 从这里转发），段表 {@link DOMAIN_RANGES} 仍在
- * errors/domain.ts 全仓唯一一份。rollback 语义守卫自 session-fs-errors.ts
+ * 「isAppError + 域判定 + cause 链回溯」统一走 {@link inDomain}，域守卫
+ * {@link isVfsError} / {@link isSessionFsError} 是本文件里它的一行组合（原 VFS 域与
+ * session-fs 域守卫模块已并入，域判定只有一个实现入口）；key 判定的对偶是
+ * {@link isAppErrorWithKey}；{@link domainOf} 段判定也
+ * 在这里（spec-3 §3.7 的唯一实现，public/errors 从这里转发），段表
+ * {@link DOMAIN_RANGES} 仍在 errors/domain.ts 全仓唯一一份。
+ * {@link VfsReplaceNotFoundDetails} 是 edit REPLACE_NOT_FOUND 的 LCS 诊断字段
+ * 类型（随 VFS 域守卫模块并入）。rollback 语义守卫自 session-fs 域守卫模块
  * 原样搬入（root-only unwrap 语义保留）。
  *
  * @module errors/guards
@@ -19,7 +21,25 @@ import type { ErrorKey } from "@/errors/error-codes.js";
 export { isAppError };
 
 /** 域守卫签名：收窄到 AppError，不收窄 key（key 判定走 {@link isAppErrorWithKey}）。 */
-export type AppErrorGuard = (e: unknown) => e is AppError;
+type AppErrorGuard = (e: unknown) => e is AppError;
+
+/**
+ * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
+ *
+ * oldStringPreview / fileHintPreview 是双方前 100 字符的**原始文本**预览，
+ * 由 formatter 以 JSON 转义形态展示——中文引号、HTML entity、换行/制表
+ * 这类「肉眼看着一样或看不见」的差异会直接显形（`“` vs `"` vs `&ldquo;`、
+ * `\n`/`\t`），且 LLM 可直接照抄修正 oldString（hex 码点无法反向消费，已退役）。
+ * 设为可选，老的对象字面量构造路径不强制要求。
+ */
+export type VfsReplaceNotFoundDetails = {
+  readonly oldStringLength: number;
+  readonly longestCommonSubstring: string;
+  readonly lcsLength: number;
+  readonly lcsOccurrences: number;
+  readonly oldStringPreview?: string;
+  readonly fileHintPreview?: string;
+};
 
 /** 域判定唯一实现：按段表返回 code 归属的域。未登记的码只能来自编程错误（AppError 的 code 恒经码表产生），按不变量破坏 throw。 */
 export function domainOf(code: number): ErrorDomain {
@@ -51,6 +71,17 @@ function someCauseLink(e: unknown, hit: (link: unknown) => boolean): boolean {
 export function inDomain(e: unknown, ...domains: ErrorDomain[]): e is AppError {
   return someCauseLink(e, (link) => isAppError(link) && domains.includes(domainOf(link.code)));
 }
+
+/**
+ * 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯。
+ *
+ * nm-style: keep-public — VFS 域策略入口（inDomain 的 VFS 段位组合），service 多处
+ * 生产调用 + 域测试直接引用；内联会把段位策略散到各调用点，不能撤导出。
+ */
+export const isVfsError: AppErrorGuard = (e) => inDomain(e, "VFS", "VFS_CHARACTER_CARD");
+
+/** 结构守卫：AppError 且 `code` 落在 SESSION_FS 域段（116000-116999），沿 cause 链回溯。 */
+export const isSessionFsError: AppErrorGuard = (e) => inDomain(e, "SESSION_FS");
 
 /** key 守卫（inDomain 的 key 侧对偶）：e 自身或 cause 链上任一环是 AppError 且 key 命中。 */
 // nm-style: keep-public — guards 统一点名要求的守卫工具面（inDomain 的 key 侧对偶），

@@ -29,7 +29,7 @@
  * @module service/integrity-repair
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { assert } from "@/common/assert.js";
 
 /** 兜底种类：修复 / 重命名引用迁移 / 补缺。 */
 type IntegrityRepairKind = "repair" | "rename" | "backfill";
@@ -99,10 +99,7 @@ export class IntegrityRepairRegistry {
     if (!op || typeof op.detect !== "function" || typeof op.repair !== "function") {
       throw new TypeError(`IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`);
     }
-    if (this.operations.has(op.name)) {
-      const duplicated = `操作 ${op.name} 已登记，不允许覆盖`;
-      throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: duplicated });
-    }
+    assert(!this.operations.has(op.name), `操作 ${op.name} 已登记，不允许覆盖`);
     this.operations.set(op.name, op);
     return this;
   }

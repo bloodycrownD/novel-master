@@ -20,9 +20,9 @@ function visibleFloorOf(doc: Record<string, unknown>): number | undefined {
   return typeof doc.visibleFloor === "number" ? doc.visibleFloor : typeof doc["visible-floor"] === "number" ? (doc["visible-floor"] as number) : undefined;
 }
 
-/** decode 失败转码：CONFIG_DECODE_INVALID_SCHEMA → 本域码。schema 违约仍 throw（见 port 注），不落 Result 通道。 */
-function rethrowDecodeError(error: AppError): never {
-  throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
+/** decode 失败转码：CONFIG_DECODE_INVALID_SCHEMA → 本域码。 */
+function invalidSchemaError(error: AppError): AppError {
+  return new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
 }
 
 export class DefaultCompactionConditionsStore implements CompactionConditionsStore {
@@ -36,7 +36,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
     try {
       parsed = JSON.parse(raw.value) as unknown;
     } catch (error) {
-      throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}` });
+      return Result.err(new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}` }));
     }
     if (parsed != null && typeof parsed === "object") {
       const doc = parsed as Record<string, unknown>;
@@ -51,7 +51,7 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
           hideStartDepth: DEFAULT_HIDE_START_DEPTH,
         };
         const validated = decode(migrated, compactionConditionsSchema);
-        if (!validated.ok) rethrowDecodeError(validated.error);
+        if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
         await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
         return Result.ok(validated.value);
       }
@@ -68,19 +68,20 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
           hideStartDepth: DEFAULT_HIDE_START_DEPTH,
         };
         const validated = decode(migrated, compactionConditionsSchema);
-        if (!validated.ok) rethrowDecodeError(validated.error);
+        if (!validated.ok) return Result.err(invalidSchemaError(validated.error));
         await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
         return Result.ok(validated.value);
       }
     }
     const direct = decode(parsed, compactionConditionsSchema);
-    if (!direct.ok) rethrowDecodeError(direct.error);
+    if (!direct.ok) return Result.err(invalidSchemaError(direct.error));
     return Result.ok(direct.value);
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
     const validated = decode(conditions, compactionConditionsSchema);
-    if (!validated.ok) rethrowDecodeError(validated.error);
+    // 端口无失败位、apps set 路径按异常收口：schema 违约在写入口仍走 throw（边界决定，见 port 注）。
+    if (!validated.ok) throw invalidSchemaError(validated.error);
     await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
   }
 

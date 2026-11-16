@@ -1,4 +1,4 @@
-export { isVfsError } from "../errors/vfs-errors.js";
+export { isVfsError } from "../errors/guards.js";
 export type { VfsEntry, VfsEntryKind } from "../domain/vfs/model/vfs-entry.js";
 export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
 export { createVfsService } from "../service/vfs/create-vfs-service.js";

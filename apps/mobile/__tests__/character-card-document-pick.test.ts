@@ -25,12 +25,22 @@ describe('character-card-document-pick', () => {
   });
 
   it('assertCharacterCardFileName accepts .png and .json', () => {
-    expect(() => assertCharacterCardFileName('card.png')).not.toThrow();
-    expect(() => assertCharacterCardFileName('card.JSON')).not.toThrow();
+    expect(assertCharacterCardFileName('card.png').ok).toBe(true);
+    expect(assertCharacterCardFileName('card.JSON').ok).toBe(true);
   });
 
   it('assertCharacterCardFileName rejects other names', () => {
-    expect(() => assertCharacterCardFileName('card.zip')).toThrow(/\.png/);
-    expect(() => assertCharacterCardFileName('notes.txt')).toThrow(/\.json/);
+    const zip = assertCharacterCardFileName('card.zip');
+    expect(zip.ok).toBe(false);
+    if (!zip.ok) {
+      expect(zip.error.key).toBe('INFRA_VALIDATION_FAILED');
+      expect(zip.error.message).toMatch(/\.png/);
+    }
+    const txt = assertCharacterCardFileName('notes.txt');
+    expect(txt.ok).toBe(false);
+    if (!txt.ok) {
+      expect(txt.error.key).toBe('INFRA_VALIDATION_FAILED');
+      expect(txt.error.message).toMatch(/\.json/);
+    }
   });
 });

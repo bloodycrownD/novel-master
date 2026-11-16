@@ -253,9 +253,8 @@ export class DefaultSessionService implements SessionService {
     if (!r.ok) return Result.err(r.error);
     const json = await this.deps.sessions.getSessionAgentConfig(id);
     if (json == null) {
-      // migration 后不应有 NULL；这里视为异常，提示运行 session-agent-config-v2。
-      // C 类（不变量破坏）保留 throw：处置是跑迁移，不是调用方可分支的返回值。
-      throw new AppError("CHAT_INVALID_ARGUMENT", { detail: "session agent config missing, run migration session-agent-config-v2" });
+      // migration 后不应有 NULL；这里视为已知失败走返回值，提示运行 session-agent-config-v2。
+      return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "session agent config missing, run migration session-agent-config-v2" }));
     }
     return decode(JSON.parse(json), sessionAgentConfigSchema);
   }

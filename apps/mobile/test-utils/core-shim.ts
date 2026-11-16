@@ -11,7 +11,7 @@
  */
 
 // per-domain 错误类已退役（统一 new AppError(key, params)），shim 只留双形态守卫。
-export {isVfsError} from '../../../packages/core/dist/errors/vfs-errors.js';
+export {isVfsError} from '../../../packages/core/dist/errors/guards.js';
 export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js';
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';

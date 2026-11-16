@@ -4,7 +4,7 @@
  * @module domain/prompt/logic/normalize-agent-prompt-layout
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { assert } from "@/common/assert.js";
 import type { AgentPromptLayout, PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
 import { layoutHasCustomAttach, layoutHasWorkplace } from "../model/agent-prompt-layout.js";
 
@@ -92,9 +92,7 @@ export function assertNormalizeCoversAllFields(): void {
       missed.push(field);
     }
   }
-  if (missed.length > 0) {
-    throw new AppError("PROMPT_INVARIANT_VIOLATION", { detail: `[invariant] normalizeAgentPromptLayoutDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。` });
-  }
+  assert(missed.length === 0, `[invariant] normalizeAgentPromptLayoutDomain 白名单漏字段：${missed.join("、")}。` + `NORMALIZED_OPTIONAL_FIELDS 声明了这些字段，但 normalize 没有原样回吐哨兵值 —— ` + `多半是对应的条件 spread 被删了，或分支条件写反（如 skillsEnabled 写成 === true）。`);
 }
 
 /**

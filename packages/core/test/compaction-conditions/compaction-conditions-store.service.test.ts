@@ -19,19 +19,18 @@ describe("compaction conditions store integrity", () => {
     await ctx.conn.close();
   });
 
-  it("S2: corrupt JSON throws INVALID_SCHEMA", async () => {
+  it("S2: corrupt JSON returns INVALID_SCHEMA", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
     const store = createCompactionConditionsStore(ctx.conn);
     await kkv.set(MODULE, KEY, "{invalid json");
-    await assert.rejects(
-      () => store.getConditions(),
-      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
-    );
+    const rejected = await store.getConditions();
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.ok(isAppError(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
     await ctx.conn.close();
   });
 
-  it("S3: enabled v3 without trigger throws on get", async () => {
+  it("S3: enabled v3 without trigger returns INVALID_SCHEMA on get", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
     const store = createCompactionConditionsStore(ctx.conn);
@@ -40,10 +39,9 @@ describe("compaction conditions store integrity", () => {
       KEY,
       JSON.stringify({ schemaVersion: 3, enabled: true }),
     );
-    await assert.rejects(
-      () => store.getConditions(),
-      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
-    );
+    const rejected = await store.getConditions();
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.ok(isAppError(rejected.error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"));
     await ctx.conn.close();
   });
 

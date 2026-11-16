@@ -228,7 +228,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     }
   });
 
-  it("getSessionAgentConfig 列 NULL 视为异常抛错", async () => {
+  it("getSessionAgentConfig 列 NULL 返回 CHAT_INVALID_ARGUMENT", async () => {
     const ctx = getNovelMasterTestContext();
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
@@ -243,8 +243,8 @@ describe("SessionService agent config（v2，T-S3）", () => {
     const repo = new SqliteSessionRepository(ctx.conn);
     await repo.setSessionAgentConfig(session.id, null, Date.now());
 
-    // 列 NULL 是不变量破坏：保留 throw 契约（port 注释，同 `CHAT_INVALID_ARGUMENT`）。
-    await assert.rejects(
+    // 列 NULL 视为已知失败走 Result.err（七期：`CHAT_INVALID_ARGUMENT` 迁返回值通道）。
+    await rejectsErr(
       () => ctx.sessions.getSessionAgentConfig(session.id),
       (error: unknown) =>
         isAppError(error, "CHAT_INVALID_ARGUMENT"),

@@ -10,7 +10,7 @@
  */
 
 import { isAppError } from "../../src/errors/app-error.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
+import { isVfsError } from "../../src/errors/guards.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";

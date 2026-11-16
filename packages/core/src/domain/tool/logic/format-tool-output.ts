@@ -14,8 +14,7 @@
 import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { isAppError } from "@/errors/app-error.js";
-import { inDomain } from "@/errors/guards.js";
-import { isVfsError } from "@/errors/vfs-errors.js";
+import { inDomain, isVfsError } from "@/errors/guards.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
 

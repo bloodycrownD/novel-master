@@ -8,7 +8,7 @@ import {
   isRollbackVfsDegradableError,
 } from "@novel-master/core/session-fs";
 // isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
-import { isSessionFsError } from "../../src/errors/session-fs-errors.js";
+import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   scopeKey,

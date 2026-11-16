@@ -4,6 +4,7 @@
  * @module service/vfs/impl/vfs-zip-io.service
  */
 
+import { assert } from "@/common/assert.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { AppError } from "@/errors/app-error.js";
@@ -153,9 +154,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       if (entry.kind !== "directory" || entry.path === basePrefix) {
         continue;
       }
-      if (basePrefix !== "/" && !entry.path.startsWith(`${basePrefix}/`)) {
-        throw new AppError("VFS_INVARIANT_VIOLATION", { detail: `[invariant] Path ${entry.path} is not under prefix ${directoryPath}` });
-      }
+      assert(basePrefix === "/" || entry.path.startsWith(`${basePrefix}/`), `[invariant] Path ${entry.path} is not under prefix ${directoryPath}`);
       const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
       if (!directoryNameResult.ok) return Result.err(directoryNameResult.error);
       directoryZipNames.push(directoryNameResult.value);

@@ -85,7 +85,7 @@ export const ErrorCodes = {
   VFS_CONTENT_CORRUPT: {code: 102016, desc: "vfs content corrupt"},
   VFS_CONTENT_UNSUPPORTED_FORMAT: {code: 102017, desc: "unsupported vfs content format"},
   VFS_CONTENT_BLOB_MISSING: {code: 102018, desc: "vfs content blob missing"},
-  VFS_INVARIANT_VIOLATION: {code: 102020, desc: "vfs invariant violation"},
+  // 102 VFS 020：不变量违规码已改 assert（common/assert.ts），码位不回收。
   VFS_RESTORE_FAILED: {code: 102021, desc: "vfs mutating path restore failed"},
   VFS_OPERATION_UNSUPPORTED: {code: 102022, desc: "vfs operation unsupported by this service"},
   VFS_ZIP_NOT_CONFIRMED: {code: 102023, desc: "zip import not confirmed", messageKey: "error.vfs.zip_not_confirmed"},
@@ -112,7 +112,7 @@ export const ErrorCodes = {
   PROVIDER_INVALID_ARGUMENT: {code: 105001, desc: "invalid provider argument"},
   PROVIDER_INVALID_SAVED_MODEL_ID: {code: 105002, desc: "invalid saved model id"},
   PROVIDER_API_KEY_NOT_SET: {code: 105003, desc: "provider api key not set", messageKey: "error.provider.api_key_not_set"},
-  PROVIDER_INVARIANT_VIOLATION: {code: 105004, desc: "provider invariant violation"},
+  // 105 PROVIDER 004：不变量违规码已改 assert（common/assert.ts），码位不回收。
   PROVIDER_NOT_FOUND: {code: 105005, desc: "provider not found", messageKey: "error.provider.not_found"},
   PROVIDER_CONFLICT: {code: 105006, desc: "provider conflict", messageKey: "error.provider.conflict"},
   PROVIDER_BUILTIN_PROVIDER: {code: 105007, desc: "builtin provider protected", messageKey: "error.provider.builtin_provider"},
@@ -163,7 +163,7 @@ export const ErrorCodes = {
   // 110 INFRA 001-999：组合根启动前置条件与平台能力检查。
   INFRA_BASELINE_TOO_OLD: {code: 110001, desc: "database baseline too old"},
   INFRA_UNSUPPORTED_PLATFORM: {code: 110002, desc: "unsupported platform for sksp driver"},
-  INFRA_INVARIANT_VIOLATION: {code: 110003, desc: "internal invariant violated (assembly/programming error)"},
+  // 110 INFRA 003：不变量违规码已改 assert（common/assert.ts），码位不回收。
   // 110 INFRA 004-005：IPC 边界兜底（三期迁入；message 是边界格式化的动态文案，不配模板）。
   INFRA_VALIDATION_FAILED: {code: 110004, desc: "request validation failed"},
   INFRA_UNEXPECTED_ERROR: {code: 110005, desc: "unexpected internal error"},
@@ -193,7 +193,7 @@ export const ErrorCodes = {
   // 117 PROMPT 001-999：布局校验与动态宏校验。
   PROMPT_INVALID_LAYOUT: {code: 117001, desc: "invalid prompt layout"},
   PROMPT_INVALID_MACRO: {code: 117002, desc: "invalid prompt macro"},
-  PROMPT_INVARIANT_VIOLATION: {code: 117003, desc: "prompt normalization invariant violation"},
+  // 117 PROMPT 003：不变量违规码已改 assert（common/assert.ts），码位不回收。
   PROMPT_INVALID_YAML: {code: 117004, desc: "invalid prompt yaml", messageKey: "error.prompt.invalid_yaml"},
   PROMPT_INVALID_BLOCK: {code: 117005, desc: "invalid prompt block", messageKey: "error.prompt.invalid_block"},
   PROMPT_UNKNOWN_FIELD: {code: 117006, desc: "unknown prompt field", messageKey: "error.prompt.unknown_field"},

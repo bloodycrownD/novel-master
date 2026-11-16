@@ -7,7 +7,7 @@
  * @module infra/llm-protocol/logic/registry
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { assert } from "@/common/assert.js";
 import type { FetchFn, LlmProtocolAdapter, LlmProtocolKind } from "../ports/adapter.port.js";
 import { AnthropicProtocolAdapter } from "../impl/anthropic.adapter.js";
 import { GeminiProtocolAdapter } from "../impl/gemini.adapter.js";
@@ -35,9 +35,7 @@ export function getProtocolAdapter(kind: LlmProtocolKind, fetchFn?: FetchFn): Ll
     adapters.set("gemini", new GeminiProtocolAdapter(fn));
   }
   const adapter = adapters.get(kind);
-  if (!adapter) {
-    throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: `No LLM protocol adapter for: ${kind}` });
-  }
+  assert(adapter != null, `No LLM protocol adapter for: ${kind}`);
   return adapter;
 }
 

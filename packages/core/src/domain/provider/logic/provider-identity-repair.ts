@@ -20,7 +20,7 @@
  * @module domain/provider/logic/provider-identity-repair
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { assert } from "@/common/assert.js";
 import type { ProviderRepository } from "../repositories/provider.port.js";
 import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
@@ -70,10 +70,7 @@ export function createProviderIdentityRepairOperation(args: { readonly providerR
       const providers = listed.value;
       const emptyNames = providers.filter((p) => p.displayName.trim() === "");
       const builtinMissingKey = providers.filter((p) => p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === ""));
-      if (emptyNames.length === 0 && builtinMissingKey.length === 0) {
-        return;
-      }
-      throw new AppError("PROVIDER_INVARIANT_VIOLATION", { detail: `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]` });
+      assert(emptyNames.length === 0 && builtinMissingKey.length === 0, `[invariant] provider 双身份键不变量被破坏，无法自动修复：空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]`);
     },
   };
 }

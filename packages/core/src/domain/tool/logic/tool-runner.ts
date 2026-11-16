@@ -4,8 +4,9 @@
  * @module domain/tool/tool-runner
  */
 
-import { AppError } from "@/errors/app-error.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { AbortReason } from "@/errors/outcome.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -17,7 +18,13 @@ export interface ToolCall {
 }
 
 /** Outcome of one parallel tool invocation (errors are captured, not thrown). */
-export type ParallelToolOutcome = { readonly ok: true; readonly output: unknown } | { readonly ok: false; readonly error: unknown };
+// 取消是控制流信号不是失败：`TOOL_CANCELLED` 命中时落 `{ ok: false, error, kind: "cancelled", reason }`。
+// 保留 ok/error 让展示层（buildToolResultBlock / formatToolErrorForLlm）沿用既有 `isAppError` 取消分类；
+// `kind`/`reason` 供上层按 `Outcome.cancelled` 识别控制流（七期：取消改返回值传播）。
+export type ParallelToolOutcome =
+  | { readonly ok: true; readonly output: unknown }
+  | { readonly ok: false; readonly error: unknown }
+  | { readonly ok: false; readonly error: AppError; readonly kind: "cancelled"; readonly reason: AbortReason };
 
 const DEFAULT_PARALLEL_CONCURRENCY = 8;
 
@@ -52,9 +59,10 @@ export class ToolRunner<Ctx = unknown> {
    * - 已知失败（NOT_FOUND / INVALID_ARGUMENT / FORBIDDEN / FAILED）走 `Result.err`，
    *   与工具闭包 Err 共用 {@link normalizeToolFailure} 归一化出口（TOOL_* 直通、
    *   其余包 TOOL_FAILED），模型可见错误不变（五期门⑦：返回值通道）。
-   * - 取消仍走异常通道（spec-2 §2.2 路径二）：`AppError TOOL_CANCELLED` when the
-   *   turn signal aborted（预检与竞速同一码，UI 不弹错误文案）；并发协议只有
-   *   throw / reject 通道，不迁返回值。
+   * - 取消走返回值通道（七期）：进入时 signal 已 abort 直接 `Result.err(TOOL_CANCELLED)`；
+   *   在途竞速仍是 reject（平台协议例外，八期换 `createAbortError` 载荷），由
+   *   {@link runParallel} 收成取消 outcome。`TOOL_CANCELLED` 码保留作展示标签
+   *   （UI 不弹错误文案）。
    */
   async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Result<Output, AppError>> {
     const tool = this.registry.get(name);
@@ -77,10 +85,11 @@ export class ToolRunner<Ctx = unknown> {
     try {
       const signal = (ctx as { readonly signal?: AbortSignal } | null | undefined)?.signal;
       // 取消语义第一道（B-1）：进入时 signal 已 abort 就在**启动工具副作用之前**
-      // 直接拒绝。竞速（下方）只让调用方 reject，不会阻止已启动的 work——写类
-      // 工具副作用照常落盘；runParallel 的 worker 在 abort 后仍会从队列取下一
-      // 个 call，靠这一道保证 abort 后不再发起新的 tool.run。
-      if (signal?.aborted) throw new AppError("TOOL_CANCELLED", {toolName: name});
+      // 沿 Result.err 返回 TOOL_CANCELLED（七期：不再 throw）。竞速（下方）只让
+      // 调用方 reject，不会阻止已启动的 work——写类工具副作用照常落盘；runParallel
+      // 的 worker 在 abort 后仍会从队列取下一个 call，靠这一道保证 abort 后不再
+      // 发起新的 tool.run。
+      if (signal?.aborted) return Result.err(new AppError("TOOL_CANCELLED", {toolName: name}));
       // 回合取消竞速（所有工具共用的兜底）：用户点停止 / 回合中断时 signal
       // abort，这里立即 reject，**不依赖工具自身监听**——否则 waiting 中的
       // 回合会被慢工具（curl / search 等长请求）占住线程、停止按钮点不动。
@@ -113,7 +122,8 @@ export class ToolRunner<Ctx = unknown> {
 
       // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
       // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），已知失败沿 Result.err
-      // 接力（五期门⑦）；取消等异常通道照旧由下方 catch 抛出。
+      // 接力（五期门⑦）；工具返回的 TOOL_CANCELLED 同样沿 Result.err 回来
+      // （七期），在途竞速的取消仍由下方 catch 走异常通道。
       if (!out.ok) return Result.err(normalizeToolFailure(name, out.error));
 
       if (tool.outputSchema) {
@@ -144,6 +154,11 @@ export class ToolRunner<Ctx = unknown> {
     // 同 path 的突变调用串行化：每个 path 维护一条 tail promise 链。
     const pathTail = new Map<string, Promise<void>>();
     let nextIndex = 0;
+    // 取消裁定（七期 §6.2）：`TOOL_CANCELLED` 命中即收成取消 outcome，沿返回值向上，
+    // 不再往下抛。本基线 ctx 上没有 abort scope（signal-abort-scope 迭代接入后改读
+    // scope.reason），无 scope 时按用户停止兜底。
+    const failedOutcome = (error: unknown): ParallelToolOutcome =>
+      isAppError(error, "TOOL_CANCELLED") ? { ok: false, error, kind: "cancelled", reason: "user-stop" } : { ok: false, error };
     // nm-style: keep-local — §2 一行写完的中转变量：内联进 Promise.all(Array.from(...)) 会重新拆出多行实参。
     const worker = async () => {
       while (true) {
@@ -167,11 +182,13 @@ export class ToolRunner<Ctx = unknown> {
         try {
           try {
             const result = await this.call(call.name, call.input, ctx);
-            // 已知失败沿 Result.err 落 outcome；取消等异常通道（TOOL_CANCELLED）
-            // 仍由下方 catch 捕获落 outcome，ParallelToolOutcome 形态不变。
-            outcomes[index] = result.ok ? { ok: true, output: result.value } : { ok: false, error: result.error };
+            // 已知失败与取消都沿 Result.err 接力：TOOL_CANCELLED 收成取消 outcome
+            // （保留 error 供展示层沿用 isAppError 分类），其余原样落失败。
+            outcomes[index] = result.ok ? { ok: true, output: result.value } : failedOutcome(result.error);
           } catch (error: unknown) {
-            outcomes[index] = { ok: false, error };
+            // 在途竞速的 reject（TOOL_CANCELLED 载荷本轮不动，八期换 createAbortError）
+            // 与未知异常同口收编；取消同样收成取消 outcome，不再向上抛。
+            outcomes[index] = failedOutcome(error);
           }
         } finally {
           release?.();

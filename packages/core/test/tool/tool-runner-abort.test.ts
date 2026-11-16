@@ -49,7 +49,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     assert.equal(unwrap(await runner.call("echo", { text: "ok" }, {})), "ok");
   });
 
-  it("进入时 signal 已 abort：run 零启动，call 直接拒绝（B-1 / G-1①：副作用前早退）", async () => {
+  it("进入时 signal 已 abort：run 零启动，call 返回 Result.err（B-1 / G-1①：副作用前早退）", async () => {
     let runCount = 0;
     const registry = new ToolRegistry<{ readonly signal?: AbortSignal }>();
     registry.register({
@@ -64,10 +64,9 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     const runner = new ToolRunner(registry);
     const controller = new AbortController();
     controller.abort(); // 先 abort 再 call：工具副作用必须还没启动就被拒
-    await assert.rejects(runner.call("side-effect", {}, { signal: controller.signal }), (err: unknown) => {
+    await rejectsErr(runner.call("side-effect", {}, { signal: controller.signal }), (err) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.ok(isAppError(err, "TOOL_CANCELLED"), "取消统一 TOOL_CANCELLED（文案由 formatter 统一成「工具调用已取消」）");
-      return true;
     });
     assert.equal(runCount, 0);
   });

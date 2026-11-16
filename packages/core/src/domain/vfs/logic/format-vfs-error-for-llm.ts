@@ -6,7 +6,7 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import type { VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
+import type { VfsReplaceNotFoundDetails } from "@/errors/guards.js";
 import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
@@ -59,7 +59,6 @@ const VFS_KEY_TO_LABEL: Partial<Record<ErrorKey, string>> = {
   VFS_CONTENT_CORRUPT: "CONTENT_CORRUPT",
   VFS_CONTENT_UNSUPPORTED_FORMAT: "CONTENT_UNSUPPORTED_FORMAT",
   VFS_CONTENT_BLOB_MISSING: "CONTENT_BLOB_MISSING",
-  VFS_INVARIANT_VIOLATION: "INVARIANT_VIOLATION",
   VFS_RESTORE_FAILED: "RESTORE_FAILED",
   VFS_OPERATION_UNSUPPORTED: "OPERATION_UNSUPPORTED",
   VFS_SINGLE_FILE_TOO_LARGE: "SINGLE_FILE_TOO_LARGE",
