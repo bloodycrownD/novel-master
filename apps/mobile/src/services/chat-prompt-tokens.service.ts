@@ -178,7 +178,8 @@ async function loadChatTokenLabelWithFlag(
     // 会话升级价值，丢掉这轮读数没有损失（下一轮刷新自然补上）。真要补也不难，
     // 但会让「无 bail 分支」这个例外从注释升格成需要长期维护的分支。
     const serialized = await serializePromptLlmInput(layout, ctx);
-    const count = countFallback(runtime, serialized);
+    if (!serialized.ok) return Result.err(serialized.error);
+    const count = countFallback(runtime, serialized.value);
     return Result.ok({
       label: formatLabel({
         tokenCount: count,
@@ -190,7 +191,12 @@ async function loadChatTokenLabelWithFlag(
     });
   }
   const models = runtime.providerModels;
-  const mode = await resolveTokenCounterModeForModel(models, savedModelId);
+  const counterMode = await resolveTokenCounterModeForModel(models, savedModelId);
+  // 已知失败沿 Result 接力（错误通道迁移四期）：首帧轮由 resilient 的 !ok
+  // 分支回落 fallback（与旧异常通道同终端），升级轮由 runPreciseUpgrade 的
+  // !ok 分支留痕返回。
+  if (!counterMode.ok) return Result.err(counterMode.error);
+  const mode = counterMode.value;
   // resolve 段（含 ~5.8s 级原生整串计数）同样要能中途弃权（r3-chip-1，错误
   // 通道迁移二期改返回值）：core 在两处整串级重活之前检查 shouldBail，命中沿
   // Outcome.cancelled/replaced 返回，这里收成空串哨兵——不重试、不回落
@@ -210,7 +216,7 @@ async function loadChatTokenLabelWithFlag(
         savedModels: {
           findById: async id => {
             const saved = await runtime.providerModels.getSavedById(id);
-            return Result.ok(saved);
+            return saved;
           },
         },
       },
@@ -248,7 +254,10 @@ async function loadChatTokenLabelWithFlag(
     }
     throw error;
   }
-  const cw = await runtime.providerModels.getContextWindow(savedModelId);
+  const window = await runtime.providerModels.getContextWindow(savedModelId);
+  // 已知失败沿 Result 接力（错误通道迁移四期）：同 counterMode 口径。
+  if (!window.ok) return Result.err(window.error);
+  const cw = window.value;
   if (__DEV__) {
     const msg = `[nm-chip] resolve ${Date.now() - t0}ms est=${preferEstimate}`;
     console.log(msg);
@@ -669,7 +678,8 @@ async function loadChatPromptTokenLabelFallback(
   if (savedModelId) {
     try {
       const cw = await runtime.providerModels.getContextWindow(savedModelId);
-      contextWindow = cw ?? undefined;
+      // 已知失败与未知异常同收 undefined（错误通道迁移四期：不再解包上抛）。
+      if (cw.ok) contextWindow = cw.value ?? undefined;
     } catch {
       contextWindow = undefined;
     }

@@ -46,7 +46,9 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
   });
 
   it("直接调 exportDatabaseBackupToPath 期间 busy=true、结束后 false", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
       execute: (sql: string, params?: unknown) => Promise<unknown>;
     };
@@ -71,7 +73,9 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
   it("直接调 importDatabaseBackupFromBytes 期间 busy=true、结束后 false", async () => {
     // 用上一用例导出的真实备份字节回灌：闭环无损（同一测试库）。
     const bytes = new Uint8Array(await readFile(join(tempDir, "ic20-export.db")));
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const conn = runtime.conn as unknown as {
       query: (sql: string, params?: unknown) => Promise<unknown>;
     };
@@ -102,7 +106,9 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
     // 模拟 handleBackupImport / handleCloudSyncPull 的令牌时序（r3 定稿）：
     // 外层进入时 acquire，底层 import 自平衡（期间计数 2、结束回到 1，
     // 不互相提前清位），rebootstrap 完成之后才 release。
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     await exportDatabaseBackupToPath(runtime, join(tempDir, "ic20-roundtrip.db"));
 
     acquireDesktopDbMaintenanceBusy();

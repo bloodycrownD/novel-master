@@ -39,7 +39,7 @@ async function resolveWorkspaceZipName(
   return `${project.value.name}.zip`;
 }
 
-function assertZipArchive(bytes: Uint8Array): void {
+function assertZipArchive(bytes: Uint8Array): Result<void, AppError> {
   const ok =
     bytes.length >= 4 &&
     bytes[0] === 0x50 &&
@@ -47,8 +47,9 @@ function assertZipArchive(bytes: Uint8Array): void {
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
   if (!ok) {
-    throw new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `not a ZIP archive (${bytes.length} bytes)` });
+    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `not a ZIP archive (${bytes.length} bytes)` }));
   }
+  return Result.ok(undefined);
 }
 
 function resolveDirectoryPath(directoryPath?: string): string {
@@ -77,7 +78,8 @@ export async function exportVfsZipWithDialog(
   // 失败沿 Result 返回，由唯一调用方 handleVfsZipExport 转码。
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  assertZipArchive(bytes);
+  const archiveCheck = assertZipArchive(bytes);
+  if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
   const base = zipBaseNameFromPath(directoryPath);
   const defaultPath =
@@ -103,10 +105,10 @@ export async function exportVfsZipWithDialog(
   return Result.ok("saved");
 }
 
-/** 弹框选择 zip 并读字节（新建弹窗预检用）；用户取消返回 null。 */
+/** 弹框选择 zip 并读字节（新建弹窗预检用）；用户取消返回 null（`Result.ok(null)`）。 */
 export async function pickVfsZipBytesWithDialog(
   parentWindow?: BrowserWindow | null,
-): Promise<Uint8Array | null> {
+): Promise<Result<Uint8Array | null, AppError>> {
   const win = parentWindow ?? undefined;
   const result = win
     ? await dialog.showOpenDialog(win, {
@@ -118,11 +120,12 @@ export async function pickVfsZipBytesWithDialog(
         properties: ["openFile"],
       });
   if (result.canceled || result.filePaths.length === 0) {
-    return null;
+    return Result.ok(null);
   }
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
-  assertZipArchive(bytes);
-  return bytes;
+  const archiveCheck = assertZipArchive(bytes);
+  if (!archiveCheck.ok) return Result.err(archiveCheck.error);
+  return Result.ok(bytes);
 }
 
 /** 字节直写导入（不弹框）：选文件与确认已在 Renderer 前置完成。 */
@@ -134,11 +137,12 @@ export async function importVfsZipBytes(
     readonly confirmed: boolean;
     readonly directoryPath?: string;
   },
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const directoryPath = resolveDirectoryPath(options.directoryPath);
-  assertZipArchive(options.bytes);
+  const archiveCheck = assertZipArchive(options.bytes);
+  if (!archiveCheck.ok) return archiveCheck;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  await zipSvc.import(scope, options.bytes, {
+  return zipSvc.import(scope, options.bytes, {
     confirmed: options.confirmed,
     directoryPath,
   });
@@ -149,15 +153,17 @@ export async function importVfsZipWithDialog(
   scope: VfsScope,
   options: { readonly confirmed: boolean; readonly directoryPath?: string },
   parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
-  const bytes = await pickVfsZipBytesWithDialog(parentWindow);
-  if (bytes == null) {
-    return "cancelled";
+): Promise<Result<"imported" | "cancelled", AppError>> {
+  const picked = await pickVfsZipBytesWithDialog(parentWindow);
+  if (!picked.ok) return Result.err(picked.error);
+  if (picked.value == null) {
+    return Result.ok("cancelled");
   }
-  await importVfsZipBytes(runtime, scope, {
-    bytes,
+  const imported = await importVfsZipBytes(runtime, scope, {
+    bytes: picked.value,
     confirmed: options.confirmed,
     directoryPath: options.directoryPath,
   });
-  return "imported";
+  if (!imported.ok) return Result.err(imported.error);
+  return Result.ok("imported");
 }

@@ -71,11 +71,11 @@ describe("compaction conditions v3 migration", () => {
   });
 
   it("v2 set is rejected", () => {
-    assert.throws(() => {
-      decode(
-        { schemaVersion: 2, enabled: true, tokenThreshold: 12000 },
-        compactionConditionsSchema,
-      );
-    });
+    // 四期签名：decode 失败沿 Result.err 回传（不再 throw）。
+    const r = decode(
+      { schemaVersion: 2, enabled: true, tokenThreshold: 12000 },
+      compactionConditionsSchema,
+    );
+    assert.equal(r.ok, false);
   });
 });

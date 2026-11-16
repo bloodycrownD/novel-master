@@ -26,15 +26,17 @@ import {
 } from '@/config-forms/agent';
 import * as storedConfig from '@novel-master/core/stored-config-validity';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
+import {type AppError, Result} from '@novel-master/core/errors';
 
 import {useRuntime} from '../../../hooks/useRuntime';
 
 type MobileRuntime = ReturnType<typeof useRuntime>;
 
-/** savedList 返回数组的元素类型（扁平化后「专属模型」下拉的数据源）。 */
-export type SavedModelEntry = Awaited<
-  ReturnType<MobileRuntime['providerModels']['savedList']>
->[number];
+/** savedList Ok 分支返回数组的元素类型（扁平化后「专属模型」下拉的数据源）。 */
+export type SavedModelEntry = Extract<
+  Awaited<ReturnType<MobileRuntime['providerModels']['savedList']>>,
+  {ok: true}
+>['value'][number];
 
 export type SavedProviderOption = {
   id: string;
@@ -235,17 +237,28 @@ export function useAgentEditorFormState(
   // 扁平化：聚合所有服务商下的 savedModels，供「专属模型」下拉直接选。
   // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
-  const loadAllSavedModels = useCallback(async () => {
-    const list = await runtime.providers.list();
-    const lists = list.map(p => runtime.providerModels.savedList(p.id));
-    const all = await Promise.all(lists);
-    const flat = all.flat();
-    setSavedModels(flat);
-    return flat;
-  }, [runtime]);
+  const loadAllSavedModels = useCallback(
+    async (): Promise<Result<SavedModelEntry[], AppError>> => {
+      const list = await runtime.providers.list();
+      const lists = list.map(p => runtime.providerModels.savedList(p.id));
+      const all = await Promise.all(lists);
+      // 已知失败沿 Result 接力（错误通道迁移四期）：首个失败服务商即短路，
+      // 与旧解包抛错同口径（收口在 loadAgentImpl 的 !ok 分支）。
+      const flat: SavedModelEntry[] = [];
+      for (const r of all) {
+        if (!r.ok) return Result.err(r.error);
+        flat.push(...r.value);
+      }
+      setSavedModels(flat);
+      return Result.ok(flat);
+    },
+    [runtime],
+  );
 
   // nm-style: keep-local — 回调承载定义 → 表单/基线映射的状态链，内联回 useCallback 会让调用参数跨行
-  const fillForm = async (def: AgentDefinition) => {
+  const fillForm = async (
+    def: AgentDefinition,
+  ): Promise<Result<void, AppError>> => {
     // 字段映射与只读直填同源（formStateFromDefinition）；模型三件套
     // 在下方 savedModels 装载后精确覆盖（providerId 依赖查表）。
     const promptForm = definitionToForm(def);
@@ -254,11 +267,12 @@ export function useAgentEditorFormState(
     // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
     await loadProviders();
     const allModels = await loadAllSavedModels();
+    if (!allModels.ok) return Result.err(allModels.error);
     const modelEnabledWire = Boolean(def.model);
     let baselineProviderId = '';
     let baselineSavedModelId = '';
     if (modelEnabledWire && def.model) {
-      const saved = allModels.find(m => m.id === def.model);
+      const saved = allModels.value.find(m => m.id === def.model);
       if (saved) {
         baselineProviderId = saved.providerId;
         baselineSavedModelId = def.model;
@@ -289,6 +303,7 @@ export function useAgentEditorFormState(
       persist: [...promptForm.persist],
     });
     setSavedBaseline(baseline);
+    return Result.ok(undefined);
   };
   const populateFormDeps = [loadProviders, loadAllSavedModels];
   const populateFormFromDefinition = useCallback(fillForm, populateFormDeps);
@@ -311,7 +326,12 @@ export function useAgentEditorFormState(
         setInvalidConfig({code: health.code, message: health.message});
         return;
       }
-      await populateFormFromDefinition(health.value);
+      const populated = await populateFormFromDefinition(health.value);
+      // 已知失败收 loadError（错误通道迁移四期）：与旧 catch 的 message 口径一致。
+      if (!populated.ok) {
+        setLoadError(populated.error.message);
+        return;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);

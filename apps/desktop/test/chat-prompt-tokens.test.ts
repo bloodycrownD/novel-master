@@ -143,13 +143,17 @@ describe("chat-prompt-tokens.service", () => {
       return;
     }
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const saved = await rt.providerModels.save(
       provider.data.providerId,
       "gpt-4o",
     );
-    await rt.state.setCurrentModelId(saved.id);
-    savedModelId = saved.id;
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
+    savedModelId = saved.value.id;
 
     const session = await handleSessionsCreate({
       projectId,
@@ -174,7 +178,9 @@ describe("chat-prompt-tokens.service", () => {
       updatedAt: Date.now(),
     });
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const stats = await loadStatsOrThrow(rt, {
       projectId,
       sessionId,
@@ -203,7 +209,9 @@ describe("chat-prompt-tokens.service", () => {
     promptWholeCache.clearForTests();
     pushed.length = 0;
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 首帧：preferEstimate 且 L1 冷 → 廉价估算即回（gpt ≈），服务侧安排
     // 后台暖机（家族真分词器 + L1 写入）。
     const first = await loadStatsOrThrow(rt, {
@@ -319,7 +327,9 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("T-T9b2: 补推送路径不重跑 build（首帧之后 buildSessionPromptInput 调用 0 次）", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await getDesktopRuntime();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const coldSessionId = await createColdSession(
         "cache3-nobuild",
         "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(7),
@@ -354,7 +364,9 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("T-T9b3: 暖机期间换了模型 ⇒ 补读一次（不让旧模型的精确档闪进 UI）", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await getDesktopRuntime();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const coldSessionId = await createColdSession(
         "cache3-modelswitch",
         "雨还没停。屋里暖气烘着，玻璃上那层水雾被指尖抹开一条缝。".repeat(7),
@@ -452,7 +464,9 @@ describe("chat-prompt-tokens.service", () => {
   it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
     sessionApiPromptTokenCache.clearAll();
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 空白 agent 的系统提示词是空的，早退分支会数出 0——那样这条用例就什么也
     // 证不了。先给它塞一段中文正文（也就是最吃亏于字符折算的那类文本）。
     const chinese = "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
@@ -547,7 +561,9 @@ describe("chat-prompt-tokens.service", () => {
   });
 
   it("T-T9d: 兜底 registry 的 forSavedModel / forVendorModel 可调用（形态护栏）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const registry = withRealFallbackCounter(rt);
 
     // 形态护栏：`runtime.tokenCounters` 是 `DefaultTokenCounterRegistry` 的**类实例**，
@@ -616,7 +632,9 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("rapid 双触发（<300ms 窗口内）合并为一次底层计算", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await getDesktopRuntime();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       // 两个请求同帧连发（间隔远小于 300ms）：共享 trailing 窗口的同一次执行。
@@ -636,7 +654,9 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("并发 5 触发在途合并为一次底层计算", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await getDesktopRuntime();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       const results = await Promise.all(
@@ -654,7 +674,9 @@ describe("chat-prompt-tokens.service", () => {
     });
 
     it("trailing：窗口内不执行，窗口过后必有最终一次计算，且不吞任何一击", async () => {
-      const rt = await getDesktopRuntime();
+      const rtR = await getDesktopRuntime();
+      if (!rtR.ok) throw rtR.error;
+      const rt = rtR.value;
       const scope = { projectId, sessionId };
 
       // 单次触发：防抖是 trailing 而非 leading——窗口内（<300ms）不执行。

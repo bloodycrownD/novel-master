@@ -77,7 +77,9 @@ describe("handleMessagesSetFloor", () => {
 
   it("T-SF1/T-CR5: 置位成功仅清 file_cache（+rule_snapshot），保留 pending；不依赖 BlockStore capture", async () => {
     const sessionId = await createSession("sf1");
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await appendMessage(sessionId, "user", "u1");
     await appendMessage(sessionId, "assistant", "a1");
     const anchorId = await appendMessage(sessionId, "user", "u2");

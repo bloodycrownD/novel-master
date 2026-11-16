@@ -17,6 +17,9 @@ export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
+// Result 同时是值（ok/err 静态入口）与类型（Ok|Err 联合）：云同步测试按
+// coordinator 的 Result 通道造 mock 返回值（错误通道迁移四期适配）。
+export {Result} from '../../../packages/core/dist/errors/either.js';
 export {CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
 export type {KkvService} from '../../../packages/core/dist/service/kkv/kkv.port.js';
 export {matchDepth, validateDepthSlice} from '../../../packages/core/dist/domain/depth/logic/depth-slice.js';

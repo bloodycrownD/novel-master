@@ -5,6 +5,8 @@
  */
 
 import { z } from "zod";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { SessionAgentConfig } from "./session-agent-config.js";
 
 const sessionAgentConfigDocumentSchema = z.object({
@@ -14,5 +16,6 @@ const sessionAgentConfigDocumentSchema = z.object({
 
 /** 列内 JSON → {@link SessionAgentConfig}；含 `toWire` 用于持久化。 */
 export const sessionAgentConfigSchema = Object.assign(sessionAgentConfigDocumentSchema, {
-  toWire: (config: SessionAgentConfig): Record<string, unknown> => ({ agentId: config.agentId, ...(config.modelId != null ? { modelId: config.modelId } : {}) }),
+  toWire: (config: SessionAgentConfig): Result<Record<string, unknown>, AppError> =>
+    Result.ok({ agentId: config.agentId, ...(config.modelId != null ? { modelId: config.modelId } : {}) }),
 });

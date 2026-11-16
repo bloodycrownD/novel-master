@@ -9,9 +9,9 @@ import { AppError, promptsDocumentSchema } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import { validateAgentPromptLayoutFromMaps, type AgentPromptLayout } from "@novel-master/core/prompt";
 
-function extractPromptsRecord(parsed: unknown): unknown {
+function extractPromptsRecord(parsed: unknown): Result<Record<string, unknown>, AppError> {
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must be an object" });
+    return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must be an object" }));
   }
   const record = parsed as Record<string, unknown>;
   if (
@@ -19,28 +19,28 @@ function extractPromptsRecord(parsed: unknown): unknown {
     record.dynamic != null ||
     record.system != null
   ) {
-    return record;
+    return Result.ok(record);
   }
   const nested = record.prompts;
   if (nested != null && typeof nested === "object" && !Array.isArray(nested)) {
-    return nested;
+    return Result.ok(nested as Record<string, unknown>);
   }
-  throw new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must contain prompts.system / persist / dynamic" });
+  return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: "prompt root must contain prompts.system / persist / dynamic" }));
 }
 
 /** 解析 YAML 中的三区 prompts 文档。layout 校验的 `Result` 失败沿返回值交给上层（错误通道迁移四期）。 */
 export function loadAgentPromptLayoutFromYaml(source: string): Result<AgentPromptLayout, AppError> {
-  let parsed: unknown;
-  try {
-    parsed = parseText(source, "yaml");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "invalid YAML";
-    throw new AppError("PROMPT_INVALID_YAML", { detail: message });
+  const parsed = parseText(source, "yaml");
+  if (!parsed.ok) {
+    // 原形态把 parseText 的 CONFIG_DECODE_INVALID_SCHEMA 转包成 PROMPT_INVALID_YAML（detail 透传），保留码语义。
+    return Result.err(new AppError("PROMPT_INVALID_YAML", { detail: parsed.error.message }));
   }
 
-  const promptsRaw = extractPromptsRecord(parsed);
-  const doc = decode(promptsRaw, promptsDocumentSchema);
-  const layout = validateAgentPromptLayoutFromMaps(doc.persist, doc.dynamic, doc.system);
+  const promptsRaw = extractPromptsRecord(parsed.value);
+  if (!promptsRaw.ok) return Result.err(promptsRaw.error);
+  const doc = decode(promptsRaw.value, promptsDocumentSchema);
+  if (!doc.ok) return Result.err(doc.error);
+  const layout = validateAgentPromptLayoutFromMaps(doc.value.persist, doc.value.dynamic, doc.value.system);
   if (!layout.ok) return layout;
   return Result.ok(layout.value);
 }

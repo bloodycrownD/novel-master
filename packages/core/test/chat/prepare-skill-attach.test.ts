@@ -103,8 +103,9 @@ function fakeSkillService(state: {
   readError?: boolean;
 }): SkillService & { readonly state: typeof state } {
   const service = {
-    effectiveSkills: async (): Promise<EffectiveSkill[]> =>
-      state.names.map((name) => ({
+    // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+    effectiveSkills: async (): Promise<SkillService["effectiveSkills"] extends (...args: never[]) => Promise<infer R> ? R : never> =>
+      Result.ok(state.names.map((name) => ({
         name,
         description: null,
         domain: "project",
@@ -112,7 +113,7 @@ function fakeSkillService(state: {
         disabled: false,
         valid: true,
         effective: true,
-      })),
+      })) as never),
     // 错误通道迁移二期：readSkillFile 走 Result 通道——fake 在这里统一包 Ok。
     readSkillFile: async (): Promise<SkillService["readSkillFile"] extends (...args: never[]) => Promise<infer R> ? R : never> => {
       if (state.readError) {
@@ -272,7 +273,8 @@ describe("promptAssembler skillAttach (T-SK12)", () => {
       },
     ];
     const service = {
-      effectiveSkills: async () => entries,
+      // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+      effectiveSkills: async () => Result.ok(entries),
       // 错误通道迁移二期：readSkillFile 走 Result 通道。
       readSkillFile: async (): Promise<SkillFileContent> =>
         Result.ok({

@@ -42,12 +42,12 @@ export interface DefaultProviderServiceDeps {
   readonly conn: TdbcConnection;
 }
 
-function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
+function requireNonEmptyDisplayName(raw: string, providerId?: string): Result<string, AppError> {
   const trimmed = raw.trim();
   if (trimmed === "") {
-    throw new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: {key: "error.provider.display_name_required"}, ...(providerId != null ? {providerId} : {}) });
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { descriptor: {key: "error.provider.display_name_required"}, ...(providerId != null ? {providerId} : {}) }));
   }
-  return trimmed;
+  return Result.ok(trimmed);
 }
 
 /** Provider 配置服务。 */
@@ -64,16 +64,18 @@ export class DefaultProviderService implements ProviderService {
     );
   }
 
-  async get(id: string): Promise<LlmProvider> {
+  async get(id: string): Promise<Result<LlmProvider, AppError>> {
     const p = await this.deps.providers.findById(id);
     if (!p) {
-      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id });
+      return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id }));
     }
-    return p;
+    return Result.ok(p);
   }
 
   async create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>> {
-    const displayName = requireNonEmptyDisplayName(input.displayName);
+    const name = requireNonEmptyDisplayName(input.displayName);
+    if (!name.ok) return Result.err(name.error);
+    const displayName = name.value;
     const id = randomUUID();
     const now = Date.now();
     const secretRef = input.apiKey ? providerApiKeyRef(id) : null;
@@ -127,9 +129,11 @@ export class DefaultProviderService implements ProviderService {
   }
 
   async edit(id: string, patch: EditProviderPatch): Promise<Result<LlmProvider, AppError>> {
-    const provider = await this.get(id);
+    const got = await this.get(id);
+    if (!got.ok) return Result.err(got.error);
+    const provider = got.value;
     if (provider.isBuiltin && patch.protocol !== undefined) {
-      throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id });
+      return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot change protocol of built-in provider: ${id}`, providerId: id }));
     }
 
     // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
@@ -153,10 +157,12 @@ export class DefaultProviderService implements ProviderService {
       }
     }
 
-    const displayName =
+    const displayNameResult =
       patch.displayName !== undefined
         ? requireNonEmptyDisplayName(patch.displayName, id)
-        : provider.displayName;
+        : Result.ok(provider.displayName);
+    if (!displayNameResult.ok) return Result.err(displayNameResult.error);
+    const displayName = displayNameResult.value;
     const updated: LlmProvider = {
       ...provider,
       protocol: patch.protocol ?? provider.protocol,
@@ -219,9 +225,11 @@ export class DefaultProviderService implements ProviderService {
   }
 
   async delete(id: string): Promise<Result<void, AppError>> {
-    const provider = await this.get(id);
+    const got = await this.get(id);
+    if (!got.ok) return Result.err(got.error);
+    const provider = got.value;
     if (provider.isBuiltin) {
-      throw new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id });
+      return Result.err(new AppError("PROVIDER_BUILTIN_PROVIDER", { detail: `Cannot delete built-in provider: ${id}`, providerId: id }));
     }
 
     // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
@@ -266,7 +274,7 @@ export class DefaultProviderService implements ProviderService {
         // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
         // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
         // 新造码只会让前端拿不到已处理的文案。
-        throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor: {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, providerId: id });
+        return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { descriptor: {key: "error.provider.saved_model_in_use", params: {model_name: m.modelName, blocking_refs: blockingRefs.join("、")}}, providerId: id }));
       }
     }
 

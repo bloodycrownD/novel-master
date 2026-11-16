@@ -50,7 +50,9 @@ describe("preferences IPC handlers — subagentStream（T-D1）", () => {
 
   it("reset 后恢复默认 true（依赖上一用例已 set false）", async () => {
     // 直接经共享 runtime 调 core 的 reset（IPC 五件套不含 reset 通道）。
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.preferences.resetSubagentStreamEnabled();
 
     const got = await handlePreferencesGetSubagentStream();

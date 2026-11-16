@@ -134,7 +134,9 @@ describe("handleVfsRename move 后原路径不存在 (T-B7)", () => {
       assert.equal(moved.data.content, "move-me");
     }
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 错误通道迁移四期：read 已知失败沿 Result.err（不再 reject）。
     const missing = await rt.sessionVfs(projectId, sessionId).read("/src/note.md");
     assert.equal(missing.ok, false);

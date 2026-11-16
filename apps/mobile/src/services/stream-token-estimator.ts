@@ -86,12 +86,14 @@ export interface StreamTokenModelHintRuntime {
     ): Promise<ResultWire<{agentId: string; modelId?: string | undefined}>>;
   };
   readonly agentRegistry: {
-    get(agentId: string): Promise<{model?: string | undefined}>;
+    // 五期门⑦：registry 读口已知失败走 Result（结构同 ResultWire）。
+    get(agentId: string): Promise<ResultWire<{model?: string | undefined}>>;
   };
   readonly providerModels: {
+    // 五期门⑦：getSavedById 已知失败走 Result（结构同 ResultWire）。
     getSavedById(
       id: string,
-    ): Promise<{vendorModelId: string} | null | undefined>;
+    ): Promise<ResultWire<{vendorModelId: string} | null>>;
   };
 }
 
@@ -192,13 +194,17 @@ export async function resolveStreamTokenVendorModelId(
       const definition = await runtime.agentRegistry.get(
         sessionConfig.value.agentId,
       );
-      savedModelId = definition.model;
+      // registry 读失败（已知失败）与旧 catch 同款兜底：回落 modelId 缺省路径。
+      savedModelId = definition.ok ? definition.value.model : undefined;
     }
     if (savedModelId == null || savedModelId.length === 0) {
       return null;
     }
     const saved = await runtime.providerModels.getSavedById(savedModelId);
-    const vendorModelId = saved?.vendorModelId;
+    // 读失败（已知失败）与旧 catch 同款兜底：null 缺省路径（错误通道迁移四期，
+    // 同上方 sessionConfig / definition 两处口径，不解包上抛）。
+    if (!saved.ok) return null;
+    const vendorModelId = saved.value?.vendorModelId;
     return vendorModelId != null && vendorModelId.length > 0
       ? vendorModelId
       : null;

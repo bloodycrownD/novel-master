@@ -90,21 +90,13 @@ export interface AgentToolWriteOutput {
 
 export type AgentToolOutput = AgentToolListOutput | AgentToolGetOutput | AgentToolWriteOutput;
 
-/** 校验非空必填字符串字段，缺失时抛 INVALID_ARGUMENT（错误文案带字段名）。 */
-function requireString(action: AgentToolInput["action"], field: string, value: string | undefined): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `agent 的 ${action} 动作必须提供非空 ${field}`});
-  }
-  return value;
-}
-
 /** 校验 create / update 必填的 definition 对象字段（形状校验；语义交服务层）。 */
-function requireDefinition(action: "create" | "update", value: Record<string, unknown> | undefined): Record<string, unknown> {
+function requireDefinition(action: "create" | "update", value: Record<string, unknown> | undefined): Result<Record<string, unknown>, AppError> {
   if (value == null || typeof value !== "object") {
     const shape = action === "create" ? "完整定义体对象，顶层必含 name" : "要修改的字段对象（只填要改的，未填保留现值）";
-    throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `agent 的 ${action} 动作必须提供 definition（${shape}）`});
+    return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `agent 的 ${action} 动作必须提供 definition（${shape}）`}));
   }
-  return value;
+  return Result.ok(value);
 }
 
 /**
@@ -163,27 +155,27 @@ function buildValidateOptions(agentsCtx: BuiltinToolAgentsContext): ValidateAgen
 }
 
 /**
- * 调 registry 写操作并把服务层校验错误转成 message 含原因的 ToolError。
+ * 调 registry 写操作并把失败转成带原因文案的业务错误（走 Result 返回值通道，门⑦）。
  *
- * WHY：`ToolRunner` 对非 ToolError 异常统一包成 `Tool failed: agent`，
- * 原始 message 只进 `cause`——LLM 看不到「哪个字段 / 哪个工具名不合法」。
- * Agent 定义校验失败是入参语义问题（INVALID_ARGUMENT），其余按 FAILED 透传原因。
+ * WHY：LLM 要能看到「哪个字段 / 哪个工具名不合法」——服务层错误取 messageKey
+ * （精确到字段级规则）拼进 detail；repository 层未知异常（未知通道）包
+ * TOOL_FAILED 透传原因。
  */
-async function saveWithTranslatedError<T>(action: () => Promise<Result<T, AppError>>): Promise<T> {
+async function saveWithTranslatedError<T>(action: () => Promise<Result<T, AppError>>): Promise<Result<T, AppError>> {
   let result: Result<T, AppError>;
   try {
     result = await action();
   } catch (error) {
     // repository 层未知异常（未知通道）：包 TOOL_FAILED 透传原因（旧 catch 同路径）。
-    throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, cause: error, detail: `agent 定义保存未通过校验：${error instanceof Error ? error.message : String(error)}`});
+    return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, cause: error, detail: `agent 定义保存未通过校验：${error instanceof Error ? error.message : String(error)}`}));
   }
   if (result.ok) {
-    return result.value;
+    return result;
   }
   // descriptor 迁移后 message 退为英文 desc（日志口径）；给 LLM 的原因优先取 key（精确到字段级规则）。
   const error = result.error;
   const reason = typeof (error as {messageKey?: unknown}).messageKey === "string" ? (error as Error & {messageKey: string}).messageKey : error.message;
-  throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `agent 定义保存未通过校验：${reason}`}, {cause: error});
+  return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `agent 定义保存未通过校验：${reason}`}, {cause: error}));
 }
 
 /**
@@ -264,35 +256,44 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       }
       case "get": {
         if ((input.name == null || input.name.length === 0) && (input.agentId == null || input.agentId.length === 0)) {
-          throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 get 动作必须提供 name 或 agentId"});
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 get 动作必须提供 name 或 agentId"}));
         }
         // name 优先：registry.list() 合并虚拟 seed，by-name 可命中内置 general。
         if (input.name != null && input.name.length > 0) {
           const defs = await agentsCtx.registry.list();
+          // 毒行 decode 失败（五期门⑦沿 Result 到达）原样上递给工具边界。
+          if (!defs.ok) return Result.err(defs.error);
           // 输入侧 trim 后再匹配（对齐 update，指南正文承诺两侧 trim）。
           const targetName = input.name.trim();
-          const def = defs.find((d) => d.name === targetName);
+          const def = defs.value.find((d) => d.name === targetName);
           if (def == null) {
             const names = agentsCtx.agents.map((a) => a.name).join(", ");
-            throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到名为 "${targetName}" 的 agent；可选：${names || "（暂无）"}`});
+            return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到名为 "${targetName}" 的 agent；可选：${names || "（暂无）"}`}));
           }
           return Result.ok({ action: "get", definition: def });
         }
         // by-agentId：get(id) 不合并虚拟；getRawWire 判存在（null → 未找到）。
-        const agentId = requireString("get", "agentId", input.agentId);
+        const agentId = input.agentId ?? "";
+        if (agentId.length === 0) {
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 get 动作必须提供非空 agentId"}));
+        }
         const wire = await agentsCtx.registry.getRawWire(agentId);
         if (wire == null) {
-          throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到 id 为 ${agentId} 的 agent`});
+          return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到 id 为 ${agentId} 的 agent`}));
         }
         const def = await agentsCtx.registry.get(agentId);
-        return Result.ok({ action: "get", agentId, definition: def });
+        if (!def.ok) return Result.err(def.error);
+        return Result.ok({ action: "get", agentId, definition: def.value });
       }
       case "create": {
-        const definition = requireDefinition("create", input.definition);
+        const definitionResult = requireDefinition("create", input.definition);
+        if (!definitionResult.ok) return Result.err(definitionResult.error);
+        const definition = definitionResult.value;
         const agentId = await allocateAgentId(agentsCtx.registry);
         // D5：schema 宽松收包，类型收窄只是把 Record 视作 AgentDefinition，
         // 字段级校验完全交 upsert → validateAgentDefinition。
-        await saveWithTranslatedError(() => agentsCtx.registry.upsert(agentId, definition as unknown as AgentDefinition, buildValidateOptions(agentsCtx)));
+        const saved = await saveWithTranslatedError(() => agentsCtx.registry.upsert(agentId, definition as unknown as AgentDefinition, buildValidateOptions(agentsCtx)));
+        if (!saved.ok) return Result.err(saved.error);
         return Result.ok({
           action: "create",
           name: readDefinitionName(definition),
@@ -300,11 +301,13 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
         });
       }
       case "update": {
-        const definition = requireDefinition("update", input.definition);
+        const definitionResult = requireDefinition("update", input.definition);
+        if (!definitionResult.ok) return Result.err(definitionResult.error);
+        const definition = definitionResult.value;
         const hasName = input.name != null && input.name.trim().length > 0;
         const hasId = input.agentId != null && input.agentId.length > 0;
         if (!hasName && !hasId) {
-          throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 update 动作必须提供 name 或 agentId 定位目标"});
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 update 动作必须提供 name 或 agentId 定位目标"}));
         }
         let agentId: string;
         if (hasName) {
@@ -313,9 +316,9 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
           const resolved = await findAgentIdByName(agentsCtx.registry, targetName);
           if (resolved == null) {
             if (agentsCtx.agents.some((a) => a.name === targetName)) {
-              throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `"${targetName}" 是内置 agent，不支持通过工具修改`});
+              return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `"${targetName}" 是内置 agent，不支持通过工具修改`}));
             }
-            throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到名为 "${targetName}" 的 agent`});
+            return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: `未找到名为 "${targetName}" 的 agent`}));
           }
           agentId = resolved;
         } else {
@@ -324,18 +327,19 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
           //（对齐 get by-agentId 的 getRawWire 判空样板）。
           const wire = await agentsCtx.registry.getRawWire(agentId);
           if (wire == null) {
-            throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `未找到该 agentId 对应的 agent：${agentId}`});
+            return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: `未找到该 agentId 对应的 agent：${agentId}`}));
           }
         }
         // patch 语义：读当前定义 → 浅合并 patch → 走同一套 upsert 校验门禁。
         // 空 patch 没有意义（合并结果 = 现状），直接拦在入参层。
         if (Object.keys(definition).length === 0) {
-          throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 update 动作 definition 不能为空对象——至少包含一个要修改的字段（只填要改的字段，未填的保留现值）"});
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: AGENT_TOOL_NAME, detail: "agent 的 update 动作 definition 不能为空对象——至少包含一个要修改的字段（只填要改的字段，未填的保留现值）"}));
         }
-        const merged = await saveWithTranslatedError(() => agentsCtx.registry.update(agentId, definition as AgentDefinitionPatch, buildValidateOptions(agentsCtx)));
+        const updated = await saveWithTranslatedError(() => agentsCtx.registry.update(agentId, definition as AgentDefinitionPatch, buildValidateOptions(agentsCtx)));
+        if (!updated.ok) return Result.err(updated.error);
         return Result.ok({
           action: "update",
-          name: readDefinitionName(merged as unknown as Record<string, unknown>),
+          name: readDefinitionName(updated.value as unknown as Record<string, unknown>),
           agentId,
         });
       }

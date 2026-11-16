@@ -47,11 +47,11 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
     };
   }
 
-  let raw: unknown;
-  try {
-    raw = parseText(split.frontMatterLines.join("\n"), "yaml");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "invalid YAML";
+  // parseText 四期起沿 Result 回传解析失败（不再 throw）；Err.error 即原
+  // AppError，message 口径与旧 catch 分支一致。
+  const text = parseText(split.frontMatterLines.join("\n"), "yaml");
+  if (!text.ok) {
+    const message = text.error instanceof Error ? text.error.message : "invalid YAML";
     return {
       valid: false,
       invalidReason: { key: "error.skill.front_matter_unparsable", params: { message } },
@@ -59,6 +59,7 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
       description: null,
     };
   }
+  const raw: unknown = text.value;
 
   const parsed = skillFrontMatterSchema.safeParse(raw);
   if (!parsed.success) {

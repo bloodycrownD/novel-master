@@ -20,6 +20,7 @@ import {
   type TdbcConnection,
 } from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
+import {Result} from '@novel-master/core/errors';
 import {
   checkpointMobileDatabase,
   closeMobileConnection,
@@ -47,14 +48,15 @@ function backupFileName(): string {
   return 'nmbackup.db';
 }
 
-function assertSqliteFile(bytes: Uint8Array): void {
+function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
   if (bytes.length < 16) {
-    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'});
+    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
   }
   const header = String.fromCharCode(...bytes.subarray(0, 16));
   if (!header.startsWith(SQLITE_MAGIC)) {
-    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'});
+    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'}));
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -96,16 +98,17 @@ function errorDetail(error: unknown): string {
  * 仅校验路径存在且体积足够；魔数交给替换后 open（失败则 bak 回滚）。
  * 注意：`fs.readFile(path, enc, 16)` 的第三参会被忽略，会整包读入，大备份必 OOM。
  */
-async function assertSqliteBackupAtPath(srcPath: string): Promise<void> {
+async function assertSqliteBackupAtPath(srcPath: string): Promise<Result<void, AppError>> {
   const fs = blobFs();
   const exists = await fs.exists(srcPath);
   if (!exists) {
-    throw new AppError('INFRA_VALIDATION_FAILED', {detail: `数据库文件不存在: ${srcPath}`});
+    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: `数据库文件不存在: ${srcPath}`}));
   }
   const info = await fs.stat(srcPath);
   if (Number(info.size) < 16) {
-    throw new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'});
+    return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
   }
+  return Result.ok(undefined);
 }
 
 /** 分块 ascii 写入，避免整包 `String.fromCharCode` / `btoa`。 */
@@ -169,6 +172,7 @@ export async function exportDatabaseBackupToPath(
  * 最危险窗口与恢复三表全程覆盖，云同步直调路径同样被保护。
  *
  * 错误处理口径（与 desktop 同款）：
+ * - 文件级校验（存在性 / 体积）为已知失败，沿 `Result.err` 上行（错误通道迁移五期）。
  * - 备份步裸 await，失败即抛（全新安装 dbPath 不存在时跳过，此时无可回滚）。
  * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后抛
  *   {@link DatabaseReplacedError}，**不回滚**。
@@ -177,10 +181,11 @@ export async function exportDatabaseBackupToPath(
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
-): Promise<DbImportOutcome> {
+): Promise<Result<DbImportOutcome, AppError>> {
   acquireMobileDbMaintenanceBusy();
   try {
-    await assertSqliteBackupAtPath(srcPath);
+    const checked = await assertSqliteBackupAtPath(srcPath);
+    if (!checked.ok) return Result.err(checked.error);
 
     const dbPath = await resolveMobileDatabaseFilePath();
     const bakPath = `${dbPath}.nmbackup.bak`;
@@ -234,7 +239,7 @@ export async function importDatabaseBackupFromPath(
   } finally {
     releaseMobileDbMaintenanceBusy();
   }
-  return {databaseReplaced: true, providerTablesRestored: true};
+  return Result.ok({databaseReplaced: true, providerTablesRestored: true});
 }
 
 /**
@@ -246,8 +251,10 @@ export async function importDatabaseBackupFromPath(
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
-): Promise<DbImportOutcome> {
-  assertSqliteFile(bytes);
+): Promise<Result<DbImportOutcome, AppError>> {
+  // 内存态校验：失败沿 Result.err（与 FromPath 同口径）。
+  const checked = assertSqliteFile(bytes);
+  if (!checked.ok) return Result.err(checked.error);
 
   const fs = blobFs();
   const tmpPath = `${fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;
@@ -267,9 +274,9 @@ export async function importDatabaseBackupFromBytes(
  */
 export async function exportDatabaseBackup(
   runtime: MobileNovelMasterRuntime,
-): Promise<'saved' | 'cancelled'> {
+): Promise<Result<'saved' | 'cancelled', AppError>> {
   if (isMobileAgentActive()) {
-    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'});
+    return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'}));
   }
 
   // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
@@ -277,12 +284,13 @@ export async function exportDatabaseBackup(
   // acquire/release，嵌套计数不会互相提前清位。
   acquireMobileDbMaintenanceBusy();
   try {
-    return await exportBytesViaDocumentPicker({
+    const saved = await exportBytesViaDocumentPicker({
       fileName: backupFileName(),
       mimeType: 'application/octet-stream',
       copy: Platform.OS === 'ios',
       write: destPath => exportDatabaseBackupToPath(runtime, destPath),
     });
+    return Result.ok(saved);
   } finally {
     releaseMobileDbMaintenanceBusy();
   }
@@ -295,9 +303,9 @@ export async function exportDatabaseBackup(
  */
 export async function importDatabaseBackup(
   onRebootstrap: () => void,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   if (isMobileAgentActive()) {
-    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'});
+    return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'}));
   }
 
   // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
@@ -312,11 +320,13 @@ export async function importDatabaseBackup(
       localFileName: 'import.nmbackup',
     });
     if (picked == null) {
-      return;
+      return Result.ok(undefined);
     }
 
-    await importDatabaseBackupFromPath(picked.fsPath);
+    const imported = await importDatabaseBackupFromPath(picked.fsPath);
+    if (!imported.ok) return Result.err(imported.error);
     onRebootstrap();
+    return Result.ok(undefined);
   } finally {
     releaseMobileDbMaintenanceBusy();
   }

@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
@@ -72,7 +72,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
@@ -119,7 +119,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(() =>
+    await rejectsErr(() =>
       ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
     );
 
@@ -184,7 +184,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(
           session.id,
@@ -292,7 +292,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await assert.rejects(() =>
+    await rejectsErr(() =>
       ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
     );
 

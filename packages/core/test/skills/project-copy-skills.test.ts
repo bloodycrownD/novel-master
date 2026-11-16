@@ -63,7 +63,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const copy = unwrap(await ctx.projects.copy(source.id));
 
     // 技能文件随整树复制到新项目
-    const copyList = await skills.listSkills({ projectId: copy.id });
+    const copyList = unwrap(await skills.listSkills({ projectId: copy.id }));
     const helper = copyList.find((s) => s.name === "novel-helper");
     assert.ok(helper != null, "项目技能应随复制携带");
     assert.equal(helper.valid, true);
@@ -77,19 +77,19 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     assert.equal(copiedPrompt.content, "辅助提示词");
 
     // 负清单行按 scope_key 复制：新项目里同名禁用行生效
-    const copyView = await skills.effectiveSkills(copy.id);
+    const copyView = unwrap(await skills.effectiveSkills(copy.id));
     assert.equal(copyView.find((s) => s.name === "novel-helper")?.disabled, true);
     assert.equal(copyView.find((s) => s.name === "shared-tool")?.domain, "project");
 
     // 副本禁用行独立于源：副本里关掉，源不受影响
     unwrap(await skills.setDisabled(copy.id, "novel-helper", false));
-    const sourceView = await skills.effectiveSkills(source.id);
+    const sourceView = unwrap(await skills.effectiveSkills(source.id));
     assert.equal(
       sourceView.find((s) => s.name === "novel-helper")?.disabled,
       true,
       "源项目禁用行不应被副本操作改动",
     );
-    const copyViewAfter = await skills.effectiveSkills(copy.id);
+    const copyViewAfter = unwrap(await skills.effectiveSkills(copy.id));
     assert.equal(
       copyViewAfter.find((s) => s.name === "novel-helper")?.disabled,
       false,
@@ -117,13 +117,13 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     assert.equal(copySessions.length, 0);
 
     // 技能在新项目、原项目也还在；其他项目（新建第三个项目）不串
-    const copyList = await skills.listSkills({ projectId: copy.id });
+    const copyList = unwrap(await skills.listSkills({ projectId: copy.id }));
     assert.ok(copyList.some((s) => s.name === "solo-skill"));
-    const sourceList = await skills.listSkills({ projectId: source.id });
+    const sourceList = unwrap(await skills.listSkills({ projectId: source.id }));
     assert.ok(sourceList.some((s) => s.name === "solo-skill"));
 
     const third = unwrap(await ctx.projects.create(`P3-${suffix}`));
-    const thirdView = await skills.effectiveSkills(third.id);
+    const thirdView = unwrap(await skills.effectiveSkills(third.id));
     assert.equal(
       thirdView.find((s) => s.name === "solo-skill"),
       undefined,

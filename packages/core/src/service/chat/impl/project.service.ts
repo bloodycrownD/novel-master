@@ -54,7 +54,7 @@ function reposFor(conn: TdbcConnection) {
   };
 }
 
-function parseStoredAgentConfig(json: string): ProjectAgentConfig {
+function parseStoredAgentConfig(json: string): Result<ProjectAgentConfig, AppError> {
   return decode(JSON.parse(json), projectAgentConfigSchema);
 }
 
@@ -72,14 +72,16 @@ function mergeAgentConfigPatch(
   };
 }
 
-/** 纯 follow 且无草稿时存 NULL；否则存 wire JSON。 */
+/** 纯 follow 且无草稿时存 NULL；否则存 wire JSON。toWire 门禁失败沿 `Result.err` 上递（五期门⑦）。 */
 function serializeAgentConfigForStorage(
   config: ProjectAgentConfig
-): string | null {
+): Result<string | null, AppError> {
   if (config.mode === "follow" && config.definition == null) {
-    return null;
+    return Result.ok(null);
   }
-  return JSON.stringify(projectAgentConfigSchema.toWire(config));
+  const wire = projectAgentConfigSchema.toWire(config);
+  if (!wire.ok) return Result.err(wire.error);
+  return Result.ok(JSON.stringify(wire.value));
 }
 
 /** Deep-clones stored JSON for project copy. */
@@ -224,7 +226,7 @@ export class DefaultProjectService implements ProjectService {
     if (json == null) {
       return Result.ok(DEFAULT_PROJECT_AGENT_CONFIG);
     }
-    return Result.ok(parseStoredAgentConfig(json));
+    return parseStoredAgentConfig(json);
   }
 
   /**
@@ -240,25 +242,30 @@ export class DefaultProjectService implements ProjectService {
     const current = await this.getAgentConfig(id);
     if (!current.ok) return current;
     const merged = mergeAgentConfigPatch(current.value, patch);
+    const wire = projectAgentConfigSchema.toWire(merged);
+    if (!wire.ok) return Result.err(wire.error);
     const validated = decode(
-      projectAgentConfigSchema.toWire(merged),
+      wire.value,
       projectAgentConfigSchema
     );
-    if (validated.mode === "custom") {
-      const validation = await validateAgentDefinition(validated.definition!, options);
+    if (!validated.ok) return validated;
+    const config = validated.value;
+    if (config.mode === "custom") {
+      const validation = await validateAgentDefinition(config.definition!, options);
       if (!validation.ok) return Result.err(validation.error);
     }
     const updatedAtMs = Date.now();
-    const configJson = serializeAgentConfigForStorage(validated);
+    const configJson = serializeAgentConfigForStorage(config);
+    if (!configJson.ok) return Result.err(configJson.error);
     const updated = await this.deps.projects.updateAgentConfig(
       id,
-      configJson,
+      configJson.value,
       updatedAtMs
     );
     if (!updated) {
       return Result.err(new AppError("CHAT_NOT_FOUND", {detail: `project not found: ${id}`, kind: "project", id}));
     }
-    return Result.ok(validated);
+    return Result.ok(config);
   }
 
   async copy(id: string): Promise<Result<ChatProject, AppError>> {

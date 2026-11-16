@@ -45,7 +45,12 @@ async function budgetSkillsIndex(
     return undefined;
   }
   const effective = await runtime.skills().effectiveSkills(projectId);
-  return effective
+  if (!effective.ok) {
+    // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
+    const failure = effective.error;
+    throw failure;
+  }
+  return effective.value
     .filter(s => s.effective)
     .map(s => ({
       name: s.name,
@@ -64,11 +69,13 @@ export async function buildRealPromptPreviewTurns(
   runtime: MobileNovelMasterRuntime,
   scope: PromptPreviewScope,
 ): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
-  const {definition} = await resolveAgentForProject(
+  const resolved = await resolveAgentForProject(
     runtime,
     scope.projectId,
     scope.sessionId,
   );
+  if (!resolved.ok) return Result.err(resolved.error);
+  const {definition} = resolved.value;
   const built = await buildSessionPromptInput(runtime, scope, definition);
   if (!built.ok) return Result.err(built.error);
   const {layout, ctx} = built.value;
@@ -90,21 +97,23 @@ export async function buildRealPromptPreviewTurns(
     agentModelId: definition.model,
     sessionModelId: sessionConfig.value.modelId,
   });
+  if (!thinking.ok) return Result.err(thinking.error);
+  const {enabled, protocol, requestThinkingEnabled} = thinking.value;
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
   // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。
   const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
-    enabled: thinking.enabled,
-    protocol: thinking.protocol,
+    enabled,
+    protocol,
     retainProtocolMinimum: false,
-    requestThinkingEnabled: thinking.requestThinkingEnabled,
+    requestThinkingEnabled,
   });
   const previewCtx: PromptRenderContext =
     skillsIndex != null
       ? {...ctx, skillsIndex, messages: filteredMessages}
       : {...ctx, messages: filteredMessages};
-  return Result.ok(
-    await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
-      includeThinkingBlocks: thinking.enabled,
-    }),
-  );
+  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
+    includeThinkingBlocks: enabled,
+  });
+  if (!turns.ok) return Result.err(turns.error);
+  return Result.ok(turns.value);
 }

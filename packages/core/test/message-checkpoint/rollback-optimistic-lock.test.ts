@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -82,21 +82,21 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
       ),
     );
 
-    await assert.rejects(
+    await rejectsErr(
       () => sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error, "ROLLBACK_CONFLICT"),
           true,
-          "重试上限耗尽后应抛 ROLLBACK_CONFLICT",
+          "重试上限耗尽后应报 ROLLBACK_CONFLICT",
         );
-        // better-sqlite3 驱动会把事务里抛出的非 TdbcError 用 TdbcError 包起来（cause 链指向原错误），
-        // isSessionFsError 会追 cause 链识别；descriptor 形态下 key/计数挂在 cause 的
-        // messageKey/messageParams 上（包装层不带）。
-        const original = (error as {cause?: {messageKey?: string; messageParams?: {expected_message_count?: number; actual_message_count?: number}}}).cause;
-        assert.equal(original?.messageKey, "error.session_fs.rollback_conflict");
-        assert.equal(typeof original?.messageParams?.expected_message_count, "number");
-        assert.equal(typeof original?.messageParams?.actual_message_count, "number");
+        // service 边界已把驱动的 TdbcError 包装解包回原 AppError（错误通道迁移五期）：
+        // descriptor 形态下 key/计数直接挂在 error 的 messageKey/messageParams 上，
+        // 不再经 cause 链（cause 解包见 message-rollback.service 的 catch）。
+        const original = error as {messageKey?: string; messageParams?: {expected_message_count?: number; actual_message_count?: number}};
+        assert.equal(original.messageKey, "error.session_fs.rollback_conflict");
+        assert.equal(typeof original.messageParams?.expected_message_count, "number");
+        assert.equal(typeof original.messageParams?.actual_message_count, "number");
         return true;
       },
     );

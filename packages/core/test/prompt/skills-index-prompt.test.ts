@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
@@ -45,12 +46,12 @@ const fullLayout: AgentPromptLayout = {
 
 describe("T-SK9: 技能索引段（两套遍历）", () => {
   it("位置：system 后 workplace 前（assembly segments）", async () => {
-    const segments = await buildPromptAssemblyFromLayout(fullLayout, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(fullLayout, {
       workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
       skillsIndex,
-    });
+    }));
     const ids = segments.map((s) => s.id);
     const systemAt = ids.indexOf("system");
     const skillsAt = ids.indexOf("prompt-skills");
@@ -66,12 +67,12 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
   });
 
   it("位置：workplace 合成消息之前（llm input messages）", async () => {
-    const input = await buildPromptLlmInputFromLayout(fullLayout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(fullLayout, {
       workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
       skillsIndex,
-    });
+    }));
     assert.deepEqual(input.messages.slice(0, 4).map((m) => m.id), [
       "prompt:skills",
       "prompt:workplace",
@@ -89,8 +90,8 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
       skillsIndex,
     };
     const [segments, input] = await Promise.all([
-      buildPromptAssemblyFromLayout(fullLayout, ctx),
-      buildPromptLlmInputFromLayout(fullLayout, ctx),
+      unwrap(await buildPromptAssemblyFromLayout(fullLayout, ctx)),
+      unwrap(await buildPromptLlmInputFromLayout(fullLayout, ctx)),
     ]);
     const segment = segments.find((s) => s.id === "prompt-skills")!;
     const synthetic = input.messages.find((m) => m.id === "prompt:skills")!;
@@ -104,9 +105,9 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
       now: fixedNow,
     };
     for (const ctx of [base, { ...base, skillsIndex: [] }]) {
-      const segments = await buildPromptAssemblyFromLayout(fullLayout, ctx);
+      const segments = unwrap(await buildPromptAssemblyFromLayout(fullLayout, ctx));
       assert.ok(segments.every((s) => s.id !== "prompt-skills"));
-      const input = await buildPromptLlmInputFromLayout(fullLayout, ctx);
+      const input = unwrap(await buildPromptLlmInputFromLayout(fullLayout, ctx));
       assert.ok(input.messages.every((m) => m.id !== "prompt:skills"));
     }
   });
@@ -137,7 +138,7 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
       now: fixedNow,
       skillsIndex,
     };
-    const input = await buildPromptLlmInputFromLayout(fullLayout, ctx);
+    const input = unwrap(await buildPromptLlmInputFromLayout(fullLayout, ctx));
     const zones = computeLlmExportZonesFromLayout(fullLayout, {
       workplaceDisplay: "WT",
       skillsIndex,

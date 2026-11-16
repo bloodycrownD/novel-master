@@ -12,7 +12,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
-import { rejectsErr } from "../helpers/result-unwrap.js";
+import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -20,7 +20,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
   it("空 DB 时 list 包含虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    const defs = await registry.list();
+    const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
     assert.ok(
@@ -32,20 +32,18 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
   it("get(<不存在的 uuid>) 报 AGENT_NOT_FOUND（get 不合并虚拟）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    await assert.rejects(
-      () => registry.get("non-existent-uuid-xxx"),
-      (e: unknown) =>
-        isAppError(e, "AGENT_NOT_FOUND"),
+    await rejectsErr(
+      registry.get("non-existent-uuid-xxx"),
+      (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
     );
   });
 
   it("delete('general') 走 DB 路径报 AGENT_NOT_FOUND（虚拟不可删）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    await assert.rejects(
-      () => registry.delete("general"),
-      (e: unknown) =>
-        isAppError(e, "AGENT_NOT_FOUND"),
+    await rejectsErr(
+      registry.delete("general"),
+      (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
     );
   });
 
@@ -64,13 +62,15 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     await rejectsErr(
       registry.upsert(
         dbGeneralId,
-        decode(
-          {
-            schemaVersion: 1,
-            name: "general",
-            prompts: { persist: {}, dynamic: {} },
-          },
-          agentDefinitionSchema,
+        unwrap(
+          decode(
+            {
+              schemaVersion: 1,
+              name: "general",
+              prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema,
+          ),
         ),
       ),
       (e) => {
@@ -82,7 +82,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
   it("T-G1: 空 DB 时 list 返回的虚拟 general 满足 mode === subagent（FR-5）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    const defs = await registry.list();
+    const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
     assert.equal(
@@ -98,16 +98,18 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const writerId = `writer-${testIsolationSuffix()}`;
     await registry.upsert(
       writerId,
-      decode(
-        {
-          schemaVersion: 1,
-          name: `writer-${testIsolationSuffix()}`,
-          prompts: { persist: {}, dynamic: {} },
-        },
-        agentDefinitionSchema,
+      unwrap(
+        decode(
+          {
+            schemaVersion: 1,
+            name: `writer-${testIsolationSuffix()}`,
+            prompts: { persist: {}, dynamic: {} },
+          },
+          agentDefinitionSchema,
+        ),
       ),
     );
-    const defs = await registry.list();
+    const defs = unwrap(await registry.list());
     assert.ok(defs.some((d) => d.name === "general"));
     assert.ok(defs.some((d) => d.name.startsWith("writer-")));
   });

@@ -87,10 +87,14 @@ export async function buildSessionPromptInput(
 
   // 未预传入 definition 时才走 resolver（与 desktop 同款的短路逻辑），
   // 透传 scope.sessionId 让 core 解析链读到会话级绑定。
-  const resolved =
-    definition ??
-    (await resolveAgentForProject(runtime, scope.projectId, scope.sessionId))
-      .definition;
+  let resolved: AgentDefinition;
+  if (definition != null) {
+    resolved = definition;
+  } else {
+    const r = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+    if (!r.ok) return Result.err(r.error);
+    resolved = r.value.definition;
+  }
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] agent +${Date.now() - diagT0}ms`);
@@ -175,7 +179,8 @@ export async function buildSessionPromptInput(
     workplaceFiles,
     workplaceFingerprint: fingerprint,
   };
-  const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  const inputResult = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  if (!inputResult.ok) return Result.err(inputResult.error);
   if (__DEV__) {
     console.log(`[nm-chip-build] layout +${Date.now() - diagT0}ms`);
   }
@@ -183,7 +188,7 @@ export async function buildSessionPromptInput(
     definition: resolved,
     layout: resolved.prompts,
     ctx,
-    input,
+    input: inputResult.value,
     rawMessages: visibleMessages,
   });
 }

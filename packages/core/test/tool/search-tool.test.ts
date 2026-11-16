@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 
@@ -146,14 +146,14 @@ describe("search 工具：run 基础行为", () => {
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SEARCH_TOOL_NAME,
       { params: { q: "q" } },
       makeCtx({
         search: await assembleSearchToolContext(createSearchConfigStore({ kkv, secretStore })),
         fetchFn,
       })
-    );
+    ));
     const rec = out as { engine: string; results: unknown[] };
     assert.equal(rec.engine, "duckduckgo");
     assert.ok(urls[0]!.startsWith("https://html.duckduckgo.com/html/"), `DDG 请求应发出: ${urls[0]}`);
@@ -166,7 +166,7 @@ describe("search 工具：run 基础行为", () => {
     unwrap(await store.setEnabled("duckduckgo", false));
 
     const runner = makeRunner();
-    const out = await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })));
     assert.equal(out, SEARCH_NOT_CONFIGURED_MESSAGE);
     // 中性口径：不谎报「未启用任何」，两种到达路径共用一条文案。
     assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /当前没有可用的已启用搜索引擎/);
@@ -196,7 +196,7 @@ describe("search 工具：run 基础行为", () => {
     const ctx = makeCtx({ search, fetchFn });
 
     // schema 只校验形状（engine/params）；搜索词缺失在 run 内以可读错误拒绝。
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { count: 5 } }, ctx), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { count: 5 } }, ctx), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
@@ -208,7 +208,7 @@ describe("search 工具：run 基础行为", () => {
       calls.push(String(url));
       return bochaResponse();
     }) as typeof globalThis.fetch;
-    const out = await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 0 } }, makeCtx({ ...ctx, fetchFn: recordingFetch }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 0 } }, makeCtx({ ...ctx, fetchFn: recordingFetch })));
     assert.equal((out as { engine: string }).engine, "bocha");
     assert.equal(calls[0], "https://api.bochaai.com/v1/web-search");
   });
@@ -261,7 +261,7 @@ describe("search 工具：run 基础行为", () => {
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    const out = await runner.call(SEARCH_TOOL_NAME, { params: { query: "量子计算", need_content: true } }, makeCtx({ search, fetchFn }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { query: "量子计算", need_content: true } }, makeCtx({ search, fetchFn })));
     assert.equal((out as { engine: string }).engine, "deepseek");
     assert.equal(urls[0], "https://api.deepseek.com/v1/tools/search");
     const body = JSON.parse(bodies[0]!) as Record<string, unknown>;
@@ -270,11 +270,11 @@ describe("search 工具：run 基础行为", () => {
     assert.equal(body.count, 5, "{{count}} 归一后为 5");
 
     // 同名 params 覆盖模板默认值（POST 浅合并）。
-    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 99 } }, makeCtx({ search, fetchFn }));
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 99 } }, makeCtx({ search, fetchFn })));
     assert.equal((JSON.parse(bodies[1]!) as Record<string, unknown>).count, 99);
 
     // DDG 无模板：params 不参与请求（URL 只有 q）。
-    const ddgOut = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", any: "thing" } }, makeCtx({ search, fetchFn }));
+    const ddgOut = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", any: "thing" } }, makeCtx({ search, fetchFn })));
     assert.equal((ddgOut as { engine: string }).engine, "duckduckgo");
     const ddgUrl = new URL(urls[2]!);
     assert.deepEqual([...ddgUrl.searchParams.keys()], ["q"]);
@@ -318,7 +318,7 @@ describe("search 工具：run 基础行为", () => {
 
     const runner = makeRunner();
     // maxResults=20 让 20 条 3KB snippet 全量回流（缺省 5 条仅 15KB 不触发预算）。
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SEARCH_TOOL_NAME,
       { params: { q: "q", count: 20 } },
       makeCtx({
@@ -326,7 +326,7 @@ describe("search 工具：run 基础行为", () => {
         fetchFn,
         vfs,
       })
-    );
+    ));
     const rec = out as {
       engine: string;
       savedPath?: string;
@@ -385,7 +385,7 @@ describe("search 工具：run 基础行为", () => {
     } as never;
 
     const runner = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SEARCH_TOOL_NAME,
       { params: { q: "q", count: 20 } },
       makeCtx({
@@ -393,7 +393,7 @@ describe("search 工具：run 基础行为", () => {
         fetchFn,
         vfs,
       })
-    );
+    ));
     // 降级：完整 SearchResponse 原样回流（engine + 提取数组 JSON 文本），
     // 无 savedPath / message 字段。
     const rec = out as {
@@ -419,7 +419,7 @@ describe("search 工具：run 基础行为", () => {
       })) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       assert.equal(err.message.includes("sk-bocha-secret"), false);
@@ -555,7 +555,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    const out = await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
     const rec = out as { engine: string; attempts?: string; results: unknown };
     assert.equal(rec.engine, "tavily");
     assert.equal(rec.attempts, "bocha 失败(401) → tavily 成功");
@@ -586,7 +586,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
@@ -615,7 +615,7 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "bocha", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "bocha", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const detail = (err.cause as Error).message;
@@ -661,7 +661,12 @@ describe("search 工具：串行链执行（T-R1 四口径，fixture 模板化�
           })
         )
         .then(
-          () => null,
+          // 四期签名：链预算耗尽沿 Result.err 回传（不再 reject）——解出 Err 载荷；
+          // 兜底仍接 rejection（未预期的异常通道）。
+          (r: unknown) =>
+            r !== null && typeof r === "object" && "ok" in r && (r as { ok: unknown }).ok === false
+              ? (r as { error: unknown }).error
+              : null,
           (e: unknown) => e
         );
       // 链首 bocha 挂起（fetch + 30s 超时定时器已注册）。
@@ -811,13 +816,13 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
     const ctx = makeCtx({ search, fetchFn });
 
     // snake_case 别名：max_results 与 count 同效（bocha defaultBody 的 {{count}} 槽位）。
-    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 9 } }, ctx);
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 9 } }, ctx));
     assert.equal((JSON.parse(bodies[0]!) as Record<string, unknown>).count, 9, "max_results 别名应生效");
     // camelCase 别名：maxResults 同效。
-    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", maxResults: 7 } }, ctx);
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", maxResults: 7 } }, ctx));
     assert.equal((JSON.parse(bodies[1]!) as Record<string, unknown>).count, 7, "maxResults 别名应生效");
     // 主键 count 优先：同传时别名被忽略。
-    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 3, max_results: 9 } }, ctx);
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", count: 3, max_results: 9 } }, ctx));
     assert.equal((JSON.parse(bodies[2]!) as Record<string, unknown>).count, 3, "count 主键优先于 max_results");
   });
 
@@ -828,12 +833,12 @@ describe("search 工具：params 条数别名归一（G-1，count / max_results 
     const runner = makeRunner();
     const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
 
-    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", max_results: 2 } }, ctx);
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", max_results: 2 } }, ctx));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
     assert.equal((out as { results: unknown[] }).results.length, 2, "max_results 别名应驱动 DDG 客户端截断");
 
     // 主键 count 优先于别名（DDG 同一口径）。
-    const pinned = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: 1, max_results: 3 } }, ctx);
+    const pinned = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: 1, max_results: 3 } }, ctx));
     assert.equal((pinned as { results: unknown[] }).results.length, 1);
   });
 });
@@ -848,7 +853,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
       return ddgHtmlResponse();
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "   ", query: "真词" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "   ", query: "真词" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
     assert.equal(new URL(urls[0]!).searchParams.get("q"), "真词", "全空白 q 应跳过，回退到 query");
   });
@@ -865,13 +870,13 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
     const runner = makeRunner();
     const ctx = makeCtx({ search, fetchFn });
 
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42 } }, ctx), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42 } }, ctx), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       const cause = (err as { cause?: unknown }).cause;
       assert.match(String(cause), /params 缺少搜索词/);
       return true;
     });
-    await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42, query: "真词" } }, ctx);
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: 42, query: "真词" } }, ctx));
     assert.equal(new URL(urls[0]!).searchParams.get("q"), "真词", "非字符串 q 应被忽略，回退到 query");
   });
 
@@ -884,7 +889,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
 
     // 现状口径：count:"7" 非 nullish 短路 ?? 链后被 typeof 守卫打回 → normalizeMaxResults(undefined) = 默认 5；
     // max_results:2 因 ?? 已短路不参与（DDG 完全忽略 params，截断只随归一条数）。若实现改为 typeof 感知回落，需同步更新本断言。
-    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: "7", max_results: 2 } }, ctx);
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "q", count: "7", max_results: 2 } }, ctx));
     assert.equal((out as { results: unknown[] }).results.length, 5, "字符串 count 不采纳，按默认 5 截断；max_results 不参与");
   });
 
@@ -897,7 +902,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
       return ddgHtmlResponse();
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
-    const out = await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "A", query: "B" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn }));
+    const out = unwrap(await runner.call(SEARCH_TOOL_NAME, { engine: "duckduckgo", params: { q: "A", query: "B" } }, makeCtx({ search: await assembleSearchToolContext(store), fetchFn })));
     assert.equal((out as { engine: string }).engine, "duckduckgo");
     assert.equal(new URL(urls[0]!).searchParams.get("q"), "A", "q 应优先于 query（调换探测优先级本用例红）");
   });
@@ -913,7 +918,7 @@ describe("search 工具：params 搜索词/条数探测边界（test-docs/G-3）
     }) as typeof globalThis.fetch;
     const runner = makeRunner();
     const ctx = makeCtx({ search: await assembleSearchToolContext(store), fetchFn });
-    await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 4, maxResults: 9 } }, ctx);
+    unwrap(await runner.call(SEARCH_TOOL_NAME, { params: { q: "q", max_results: 4, maxResults: 9 } }, ctx));
     assert.equal((JSON.parse(bodies[0]!) as Record<string, unknown>).count, 4, "max_results 应优先于 maxResults");
   });
 });
@@ -923,7 +928,7 @@ describe("search 工具：显式未知 engine（钉死未知 id）", () => {
     const { kkv, secretStore } = fakeStores();
     const store = createSearchConfigStore({ kkv, secretStore });
     const runner = makeRunner();
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { engine: "google", params: { q: "q" } }, makeCtx({ search: await assembleSearchToolContext(store) })), (err: unknown) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       const cause = err.cause as AppError;

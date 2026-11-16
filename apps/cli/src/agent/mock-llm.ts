@@ -6,8 +6,9 @@
  */
 
 import { type LlmStreamEvent, type ModelRequestService } from "@novel-master/core/provider";
+import { Result } from "@novel-master/core/errors";
 
-type LlmChatResult = Awaited<ReturnType<ModelRequestService["request"]>>;
+type RequestResult = Awaited<ReturnType<ModelRequestService["request"]>>;
 type RequestOptions = NonNullable<
   Parameters<ModelRequestService["request"]>[2]
 >;
@@ -40,12 +41,12 @@ async function emitStream(
   }
 }
 
-function textResult(text: string): LlmChatResult {
-  return {
+function textResult(text: string): RequestResult {
+  return Result.ok({
     assistantText: text,
     blocks: [{ type: "text", text }],
     raw: { mock: true },
-  };
+  });
 }
 
 /**
@@ -75,7 +76,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
         }
         case "run": {
           if (callIndex === 1) {
-            return {
+            return Result.ok({
               assistantText: "",
               blocks: [
                 {
@@ -86,10 +87,10 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 },
               ],
               raw: { mock: true },
-            };
+            });
           }
           if (callIndex === 2) {
-            return {
+            return Result.ok({
               assistantText: "",
               blocks: [
                 {
@@ -100,14 +101,14 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 },
               ],
               raw: { mock: true },
-            };
+            });
           }
           const text = "Multi-step run finished.";
           await emitStream(text, options);
           return textResult(text);
         }
         case "vfs": {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -118,7 +119,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
               },
             ],
             raw: { mock: true },
-          };
+          });
         }
         case "stream": {
           const text = "streamed hello";
@@ -127,7 +128,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
         }
         case "doom": {
           const input = { path: "/x" };
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               { type: "tool_use", id: "a", name: "read", input },
@@ -135,7 +136,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
               { type: "tool_use", id: "c", name: "read", input },
             ],
             raw: { mock: true },
-          };
+          });
         }
         case "compaction": {
           const text = "After compaction.";

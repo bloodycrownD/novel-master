@@ -57,7 +57,9 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
 
   it("T-UO4 undo_send: rollback 后清 main 侧 annotate store 并 COMPOSER_ATTACHMENTS_SUGGEST 推空", async () => {
     const sessionId = await createSession("undo-send");
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const annotateActionXml =
       '<action name="annotate">\n{"path":"/a.md","originalText":"原文","userAnnotation":"批一下"}\n</action>';
     // 错误通道迁移二期后 messages.append 走 Result，解包取消息。
@@ -121,7 +123,9 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
 
   it("T-UO4 rewind: rollback 后 main 侧 annotate store 清空、推空", async () => {
     const sessionId = await createSession("rewind");
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const userMsg = await rt.messages.append(
       sessionId,
       "user",

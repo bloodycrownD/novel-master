@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode } from "../../src/infra/serialization/decode.js";
+import { decode as decodeRaw } from "../../src/infra/serialization/decode.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import { sessionAgentConfigSchema } from "../../src/domain/chat/model/session-agent-config.schema.js";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  const r = decodeRaw(raw, schema);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
 
 describe("sessionAgentConfigSchema（v2 单形态）", () => {
   it("缺 agentId 报错", () => {
@@ -66,8 +74,10 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
   });
 
   it("toWire：不带 modelId 时只输出 agentId", () => {
+    // toWire 已改返回 Result（五期门⑦）：恒成功路径解包 value 断言。
     const wire = sessionAgentConfigSchema.toWire({ agentId: "agent-b" });
-    assert.deepEqual(wire, { agentId: "agent-b" });
+    assert.ok(wire.ok);
+    assert.deepEqual(wire.value, { agentId: "agent-b" });
   });
 
   it("toWire：带 modelId 时输出两个字段", () => {
@@ -75,6 +85,7 @@ describe("sessionAgentConfigSchema（v2 单形态）", () => {
       agentId: "agent-b",
       modelId: "m1",
     });
-    assert.deepEqual(wire, { agentId: "agent-b", modelId: "m1" });
+    assert.ok(wire.ok);
+    assert.deepEqual(wire.value, { agentId: "agent-b", modelId: "m1" });
   });
 });

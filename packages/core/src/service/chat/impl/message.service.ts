@@ -21,6 +21,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -414,9 +415,9 @@ export class DefaultMessageService implements MessageService {
         seq++;
       }
       await r.messages.batchInsert(forkedMessages);
-      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages });
-      // 解包 throw 边界（事务回调）：seed 失败靠抛错回滚（总纲 §五例外 2），异常穿出 transaction 由调用链端点 catch 收口。
-      if (!seeded.ok) throw seeded.error;
+      // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
+      // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
+      await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
       return forked;
     });
     return Result.ok(forkedSession);

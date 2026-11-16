@@ -57,7 +57,9 @@ const sleep = (ms: number) =>
 async function registerRunInFlight(
   sessionId: string,
 ): Promise<() => Promise<void>> {
-  const rt = await getDesktopRuntime();
+  const rtR = await getDesktopRuntime();
+  if (!rtR.ok) throw rtR.error;
+  const rt = rtR.value;
   const controller = new AbortController();
   rt.abortRegistry.register(sessionId, controller);
   return async () => {
@@ -121,9 +123,13 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     });
     assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
     if (!provider.ok) return;
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const saved = await rt.providerModels.save(provider.data.providerId, "gpt-4o");
-    await rt.state.setCurrentModelId(saved.id);
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
 
     const session = await handleSessionsCreate({ projectId, title: "dt-align" });
     assert.equal(session.ok, true);
@@ -150,7 +156,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   });
 
   it("T-DA1: run 在途 ⇒ 读口跳过本轮（build 0 次）+ IPC 回 data:null", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 探针：数 buildSessionPromptInput 的两处 runtime 足迹——第①段
@@ -296,7 +304,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   });
 
   it("T-DA3: build 途中 run 起步 ⇒ 弃权回 null，且绝不进 fallback", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 前提：把 build 卡在取消息那一步，等 build 跑起来之后才让 run 起步——
@@ -354,7 +364,9 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   });
 
   it("T-DA3-ctl: 非弃权异常仍走 fallback（证明 T-DA3 的探针不是恒真）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const scope = { projectId, sessionId };
 
     // 只让**第一次**取消息抛普通异常：主路径挂掉 → 兜底必须重跑一遍 build 并

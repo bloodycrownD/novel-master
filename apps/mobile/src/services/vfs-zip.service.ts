@@ -73,7 +73,7 @@ function findZipEocdOffset(bytes: Uint8Array): number {
   return -1;
 }
 
-function assertZipArchive(bytes: Uint8Array): void {
+function assertZipArchive(bytes: Uint8Array): Result<void, AppError> {
   const hasLocalHeader =
     bytes.length >= 4 &&
     bytes[0] === 0x50 &&
@@ -81,11 +81,12 @@ function assertZipArchive(bytes: Uint8Array): void {
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
   if (!hasLocalHeader) {
-    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `not a ZIP archive (${bytes.length} bytes)` });
+    return Result.err(new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `not a ZIP archive (${bytes.length} bytes)` }));
   }
   if (findZipEocdOffset(bytes) < 0) {
-    throw new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)` });
+    return Result.err(new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)` }));
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -108,7 +109,8 @@ export async function exportVfsZip(
   const exported = await zipSvc.export(scope, {directoryPath});
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  assertZipArchive(bytes);
+  const archiveCheck = assertZipArchive(bytes);
+  if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
   const base = zipBaseNameFromPath(directoryPath);
   const zipName =
@@ -127,8 +129,8 @@ export async function exportVfsZip(
   );
 }
 
-/** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
-export async function pickZipFileBytes(): Promise<Uint8Array | null> {
+/** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null（`Result.ok(null)`）。 */
+export async function pickZipFileBytes(): Promise<Result<Uint8Array | null, AppError>> {
   const bytes = await pickAndReadBytes({
     mimeTypes: [types.zip],
     localFileName: 'import.zip',
@@ -138,10 +140,11 @@ export async function pickZipFileBytes(): Promise<Uint8Array | null> {
       new AppError('VFS_ZIP_INVALID_ARCHIVE', { detail: `ZIP file not found at ${fsPath}` }),
   });
   if (bytes == null) {
-    return null;
+    return Result.ok(null);
   }
-  assertZipArchive(bytes);
-  return bytes;
+  const archiveCheck = assertZipArchive(bytes);
+  if (!archiveCheck.ok) return Result.err(archiveCheck.error);
+  return Result.ok(bytes);
 }
 
 export async function importVfsZip(
@@ -151,10 +154,12 @@ export async function importVfsZip(
     readonly directoryPath?: string;
   },
 ): Promise<Result<void, AppError>> {
-  const zipBytes = await pickZipFileBytes();
-  if (zipBytes == null) {
+  const picked = await pickZipFileBytes();
+  if (!picked.ok) return Result.err(picked.error);
+  if (picked.value == null) {
     return Result.ok(undefined);
   }
+  const zipBytes = picked.value;
 
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''

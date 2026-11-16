@@ -65,9 +65,9 @@ describe("VFS directory nodes", () => {
 
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
     await vfs.write(GLOBAL_SCOPE, `${drafts}/a.md`, "x", { versionCheck: false });
-    // 判空在事务回调内（总纲 §五例外 2：失败靠抛错回滚），AppError 过驱动事务
-    // 边界被包成 TdbcError（message 原样保留），故沿 cause 解出域错误再断 key。
-    await assert.rejects(() => vfs.delete(GLOBAL_SCOPE, drafts), (e: unknown) => {
+    // 判空在事务回调内靠抛错回滚；delete 方法边界把域失败收进 Err（四期签名
+    // Result 承诺），这里按 Err 消费并断 key。
+    await rejectsErr(vfs.delete(GLOBAL_SCOPE, drafts), (e: unknown) => {
       assert.equal(vfsAppError(e).key, "VFS_DIRECTORY_NOT_EMPTY");
       return true;
     });

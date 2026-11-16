@@ -93,9 +93,11 @@ export function FetchModelsSheet({
     setLoading(true);
     setError(undefined);
     try {
-      await runtime.providerModels.fetch(providerId);
+      const fetched = await runtime.providerModels.fetch(providerId);
+      if (!fetched.ok) throw fetched.error;
       const suggestions = await runtime.providerModels.suggestList(providerId);
-      setRows(suggestions.filter(s => !s.stale));
+      if (!suggestions.ok) throw suggestions.error;
+      setRows(suggestions.value.filter(s => !s.stale));
     } catch (cause) {
       setRows([]);
       setError(formatError(cause));
@@ -133,11 +135,12 @@ export function FetchModelsSheet({
     try {
       for (const item of selected) {
         try {
-          await runtime.providerModels.save(
+          const savedModel = await runtime.providerModels.save(
             providerId,
             item.vendorModelId,
             item.displayName ?? undefined,
           );
+          if (!savedModel.ok) throw savedModel.error;
           savedNow.push(item.vendorModelId);
         } catch (cause) {
           setSaveError(formatError(cause));

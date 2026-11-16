@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -75,19 +76,21 @@ function fakeAgentRegistry(options?: {
     ),
     get: record("get", async (id: string) => {
       const found = persisted.get(id);
-      if (found == null) throw new AppError("AGENT_NOT_FOUND", `未找到 ${id}`);
-      return found;
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+      if (found == null) return Result.err(new AppError("AGENT_NOT_FOUND", {agentId: id}));
+      return Result.ok(found);
     }),
     upsert: recordedUpsert,
     update: record("update", async (id: string, patch: AgentDefinitionPatch) => {
       const current = persisted.get(id);
-      if (current == null) throw new AppError("AGENT_NOT_FOUND", `未找到 ${id}`);
+      if (current == null) return Result.err(new AppError("AGENT_NOT_FOUND", {agentId: id}));
       const merged = applyMergePatch(current, patch);
       await recordedUpsert(id, merged);
       return Result.ok(merged);
     }),
     delete: record("delete", async (id: string) => {
       persisted.delete(id);
+      return Result.ok(undefined);
     }),
   };
   return { ...service, calls } as ReturnType<typeof fakeAgentRegistry>;
@@ -173,7 +176,7 @@ describe("agent 管理工具", () => {
   // T-AG1：action 分派与字段校验——缺必填报 INVALID_ARGUMENT 且错误信息含字段名。
   it("T-AG1：get 缺 name 与 agentId 报 INVALID_ARGUMENT 且文案含字段名", async () => {
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("agent", { action: "get" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
         isAppError(e) && e.key.startsWith("TOOL_") &&
@@ -185,7 +188,7 @@ describe("agent 管理工具", () => {
 
   it("T-AG1：create 缺 definition 报 INVALID_ARGUMENT 且文案含字段名", async () => {
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("agent", { action: "create" }, makeCtx(fakeAgentRegistry())),
       (e: unknown) =>
         isAppError(e) && e.key.startsWith("TOOL_") &&
@@ -196,7 +199,7 @@ describe("agent 管理工具", () => {
 
   it("T-AG1：update 缺定位字段（name/agentId 均空）报 INVALID_ARGUMENT", async () => {
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",
@@ -228,11 +231,11 @@ describe("agent 管理工具", () => {
   // T-AG2：list 含虚拟 general；get by-name 命中 general、by-agentId 走 registry.get。
   it("T-AG2：list 从装配期快照直出，含虚拟 general（name/描述/mode）", async () => {
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "list";
       entries: { name: string; description?: string; mode: string }[];
       total: number;
-    }>("agent", { action: "list" }, makeCtx(fakeAgentRegistry()));
+    }>("agent", { action: "list" }, makeCtx(fakeAgentRegistry())));
 
     assert.equal(out.action, "list");
     assert.equal(out.total, 2);
@@ -247,11 +250,11 @@ describe("agent 管理工具", () => {
   it("T-AG2：get by-name 命中虚拟 general（走 registry.list，无 agentId 回填）", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "get";
       agentId?: string;
       definition: AgentDefinition;
-    }>("agent", { action: "get", name: "general" }, makeCtx(registry));
+    }>("agent", { action: "get", name: "general" }, makeCtx(registry)));
 
     assert.equal(out.action, "get");
     assert.equal(out.definition.name, "general");
@@ -264,11 +267,11 @@ describe("agent 管理工具", () => {
   it("T-AG2：get by-agentId 走 getRawWire 判存在 + registry.get 解码", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "get";
       agentId?: string;
       definition: AgentDefinition;
-    }>("agent", { action: "get", agentId: "agent-1" }, makeCtx(registry));
+    }>("agent", { action: "get", agentId: "agent-1" }, makeCtx(registry)));
 
     assert.equal(out.agentId, "agent-1");
     assert.equal(out.definition.name, "beta");
@@ -279,10 +282,10 @@ describe("agent 管理工具", () => {
   it("T-AG2：get by-name 输入侧 trim——带空白的名字仍可命中（D-4）", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "get";
       definition: AgentDefinition;
-    }>("agent", { action: "get", name: "  beta  " }, makeCtx(registry));
+    }>("agent", { action: "get", name: "  beta  " }, makeCtx(registry)));
 
     assert.equal(out.action, "get");
     assert.equal(out.definition.name, "beta");
@@ -291,12 +294,12 @@ describe("agent 管理工具", () => {
   it("T-AG2：get 未命中（by-name / by-agentId）报 FAILED 且文案含目标", async () => {
     const runner = makeRunner();
     const ctx = makeCtx(fakeAgentRegistry());
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("agent", { action: "get", name: "nope" }, ctx),
       (e: unknown) =>
         isAppError(e, "TOOL_FAILED") && e.message.includes("nope"),
     );
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("agent", { action: "get", agentId: "agent-404" }, ctx),
       (e: unknown) =>
         isAppError(e) && e.key.startsWith("TOOL_") &&
@@ -309,7 +312,7 @@ describe("agent 管理工具", () => {
   it("T-AG3：create 生成 agent- 前缀新 id 并经 upsert 落盘", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "create";
       name: string;
       agentId: string;
@@ -317,7 +320,7 @@ describe("agent 管理工具", () => {
       "agent",
       { action: "create", definition: { name: "gamma", mode: "subagent" } },
       makeCtx(registry),
-    );
+    ));
 
     assert.equal(out.action, "create");
     assert.equal(out.name, "gamma");
@@ -332,7 +335,7 @@ describe("agent 管理工具", () => {
       upsertErr: () => new AppError("AGENT_INVALID_TOOL_POLICY", { detail: "工具策略含未注册工具名：nope_tool" }),
     });
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",
@@ -352,7 +355,7 @@ describe("agent 管理工具", () => {
       upsertThrows: () => new Error("数据库只读"),
     });
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",
@@ -382,7 +385,7 @@ describe("agent 管理工具", () => {
     // 直接重建：fakeAgentRegistry 的 persisted 固定 agent-1=def("beta")，
     // 所以这里用 by-agentId 定位这条预置行更有代表性——另见下方 e2e。
     const runner = makeRunner();
-    const out = await runner.call<{
+    const out = unwrap(await runner.call<{
       action: "update";
       name: string;
       agentId: string;
@@ -394,7 +397,7 @@ describe("agent 管理工具", () => {
         definition: { description: "新描述" },
       },
       makeCtx(registry),
-    );
+    ));
 
     assert.equal(out.action, "update");
     assert.equal(out.agentId, "agent-1");
@@ -413,16 +416,16 @@ describe("agent 管理工具", () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
     // 先补 model 现状，再置 null 清除
-    await runner.call("agent", {
+    unwrap(await runner.call("agent", {
       action: "update",
       agentId: "agent-1",
       definition: { model: "m-1" },
-    }, makeCtx(registry));
-    await runner.call("agent", {
+    }, makeCtx(registry)));
+    unwrap(await runner.call("agent", {
       action: "update",
       agentId: "agent-1",
       definition: { model: null },
-    }, makeCtx(registry));
+    }, makeCtx(registry)));
     const upserts = registry.calls.filter((c) => c.method === "upsert");
     assert.equal(upserts.length, 2);
     assert.ok("model" in (upserts[0]!.args[1] as Record<string, unknown>));
@@ -433,7 +436,7 @@ describe("agent 管理工具", () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
     const persistBlock = { name: "p1", content: "持久块" };
-    await runner.call(
+    unwrap(await runner.call(
       "agent",
       {
         action: "update",
@@ -441,7 +444,7 @@ describe("agent 管理工具", () => {
         definition: { prompts: { persist: [persistBlock] } },
       },
       makeCtx(registry),
-    );
+    ));
     const upsert = registry.calls.find((c) => c.method === "upsert");
     assert.ok(upsert);
     assert.deepEqual((upsert.args[1] as { prompts: unknown }).prompts, {
@@ -453,7 +456,7 @@ describe("agent 管理工具", () => {
   it("T-AG6：空 patch 报 INVALID_ARGUMENT 且文案说明部分更新语义", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",
@@ -470,7 +473,7 @@ describe("agent 管理工具", () => {
 
   it("T-AG3：update by-name 命中虚拟 general（无持久化 id）报「内置 agent 不支持修改」", async () => {
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",
@@ -487,11 +490,11 @@ describe("agent 管理工具", () => {
   it("T-AG3：update by-agentId 先 getRawWire 判存在再直达持久化行（B-nit1）", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    const out = await runner.call<{ action: "update"; agentId: string }>(
+    const out = unwrap(await runner.call<{ action: "update"; agentId: string }>(
       "agent",
       { action: "update", agentId: "agent-1", definition: { name: "beta2" } },
       makeCtx(registry),
-    );
+    ));
     assert.equal(out.agentId, "agent-1");
     // 存在性检查先行，随后 upsert 覆盖同一持久化行。
     assert.ok(registry.calls.some((c) => c.method === "getRawWire"));
@@ -503,7 +506,7 @@ describe("agent 管理工具", () => {
   it("T-AG3：update by-agentId 过期 id 报 INVALID_ARGUMENT 且不静默新建（B-nit1）", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "agent",

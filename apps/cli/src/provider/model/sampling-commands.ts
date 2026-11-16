@@ -83,15 +83,17 @@ export async function runProviderModelSampling(
         },
       });
       if (!parsed.ok) return Result.err(parsed.error);
-      await rt.providerModels.updateSettings(saved.value.id, {
+      const updated = await rt.providerModels.updateSettings(saved.value.id, {
         sampling: savedModelSampling(parsed.value),
       });
+      if (!updated.ok) return Result.err(updated.error);
       return RESULT_OK;
     }
     case "clear": {
-      await rt.providerModels.updateSettings(saved.value.id, {
+      const cleared = await rt.providerModels.updateSettings(saved.value.id, {
         sampling: { enabled: false },
       });
+      if (!cleared.ok) return Result.err(cleared.error);
       return RESULT_OK;
     }
     default:

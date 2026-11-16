@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -98,7 +98,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
@@ -362,7 +362,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
   it("skipVfsReconcile 与 revisionHeadBackfill 同时指定时抛错", async () => {
     const { ctx, project, session, assistant1 } = await setupR1Scenario();
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(
           session.id,

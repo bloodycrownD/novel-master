@@ -24,6 +24,7 @@ import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js
 import { InMemoryAgentSession } from "@novel-master/core/agent";
 
 import { createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
+import { Result } from "../../src/errors/either.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
@@ -87,22 +88,22 @@ describe("TokenRatioConditionTrigger", () => {
     const below = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await below.shouldTrigger(session, evaluation), false);
+    assert.equal((await below.shouldTrigger(session, evaluation)).value, false);
 
     assert.equal(
-      await new TokenRatioConditionTrigger(
+      (await new TokenRatioConditionTrigger(
         {
           tokenRatio: 0.8,
-          resolveContextWindow: async () => null,
-          resolveTokenizerOverride: async () => "auto",
+          resolveContextWindow: async () => Result.ok(null),
+          resolveTokenizerOverride: async () => Result.ok("auto"),
         },
         registry,
-      ).shouldTrigger(session, evaluation),
+      ).shouldTrigger(session, evaluation)).value,
       false,
     );
   });
@@ -122,12 +123,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), true);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, true);
   });
 
   it("does not fire when token count equals threshold (strict >)", async () => {
@@ -144,12 +145,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 
   it("无统计可用时评估走 heuristic 估算、不调驱动（preferEstimate，T5 改版）", async () => {
@@ -173,8 +174,8 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "heuristic",
+        resolveContextWindow: async () => Result.ok(100_000),
+          resolveTokenizerOverride: async () => Result.ok("heuristic"),
       },
       registry,
     );
@@ -205,25 +206,25 @@ describe("TokenRatioConditionTrigger", () => {
       new TokenRatioConditionTrigger(
         {
           tokenRatio: 0.8,
-          resolveContextWindow: async () => 100_000,
-          resolveTokenizerOverride: async () => "auto",
+          resolveContextWindow: async () => Result.ok(100_000),
+          resolveTokenizerOverride: async () => Result.ok("auto"),
           heuristicSafetyFactor,
         },
         registry,
       );
 
     assert.equal(
-      await makeTrigger().shouldTrigger(session, evaluation),
+      (await makeTrigger().shouldTrigger(session, evaluation)).value,
       true,
       "heuristic 估算（估算优先路径的必然档位）必须走保守阈值",
     );
     // safetyFactor=1 时退化回精确阈值，不再提前触发。
-    assert.equal(await makeTrigger(1).shouldTrigger(session, evaluation), false);
+    assert.equal((await makeTrigger(1).shouldTrigger(session, evaluation)).value, false);
 
     // 对照：同数值走 api 精确档（counterKind=api）不乘系数 → 不触发。
     await seedKkvEntry(sessionKkv, "sess-heuristic-factor", 75_000);
     assert.equal(
-      await makeTrigger().shouldTrigger(session, evaluation),
+      (await makeTrigger().shouldTrigger(session, evaluation)).value,
       false,
       "api 基线命中时不乘保守系数",
     );
@@ -247,12 +248,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), true);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, true);
   });
 
   it("API 口径（counterKind=api）不乘 heuristic 安全系数", async () => {
@@ -273,12 +274,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 
   it("指纹不符（KKV 值属于别的模型）→ 当 miss 走本地估算", async () => {
@@ -306,12 +307,12 @@ describe("TokenRatioConditionTrigger", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       registry,
     );
     // 不采用 99_999（否则必触发）；本地估算 + heuristic 安全系数下也不会触发。
-    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+    assert.equal((await trigger.shouldTrigger(session, evaluation)).value, false);
   });
 });

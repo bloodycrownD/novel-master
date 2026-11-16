@@ -4,6 +4,8 @@
  * @module service/session-fs/session-fs.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { RollbackOptions } from "@/service/message-checkpoint/message-rollback.port.js";
 
 /**
@@ -23,5 +25,5 @@ export interface SessionFsService {
     projectId: string,
     messageId: string,
     options?: RollbackOptions
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 }

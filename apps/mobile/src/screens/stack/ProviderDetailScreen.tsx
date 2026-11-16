@@ -1,8 +1,6 @@
 /**
  * Saved models for one provider; add model + navigate to sampling.
  */
-import {AppError, Result} from '@novel-master/core/errors';
-import {isAppError} from '@novel-master/core/agent';
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
@@ -104,15 +102,18 @@ export function ProviderDetailScreen() {
         // 缺路由参数：空态兑底（fetcher 返回 null 由 hook 落到 fallbackValue）
         return null;
       }
-      const provider = await runtime.providers.get(providerId);
+      const got = await runtime.providers.get(providerId);
+      if (!got.ok) throw got.error;
+      const provider = got.value;
       setStackOverride({title: provider.displayName});
       const saved = await runtime.providerModels.savedList(providerId);
+      if (!saved.ok) throw saved.error;
       const nameCounts = new Map<string, number>();
-      for (const model of saved) {
+      for (const model of saved.value) {
         const key = modelNameKey(model.providerId, model.modelName);
         nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
       }
-      return saved.map(model => {
+      return saved.value.map(model => {
         const sampling = savedModelSampling(model.settings);
         const hasSampling = Boolean(sampling.enabled && sampling.params);
         const duplicate =
@@ -157,14 +158,16 @@ export function ProviderDetailScreen() {
     if (!providerId) {
       return;
     }
-    await runtime.providerModels.save(providerId, vendorModelId, modelName);
+    const savedModel = await runtime.providerModels.save(providerId, vendorModelId, modelName);
+    if (!savedModel.ok) throw savedModel.error;
     await reload();
     showToast('已添加模型');
   };
 
   const deleteModels = async (savedModelIds: string[]) => {
     for (const savedModelId of savedModelIds) {
-      await runtime.providerModels.deleteSaved(savedModelId);
+      const deleted = await runtime.providerModels.deleteSaved(savedModelId);
+      if (!deleted.ok) throw deleted.error;
     }
     await reload();
   };
@@ -172,20 +175,10 @@ export function ProviderDetailScreen() {
   const confirmBatchDelete = useBatchDeleteConfirm<string>({
     title: '删除模型',
     message: ids => `确定删除选中的 ${ids.length} 个模型？`,
+    // 五期门⑦：deleteSaved 已知失败沿返回值到达，直接透传，不再走 try/catch 桥。
     deleteOne: useCallback(
       async (savedModelId: string) => {
-        try {
-          await runtime.providerModels.deleteSaved(savedModelId);
-          return Result.ok(undefined);
-        } catch (error) {
-          // void-throwing core 方法 → Result 桥（错误通道迁移四期）；
-          // deleteSaved 的失败面是 AppError，非 AppError 兜 INFRA_UNEXPECTED_ERROR。
-          return Result.err(
-            isAppError(error)
-              ? error
-              : new AppError('INFRA_UNEXPECTED_ERROR', {detail: String(error)}),
-          );
-        }
+        return runtime.providerModels.deleteSaved(savedModelId);
       },
       [runtime],
     ),
@@ -215,7 +208,8 @@ export function ProviderDetailScreen() {
       return;
     }
     try {
-      await runtime.providerModels.editSaved(menuSavedModelId, modelName);
+      const renamed = await runtime.providerModels.editSaved(menuSavedModelId, modelName);
+      if (!renamed.ok) throw renamed.error;
       await reload();
       showToast('已重命名模型');
       setMenuSavedModelId(undefined);
@@ -431,7 +425,9 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const provider = await runtime.providers.get(providerId);
+      const got = await runtime.providers.get(providerId);
+      if (!got.ok) throw got.error;
+      const provider = got.value;
       const listed = (await runtime.providers.list()).find(
         p => p.id === providerId,
       );

@@ -21,6 +21,7 @@ import {
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -54,7 +55,7 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
     const registry = createAgentRegistryService(testCtx.conn);
     const idsBefore = new Set(await registry.listAgentIds());
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         makeRunner().call(
           "agent",
@@ -66,9 +67,11 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
-        e.key === "TOOL_INVALID_ARGUMENT" &&
-        e.message.includes("error.agent.invalid_schema.name_required"),
+        assert.ok(
+          isAppError(e) && e.key.startsWith("TOOL_") &&
+          e.key === "TOOL_INVALID_ARGUMENT" &&
+          e.message.includes("error.agent.invalid_schema.name_required"),
+        ),
     );
 
     // 拒绝后无落盘：持久化 id 集合与调用前一致（无 agent- 前缀新行）。
@@ -103,10 +106,10 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
       },
       makeRealCtx(),
     );
-    assert.equal(out.action, "update");
+    assert.equal(unwrap(out).action, "update");
 
     // 读回：description 已改，prompts 布局原样保留
-    const saved = await registry.get(agentId);
+    const saved = unwrap(await registry.get(agentId));
     assert.equal(saved.description, "新描述");
     assert.equal(saved.name, "patch-e2e-alpha");
     // wire 往返会给块补 type: "text"（归一），断言对齐落盘后的形状。
@@ -128,7 +131,7 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
     await registry.upsert(a, { name: "dup-target" } as never);
     await registry.upsert(b, { name: "dup-source" } as never);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         makeRunner().call(
           "agent",
@@ -136,9 +139,11 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
           makeRealCtx(),
         ),
       (e: unknown) =>
-        isAppError(e) && e.key.startsWith("TOOL_") &&
-        e.key === "TOOL_INVALID_ARGUMENT" &&
-        e.message.includes("error.agent.duplicate_name"),
+        assert.ok(
+          isAppError(e) && e.key.startsWith("TOOL_") &&
+          e.key === "TOOL_INVALID_ARGUMENT" &&
+          e.message.includes("error.agent.duplicate_name"),
+        ),
     );
 
     await registry.delete(a);

@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -35,7 +35,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     }));
 
     // backfill 前直接 undo_send 会被 Step 8 的护栏拦下（空 targetTree）。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),

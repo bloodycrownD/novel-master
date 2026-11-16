@@ -9,6 +9,8 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 
 /**
@@ -50,23 +52,17 @@ export class ChatAgentSession implements AgentSession {
       /** 结构化附件：透传给 `MessageService.append`（写 `attachments_json`）。 */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessageData> {
-    const appended = await this.messages.append(this.sessionId, role, content, options);
-    if (!appended.ok) throw appended.error;
-    return appended.value;
+  ): Promise<Result<ChatMessageData, AppError>> {
+    // 已知失败沿返回值接力（五期门⑦）：消息仓储 `Result` 原样透传，由 agent
+    // turn loop 框架级统一收口。
+    return this.messages.append(this.sessionId, role, content, options);
   }
 
-  /**
-   * 解包 throw 边界（错误通道迁移三期门⑦）：消息仓储 `Result` → agent 会话异常通道转码点（truncateAfterMessage 等同款）——失败原样上抛，由 agent turn loop 框架级统一收口。
-   */
-  async hideRange(fromSeq: number, toSeq: number): Promise<number> {
-    const hidden = await this.messages.hideRange(this.sessionId, fromSeq, toSeq);
-    if (!hidden.ok) throw hidden.error;
-    return hidden.value;
+  async hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
+    return this.messages.hideRange(this.sessionId, fromSeq, toSeq);
   }
 
-  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
-    const truncated = await this.messages.truncateAfter(this.sessionId, afterMessageId);
-    if (!truncated.ok) throw truncated.error;
+  async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
+    return this.messages.truncateAfter(this.sessionId, afterMessageId);
   }
 }

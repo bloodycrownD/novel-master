@@ -67,12 +67,14 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
     return Result.ok(undefined);
   }
 
-  /** `KKV_NOT_FOUND` 归一为空缓存；其余 KKV 失败经 `Result.err` 原样接力。 */
+  /** `KKV_NOT_FOUND` 归一为空缓存；其余 KKV 失败与缓存毒行 decode 失败均经 `Result.err` 原样接力。 */
   private async readCache(providerId: string): Promise<Result<ModelSuggestionCache, AppError>> {
     const raw = await this.kkv.get(MODULE, providerId);
     if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     if (!raw.ok) return Result.ok({ schemaVersion: 1, models: [] });
-    return Result.ok(decode(JSON.parse(raw.value) as unknown, modelSuggestionCacheSchema));
+    // decode 已 Result 化（错误通道迁移四期）；毒行沿返回值上递给三个公开口。
+    const decoded = decode(JSON.parse(raw.value) as unknown, modelSuggestionCacheSchema);
+    return decoded;
   }
 
   private async writeCache(providerId: string, cache: ModelSuggestionCache): Promise<void> {

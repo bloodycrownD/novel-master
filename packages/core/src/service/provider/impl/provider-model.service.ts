@@ -7,6 +7,7 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";
 import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
@@ -44,45 +45,48 @@ export interface DefaultProviderModelServiceDeps {
 function resolvePersistedModelName(
   vendorModelId: string,
   modelName?: string
-): string {
+): Result<string, AppError> {
   if (modelName === undefined) {
-    return vendorModelId;
+    return Result.ok(vendorModelId);
   }
   const trimmed = modelName.trim();
   if (trimmed.length === 0) {
-    throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" });
+    return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty" }));
   }
-  return trimmed;
+  return Result.ok(trimmed);
 }
 
-/** 解包 domain 的 Result，保持 service 对 app 的 AppError 契约。 */
+/** 解包 domain 的 Result，保持 service 对 app 的 AppError 契约（五期门⑦走返回值）。 */
 async function requireSavedModel(
   savedModelId: string,
   savedModels: SavedModelRepository
-): Promise<SavedModel> {
+): Promise<Result<SavedModel, AppError>> {
   const asserted = await assertSavedModelUuid(savedModelId, savedModels);
   if (!asserted.ok) {
-    throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: asserted.error.message, modelId: savedModelId });
+    return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: asserted.error.message, modelId: savedModelId }));
   }
-  return asserted.value;
+  return Result.ok(asserted.value);
 }
 
 /** Model suggestion and saved-model service. */
 export class DefaultProviderModelService implements ProviderModelService {
   constructor(private readonly deps: DefaultProviderModelServiceDeps) {}
 
-  async suggestList(providerId: string): Promise<ModelSuggestion[]> {
-    await this.deps.providers.get(providerId);
+  async suggestList(providerId: string): Promise<Result<ModelSuggestion[], AppError>> {
+    const got = await this.deps.providers.get(providerId);
+    if (!got.ok) return Result.err(got.error);
     const listed = await this.deps.suggestions.listByProvider(providerId);
-    if (!listed.ok) throw listed.error;
-    return listed.value;
+    if (!listed.ok) return Result.err(listed.error);
+    return Result.ok(listed.value);
   }
 
-  async fetch(providerId: string): Promise<void> {
-    const provider = await this.deps.providers.get(providerId);
+  async fetch(providerId: string): Promise<Result<void, AppError>> {
+    const got = await this.deps.providers.get(providerId);
+    if (!got.ok) return Result.err(got.error);
+    const provider = got.value;
     const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      throw new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId });
+      return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId }));
     }
     const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
@@ -105,14 +109,16 @@ export class DefaultProviderModelService implements ProviderModelService {
       });
     }
     await this.deps.suggestions.markStaleExcept(providerId, seen);
+    return Result.ok(undefined);
   }
 
   async save(
     providerId: string,
     vendorModelId: string,
     modelName?: string
-  ): Promise<SavedModel> {
-    await this.deps.providers.get(providerId);
+  ): Promise<Result<SavedModel, AppError>> {
+    const got = await this.deps.providers.get(providerId);
+    if (!got.ok) return Result.err(got.error);
     const normalizedVendorModelId = normalizeVendorModelId(
       providerId,
       vendorModelId
@@ -121,47 +127,51 @@ export class DefaultProviderModelService implements ProviderModelService {
       normalizedVendorModelId,
       modelName
     );
+    if (!persistedModelName.ok) return Result.err(persistedModelName.error);
     const now = Date.now();
     const model: SavedModel = {
       id: randomUUID(),
       providerId,
       vendorModelId: normalizedVendorModelId,
-      modelName: persistedModelName,
+      modelName: persistedModelName.value,
       settings: defaultSavedModelSettings(normalizedVendorModelId),
       createdAtMs: now,
       updatedAtMs: now,
     };
     await this.deps.savedModels.insert(model);
-    return model;
+    return Result.ok(model);
   }
 
-  async create(providerId: string, vendorModelId: string): Promise<SavedModel> {
+  async create(providerId: string, vendorModelId: string): Promise<Result<SavedModel, AppError>> {
     return this.save(providerId, vendorModelId);
   }
 
-  async savedList(providerId: string): Promise<SavedModel[]> {
-    await this.deps.providers.get(providerId);
+  async savedList(providerId: string): Promise<Result<SavedModel[], AppError>> {
+    const got = await this.deps.providers.get(providerId);
+    if (!got.ok) return Result.err(got.error);
     const listed = await this.deps.savedModels.listByProvider(providerId);
-    if (!listed.ok) throw listed.error;
-    return listed.value;
+    if (!listed.ok) return Result.err(listed.error);
+    return Result.ok(listed.value);
   }
 
   async editSaved(
     savedModelId: string,
     modelName?: string
-  ): Promise<SavedModel> {
-    const existing = await requireSavedModel(
+  ): Promise<Result<SavedModel, AppError>> {
+    const found = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
     let nextModelName = existing.modelName;
     if (modelName === null) {
-      throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId });
+      return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId }));
     }
     if (modelName !== undefined) {
       const trimmed = modelName.trim();
       if (trimmed.length === 0) {
-        throw new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId });
+        return Result.err(new AppError("PROVIDER_INVALID_MODEL_NAME", { detail: "modelName must not be empty", modelId: savedModelId }));
       }
       nextModelName = trimmed;
     }
@@ -171,46 +181,51 @@ export class DefaultProviderModelService implements ProviderModelService {
       updatedAtMs: Date.now(),
     };
     await this.deps.savedModels.updateById(updated);
-    return updated;
+    return Result.ok(updated);
   }
 
-  async deleteSaved(savedModelId: string): Promise<void> {
-    const existing = await requireSavedModel(
+  async deleteSaved(savedModelId: string): Promise<Result<void, AppError>> {
+    const found = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
     const refs = await findSavedModelReferences(this.deps.conn, savedModelId);
     if (refs.length > 0) {
-      throw new AppError("PROVIDER_SAVED_MODEL_IN_USE", { detail: `Saved model is in use: ${refs.join(", ")}`, modelId: savedModelId, providerId: existing.providerId });
+      return Result.err(new AppError("PROVIDER_SAVED_MODEL_IN_USE", { detail: `Saved model is in use: ${refs.join(", ")}`, modelId: savedModelId, providerId: existing.providerId }));
     }
     const ok = await this.deps.savedModels.deleteById(savedModelId);
     if (!ok) {
-      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Saved model not found: ${savedModelId}`, modelId: savedModelId });
+      return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Saved model not found: ${savedModelId}`, modelId: savedModelId }));
     }
+    return Result.ok(undefined);
   }
 
   async updateSettings(
     savedModelId: string,
     patch: SavedModelSettingsPatch
-  ): Promise<SavedModel> {
-    const existing = await requireSavedModel(
+  ): Promise<Result<SavedModel, AppError>> {
+    const found = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
 
     if (
       patch.contextWindowTokens != null &&
       (!Number.isInteger(patch.contextWindowTokens) ||
         patch.contextWindowTokens <= 0)
     ) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "contextWindowTokens must be a positive integer", modelId: savedModelId, providerId: existing.providerId });
+      return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: "contextWindowTokens must be a positive integer", modelId: savedModelId, providerId: existing.providerId }));
     }
 
     if (
       patch.tokenCounterMode != null &&
       !isValidTokenCounterModePref(patch.tokenCounterMode)
     ) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId });
+      return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: `Invalid tokenCounterMode: ${patch.tokenCounterMode}`, modelId: savedModelId, providerId: existing.providerId }));
     }
 
     const mergedSettings = applySavedModelSettingsPatch(
@@ -219,7 +234,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     );
     const persistable = assertSavedModelSettingsPersistable(mergedSettings);
     if (!persistable.ok) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", { detail: persistable.error.message });
+      return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", { detail: persistable.error.message }));
     }
 
     const updated: SavedModel = {
@@ -229,33 +244,37 @@ export class DefaultProviderModelService implements ProviderModelService {
     };
 
     await this.deps.savedModels.updateById(updated);
-    return updated;
+    return Result.ok(updated);
   }
 
-  async resetContextWindowToDefault(savedModelId: string): Promise<SavedModel> {
-    const existing = await requireSavedModel(
+  async resetContextWindowToDefault(savedModelId: string): Promise<Result<SavedModel, AppError>> {
+    const found = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
+    if (!found.ok) return Result.err(found.error);
+    const existing = found.value;
     const defaults = defaultSavedModelSettings(existing.vendorModelId);
     return this.updateSettings(savedModelId, {
       contextWindowTokens: defaults.internal.contextWindowTokens,
     });
   }
 
-  async getSavedById(savedModelId: string): Promise<SavedModel | null> {
+  async getSavedById(savedModelId: string): Promise<Result<SavedModel | null, AppError>> {
     const saved = await this.deps.savedModels.findById(savedModelId);
-    if (!saved.ok) throw saved.error;
-    return saved.value;
+    if (!saved.ok) return Result.err(saved.error);
+    return Result.ok(saved.value);
   }
 
-  async getContextWindow(savedModelId: string): Promise<number | null> {
+  async getContextWindow(savedModelId: string): Promise<Result<number | null, AppError>> {
     const saved = await this.getSavedById(savedModelId);
-    return saved != null ? savedModelContextWindowTokens(saved.settings) : null;
+    if (!saved.ok) return Result.err(saved.error);
+    return Result.ok(saved.value != null ? savedModelContextWindowTokens(saved.value.settings) : null);
   }
 
-  async getTokenCounterMode(savedModelId: string): Promise<TokenizerOverride> {
+  async getTokenCounterMode(savedModelId: string): Promise<Result<TokenizerOverride, AppError>> {
     const saved = await this.getSavedById(savedModelId);
-    return saved != null ? savedModelTokenCounterMode(saved.settings) : "auto";
+    if (!saved.ok) return Result.err(saved.error);
+    return Result.ok(saved.value != null ? savedModelTokenCounterMode(saved.value.settings) : "auto");
   }
 }

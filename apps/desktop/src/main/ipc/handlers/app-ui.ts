@@ -18,7 +18,10 @@ export async function handleAppUiGet(
   req: AppUiGetRequest,
 ): Promise<AppUiGetResponse> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const appUi = createDesktopAppUiPreferences(rt.kkv);
     const raw = await appUi.get(req.key);
     if (!raw.ok) return { ok: false, error: formatIpcError(raw.error) };
@@ -32,7 +35,10 @@ export async function handleAppUiSet(
   req: AppUiSetRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const appUi = createDesktopAppUiPreferences(rt.kkv);
     if (req.key === DESKTOP_UI_KEY_THEME && req.value !== "light" && req.value !== "dark") {
       return {

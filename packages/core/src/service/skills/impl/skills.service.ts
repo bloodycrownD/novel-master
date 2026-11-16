@@ -35,6 +35,7 @@ import { validateSkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type {
   SkillEditMatch,
   SkillFileContent,
@@ -200,7 +201,7 @@ export class SkillsService implements SkillService {
     return new AppError("SKILL_NOT_FOUND", { descriptor: {key: "error.skill.not_found_in_domain", params: {name, domain, path, hint}}, skillName: name, path, domain });
   }
 
-  async listSkills(scope: SkillListScope): Promise<SkillListItem[]> {
+  async listSkills(scope: SkillListScope): Promise<Result<SkillListItem[], AppError>> {
     const { vfs, domain } = this.vfsForScope(scope);
     const listed = await vfs.list(SKILLS_ROOT, { recursive: true });
     let entries: VfsListEntry[];
@@ -209,9 +210,10 @@ export class SkillsService implements SkillService {
     } else {
       // 技能根目录尚不存在 = 无技能（write 首个 SKILL.md 时才会建目录行）
       if (isAppError(listed.error, "VFS_NOT_FOUND")) {
-        return [];
+        return Result.ok([]);
       }
-      throw listed.error;
+      // 其余清单读取失败沿返回值接力（五期门⑦），由调用方收口。
+      return Result.err(listed.error);
     }
 
     const rootPrefix = `${SKILLS_ROOT}/`;
@@ -240,7 +242,7 @@ export class SkillsService implements SkillService {
       items.push(await this.summarizeSkill(vfs, domain, name, files));
     }
     items.sort((a, b) => a.name.localeCompare(b.name));
-    return items;
+    return Result.ok(items);
   }
 
   /** 读取 SKILL.md 解析 front matter，拼清单条目（读不到按无效处理）。 */
@@ -275,9 +277,11 @@ export class SkillsService implements SkillService {
     };
   }
 
-  async effectiveSkills(projectId: string): Promise<EffectiveSkill[]> {
+  async effectiveSkills(projectId: string): Promise<Result<EffectiveSkill[], AppError>> {
     const [global, project, disabledNames] = await Promise.all([this.listSkills("global"), this.listSkills({ projectId }), this.disabledRules.listDisabledNames(`project:${projectId}`)]);
-    return computeEffectiveSkills({ global, project, disabledNames });
+    if (!global.ok) return Result.err(global.error);
+    if (!project.ok) return Result.err(project.error);
+    return Result.ok(computeEffectiveSkills({ global: global.value, project: project.value, disabledNames }));
   }
 
   async readSkillFile(domain: SkillDomain | undefined, name: string, path?: string, projectId?: string): Promise<Result<SkillFileContent, AppError>> {
@@ -490,7 +494,8 @@ export class SkillsService implements SkillService {
         // renamePrefix 无目标存在检查，由上一步事务内查重保证）
         if (renaming) {
           const renamed = await vfs.renamePrefix(oldPrefix, newPrefix);
-          if (!renamed.ok) throw renamed.error;
+          // 事务回调内失败必须 throw 才能回滚（unwrapOrRollback 集中解包，见 helper 注释）。
+          unwrapOrRollback(renamed);
         }
 
         // 校验链 6：front matter 同步——解析成功才重写（bump version +
@@ -502,11 +507,13 @@ export class SkillsService implements SkillService {
         if (entryRead.ok) {
           source = entryRead.value.content;
         } else if (!isAppError(entryRead.error, "VFS_NOT_FOUND")) {
-          throw entryRead.error;
+          // 非 NOT_FOUND 的读取失败：抛出触发事务回滚（helper 集中解包）。
+          unwrapOrRollback(entryRead);
         }
         if (source != null && parseSkillFrontMatter(source).valid) {
           const written = await vfs.write(entryPath, withSkillFrontMatterValues(source, { ...(newName != null ? { name: newName } : {}), ...(description != null ? { description } : {}) }));
-          if (!written.ok) throw written.error;
+          // 写失败必须回滚（renamePrefix 已迁移目录，吞错会留半写状态）。
+          unwrapOrRollback(written);
         }
 
         // 校验链 7：负清单迁移（仅改名时）——project 域迁本项目单行；

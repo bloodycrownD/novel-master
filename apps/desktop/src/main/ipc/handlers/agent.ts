@@ -42,148 +42,124 @@ import {
   isDesktopAgentActive,
 } from "../../runtime/agent-activity.js";
 import { createLogger } from "@novel-master/core/log";
+import { type AppError, Result } from "@novel-master/core/errors";
 import { formatIpcError } from "../format-ipc-error.js";
-import { ipcErr } from "../ipc-result.js";
+import { toIpcResult } from "../ipc-result.js";
 import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-appended.js";
 
 const log = createLogger("desktop.ipc.agent");
 
 async function resolveModelLabel(
-  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
+  rt: DesktopNovelMasterRuntime,
   savedModelId: string,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const saved = await rt.providerModels.getSavedById(savedModelId);
-  if (saved == null) {
-    return savedModelId;
+  if (!saved.ok) return Result.err(saved.error);
+  if (saved.value == null) {
+    return Result.ok(savedModelId);
   }
-  const provider = await rt.providers.get(saved.providerId);
-  return savedModelDisplayName(saved, provider.displayName);
+  const provider = await rt.providers.get(saved.value.providerId);
+  if (!provider.ok) return Result.err(provider.error);
+  return Result.ok(savedModelDisplayName(saved.value, provider.value.displayName));
 }
 
-export async function handleAgentResolveCurrent(): Promise<
-  IpcResult<AgentResolveCurrentResponse>
-> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurrentResponse>> {
+  return toIpcResult(async (): Promise<Result<AgentResolveCurrentResponse, AppError>> => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const agentId = await resolveCurrentAgentId(rt);
     if (agentId == null) {
-      return {
-        ok: true,
-        data: {
-          agentId: undefined,
-          agentName: "未配置 Agent",
-          modelLabel: "—",
-          hasDedicatedModel: false,
-        },
-      };
+      return Result.ok({ agentId: undefined, agentName: "未配置 Agent", modelLabel: "—", hasDedicatedModel: false });
     }
     const { definition } = await resolveCurrentAgentDefinition(rt);
-    const hasDedicatedModel =
-      definition.model != null && definition.model !== "";
+    const hasDedicatedModel = definition.model != null && definition.model !== "";
     // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
     const savedModelId = definition.model;
     let modelLabel = "未选择模型";
     if (savedModelId) {
-      modelLabel = await resolveModelLabel(rt, savedModelId);
+      const label = await resolveModelLabel(rt, savedModelId);
+      if (!label.ok) return Result.err(label.error);
+      modelLabel = label.value;
     }
-    return {
-      ok: true,
-      data: {
-        agentId,
-        agentName: definition.name,
-        modelLabel,
-        hasDedicatedModel,
-      },
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok({ agentId, agentName: definition.name, modelLabel, hasDedicatedModel });
+  });
 }
 
-export async function handleAgentListPicker(): Promise<
-  IpcResult<AgentListPickerResponse>
-> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleAgentListPicker(): Promise<IpcResult<AgentListPickerResponse>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const currentAgent = await rt.state.getCurrentAgentId();
-    if (!currentAgent.ok) return ipcErr(formatIpcError(currentAgent.error));
+    if (!currentAgent.ok) return Result.err(currentAgent.error);
     const currentId = currentAgent.value ?? undefined;
     const ids = await rt.agentRegistry.listAgentIds();
     const rows = [];
     for (const agentId of ids) {
       let label = agentId;
-      try {
-        const def = await rt.agentRegistry.get(agentId);
-        if (def.mode === "subagent") continue;
-        label = def.name?.trim() || agentId;
-      } catch {
-        /* keep id */
+      const def = await rt.agentRegistry.get(agentId);
+      if (def.ok) {
+        if (def.value.mode === "subagent") continue;
+        label = def.value.name?.trim() || agentId;
       }
       rows.push({ agentId, label });
     }
-    return { ok: true, data: { rows, currentId } };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok({ rows, currentId });
+  });
 }
 
-export async function handleAgentSetCurrent(
-  req: AgentSetCurrentRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    await rt.state.setCurrentAgentId(req.agentId);
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+export function handleAgentSetCurrent(req: AgentSetCurrentRequest): Promise<IpcResult<void>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
+    return rt.state.setCurrentAgentId(req.agentId);
+  });
 }
 
-export async function handleModelListPicker(): Promise<
-  IpcResult<ModelListPickerResponse>
-> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleModelListPicker(): Promise<IpcResult<ModelListPickerResponse>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const currentModel = await rt.state.getCurrentModelId();
-    if (!currentModel.ok) return ipcErr(formatIpcError(currentModel.error));
+    if (!currentModel.ok) return Result.err(currentModel.error);
     const currentId = currentModel.value ?? undefined;
     const providers = await rt.providers.list();
     const rows = [];
     for (const provider of providers) {
       const saved = await rt.providerModels.savedList(provider.id);
-      for (const model of saved) {
+      if (!saved.ok) return Result.err(saved.error);
+      for (const model of saved.value) {
         const savedModelId = model.id;
         let label = savedModelDisplayName(model, provider.displayName);
-        try {
-          label = await resolveModelLabel(rt, savedModelId);
-        } catch {
-          /* keep derived label */
+        const resolved = await resolveModelLabel(rt, savedModelId);
+        if (resolved.ok) {
+          label = resolved.value;
         }
         rows.push({ savedModelId, label });
       }
     }
     rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
-    return { ok: true, data: { rows, currentId } };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok({ rows, currentId });
+  });
 }
 
-export async function handleModelSetCurrent(
-  req: ModelSetCurrentRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const saved = await assertSavedModelUuid(
-      req.savedModelId,
-      rt.savedModelRepo,
-    );
-    if (!saved.ok) return ipcErr(formatIpcError(saved.error));
-    await rt.state.setCurrentModelId(saved.value.id);
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+export function handleModelSetCurrent(req: ModelSetCurrentRequest): Promise<IpcResult<void>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
+    const saved = await assertSavedModelUuid(req.savedModelId, rt.savedModelRepo);
+    if (!saved.ok) return Result.err(saved.error);
+    return rt.state.setCurrentModelId(saved.value.id);
+  });
 }
 
 /**
@@ -384,7 +360,10 @@ export async function handleAgentAbort(
 export async function handleAgentRunIsActive(
   req: AgentRunIsActiveRequest,
 ): Promise<IpcResult<boolean>> {
-  const rt = await getDesktopRuntime();
+  const built = await getDesktopRuntime();
+  // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+  if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+  const rt = built.value;
   return { ok: true, data: rt.abortRegistry.has(req.sessionId) };
 }
 
@@ -412,7 +391,10 @@ export async function handleAgentRun(
   }
 
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     await resolveDesktopSavedModelId(
       rt,
       (await resolveCurrentAgentDefinition(rt)).definition,
@@ -501,7 +483,13 @@ export async function handleAgentRun(
  * controller。refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
  */
 export async function abortAgentRun(sessionId: string): Promise<void> {
-  const rt = await getDesktopRuntime();
+  const built = await getDesktopRuntime();
+  // runtime 未就位时无在途 run 可中断（错误通道迁移七期：不抛，留痕后返回）。
+  if (!built.ok) {
+    log.warn("abort before runtime ready", { sessionId, error: built.error });
+    return;
+  }
+  const rt = built.value;
   rt.abortRegistry.abort(sessionId);
   // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
 }

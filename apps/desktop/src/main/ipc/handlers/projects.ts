@@ -8,9 +8,9 @@ import type {
   ProjectDto,
   ProjectRenameRequest,
 } from "../../../../shared/ipc-types.js";
+import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { formatIpcError } from "../format-ipc-error.js";
-import { ipcErr } from "../ipc-result.js";
+import { toIpcResult } from "../ipc-result.js";
 
 function toDto(project: {
   id: string;
@@ -26,51 +26,45 @@ function toDto(project: {
   };
 }
 
-export async function handleProjectsList(): Promise<IpcResult<ProjectDto[]>> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleProjectsList(): Promise<IpcResult<ProjectDto[]>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const projects = await rt.projects.list();
-    return { ok: true, data: projects.map(toDto) };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok(projects.map(toDto));
+  });
 }
 
-export async function handleProjectsCreate(
-  req: ProjectCreateRequest,
-): Promise<IpcResult<ProjectDto>> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleProjectsCreate(req: ProjectCreateRequest): Promise<IpcResult<ProjectDto>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const project = await rt.projects.create(req.name);
-    if (!project.ok) return ipcErr(formatIpcError(project.error));
-    return { ok: true, data: toDto(project.value) };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return project.map(toDto);
+  });
 }
 
-export async function handleProjectsRename(
-  req: ProjectRenameRequest,
-): Promise<IpcResult<ProjectDto>> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleProjectsRename(req: ProjectRenameRequest): Promise<IpcResult<ProjectDto>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     const project = await rt.projects.rename(req.id, req.name);
-    if (!project.ok) return ipcErr(formatIpcError(project.error));
-    return { ok: true, data: toDto(project.value) };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return project.map(toDto);
+  });
 }
 
-export async function handleProjectsDelete(
-  req: ProjectDeleteRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const deleted = await rt.projects.delete(req.id);
-    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+export function handleProjectsDelete(req: ProjectDeleteRequest): Promise<IpcResult<void>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
+    return rt.projects.delete(req.id);
+  });
 }

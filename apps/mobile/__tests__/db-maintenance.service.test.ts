@@ -86,9 +86,12 @@ describe('db-maintenance.service', () => {
   it('T-DMM1: Agent 运行中 getDatabaseMaintenanceStats reject 中文错误且不触 stat/core', async () => {
     mockAgentActive.mockReturnValue(true);
 
-    await expect(getDatabaseMaintenanceStats(runtime)).rejects.toThrow(
-      /Agent 运行中/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
+    const stats = await getDatabaseMaintenanceStats(runtime);
+    expect(stats.ok).toBe(false);
+    if (!stats.ok) {
+      expect(stats.error.message).toMatch(/Agent 运行中/);
+    }
     expect(mockStat).not.toHaveBeenCalled();
     expect(mockCreateService).not.toHaveBeenCalled();
   });
@@ -96,9 +99,12 @@ describe('db-maintenance.service', () => {
   it('T-DMM1: Agent 运行中 runDatabaseMaintenance reject 中文错误且不触 stat/core', async () => {
     mockAgentActive.mockReturnValue(true);
 
-    await expect(runDatabaseMaintenance(runtime)).rejects.toThrow(
-      /Agent 运行中/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
+    const result = await runDatabaseMaintenance(runtime);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toMatch(/Agent 运行中/);
+    }
     expect(mockStat).not.toHaveBeenCalled();
     expect(mockCreateService).not.toHaveBeenCalled();
   });
@@ -111,9 +117,13 @@ describe('db-maintenance.service', () => {
     expect(mockStat).toHaveBeenCalledWith('/db/novel_master_vfs');
     expect(mockCreateService).toHaveBeenCalledWith(liveConn);
     expect(mockGetStorageStats).toHaveBeenCalledTimes(1);
+    // 四期签名：成功值在 Result.value 里。
     expect(stats).toEqual({
-      fileBytes: 1048576,
-      reclaimableBytes: 40960,
+      ok: true,
+      value: {
+        fileBytes: 1048576,
+        reclaimableBytes: 40960,
+      },
     });
   });
 
@@ -127,7 +137,10 @@ describe('db-maintenance.service', () => {
     expect(mockRunMaintenance).toHaveBeenCalledTimes(1);
     expect(mockRunMaintenance).toHaveBeenCalledWith();
     expect(mockStat).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({beforeBytes: 1048576, afterBytes: 524288});
+    expect(result).toEqual({
+      ok: true,
+      value: {beforeBytes: 1048576, afterBytes: 524288},
+    });
   });
 
   it('T-DMM2: core runDatabaseMaintenance 抛错时 reject 上抛（可被调用方捕获），不吞错', async () => {

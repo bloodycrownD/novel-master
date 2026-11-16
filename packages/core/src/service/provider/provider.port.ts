@@ -31,7 +31,8 @@ export interface ProviderListItem extends LlmProvider {
 
 export interface ProviderService {
   list(): Promise<ProviderListItem[]>;
-  get(id: string): Promise<LlmProvider>;
+  /** 已知失败走返回值（五期门⑦）：NOT_FOUND 收 `Result.err`；未知异常仍抛。 */
+  get(id: string): Promise<Result<LlmProvider, AppError>>;
   /** 已知失败走返回值（四期门⑦）：域校验 / 跨资源写失败收 `Result.err`；未知异常仍抛。 */
   create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>>;
   /** 已知失败走返回值（四期门⑦）。 */

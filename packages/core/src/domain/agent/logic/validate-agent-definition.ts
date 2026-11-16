@@ -70,10 +70,21 @@ export async function validateAgentDefinition(def: AgentDefinition, options: Val
   // uuid / runtime / 块形状 / 未知键等其余字段错误在此以 zod 消息拒绝，
   // 保证写入门禁与读门禁完全一致。toWire 对畸形输入可能抛 TypeError，统一转译。
   try {
-    decode(agentDefinitionSchema.toWire(def), agentDefinitionSchema);
+    // toWire 的块名唯一性门禁已 Result 化（五期门⑦）：Err 走与旧 catch 同一条转译。
+    const wire = agentDefinitionSchema.toWire(def);
+    if (!wire.ok) {
+      const detail = wire.error.message;
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
+    }
+    // decode 已 Result 化（错误通道迁移四期）：Err 走与旧 catch 同一条转译。
+    const decoded = decode(wire.value, agentDefinitionSchema);
+    if (!decoded.ok) {
+      const detail = decoded.error.message;
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
+    }
   } catch (error) {
-    // schema 层的失败协议是 throw（preprocess 抛 AGENT_INVALID_SCHEMA，prompt 校验抛 PROMPT_*），
-    // 在这里统一转译成定义级失败，保留原始 message。
+    // schema 层同步失败协议（读侧 transform / preprocess 抛 PROMPT_* 等）在这里
+    // 统一转译成定义级失败，保留原始 message。
     const detail = error instanceof Error ? error.message : String(error);
     return Result.err(new AppError("AGENT_INVALID_SCHEMA", { descriptor: { key: "error.agent.invalid_schema.field_invalid", params: { detail: messageParamOf(detail) } } }));
   }

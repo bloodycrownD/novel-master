@@ -52,7 +52,10 @@ export async function handleAgentRegistryList(): Promise<
   IpcResult<AgentRegistryListItemDto[]>
 > {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const ids = await rt.agentRegistry.listAgentIds();
     const rows: AgentRegistryListItemDto[] = [];
     for (const agentId of ids) {
@@ -95,7 +98,10 @@ export async function handleAgentRegistryList(): Promise<
 
 export async function handleAgentRegistryGet(req: AgentRegistryGetRequest): Promise<IpcResult<AgentRegistryGetResponse>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const raw = await getAgentRawWire(rt.conn, req.agentId);
     if (raw == null) {
       return {
@@ -115,7 +121,10 @@ export async function handleAgentRegistryGet(req: AgentRegistryGetRequest): Prom
 
 export async function handleAgentRegistryUpsert(req: AgentRegistryUpsertRequest): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
     const def = req.definition as Parameters<typeof rt.agentRegistry.upsert>[1];
@@ -128,7 +137,10 @@ export async function handleAgentRegistryUpsert(req: AgentRegistryUpsertRequest)
 
 export async function handleAgentRegistryUpdate(req: AgentRegistryUpdateRequest): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
     const patch = req.patch as Parameters<typeof rt.agentRegistry.update>[1];
@@ -143,8 +155,12 @@ export async function handleAgentRegistryUpdate(req: AgentRegistryUpdateRequest)
 
 export async function handleAgentRegistryDelete(req: AgentRegistryDeleteRequest): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
-    await rt.agentRegistry.delete(req.agentId);
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
+    const deleted = await rt.agentRegistry.delete(req.agentId);
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -153,7 +169,10 @@ export async function handleAgentRegistryDelete(req: AgentRegistryDeleteRequest)
 
 export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBlankRequest): Promise<IpcResult<{ agentId: string }>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const agentId = `agent-${Date.now()}`;
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
@@ -189,7 +208,10 @@ export async function handleAgentRegistryCreateBlank(req?: AgentRegistryCreateBl
 
 export async function handleAgentYamlExport(req: AgentYamlExportRequest): Promise<IpcResult<"saved" | "cancelled">> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const win = BrowserWindow.getFocusedWindow();
     const result = await yamlIo.exportAgentYamlWithDialog(rt, req.agentId, win);
     return { ok: true, data: result };
@@ -200,7 +222,10 @@ export async function handleAgentYamlExport(req: AgentYamlExportRequest): Promis
 
 export async function handleAgentYamlImport(req: AgentYamlImportRequest): Promise<IpcResult<"imported" | "cancelled">> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const win = BrowserWindow.getFocusedWindow();
     const result = await yamlIo.importAgentYamlWithDialog(rt, req.agentId, win);
     return { ok: true, data: result };

@@ -23,6 +23,8 @@ import type {
   PromptRenderContext,
   PromptSkillIndexEntry,
 } from "../../domain/prompt/model/prompt-render-context.js";
+import type { AppError } from "../../errors/app-error.js";
+import { Result } from "../../errors/either.js";
 
 export type {
   PromptLlmInput,
@@ -257,15 +259,14 @@ function appendWorkplacePairSegmentsIfPresent(
  * 三区 layout 单次遍历：system → skills 索引（若预算非空）→ workplace 双段（若开启）
  * → persist 文本 → chat → dynamic。
  *
- * 解包 throw 边界（错误通道迁移三期门⑦）：dynamic 宏展开失败原样上抛——
- * 拼装链（agent-runner turn loop、两端 buildSessionPromptInput）统一异常通道，
- * 由 turn loop / chip 读口 catch 收口（与 prompt-assembler.prepare 同款）。
+ * 五期门⑦：dynamic 宏展开失败沿 `Result.err` 回传（不再 throw）——调用方（turn loop /
+ * 两端 buildSessionPromptInput / chip 读口）按 `!ok` 分支收口。
  */
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions
-): Promise<readonly PromptAssemblySegment[]> {
+): Promise<Result<readonly PromptAssemblySegment[], AppError>> {
   const agentStepIndex = resolveAgentStepIndex(options);
   const segments: PromptAssemblySegment[] = [];
   let segmentIndex = 0;
@@ -335,7 +336,7 @@ export async function buildPromptAssemblyFromLayout(
         filetree: ctx.filetree,
       });
       if (!expanded.ok) {
-        throw expanded.error;
+        return Result.err(expanded.error);
       }
       segments.push({
         id: `dynamic-${block.name}`,
@@ -347,20 +348,20 @@ export async function buildPromptAssemblyFromLayout(
     }
   }
 
-  return segments;
+  return Result.ok(segments);
 }
 
 /**
  * 构建 LLM 输入：system 字段 + persist 合成消息 + chat + dynamic。
  *
- * 解包 throw 边界（错误通道迁移三期门⑦）：同 {@link buildPromptAssemblyFromLayout}，
- * dynamic 宏展开失败沿拼装链异常通道上抛，turn loop / chip 读口 catch 收口。
+ * 五期门⑦：同 {@link buildPromptAssemblyFromLayout}，dynamic 宏展开失败沿
+ * `Result.err` 回传，调用方按 `!ok` 分支收口。
  */
 export async function buildPromptLlmInputFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions
-): Promise<PromptLlmInput> {
+): Promise<Result<PromptLlmInput, AppError>> {
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessageData[] = [];
 
@@ -395,7 +396,7 @@ export async function buildPromptLlmInputFromLayout(
         filetree: ctx.filetree,
       });
       if (!expanded.ok) {
-        throw expanded.error;
+        return Result.err(expanded.error);
       }
       messages.push(syntheticTemplateMessage(block, expanded.value, ctx));
     }
@@ -406,7 +407,7 @@ export async function buildPromptLlmInputFromLayout(
       ? layout.system
       : undefined;
 
-  return { system, messages };
+  return Result.ok({ system, messages });
 }
 
 /** 构建有序预览分段（每段一张卡片）。 */
@@ -414,14 +415,17 @@ export async function buildPromptPreviewSegmentsFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions
-): Promise<PromptPreviewSegment[]> {
-  const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
-  return segments.map((segment) => ({
+): Promise<Result<PromptPreviewSegment[], AppError>> {
+  const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
+  if (!assembled.ok) {
+    return Result.err(assembled.error);
+  }
+  return Result.ok(assembled.value.map((segment) => ({
     id: segment.id,
     role: segment.role,
     title: segment.title,
     body: segment.body,
-  }));
+  })));
 }
 
 /** CLI 预览与 token 计数用的 role 前缀纯文本。 */
@@ -429,9 +433,12 @@ export async function formatPromptLlmInputForCliFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions
-): Promise<string> {
-  const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
-  return segments
+): Promise<Result<string, AppError>> {
+  const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
+  if (!assembled.ok) {
+    return Result.err(assembled.error);
+  }
+  return Result.ok(assembled.value
     .map((segment) => formatSegment(segment.role, segment.body))
-    .join("\n");
+    .join("\n"));
 }

@@ -92,11 +92,12 @@ function gatedSkills(opts: { readonly onEnter: () => void; readonly gate: Promis
   return {
     factory: () =>
       ({
+        // 错误通道迁移四期：effectiveSkills 走 Result 通道。
         effectiveSkills: async () => {
           calls += 1;
           opts.onEnter();
           await opts.gate;
-          return [];
+          return Result.ok([]) as never;
         },
       } as unknown as SkillService),
     calls: () => calls,
@@ -159,7 +160,7 @@ interface ScriptedModelOptions {
 function scriptedModel(opts: ScriptedModelOptions): ModelRequestService {
   let calls = 0;
   return {
-    request: async (_savedModelId: string, _userContent: string, _options?: ModelRequestOptions): Promise<LlmChatResult> => {
+    request: async (_savedModelId: string, _userContent: string, _options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> => {
       const idx = calls;
       calls += 1;
       opts.onCall?.[idx]?.();
@@ -167,7 +168,7 @@ function scriptedModel(opts: ScriptedModelOptions): ModelRequestService {
       if (r == null) {
         throw new Error(`scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${opts.responses.length}）`);
       }
-      return r;
+      return Result.ok(r);
     },
   };
 }
@@ -490,7 +491,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("停止生效时不该走到这里");
+        return Result.ok(textDoneResponse("停止生效时不该走到这里"));
       },
     };
 
@@ -571,7 +572,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("组装期间停止不该走到模型");
+        return Result.ok(textDoneResponse("组装期间停止不该走到模型"));
       },
     };
 
@@ -655,7 +656,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("入口就停了，不该走到这里");
+        return Result.ok(textDoneResponse("入口就停了，不该走到这里"));
       },
     };
 
@@ -716,7 +717,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("停止生效时不该走到这里");
+        return Result.ok(textDoneResponse("停止生效时不该走到这里"));
       },
     };
 
@@ -808,7 +809,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("停止生效时不该走到这里");
+        return Result.ok(textDoneResponse("停止生效时不该走到这里"));
       },
     };
 
@@ -870,7 +871,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const modelRequests: ModelRequestService = {
       request: async () => {
         modelCalls += 1;
-        return textDoneResponse("停止生效时不该走到这里");
+        return Result.ok(textDoneResponse("停止生效时不该走到这里"));
       },
     };
 
@@ -961,7 +962,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
         if (calls <= 1) {
           throw new AppError("PROVIDER_STREAM_TIMEOUT", {phase: "idle", timeoutMs: 90_000, detail: "LLM stream idle for 90000ms after the last chunk"});
         }
-        return textDoneResponse("重试成功");
+        return Result.ok(textDoneResponse("重试成功"));
       },
     };
 
@@ -1336,8 +1337,8 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
         if (modelCalls > 2) {
           throw new Error("子 run 不该发模型请求（子 runner.run 未调）");
         }
-        if (modelCalls === 1) return taskToolUseResponse("tu-cp2");
-        return textDoneResponse("主代理收到停止回流");
+        if (modelCalls === 1) return Result.ok(taskToolUseResponse("tu-cp2"));
+        return Result.ok(textDoneResponse("主代理收到停止回流"));
       },
     };
 
@@ -1444,7 +1445,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
         if (modelCalls > 1) {
           throw new Error("父 run 被取消后不该再发第二次模型请求");
         }
-        return taskToolUseResponse("tu-cp1");
+        return Result.ok(taskToolUseResponse("tu-cp1"));
       },
     };
 

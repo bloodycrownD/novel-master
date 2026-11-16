@@ -66,26 +66,28 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     return this.deps.repository.listIds();
   }
 
-  async list(): Promise<readonly AgentDefinition[]> {
+  async list(): Promise<Result<readonly AgentDefinition[], AppError>> {
     const dbDefs = await this.deps.repository.list();
+    if (!dbDefs.ok) return Result.err(dbDefs.error);
     // 内置 general 为虚拟 agent 且禁止用户同名覆盖（upsert 拒绝同名），
     // 因此 DB 不可能含同名项；防御性保留同名检查以免未来放开 upsert 限制时行为分叉。
-    if (dbDefs.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
-      return dbDefs;
+    if (dbDefs.value.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
+      return Result.ok(dbDefs.value);
     }
-    return [...dbDefs, DEFAULT_SUBAGENT_DEFINITION];
+    return Result.ok([...dbDefs.value, DEFAULT_SUBAGENT_DEFINITION]);
   }
 
   async getRawWire(agentId: string): Promise<unknown | null> {
     return this.deps.repository.getRawWire(agentId);
   }
 
-  async get(agentId: string): Promise<AgentDefinition> {
+  async get(agentId: string): Promise<Result<AgentDefinition, AppError>> {
     const def = await this.deps.repository.get(agentId);
-    if (def == null) {
-      throw new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId});
+    if (!def.ok) return Result.err(def.error);
+    if (def.value == null) {
+      return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
     }
-    return def;
+    return Result.ok(def.value);
   }
 
   async upsert(agentId: string, def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AppError>> {
@@ -108,8 +110,9 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
       let otherName: string;
       try {
         const otherDef = await this.deps.repository.get(otherId);
-        otherName = otherDef == null ? otherId.trim() : otherDef.name.trim();
+        otherName = !otherDef.ok || otherDef.value == null ? otherId.trim() : otherDef.value.name.trim();
       } catch {
+        // DB 层未知异常仍可能抛（port 注），降级为 id 参与比对（与旧 catch 一致）。
         otherName = otherId.trim();
       }
       if (otherName.length > 0 && otherName === trimmedName) {
@@ -118,21 +121,23 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     }
 
     const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
-    await this.deps.repository.upsert(agentId, normalized);
+    const saved = await this.deps.repository.upsert(agentId, normalized);
+    if (!saved.ok) return Result.err(saved.error);
     return Result.ok(undefined);
   }
 
   async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<AgentDefinition, AppError>> {
     const current = await this.get(agentId);
-    const merged = applyMergePatch(current, patch);
+    if (!current.ok) return Result.err(current.error);
+    const merged = applyMergePatch(current.value, patch);
     const saved = await this.upsert(agentId, merged, options);
     if (!saved.ok) return Result.err(saved.error);
     return Result.ok(merged);
   }
 
-  async delete(agentId: string): Promise<void> {
+  async delete(agentId: string): Promise<Result<void, AppError>> {
     if (!(await this.deps.repository.exists(agentId))) {
-      throw new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId});
+      return Result.err(new AppError("AGENT_NOT_FOUND", {detail: `agent not found: ${agentId}`, agentId}));
     }
     // built-in general 不可删除（运行时虚拟注入的递归基线）。
     // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
@@ -140,7 +145,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     const wire = await this.deps.repository.getRawWire(agentId);
     const wireName = wire != null && typeof wire === "object" && !Array.isArray(wire) ? (wire as { name?: unknown }).name : undefined;
     if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
-      throw new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}});
+      return Result.err(new AppError("AGENT_INVALID_SCHEMA", {descriptor: {key: "error.agent.invalid_schema.builtin_not_deletable", params: {name: DEFAULT_SUBAGENT_DEFINITION.name}}}));
     }
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {
@@ -149,5 +154,6 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         await this.deps.state.resetCurrentAgentId();
       }
     }
+    return Result.ok(undefined);
   }
 }

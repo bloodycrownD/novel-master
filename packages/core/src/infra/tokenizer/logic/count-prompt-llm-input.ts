@@ -7,6 +7,8 @@
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
@@ -59,7 +61,7 @@ export interface PromptTokenCountResult {
  * Counts tokens for a full prompt via registered NMTP driver (assembly serialize).
  */
 // nm-style: keep-local — 单行转手但负责解析驱动注册表单例（隔离不稳定依赖），调用点不应各自查 registry。
-export async function countPromptLlmInput(params: CountPromptLlmInputParams): Promise<PromptTokenCountResult> {
+export async function countPromptLlmInput(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
   return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
@@ -79,21 +81,22 @@ export async function resolveVendorModelIdFromSaved(savedModelId: string, savedM
  *
  * nm-style: keep-public — desktop 跨包消费，依赖 core 序列化 + 家族解析 + registry
  */
-export async function countPromptLlmInputHeuristicOnly(params: CountPromptLlmInputParams): Promise<PromptTokenCountResult> {
+export async function countPromptLlmInputHeuristicOnly(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
   const { savedModelId, registry, layout, ctx } = params;
   const vendorModelId = await resolveVendorModelIdFromSaved(savedModelId, params.savedModels);
   const family = resolveTokenizerFamily(vendorModelId, "auto");
   // tools 段与提示词同串计数（空 tools 时拼接为恒等；口径见 helper 头注释）。
-  const serialized = (await serializePromptLlmInput(layout, ctx)) + serializeToolsForTokenCount(params.tools);
-  const tokenCount = registry.heuristic.countText(serialized);
-  return {
+  const serialized = await serializePromptLlmInput(layout, ctx);
+  if (!serialized.ok) return Result.err(serialized.error);
+  const tokenCount = registry.heuristic.countText(serialized.value + serializeToolsForTokenCount(params.tools));
+  return Result.ok({
     tokenCount,
     counterKind: "heuristic",
     estimated: true,
     savedModelId,
     vendorModelId,
     tokenizerFamily: family,
-  };
+  });
 }
 
 // usage label 拼装已随 token-source-label 收敛进 common/format-token-count.ts

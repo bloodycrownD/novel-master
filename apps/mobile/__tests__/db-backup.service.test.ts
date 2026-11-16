@@ -147,13 +147,23 @@ describe('db-backup.service', () => {
 
   it('rejects export when agent is running', async () => {
     mockAgentActive.mockReturnValue(true);
-    await expect(exportDatabaseBackup(runtime)).rejects.toThrow(/Agent/);
+    // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
+    const exportResult = await exportDatabaseBackup(runtime);
+    expect(exportResult.ok).toBe(false);
+    if (!exportResult.ok) {
+      expect(exportResult.error.message).toMatch(/Agent/);
+    }
     expect(mockCheckpoint).not.toHaveBeenCalled();
   });
 
   it('rejects import when agent is running (guard fires before picker)', async () => {
     mockAgentActive.mockReturnValue(true);
-    await expect(importDatabaseBackup(onRebootstrap)).rejects.toThrow(/Agent/);
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const importGuard = await importDatabaseBackup(onRebootstrap);
+    expect(importGuard.ok).toBe(false);
+    if (!importGuard.ok) {
+      expect(importGuard.error.message).toMatch(/Agent/);
+    }
     // 守卫在触发前拦截：文件选择器与后续导入链路均未启动
     expect(mockPick).not.toHaveBeenCalled();
     expect(mockDumpSnapshot).not.toHaveBeenCalled();
@@ -201,9 +211,12 @@ describe('db-backup.service', () => {
     ]);
     mockStat.mockResolvedValue({size: 8});
 
-    await expect(importDatabaseBackup(onRebootstrap)).rejects.toThrow(
-      /文件过小/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const tinyResult = await importDatabaseBackup(onRebootstrap);
+    expect(tinyResult.ok).toBe(false);
+    if (!tinyResult.ok) {
+      expect(tinyResult.error.message).toMatch(/文件过小/);
+    }
     expect(mockReadFile).not.toHaveBeenCalled();
     expect(onRebootstrap).not.toHaveBeenCalled();
   });
@@ -266,9 +279,12 @@ describe('db-backup.service', () => {
   it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {
     const bytes = new Uint8Array(Buffer.from('not sqlite'));
 
-    await expect(importDatabaseBackupFromBytes(bytes)).rejects.toThrow(
-      /不是有效的/,
-    );
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject。
+    const invalidResult = await importDatabaseBackupFromBytes(bytes);
+    expect(invalidResult.ok).toBe(false);
+    if (!invalidResult.ok) {
+      expect(invalidResult.error.message).toMatch(/不是有效的/);
+    }
     expect(mockDumpSnapshot).not.toHaveBeenCalled();
     expect(mockWriteStream).not.toHaveBeenCalled();
   });
@@ -328,9 +344,12 @@ describe('db-backup.service', () => {
     expect(isMobileDbMaintenanceBusy()).toBe(false);
     mockStat.mockResolvedValue({size: 8});
 
-    await expect(
-      importDatabaseBackupFromPath('/cache/too-small.nmbackup'),
-    ).rejects.toThrow(/文件过小/);
+    // 四期签名：已知失败沿 Result.err 回传，不再 reject；busy 计数仍由 finally 配对释放。
+    const tooSmall = await importDatabaseBackupFromPath('/cache/too-small.nmbackup');
+    expect(tooSmall.ok).toBe(false);
+    if (!tooSmall.ok) {
+      expect(tooSmall.error.message).toMatch(/文件过小/);
+    }
     expect(isMobileDbMaintenanceBusy()).toBe(false);
   });
 });

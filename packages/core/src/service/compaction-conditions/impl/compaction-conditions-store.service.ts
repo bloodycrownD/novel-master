@@ -72,11 +72,9 @@ function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-function rethrowDecodeError(error: unknown): never {
-  if (isAppError(error, "CONFIG_DECODE_INVALID_SCHEMA")) {
-    throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
-  }
-  throw error;
+/** decode 失败转码：CONFIG_DECODE_INVALID_SCHEMA → 本域码。schema 违约仍 throw（见 port 注），不落 Result 通道。 */
+function rethrowDecodeError(error: AppError): never {
+  throw new AppError("COMPACTION_CONDITIONS_INVALID_SCHEMA", { detail: error.message });
 }
 
 export class DefaultCompactionConditionsStore
@@ -92,13 +90,9 @@ export class DefaultCompactionConditionsStore
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
-    let validated: CompactionConditions;
-    try {
-      validated = decode(conditions, compactionConditionsSchema);
-    } catch (error) {
-      rethrowDecodeError(error);
-    }
-    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated));
+    const validated = decode(conditions, compactionConditionsSchema);
+    if (!validated.ok) rethrowDecodeError(validated.error);
+    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
   }
 
   async clearConditions(): Promise<void> {
@@ -122,30 +116,20 @@ export class DefaultCompactionConditionsStore
     if (isV2Document(parsed)) {
       // v2 → v3 → v4 两步迁移：先升到 v3 形态，再补 hideStartDepth 升 v4。
       const v4 = migrateV3ToV4(migrateV2ToV3(parsed));
-      let validatedFromV2: CompactionConditions;
-      try {
-        validatedFromV2 = decode(v4, compactionConditionsSchema);
-      } catch (error) {
-        rethrowDecodeError(error);
-      }
-      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validatedFromV2));
-      return validatedFromV2;
+      const validatedFromV2 = decode(v4, compactionConditionsSchema);
+      if (!validatedFromV2.ok) rethrowDecodeError(validatedFromV2.error);
+      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validatedFromV2.value));
+      return validatedFromV2.value;
     }
     if (isV3Document(parsed)) {
       const migrated = migrateV3ToV4(parsed);
-      let validated: CompactionConditions;
-      try {
-        validated = decode(migrated, compactionConditionsSchema);
-      } catch (error) {
-        rethrowDecodeError(error);
-      }
-      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated));
-      return validated;
+      const validated = decode(migrated, compactionConditionsSchema);
+      if (!validated.ok) rethrowDecodeError(validated.error);
+      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validated.value));
+      return validated.value;
     }
-    try {
-      return decode(parsed, compactionConditionsSchema);
-    } catch (error) {
-      rethrowDecodeError(error);
-    }
+    const direct = decode(parsed, compactionConditionsSchema);
+    if (!direct.ok) rethrowDecodeError(direct.error);
+    return direct.value;
   }
 }

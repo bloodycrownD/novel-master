@@ -70,16 +70,37 @@ export async function loadChatAgentMeta(
       projectId,
       sessionId,
     );
+    if (!resolved.ok) {
+      // 归一口径与下方 catch 同款（错误通道迁移四期：不再借 throw 进 catch）：
+      // RESOLVE_KEYS 内的 agent 解析失败收成待重选 none meta，其余已知失败
+      // 沿 Result.err 接力给调用方（两个调用方对 !ok 与未知异常同终端）。
+      if (
+        isAppError(resolved.error) &&
+        AGENT_RUN_RESOLVE_KEYS.has(resolved.error.key)
+      ) {
+        return Result.ok({
+          source: 'none',
+          agentId: undefined,
+          agentName: '未配置 Agent',
+          modelLabel: '—',
+          tokenLabel: '',
+          hasDedicatedModel: false,
+          modelSource: 'session',
+        });
+      }
+      return Result.err(resolved.error);
+    }
     const sessionConfig = await sessionConfigPromise;
     if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-    const {definition} = resolved;
+    const {definition, agentId} = resolved.value;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
     const savedModelId = definition.model ?? sessionConfig.value.modelId;
     let modelLabel = '未选择模型';
     if (savedModelId) {
       try {
-        modelLabel = await resolveModelDisplayLabel(runtime, savedModelId);
+        const label = await resolveModelDisplayLabel(runtime, savedModelId);
+        modelLabel = label.ok ? label.value : savedModelId;
       } catch {
         modelLabel = savedModelId;
       }
@@ -90,7 +111,7 @@ export async function loadChatAgentMeta(
       : 'session';
     return Result.ok({
       source: 'session',
-      agentId: resolved.agentId,
+      agentId,
       agentName: definition.name,
       modelLabel,
       tokenLabel: '',

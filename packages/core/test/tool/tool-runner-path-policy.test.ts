@@ -1,4 +1,5 @@
 import { isAppError } from "../../src/errors/app-error.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
 import type { AppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
@@ -181,11 +182,11 @@ describe("ToolRunner path policy (T-SC9)", () => {
     registry.register(makeWriteTool(ran));
     const runner = new ToolRunner(registry);
 
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "write",
       { path: "anywhere/secret.txt", content: "x" },
       {}, // 没有 allowedPaths
-    );
+    ));
     assert.deepEqual(out, { ok: true });
     assert.equal(ran.ok, true);
   });
@@ -196,11 +197,11 @@ describe("ToolRunner path policy (T-SC9)", () => {
     registry.register(makeWriteTool(ran));
     const runner = new ToolRunner(registry);
 
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "write",
       { path: "src/a.ts", content: "x" },
       { allowedPaths: ["src", "docs"] },
-    );
+    ));
     assert.deepEqual(out, { ok: true });
     assert.equal(ran.ok, true);
   });
@@ -211,7 +212,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     registry.register(makeWriteTool(ran));
     const runner = new ToolRunner(registry);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "write",
@@ -237,7 +238,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     registry.register(makeWriteTool(ran));
     const runner = new ToolRunner(registry);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "write",
@@ -256,7 +257,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     const runner = new ToolRunner(registry);
 
     // from 在 src 下，to 跑到 secrets 下——必须被拒
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "fs",
@@ -295,7 +296,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     } as never);
     const runner = new ToolRunner(registry);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "task",
@@ -323,7 +324,7 @@ describe("ToolRunner path policy (T-SC9)", () => {
     registry.register(makeWriteTool(ran));
     const runner = new ToolRunner(registry);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           "write",

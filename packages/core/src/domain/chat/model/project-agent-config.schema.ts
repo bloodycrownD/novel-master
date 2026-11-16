@@ -5,6 +5,8 @@
  */
 
 import { z } from "zod";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { ProjectAgentConfig } from "./project-agent-config.js";
 
@@ -25,10 +27,14 @@ const projectAgentConfigDocumentSchema = z.object({
 
 /** 列内 JSON → {@link ProjectAgentConfig}；含 `toWire` 用于持久化。 */
 export const projectAgentConfigSchema = Object.assign(projectAgentConfigDocumentSchema, {
-  toWire: (config: ProjectAgentConfig): Record<string, unknown> => ({
-    mode: config.mode,
-    ...(config.definition != null ? { definition: agentDefinitionSchema.toWire(config.definition) } : {}),
-  }),
+  toWire: (config: ProjectAgentConfig): Result<Record<string, unknown>, AppError> => {
+    const definition = config.definition != null ? agentDefinitionSchema.toWire(config.definition) : undefined;
+    if (definition != null && !definition.ok) return Result.err(definition.error);
+    return Result.ok({
+      mode: config.mode,
+      ...(definition != null && definition.ok ? { definition: definition.value } : {}),
+    });
+  },
 });
 
 export { projectAgentModeSchema };

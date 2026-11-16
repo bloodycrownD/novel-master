@@ -854,11 +854,16 @@ export const VfsFileManager = forwardRef<
           return;
         }
         if (menuRow.kind === 'dir') {
-          const nextEnabled = await toggleDirRuleEnabled(
+          const nextEnabledResult = await toggleDirRuleEnabled(
             workplace,
             menuPath,
             menuRow.ruleEnabled,
           );
+          if (!nextEnabledResult.ok) {
+            showToast(toastMessage('操作失败', nextEnabledResult.error));
+            return;
+          }
+          const nextEnabled = nextEnabledResult.value;
           showToast(nextEnabled ? '目录规则已开启' : '目录规则已关闭');
           setWorktreeRows(prev =>
             prev.map(row =>

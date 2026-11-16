@@ -170,7 +170,8 @@ export async function runSession(
       const resolvedScope = await deps.scope.resolveProjectSession(flags);
       if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
       const { projectId, sessionId } = resolvedScope.value;
-      await deps.sessionFs.rollbackToMessage(sessionId, projectId, messageId);
+      const r = await deps.sessionFs.rollbackToMessage(sessionId, projectId, messageId);
+      if (!r.ok) return { kind: "failed", error: r.error };
       return OUTCOME_COMPLETED;
     }
     default:

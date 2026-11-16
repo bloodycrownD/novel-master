@@ -16,7 +16,7 @@
  * - 串行执行：从链首起依次请求，单引擎失败（任何错误类型）→ 尝试链中
  *   下一个；显式 input.engine 时钉死链首、失败不降级直接报错。链总预算
  *   120s（每引擎尝试前检查剩余额度，耗尽带已收集错误返回）；全链失败
- *   抛聚合错误（每引擎一行摘要，不泄漏 key）。
+ *   返回聚合错误（Result.err，每引擎一行摘要，不泄漏 key）。
  * - `params` 是自由 JSON 对象，原样透传给模板执行器（引擎方言参数，
  *   未知字段由引擎忽略）；DuckDuckGo 忽略 params。
  * - 成功输出携带 `attempts` 尝试轨迹（首发成功省略该字段）。
@@ -175,7 +175,7 @@ ${engineSection}
         break;
       }
     }
-    if (query.length === 0) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
+    if (query.length === 0) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("params 缺少搜索词：请传 q / query / search_query 之一（字段名随引擎，见描述里的逐引擎参数说明）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     const rawCount = params.count ?? params.max_results ?? params.maxResults;
     const maxResults = normalizeMaxResults(typeof rawCount === "number" ? rawCount : undefined);
 
@@ -208,7 +208,7 @@ ${engineSection}
       if (signal?.aborted === true) throw new AppError("TOOL_CANCELLED", {toolName: SEARCH_TOOL_NAME});
       // 链总预算：每引擎尝试前检查剩余额度，耗尽即带已收集错误返回
       //（首引擎前 elapsed 为 0，不会误拦）。
-      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
+      if (Date.now() - startedAt >= SEARCH_CHAIN_BUDGET_MS) return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, candidates.length - i)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
       try {
         const response = await dispatchSearch(entry, query, { maxResults }, params, fetchFn, signal);
         if (!response.ok) {
@@ -232,7 +232,7 @@ ${engineSection}
 
     if (success == null) {
       // 全链失败：聚合错误（每引擎一行摘要，不泄漏 key）。
-      throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, 0)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
+      return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error(buildChainErrorMessage(failureLines, 0)), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     }
 
     // —— 超 50KB 落盘保险丝（overflow-sink，curl 同机制）——

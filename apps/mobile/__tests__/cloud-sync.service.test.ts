@@ -1,4 +1,4 @@
-import {AppError} from '@novel-master/core';
+import {AppError, Result} from '@novel-master/core';
 import {
   pullCloudSync,
   pushCloudSync,
@@ -216,7 +216,7 @@ describe('pullCloudSync', () => {
   });
 
   it('拉取换代成功时先 onRebootstrap 再用新 runtime 记账', async () => {
-    mockCoordinatorPull.mockResolvedValue({rev: 3, databaseReplaced: true});
+    mockCoordinatorPull.mockResolvedValue(Result.ok({rev: 3, databaseReplaced: true}));
     const order: string[] = [];
     const rebootstrap = jest.fn(async () => {
       order.push('rebootstrap');
@@ -256,7 +256,7 @@ describe('pullCloudSync', () => {
 
   it('databaseReplaced=false 时不调用 onRebootstrap 且记账走旧 runtime', async () => {
     // S-CS-16：这条分支不换代（库没换、连接没关），所以记账可以用旧 runtime。
-    mockCoordinatorPull.mockResolvedValue({rev: 3, databaseReplaced: false});
+    mockCoordinatorPull.mockResolvedValue(Result.ok({rev: 3, databaseReplaced: false}));
     const rebootstrap = jest.fn(async () => freshRuntime);
 
     const result = await pullCloudSync(runtime, rebootstrap);
@@ -270,8 +270,9 @@ describe('pullCloudSync', () => {
   });
 
   it('ALREADY_UP_TO_DATE 时不调用 onRebootstrap 且记账走旧 runtime', async () => {
-    mockCoordinatorPull.mockRejectedValue(
-      new AppError('CLOUD_SYNC_ALREADY_UP_TO_DATE', {detail: '本地已是最新，无需拉取'}),
+    // coordinator 的业务失败沿 Result 回传（错误通道迁移四期）：不 reject。
+    mockCoordinatorPull.mockResolvedValue(
+      Result.err(new AppError('CLOUD_SYNC_ALREADY_UP_TO_DATE', {detail: '本地已是最新，无需拉取'})),
     );
     const rebootstrap = jest.fn(async () => freshRuntime);
 
@@ -359,7 +360,7 @@ describe('pullCloudSync', () => {
   });
 
   it('coordinator.pull 失败时两个临时文件都被清理且参数为完整路径', async () => {
-    mockCoordinatorPull.mockRejectedValue(new Error('快照校验失败'));
+    mockCoordinatorPull.mockResolvedValue(Result.err(new Error('快照校验失败')));
     const rebootstrap = jest.fn(async () => freshRuntime);
 
     const failed = await pullCloudSync(runtime, rebootstrap);
@@ -376,7 +377,7 @@ describe('pullCloudSync', () => {
 
 describe('pushCloudSync', () => {
   it('推送成功时更新 lastSyncedRev', async () => {
-    mockCoordinatorPush.mockResolvedValue({rev: 2});
+    mockCoordinatorPush.mockResolvedValue(Result.ok({rev: 2}));
 
     const result = await pushCloudSync(runtime, undefined);
 
@@ -394,14 +395,17 @@ describe('pushCloudSync', () => {
     );
   });
 
-  it('NEED_PULL_FIRST 时向上抛出', async () => {
-    mockCoordinatorPush.mockRejectedValue(
-      new AppError('CLOUD_SYNC_NEED_PULL_FIRST', {detail: '云端有更新，请先拉取'}),
+  it('NEED_PULL_FIRST 时沿 Result.err 上行', async () => {
+    // coordinator 的业务失败沿 Result 回传（错误通道迁移四期）：不 reject。
+    mockCoordinatorPush.mockResolvedValue(
+      Result.err(new AppError('CLOUD_SYNC_NEED_PULL_FIRST', {detail: '云端有更新，请先拉取'})),
     );
 
-    await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
-      key: 'CLOUD_SYNC_NEED_PULL_FIRST',
-    });
+    const result = await pushCloudSync(runtime, undefined);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({key: 'CLOUD_SYNC_NEED_PULL_FIRST'});
+    }
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,
       expect.objectContaining({lastPushResult: 'error'}),

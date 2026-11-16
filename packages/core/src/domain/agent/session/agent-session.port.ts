@@ -7,6 +7,8 @@
 import type { ChatMessageData, MessageContent } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 /**
  * Session abstraction for agent context (in-memory or chat-backed).
@@ -33,7 +35,12 @@ export interface AgentSession {
   /** Visible messages in order (excludes `hidden`). */
   list(): Promise<readonly ChatMessageData[]>;
 
-  /** Appends a message to the session. */
+  /**
+   * Appends a message to the session.
+   *
+   * 已知失败走返回值（五期门⑦）：消息仓储 `Result` 失败沿 `Result.err` 接力，
+   * 由调用方（agent turn loop 框架级）统一收口；未知异常仍抛。
+   */
   append(
     role: string,
     content: MessageContent,
@@ -52,16 +59,18 @@ export interface AgentSession {
        */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessageData>;
+  ): Promise<Result<ChatMessageData, AppError>>;
 
-  /** Hides messages in a seq range (compaction). Returns affected count. */
-  hideRange(fromSeq: number, toSeq: number): Promise<number>;
+  /** Hides messages in a seq range (compaction). Returns affected count; 失败沿 `Result.err` 接力（五期门⑦）。 */
+  hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>>;
 
   /**
    * 删除当前 session 中严格位于 `afterMessageId` 之后追加的消息（不含 anchor 自身）；
    * `afterMessageId` 为 null 时清空 session 内全部消息。
    *
+   * 已知失败沿 `Result.err` 接力（五期门⑦）。
+   *
    * 用途：agent turn abort 时回滚到 turn 起点，避免残留 partial assistant 消息。
    */
-  truncateAfterMessage(afterMessageId: string | null): Promise<void>;
+  truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>>;
 }

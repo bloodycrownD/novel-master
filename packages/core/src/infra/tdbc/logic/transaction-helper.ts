@@ -4,6 +4,8 @@
  * @module infra/tdbc/logic/transaction-helper
  */
 
+import { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import { TdbcError } from "../errors.js";
 import type { TdbcConnection } from "../ports/connection.port.js";
 
@@ -25,4 +27,19 @@ export async function runInTransactionOrConn<T>(conn: TdbcConnection, fn: (tx: T
     }
     throw error;
   }
+}
+
+/**
+ * 事务回调内的 `Result` 解包（门⑦白名单形态，总纲 §五例外 2）。
+ *
+ * better-sqlite3 / tdbc 的事务只认抛错回滚，事务回调内的已知失败必须
+ * 升级为 throw 才能保住原子性（返回值会被事务包装层无视，留下半写状态）；
+ * 解包字面集中在此处，调用方零 `throw x.error`。外层 catch 按 TdbcError
+ * cause 解包还原业务错误码（既有链路不变）。
+ */
+export function unwrapOrRollback<T>(r: Result<T, AppError>): T {
+  if (!r.ok) {
+    throw r.error;
+  }
+  return r.value;
 }

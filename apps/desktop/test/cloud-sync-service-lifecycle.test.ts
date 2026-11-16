@@ -41,9 +41,13 @@ describe("云同步 service 单例随 runtime 换代重建 (S-CS-02)", () => {
   });
 
   it("rebootstrap 后 getDesktopCloudSyncService 返回新实例", async () => {
-    const s1 = await getDesktopCloudSyncService();
+    const s1R = await getDesktopCloudSyncService();
+    if (!s1R.ok) throw s1R.error;
+    const s1 = s1R.value;
     await rebootstrapDesktopRuntime();
-    const s2 = await getDesktopCloudSyncService();
+    const s2R = await getDesktopCloudSyncService();
+    if (!s2R.ok) throw s2R.error;
+    const s2 = s2R.value;
     assert.notEqual(
       s1,
       s2,
@@ -53,8 +57,12 @@ describe("云同步 service 单例随 runtime 换代重建 (S-CS-02)", () => {
 
   it("同一 runtime 连续两次 getDesktopCloudSyncService 返回同一实例", async () => {
     // 守住「不每次都重建」这条回归：换代判据是 runtime 身份，不是调用次数。
-    const s1 = await getDesktopCloudSyncService();
-    const s2 = await getDesktopCloudSyncService();
+    const s1R = await getDesktopCloudSyncService();
+    if (!s1R.ok) throw s1R.error;
+    const s1 = s1R.value;
+    const s2R = await getDesktopCloudSyncService();
+    if (!s2R.ok) throw s2R.error;
+    const s2 = s2R.value;
     assert.equal(s1, s2, "同一代 runtime 不得反复重建 service");
   });
 
@@ -75,18 +83,24 @@ describe("云同步 service 单例随 runtime 换代重建 (S-CS-02)", () => {
     // 「导入 → rebootstrapDesktopRuntime()」。
     await rebootstrapDesktopRuntime();
     // 先把 service 缓存住，确保后面拿到的是「rebootstrap 之前」那一份。
-    const before = await getDesktopCloudSyncService();
+    const beforeR = await getDesktopCloudSyncService();
+    if (!beforeR.ok) throw beforeR.error;
+    const before = beforeR.value;
 
     const { exportDatabaseBackupToPath, importDatabaseBackupFromPath } =
       await import("../src/main/services/db-backup.service.js");
     const { join } = await import("node:path");
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const backupPath = join(tempDir, "lifecycle-backup.nmbackup");
     await exportDatabaseBackupToPath(runtime, backupPath);
     await importDatabaseBackupFromPath(backupPath);
     await rebootstrapDesktopRuntime();
 
-    const s2 = await getDesktopCloudSyncService();
+    const s2R = await getDesktopCloudSyncService();
+    if (!s2R.ok) throw s2R.error;
+    const s2 = s2R.value;
     assert.notEqual(s2, before, "本地备份导入换代 runtime 后单例必须换代");
     const result = await handleCloudSyncGetConfig();
     assert.equal(

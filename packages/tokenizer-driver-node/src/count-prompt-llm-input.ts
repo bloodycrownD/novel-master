@@ -38,6 +38,7 @@ import {
   type TokenCounterKind,
   type TokenizerFamily,
 } from "@novel-master/core/provider";
+import { Result, type AppError } from "@novel-master/core/errors";
 import { getDefaultNodeEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
@@ -167,7 +168,7 @@ async function resolveVendorModelId(
 /** Full model-aware count using Node tokenizer libraries. */
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
-): Promise<PromptTokenCountResult> {
+): Promise<Result<PromptTokenCountResult, AppError>> {
   const { layout, ctx, savedModelId, registry } = params;
   const vendorModelId = await resolveVendorModelId(params);
   const override =
@@ -177,9 +178,9 @@ export async function countPromptLlmInput(
   const family = resolveTokenizerFamily(vendorModelId, override);
   // tools 段与提示词同串计数：本地估算含 tools 才与 API 的 promptTokens
   // （本身就含 tools）可比。空 tools 时拼接为恒等（helper 返回空串）。
-  const serialized =
-    (await serializePromptLlmInput(layout, ctx)) +
-    serializeToolsForTokenCount(params.tools);
+  const promptText = await serializePromptLlmInput(layout, ctx);
+  if (!promptText.ok) return Result.err(promptText.error);
+  const serialized = promptText.value + serializeToolsForTokenCount(params.tools);
 
   // ---- L1 整串缓存（message-token-cache Step 3）----
   // 键 = 内容指纹（hashContent(整串+tools 串) 前 16 hex，与 L2 块键同口径——
@@ -197,7 +198,7 @@ export async function countPromptLlmInput(
   const cached = promptWholeCache.lookup("", scope, contentHash);
   if (cached != null) {
     // L1 命中：内容与计数器身份都没变，口径三件套原样返回，不进任何计数路径。
-    return pack(savedModelId, vendorModelId, family, cached.tokenCount, cached.counterKind, cached.estimated);
+    return Result.ok(pack(savedModelId, vendorModelId, family, cached.tokenCount, cached.counterKind, cached.estimated));
   }
 
   const { tokenCount, counterKind, estimated } = await computeCount(
@@ -214,14 +215,14 @@ export async function countPromptLlmInput(
     estimated,
   });
 
-  return pack(
+  return Result.ok(pack(
     savedModelId,
     vendorModelId,
     family,
     tokenCount,
     counterKind,
     estimated,
-  );
+  ));
 }
 
 /** 各档实际计数（L1 miss 后进入；tiktoken / 兜底档走 L2 块流程，WEB/SP 整串）。 */

@@ -62,15 +62,15 @@ export function SkillPanelScreen() {
     setRows: setSkills,
   } = useFocusListReload<EffectiveSkill[]>({
     fetcher: useCallback(async () => {
-      try {
-        return await runtime.skills().effectiveSkills(projectId);
-      } catch (error) {
+      const list = await runtime.skills().effectiveSkills(projectId);
+      if (!list.ok) {
         // 与服务层向 NOT_FOUND 语义对齐：技能根目录不存在 = 空列表
-        if (isAppError(error, 'VFS_NOT_FOUND')) {
+        if (isAppError(list.error, 'VFS_NOT_FOUND')) {
           return [];
         }
-        throw error;
+        throw list.error;
       }
+      return list.value;
     }, [runtime, projectId]),
     fallbackValue: EMPTY_SKILLS,
     focusSilent: true,

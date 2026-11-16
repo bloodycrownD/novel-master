@@ -13,6 +13,7 @@
  */
 import assert from "node:assert/strict";
 import { after, describe, it, mock } from "node:test";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
@@ -138,7 +139,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -221,14 +222,14 @@ describe("AgentRunner compaction (T-AR1)", () => {
     };
     const runner = createAgentRunner(deps);
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     // run 正常完成（说明没有触发 "messages/messageTranscriptEffects 缺失" 的硬错误，
     // 也没有任何 eventOrchestrator 相关的依赖报错——CreateAgentRunnerDeps 根本没这个字段）。
@@ -375,14 +376,14 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
       messageTranscriptEffects: effectsStub,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(result.stepsExecuted, 3);
@@ -432,14 +433,14 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
       messageTranscriptEffects: effectsStub,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     // 步数与 stopReason 口径不变。
     assert.equal(result.stopReason, "completed");
@@ -526,14 +527,14 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
         messageTranscriptEffects: effectsStub,
       });
 
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition,
         sessionId: MOCK_SESSION_ID,
         projectId: MOCK_PROJECT_ID,
         savedModelId: RUN_MODEL_ID,
         workspaceModelId: RUN_MODEL_ID,
-      });
+      }));
       return {
         n,
         result,

@@ -3,6 +3,7 @@
  * 自定义前缀替换默认行；缺省用 DEFAULT_SKILLS_INDEX_PREFIX。
  */
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 
 import {
@@ -29,7 +30,7 @@ function firstUserBody(input: { readonly messages: readonly { content: { blocks:
 
 describe("skillsPrefix 索引前缀语", () => {
   it("缺省：索引段以默认前缀开头", async () => {
-    const input = await buildPromptLlmInputFromLayout(BASE_LAYOUT, ctxWithSkills());
+    const input = unwrap(await buildPromptLlmInputFromLayout(BASE_LAYOUT, ctxWithSkills()));
     const body = firstUserBody(input);
     assert.ok(body.startsWith(DEFAULT_SKILLS_INDEX_PREFIX));
     assert.match(body, /- demo：演示（project）/);
@@ -40,7 +41,7 @@ describe("skillsPrefix 索引前缀语", () => {
       ...BASE_LAYOUT,
       skillsPrefix: "  当前支持的 skill 如下：  ",
     };
-    const input = await buildPromptLlmInputFromLayout(layout, ctxWithSkills());
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctxWithSkills()));
     const body = firstUserBody(input);
     assert.ok(body.startsWith("当前支持的 skill 如下："));
     assert.equal(body.includes(DEFAULT_SKILLS_INDEX_PREFIX), false);
@@ -49,7 +50,7 @@ describe("skillsPrefix 索引前缀语", () => {
 
   it("skillsEnabled=false 时即便有 skillsIndex 也不注入（resolve 侧已摘工具，此处验渲染兼容）", async () => {
     const layout: AgentPromptLayout = { ...BASE_LAYOUT, skillsEnabled: false };
-    const input = await buildPromptLlmInputFromLayout(layout, ctxWithSkills());
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctxWithSkills()));
     assert.equal(input.messages.length, 0);
   });
 });

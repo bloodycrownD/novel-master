@@ -151,10 +151,15 @@ export function NewSkillModal({
     setImporting(true);
     setError(undefined);
     try {
-      const bytes = await pickZipFileBytes();
-      if (bytes == null) {
+      const picked = await pickZipFileBytes();
+      if (!picked.ok) {
+        setError(picked.error.message);
         return;
       }
+      if (picked.value == null) {
+        return;
+      }
+      const bytes = picked.value;
       const previewResult = previewSkillZip(bytes);
       if (!previewResult.ok) {
         setError(previewResult.error.message);
@@ -186,7 +191,11 @@ export function NewSkillModal({
       const existing = await runtime
         .skills()
         .listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (existing.some(s => s.name === name)) {
+      if (!existing.ok) {
+        setError(existing.error.message);
+        return;
+      }
+      if (existing.value.some(s => s.name === name)) {
         setError(`目标域已存在同名技能「${name}」`);
         return;
       }

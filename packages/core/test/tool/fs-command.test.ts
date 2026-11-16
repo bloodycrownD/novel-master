@@ -16,18 +16,19 @@ import {
 
 describe("fs-command parser", () => {
   it("parses ls variants", () => {
-    assert.deepEqual(parseFsCommand({ action: "ls" }), {
+    // 四期签名：parseFsCommand 失败沿 Result.err 回传，成功解包取命令。
+    assert.deepEqual(unwrap(parseFsCommand({ action: "ls" })), {
       kind: "ls",
       dir: "/",
       recursive: false,
     });
-    assert.deepEqual(parseFsCommand({ action: "ls", path: "/docs" }), {
+    assert.deepEqual(unwrap(parseFsCommand({ action: "ls", path: "/docs" })), {
       kind: "ls",
       dir: "/docs",
       recursive: false,
     });
     assert.deepEqual(
-      parseFsCommand({ action: "ls", path: "/docs", recursive: true }),
+      unwrap(parseFsCommand({ action: "ls", path: "/docs", recursive: true })),
       {
         kind: "ls",
         dir: "/docs",
@@ -38,35 +39,35 @@ describe("fs-command parser", () => {
 
   it("parses mv/rm -r/mkdir/cp -r", () => {
     assert.deepEqual(
-      parseFsCommand({ action: "mv", from: "/a", to: "/b" }),
+      unwrap(parseFsCommand({ action: "mv", from: "/a", to: "/b" })),
       { kind: "mv", from: "/a", to: "/b" },
     );
     assert.deepEqual(
-      parseFsCommand({ action: "rm", path: "/dir", recursive: true }),
+      unwrap(parseFsCommand({ action: "rm", path: "/dir", recursive: true })),
       { kind: "rm", path: "/dir", recursive: true },
     );
-    assert.deepEqual(parseFsCommand({ action: "mkdir", path: "/new" }), {
+    assert.deepEqual(unwrap(parseFsCommand({ action: "mkdir", path: "/new" })), {
       kind: "mkdir",
       path: "/new",
     });
     assert.deepEqual(
-      parseFsCommand({
+      unwrap(parseFsCommand({
         action: "cp",
         from: "/src",
         to: "/dst",
         recursive: true,
-      }),
+      })),
       { kind: "cp", from: "/src", to: "/dst", recursive: true },
     );
   });
 
   it("支持路径含空格与中文", () => {
     assert.deepEqual(
-      parseFsCommand({ action: "rm", path: "/my note.md" }),
+      unwrap(parseFsCommand({ action: "rm", path: "/my note.md" })),
       { kind: "rm", path: "/my note.md", recursive: false },
     );
     assert.deepEqual(
-      parseFsCommand({ action: "mv", from: "/诗歌 集", to: "/poems" }),
+      unwrap(parseFsCommand({ action: "mv", from: "/诗歌 集", to: "/poems" })),
       { kind: "mv", from: "/诗歌 集", to: "/poems" },
     );
   });
@@ -88,10 +89,9 @@ describe("fs-command parser", () => {
       { action: "cp", to: "/b" },
     ];
     for (const input of bad) {
-      assert.throws(
-        () => parseFsCommand(input),
-        (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
-      );
+      const r = parseFsCommand(input);
+      assert.ok(!r.ok);
+      if (!r.ok) assert.ok(isAppError(r.error, "TOOL_INVALID_ARGUMENT"));
     }
   });
 });
@@ -109,22 +109,22 @@ describe("fs-command integration", () => {
     unwrap(
       await executeFsCommand(
         vfs,
-        parseFsCommand({ action: "mv", from: "/a.txt", to: "/b.txt" }),
+        unwrap(parseFsCommand({ action: "mv", from: "/a.txt", to: "/b.txt" })),
       ),
     );
     assert.equal(unwrap(await vfs.read("/b.txt")).content, "body");
 
-    unwrap(await executeFsCommand(vfs, parseFsCommand({ action: "mkdir", path: "/dir" })));
+    unwrap(await executeFsCommand(vfs, unwrap(parseFsCommand({ action: "mkdir", path: "/dir" }))));
     unwrap(await vfs.write("/dir/x.txt", "x"));
     unwrap(
       await executeFsCommand(
         vfs,
-        parseFsCommand({
+        unwrap(parseFsCommand({
           action: "cp",
           from: "/dir",
           to: "/copy",
           recursive: true,
-        }),
+        })),
       ),
     );
     assert.equal(unwrap(await vfs.read("/copy/x.txt")).content, "x");
@@ -132,7 +132,7 @@ describe("fs-command integration", () => {
     unwrap(
       await executeFsCommand(
         vfs,
-        parseFsCommand({ action: "rm", path: "/copy", recursive: true }),
+        unwrap(parseFsCommand({ action: "rm", path: "/copy", recursive: true })),
       ),
     );
     await rejectsErr(() => vfs.read("/copy/x.txt"));
@@ -147,7 +147,7 @@ describe("fs-command integration", () => {
     unwrap(await vfs.mkdir("/55"));
     unwrap(await vfs.write("/55/诗歌.txt", "poem", { versionCheck: false }));
 
-    unwrap(await executeFsCommand(vfs, parseFsCommand({ action: "rm", path: "/55" })));
+    unwrap(await executeFsCommand(vfs, unwrap(parseFsCommand({ action: "rm", path: "/55" }))));
     await rejectsErr(() => vfs.list("/55"));
   });
 
@@ -159,8 +159,8 @@ describe("fs-command integration", () => {
     unwrap(await vfs.mkdir("/dir"));
     await vfs.write("/dir/a.txt", "stay");
 
-    await assert.rejects(() =>
-      executeFsCommand(vfs, parseFsCommand({ action: "rmdir", path: "/dir" })),
+    await rejectsErr(() =>
+      executeFsCommand(vfs, unwrap(parseFsCommand({ action: "rmdir", path: "/dir" }))),
     );
   });
 
@@ -175,7 +175,7 @@ describe("fs-command integration", () => {
     const out = unwrap(
       await executeFsCommand(
         vfs,
-        parseFsCommand({ action: "ls", path: "/", recursive: true }),
+        unwrap(parseFsCommand({ action: "ls", path: "/", recursive: true })),
       ),
     );
     assert.ok("entries" in out);

@@ -18,6 +18,7 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { utf8ByteLength } from "@/common/encoding.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { scopeKey, validateLogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
@@ -175,15 +176,12 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         this.testHook?.onBeforeDeletePrefix?.();
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         if (directoryPath !== "/") {
-          const parentCheck = await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`);
-          // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
-          if (!parentCheck.ok) throw parentCheck.error;
-          const existing = await repoTx.findByPath(sk, directoryPath);
-          if (!existing.ok) throw existing.error;
-          if (existing.value == null) {
-            const inserted = await repoTx.insertDirectory(sk, directoryPath);
-            if (!inserted.ok) throw inserted.error;
-          } else if (existing.value.entryKind !== "directory") {
+          // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+          unwrapOrRollback(await ensureParentDirectories(repoTx, sk, `${directoryPath}/__vfs_card_placeholder`));
+          const existing = unwrapOrRollback(await repoTx.findByPath(sk, directoryPath));
+          if (existing == null) {
+            unwrapOrRollback(await repoTx.insertDirectory(sk, directoryPath));
+          } else if (existing.entryKind !== "directory") {
             throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
           }
         }
@@ -212,9 +210,8 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
               throw new Error("test import failure");
             }
-            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
-            // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
-            if (!parentCheck.ok) throw parentCheck.error;
+            // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+            unwrapOrRollback(await ensureParentDirectories(repoTx, sk, logical));
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });

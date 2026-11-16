@@ -68,10 +68,16 @@ export async function buildSessionPromptInput(
     }
   };
 
-  const resolved =
-    definition ??
-    (await resolveAgentForProject(runtime, scope.projectId, scope.sessionId))
-      .definition;
+  // 错误通道迁移四期：resolveAgentForProject 沿 Result 回传，Err 直接并进本
+  // 函数的 Result 通道（token 读口已有 resilient 降级、预览侧有 ipcErr 收口）。
+  let resolved: AgentDefinition;
+  if (definition != null) {
+    resolved = definition;
+  } else {
+    const resolvedAgent = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
+    if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
+    resolved = resolvedAgent.value.definition;
+  }
   bail();
 
   // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
@@ -147,7 +153,9 @@ export async function buildSessionPromptInput(
     workplaceFiles,
     workplaceFingerprint: fingerprint,
   };
-  // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
-  const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
-  return Result.ok({ definition: resolved, layout: resolved.prompts, ctx, input, rawMessages: visibleMessages });
+  // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块。
+  // 四期签名：buildPromptLlmInputFromLayout 沿 Result 回传，Err 并进本函数通道。
+  const built = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  if (!built.ok) return Result.err(built.error);
+  return Result.ok({ definition: resolved, layout: resolved.prompts, ctx, input: built.value, rawMessages: visibleMessages });
 }

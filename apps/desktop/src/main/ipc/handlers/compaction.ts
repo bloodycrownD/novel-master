@@ -37,7 +37,10 @@ export async function handleCompactionManual(
   req: CompactionManualRequest,
 ): Promise<IpcResult<{ ok: boolean }>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     // run 在途即拒：压缩是 hide-message 式的可见性重排，落在回合中段会与
     // core 那边「回合内前缀冻结」的自动压缩语义打架。返回既有 IpcResult 失败
     // 分支（不引入 data 层 reason 字段，IPC 契约零变更）。

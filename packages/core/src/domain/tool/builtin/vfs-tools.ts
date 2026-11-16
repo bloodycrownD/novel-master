@@ -143,10 +143,10 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const totalLines = lines.length;
 
       if (offset > 1 && totalLines === 0) {
-        throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (0 lines)`});
+        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (0 lines)`}));
       }
       if (totalLines > 0 && offset > totalLines) {
-        throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
+        return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "read", detail: `offset ${offset} exceeds file length (${totalLines} lines)`}));
       }
 
       const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(lines, offset, limit);
@@ -318,11 +318,12 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     ]),
     async run(input, ctx) {
       const parsed = parseFsCommand(input);
-      const result = await executeFsCommand(ctx.vfs, parsed);
+      if (!parsed.ok) return Result.err(parsed.error);
+      const result = await executeFsCommand(ctx.vfs, parsed.value);
       if (!result.ok) return Result.err(result.error);
       // mkdir 成功后为新目录及其祖先补默认目录规则；其余子命令不碰
-      if (parsed.kind === "mkdir") {
-        const resolved = resolveLogicalPath(parsed.path);
+      if (parsed.value.kind === "mkdir") {
+        const resolved = resolveLogicalPath(parsed.value.path);
         if (!resolved.ok) return Result.err(resolved.error);
         await ensureDirRulesForNewPath(ctx, resolved.value);
       }

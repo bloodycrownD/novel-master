@@ -19,7 +19,7 @@
  * @module test/message-checkpoint/rollback-restore-deleted-entry.test
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -290,7 +290,7 @@ describe("rollback-restore-deleted-entry", () => {
 
     // 默认不带选项：应走 BACKFILL_REQUIRED 确认流（双端 UI 确认后带
     // revisionHeadBackfill 重试降级），而非整体 VFS_RESTORE_FAILED。
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
@@ -339,7 +339,7 @@ describe("rollback-restore-deleted-entry", () => {
     );
 
     // 先走默认确认流：抛 BACKFILL_REQUIRED。
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
@@ -414,7 +414,7 @@ describe("rollback-restore-deleted-entry", () => {
 
     // 既有 UX 设计：默认不带选项必须抛 BACKFILL_REQUIRED 阻断，由双端
     // UI 确认后带 revisionHeadBackfill:true 重试才降级完成回滚。
-    await assert.rejects(
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),

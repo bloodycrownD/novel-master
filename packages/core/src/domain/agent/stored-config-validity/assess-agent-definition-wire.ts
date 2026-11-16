@@ -22,9 +22,17 @@ const REMOVED_FEATURE_KEYWORDS = [
  * 将智能体配置 wire 判定为 valid / invalid。
  */
 export function assessAgentDefinitionWire(raw: unknown): StoredConfigHealth<AgentDefinition> {
+  // decode 已 Result 化（错误通道迁移四期）。两条失败通道都归 invalid，分类关键词
+  // 与 message 透传规则不变：① decode 的 `Result.err`（zod issue）；② schema
+  // preprocess 的同步 throw（zod v4 的 safeParse 不把 transform/preprocess 抛错
+  // 折进 issue，会原样穿透 decode，必须在这里兜住）。
   try {
-    const value = decode(raw, agentDefinitionSchema);
-    return { status: "valid", value };
+    const decoded = decode(raw, agentDefinitionSchema);
+    if (!decoded.ok) {
+      const message = decoded.error.message;
+      return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };
+    }
+    return { status: "valid", value: decoded.value };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { status: "invalid", code: REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword)) ? "removed_feature" : "broken_wire", message };

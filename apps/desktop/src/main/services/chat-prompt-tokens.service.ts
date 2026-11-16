@@ -247,10 +247,11 @@ async function computeChatPromptTokenStats(
     // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
     // `serializeToolsForTokenCount` 头注释）。
     const serialized = await serializePromptLlmInput(layout, ctx);
+    if (!serialized.ok) return Result.err(serialized.error);
     // 无模型可用 → 只能按默认编码估算。仍然走真分词器（cl100k）而不是字符折算：
     // 「预估」标签与 counterKind 语义不变，变的是读数——折算对中文低估八成，而这
     // 正是最需要保守估计的一条路径。
-    const count = countFallbackTokens(runtime, serialized);
+    const count = countFallbackTokens(runtime, serialized.value);
     return Result.ok(buildTokenStats(count, true, "heuristic", undefined, "local"));
   }
 
@@ -291,20 +292,24 @@ const readWarmInflight = new Set<string>();
 async function buildResolveParams(
   runtime: DesktopNovelMasterRuntime,
   args: CountArgs,
-): Promise<CountPromptLlmInputParams> {
+): Promise<Result<CountPromptLlmInputParams, AppError>> {
   const { layout, ctx, savedModelId } = args;
-  const tokenizerOverride = await resolveTokenCounterModeForModel(
+  const mode = await resolveTokenCounterModeForModel(
     runtime.providerModels,
     savedModelId,
   );
-  return {
+  // 已知失败沿 Result 上行（错误通道迁移七期），由唯一调用方 countFn 的
+  // Result 通道收口。
+  if (!mode.ok) return Result.err(mode.error);
+  const tokenizerOverride = mode.value;
+  return Result.ok({
     layout,
     ctx,
     savedModelId,
     registry: runtime.tokenCounters,
     tokenizerOverride,
     savedModels: runtime.savedModelRepo,
-  };
+  });
 }
 
 /**
@@ -344,11 +349,12 @@ async function isPreciseWarmStillCurrent(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    // 读失败（已知失败）与 registry.get 抛错同判：宁可信「变了」去补读一次。
+    // 读失败（已知失败）与 registry.get 失败同判：宁可信「变了」去补读一次。
     if (!sessionConfig.ok) return false;
     const definition = await runtime.agentRegistry.get(sessionConfig.value.agentId);
+    if (!definition.ok) return false;
     return (
-      (definition.model ?? sessionConfig.value.modelId) === warmSavedModelId
+      (definition.value.model ?? sessionConfig.value.modelId) === warmSavedModelId
     );
   } catch {
     return false;
@@ -406,8 +412,16 @@ async function pushPreciseStatsIfReady(
   }
   // 模型没变 ⇒ 手里这份就是当下的精确读数，直接装配推送。
   // contextWindow 是轻查询（模型元信息一行），与主路径里那次同款。
-  const contextWindow =
-    await runtime.providerModels.getContextWindow(warm.savedModelId);
+  const cw = await runtime.providerModels.getContextWindow(warm.savedModelId);
+  if (!cw.ok) {
+    // 推送失败只丢「这次升级」（错误通道迁移七期：原沿 throw 进上层 .catch
+    // 的非弃权分支，收口同款——开发期留痕，不影响 chip 既有标签）。
+    if (!app.isPackaged) {
+      log.warn("prompt token precise warm-up failed", { error: cw.error });
+    }
+    return;
+  }
+  const contextWindow = cw.value;
   notifyPromptChatTokenUpdatedToRenderer({
     sessionId: scope.sessionId,
     stats: buildTokenStats(
@@ -464,7 +478,9 @@ async function loadChatPromptTokenStatsNow(
     scope,
     async (args) => {
       const { savedModelId } = args;
-      const params = await buildResolveParams(runtime, args);
+      const paramsR = await buildResolveParams(runtime, args);
+      if (!paramsR.ok) return Result.err(paramsR.error);
+      const params = paramsR.value;
       // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
       // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
       // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
@@ -538,8 +554,11 @@ async function loadChatPromptTokenStatsNow(
           })
           .finally(() => readWarmInflight.delete(scope.sessionId));
       }
-      const contextWindow =
-        await runtime.providerModels.getContextWindow(savedModelId);
+      const cw = await runtime.providerModels.getContextWindow(savedModelId);
+      // 已知失败沿 countFn 的 Result 通道上行（错误通道迁移七期）：resilient
+      // 收到 Err 仍走 fallback，与旧「throw → catch → fallback」同一终点。
+      if (!cw.ok) return Result.err(cw.error);
+      const contextWindow = cw.value;
       return Result.ok({
         tokenCount: result.tokenCount,
         estimated: result.estimated,
@@ -716,20 +735,17 @@ async function loadChatPromptTokenStatsFallback(
       registry: withRealFallbackCounter(runtime),
       savedModels: runtime.savedModelRepo,
     });
+    if (!result.ok) return Result.err(result.error);
 
-    let contextWindow: number | undefined;
-    try {
-      const cw =
-        await runtime.providerModels.getContextWindow(savedModelId);
-      contextWindow = cw ?? undefined;
-    } catch {
-      contextWindow = undefined;
-    }
+    // contextWindow 读失败（已知失败）按缺省收（错误通道迁移七期，与旧
+    // throw→catch 同口径：fallback 的读数主体不受模型元信息缺失影响）。
+    const cw = await runtime.providerModels.getContextWindow(savedModelId);
+    const contextWindow: number | undefined = cw.ok ? (cw.value ?? undefined) : undefined;
 
     return Result.ok({
-      tokenCount: result.tokenCount,
-      estimated: result.estimated,
-      counterKind: result.counterKind,
+      tokenCount: result.value.tokenCount,
+      estimated: result.value.estimated,
+      counterKind: result.value.counterKind,
       contextWindow,
       source: "local",
     });

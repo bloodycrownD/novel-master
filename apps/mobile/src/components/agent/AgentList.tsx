@@ -126,7 +126,11 @@ export function AgentList({onCreate}: Props) {
       let wsLabel = '—';
       if (workspaceModelId) {
         try {
-          wsLabel = await resolveModelDisplayLabel(runtime, workspaceModelId);
+          const wsLabelResolved = await resolveModelDisplayLabel(
+            runtime,
+            workspaceModelId,
+          );
+          wsLabel = wsLabelResolved.ok ? wsLabelResolved.value : workspaceModelId;
         } catch {
           wsLabel = workspaceModelId;
         }
@@ -147,7 +151,11 @@ export function AgentList({onCreate}: Props) {
           if (def.model) {
             let label = def.model;
             try {
-              label = await resolveModelDisplayLabel(runtime, def.model);
+              const labelResolved = await resolveModelDisplayLabel(
+                runtime,
+                def.model,
+              );
+              if (labelResolved.ok) label = labelResolved.value;
             } catch {
               /* 使用原始 model id */
             }
@@ -451,10 +459,11 @@ export function AgentList({onCreate}: Props) {
           } else if (action === 'duplicate') {
             void (async () => {
               const def = await runtime.agentRegistry.get(id);
+              if (!def.ok) throw def.error;
               const copyId = `agent-${Date.now()}`;
               await runtime.agentRegistry.upsert(copyId, {
-                ...def,
-                name: `${def.name}-copy`,
+                ...def.value,
+                name: `${def.value.name}-copy`,
               });
               await reload();
               navigation.navigate('AgentEditor', {agentId: copyId});
@@ -495,8 +504,9 @@ export function AgentList({onCreate}: Props) {
             const trimmed = values[0].trim();
             if (trimmed !== '') {
               const def = await runtime.agentRegistry.get(prompt.agentId);
+              if (!def.ok) throw def.error;
               await runtime.agentRegistry.upsert(prompt.agentId, {
-                ...def,
+                ...def.value,
                 name: trimmed,
               });
               await reload();

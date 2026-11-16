@@ -33,6 +33,7 @@ import {
   type TokenCounterKind,
   type TokenizerFamily,
 } from "@novel-master/core/provider";
+import { Result, type AppError } from "@novel-master/core/errors";
 import {
   PromptCountCancelledError,
   countPromptViaNative,
@@ -108,7 +109,7 @@ type RnEncodingOrNull = RnEncodingName | null;
 
 /** RN 驱动入口的参数与返回。 */
 type RnParams = CountPromptLlmInputParams;
-type RnOut = PromptTokenCountResult;
+type RnOut = Result<PromptTokenCountResult, AppError>;
 
 /** 测试用表源注入签名。 */
 type EncodingSource = ((name: RnEncodingName) => RnTokenEncoding | null) | null;
@@ -686,18 +687,19 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
     driverName: DRIVER_NAME,
   });
   const promptText = await serializePromptLlmInput(layout, ctx);
-  const serialized = promptText + serializeToolsForTokenCount(params.tools);
+  if (!promptText.ok) return Result.err(promptText.error);
+  const serialized = promptText.value + serializeToolsForTokenCount(params.tools);
   const contentHash = chunkHash16(serialized);
   const cached = promptWholeCache.lookup("", scope, contentHash);
   if (cached != null) {
-    return {
+    return Result.ok({
       tokenCount: cached.tokenCount,
       counterKind: cached.counterKind,
       estimated: cached.estimated,
       savedModelId,
       vendorModelId,
       tokenizerFamily: family,
-    };
+    });
   }
 
   const countArgs: CountArgs = [
@@ -718,14 +720,14 @@ export async function countPromptLlmInputRn(params: RnParams): Promise<RnOut> {
     estimated,
   });
 
-  return {
+  return Result.ok({
     tokenCount: count,
     counterKind,
     estimated,
     savedModelId,
     vendorModelId,
     tokenizerFamily: family,
-  };
+  });
 }
 
 /** Test hooks for Jest (mobile + driver unit tests). */

@@ -91,7 +91,12 @@ async function budgetSkillsIndex(
     return undefined;
   }
   const effective = await rt.skills().effectiveSkills(projectId);
-  return effective
+  if (!effective.ok) {
+    // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
+    const failure = effective.error;
+    throw failure;
+  }
+  return effective.value
     .filter((s) => s.effective)
     .map((s) => ({
       name: s.name,
@@ -163,7 +168,9 @@ export async function runPrompt(
     vfs,
     ...(skillsIndex != null ? { skillsIndex } : {}),
   };
-  const text = await formatPromptLlmInputForCliFromLayout(layout, ctx);
+  const textResult = await formatPromptLlmInputForCliFromLayout(layout, ctx);
+  if (!textResult.ok) return { kind: "failed", error: textResult.error };
+  const { value: text } = textResult;
   if (text.length > 0) {
     process.stdout.write(text);
   }
@@ -183,6 +190,7 @@ export async function runPrompt(
       // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
       // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
       const serialized = await serializePromptLlmInput(layout, ctx);
+      if (!serialized.ok) return { kind: "failed", error: serialized.error };
       // stream-metrics-native ④：拿不到模型时改走 Node 驱动的默认 cl100k 真计数，
       // 而不是 `rt.tokenCounters.heuristic.countText` 的 `ceil(chars / 3.35)`
       // 字符折算（3.35 是英文口径，对中文正文低估 82%~84%）。下面 JSON 的
@@ -190,7 +198,7 @@ export async function runPrompt(
       // cl100k 对任意模型都只是近似，报成精确档反而是误导。编码表建不起来
       // （ranks 资源缺失）时才有最后一级折算兜底。
       const tokenCount = resolveCliPromptTokens(
-        serialized,
+        serialized.value,
         countTextWithDefaultEncoding,
         (text) => rt.tokenCounters.heuristic.countText(text),
       );
@@ -206,9 +214,11 @@ export async function runPrompt(
       );
     }
 
-    const tokenizerOverride = await rt.providerModels.getTokenCounterMode(
+    const counterMode = await rt.providerModels.getTokenCounterMode(
       savedModelId,
     );
+    if (!counterMode.ok) return { kind: "failed", error: counterMode.error };
+    const tokenizerOverride = counterMode.value;
     // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
     // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
     const result = await countPromptLlmInput({
@@ -219,14 +229,15 @@ export async function runPrompt(
       tokenizerOverride,
       savedModels: rt.savedModels,
     });
+    if (!result.ok) return { kind: "failed", error: result.error };
 
     console.error(
       JSON.stringify({
-        tokenCount: result.tokenCount,
+        tokenCount: result.value.tokenCount,
         model: savedModelId,
-        counter: result.counterKind,
-        estimated: result.estimated,
-        tokenizerFamily: result.tokenizerFamily,
+        counter: result.value.counterKind,
+        estimated: result.value.estimated,
+        tokenizerFamily: result.value.tokenizerFamily,
       }),
     );
   }

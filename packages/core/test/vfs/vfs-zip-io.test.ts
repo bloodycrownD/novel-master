@@ -191,9 +191,9 @@ describe("VfsZipIoService", () => {
 
     const zipSvc = createVfsZipIoService(ctx.conn);
     const zipBytes = buildVfsZip(new Map([["other.md", "x"]]));
-    await assert.rejects(
-      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_NOT_CONFIRMED")
+    await rejectsErr(
+      zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
+      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_NOT_CONFIRMED"))
     );
     const read = unwrap(await vfs.read("/stay.md"));
     assert.equal(read.content, "stay");
@@ -513,25 +513,23 @@ describe("VfsZipIoService", () => {
     await vfs.write("/b/stay.txt", "stay-b");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    await assert.rejects(
-      () =>
-        zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
-          confirmed: false,
-          directoryPath: "/a",
-        }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_NOT_CONFIRMED")
+    await rejectsErr(
+      zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
+        confirmed: false,
+        directoryPath: "/a",
+      }),
+      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_NOT_CONFIRMED"))
     );
 
     const invalidUtf8Zip = zipSync({
       "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
     });
     await rejectsErr(
-      () =>
-        zipSvc.import(scope, invalidUtf8Zip, {
-          confirmed: true,
-          directoryPath: "/a",
-        }),
-      (e: unknown) => isAppError(e, "VFS_ZIP_INVALID_UTF8"),
+      zipSvc.import(scope, invalidUtf8Zip, {
+        confirmed: true,
+        directoryPath: "/a",
+      }),
+      (e: unknown) => assert.ok(isAppError(e, "VFS_ZIP_INVALID_UTF8")),
     );
 
     assert.equal((unwrap(await vfs.read("/a/stay.txt"))).content, "stay-a");

@@ -78,7 +78,9 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
     if (!session.ok) return;
     sessionId = session.data.id;
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.messages.append(sessionId, "user", textBlocks("你好，请记住附加信息"));
   });
 
@@ -87,7 +89,9 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
   });
 
   it("T-CA5: definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const definition = buildDefaultAgentDefinitionPreservingName("extra-info-agent");
     // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
     definition.prompts = {
@@ -164,7 +168,9 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
     if (!session.ok) return;
     sessionId = session.data.id;
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // 真写一份超预算正文进 VFS：prepare 首次全文 hydrate 走
     // file_cache miss → vfs.read 这条路。
     await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
@@ -187,7 +193,9 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
   });
 
   it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const bundleResult = await buildSessionPromptInput(rt, { projectId, sessionId })
     if (!bundleResult.ok) throw bundleResult.error;
     const bundle = bundleResult.value;
@@ -248,7 +256,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     assert.equal(session.ok, true);
     if (!session.ok) return;
     sessionId = session.data.id;
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.messages.append(sessionId, "user", textBlocks("他把伞收了"));
   });
 
@@ -310,7 +320,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   }
 
   it("检查点①（解析 agent 之后）翻真：取消息一步都不许跑", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
       buildSessionPromptInput(
@@ -326,7 +338,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点②（取消息之后）翻真：工作区装配不许起步", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
       buildSessionPromptInput(
@@ -346,7 +360,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点③（工作区装配之后）翻真：prepare 段不许起步", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
       buildSessionPromptInput(
@@ -366,7 +382,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("检查点④（prepare 之后）翻真：四段足迹全见过才抛（layout 不再碰 runtime）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
       buildSessionPromptInput(
@@ -387,7 +405,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("workplace 段内中止：assemble 文件粒度抛错 → build 转抛 ChatPromptBuildBailedError", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const project = await handleProjectsCreate({ name: "wp-bail" });
     assert.equal(project.ok, true);
     if (!project.ok) return;
@@ -455,7 +475,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
   });
 
   it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     const bundleResult = await buildSessionPromptInput(
       runtime,

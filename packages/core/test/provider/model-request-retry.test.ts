@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -87,7 +88,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -135,7 +136,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 2);
   });
@@ -161,7 +162,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -266,7 +267,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3, "first-chunk 超时应按既有重试上限重试");
   });
@@ -393,12 +394,12 @@ describe("DefaultModelRequestService retry", () => {
       resolveAdapter: () => adapter,
     });
 
-    const out = await svc.request(SAVED_MODEL_ID, "hello", {
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello", {
       stream: true,
       onStream: (ev) => {
         if (ev.type === "text-delta") seen.push(ev.text);
       },
-    });
+    }));
     assert.equal(calls, 2);
     assert.equal(out.assistantText, "ok");
     assert.deepEqual(seen, ["ok"]);
@@ -478,10 +479,10 @@ describe("DefaultModelRequestService retry", () => {
       resolveAdapter: () => adapter,
     });
 
-    const out = await svc.request(SAVED_MODEL_ID, "hello", {
+    const out = unwrap(await svc.request(SAVED_MODEL_ID, "hello", {
       stream: true,
       onStream: () => undefined,
-    });
+    }));
     assert.equal(calls, 2);
     assert.equal(out.assistantText, "ok");
   });

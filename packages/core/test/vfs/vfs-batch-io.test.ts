@@ -1,4 +1,5 @@
 import { isAppError } from "../../src/errors/app-error.js";
+import { Result } from "../../src/errors/either.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -326,13 +327,16 @@ describe("VfsBatchIoService", () => {
       plan,
       { overwriteConfirmed: false },
       {
-        async mkdir() {},
+        async mkdir() {
+          return Result.ok(undefined);
+        },
         async writeFile(logical, content) {
           if (logical.endsWith("/b.md")) {
             throw new Error("simulated write fail");
           }
           unwrap(await vfs.write(logical, content, { versionCheck: false }));
           writtenViaWriter.push(logical);
+          return Result.ok(undefined);
         },
       },
     ));
@@ -669,7 +673,7 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       "/导入",
       plan,
       { overwriteConfirmed: false },
-      { async mkdir() {}, async writeFile() {} },
+      { async mkdir() { return Result.ok(undefined); }, async writeFile() { return Result.ok(undefined); } },
     ));
     assert.deepEqual(zeroWritten.written, []);
     assert.deepEqual(
@@ -686,9 +690,12 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       plan,
       { overwriteConfirmed: true },
       {
-        async mkdir() {},
+        async mkdir() {
+          return Result.ok(undefined);
+        },
         async writeFile(logical, content) {
           unwrap(await vfs.write(logical, content, { versionCheck: false }));
+          return Result.ok(undefined);
         },
       },
     ));
@@ -722,12 +729,15 @@ describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
       partialPlan,
       { overwriteConfirmed: false },
       {
-        async mkdir() {},
+        async mkdir() {
+          return Result.ok(undefined);
+        },
         async writeFile(logical, content) {
           if (logical.endsWith("/b.md")) {
             throw new Error("simulated write fail");
           }
           await vfs.write(logical, content, { versionCheck: false });
+          return Result.ok(undefined);
         },
       },
     ));

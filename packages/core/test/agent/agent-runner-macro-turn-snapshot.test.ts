@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../src/errors/either.js";
 import {
@@ -108,7 +109,7 @@ describe("AgentRunner macro turn snapshot", () => {
       request: mock.fn(async (_modelId, _content, options) => {
         histories.push(options);
         if (histories.length < 2) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -119,13 +120,13 @@ describe("AgentRunner macro turn snapshot", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
@@ -142,14 +143,14 @@ describe("AgentRunner macro turn snapshot", () => {
       toolCtx: mockToolCtx(mockVfs()),
     } as CreateAgentRunnerDeps);
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(histories.length, 2);
     // 快照只取一次：customAttach/dynamic/token 计数各链路共享，不重复渲染。
@@ -208,11 +209,11 @@ describe("AgentRunner macro turn snapshot", () => {
     const model: ModelRequestService = {
       request: mock.fn(async (_modelId, _content, options) => {
         captured.options = options;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
@@ -227,14 +228,14 @@ describe("AgentRunner macro turn snapshot", () => {
       toolCtx: mockToolCtx(mockVfs()),
     } as CreateAgentRunnerDeps);
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     // 不使用 $filetree 的 agent 不应白付一次全量 metadata 渲染。
     assert.equal(renderFileTree.mock.callCount(), 0);

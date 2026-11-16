@@ -39,6 +39,9 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
     // 这里先注册一个 agent 并设为 workspace 当前，保证 create 能落库。
     await rt.agentRegistry.upsert("any-agent", definition);
     await rt.state.setCurrentAgentId("any-agent");
+    // 测试环境会种子化 workspace 当前模型；负例前提是「agent 无 pin 且 session
+    // 无 modelId」，而 create 会把 workspace modelId 复制进会话——先清空再建。
+    await rt.state.resetCurrentModelId();
     // 错误通道迁移二期后 create 链走 Result，解包取实体。
     const projectCreated = await rt.projects.create("saved-model-proj");
     if (!projectCreated.ok) throw projectCreated.error;
@@ -50,7 +53,9 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
     if (!sessionCreated.ok) throw sessionCreated.error;
     const session = sessionCreated.value;
 
-    // workspace 层已移除：agent 无 pin 且 session 无 modelId → 无模型可解析，拋 AgentRunError
+    // workspace 层已移除：agent 无 pin 且 session 无 modelId → 无模型可解析，
+    // resolveApplicationModelIdForRun 收 AGENT_MODEL_NOT_SET，经 mapResolveError
+    // 转 AgentTurnError 抛出（抛出契约保留）。
     await assert.rejects(
       () => resolveDesktopSavedModelId(rt, definition, session.id),
       (err: unknown) => err instanceof Error

@@ -42,7 +42,7 @@ describe("内置 agent-config 技能 seed（T-AS1）", () => {
     await bootstrapNovelMaster(conn);
 
     const skills = createSkillsService(conn);
-    const list = await skills.listSkills("global");
+    const list = unwrap(await skills.listSkills("global"));
     const item = list.find((s) => s.name === "agent-config");
     assert.ok(item != null, "bootstrap 后 global 清单应含 agent-config");
     assert.equal(item.valid, true, "front matter 应过 strict 校验");

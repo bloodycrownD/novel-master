@@ -8,7 +8,7 @@
  */
 
 import { isAppError } from "@/errors/app-error.js";
-import { domainOf } from "@/errors/domain.js";
+import { inDomain } from "@/errors/guards.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { CORE_MESSAGE_KEYS } from "@/i18n/keys.js";
@@ -51,7 +51,7 @@ function operationFailed(detail: string): CoreMessageDescriptor {
  */
 export function vfsUserMessage(error: unknown, _scope?: VfsScope): CoreMessageDescriptor {
   // 旧 ToolError 的 cause 解包（类已退役，等价判 TOOL 域段；cause 双写在 Error.cause 与 details.cause）。
-  if (isAppError(error) && domainOf(error.code) === "TOOL") {
+  if (inDomain(error, "TOOL")) {
     const cause = error.cause ?? (error.details as {cause?: unknown} | undefined)?.cause;
     if (cause != null) {
       return vfsUserMessage(cause, _scope);

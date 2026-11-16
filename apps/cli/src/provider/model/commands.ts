@@ -58,7 +58,8 @@ export async function runProviderModel(
     if (!resolvedProvider.ok) return Result.err(resolvedProvider.error);
     const providerId = resolvedProvider.value;
     const list = await rt.providerModels.suggestList(providerId);
-    for (const s of list) {
+    if (!list.ok) return Result.err(list.error);
+    for (const s of list.value) {
       console.log(
         `${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`,
       );
@@ -82,7 +83,8 @@ export async function runProviderModel(
 
   switch (subcommand) {
     case "fetch": {
-      await rt.providerModels.fetch(providerId);
+      const fetched = await rt.providerModels.fetch(providerId);
+      if (!fetched.ok) return Result.err(fetched.error);
       return RESULT_OK;
     }
     case "save": {
@@ -92,11 +94,12 @@ export async function runProviderModel(
           "Usage: nm provider model save --vendorModelId <id> [--modelName <name>]",
         );
       }
-      await rt.providerModels.save(
+      const savedModel = await rt.providerModels.save(
         providerId,
         vendorModelId,
         flagString(flags, "modelName"),
       );
+      if (!savedModel.ok) return Result.err(savedModel.error);
       return RESULT_OK;
     }
     case "create": {
@@ -106,15 +109,18 @@ export async function runProviderModel(
           "Usage: nm provider model create --vendorModelId <id>",
         );
       }
-      await rt.providerModels.create(providerId, vendorModelId);
+      const created = await rt.providerModels.create(providerId, vendorModelId);
+      if (!created.ok) return Result.err(created.error);
       return RESULT_OK;
     }
     case "list": {
       const list = await rt.providerModels.savedList(providerId);
+      if (!list.ok) return Result.err(list.error);
       const provider = await rt.providers.get(providerId);
-      for (const m of list) {
+      if (!provider.ok) return Result.err(provider.error);
+      for (const m of list.value) {
         console.log(
-          `${m.id}\t${savedModelDisplayName(m, provider.displayName)}\t${m.vendorModelId}`,
+          `${m.id}\t${savedModelDisplayName(m, provider.value.displayName)}\t${m.vendorModelId}`,
         );
       }
       return RESULT_OK;
@@ -137,10 +143,12 @@ export async function runProviderModel(
         ? (flagString(flags, "modelName") ?? null)
         : undefined;
       if (modelName !== undefined) {
-        await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
+        const edited = await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
+        if (!edited.ok) return Result.err(edited.error);
       }
       if (flags.has("resetContextWindow")) {
-        await rt.providerModels.resetContextWindowToDefault(savedModelId);
+        const reset = await rt.providerModels.resetContextWindowToDefault(savedModelId);
+        if (!reset.ok) return Result.err(reset.error);
       } else {
         const contextWindowRaw = flagString(flags, "contextWindowTokens");
         const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
@@ -165,7 +173,8 @@ export async function runProviderModel(
             ...(contextWindowTokens != null ? { contextWindowTokens } : {}),
             ...(tokenCounterMode != null ? { tokenCounterMode } : {}),
           };
-          await rt.providerModels.updateSettings(savedModelId, patch);
+          const updated = await rt.providerModels.updateSettings(savedModelId, patch);
+          if (!updated.ok) return Result.err(updated.error);
         }
       }
       return RESULT_OK;
@@ -173,7 +182,8 @@ export async function runProviderModel(
     case "delete": {
       const resolvedSavedModel = await requireSavedModelId(rt, flags);
       if (!resolvedSavedModel.ok) return Result.err(resolvedSavedModel.error);
-      await rt.providerModels.deleteSaved(resolvedSavedModel.value);
+      const deleted = await rt.providerModels.deleteSaved(resolvedSavedModel.value);
+      if (!deleted.ok) return Result.err(deleted.error);
       return RESULT_OK;
     }
     default:

@@ -13,16 +13,16 @@ describe("AgentRegistryService", () => {
   it("upsert preserves display name separate from agentId", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "写作助手",
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("writer", def);
-    const loaded = await registry.get("writer");
+    const loaded = unwrap(await registry.get("writer"));
     assert.equal(loaded.name, "写作助手");
   });
 
@@ -45,7 +45,7 @@ describe("AgentRegistryService", () => {
     assert.equal(merged.description, "新描述");
     assert.ok(!("model" in merged));
     assert.deepEqual(merged.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
-    const loaded = await registry.get(id);
+    const loaded = unwrap(await registry.get(id));
     assert.equal(loaded.description, "新描述");
     assert.equal(loaded.model, undefined);
     assert.deepEqual(loaded.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
@@ -55,9 +55,9 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const id = `agent-missing-${testIsolationSuffix()}`;
-    await assert.rejects(
-      () => registry.update(id, { description: "x" }),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
+    await rejectsErr(
+      registry.update(id, { description: "x" }),
+      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -77,7 +77,7 @@ describe("AgentRegistryService", () => {
       }
     );
     // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
-    const defs = await registry.list();
+    const defs = unwrap(await registry.list());
     assert.ok(defs.every((d) => typeof d.name === "string" && d.name.length > 0));
   });
 
@@ -86,7 +86,7 @@ describe("AgentRegistryService", () => {
     const registry = createAgentRegistryService(ctx.conn);
     const id = `agent-min-${testIsolationSuffix()}`;
     await registry.upsert(id, { name: "minimal" } as unknown as AgentDefinition);
-    const loaded = await registry.get(id);
+    const loaded = unwrap(await registry.get(id));
     assert.deepEqual(loaded.prompts.persist, []);
     assert.deepEqual(loaded.prompts.dynamic, []);
   });
@@ -99,7 +99,7 @@ describe("AgentRegistryService", () => {
       name: "partial",
       prompts: { system: "你是翻译" },
     } as unknown as AgentDefinition);
-    const loaded = await registry.get(id);
+    const loaded = unwrap(await registry.get(id));
     assert.equal(loaded.prompts.system, "你是翻译");
     assert.deepEqual(loaded.prompts.persist, []);
     assert.deepEqual(loaded.prompts.dynamic, []);
@@ -121,9 +121,9 @@ describe("AgentRegistryService", () => {
         assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
-    await assert.rejects(
-      () => registry.get(id),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
+    await rejectsErr(
+      registry.get(id),
+      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -141,9 +141,9 @@ describe("AgentRegistryService", () => {
         assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
-    await assert.rejects(
-      () => registry.get(id),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
+    await rejectsErr(
+      registry.get(id),
+      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -161,9 +161,9 @@ describe("AgentRegistryService", () => {
         assert.ok(isAppError(e, "AGENT_INVALID_SCHEMA") && e.messageKey === "error.agent.invalid_schema.prompts_shape");
       }
     );
-    await assert.rejects(
-      () => registry.get(id),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
+    await rejectsErr(
+      registry.get(id),
+      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -172,19 +172,19 @@ describe("AgentRegistryService", () => {
     const registry = createAgentRegistryService(ctx.conn);
     await registry.upsert(
       "summarizer",
-      decode(
+      unwrap(decode(
         {
           schemaVersion: 1,
           name: "summarizer",
           prompts: { persist: {}, dynamic: {} },
         },
         agentDefinitionSchema
-      )
+      ))
     );
     await registry.delete("summarizer");
-    await assert.rejects(
-      () => registry.get("summarizer"),
-      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
+    await rejectsErr(
+      registry.get("summarizer"),
+      (e: unknown) => assert.ok(e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND"))
     );
   });
 
@@ -192,14 +192,14 @@ describe("AgentRegistryService", () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const displayName = `写作助手-${testIsolationSuffix()}`;
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: displayName,
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("writer-a", def);
     await rejectsErr(
       () => registry.upsert("writer-b", def),
@@ -212,17 +212,17 @@ describe("AgentRegistryService", () => {
   it("upsert 允许同一 Agent 保存原显示名", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "写作助手",
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("writer", def);
     await registry.upsert("writer", { ...def, runtime: { maxSteps: 10 } });
-    const loaded = await registry.get("writer");
+    const loaded = unwrap(await registry.get("writer"));
     assert.equal(loaded.name, "写作助手");
     assert.equal(loaded.runtime?.maxSteps, 10);
   });
@@ -233,27 +233,27 @@ describe("AgentRegistryService", () => {
     const displayName = `写作助手-${testIsolationSuffix()}`;
     await registry.upsert(
       "writer-a",
-      decode(
+      unwrap(decode(
         {
           schemaVersion: 1,
           name: `  ${displayName}  `,
           prompts: { persist: {}, dynamic: {} },
         },
         agentDefinitionSchema
-      )
+      ))
     );
     await rejectsErr(
       () =>
         registry.upsert(
           "writer-b",
-          decode(
+          unwrap(decode(
             {
               schemaVersion: 1,
               name: displayName,
               prompts: { persist: {}, dynamic: {} },
             },
             agentDefinitionSchema
-          )
+          ))
         ),
       (e) => {
         assert.ok(e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME"));
@@ -264,14 +264,14 @@ describe("AgentRegistryService", () => {
   it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("agent-a", def);
     await registry.upsert("agent-b", { ...def, name: "b" });
     await ctx.state.setCurrentAgentId("agent-a");
@@ -282,14 +282,14 @@ describe("AgentRegistryService", () => {
   it("AG5b: delete 非当前 Agent 时保留指针", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("agent-a", def);
     await registry.upsert("agent-b", { ...def, name: "b" });
     await ctx.state.setCurrentAgentId("agent-a");
@@ -300,14 +300,14 @@ describe("AgentRegistryService", () => {
   it("AG5c: 未注入 state 时 delete 不清指针", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema
-    );
+    ));
     await registry.upsert("agent-a", def);
     await ctx.state.setCurrentAgentId("agent-a");
     await registry.delete("agent-a");

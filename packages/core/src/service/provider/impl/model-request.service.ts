@@ -5,7 +5,8 @@
  */
 
 import { AppError, isAppError } from "@/errors/app-error.js";
-import { domainOf } from "@/errors/domain.js";
+import { Result } from "@/errors/either.js";
+import { inDomain } from "@/errors/guards.js";
 import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
@@ -91,7 +92,7 @@ function isRetryableError(error: unknown): boolean {
   if (isAppError(error, "PROVIDER_STREAM_TIMEOUT")) {
     return error.details?.phase === "first-chunk";
   }
-  if (!(error instanceof AppError) || domainOf(error.code) !== "PROVIDER") {
+  if (!inDomain(error, "PROVIDER")) {
     // Unknown transport/runtime failures are treated as transient once.
     return true;
   }
@@ -161,20 +162,20 @@ export class DefaultModelRequestService implements ModelRequestService {
     savedModelId: string,
     userContent: string,
     options?: ModelRequestOptions
-  ): Promise<LlmChatResult> {
+  ): Promise<Result<LlmChatResult, AppError>> {
     const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
     if (!asserted.ok) {
-      throw new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId });
+      return Result.err(new AppError("PROVIDER_MODEL_NOT_SAVED", { detail: `Model not saved: ${savedModelId}. Fetch and save the model first.`, modelId: savedModelId }));
     }
     const saved = asserted.value;
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
     if (!provider) {
-      throw new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId });
+      return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId }));
     }
     const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      throw new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: provider.id });
+      return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: provider.id }));
     }
     const apiKey = apiKeyResult.value;
     let sampling = options?.sampling;
@@ -203,7 +204,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
     if (this.deps.retryPolicies != null) {
       const fetched = await this.deps.retryPolicies.getPolicy();
-      if (!fetched.ok) throw fetched.error;
+      if (!fetched.ok) return Result.err(fetched.error);
       if (fetched.value != null) {
         policy = fetched.value;
       }
@@ -232,7 +233,9 @@ export class DefaultModelRequestService implements ModelRequestService {
               options.onStream!(ev);
             };
       try {
-        return await adapter.chat({
+        // 传输层失败仍沿 throw 通道（retry 按 catch + code 分派，spec-2-core §2.1 D 类），
+        // 只有预检失败（上方三处 + policy 读取）走 `Result.err`。
+        return Result.ok(await adapter.chat({
           baseUrl: provider.baseUrl,
           apiKey,
           vendorModelId,
@@ -248,7 +251,7 @@ export class DefaultModelRequestService implements ModelRequestService {
           sampling,
           thinking,
           signal: options?.signal,
-        });
+        }));
       } catch (error) {
         const canRetry =
           attempt <= policy.maxRetries &&

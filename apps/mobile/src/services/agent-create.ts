@@ -26,12 +26,8 @@ export async function createBlankAgent(
   const ids = await runtime.agentRegistry.listAgentIds();
   const slots = [];
   for (const id of ids) {
-    try {
-      const def = await runtime.agentRegistry.get(id);
-      slots.push({id, name: def.name});
-    } catch {
-      slots.push({id, name: id});
-    }
+    const def = await runtime.agentRegistry.get(id);
+    slots.push(def.ok ? {id, name: def.value.name} : {id, name: id});
   }
   const name = allocateAgentDisplayName(slots);
   const saved = await runtime.agentRegistry.upsert(id, {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
 import { agentDefinitionSchema } from "@novel-master/core/agent";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 /** 与 handleAgentRegistryList 中单条 get 失败分支一致。 */
 function buildBrokenListItem(
@@ -15,19 +16,17 @@ function buildBrokenListItem(
 
 describe("Agent 列表 decode 容错", () => {
   it("prompts.blocks 解码失败时生成 decodeError 行", () => {
-    let caught: unknown;
-    try {
-      decode(
-        {
-          schemaVersion: 1,
-          name: "broken",
-          prompts: { blocks: {} },
-        },
-        agentDefinitionSchema,
-      );
-    } catch (err) {
-      caught = err;
-    }
+    // decode 已 Result 化（四期签名）：毒行不再 throw，失败沿 Result.err 回传。
+    const r = decode(
+      {
+        schemaVersion: 1,
+        name: "broken",
+        prompts: { blocks: {} },
+      },
+      agentDefinitionSchema,
+    );
+    assert.ok(!r.ok);
+    const caught = r.ok ? undefined : r.error;
     assert.ok(caught);
 
     const row = buildBrokenListItem("broken-agent", caught);
@@ -37,14 +36,14 @@ describe("Agent 列表 decode 容错", () => {
   });
 
   it("正常解码行不含 decodeError", () => {
-    const def = decode(
+    const def = unwrap(decode(
       {
         schemaVersion: 1,
         name: "writer",
         prompts: { system: "hi", persist: {}, dynamic: {} },
       },
       agentDefinitionSchema,
-    );
+    ));
     assert.equal(def.name, "writer");
   });
 });

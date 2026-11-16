@@ -21,7 +21,7 @@
  * @module test/message-checkpoint/rollback-fingerprint-lock
  */
 
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -142,16 +142,15 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
     });
     const rollback = createMessageRollbackService(conn);
 
-    await assert.rejects(
+    await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),
       (error: unknown) => {
         assert.ok(
           isSessionFsError(error, "ROLLBACK_CONFLICT"),
-          `必须是 ROLLBACK_CONFLICT，实际：${String(error)}`
+          `文件面变了就必须报 ROLLBACK_CONFLICT（旧乐观锁只比消息行数，这一支会静默绿），实际：${String(error)}`
         );
         return true;
       },
-      "文件面变了就必须报冲突（旧乐观锁只比消息行数，这一支会静默绿）"
     );
 
     assert.ok(
@@ -248,16 +247,15 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
     });
     const rollback = createMessageRollbackService(conn);
 
-    await assert.rejects(
+    await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),
       (error: unknown) => {
         assert.ok(
           isSessionFsError(error, "ROLLBACK_TAIL_DRIFT"),
-          `必须是 ROLLBACK_TAIL_DRIFT，实际：${String(error)}`
+          `tail 构成变了必须拒绝截断（否则会连带截断用户从没回滚过的新消息）：${String(error)}`
         );
         return true;
       },
-      "tail 构成变了必须拒绝截断（否则会连带截断用户从没回滚过的新消息）"
     );
 
     // 事务整体回滚 ⇒ 注入的两条消息都还在（未被截断）。

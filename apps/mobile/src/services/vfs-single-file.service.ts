@@ -167,7 +167,7 @@ export async function exportVfsSingleFile(
   if (!planned.ok) return Result.err(planned.error);
   const plan = planned.value;
   if (plan.files.length !== 1) {
-    throw new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath});
+    return Result.err(new AppError('VFS_SINGLE_FILE_EXPORT_TARGET_INVALID', {logicalPath}));
   }
 
   const file = plan.files[0]!;

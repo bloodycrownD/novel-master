@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import { BUILTIN_SKILL_NAMES } from "../../src/bootstrap/skills/seed-builtin-skills.js";
@@ -18,16 +19,16 @@ describe("skill 空态", () => {
 
     // bootstrap 会幂等种入内置 agent-config（seed-builtin-skills），
     // 「空态」指除内置外无用户技能。
-    const globalList = await skills.listSkills("global");
+    const globalList = unwrap(await skills.listSkills("global"));
     assert.deepEqual(
       globalList.map((s) => s.name).filter((n) => !BUILTIN_SKILL_NAMES.has(n)),
       [],
     );
 
-    const projectList = await skills.listSkills({ projectId: project.id });
+    const projectList = unwrap(await skills.listSkills({ projectId: project.id }));
     assert.deepEqual(projectList, []);
 
-    const view = await skills.effectiveSkills(project.id);
+    const view = unwrap(await skills.effectiveSkills(project.id));
     // 未禁用时内置技能计入生效列表（索引可见属预期）；断言仅含内置。
     assert.deepEqual(
       view.filter((s) => !BUILTIN_SKILL_NAMES.has(s.name)).map((s) => s.name),

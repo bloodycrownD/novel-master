@@ -14,6 +14,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import { unwrap } from "../../helpers/result-unwrap.js";
 import { countTextWithDefaultEncoding } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
 import type { LlmToolDefinition } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 import {
@@ -80,20 +81,20 @@ describe("本地计数含 tools 段", () => {
   const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
 
   it("heuristic-only：带 tools 比不带大；空数组与不带一致", async () => {
-    const without = await countPromptLlmInputHeuristicOnly({
+    const without = unwrap(await countPromptLlmInputHeuristicOnly({
       ...BASE_PARAMS,
       registry,
-    });
-    const withTools = await countPromptLlmInputHeuristicOnly({
+    }));
+    const withTools = unwrap(await countPromptLlmInputHeuristicOnly({
       ...BASE_PARAMS,
       registry,
       tools: TOOLS,
-    });
-    const withEmpty = await countPromptLlmInputHeuristicOnly({
+    }));
+    const withEmpty = unwrap(await countPromptLlmInputHeuristicOnly({
       ...BASE_PARAMS,
       registry,
       tools: [],
-    });
+    }));
 
     assert.equal(withTools.counterKind, "heuristic");
     assert.equal(withTools.estimated, true);
@@ -107,22 +108,22 @@ describe("本地计数含 tools 段", () => {
   it("注册驱动路径（node driver，heuristic 档）：tools 文本按同一序列化拼接", async () => {
     registerNodeTokenizerDriverForTests();
 
-    const without = await countPromptLlmInput({
+    const without = unwrap(await countPromptLlmInput({
       ...BASE_PARAMS,
       registry,
       tokenizerOverride: "heuristic",
-    });
-    const withTools = await countPromptLlmInput({
+    }));
+    const withTools = unwrap(await countPromptLlmInput({
       ...BASE_PARAMS,
       registry,
       tokenizerOverride: "heuristic",
       tools: TOOLS,
-    });
+    }));
 
-    const serialized = await serializePromptLlmInput(
+    const serialized = unwrap(await serializePromptLlmInput(
       BASE_PARAMS.layout,
       BASE_PARAMS.ctx
-    );
+    ));
     // 期望值必须与实现同一把尺子：node 驱动的 heuristic 档自 ④ 起用真分词器（cl100k）
     // 计数（`counterKind` 仍标 heuristic），所以这里不能再拿 `registry.heuristic.countText`
     // 的字符折算值去比——那是改版前的契约（旧期望 81，整串真计数 90）。

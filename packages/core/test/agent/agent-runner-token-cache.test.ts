@@ -186,7 +186,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -240,11 +240,11 @@ describe("AgentRunner session API prompt token cache", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID)?.promptTokens, 4242);
 
@@ -281,14 +281,14 @@ describe("AgentRunner session API prompt token cache", () => {
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.01,
-        resolveContextWindow: async () => 100_000,
-        resolveTokenizerOverride: async () => "auto",
+        resolveContextWindow: async () => Result.ok(100_000),
+        resolveTokenizerOverride: async () => Result.ok("auto"),
       },
       tokenRegistry,
     );
     // 4242 > floor(100000*0.01)=1000 → true；且与 resolve 同读 API
     assert.equal(
-      await trigger.shouldTrigger(session, {
+      (await trigger.shouldTrigger(session, {
         sessionId: SESSION_ID,
         modelContext: {
           workspaceModelId: RUN_MODEL_ID,
@@ -297,7 +297,7 @@ describe("AgentRunner session API prompt token cache", () => {
         promptInput: { messages: [] },
         layout: { persist: [], dynamic: [] },
         ctx: { workplaceDisplay: "", messages: [] },
-      }),
+      })).value,
       true,
     );
   });
@@ -362,12 +362,12 @@ describe("AgentRunner session API prompt token cache", () => {
       eventBus: bus,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
       persistMessages: false,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.ok(
       midRunAnchors.length > 0,
@@ -413,12 +413,12 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
     assert.equal(result.stopReason, "cancelled");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
@@ -467,11 +467,11 @@ describe("AgentRunner session API prompt token cache", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "max_steps");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
@@ -631,11 +631,11 @@ describe("AgentRunner 每 step usage 回锚", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.equal(seen.length, 2, "两步各评估一次");
 
@@ -688,8 +688,8 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
    */
   const MUST_TRIGGER_OPTIONS = {
     tokenRatio: 0.0001,
-    resolveContextWindow: async () => 1_000_000,
-    resolveTokenizerOverride: async () => "auto",
+    resolveContextWindow: async () => Result.ok(1_000_000),
+    resolveTokenizerOverride: async () => Result.ok("auto"),
   } as const;
 
   it("T-G1a: 重启（clearAll）后第二轮的压缩评估仍用 KKV 里的 api 值", async () => {
@@ -714,11 +714,11 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
-    const first = await firstRunner.run({
+    const first = unwrap(await firstRunner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(first.stopReason, "completed");
     assert.equal((await parsedPromptTokenRow())?.promptTokens, 4242);
 
@@ -789,7 +789,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
               tokenCount: resolved.tokenCount,
               counterKind: resolved.counterKind,
             });
-            return Result.ok(await realTrigger.shouldTrigger(session, evaluation));
+            return realTrigger.shouldTrigger(session, evaluation);
           },
           async getHideStartDepth() {
             return Result.ok(6);
@@ -800,11 +800,11 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       }),
     );
 
-    const second = await secondRunner.run({
+    const second = unwrap(await secondRunner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(second.stopReason, "completed");
 
     assert.ok(seen.length > 0, "压缩评估应至少被调一次");
@@ -877,7 +877,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
                 tokenCount: resolved.tokenCount,
                 toolCount: evaluation.tools?.length ?? 0,
               });
-              return Result.ok(await realTrigger.shouldTrigger(s, evaluation));
+              return realTrigger.shouldTrigger(s, evaluation);
             },
             async getHideStartDepth() {
               return Result.ok(6);
@@ -896,11 +896,11 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       );
       // 清掉上一轮可能落下的 api 值：两轮都强制走本地档，比的才是 tools 段。
       await invalidateSessionApiPromptTokenEntry(sessionKkv, SESSION_ID);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 3,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
       assert.equal(result.stopReason, "completed");
       assert.ok(readings.length > 0, "压缩评估应至少被调一次");
       return readings[0]!;
@@ -1015,7 +1015,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: {
         name: "test",
@@ -1023,7 +1023,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         prompts: { workplace: "【done】", persist: [], dynamic: [] },
       },
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.stopReason, "completed");
     assert.ok(
       evaluatedFingerprints.length >= 1,

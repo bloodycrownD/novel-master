@@ -15,7 +15,7 @@ import {
   type BatchExportSkip,
   type VfsScope,
   } from "@novel-master/core/vfs";
-import { AppError } from "@novel-master/core/agent";
+import { AppError, isAppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
@@ -127,12 +127,21 @@ export async function collectHostPathEntries(
 }
 
 /**
+ * `executeSessionUserVfsOp` 的错误侧是 `unknown`（user-vfs-turn port 的异构
+ * 形态），writer 端口契约是 `Result<void, AppError>`——在此归一：AppError 原样
+ * 透传，其余包 INFRA_UNEXPECTED_ERROR（与 formatIpcError 的未知分支同款）。
+ */
+function toWriterResult(r: Result<void, unknown>): Result<void, AppError> {
+  if (r.ok) return Result.ok(undefined);
+  return Result.err(isAppError(r.error) ? r.error : new AppError("INFRA_UNEXPECTED_ERROR", {detail: r.error instanceof Error ? r.error.message : String(r.error)}, {cause: r.error}));
+}
+
+/**
  * BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）。
  *
- * ⚠️ 本回调协议**只有 throw 通道**（core 定义 `Promise<void>`，无 Result 形参位；
- * core `applyBatchIngestWithWriter` 逐项 try/catch 聚合进 `Report.failed`），故
- * `executeSessionUserVfsOp` 的已知失败在此解包转 throw——总纲 §五「平台强制穿透」
- * 例外，错误通道迁移四期点名保留。
+ * 错误通道迁移七期：writer 端口已知失败沿 `Result.err` 回传，由 core
+ * `applyBatchIngestWithWriter` 逐项聚合进 `Report.failed`（Result 契约之外的
+ * 未知异常仍按 catch 落表，不整批 err）。
  */
 function createSessionBatchWriter(
   runtime: DesktopNovelMasterRuntime,
@@ -140,26 +149,27 @@ function createSessionBatchWriter(
   vfs: VfsService,
 ): BatchIngestWriter {
   return {
-    async mkdir(logicalPath: string): Promise<void> {
-      const r = await executeSessionUserVfsOp(
-        runtime,
-        sessionId,
-        buildUserVfsMkdirOp(logicalPath),
-      );
-      if (!r.ok) throw r.error;
-    },
-    async writeFile(logicalPath: string, content: string): Promise<void> {
-      const baselineResult = await readUserVfsSaveBaseline(vfs, logicalPath);
-      if (!baselineResult.ok) throw baselineResult.error;
-      const baseline = baselineResult.value;
-      if (baseline == null) {
-        const r = await executeSessionUserVfsOp(
+    async mkdir(logicalPath: string): Promise<Result<void, AppError>> {
+      return toWriterResult(
+        await executeSessionUserVfsOp(
           runtime,
           sessionId,
-          buildUserVfsCreateFileOp(logicalPath, content),
+          buildUserVfsMkdirOp(logicalPath),
+        ),
+      );
+    },
+    async writeFile(logicalPath: string, content: string): Promise<Result<void, AppError>> {
+      const baselineResult = await readUserVfsSaveBaseline(vfs, logicalPath);
+      if (!baselineResult.ok) return Result.err(baselineResult.error);
+      const baseline = baselineResult.value;
+      if (baseline == null) {
+        return toWriterResult(
+          await executeSessionUserVfsOp(
+            runtime,
+            sessionId,
+            buildUserVfsCreateFileOp(logicalPath, content),
+          ),
         );
-        if (!r.ok) throw r.error;
-        return;
       }
       const op = buildUserVfsSaveOp(
         baseline,
@@ -167,10 +177,8 @@ function createSessionBatchWriter(
         logicalPath,
         content,
       );
-      if (op != null) {
-        const r = await executeSessionUserVfsOp(runtime, sessionId, op);
-        if (!r.ok) throw r.error;
-      }
+      if (op == null) return Result.ok(undefined);
+      return toWriterResult(await executeSessionUserVfsOp(runtime, sessionId, op));
     },
   };
 }
@@ -425,7 +433,7 @@ export async function stageVfsBatchExport(
   logicalPaths: readonly string[],
 ): Promise<Result<ExportStageResult, AppError>> {
   if (logicalPaths.length === 0) {
-    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可导出的路径"});
+    return Result.err(new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可导出的路径"}));
   }
 
   const batch = createVfsBatchIoService(runtime.conn);
@@ -434,7 +442,7 @@ export async function stageVfsBatchExport(
   if (!planned.ok) return Result.err(planned.error);
   const plan = planned.value;
   if (plan.files.length === 0 && plan.mkdirPaths.length === 0) {
-    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "导出内容为空"});
+    return Result.err(new AppError("INFRA_VALIDATION_FAILED", {detail: "导出内容为空"}));
   }
 
   const stagingRoot = join(vfsBatchStagingBase(), randomUUID());
@@ -488,13 +496,13 @@ export async function stageVfsBatchExport(
   }
 }
 
-/** 调用 webContents.startDrag；失败抛错由调用方 toast。 */
+/** 调用 webContents.startDrag；已知失败沿 `Result.err` 返回，由 handleVfsStartDrag 转码 toast。 */
 export function startDragExport(
   webContents: WebContents,
   filePaths: readonly string[],
-): void {
+): Result<void, AppError> {
   if (filePaths.length === 0) {
-    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可拖出的文件"});
+    return Result.err(new AppError("INFRA_VALIDATION_FAILED", {detail: "没有可拖出的文件"}));
   }
   const icon = resolveDragIcon();
   // Electron 类型要求 `file`；多文件时同时传 `files`
@@ -503,6 +511,7 @@ export function startDragExport(
     files: [...filePaths],
     icon,
   });
+  return Result.ok(undefined);
 }
 
 /** @internal 测试辅助：相对路径规范化（POSIX）。 */

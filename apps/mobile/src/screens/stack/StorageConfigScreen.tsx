@@ -60,15 +60,11 @@ export function StorageConfigScreen() {
   }, [runtime]);
 
   const refreshMaintenanceStats = useCallback(async () => {
-    try {
-      const stats = await getDatabaseMaintenanceStats(runtime);
-      setDbFileBytes(stats.fileBytes);
-      setDbReclaimBytes(stats.reclaimableBytes);
-    } catch {
-      // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
-      setDbFileBytes(null);
-      setDbReclaimBytes(null);
-    }
+    const stats = await getDatabaseMaintenanceStats(runtime);
+    // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位；
+    // 平台异常仍走 reject，由外层调用方的 .catch 收口。
+    setDbFileBytes(stats.ok ? stats.value.fileBytes : null);
+    setDbReclaimBytes(stats.ok ? stats.value.reclaimableBytes : null);
   }, [runtime]);
 
   const formatStorageBytes = (bytes: number | null): string => {
@@ -137,9 +133,13 @@ export function StorageConfigScreen() {
               onPress: () => {
                 setDbBusy(true);
                 runDatabaseMaintenance(runtime)
-                  .then(({beforeBytes, afterBytes}) => {
-                    const before = formatStorageBytes(beforeBytes);
-                    const after = formatStorageBytes(afterBytes);
+                  .then(result => {
+                    if (!result.ok) {
+                      showToast(toastMessage('清理失败', result.error));
+                      return;
+                    }
+                    const before = formatStorageBytes(result.value.beforeBytes);
+                    const after = formatStorageBytes(result.value.afterBytes);
                     showToast(`清理完成：${before} → ${after}`);
                     refreshMaintenanceStats().catch(() => undefined);
                   })
@@ -162,7 +162,7 @@ export function StorageConfigScreen() {
           setDbBusy(true);
           exportDatabaseBackup(runtime)
             .then(result => {
-              if (result === 'saved') {
+              if (result.ok && result.value === 'saved') {
                 showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
               }
             })
@@ -206,7 +206,13 @@ export function StorageConfigScreen() {
               onPress: () => {
                 setDbBusy(true);
                 importDatabaseBackup(retry)
-                  .then(() => showToast('正在重新加载，请稍候…'))
+                  .then(result => {
+                    if (result.ok) {
+                      showToast('正在重新加载，请稍候…');
+                    } else {
+                      showToast(toastMessage('导入失败', result.error));
+                    }
+                  })
                   .catch(err => showToast(toastMessage('导入失败', err)))
                   .finally(() => setDbBusy(false));
               },

@@ -127,7 +127,10 @@ export async function handleVfsRead(
   req: VfsReadRequest,
 ): Promise<IpcResult<VfsReadResultDto>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -151,7 +154,10 @@ export async function handleVfsWrite(
   req: VfsWriteRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -194,7 +200,10 @@ export async function handleVfsMkdir(
   req: VfsMkdirRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -223,7 +232,10 @@ export async function handleVfsDelete(
   req: VfsDeleteRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -255,7 +267,10 @@ export async function handleVfsRename(
   req: VfsRenameRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -314,7 +329,10 @@ export async function handleVfsZipExport(
   req: VfsZipRequest,
 ): Promise<IpcResult<VfsZipExportResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -335,7 +353,10 @@ export async function handleVfsZipImport(
   req: VfsZipRequest,
 ): Promise<IpcResult<VfsZipImportResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -348,7 +369,8 @@ export async function handleVfsZipImport(
       },
       focusedWindow(),
     );
-    return { ok: true, data: result };
+    if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
+    return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -359,8 +381,9 @@ export async function handleVfsZipPick(): Promise<
   IpcResult<VfsZipPickResult>
 > {
   try {
-    const bytes = await pickVfsZipBytesWithDialog(focusedWindow());
-    return { ok: true, data: bytes };
+    const picked = await pickVfsZipBytesWithDialog(focusedWindow());
+    if (!picked.ok) return { ok: false, error: formatIpcError(picked.error) };
+    return { ok: true, data: picked.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -371,15 +394,19 @@ export async function handleVfsZipImportBytes(
   req: VfsZipBytesImportRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
-    await importVfsZipBytes(rt, scope, {
+    const imported = await importVfsZipBytes(rt, scope, {
       bytes: req.bytes,
       confirmed: req.confirmed === true,
       directoryPath: req.directoryPath,
     });
+    if (!imported.ok) return { ok: false, error: formatIpcError(imported.error) };
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
@@ -391,7 +418,10 @@ export async function handleVfsCharacterCardImport(
   req: VfsCharacterCardImportRequest,
 ): Promise<IpcResult<VfsCharacterCardImportResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -431,7 +461,10 @@ export async function handleVfsFileExport(
   req: VfsFileExportRequest,
 ): Promise<IpcResult<VfsFileExportResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -452,7 +485,10 @@ export async function handleVfsBatchIngestFromPaths(
   req: VfsBatchIngestFromPathsRequest,
 ): Promise<IpcResult<VfsBatchIngestFromPathsResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -480,7 +516,10 @@ export async function handleVfsBatchExportStage(
   req: VfsBatchExportStageRequest,
 ): Promise<IpcResult<VfsBatchExportStageResult>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -510,7 +549,16 @@ export function handleVfsStartDrag(
   req: VfsStartDragRequest,
 ): void {
   try {
-    startDragExport(event.sender, req.filePaths ?? []);
+    const dragResult = startDragExport(event.sender, req.filePaths ?? []);
+    if (!dragResult.ok) {
+      log.error("vfs-batch startDrag failed", { error: dragResult.error });
+      const payload: VfsStartDragFailedPayload = {
+        message: formatIpcError(dragResult.error).message || "拖出失败",
+      };
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+      }
+    }
   } catch (err) {
     log.error("vfs-batch startDrag failed", { error: err });
     const payload: VfsStartDragFailedPayload = {

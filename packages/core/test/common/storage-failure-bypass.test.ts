@@ -41,14 +41,10 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
   });
 
   it("T-SRTX-D2 YAML 语法错 / schema 违规仍贴「YAML 无效」标签", () => {
-    // YAML 语法错。
-    let syntaxErr: unknown;
-    try {
-      parseText("rules: [", "yaml");
-    } catch (e) {
-      syntaxErr = e;
-    }
-    assert.ok(syntaxErr != null, "夹具必须真的抛（否则本条无牙齿）");
+    // YAML 语法错（四期签名：parseText 失败沿 Result.err 回传，不再 throw）。
+    const syntaxParsed = parseText("rules: [", "yaml");
+    const syntaxErr: unknown = syntaxParsed.ok ? null : syntaxParsed.error;
+    assert.ok(syntaxErr != null, "夹具必须真的失败（否则本条无牙齿）");
     // 迁移后标签走 descriptor：message 是 key 原文，中文经 userMessageOf +
     // tCore 渲染（顺带钉住「带 messageKey 的错误能被边界翻译通道识别」）。
     const syntaxDescriptor = userMessageOf(normalizeSmartSortImportError(syntaxErr));

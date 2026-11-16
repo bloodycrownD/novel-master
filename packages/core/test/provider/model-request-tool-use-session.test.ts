@@ -66,11 +66,11 @@ describe("ModelRequestService tool_use session round-trip", () => {
     const history = (await ctx.messages.listBySession(session.id)).filter(
       (m) => !m.hidden,
     );
-    const result = await bundle.modelRequests.request(
+    const result = unwrap(await bundle.modelRequests.request(
       model.id,
       "find foo",
       { history },
-    );
+    ));
 
     const saved = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: result.blocks,

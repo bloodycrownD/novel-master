@@ -1,5 +1,7 @@
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   LlmChatResult,
@@ -24,9 +26,14 @@ export interface ModelRequestOptions {
 
 /** Sends chat requests via protocol adapters. */
 export interface ModelRequestService {
+  /**
+   * 已知失败走返回值（五期门⑦）：预检失败（模型未保存 / 服务商不存在 / API key
+   * 未设 / retry policy 读取失败）收 `Result.err`；传输层错误与取消仍抛
+   * （llm-protocol ProviderError 协议：retry 按 catch + code 分派）。
+   */
   request(
     savedModelId: string,
     userContent: string,
     options?: ModelRequestOptions
-  ): Promise<LlmChatResult>;
+  ): Promise<Result<LlmChatResult, AppError>>;
 }

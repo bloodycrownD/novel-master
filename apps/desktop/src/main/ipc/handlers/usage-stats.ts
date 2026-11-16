@@ -25,9 +25,10 @@ import type {
   UsageStatsRequestRowDto,
   UsageStatsSummaryDto,
 } from "../../../../shared/ipc-types.js";
-import { formatIpcError } from "../format-ipc-error.js";
-import { ipcErr } from "../ipc-result.js";
+import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
+import { toIpcResult } from "../ipc-result.js";
 
 /**
  * 校验自然日区间 DTO：YYYY-MM-DD 格式、合法日历日（拒绝 02-30 等溢出）与
@@ -157,92 +158,58 @@ function toSessionDetailDto(detail: SessionUsageDetail): SessionUsageDetailDto {
   };
 }
 
-export async function handleUsageStatsQuery(
-  req: UsageStatsQueryRequest
-): Promise<IpcResult<UsageStatsQueryResponse>> {
-  try {
-    if (req.filter.range != null) {
-      const rangeError = validateRangeDto(req.filter.range);
-      if (rangeError != null) {
-        return {
-          ok: false,
-          error: { code: "INFRA_UNEXPECTED_ERROR", message: rangeError },
-        };
-      }
+/** 已知失败沿 Result 返回（range 校验拒绝 + core 服务 Err）；未知异常由 toIpcResult 兜底转码。 */
+async function usageStatsQueryWork(req: UsageStatsQueryRequest): Promise<Result<UsageStatsQueryResponse, AppError>> {
+  if (req.filter.range != null) {
+    const rangeError = validateRangeDto(req.filter.range);
+    if (rangeError != null) {
+      return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: rangeError }));
     }
-    const rt = await getDesktopRuntime();
-    const svc: UsageStatsService = rt.usageStats;
-    const filter = toCoreFilter(req.filter);
-    switch (req.kind) {
-      case "summary": {
-        const summary = await svc.getSummary(filter);
-        if (!summary.ok) return ipcErr(formatIpcError(summary.error));
-        return {
-          ok: true,
-          data: toSummaryDto(summary.value),
-        };
-      }
-      case "daily": {
-        const buckets = await svc.getDailyBuckets(filter);
-        if (!buckets.ok) return ipcErr(formatIpcError(buckets.error));
-        return {
-          ok: true,
-          data: buckets.value.map(toBucketDto),
-        };
-      }
-      case "hourly": {
-        // dayLocalDate 缺失时传空串，由服务层日期校验拒绝并落入 IpcResult error
-        const buckets = await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter);
-        if (!buckets.ok) return ipcErr(formatIpcError(buckets.error));
-        return {
-          ok: true,
-          data: buckets.value.map(toBucketDto),
-        };
-      }
-      case "modelBreakdown": {
-        const rows = await svc.getModelBreakdown(filter);
-        if (!rows.ok) return ipcErr(formatIpcError(rows.error));
-        return {
-          ok: true,
-          data: toModelRowDtos(rows.value),
-        };
-      }
-      case "models":
-        return { ok: true, data: await svc.listModels() };
-      case "requests": {
-        // offset/limit 仅 requests 使用；缺省 0/50 与 renderer 侧默认页大小一致。
-        const page = await svc.listRequestUsage(filter, {
-          offset: req.offset ?? 0,
-          limit: req.limit ?? 50,
-        });
-        if (!page.ok) return ipcErr(formatIpcError(page.error));
-        return {
-          ok: true,
-          data: { rows: page.value.rows.map(toRequestRowDto), total: page.value.total },
-        };
-      }
-      case "sessionDetail": {
-        // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
-        // sessionId 缺失传空串，由服务层 CHAT_INVALID_ARGUMENT 拒绝并落入 error。
-        const detail = await svc.getSessionUsageDetail(req.sessionId ?? "");
-        if (!detail.ok) return ipcErr(formatIpcError(detail.error));
-        return {
-          ok: true,
-          data: toSessionDetailDto(detail.value),
-        };
-      }
-      default: {
-        const exhaustive: never = req.kind;
-        return {
-          ok: false,
-          error: {
-            code: "INFRA_UNEXPECTED_ERROR",
-            message: `未知的 usageStats 查询 kind: ${String(exhaustive)}`,
-          },
-        };
-      }
-    }
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
   }
+  const built = await getDesktopRuntime();
+  // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+  if (!built.ok) return Result.err(built.error);
+  const rt = built.value;
+  const svc: UsageStatsService = rt.usageStats;
+  const filter = toCoreFilter(req.filter);
+  switch (req.kind) {
+    case "summary": {
+      const summary = await svc.getSummary(filter);
+      return summary.map(toSummaryDto);
+    }
+    case "daily": {
+      const buckets = await svc.getDailyBuckets(filter);
+      return buckets.map((list) => list.map(toBucketDto));
+    }
+    case "hourly": {
+      // dayLocalDate 缺失时传空串，由服务层日期校验拒绝并落入 IpcResult error
+      const buckets = await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter);
+      return buckets.map((list) => list.map(toBucketDto));
+    }
+    case "modelBreakdown": {
+      const rows = await svc.getModelBreakdown(filter);
+      return rows.map(toModelRowDtos);
+    }
+    case "models":
+      return Result.ok(await svc.listModels());
+    case "requests": {
+      // offset/limit 仅 requests 使用；缺省 0/50 与 renderer 侧默认页大小一致。
+      const page = await svc.listRequestUsage(filter, { offset: req.offset ?? 0, limit: req.limit ?? 50 });
+      return page.map((p) => ({ rows: p.rows.map(toRequestRowDto), total: p.total }));
+    }
+    case "sessionDetail": {
+      // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
+      // sessionId 缺失传空串，由服务层 CHAT_INVALID_ARGUMENT 拒绝并落入 error。
+      const detail = await svc.getSessionUsageDetail(req.sessionId ?? "");
+      return detail.map(toSessionDetailDto);
+    }
+    default: {
+      const exhaustive: never = req.kind;
+      return Result.err(new AppError("INFRA_UNEXPECTED_ERROR", { detail: `未知的 usageStats 查询 kind: ${String(exhaustive)}` }));
+    }
+  }
+}
+
+export function handleUsageStatsQuery(req: UsageStatsQueryRequest): Promise<IpcResult<UsageStatsQueryResponse>> {
+  return toIpcResult(() => usageStatsQueryWork(req));
 }

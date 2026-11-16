@@ -18,6 +18,7 @@ import { describe, it } from "node:test";
 
 import type { UsageStatsFilterDto } from "../shared/ipc-types.js";
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 
 register(new URL("./usage-stats-runtime-hook.mjs", import.meta.url));
 const { handleUsageStatsQuery } = await import(
@@ -145,26 +146,28 @@ function makeStubUsageStats(
 ): {
   usageStats: unknown;
 } {
-  // 错误通道迁移二期后除 listModels 外各方法走 Result（handler 侧 `!ok` 即 throw）。
+  // 错误通道迁移四期后 handler 走 Result 组合子（.map 链），stub 必须返回
+  // 真 Result 实例（裸 {ok, value} 字面量没有原型方法，会伪装成未知异常）；
+  // listModels 仍返回裸数组（签名未迁移）。
   const usageStats = {
     getSummary: async (filter: unknown) => {
       calls.push({ method: "getSummary", args: [filter] });
       if (summaryError) {
         throw summaryError;
       }
-      return { ok: true as const, value: SUMMARY };
+      return Result.ok(SUMMARY);
     },
     getDailyBuckets: async (filter: unknown) => {
       calls.push({ method: "getDailyBuckets", args: [filter] });
-      return { ok: true as const, value: BUCKETS };
+      return Result.ok(BUCKETS);
     },
     getHourlyBuckets: async (dayLocalDate: string, filter: unknown) => {
       calls.push({ method: "getHourlyBuckets", args: [dayLocalDate, filter] });
-      return { ok: true as const, value: BUCKETS };
+      return Result.ok(BUCKETS);
     },
     getModelBreakdown: async (filter: unknown) => {
       calls.push({ method: "getModelBreakdown", args: [filter] });
-      return { ok: true as const, value: modelRows ?? MODEL_ROWS };
+      return Result.ok(modelRows ?? MODEL_ROWS);
     },
     listModels: async () => {
       calls.push({ method: "listModels", args: [] });
@@ -172,11 +175,11 @@ function makeStubUsageStats(
     },
     listRequestUsage: async (filter: unknown, page: unknown) => {
       calls.push({ method: "listRequestUsage", args: [filter, page] });
-      return { ok: true as const, value: REQUEST_PAGE };
+      return Result.ok(REQUEST_PAGE);
     },
     getSessionUsageDetail: async (sessionId: string) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return { ok: true as const, value: SESSION_DETAIL };
+      return Result.ok(SESSION_DETAIL);
     },
   };
   return { usageStats };
@@ -560,10 +563,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       sessionId: string
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      return {
-        ok: true as const,
-        value: { last: null, visibleMessageCount: 0, toolUseCount: 0 },
-      };
+      return Result.ok({ last: null, visibleMessageCount: 0, toolUseCount: 0 });
     };
     const res = await handleUsageStatsQuery({
       kind: "sessionDetail",

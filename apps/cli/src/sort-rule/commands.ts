@@ -191,8 +191,9 @@ export async function runSortRule(
         throw new Error("Usage: nm sort-rule import --file <path>");
       }
       const source = await readFile(file, "utf8");
-      const raw = parseText(source, formatFromPath(file));
-      const rules = await svc.importRules(raw);
+      const parsed = parseText(source, formatFromPath(file));
+      if (!parsed.ok) return Result.err(parsed.error);
+      const rules = await svc.importRules(parsed.value);
       if (!rules.ok) return Result.err(rules.error);
       console.log(rules.value.length);
       return RESULT_OK;

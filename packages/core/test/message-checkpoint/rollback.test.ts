@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -92,7 +92,7 @@ describe("MessageRollbackService (revision model)", () => {
     // S-13 护栏：user1 是首条 plain user，prior 与 anchor 都没有 baseline 快照，
     // targetTree 为空——直接 reconcile 会把 /poem.md 当「需删除」清掉。这里应抛
     // ROLLBACK_UNDO_SEND_EMPTY_TARGET，且不截断消息、不动文件。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
@@ -121,7 +121,7 @@ describe("MessageRollbackService (revision model)", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("bye")));
 
     // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝 reconcile。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
@@ -172,7 +172,7 @@ describe("MessageRollbackService (revision model)", () => {
     }));
 
     // S-13 护栏：首条 plain user、无 baseline，targetTree 为空 → 拒绝删除。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
@@ -478,12 +478,12 @@ describe("MessageRollbackService (revision model)", () => {
       await ctx.messages.listBySession(session.id)
     ).length;
 
-    await assert.rejects(
+    // 空 targetTree + live 树非空必须被拦下（rewind 同样适用）。
+    await rejectsErr(
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-      "空 targetTree + live 树非空必须被拦下（rewind 同样适用）"
     );
 
     assert.equal(

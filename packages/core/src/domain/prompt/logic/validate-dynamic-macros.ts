@@ -29,15 +29,12 @@ type PromptMacroError = AppError<"PROMPT_INVALID_MACRO">;
  * descriptor），作为 `{block}` 参数嵌进各 key 的文案。
  */
 export function validateDynamicMacros(content: string, blockLabel: MessageLike): Result<void, PromptMacroError> {
-  let actions: ReturnType<typeof scanMacroActions>;
-  try {
-    actions = scanMacroActions(content);
-  } catch (error) {
-    // 宏扫描器（infra）对残缺模板会抛 PROMPT_* 形态的 AppError；在本函数内转成领域失败，不穿透。
-    const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.scan_failed", params: { block: blockLabel, detail } }, cause: error }));
+  // 宏扫描器已 Result 化（错误通道迁移四期）：扫描失败在本函数内转成领域失败，不穿透。
+  const scanned = scanMacroActions(content);
+  if (!scanned.ok) {
+    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.invalid_macro.scan_failed", params: { block: blockLabel, detail: scanned.error.message } }, cause: scanned.error }));
   }
-  for (const action of actions) {
+  for (const action of scanned.value) {
     if (action.kind === "comment") {
       continue;
     }

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
+import { Result } from "../../../src/errors/either.js";
 import {
   clearTokenizerDrivers,
   registerTokenizerDriver,
@@ -424,14 +425,14 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
         captured.sessionId = params.sessionId;
-        return {
+        return Result.ok({
           tokenCount: 1_234,
           counterKind: "glm",
           estimated: false,
           savedModelId: params.savedModelId,
           vendorModelId: "zai/glm-4.6",
           tokenizerFamily: "glm",
-        };
+        });
       },
     });
 
@@ -465,14 +466,14 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
         captured.sessionId = params.sessionId;
-        return {
+        return Result.ok({
           tokenCount: 10,
           counterKind: "tiktoken",
           estimated: false,
           savedModelId: params.savedModelId,
           vendorModelId: "openai/gpt-4o",
           tokenizerFamily: "tiktoken",
-        };
+        });
       },
     });
 

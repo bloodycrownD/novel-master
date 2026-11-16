@@ -20,6 +20,7 @@ import {
   type TdbcConnection,
 } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   checkpointDesktopDatabase,
@@ -109,14 +110,15 @@ function backupFileName(): string {
   return "nmbackup.db";
 }
 
-function assertSqliteFile(bytes: Uint8Array): void {
+function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
   if (bytes.length < 16) {
-    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "文件过小，不是有效的数据库备份"});
+    return Result.err(new AppError("INFRA_VALIDATION_FAILED", {detail: "文件过小，不是有效的数据库备份"}));
   }
   const header = String.fromCharCode(...bytes.subarray(0, 16));
   if (!header.startsWith(SQLITE_MAGIC)) {
-    throw new AppError("INFRA_VALIDATION_FAILED", {detail: "不是有效的 SQLite 数据库备份"});
+    return Result.err(new AppError("INFRA_VALIDATION_FAILED", {detail: "不是有效的 SQLite 数据库备份"}));
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -126,12 +128,12 @@ function assertSqliteFile(bytes: Uint8Array): void {
  * 也禁止裸 `readFile` 整包进内存。手机端同款防呆注释见 apps/mobile 的
  * `assertSqliteBackupAtPath`。
  */
-async function assertSqliteFileAtPath(srcPath: string): Promise<void> {
+async function assertSqliteFileAtPath(srcPath: string): Promise<Result<void, AppError>> {
   const handle = await fsOps.open(srcPath, "r");
   try {
     const buf = Buffer.alloc(SQLITE_HEADER_BYTES);
     const { bytesRead } = await handle.read(buf, 0, SQLITE_HEADER_BYTES, 0);
-    assertSqliteFile(new Uint8Array(buf.subarray(0, bytesRead)));
+    return assertSqliteFile(new Uint8Array(buf.subarray(0, bytesRead)));
   } finally {
     await handle.close();
   }
@@ -284,11 +286,14 @@ async function replaceLiveDatabase(
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
-): Promise<DbImportOutcome> {
+): Promise<Result<DbImportOutcome, AppError>> {
   acquireDesktopDbMaintenanceBusy();
   try {
-    // 路径级校验：只读 16 字节魔数，不整包读入。
-    await assertSqliteFileAtPath(srcPath);
+    // 路径级校验：只读 16 字节魔数，不整包读入。已知失败（非备份文件）沿 Result.err；
+    // 其后的替换链（备份 → 关连接 → 覆盖 → 恢复三表）保持 throw 通道
+    // （DatabaseReplacedError 的「已换代」信号必须由异常类型承载，见 DbImportOutcome 注）。
+    const checked = await assertSqliteFileAtPath(srcPath);
+    if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();
     const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
@@ -300,7 +305,7 @@ export async function importDatabaseBackupFromPath(
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
-  return { databaseReplaced: true, providerTablesRestored: true };
+  return Result.ok({ databaseReplaced: true, providerTablesRestored: true });
 }
 
 /**
@@ -311,11 +316,12 @@ export async function importDatabaseBackupFromPath(
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
-): Promise<DbImportOutcome> {
+): Promise<Result<DbImportOutcome, AppError>> {
   acquireDesktopDbMaintenanceBusy();
   try {
-    // 内存态校验：bytes 已在堆上，不涉及整包读盘。
-    assertSqliteFile(bytes);
+    // 内存态校验：bytes 已在堆上，不涉及整包读盘。失败沿 Result.err（同 FromPath 口径）。
+    const checked = assertSqliteFile(bytes);
+    if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();
     const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
@@ -327,15 +333,15 @@ export async function importDatabaseBackupFromBytes(
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
-  return { databaseReplaced: true, providerTablesRestored: true };
+  return Result.ok({ databaseReplaced: true, providerTablesRestored: true });
 }
 
 export async function exportDatabaseBackup(
   runtime: DesktopNovelMasterRuntime,
   parentWindow?: BrowserWindow | null,
-): Promise<"saved" | "cancelled"> {
+): Promise<Result<"saved" | "cancelled", AppError>> {
   if (isDesktopAgentActive()) {
-    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导出数据库"});
+    return Result.err(new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导出数据库"}));
   }
 
   const fileName = backupFileName();
@@ -355,18 +361,18 @@ export async function exportDatabaseBackup(
         ],
       });
   if (result.canceled || result.filePath == null) {
-    return "cancelled";
+    return Result.ok("cancelled");
   }
 
   await exportDatabaseBackupToPath(runtime, result.filePath);
-  return "saved";
+  return Result.ok("saved");
 }
 
 export async function importDatabaseBackup(
   parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
+): Promise<Result<"imported" | "cancelled", AppError>> {
   if (isDesktopAgentActive()) {
-    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导入数据库"});
+    return Result.err(new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再导入数据库"}));
   }
 
   const win = parentWindow ?? undefined;
@@ -384,13 +390,14 @@ export async function importDatabaseBackup(
         properties: ["openFile"],
       });
   if (result.canceled || result.filePaths.length === 0) {
-    return "cancelled";
+    return Result.ok("cancelled");
   }
 
   const pickedPath = result.filePaths[0]!;
   // 走路径级导入：整包 readFile 会把 200MB 级备份拉进 Node 堆，
   // 且与 mobile（pick 到本地路径 → FromPath）的形态不一致。
-  // 返回类型不变（"imported" | "cancelled"），调用方 handlers/backup.ts 零改动。
-  await importDatabaseBackupFromPath(pickedPath);
-  return "imported";
+  // 返回类型不变（Result："imported" | "cancelled"），调用方 handlers/backup.ts 同步适配。
+  const imported = await importDatabaseBackupFromPath(pickedPath);
+  if (!imported.ok) return Result.err(imported.error);
+  return Result.ok("imported");
 }

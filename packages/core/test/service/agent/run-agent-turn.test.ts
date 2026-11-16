@@ -114,7 +114,8 @@ function makeRuntime(overrides: {
     agentRegistry: {
       listAgentIds: async () => ["a1"],
       list: async () => [definition],
-      get: async () => definition,
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+      get: async () => Result.ok(definition) as never,
     },
     projects: {
       getAgentConfig: async () => Result.ok({ mode: "follow" }),

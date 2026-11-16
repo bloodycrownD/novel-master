@@ -26,6 +26,7 @@ import {
 } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
@@ -75,6 +76,15 @@ import { randomUUID } from "@/infra/random-uuid.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 const log = createLogger("agent.runner");
+
+/**
+ * Result 失败转异常通道：复用 run() 主 catch 的既有收口（FAILED 事件 /
+ * 失败消息落库 / KKV 失效，最后 AppError 分流为 `Result.err`）。主 try 内的
+ * 解包一律经此进 catch——直接 `return Result.err` 会跳过收尾，终态事件丢失。
+ */
+function raiseRunError(error: unknown): never {
+  throw error;
+}
 
 interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
@@ -128,7 +138,7 @@ export class DefaultAgentRunner implements AgentRunner {
     this.toolRunner = new ToolRunner(deps.registry);
   }
 
-  async run(options: AgentRunOptions): Promise<AgentRunResult> {
+  async run(options: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
     const { sessionId, projectId } = options;
     const persistMessages = options.persistMessages !== false;
     const publishRunLifecycle = options.publishRunLifecycle !== false;
@@ -212,7 +222,8 @@ export class DefaultAgentRunner implements AgentRunner {
     const savedModelFound = await this.deps.savedModels.findById(
       options.savedModelId
     );
-    if (!savedModelFound.ok) throw savedModelFound.error;
+    // 主 try 之前的前置读失败：直接沿返回值交入口壳（STARTED 未发，入口壳补 FAILED('')）。
+    if (!savedModelFound.ok) return Result.err(savedModelFound.error);
     const savedModelForAppend = savedModelFound.value;
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
@@ -225,7 +236,7 @@ export class DefaultAgentRunner implements AgentRunner {
       const pref = await this.deps.preferences.getThinkingContextEnabled();
       if (!pref.ok) {
         if (!isAppError(pref.error, "PREFERENCES_INVALID_VALUE")) {
-          throw pref.error;
+          return Result.err(pref.error);
         }
         log.error("thinking_context_pref_read_failed", {
           stage: "thinking_context_pref",
@@ -320,7 +331,7 @@ export class DefaultAgentRunner implements AgentRunner {
       let turnFiletree: string | undefined;
       if (wantsTree) {
         const rendered = await wt.renderFileTree();
-        if (!rendered.ok) throw rendered.error;
+        if (!rendered.ok) raiseRunError(rendered.error);
         turnFiletree = rendered.value;
       }
       for (let step = 0; step < maxSteps; step++) {
@@ -377,8 +388,8 @@ export class DefaultAgentRunner implements AgentRunner {
         }
         if (assembled.kind === "failed") {
           // 组装内的已知失败（如路径解析）：与旧 throw 同路径进 run 收尾
-          // （FAILED 事件 + 重抛），不吞成中断。
-          throw assembled.error;
+          // （FAILED 事件 + Result.err 分流），不吞成中断。
+          raiseRunError(assembled.error);
         }
         const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } = assembled.value;
         if (signal?.aborted) {
@@ -405,7 +416,7 @@ export class DefaultAgentRunner implements AgentRunner {
           projectId,
         };
         const prepared = await promptAssembler.prepare(visible, prepareRuntime);
-        if (!prepared.ok) throw prepared.error;
+        if (!prepared.ok) raiseRunError(prepared.error);
         visible = prepared.value;
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
@@ -451,11 +462,9 @@ export class DefaultAgentRunner implements AgentRunner {
           // （记忆键 / 增量分解的按指纹缓存）消费，渲染侧忽略——零行为影响。
           workplaceFingerprint: fingerprint,
         };
-        const promptInput = await buildPromptLlmInputFromLayout(
-          options.definition.prompts,
-          promptRenderCtx,
-          { agentStepIndex: step }
-        );
+        const promptInputBuilt = await buildPromptLlmInputFromLayout(options.definition.prompts, promptRenderCtx, { agentStepIndex: step });
+        if (!promptInputBuilt.ok) raiseRunError(promptInputBuilt.error);
+        const promptInput = promptInputBuilt.value;
 
         if (persistMessages && this.deps.compactionConditions != null) {
           const evaluated = await this.deps.compactionConditions.shouldRequestCompaction(
@@ -478,7 +487,7 @@ export class DefaultAgentRunner implements AgentRunner {
                 visibleMessageCount,
               }
             );
-          if (!evaluated.ok) throw evaluated.error;
+          if (!evaluated.ok) raiseRunError(evaluated.error);
           const shouldCompact = evaluated.value;
           if (signal?.aborted) {
             await handleAbort("after_compaction_eval");
@@ -495,7 +504,7 @@ export class DefaultAgentRunner implements AgentRunner {
               throw new AppError("INFRA_INVARIANT_VIOLATION", { detail: missingDeps });
             }
             const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
-            if (!hiddenDepth.ok) throw hiddenDepth.error;
+            if (!hiddenDepth.ok) raiseRunError(hiddenDepth.error);
             const hideStartDepth = hiddenDepth.value;
             await runCompaction(
               {
@@ -614,7 +623,10 @@ export class DefaultAgentRunner implements AgentRunner {
 
         let result;
         try {
-          result = await this.deps.modelRequests.request(
+          // 五期门⑦：预检失败（模型未保存 / 服务商缺失 / 密钥未设 / policy 读取）
+          // 收 `Result.err`，经 raiseRunError 保持「run 侧错误沿 catch 冒泡」既有语义；
+          // 传输层错误仍由 request 直接抛。
+          const requested = await this.deps.modelRequests.request(
             options.savedModelId,
             "",
             {
@@ -627,6 +639,8 @@ export class DefaultAgentRunner implements AgentRunner {
               signal,
             }
           );
+          if (!requested.ok) raiseRunError(requested.error);
+          result = requested.value;
         } catch (e: unknown) {
           if (
             signal?.aborted ||
@@ -689,7 +703,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         let assistantMessage: ChatMessageData | undefined;
         if (result.blocks.length > 0 && meaningful) {
-          assistantMessage = await session.append(
+          const appended = await session.append(
             "assistant",
             { blocks: result.blocks },
             {
@@ -711,6 +725,8 @@ export class DefaultAgentRunner implements AgentRunner {
               usage: { ...result.usage, firstTokenMs, durationMs },
             }
           );
+          if (!appended.ok) raiseRunError(appended.error);
+          assistantMessage = appended.value;
           assistantAppendedInRun = true;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -747,9 +763,8 @@ export class DefaultAgentRunner implements AgentRunner {
         // 能走到这里且未置位，本 step 必无 tool_use，后继必然 finished。
         if (persistMessages && !assistantAppendedInRun) {
           try {
-            await session.append("assistant", {
-              blocks: [{ type: "text", text: "（本次生成无内容输出）" }],
-            });
+            const appended = await session.append("assistant", { blocks: [{ type: "text", text: "（本次生成无内容输出）" }] });
+            if (!appended.ok) raiseRunError(appended.error);
             assistantAppendedInRun = true;
           } catch (appendError) {
             // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
@@ -788,10 +803,10 @@ export class DefaultAgentRunner implements AgentRunner {
           usage: result.usage,
         });
 
-        // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里抛出 AppError。
+        // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里沿 catch 收口。
         const doomLoopResult = doomLoop.checkStep(result.blocks);
         if (!doomLoopResult.ok) {
-          throw doomLoopResult.error;
+          raiseRunError(doomLoopResult.error);
         }
 
         if (signal?.aborted) {
@@ -877,7 +892,8 @@ export class DefaultAgentRunner implements AgentRunner {
           await handleAbort("after_tool_checkpoint");
           break;
         }
-        await session.append("user", { blocks: toolResults });
+        const appendedResults = await session.append("user", { blocks: toolResults });
+        if (!appendedResults.ok) raiseRunError(appendedResults.error);
         // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
         // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
         // api 档零计数、锚点后增量由读口覆盖）。
@@ -915,9 +931,8 @@ export class DefaultAgentRunner implements AgentRunner {
         // 落库须先于 FAILED 事件发出，保证下游 tail reload 时能读到这条消息。
         if (persistMessages && !assistantAppendedInRun) {
           try {
-            await session.append("assistant", {
-              blocks: [{ type: "text", text: `[生成失败] ${runError}` }],
-            });
+            const appended = await session.append("assistant", { blocks: [{ type: "text", text: `[生成失败] ${runError}` }] });
+            if (!appended.ok) raiseRunError(appended.error);
           } catch (appendError) {
             // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
             log.error("failure_message_append_failed", {
@@ -942,6 +957,11 @@ export class DefaultAgentRunner implements AgentRunner {
             runId,
             error: runError,
           });
+        }
+        // 已知失败沿返回值交入口壳（五期门⑦）：收尾（FAILED 事件 + 失败消息）已在上完成；
+        // 非 AppError 的未知异常保持 throw（转码矩阵「未知 throw」行）。
+        if (e instanceof AppError) {
+          return Result.err(e);
         }
         throw e;
       }
@@ -984,12 +1004,12 @@ export class DefaultAgentRunner implements AgentRunner {
       );
     }
 
-    return {
+    return Result.ok({
       stepsExecuted,
       finished,
       stopReason,
       rounds,
-    };
+    });
   }
 }
 

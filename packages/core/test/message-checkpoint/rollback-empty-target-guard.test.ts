@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -36,13 +36,13 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
 
     const filesBefore = unwrap(await svfs.list("/")).length;
 
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
           true,
-          "应抛 ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+          "应报 ROLLBACK_UNDO_SEND_EMPTY_TARGET",
         );
         assert.equal(
           (error as {messageKey?: string}).messageKey,

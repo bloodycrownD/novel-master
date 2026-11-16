@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
@@ -38,11 +39,11 @@ const sampleLayout: AgentPromptLayout = {
 describe("buildPromptLlmInputFromLayout", () => {
   it("extracts system field, persist synthetic messages, and chat", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const input = await buildPromptLlmInputFromLayout(sampleLayout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(sampleLayout, {
       workplaceDisplay: "WT",
       messages,
       now: fixedNow,
-    });
+    }));
     assert.equal(input.system, "ctx");
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:u");
@@ -59,11 +60,11 @@ describe("buildPromptLlmInputFromLayout", () => {
       ],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[0]!.role, "user");
@@ -79,11 +80,11 @@ describe("buildPromptLlmInputFromLayout", () => {
       persist: [{ name: "u", type: "text", role: "assistant", content: "ask" }],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 1);
     assert.equal(input.messages[0]!.id, "prompt:u");
     assert.ok(input.messages.every((m) => !m.id.includes("worktree")));
@@ -99,7 +100,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
       dynamic: [],
     };
     const ctx = { workplaceDisplay: "WT", messages: [], now: fixedNow };
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, ctx));
     const wt = segments.find((s) => s.id === "prompt-workplace");
     const done = segments.find((s) => s.id === "prompt-workplace-done");
     assert.equal(wt?.role, "user");
@@ -130,9 +131,9 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
     };
     const messages = [message("user", "hi", 1)];
     const ctx = { workplaceDisplay: "WT", messages, now: fixedNow };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctx, {
       agentStepIndex: 0,
-    });
+    }));
     assert.deepEqual(
       input.messages.map((m) => m.id),
       [
@@ -144,9 +145,9 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
         "prompt:state",
       ]
     );
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, ctx, {
       agentStepIndex: 0,
-    });
+    }));
     const templateIds = segments
       .filter((s) => s.source === "template")
       .map((s) => s.id);
@@ -164,10 +165,10 @@ describe("buildPromptPreviewSegmentsFromLayout", () => {
   it("segments join to the same text as formatPromptLlmInputForCliFromLayout", async () => {
     const messages = [message("user", "{{literal}}", 1)];
     const ctx = { workplaceDisplay: "WT", messages, now: fixedNow };
-    const segments = await buildPromptPreviewSegmentsFromLayout(
+    const segments = unwrap(await buildPromptPreviewSegmentsFromLayout(
       sampleLayout,
       ctx
-    );
+    ));
     const joined = segments
       .map((s) => {
         const trimmed = s.body.replace(/\r\n/g, "\n");
@@ -183,7 +184,7 @@ describe("buildPromptPreviewSegmentsFromLayout", () => {
       .join("\n");
     assert.equal(
       joined,
-      await formatPromptLlmInputForCliFromLayout(sampleLayout, ctx)
+      unwrap(await formatPromptLlmInputForCliFromLayout(sampleLayout, ctx))
     );
   });
 });
@@ -191,11 +192,11 @@ describe("buildPromptPreviewSegmentsFromLayout", () => {
 describe("formatPromptLlmInputForCliFromLayout", () => {
   it("renders system + persist + chat in order", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const out = await formatPromptLlmInputForCliFromLayout(sampleLayout, {
+    const out = unwrap(await formatPromptLlmInputForCliFromLayout(sampleLayout, {
       workplaceDisplay: "WT",
       messages,
       now: fixedNow,
-    });
+    }));
     assert.equal(out, "system: ctx\nuser: ask\nuser: {{literal}}");
   });
 });
@@ -213,11 +214,11 @@ describe("includeThinkingBlocks 预览（T-PV1）", () => {
   };
 
   it("includeThinkingBlocks true 时产出 role:thinking 段，redacted 用占位，块序保持在消息内位置", async () => {
-    const segments = await buildPromptPreviewSegmentsFromLayout(
+    const segments = unwrap(await buildPromptPreviewSegmentsFromLayout(
       sampleLayout,
       { messages: [thinkingMessage], now: fixedNow },
       { includeThinkingBlocks: true },
-    );
+    ));
     const roles = segments.map((s) => s.role);
     assert.deepEqual(
       roles.filter((r) => r === "thinking"),
@@ -232,10 +233,10 @@ describe("includeThinkingBlocks 预览（T-PV1）", () => {
   });
 
   it("默认 false 时无 thinking 段（CLI 文本与 token 计数 parity 不变）", async () => {
-    const segments = await buildPromptPreviewSegmentsFromLayout(
+    const segments = unwrap(await buildPromptPreviewSegmentsFromLayout(
       sampleLayout,
       { messages: [thinkingMessage], now: fixedNow },
-    );
+    ));
     assert.equal(segments.filter((s) => s.role === "thinking").length, 0);
     assert.ok(segments.some((s) => s.body === "回答"));
   });
@@ -243,10 +244,10 @@ describe("includeThinkingBlocks 预览（T-PV1）", () => {
 
 describe("buildPromptAssemblyFromLayout", () => {
   it("includes system segment first", async () => {
-    const segments = await buildPromptAssemblyFromLayout(sampleLayout, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(sampleLayout, {
       workplaceDisplay: "",
       messages: [],
-    });
+    }));
     assert.equal(segments[0]!.source, "system");
   });
 
@@ -282,10 +283,10 @@ describe("buildPromptAssemblyFromLayout", () => {
       persist: [],
       dynamic: [],
     };
-    const segments = await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, {
       workplaceDisplay: "",
       messages,
-    });
+    }));
     const chat = segments.filter((s) => s.source === "message");
     assert.equal(chat.length, 2);
     assert.match(chat[0]!.body, /<action\b/);
@@ -307,11 +308,11 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctx));
     assert.equal(input.messages.length, 1);
     assert.equal(input.messages[0]!.id, "m1");
 
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, ctx));
     assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
   });
 
@@ -328,7 +329,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
         },
       ],
     };
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await buildPromptLlmInputFromLayout(
       layout,
       {
         workplaceDisplay: "",
@@ -336,17 +337,17 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
         now: fixedNow,
       },
       { agentStepIndex: 0 }
-    );
+    ));
     assert.equal(input.messages.length, 0);
 
-    const segments = await buildPromptAssemblyFromLayout(
+    const segments = unwrap(await buildPromptAssemblyFromLayout(
       layout,
       {
         workplaceDisplay: "",
         messages: [],
       },
       { agentStepIndex: 0 }
-    );
+    ));
     assert.ok(segments.every((s) => !s.id.startsWith("dynamic-")));
   });
 
@@ -364,14 +365,14 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctx));
     assert.equal(input.messages.length, 3);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[2]!.id, "m1");
     assert.ok(input.messages.every((m) => !m.id.startsWith("prompt:u")));
 
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, ctx));
     assert.ok(segments.some((s) => s.id === "prompt-workplace"));
     assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
   });
@@ -388,7 +389,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctx));
     assert.equal(input.messages.length, 1);
     assert.equal(input.messages[0]!.id, "m1");
     const zones = computeLlmExportZonesFromLayout(layout, {
@@ -405,12 +406,12 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       dynamic: [],
     };
     const ctx = { workplaceDisplay: "WT", messages: [], now: fixedNow };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, ctx));
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");
     assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, ctx));
     const wt = segments.find((s) => s.id === "prompt-workplace");
     const done = segments.find((s) => s.id === "prompt-workplace-done");
     assert.equal(wt?.role, "user");

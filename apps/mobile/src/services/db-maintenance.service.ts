@@ -4,8 +4,8 @@
  * 清理执行链在 core `createDbMaintenanceService`（缓存 GC → 防御性
  * checkpoint → VACUUM，事务外、驱动层互斥串行）；本服务只补 mobile 侧
  * 事情——Agent 运行守卫与数据库文件体积采样（blob-util stat）。
- * 错误口径：主链路（统计主指标/清理执行）以 reject 语义上抛（由调用方
- * toast）。
+ * 错误口径：Agent 运行中守卫沿 `Result.err` 上行（错误通道迁移五期）；
+ * 其余平台异常（blobFs stat 等）仍以 reject 上抛（由调用方 catch 收口）。
  *
  * 存量 blob 归一与 VFS 历史版本打包两个后台搬运任务的状态透传已随
  * 第七轮退役删除（v1.5.41 同批，任务本体一并出列）。
@@ -14,6 +14,7 @@
  */
 import {createDbMaintenanceService} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
+import {Result} from '@novel-master/core/errors';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -38,21 +39,18 @@ async function statDatabaseFileBytes(): Promise<number> {
  */
 export async function getDatabaseMaintenanceStats(
   runtime: MobileNovelMasterRuntime,
-): Promise<{
-  fileBytes: number;
-  reclaimableBytes: number;
-}> {
+): Promise<Result<{fileBytes: number; reclaimableBytes: number}, AppError>> {
   if (isMobileAgentActive()) {
-    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'});
+    return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
   const [fileBytes, stats] = await Promise.all([
     statDatabaseFileBytes(),
     createDbMaintenanceService(runtime.conn).getStorageStats(),
   ]);
-  return {
+  return Result.ok({
     fileBytes,
     reclaimableBytes: stats.reclaimableBytes,
-  };
+  });
 }
 
 /**
@@ -62,16 +60,16 @@ export async function getDatabaseMaintenanceStats(
  */
 export async function runDatabaseMaintenance(
   runtime: MobileNovelMasterRuntime,
-): Promise<{beforeBytes: number; afterBytes: number}> {
+): Promise<Result<{beforeBytes: number; afterBytes: number}, AppError>> {
   if (isMobileAgentActive()) {
-    throw new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'});
+    return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
   acquireMobileDbMaintenanceBusy();
   try {
     const beforeBytes = await statDatabaseFileBytes();
     await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
     const afterBytes = await statDatabaseFileBytes();
-    return {beforeBytes, afterBytes};
+    return Result.ok({beforeBytes, afterBytes});
   } finally {
     releaseMobileDbMaintenanceBusy();
   }

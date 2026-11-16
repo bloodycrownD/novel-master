@@ -10,6 +10,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { Result } from "../../src/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -152,18 +154,18 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
             raw: {},
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
           };
-          return result;
+          return Result.ok(result);
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         stream: true,
         onStream: () => {},
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "completed");
       const msgs = await session.list();
@@ -190,21 +192,21 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
         request: async (_id, _prompt, _req: LlmChatRequest) => {
           const started = Date.now();
           clock.now = started + 1800;
-          return {
+          return Result.ok({
             assistantText: "hi",
             blocks: [{ type: "text", text: "hi" }],
             raw: {},
             usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "completed");
       const msgs = await session.list();
@@ -234,22 +236,22 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
           // 请求进行中 abort，但 request 正常返回（post-model abort 路径）
           controller.abort();
           clock.now = started + 900;
-          return {
+          return Result.ok({
             assistantText: "partial",
             blocks: [{ type: "text", text: "partial" }],
             raw: {},
             // 无 usage：断言 usage 仅含两个耗时字段
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         },
       };
 
       const runner = makeRunner(session, model);
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 2,
         definition: minimalDefinition(),
         signal: controller.signal,
         ...defaultRunScope,
-      });
+      }));
 
       assert.equal(result.stopReason, "cancelled");
       const msgs = await session.list();

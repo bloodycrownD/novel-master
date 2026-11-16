@@ -1,11 +1,11 @@
 /**
- * 错误域判定（错误通道迁移三期 spec-3 §3.7）。
+ * 错误域段表（错误通道迁移三期 spec-3 §3.7）。
  *
  * 域是 6 位码的前三位（DDDSSS，见 error-codes.ts 头注），码表登记时就定死。
- * 判域一律走 {@link domainOf}——这是唯一实现，不依赖 key 的命名约定：key 改名
- * 或新增前缀时 `startsWith` 判域会静默漏判（只走兜底、不报错），段号不会。
- * 段表 {@link DOMAIN_RANGES} 全仓仅此一份（此前只在 test/errors/app-error.test.ts），
- * 测试引用这里，不再自留副本。
+ * 判域一律走 errors/guards.ts 的 `domainOf` / `inDomain`——唯一实现，不依赖
+ * key 的命名约定：key 改名或新增前缀时 `startsWith` 判域会静默漏判（只走兜底、
+ * 不报错），段号不会。段表 {@link DOMAIN_RANGES} 全仓仅此一份（此前只在
+ * test/errors/app-error.test.ts），测试引用这里，不再自留副本。
  *
  * @module errors/domain
  */
@@ -41,12 +41,3 @@ export const DOMAIN_RANGES = {
 
 /** 错误域：号段表的键名。 */
 export type ErrorDomain = keyof typeof DOMAIN_RANGES;
-
-/** 域判定唯一实现：按段表返回 code 归属的域。未登记的码只能来自编程错误（AppError 的 code 恒经码表产生），按不变量破坏 throw。 */
-export function domainOf(code: number): ErrorDomain {
-  const matched = (Object.entries(DOMAIN_RANGES) as readonly [ErrorDomain, readonly [number, number]][]).find(([, [lo, hi]]) => code >= lo && code <= hi);
-  if (matched == null) {
-    throw new Error(`domainOf: 未登记的错误码 ${code}（码表外的 code 是不变量破坏）`);
-  }
-  return matched[0];
-}

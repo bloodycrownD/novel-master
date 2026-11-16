@@ -73,14 +73,19 @@ export interface SkillInfoChanges {
  * `Result.err(AppError)`；未知异常（含事务回滚与 TdbcError 解包）仍走 throw。
  */
 export interface SkillService {
-  /** 技能清单（含 files 相对路径、front matter 元数据、有效性）。 */
-  listSkills(scope: SkillListScope): Promise<SkillListItem[]>;
+  /**
+   * 技能清单（含 files 相对路径、front matter 元数据、有效性）。
+   *
+   * 已知失败走返回值（五期门⑦）：清单读取的非 NOT_FOUND 失败（IO / DB 异常）
+   * 收 `Result.err`；技能根目录不存在不算失败，返回空数组。
+   */
+  listSkills(scope: SkillListScope): Promise<Result<SkillListItem[], AppError>>;
 
   /**
    * 当前项目的合并视图（global ∪ project、同名项目覆盖、禁用过滤），
-   * 供索引预算 / `$` 候选 / 面板共用。
+   * 供索引预算 / `$` 候选 / 面板共用。两域清单读取失败沿 `Result.err` 接力。
    */
-  effectiveSkills(projectId: string): Promise<EffectiveSkill[]>;
+  effectiveSkills(projectId: string): Promise<Result<EffectiveSkill[], AppError>>;
 
   /**
    * 读取技能文件。

@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -68,7 +68,7 @@ describe("ProviderService", () => {
     assert.equal(created.displayName, "自定义网关");
     assert.equal(created.builtinKey, null);
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         bundle.providers.create({
           protocol: "openai",
@@ -91,7 +91,7 @@ describe("ProviderService", () => {
     const saved = unwrap(await bundle.providerModels.create(provider.id, "m1"));
     assert.equal(savedModelDisplayName(saved, provider.displayName), "旧名称/m1");
 
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providers.edit(provider.id, { displayName: "  " }),
       (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
     );
@@ -108,14 +108,14 @@ describe("ProviderService", () => {
   it("T-PI5：内置不可删、不可改 protocol", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    await assert.rejects(
+    await rejectsErr(
       () =>
         bundle.providers.edit(BUILTIN_PROVIDER_UUID_OPENAI, {
           protocol: "gemini",
         }),
       (e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providers.delete(BUILTIN_PROVIDER_UUID_OPENAI),
       (e) => isAppError(e, "PROVIDER_BUILTIN_PROVIDER"),
     );
@@ -124,7 +124,7 @@ describe("ProviderService", () => {
   it("model request fails when not saved", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    await assert.rejects(
+    await rejectsErr(
       () =>
         bundle.modelRequests.request(
           "00000000-0000-4000-8000-000000000000",
@@ -169,12 +169,12 @@ describe("ProviderService", () => {
       modelId: saved.id,
     }));
 
-    await assert.rejects(
-      () => bundle.providers.delete(created.id),
-      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+    await rejectsErr(
+      bundle.providers.delete(created.id),
+      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
     // 半套防护：模型必须仍在（服务层只有 savedList，没有 listByProvider）
-    const still = await bundle.providerModels.savedList(created.id);
+    const still = unwrap(await bundle.providerModels.savedList(created.id));
     assert.equal(
       still.some((m) => m.id === saved.id),
       true,

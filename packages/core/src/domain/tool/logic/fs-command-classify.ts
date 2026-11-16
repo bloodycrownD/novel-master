@@ -30,21 +30,21 @@ export function classifyFsCommand(input: unknown): FsCommandClassification {
   if (typeof action !== "string" || action === "") {
     return { mutating: false, paths: null };
   }
-  try {
-    const parsed = parseFsCommand(input as FsToolInput);
-    switch (parsed.kind) {
-      case "ls":
-        return { mutating: false, paths: null };
-      case "rm":
-      case "rmdir":
-      case "mkdir":
-        return { mutating: true, paths: [parsed.path] };
-      case "mv":
-      case "cp":
-        return { mutating: true, paths: [parsed.from, parsed.to] };
-    }
-  } catch {
+  const parsed = parseFsCommand(input as FsToolInput);
+  if (!parsed.ok) {
+    // 解析失败（缺必填字段 / 未知 action）：checkpoint 保守策略，runner 不串行化未知路径。
     return { mutating: true, paths: null };
+  }
+  switch (parsed.value.kind) {
+    case "ls":
+      return { mutating: false, paths: null };
+    case "rm":
+    case "rmdir":
+    case "mkdir":
+      return { mutating: true, paths: [parsed.value.path] };
+    case "mv":
+    case "cp":
+      return { mutating: true, paths: [parsed.value.from, parsed.value.to] };
   }
 }
 

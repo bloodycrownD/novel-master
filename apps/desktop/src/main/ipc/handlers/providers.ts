@@ -17,11 +17,15 @@ export async function handleProvidersList(): Promise<
   IpcResult<ProviderListItemDto[]>
 > {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const providers = await rt.providers.list();
     const rows: ProviderListItemDto[] = [];
     for (const provider of providers) {
       const saved = await rt.providerModels.savedList(provider.id);
+      if (!saved.ok) return ipcErr(formatIpcError(saved.error));
       rows.push({
         id: provider.id,
         displayName: provider.displayName,
@@ -29,7 +33,7 @@ export async function handleProvidersList(): Promise<
         baseUrl: provider.baseUrl,
         isBuiltin: provider.isBuiltin,
         apiKeyStatus: provider.apiKeyStatus,
-        savedCount: saved.length,
+        savedCount: saved.value.length,
       });
     }
     return { ok: true, data: rows };
@@ -42,8 +46,13 @@ export async function handleProvidersGet(
   req: ProviderIdRequest,
 ): Promise<IpcResult<ProviderDetailDto>> {
   try {
-    const rt = await getDesktopRuntime();
-    const provider = await rt.providers.get(req.providerId);
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
+    const got = await rt.providers.get(req.providerId);
+    if (!got.ok) return ipcErr(formatIpcError(got.error));
+    const provider = got.value;
     const listed = (await rt.providers.list()).find((p) => p.id === req.providerId);
     return {
       ok: true,
@@ -67,7 +76,10 @@ export async function handleProvidersCreate(
   req: ProviderCreateRequest,
 ): Promise<IpcResult<{ providerId: string }>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const created = await rt.providers.create(req);
     if (!created.ok) return ipcErr(formatIpcError(created.error));
     return { ok: true, data: { providerId: created.value.id } };
@@ -80,7 +92,10 @@ export async function handleProvidersEdit(
   req: ProviderEditRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const { providerId, ...patch } = req;
     const edited = await rt.providers.edit(providerId, patch);
     if (!edited.ok) return ipcErr(formatIpcError(edited.error));
@@ -94,7 +109,10 @@ export async function handleProvidersDelete(
   req: ProviderIdRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     // ⚠️ 归属判定必须发生在 providers.delete 之前：delete 会级联抹掉该 provider 名下
     // 的全部 saved model 行，delete 之后再 getSavedById 恒为 null，reset 永不执行 ⇒
     // currentModelId 悬空固化进新会话 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
@@ -107,7 +125,8 @@ export async function handleProvidersDelete(
     let clearCurrentModel = false;
     if (currentModelId != null && currentModelId !== "") {
       const saved = await rt.providerModels.getSavedById(currentModelId);
-      clearCurrentModel = saved?.providerId === req.providerId;
+      if (!saved.ok) return ipcErr(formatIpcError(saved.error));
+      clearCurrentModel = saved.value?.providerId === req.providerId;
     }
     const deleted = await rt.providers.delete(req.providerId);
     if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));

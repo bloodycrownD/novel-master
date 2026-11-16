@@ -44,7 +44,7 @@ describe("SkillService（T-SK5）", () => {
 
     unwrap(await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD));
 
-    const list = await skills.listSkills("global");
+    const list = unwrap(await skills.listSkills("global"));
     const item = list.find((s) => s.name === name);
     assert.ok(item != null, "新建技能应出现在全局清单");
     assert.equal(item.valid, true);
@@ -99,7 +99,7 @@ describe("SkillService（T-SK5）", () => {
       "辅助文件",
     );
 
-    const list = await skills.listSkills("global");
+    const list = unwrap(await skills.listSkills("global"));
     const badFm = list.find((s) => s.name === `bad-fm-${suffix}`);
     assert.ok(badFm != null);
     assert.equal(badFm.valid, false);
@@ -253,7 +253,7 @@ describe("SkillService（T-SK5）", () => {
     assert.match(read.content, /改过的正文/);
     assert.doesNotMatch(read.content, /演示技能正文/);
     // front matter 未动，技能仍有效
-    const item = (await skills.listSkills("global")).find(
+    const item = (unwrap(await skills.listSkills("global"))).find(
       (s) => s.name === name,
     );
     assert.ok(item != null && item.valid);
@@ -274,7 +274,7 @@ describe("SkillService（T-SK5）", () => {
       project.id,
     ));
 
-    let view = await skills.effectiveSkills(project.id);
+    let view = unwrap(await skills.effectiveSkills(project.id));
     const gSkill = view.find((s) => s.name === "g-skill");
     const pSkill = view.find((s) => s.name === "p-skill");
     assert.ok(gSkill != null && pSkill != null);
@@ -283,14 +283,14 @@ describe("SkillService（T-SK5）", () => {
     assert.equal(pSkill.domain, "project");
 
     unwrap(await skills.setDisabled(project.id, "g-skill", true));
-    view = await skills.effectiveSkills(project.id);
+    view = unwrap(await skills.effectiveSkills(project.id));
     const disabledOne = view.find((s) => s.name === "g-skill");
     assert.ok(disabledOne != null);
     assert.equal(disabledOne.disabled, true);
     assert.equal(disabledOne.effective, false);
 
     unwrap(await skills.setDisabled(project.id, "g-skill", false));
-    view = await skills.effectiveSkills(project.id);
+    view = unwrap(await skills.effectiveSkills(project.id));
     assert.equal(view.find((s) => s.name === "g-skill")?.effective, true);
   });
 
@@ -322,13 +322,13 @@ describe("SkillService（T-SK5）", () => {
 
     unwrap(await skills.deleteSkill({ domain: "project", projectId: p1.id, name: "del-skill" }));
 
-    const p1List = await skills.listSkills({ projectId: p1.id });
+    const p1List = unwrap(await skills.listSkills({ projectId: p1.id }));
     assert.equal(p1List.find((s) => s.name === "del-skill"), undefined);
 
     // p1 的负清单行被清理；p2 的技能与负清单行原样保留
-    const p1View = await skills.effectiveSkills(p1.id);
+    const p1View = unwrap(await skills.effectiveSkills(p1.id));
     assert.equal(p1View.find((s) => s.name === "del-skill"), undefined);
-    const p2View = await skills.effectiveSkills(p2.id);
+    const p2View = unwrap(await skills.effectiveSkills(p2.id));
     const p2Item = p2View.find((s) => s.name === "del-skill");
     assert.ok(p2Item != null);
     assert.equal(p2Item.disabled, true);
@@ -397,7 +397,7 @@ describe("SkillService（T-SK5）", () => {
     );
     assert.equal(rows.length, 0, "global 技能删除后所有项目的负清单行都应清理");
 
-    const globalList = await skills.listSkills("global");
+    const globalList = unwrap(await skills.listSkills("global"));
     assert.equal(globalList.find((s) => s.name === "g-del"), undefined);
   });
 
@@ -426,7 +426,7 @@ describe("SkillService（T-SK5）", () => {
     );
 
     // 拦截后技能目录仍在，清单还能查到
-    const item = (await skills.listSkills("global")).find(
+    const item = (unwrap(await skills.listSkills("global"))).find(
       (s) => s.name === "agent-config",
     );
     assert.ok(item != null, "内置技能目录应仍在");
@@ -451,7 +451,7 @@ describe("SkillService（T-SK5）", () => {
       name: "agent-config",
     }));
 
-    const list = await skills.listSkills({ projectId: project.id });
+    const list = unwrap(await skills.listSkills({ projectId: project.id }));
     assert.equal(
       list.find((s) => s.name === "agent-config"),
       undefined,
@@ -613,7 +613,7 @@ describe("SkillService（T-SK5）", () => {
       );
 
       // 清单在新名下仍有效；$新名 进入合并视图
-      const list = await skills.listSkills("global");
+      const list = unwrap(await skills.listSkills("global"));
       const item = list.find((s) => s.name === newName);
       assert.ok(item != null && item.valid, "新名应出现在清单且有效");
       assert.equal(
@@ -622,7 +622,7 @@ describe("SkillService（T-SK5）", () => {
         "旧名不应再出现在清单",
       );
       const project = unwrap(await ctx.projects.create(`P-REN-${suffix}`));
-      const view = await skills.effectiveSkills(project.id);
+      const view = unwrap(await skills.effectiveSkills(project.id));
       assert.ok(
         view.find((s) => s.name === newName) != null,
         "$新名应可解析（合并视图）",
@@ -663,7 +663,7 @@ describe("SkillService（T-SK5）", () => {
       assert.equal(oldRows.length, 0, "旧名负清单行不应残留");
 
       // 合并视图：新名处于禁用态
-      const view = await skills.effectiveSkills(project.id);
+      const view = unwrap(await skills.effectiveSkills(project.id));
       const moved = view.find((s) => s.name === newName);
       assert.ok(moved != null);
       assert.equal(moved.disabled, true, "改名后禁用状态应保留");
@@ -700,7 +700,7 @@ describe("SkillService（T-SK5）", () => {
           renderError(error).includes("已存在同名技能"),
       );
       // 拒绝后源技能原样（未半迁移）
-      const list = await skills.listSkills("global");
+      const list = unwrap(await skills.listSkills("global"));
       assert.ok(list.find((s) => s.name === `src-${suffix}`) != null);
       assert.ok(list.find((s) => s.name === victim) != null);
     });
@@ -721,7 +721,7 @@ describe("SkillService（T-SK5）", () => {
       );
 
       // 拒绝后内置技能目录原样
-      const item = (await skills.listSkills("global")).find(
+      const item = (unwrap(await skills.listSkills("global"))).find(
         (s) => s.name === "agent-config",
       );
       assert.ok(item != null, "内置技能目录应仍在");
@@ -847,7 +847,7 @@ describe("SkillService（T-SK5）", () => {
       // 目录迁移了，但正文原样（未被补块/改写），仍 invalid
       const read = unwrap(await skills.readSkillFile("global", newName));
       assert.equal(read.content, "没有 front matter 的正文\n");
-      const item = (await skills.listSkills("global")).find(
+      const item = (unwrap(await skills.listSkills("global"))).find(
         (s) => s.name === newName,
       );
       assert.ok(item != null && item.valid === false, "invalid 技能改名后应仍 invalid");
@@ -881,7 +881,7 @@ describe("SkillService（T-SK5）", () => {
       const after = unwrap(await skills.readSkillFile("global", name));
       assert.equal(after.name, name, "目录不应迁移");
       assert.ok(after.version > before.version, "改描述应 bump version（revision 记录）");
-      const item = (await skills.listSkills("global")).find(
+      const item = (unwrap(await skills.listSkills("global"))).find(
         (s) => s.name === name,
       );
       assert.ok(item != null);
@@ -903,7 +903,7 @@ describe("SkillService（T-SK5）", () => {
 
       const after = unwrap(await skills.readSkillFile("global", "agent-config"));
       assert.ok(after.version > before.version, "仅改描述应产生新 revision");
-      const item = (await skills.listSkills("global")).find(
+      const item = (unwrap(await skills.listSkills("global"))).find(
         (s) => s.name === "agent-config",
       );
       assert.ok(item != null && item.valid, "内置技能改描述后应仍有效");

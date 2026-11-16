@@ -24,14 +24,12 @@ async function loadAgentRows(
   const rows: AgentPickerRow[] = [];
   for (const agentId of ids) {
     let label = agentId;
-    try {
-      const def = await runtime.agentRegistry.get(agentId);
-      if (def.mode === 'subagent') {
+    const def = await runtime.agentRegistry.get(agentId);
+    if (def.ok) {
+      if (def.value.mode === 'subagent') {
         continue;
       }
-      label = def.name?.trim() || agentId;
-    } catch {
-      /* keep agentId */
+      label = def.value.name?.trim() || agentId;
     }
     rows.push({agentId, label});
   }

@@ -22,6 +22,8 @@
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { MessageLike } from "@/common/i18n.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -573,8 +575,10 @@ export async function buildPromptPreviewTurnsFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions
-): Promise<PromptPreviewTurn[]> {
-  const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
+): Promise<Result<PromptPreviewTurn[], AppError>> {
+  const assembled = await buildPromptAssemblyFromLayout(layout, ctx, options);
+  if (!assembled.ok) return Result.err(assembled.error);
+  const segments = assembled.value;
   const userInputMessageIds = new Set(
     ctx.messages.filter((message) => ChatMessage.from(message).isUserInput()).map((message) => message.id)
   );
@@ -680,7 +684,7 @@ export async function buildPromptPreviewTurnsFromLayout(
     }
   }
 
-  return groups.map((group) => {
+  const turns = groups.map((group) => {
     // 分派键用「有无 seq」（消息轮必有 seq）而不是 kind：合成段轮的 kind
     // 已是段的真实消息 role（可能是 user/assistant），按 kind 分派会把合成轮
     // 错带进真消息轮的摘要口径。
@@ -738,6 +742,7 @@ export async function buildPromptPreviewTurnsFromLayout(
       metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
     };
   });
+  return Result.ok(turns);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
@@ -104,7 +104,7 @@ describe("rollbackToMessage", () => {
 
     // S-13 护栏：user1 首条 plain user，prior 与 anchor 均无 baseline 快照，
     // targetTree 为空 → 拒绝 reconcile，保留 /poem.md 与现有消息。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
@@ -128,7 +128,7 @@ describe("rollbackToMessage", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("bye")));
 
     // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝删除。
-    await assert.rejects(
+    await rejectsErr(
       () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),

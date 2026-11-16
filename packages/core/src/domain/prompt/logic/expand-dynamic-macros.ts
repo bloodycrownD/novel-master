@@ -50,10 +50,11 @@ export async function expandDynamicMacros(content: string, ctx: DynamicMacroCont
     week_cn: formatWeekCn(now),
     filetree,
   };
-  try {
-    return Result.ok(renderMacro(content, { dot: {}, root }));
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail } }, cause: error }));
+  // renderMacro 已 Result 化（错误通道迁移四期）：Err 在本层转译收口（见 @returns，
+  // 不把 infra 的 AppError 漏出），detail/cause 与旧 catch 路径一致。
+  const rendered = renderMacro(content, { dot: {}, root });
+  if (!rendered.ok) {
+    return Result.err(new AppError("PROMPT_INVALID_MACRO", { descriptor: { key: "error.prompt.macro_expand_failed", params: { detail: rendered.error.message } }, cause: rendered.error }));
   }
+  return Result.ok(rendered.value);
 }

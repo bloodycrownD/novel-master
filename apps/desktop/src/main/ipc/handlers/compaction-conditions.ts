@@ -14,7 +14,10 @@ export async function handleCompactionConditionsGet(): Promise<
   IpcResult<CompactionConditionsDto | null>
 > {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const conditions = await rt.compactionConditions.getConditions();
     if (!conditions.ok) return ipcErr(formatIpcError(conditions.error));
     return { ok: true, data: conditions.value as CompactionConditionsDto | null };
@@ -27,7 +30,10 @@ export async function handleCompactionConditionsSet(
   req: CompactionConditionsSetRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     await rt.compactionConditions.setConditions(
       req.conditions as Parameters<
         typeof rt.compactionConditions.setConditions

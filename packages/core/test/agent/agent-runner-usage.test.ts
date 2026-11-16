@@ -8,6 +8,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
 import {
   createAgentRunner,
@@ -119,7 +120,7 @@ function createMockModel(responses: LlmChatResult[]): ModelRequestService {
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -173,11 +174,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -215,11 +216,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -264,11 +265,11 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -305,7 +306,7 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
             usage: { completionTokens },
           });
         }
-        return step.result;
+      return Result.ok(step.result);
       }),
     };
   }
@@ -357,12 +358,12 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       stream: true,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     // step1 流中（基线 0）：5、10 → done 补发 12；
@@ -408,12 +409,12 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       stream: true,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(usagePayloads.length, 0);
@@ -446,11 +447,11 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -485,11 +486,11 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();

@@ -57,7 +57,7 @@ describe("技能存储重定位（T-SR1）", () => {
     );
 
     // 上层行为不变：清单可见且有效
-    const list = await skills.listSkills("global");
+    const list = unwrap(await skills.listSkills("global"));
     const item = list.find((s) => s.name === name);
     assert.ok(item != null && item.valid);
     const read = unwrap(await skills.readSkillFile("global", name));
@@ -106,7 +106,7 @@ describe("技能存储重定位（T-SR1）", () => {
       undefined,
       entry(globalName, "全局回落"),
     ));
-    const view = await skills.effectiveSkills(project.id);
+    const view = unwrap(await skills.effectiveSkills(project.id));
     assert.ok(view.find((s) => s.name === name)?.effective);
     const fallback = unwrap(await skills.readSkillFile(
       undefined,
@@ -167,7 +167,7 @@ describe("技能存储重定位（T-SR1）", () => {
       entry(name, "重建"),
       project.id,
     ));
-    const view = await skills.effectiveSkills(project.id);
+    const view = unwrap(await skills.effectiveSkills(project.id));
     const rebuilt = view.find((s) => s.name === name);
     assert.ok(rebuilt != null);
     assert.notEqual(rebuilt.disabled, true, "重建技能不应被残留禁用行误伤");

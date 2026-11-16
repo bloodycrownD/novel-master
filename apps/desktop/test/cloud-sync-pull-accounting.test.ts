@@ -88,7 +88,9 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
 
   /** 导出一份真实快照，登记到内存远端上，返回快照路径。 */
   async function publishRemote(label: string): Promise<void> {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const snapshotPath = join(tempDir, `remote-${label}.nmbackup`);
     await exportDatabaseBackupToPath(runtime, snapshotPath);
     const snapshot = new Uint8Array(await readFile(snapshotPath));
@@ -125,7 +127,9 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
   it("pull 成功后 lastSyncedRev 推进且第二次 pull 命中 ALREADY_UP_TO_DATE", async () => {
     await publishRemote("rev2");
     const expectedRev = revCounter;
-    const before = await getDesktopRuntime();
+    const beforeR = await getDesktopRuntime();
+    if (!beforeR.ok) throw beforeR.error;
+    const before = beforeR.value;
 
     const first = await handleCloudSyncPull();
     assert.equal(
@@ -138,7 +142,9 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     }
 
     // 换库之后 runtime 必须已换代。
-    const afterPull = await getDesktopRuntime();
+    const afterPullR = await getDesktopRuntime();
+    if (!afterPullR.ok) throw afterPullR.error;
+    const afterPull = afterPullR.value;
     assert.notEqual(afterPull, before, "换库后 runtime 必须换代");
 
     const status = await handleCloudSyncGetLocalStatus();
@@ -184,10 +190,14 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
       createMemoryRemote({ rev: revCounter, snapshot: new Uint8Array([0]), sha256: "x" })
     );
 
-    const before = await getDesktopRuntime();
+    const beforeR = await getDesktopRuntime();
+    if (!beforeR.ok) throw beforeR.error;
+    const before = beforeR.value;
     const result = await handleCloudSyncPull();
     assert.equal(result.ok, true, JSON.stringify(result));
-    const after = await getDesktopRuntime();
+    const afterR = await getDesktopRuntime();
+    if (!afterR.ok) throw afterR.error;
+    const after = afterR.value;
     assert.equal(
       after,
       before,
@@ -218,14 +228,18 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     // → 恢复三表前 validateProviderTableSnapshot 抛错
     // → coordinator 原样透传 DatabaseReplacedError。
     // 「库已换却不重建」比「记账失败」更糟，所以 catch 分支必须先换代再报错。
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     await runtime.conn.execute(
       "INSERT INTO llm_provider (id, protocol, base_url, display_name, is_builtin, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, 0, 1, 1)",
       ["rollback-illegal-provider", "openai", "https://example.invalid", ""],
     );
     await publishRemote("rev4");
 
-    const before = await getDesktopRuntime();
+    const beforeR = await getDesktopRuntime();
+    if (!beforeR.ok) throw beforeR.error;
+    const before = beforeR.value;
     const result = await handleCloudSyncPull();
 
     assert.equal(result.ok, false, "收尾失败应回报失败");
@@ -236,7 +250,9 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
         "失败信息必须可读且带上 providerTablesRestored",
       );
     }
-    const after = await getDesktopRuntime();
+    const afterR = await getDesktopRuntime();
+    if (!afterR.ok) throw afterR.error;
+    const after = afterR.value;
     assert.notEqual(
       after,
       before,

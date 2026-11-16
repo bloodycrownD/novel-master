@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode } from "@novel-master/core";
+import { decode as decodeRaw, encode } from "@novel-master/core";
+import type { ZodType } from "zod";
 import { isAppError } from "@novel-master/core/agent";
 
 import { agentDefinitionSchema } from "@novel-master/core/agent";
+import { unwrap } from "../helpers/result-unwrap.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（assert.throws 的抛错契约保持不变）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";

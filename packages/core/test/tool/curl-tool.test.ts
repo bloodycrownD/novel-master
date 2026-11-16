@@ -1,4 +1,5 @@
 import { isAppError } from "../../src/errors/app-error.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 
@@ -112,7 +113,7 @@ describe("curl 工具", () => {
     const fetchFn = mock.fn(async () => fakeResponse({ body: "ok" }));
 
     for (const url of ["file:///etc/passwd", "ftp://x", "data:text/plain,x"]) {
-      await assert.rejects(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
+      await rejectsErr(runner.call("curl", { url }, makeCtx(fetchFn as unknown as typeof fetch)), (err: unknown) => {
         assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
         assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;
@@ -120,15 +121,15 @@ describe("curl 工具", () => {
     }
     assert.equal(fetchFn.mock.callCount(), 0);
 
-    const out = await runner.call("curl", { url: "http://example.com/a" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "http://example.com/a" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch)));
     assert.equal((out as { status: number }).status, 200);
-    const outHttps = await runner.call("curl", { url: "https://example.com/b" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch));
+    const outHttps = unwrap(await runner.call("curl", { url: "https://example.com/b" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch)));
     assert.equal((outHttps as { status: number }).status, 200);
   });
 
   it("T-CT2: 成功响应各字段回填（url/finalUrl/method/status/contentType/body/truncated/originalBytes），method 默认 GET", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/docs" },
       makeCtx(
@@ -140,7 +141,7 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as {
       url: string;
       finalUrl: string;
@@ -166,7 +167,7 @@ describe("curl 工具", () => {
     const { runner } = makeRunner();
     const body = "a".repeat(30 * 1024);
     const { writes, vfs } = makeRecordingVfs();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/mid" },
       makeCtx(
@@ -178,7 +179,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs }
       )
-    );
+    ));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -196,7 +197,7 @@ describe("curl 工具", () => {
     // 300KB ASCII 正文 > 50KB 预算（curl 预算从 256KB 收回到四工具统一的 50KB）。
     const ascii = "a".repeat(300_000);
     const { files, writes, vfs } = makeRecordingVfs();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/big" },
       makeCtx(
@@ -209,7 +210,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs }
       )
-    );
+    ));
     const rec = out as {
       url: string;
       finalUrl: string;
@@ -247,7 +248,7 @@ describe("curl 工具", () => {
     // 不存在切半个字符问题（截断只发生在降级路径）；text/plain → txt。
     const cjk = "你".repeat(90_000);
     const { files: cjkFiles, vfs: cjkVfs } = makeRecordingVfs();
-    const out2 = await runner.call(
+    const out2 = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/cjk" },
       makeCtx(
@@ -259,7 +260,7 @@ describe("curl 工具", () => {
         ) as unknown as typeof fetch,
         { vfs: cjkVfs }
       )
-    );
+    ));
     const rec2 = out2 as typeof rec;
     assert.equal(rec2.truncated, true);
     assert.equal(rec2.originalBytes, 270_000);
@@ -271,7 +272,7 @@ describe("curl 工具", () => {
     const { runner } = makeRunner();
     // makeCtx 缺省 vfs 是空对象 → sink 的 vfs.write 抛错 → 降级回字节截断。
     const cjk = "你".repeat(90_000);
-    const out = await runner.call("curl", { url: "https://example.com/cjk-fallback" }, makeCtx(mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/cjk-fallback" }, makeCtx(mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch)));
     const rec = out as { body: string; truncated: boolean; originalBytes: number };
     assert.equal(rec.truncated, true);
     assert.equal(rec.originalBytes, 270_000);
@@ -345,8 +346,13 @@ describe("curl 工具", () => {
 
   it("T-CT5: 网络错误 → ToolError FAILED 且 cause 文案可读", async () => {
     const { runner } = makeRunner();
+    // 双通道捕获：curl 的网络错误可能沿 Result.err 回来，也可能沿 runner 的
+    // 归一化抛出通道（未知异常）——两形态都归一成 AppError 供下方断言。
     const err = await runner.call("curl", { url: "https://example.com/down" }, makeCtx(mock.fn(() => Promise.reject(new TypeError("Network request failed"))) as unknown as typeof fetch)).then(
-      () => assert.fail("网络错误应抛 ToolError"),
+      (r: unknown) =>
+        r !== null && typeof r === "object" && "ok" in r && (r as { ok: unknown }).ok === false
+          ? (r as { error: unknown }).error
+          : assert.fail("网络错误应抛 ToolError"),
       (e: unknown) => e
     );
     assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
@@ -356,7 +362,7 @@ describe("curl 工具", () => {
 
   it("T-CT6: HTTP 404 不是错误：照常返回输出（status=404，body 照常处理）", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/missing" },
       makeCtx(
@@ -368,7 +374,7 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as { status: number; body: string; truncated: boolean };
     assert.equal(rec.status, 404);
     assert.equal(rec.body, "not found page");
@@ -382,7 +388,7 @@ describe("curl 工具", () => {
       headers: { "content-type": "image/png", "content-length": "4" },
       body: "\u0000\u0001\u0002\u0003",
     });
-    const out = await runner.call("curl", { url: "https://example.com/logo.png" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/logo.png" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch)));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -399,7 +405,7 @@ describe("curl 工具", () => {
       headers: { "content-type": "image/png" },
       body: "\u0000\u0001",
     });
-    const out2 = await runner.call("curl", { url: "https://example.com/no-len.png" }, makeCtx(mock.fn(async () => noLength) as unknown as typeof fetch));
+    const out2 = unwrap(await runner.call("curl", { url: "https://example.com/no-len.png" }, makeCtx(mock.fn(async () => noLength) as unknown as typeof fetch)));
     const rec2 = out2 as { body: string; originalBytes: number };
     assert.equal(noLength.textCalls(), 0);
     assert.equal(rec2.body, `[binary content, unknown size, not shown]`);
@@ -408,7 +414,7 @@ describe("curl 工具", () => {
 
   it("T-CT8: 重定向 → finalUrl 回填且 formatter 输出 curl METHOD url → finalUrl", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/old" },
       makeCtx(
@@ -420,7 +426,7 @@ describe("curl 工具", () => {
           })
         ) as unknown as typeof fetch
       )
-    );
+    ));
     const rec = out as { url: string; finalUrl: string };
     assert.equal(rec.url, "https://example.com/old");
     assert.equal(rec.finalUrl, "https://example.com/new");
@@ -439,7 +445,7 @@ describe("curl 工具", () => {
       },
       body: "should not be read",
     });
-    const out = await runner.call("curl", { url: "https://example.com/huge" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/huge" }, makeCtx(mock.fn(async () => response) as unknown as typeof fetch)));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -455,7 +461,7 @@ describe("curl 工具", () => {
   it("T-CT10: formatter 产出可读文本（非 JSON 串），超预算场景显示已落盘路径", async () => {
     const { runner } = makeRunner();
     const { vfs } = makeRecordingVfs();
-    const out = await runner.call("curl", { url: "https://example.com/big" }, makeCtx(mock.fn(async () => fakeResponse({ body: "b".repeat(300_000) })) as unknown as typeof fetch, { vfs }));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com/big" }, makeCtx(mock.fn(async () => fakeResponse({ body: "b".repeat(300_000) })) as unknown as typeof fetch, { vfs })));
     const formatted = formatToolOutputForLlm(out);
     assert.ok(!formatted.trimStart().startsWith("{"), "不应回落 JSON.stringify");
     assert.ok(formatted.startsWith("curl GET https://example.com/big"));
@@ -605,7 +611,7 @@ describe("curl 工具", () => {
 
   it("T-CT13: path policy 不误伤——入参顶层字段 url 不在 PATH_FIELDS", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call("curl", { url: "https://example.com" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch, { allowedPaths: ["src/"] }));
+    const out = unwrap(await runner.call("curl", { url: "https://example.com" }, makeCtx(mock.fn(async () => fakeResponse({ body: "ok" })) as unknown as typeof fetch, { allowedPaths: ["src/"] })));
     assert.equal((out as { body: string }).body, "ok");
   });
 
@@ -618,7 +624,7 @@ describe("curl 工具", () => {
     }) as unknown as typeof fetch;
 
     // POST + 自定义鉴权头 + body 未给 content-type → 默认 application/json。
-    await runner.call(
+    unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
@@ -627,7 +633,7 @@ describe("curl 工具", () => {
         body: JSON.stringify({ name: "x" }),
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal(calls.length, 1);
     assert.equal(calls[0]!.init.method, "POST");
     assert.equal(calls[0]!.init.body, JSON.stringify({ name: "x" }));
@@ -636,7 +642,7 @@ describe("curl 工具", () => {
     assert.equal(headers.get("content-type"), "application/json");
 
     // POST + 显式 content-type → 尊重显式值，不覆盖。
-    await runner.call(
+    unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
@@ -645,24 +651,24 @@ describe("curl 工具", () => {
         body: "raw text",
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal((calls[1]!.init.headers as Headers).get("content-type"), "text/plain");
 
     // 默认 GET 无 body → 不带 body、不补 content-type。
-    await runner.call("curl", { url: "https://api.example.com/items" }, makeCtx(fetchFn));
+    unwrap(await runner.call("curl", { url: "https://api.example.com/items" }, makeCtx(fetchFn)));
     assert.equal(calls[2]!.init.method, "GET");
     assert.equal(calls[2]!.init.body, undefined);
     assert.equal((calls[2]!.init.headers as Headers).get("content-type"), null);
 
     // 输出回显实际 method。
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       {
         url: "https://api.example.com/items",
         method: "DELETE",
       },
       makeCtx(fetchFn)
-    );
+    ));
     assert.equal((out as { method: string }).method, "DELETE");
   });
 
@@ -698,7 +704,7 @@ describe("curl 工具", () => {
     ];
 
     for (const input of invalidInputs) {
-      await assert.rejects(runner.call("curl", input, ctx), (err: unknown) => {
+      await rejectsErr(runner.call("curl", input, ctx), (err: unknown) => {
         assert.ok(isAppError(err) && err.key.startsWith("TOOL_"), `应抛 ToolError: ${JSON.stringify(Object.keys(input))}`);
         assert.equal(err.key, "TOOL_INVALID_ARGUMENT");
         return true;

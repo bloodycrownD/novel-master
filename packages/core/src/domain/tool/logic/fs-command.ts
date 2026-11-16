@@ -53,54 +53,58 @@ export type FsLsOutput = {
 
 export type FsCommandResult = { readonly ok: true } | FsLsOutput;
 
-function invalidCommand(reason: string): never {
-  throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: ${reason}`});
-}
-
-function requireField(value: string | undefined, field: string): string {
+function requireField(value: string | undefined, field: string): Result<string, AppError> {
   if (typeof value !== "string" || value === "") {
-    invalidCommand(`missing or empty ${field}`);
+    return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: missing or empty ${field}`}));
   }
-  return value;
+  return Result.ok(value);
 }
 
 /**
  * 将结构化 {@link FsToolInput} 解析为 {@link FsCommand}。
  *
- * @remarks `action` 为空字符串或缺失时抛 `INVALID_ARGUMENT`；classify 层在调用前自行判空。
+ * @remarks 已知失败走返回值通道（四期门⑦）：`action` 缺失 / 未知或必填字段
+ * 为空时返回 `Result.err(INVALID_ARGUMENT)`；classify 层在调用前自行判空，
+ * 工具闭包把 Err 交回 tool-runner 框架级统一收口。
  */
-export function parseFsCommand(input: FsToolInput): FsCommand {
+export function parseFsCommand(input: FsToolInput): Result<FsCommand, AppError> {
   const action = input.action;
   switch (action) {
-    case "rm":
-      return {
-        kind: "rm",
-        path: requireField(input.path, "path"),
-        recursive: input.recursive === true,
-      };
-    case "rmdir":
-      return { kind: "rmdir", path: requireField(input.path, "path") };
-    case "mv":
-      return {
-        kind: "mv",
-        from: requireField(input.from, "from"),
-        to: requireField(input.to, "to"),
-      };
-    case "cp":
-      return {
-        kind: "cp",
-        from: requireField(input.from, "from"),
-        to: requireField(input.to, "to"),
-        recursive: input.recursive === true,
-      };
-    case "mkdir":
-      return { kind: "mkdir", path: requireField(input.path, "path") };
+    case "rm": {
+      const path = requireField(input.path, "path");
+      if (!path.ok) return Result.err(path.error);
+      return Result.ok({ kind: "rm", path: path.value, recursive: input.recursive === true });
+    }
+    case "rmdir": {
+      const path = requireField(input.path, "path");
+      if (!path.ok) return Result.err(path.error);
+      return Result.ok({ kind: "rmdir", path: path.value });
+    }
+    case "mv": {
+      const from = requireField(input.from, "from");
+      if (!from.ok) return Result.err(from.error);
+      const to = requireField(input.to, "to");
+      if (!to.ok) return Result.err(to.error);
+      return Result.ok({ kind: "mv", from: from.value, to: to.value });
+    }
+    case "cp": {
+      const from = requireField(input.from, "from");
+      if (!from.ok) return Result.err(from.error);
+      const to = requireField(input.to, "to");
+      if (!to.ok) return Result.err(to.error);
+      return Result.ok({ kind: "cp", from: from.value, to: to.value, recursive: input.recursive === true });
+    }
+    case "mkdir": {
+      const path = requireField(input.path, "path");
+      if (!path.ok) return Result.err(path.error);
+      return Result.ok({ kind: "mkdir", path: path.value });
+    }
     case "ls": {
       const dir = typeof input.path === "string" && input.path !== "" ? input.path : "/";
-      return { kind: "ls", dir, recursive: input.recursive === true };
+      return Result.ok({ kind: "ls", dir, recursive: input.recursive === true });
     }
     default:
-      invalidCommand(typeof action === "string" && action !== "" ? `unknown action: ${action}` : "missing action");
+      return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: "fs", detail: `Invalid fs command: ${typeof action === "string" && action !== "" ? `unknown action: ${action}` : "missing action"}`}));
   }
 }
 

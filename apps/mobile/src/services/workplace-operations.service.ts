@@ -11,6 +11,7 @@ import {
 } from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
 import {AppError} from '@novel-master/core/agent';
+import {Result} from '@novel-master/core/errors';
 import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
 
 function workplaceRootLogicalPath(_scope: VfsScope): string {
@@ -37,16 +38,16 @@ export async function cycleFileInclusion(
   return next;
 }
 
-/** Set directory rule enabled; root cannot be disabled. */
+/** Set directory rule enabled; root cannot be disabled（守卫沿 Result.err 上行，五期）. */
 export async function setDirRuleEnabled(
   workplace: WorkplaceService,
   logicalPath: string,
   enabled: boolean,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   if (!enabled && isWorkplaceRootPath(workplace.scope, logicalPath)) {
-    throw new AppError('WORKPLACE_ROOT_RULE_LOCKED', {detail: '根目录规则不可关闭'});
+    return Result.err(new AppError('WORKPLACE_ROOT_RULE_LOCKED', {detail: '根目录规则不可关闭'}));
   }
-  await workplace.setDirRule({
+  return workplace.setDirRule({
     logicalPath,
     ruleEnabled: enabled,
   });
@@ -57,10 +58,11 @@ export async function toggleDirRuleEnabled(
   workplace: WorkplaceService,
   logicalPath: string,
   currentlyEnabled: boolean,
-): Promise<boolean> {
+): Promise<Result<boolean, AppError>> {
   const nextEnabled = !currentlyEnabled;
-  await setDirRuleEnabled(workplace, logicalPath, nextEnabled);
-  return nextEnabled;
+  const ruled = await setDirRuleEnabled(workplace, logicalPath, nextEnabled);
+  if (!ruled.ok) return Result.err(ruled.error);
+  return Result.ok(nextEnabled);
 }
 
 /**
@@ -80,8 +82,14 @@ export async function batchSetDirRulesEnabled(
       continue;
     }
     try {
-      await setDirRuleEnabled(workplace, path, enabled);
-      applied += 1;
+      // 已知失败（根目录锁定 / core 校验）沿 Result 判定；平台异常仍走 throw
+      // 由本 catch 兜住计为 skipped——两通道语义都不能丢。
+      const ruled = await setDirRuleEnabled(workplace, path, enabled);
+      if (ruled.ok) {
+        applied += 1;
+      } else {
+        skipped += 1;
+      }
     } catch {
       skipped += 1;
     }

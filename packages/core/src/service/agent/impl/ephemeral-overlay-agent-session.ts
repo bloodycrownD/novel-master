@@ -13,6 +13,8 @@ import type {
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * {@link AgentSession} that lists base + overlay messages; {@link append} never hits SQLite.
@@ -56,7 +58,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
        */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessageData> {
+  ): Promise<Result<ChatMessageData, AppError>> {
     const seq = this.nextSeq++;
     const message: ChatMessageData = {
       id: `ephemeral-${seq}`,
@@ -75,27 +77,28 @@ export class EphemeralOverlayAgentSession implements AgentSession {
         : {}),
     };
     this.overlay.push(message);
-    return message;
+    return Result.ok(message);
   }
 
-  hideRange(fromSeq: number, toSeq: number): Promise<number> {
+  hideRange(fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
     return this.base.hideRange(fromSeq, toSeq);
   }
 
-  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+  async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
     // EphemeralOverlayAgentSession 只在 RAM overlay 里追加消息；
     // base 列表是只读历史，不在本职责范围内截断。
     if (afterMessageId == null) {
       this.overlay.length = 0;
-      return;
+      return Result.ok(undefined);
     }
     const idx = this.overlay.findIndex((m) => m.id === afterMessageId);
     if (idx >= 0) {
       // anchor 命中 overlay：只截 overlay
       this.overlay.splice(idx + 1);
-      return;
+      return Result.ok(undefined);
     }
     // anchor 命中 base（turn 起点在历史里）：overlay 整段都是本 turn 写的，全清
     this.overlay.length = 0;
+    return Result.ok(undefined);
   }
 }

@@ -95,7 +95,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -161,14 +161,14 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(materializePersistBlock.mock.callCount(), 0);
     assert.equal(unwrap(await vfs.read("/out.txt")).content, "mutated");

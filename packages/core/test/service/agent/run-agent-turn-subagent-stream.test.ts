@@ -13,6 +13,7 @@
  */
 
 import { Result } from "../../../src/errors/either.js";
+import type { AppError } from "../../../src/errors/app-error.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -78,7 +79,7 @@ function taskToolUseResponse(toolUseId: string): LlmChatResult {
   };
 }
 
-/** 构造一轮纯文本完成响应。 */
+/** 构造一轮纯文本完成响应（裸 LlmChatResult；Result 包装由 scriptedModel 统一做）。 */
 function textDoneResponse(text: string): LlmChatResult {
   return {
     assistantText: text,
@@ -102,7 +103,7 @@ function scriptedModel(
       _savedModelId: string,
       _userContent: string,
       options?: ModelRequestOptions,
-    ): Promise<LlmChatResult> => {
+    ): Promise<Result<LlmChatResult, AppError>> => {
       const idx = calls;
       calls += 1;
       streams.push(options?.stream ?? false);
@@ -112,7 +113,7 @@ function scriptedModel(
           `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
         );
       }
-      return r;
+      return Result.ok(r);
     },
   };
 }
@@ -376,7 +377,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         _savedModelId: string,
         userContent: string,
         options?: ModelRequestOptions,
-      ): Promise<LlmChatResult> => {
+      ): Promise<Result<LlmChatResult, AppError>> => {
         const responses = [
           taskToolUseResponse("tu-s5"),
           textDoneResponse("主代理收到失败结果"),
@@ -392,7 +393,7 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
             `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
           );
         }
-        return r;
+        return Result.ok(r);
       },
     };
 

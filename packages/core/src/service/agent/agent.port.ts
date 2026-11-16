@@ -7,6 +7,8 @@
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 
 export interface AgentRunOptions {
   readonly definition: AgentDefinition;
@@ -30,5 +32,11 @@ export interface AgentRunOptions {
 
 /** Drives multi-step model round-trips with tool execution. */
 export interface AgentRunner {
-  run(options: AgentRunOptions): Promise<AgentRunResult>;
+  /**
+   * 已知失败沿返回值（五期门⑦）：`Result.err(AppError)` 携带失败（FAILED 事件、
+   * 失败消息落库等收尾已在 runner 内完成）；取消不是失败——`Outcome.cancelled`
+   * 路由进 `handleAbort` 后以 `stopReason:"cancelled"` 正常返回 Ok。非 AppError
+   * 的未知异常仍抛，由入口壳（run-agent-turn）catch 收口。
+   */
+  run(options: AgentRunOptions): Promise<Result<AgentRunResult, AppError>>;
 }

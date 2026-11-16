@@ -95,7 +95,9 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
   });
 
   it("明文行经 IPC 后 bodyText / contentBlocks 逐字节等于原文", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const firstBody = `明文化正文 · 压缩形态只存在于存储层：${"中文与标点、emoji 🎯 混排。".repeat(30)}`;
     const secondBody = `第二条正文 · ${"逐字节等值校验。".repeat(40)}`;
 

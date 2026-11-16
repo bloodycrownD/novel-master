@@ -6,17 +6,16 @@
  * `service/vfs/impl/legacy-vfs-error` mapper 已随三期 Step 6 删除，legacy
  * 分支一并撤除（总纲 §7.2-3）。本文件保留两样：
  * - {@link VfsReplaceNotFoundDetails}：edit REPLACE_NOT_FOUND 的 LCS 诊断字段类型。
- * - {@link isVfsError} 域守卫：AppError 且数字码落在 VFS 域段（码表登记的
- *   102 VFS 段含 VFS_ZIP_* / VFS_CONTENT_* / VFS_SINGLE_FILE_*，103
- *   VFS_CHARACTER_CARD 段），沿 cause 链回溯。域判定走 domainOf
- *   （errors/domain.ts 的段表，全仓唯一一份），按段号而非 key 命名约定——
- *   语义属 VFS、前缀不同的 key 不会静默漏判。
+ * - {@link isVfsError} 域守卫：guards 统一后是 {@link inDomain} 的一行组合，
+ *   AppError 且数字码落在 VFS 域段（码表登记的 102 VFS 段含 VFS_ZIP_* /
+ *   VFS_CONTENT_* / VFS_SINGLE_FILE_*，103 VFS_CHARACTER_CARD 段），沿 cause
+ *   链回溯。域判定按段号而非 key 命名约定——语义属 VFS、前缀不同的 key
+ *   不会静默漏判。
  *
  * @module errors/vfs-errors
  */
 
-import { isAppError, type AppError } from "@/errors/app-error.js";
-import { domainOf } from "@/errors/domain.js";
+import { inDomain, type AppErrorGuard } from "@/errors/guards.js";
 
 /**
  * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
@@ -36,11 +35,5 @@ export type VfsReplaceNotFoundDetails = {
   readonly fileHintPreview?: string;
 };
 
-/** 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯一层。 */
-export function isVfsError(error: unknown): error is AppError {
-  return inVfsSegment(error) || (typeof error === "object" && error !== null && "cause" in error && inVfsSegment((error as {cause: unknown}).cause));
-}
-
-function inVfsSegment(error: unknown): error is AppError {
-  return isAppError(error) && (domainOf(error.code) === "VFS" || domainOf(error.code) === "VFS_CHARACTER_CARD");
-}
+/** 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯。 */
+export const isVfsError: AppErrorGuard = (e) => inDomain(e, "VFS", "VFS_CHARACTER_CARD");

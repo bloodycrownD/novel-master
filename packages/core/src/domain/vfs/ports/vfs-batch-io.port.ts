@@ -108,10 +108,12 @@ export interface BatchApplyOptions {
 /**
  * 逐文件写入执行器（session + user-vfs-turn 通道）。
  * 每成功一项即落库/进 pending；失败不整批回滚。
+ * 错误通道迁移七期：已知失败沿 `Result.err` 回传，由 applyBatchIngestWithWriter
+ * 聚合进 Report.failed（Result 契约之外的未知异常仍按 catch 落表）。
  */
 export interface BatchIngestWriter {
-  mkdir(logicalPath: string): Promise<void>;
-  writeFile(logicalPath: string, content: string): Promise<void>;
+  mkdir(logicalPath: string): Promise<Result<void, AppError>>;
+  writeFile(logicalPath: string, content: string): Promise<Result<void, AppError>>;
 }
 
 /**

@@ -14,9 +14,13 @@
  *     照常计数——它属可辩的边界形态，但统一应写成 toIpcResult 包装器；
  *     是否豁免由编排者裁决，本脚本不给它开后门。
  *
- * 白名单（ALLOW_FILES，仅两类；新增例外必须先改总纲 §五）：
+ * 白名单（ALLOW_FILES，三类；新增例外必须先改总纲 §五）：
  *   1. better-sqlite3 事务回滚——`db.transaction(fn)` 只认抛错回滚；
- *   2. packages/core/src/infra/tdbc/ 层。
+ *   2. packages/core/src/infra/tdbc/ 层；
+ *   3. 控制信号转码——DatabaseReplacedError 这类携带状态字段的控制信号
+ *     Result 装不下（函数抛错时返回值送不到调用方），从 Result 取出后
+ *     rethrow 喂给文档写明的 throw 通道 port（2026-11-16 编排者裁决，
+ *     只认指定类，不是任何 Error 都能套）。
  */
 import fs from "node:fs";
 import cp from "node:child_process";
@@ -32,6 +36,12 @@ const ALLOW_FILES = [
   /transaction-helper\.ts$/,
   // tdbc 层
   /^packages\/core\/src\/infra\/tdbc\//,
+  // 控制信号转码（2026-11-16 编排者裁决）：DbSyncPort 是 throw 通道 port
+  // （port 契约无失败位，「已换库」信号靠 DatabaseReplacedError 异常承载，
+  // Result 装不下 databaseReplaced / providerTablesRestored 标志）；本文件的
+  // dbSync 适配器把 db-backup 的 Result.err 解包上抛由 coordinator 收口。
+  // desktop 同款两处由片2另行登记。
+  /^apps\/mobile\/src\/services\/cloud-sync\.service\.ts$/,
 ];
 
 // 文件集 = packages/apps 下一层包的 src/*.ts。不用 `src/**/*.ts` glob——
@@ -70,10 +80,10 @@ for (const b of bad) {
 }
 const dirLines = [...byDir.entries()].sort((a, z) => z[1] - a[1] || a[0].localeCompare(z[0]));
 
-console.log("[门⑦] FIND " + bad.length + " 处 `throw x.error`（判据：一律违规；白名单仅事务回滚 + tdbc）：\n");
+console.log("[门⑦] FIND " + bad.length + " 处 `throw x.error`（判据：一律违规；白名单仅事务回滚 + tdbc + 控制信号转码）：\n");
 console.log("—— 按目录分布 ——");
 for (const [dir, n] of dirLines) console.log("  " + String(n).padStart(3) + "  " + dir);
 console.log("\n—— 明细（前 60 条，共 " + bad.length + " 条）——");
 for (const b of bad.slice(0, 60)) console.log("  " + b.f + ":" + b.line + "  " + b.text);
-console.log("\n处置：所在函数签名改返回 Result<T, AppError>，`throw r.error` 改 `return r`，调用方逐层接力；只有 better-sqlite3 事务回调与平台强制穿透（fetch abort / Promise.race reject）可例外，并在 ALLOW_FILES 登记。");
+console.log("\n处置：所在函数签名改返回 Result<T, AppError>，`throw r.error` 改 `return r`，调用方逐层接力；例外三类（事务回滚 / tdbc 层 / 控制信号转码，如 DatabaseReplacedError——Result 装不下其状态字段，须 rethrow 喂 throw 通道 port），并在 ALLOW_FILES 登记。");
 process.exit(1);

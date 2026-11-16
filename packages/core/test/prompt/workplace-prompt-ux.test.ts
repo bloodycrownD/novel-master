@@ -2,10 +2,17 @@
  * annotate-workplace-ux-fix：常驻工作区 schema / 注入（T-WP1–T-WP6）。
  */
 import { outcomeValue } from "../helpers/outcome-value.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { decode, encode } from "@novel-master/core";
+import { decode as decodeRaw, encode } from "@novel-master/core";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 import { isAppError } from "@novel-master/core/agent";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
@@ -115,11 +122,11 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       dynamic: [],
     };
     const wrapped = `<workplace>\n${inner}\n</workplace>`;
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: wrapped,
       messages: [],
       now: fixedNow,
-    });
+    }));
     const userBody = messageBodyTextFromBlocks(input.messages[0]!.content.blocks);
     assert.equal(countTag(userBody, "<workplace>"), 1);
     assert.equal(countTag(userBody, "</workplace>"), 1);
@@ -150,20 +157,20 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       persist: [],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), custom);
     assert.notEqual(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
-    const segments = await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",
       messages: [],
       now: fixedNow,
-    });
+    }));
     const done = segments.find((s) => s.id === "prompt-workplace-done");
     assert.equal(done?.body, custom);
   });

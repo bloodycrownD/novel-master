@@ -11,6 +11,8 @@ import {
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "@novel-master/core";
+import { type AppError, Result } from "@novel-master/core/errors";
+import { RESULT_OK } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const KNOWN_KEYS = [
@@ -48,27 +50,27 @@ function parseBooleanArg(raw: string, key: string): boolean {
 async function getValue(
   preferences: PersistentPreferences,
   key: KnownKey,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   switch (key) {
     case PREF_KEY_CHAT_LLM_STREAM: {
       const enabled = await preferences.getLlmStreamEnabled();
-      if (!enabled.ok) throw enabled.error;
-      return enabled.value ? "true" : "false";
+      if (!enabled.ok) return Result.err(enabled.error);
+      return Result.ok(enabled.value ? "true" : "false");
     }
     case PREF_KEY_CHAT_SUBAGENT_STREAM: {
       const enabled = await preferences.getSubagentStreamEnabled();
-      if (!enabled.ok) throw enabled.error;
-      return enabled.value ? "true" : "false";
+      if (!enabled.ok) return Result.err(enabled.error);
+      return Result.ok(enabled.value ? "true" : "false");
     }
     case PREF_KEY_CHAT_THINKING_CONTEXT: {
       const enabled = await preferences.getThinkingContextEnabled();
-      if (!enabled.ok) throw enabled.error;
-      return enabled.value ? "true" : "false";
+      if (!enabled.ok) return Result.err(enabled.error);
+      return Result.ok(enabled.value ? "true" : "false");
     }
     case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN: {
       const vfsEnabled = await preferences.getUserVfsUnifiedToolTurn();
-      if (!vfsEnabled.ok) throw vfsEnabled.error;
-      return vfsEnabled.value ? "true" : "false";
+      if (!vfsEnabled.ok) return Result.err(vfsEnabled.error);
+      return Result.ok(vfsEnabled.value ? "true" : "false");
     }
   }
 }
@@ -100,27 +102,27 @@ async function setValue(
 async function resetValue(
   preferences: PersistentPreferences,
   key: KnownKey,
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   switch (key) {
     case PREF_KEY_CHAT_LLM_STREAM: {
       const reset = await preferences.resetLlmStreamEnabled();
-      if (!reset.ok) throw reset.error;
-      return;
+      if (!reset.ok) return Result.err(reset.error);
+      return RESULT_OK;
     }
     case PREF_KEY_CHAT_SUBAGENT_STREAM: {
       const reset = await preferences.resetSubagentStreamEnabled();
-      if (!reset.ok) throw reset.error;
-      return;
+      if (!reset.ok) return Result.err(reset.error);
+      return RESULT_OK;
     }
     case PREF_KEY_CHAT_THINKING_CONTEXT: {
       const reset = await preferences.resetThinkingContextEnabled();
-      if (!reset.ok) throw reset.error;
-      return;
+      if (!reset.ok) return Result.err(reset.error);
+      return RESULT_OK;
     }
     case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN: {
       const reset = await preferences.resetUserVfsUnifiedToolTurn();
-      if (!reset.ok) throw reset.error;
-      return;
+      if (!reset.ok) return Result.err(reset.error);
+      return RESULT_OK;
     }
   }
 }
@@ -129,7 +131,7 @@ export async function runPreferences(
   preferences: PersistentPreferences,
   subcommand: string,
   args: readonly string[],
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   const { positional } = parseCliArgs(args);
 
   switch (subcommand) {
@@ -138,8 +140,10 @@ export async function runPreferences(
       if (!key || !isKnownKey(key)) {
         throw new Error(usageGet());
       }
-      console.log(await getValue(preferences, key));
-      return;
+      const value = await getValue(preferences, key);
+      if (!value.ok) return Result.err(value.error);
+      console.log(value.value);
+      return RESULT_OK;
     }
     case "set": {
       const key = positional[0];
@@ -148,22 +152,23 @@ export async function runPreferences(
         throw new Error(usageSet());
       }
       await setValue(preferences, key, raw);
-      return;
+      return RESULT_OK;
     }
     case "reset": {
       const key = positional[0];
       if (!key || !isKnownKey(key)) {
         throw new Error(usageReset());
       }
-      await resetValue(preferences, key);
-      return;
+      const reset = await resetValue(preferences, key);
+      if (!reset.ok) return Result.err(reset.error);
+      return RESULT_OK;
     }
     case "list": {
       const entries = await preferences.list();
       for (const { key, value } of entries) {
         console.log(`${key}=${value}`);
       }
-      return;
+      return RESULT_OK;
     }
     default:
       throw new Error(

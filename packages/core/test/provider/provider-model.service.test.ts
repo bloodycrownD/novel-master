@@ -1,8 +1,14 @@
-import { unwrap } from "../helpers/result-unwrap.js";
+import type { ZodType } from "zod";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { decode } from "@novel-master/core";
+import { decode as decodeRaw } from "@novel-master/core";
 import { agentDefinitionSchema, createAgentRegistryService } from "@novel-master/core/agent";
 import { formatSavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
 import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
@@ -60,13 +66,13 @@ describe("ProviderModelService fetch", () => {
     const bundle = createProviderServices(ctx.conn, secrets);
     await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
 
-    await bundle.providerModels.fetch(BUILTIN_PROVIDER_UUID_OPENAI);
-    const suggestions = await bundle.providerModels.suggestList(BUILTIN_PROVIDER_UUID_OPENAI);
+    unwrap(await bundle.providerModels.fetch(BUILTIN_PROVIDER_UUID_OPENAI));
+    const suggestions = unwrap(await bundle.providerModels.suggestList(BUILTIN_PROVIDER_UUID_OPENAI));
     assert.equal(suggestions.length, 2);
     assert.ok(
       suggestions.some((s) => s.vendorModelId === "gpt-4o" && s.stale === false),
     );
-    const saved = await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI);
+    const saved = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
     assert.equal(saved.length, 0);
     clearProtocolAdapters();
   });
@@ -93,12 +99,12 @@ describe("ProviderModelService fetch", () => {
       apiKey: "sk-test",
     }));
 
-    await bundle.providerModels.fetch(zhipu.id);
-    const saved = await bundle.providerModels.save(
+    unwrap(await bundle.providerModels.fetch(zhipu.id));
+    const saved = unwrap(await bundle.providerModels.save(
       zhipu.id,
       `${zhipu.id}/glm-4-flash`,
-    );
-    const list = await bundle.providerModels.savedList(zhipu.id);
+    ));
+    const list = unwrap(await bundle.providerModels.savedList(zhipu.id));
     assert.equal(list.length, 1);
     assert.equal(saved.vendorModelId, "glm-4-flash");
     assert.equal(saved.modelName, "glm-4-flash");
@@ -132,12 +138,12 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
-    await assert.rejects(
+    await rejectsErr(
       () =>
         bundle.providerModels.updateSettings(saved.id, {
           contextWindowTokens: 0,
         }),
-      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_ARGUMENT")),
     );
   });
 
@@ -159,12 +165,12 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const updated = await bundle.providerModels.updateSettings(saved.id, {
+    const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
       tokenCounterMode: "gemma",
-    });
+    }));
     assert.equal(savedModelTokenCounterMode(updated.settings), "gemma");
     assert.equal(
-      await bundle.providerModels.getTokenCounterMode(saved.id),
+      unwrap(await bundle.providerModels.getTokenCounterMode(saved.id)),
       "gemma",
     );
   });
@@ -173,9 +179,9 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     assert.equal(
-      await bundle.providerModels.getTokenCounterMode(
+      unwrap(await bundle.providerModels.getTokenCounterMode(
         "00000000-0000-4000-8000-000000000000",
-      ),
+      )),
       "auto",
     );
   });
@@ -184,12 +190,12 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    await assert.rejects(
+    await rejectsErr(
       () =>
         bundle.providerModels.updateSettings(saved.id, {
           tokenCounterMode: "not-a-mode" as "auto",
         }),
-      (e) => isAppError(e, "PROVIDER_INVALID_ARGUMENT"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_ARGUMENT")),
     );
   });
 
@@ -197,12 +203,12 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const updated = await bundle.providerModels.updateSettings(saved.id, {
+    const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
       thinkingLevel: "high",
-    });
+    }));
     assert.equal(updated.settings.generation.thinkingLevel, "high");
     assert.equal(updated.settings.schemaVersion, 2);
-    const refetched = await bundle.providerModels.getSavedById(saved.id);
+    const refetched = unwrap(await bundle.providerModels.getSavedById(saved.id));
     assert.ok(refetched != null);
     assert.equal(refetched.settings.generation.thinkingLevel, "high");
     assert.equal(refetched.settings.schemaVersion, 2);
@@ -213,14 +219,14 @@ describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
   it("同 provider+vendor 可 insert 两行且 settings 独立", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const a = await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-a");
-    const b = await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-b");
+    const a = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-a"));
+    const b = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-b"));
     assert.notEqual(a.id, b.id);
     assert.equal(a.vendorModelId, b.vendorModelId);
-    await bundle.providerModels.updateSettings(a.id, { thinkingLevel: "low" });
-    await bundle.providerModels.updateSettings(b.id, { thinkingLevel: "high" });
-    const refA = await bundle.providerModels.getSavedById(a.id);
-    const refB = await bundle.providerModels.getSavedById(b.id);
+    unwrap(await bundle.providerModels.updateSettings(a.id, { thinkingLevel: "low" }));
+    unwrap(await bundle.providerModels.updateSettings(b.id, { thinkingLevel: "high" }));
+    const refA = unwrap(await bundle.providerModels.getSavedById(a.id));
+    const refB = unwrap(await bundle.providerModels.getSavedById(b.id));
     assert.equal(refA?.settings.generation.thinkingLevel, "low");
     assert.equal(refB?.settings.generation.thinkingLevel, "high");
   });
@@ -229,11 +235,11 @@ describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const vendor = `gpt-4o-dup-${Date.now()}`;
-    const before = (await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI)).length;
-    const first = await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor);
-    const second = await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor);
+    const before = (unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI))).length;
+    const first = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
+    const second = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
     assert.notEqual(first.id, second.id);
-    const list = await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI);
+    const list = unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI));
     assert.equal(list.length, before + 2);
     assert.equal(list.filter((m) => m.vendorModelId === vendor).length, 2);
   });
@@ -255,12 +261,12 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const created = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
-    await bundle.providerModels.editSaved(created.id, "Label A");
-    const after = await bundle.providerModels.editSaved(created.id);
+    unwrap(await bundle.providerModels.editSaved(created.id, "Label A"));
+    const after = unwrap(await bundle.providerModels.editSaved(created.id));
     assert.equal(after.modelName, "Label A");
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providerModels.editSaved(created.id, ""),
-      (e) => isAppError(e, "PROVIDER_INVALID_MODEL_NAME"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_INVALID_MODEL_NAME")),
     );
   });
 });
@@ -272,9 +278,9 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const state = createPersistentState(ctx.conn);
     await state.setCurrentModelId(saved.id);
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -295,9 +301,9 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
         agentDefinitionSchema,
       ),
     );
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -318,9 +324,9 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
         agentDefinitionSchema,
       ),
     }));
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -336,9 +342,9 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
       agentId: `agent-sess-${randomUUID()}`,
       modelId: saved.id,
     }));
-    await assert.rejects(
+    await rejectsErr(
       () => bundle.providerModels.deleteSaved(saved.id),
-      (e) => isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE"),
+      (e) => assert.ok(isAppError(e, "PROVIDER_SAVED_MODEL_IN_USE")),
     );
   });
 
@@ -354,7 +360,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
       session.id,
     ]);
 
-    await bundle.providerModels.deleteSaved(saved.id);
-    assert.equal(await bundle.providerModels.getSavedById(saved.id), null);
+    unwrap(await bundle.providerModels.deleteSaved(saved.id));
+    assert.equal(unwrap(await bundle.providerModels.getSavedById(saved.id)), null);
   });
 });

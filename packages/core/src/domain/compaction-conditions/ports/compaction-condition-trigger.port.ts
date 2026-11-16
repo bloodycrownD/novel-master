@@ -4,6 +4,8 @@
  * @module domain/compaction-conditions/ports/compaction-condition-trigger.port
  */
 
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptLlmInput, PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
@@ -47,5 +49,5 @@ export interface CompactionEvaluationContext {
 
 /** Returns true when this trigger slice is satisfied. */
 export interface CompactionConditionTrigger {
-  shouldTrigger(session: AgentSession, evaluation: CompactionEvaluationContext): Promise<boolean>;
+  shouldTrigger(session: AgentSession, evaluation: CompactionEvaluationContext): Promise<Result<boolean, AppError>>;
 }

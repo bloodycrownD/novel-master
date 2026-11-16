@@ -9,6 +9,7 @@ import {
 } from "../../src/infra/llm-protocol/logic/registry.js";
 import { createModelRetryPolicyService } from "../../src/service/provider/create-model-retry-policy-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
@@ -51,7 +52,7 @@ describe("ModelRequestService saved model sampling", () => {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
       await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
-      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "profile-merge");
+      const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "profile-merge"));
       await bundle.providerModels.updateSettings(saved.id, {
         sampling: {
           enabled: true,
@@ -87,7 +88,7 @@ describe("ModelRequestService saved model sampling", () => {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
       await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
-      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "no-profile");
+      const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "no-profile"));
       await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
       });
@@ -129,11 +130,11 @@ describe("ModelRequestService saved model sampling", () => {
         jitterRatio: 0,
       });
       await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
-      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "retry-policy");
+      const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "retry-policy"));
 
-      const out = await bundle.modelRequests.request(saved.id, "hi", {
+      const out = unwrap(await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
-      });
+      }));
       assert.equal(out.assistantText, "ok");
       assert.equal(callCount, 2);
     } finally {

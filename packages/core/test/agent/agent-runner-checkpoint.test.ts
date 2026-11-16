@@ -4,6 +4,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { unwrap } from "../helpers/result-unwrap.js";
+import { Result } from "../../src/errors/either.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -51,49 +53,53 @@ function runnerDeps(
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
+  // 错误通道迁移四期：VfsService 走 Result 通道。
   return {
     async read(path: string) {
       const content = files.get(path) ?? "";
-      return { path, content, version: 1, mtimeMs: 0 };
+      return Result.ok({ path, content, version: 1, mtimeMs: 0 });
     },
     async write(path: string, content: string) {
       files.set(path, content);
-      return { version: 1 };
+      return Result.ok({ version: 1 });
     },
     async replace(path: string, oldString: string, newString: string) {
       const c = files.get(path) ?? "";
       files.set(path, c.replace(oldString, newString));
-      return { version: 1, replacements: 1 };
+      return Result.ok({ version: 1, replacements: 1 });
     },
     async list() {
-      return [...files.keys()];
+      return Result.ok([...files.keys()]);
     },
     async glob() {
-      return [];
+      return Result.ok([]);
     },
     async grep() {
-      return [];
+      return Result.ok([]);
     },
     async delete() {
-      return { deleted: true };
+      return Result.ok({ deleted: true });
     },
   } as unknown as VfsService;
 }
 
 function mutatingToolRoundModel(): ModelRequestService {
   return {
-    request: mock.fn(async (): Promise<LlmChatResult> => ({
-      assistantText: "",
-      blocks: [
-        {
-          type: "tool_use",
-          id: "w1",
-          name: "write",
-          input: { path: "/out.txt", content: "x" },
-        },
-      ],
-      raw: {},
-    })),
+    // 错误通道迁移四期：request 走 Result 通道。
+    request: mock.fn(async (): Promise<Awaited<ReturnType<ModelRequestService["request"]>>> =>
+      Result.ok({
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "w1",
+            name: "write",
+            input: { path: "/out.txt", content: "x" },
+          },
+        ],
+        raw: {},
+      }),
+    ),
   };
 }
 
@@ -171,14 +177,14 @@ describe("AgentRunner message checkpoint", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const toolResult = (await session.list())
       .flatMap((m) => m.content.blocks)

@@ -6,6 +6,7 @@
 
 import { createLogger } from "@/infra/log/logger.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import {
   buildLease,
   canAcquireLock,
@@ -160,24 +161,28 @@ export class CloudSyncCoordinator {
    * 不应该因为 agent 正在跑而被拒。真正覆盖活动库文件之前再复检一次
    * （下载期间 agent 可能启动），两条 import 分支紧邻调用处各一次。
    */
-  async pull(options: PullOptions): Promise<PullResult> {
+  async pull(options: PullOptions): Promise<Result<PullResult, AppError>> {
     this.assertConfigured();
 
-    const { status: remote } = await this.readRemoteStatus();
+    const remoteStatus = await this.readRemoteStatus();
+    if (!remoteStatus.ok) return Result.err(remoteStatus.error);
+    const { status: remote } = remoteStatus.value;
 
     if (remote.rev <= options.lastSyncedRev) {
-      throw new AppError("CLOUD_SYNC_ALREADY_UP_TO_DATE");
+      return Result.err(new AppError("CLOUD_SYNC_ALREADY_UP_TO_DATE"));
     }
 
     if (remote.rev > 0 && remote.snapshotKey == null) {
-      throw new AppError("CLOUD_SYNC_SNAPSHOT_MISSING");
+      return Result.err(new AppError("CLOUD_SYNC_SNAPSHOT_MISSING"));
     }
 
     // 进程内互斥锁：pull 会整库替换活动库文件，必须与 push（以及将来的 agent
     // 启动入口）串行；超时降级拒绝（拒绝优于脏快照）。
-    const lockHandle = await this.acquireSyncLock("pull");
+    const lock = await this.acquireSyncLock("pull");
+    if (!lock.ok) return Result.err(lock.error);
     try {
-      this.assertAgentIdleForPull();
+      const active = this.agentActiveError("pull");
+      if (active != null) return Result.err(active);
 
       const snapKey = remote.snapshotKey!;
       let databaseReplaced = false;
@@ -190,12 +195,14 @@ export class CloudSyncCoordinator {
           remote.snapshotSha256 != null &&
           localHash !== remote.snapshotSha256
         ) {
-          throw new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH");
+          return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
         // 覆盖活动库前二次复检：下载期间 agent 可能已经启动。
-        this.assertAgentIdleForPull();
-        const outcome = await this.dbSync.importSnapshotFromPath!(tempPath);
-        databaseReplaced = outcome?.databaseReplaced === true;
+        const activeBeforeImport = this.agentActiveError("pull");
+        if (activeBeforeImport != null) return Result.err(activeBeforeImport);
+        const imported = await this.dbSync.importSnapshotFromPath!(tempPath);
+        if (!imported.ok) return Result.err(imported.error);
+        databaseReplaced = imported.value.databaseReplaced;
       } else {
         const { body } = await this.storage.get(snapKey);
         const localHash = this.computeSha256Hex(body);
@@ -203,36 +210,41 @@ export class CloudSyncCoordinator {
           remote.snapshotSha256 != null &&
           localHash !== remote.snapshotSha256
         ) {
-          throw new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH");
+          return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
-        this.assertAgentIdleForPull();
-        const outcome = await this.dbSync.importSnapshot(body);
-        databaseReplaced = outcome?.databaseReplaced === true;
+        const activeBeforeImport = this.agentActiveError("pull");
+        if (activeBeforeImport != null) return Result.err(activeBeforeImport);
+        const imported = await this.dbSync.importSnapshot(body);
+        if (!imported.ok) return Result.err(imported.error);
+        databaseReplaced = imported.value.databaseReplaced;
       }
 
-      return { rev: remote.rev, databaseReplaced };
+      return Result.ok({ rev: remote.rev, databaseReplaced });
     } finally {
-      this.pushMutex.release(lockHandle);
+      this.pushMutex.release(lock.value);
     }
   }
 
-  /** pull 侧 agent 复检：覆盖活动库文件会吃掉 agent 的在途写入或让它落进已废弃的 inode。 */
-  private assertAgentIdleForPull(): void {
-    if (this.dbSync.isAgentActive()) {
-      throw new AppError("CLOUD_SYNC_AGENT_ACTIVE", {descriptor: {key: "error.cloud_sync.agent_active.pull"}});
-    }
+  /**
+   * pull / push 侧 agent 复检：覆盖活动库文件会吃掉 agent 的在途写入或让它
+   * 落进已废弃的 inode。命中返回业务错误（调用方 `Result.err` 上行），空闲返回 null。
+   */
+  private agentActiveError(kind: "pull" | "push"): AppError | null {
+    if (!this.dbSync.isAgentActive()) return null;
+    return new AppError("CLOUD_SYNC_AGENT_ACTIVE", {descriptor: {key: `error.cloud_sync.agent_active.${kind}`}});
   }
 
   /** 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁） */
-  async push(options: PushOptions): Promise<PushResult> {
+  async push(options: PushOptions): Promise<Result<PushResult, AppError>> {
     this.assertConfigured();
 
     // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
-    const lockHandle = await this.acquireSyncLock("push");
+    const lock = await this.acquireSyncLock("push");
+    if (!lock.ok) return Result.err(lock.error);
     try {
       return await this.runPush(options);
     } finally {
-      this.pushMutex.release(lockHandle);
+      this.pushMutex.release(lock.value);
     }
   }
 
@@ -242,14 +254,16 @@ export class CloudSyncCoordinator {
    */
   private async acquireSyncLock(
     operation: "pull" | "push" = "push"
-  ): Promise<PushAgentLockHandle> {
+  ): Promise<Result<PushAgentLockHandle, AppError>> {
     try {
-      return await this.pushMutex.acquire({
-        timeoutMs: this.pushAcquireTimeoutMs,
-      });
+      return Result.ok(
+        await this.pushMutex.acquire({
+          timeoutMs: this.pushAcquireTimeoutMs,
+        })
+      );
     } catch (error) {
       if (isAppError(error, "AGENT_BUSY")) {
-        throw new AppError("CLOUD_SYNC_PUSH_MUTEX_TIMEOUT", {descriptor: {key: operation === "pull" ? "error.cloud_sync.push_mutex_timeout.pull" : "error.cloud_sync.push_mutex_timeout.push"}}, {cause: error});
+        return Result.err(new AppError("CLOUD_SYNC_PUSH_MUTEX_TIMEOUT", {descriptor: {key: operation === "pull" ? "error.cloud_sync.push_mutex_timeout.pull" : "error.cloud_sync.push_mutex_timeout.push"}}, {cause: error}));
       }
       throw error;
     }
@@ -261,28 +275,29 @@ export class CloudSyncCoordinator {
    * 收尾契约：**final status 条件写失败时，重读远端必须重新判定租约与 rev，
    * 禁止只取 etag 就覆盖**（否则远端 rev 回退 + 抹掉他人租约 ⇒ 跨设备静默错位）。
    */
-  private async runPush(options: PushOptions): Promise<PushResult> {
+  private async runPush(options: PushOptions): Promise<Result<PushResult, AppError>> {
     // 入口仍保留 isAgentActive 检查：兼容 apps runtime 尚未接入互斥锁的旧路径
     // （旧 agent handler 不抢锁，只能靠这里拒绝）
-    if (this.dbSync.isAgentActive()) {
-      throw new AppError("CLOUD_SYNC_AGENT_ACTIVE", {descriptor: {key: "error.cloud_sync.agent_active.push"}});
-    }
+    const entryActive = this.agentActiveError("push");
+    if (entryActive != null) return Result.err(entryActive);
 
-    const { status: remote, etag: remoteEtag } = await this.readRemoteStatus();
+    const remoteStatus = await this.readRemoteStatus();
+    if (!remoteStatus.ok) return Result.err(remoteStatus.error);
+    const { status: remote, etag: remoteEtag } = remoteStatus.value;
 
     if (!options.forceOverwriteRemote && remote.rev > options.lastSyncedRev) {
-      throw new AppError("CLOUD_SYNC_NEED_PULL_FIRST", {descriptor: {key: "error.cloud_sync.need_pull_first.remote_ahead"}});
+      return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", {descriptor: {key: "error.cloud_sync.need_pull_first.remote_ahead"}}));
     }
 
     const newLock = buildLease(this.deviceId, this.leaseSeconds);
     if (!canAcquireLock(remote.lock, this.deviceId)) {
-      throw new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER");
+      return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
     }
 
     const lockedStatus: CloudSyncStatus = { ...remote, lock: newLock };
     let statusEtag = await this.conditionalPutStatus(lockedStatus, remoteEtag);
     if (statusEtag == null) {
-      throw new AppError("CLOUD_SYNC_LOCK_CONTENTION");
+      return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
     }
 
     let lockHeldBySelf = true;
@@ -309,9 +324,8 @@ export class CloudSyncCoordinator {
       // 续租点：上传耗时过长要续云端租约；同时复检本机 agent 状态。
       // 互斥锁接入后理论上 agent 进不来，但 apps 旧路径可能未抢锁——
       // agent 拍跑到这里就拒绝，走 finally 清云端锁，避免上传菲的快照续命。
-      if (this.dbSync.isAgentActive()) {
-        throw new AppError("CLOUD_SYNC_AGENT_ACTIVE", {descriptor: {key: "error.cloud_sync.agent_active.push"}});
-      }
+      const uploadActive = this.agentActiveError("push");
+      if (uploadActive != null) return Result.err(uploadActive);
 
       if (uploadElapsed > this.leaseSeconds * 500) {
         const renewedLock = renewLease(newLock, this.leaseSeconds);
@@ -352,24 +366,26 @@ export class CloudSyncCoordinator {
         // finalStatus.rev 是最初 remote.rev + 1 算出的常量、lock 是 null，
         // 无条件覆盖会把远端 rev 写回更小的值并抹掉第三方的有效租约
         // ⇒ 跨设备静默数据错位，且两端都把自己记成成功。
-        const { status: latest, etag: rereadEtag } = await this.readRemoteStatus();
+        const latestStatus = await this.readRemoteStatus();
+        if (!latestStatus.ok) return Result.err(latestStatus.error);
+        const { status: latest, etag: rereadEtag } = latestStatus.value;
         // 两条判定必须并存：canAcquireLock 在「他人租约已过期」时返回 true，
         // 只判它仍会把已被别人推进的 rev 盖掉；latest.rev >= nextRev 才是
         // 「rev 是否被别人推进过」的唯一判据。
         if (!canAcquireLock(latest.lock, this.deviceId)) {
-          throw new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER");
+          return Result.err(new AppError("CLOUD_SYNC_LOCK_HELD_BY_OTHER"));
         }
         if (latest.rev >= nextRev) {
-          throw new AppError("CLOUD_SYNC_NEED_PULL_FIRST", {descriptor: {key: "error.cloud_sync.need_pull_first.advanced_by_other"}});
+          return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", {descriptor: {key: "error.cloud_sync.need_pull_first.advanced_by_other"}}));
         }
         finalEtag = await this.conditionalPutStatus(finalStatus, rereadEtag);
         if (finalEtag == null) {
-          throw new AppError("CLOUD_SYNC_LOCK_CONTENTION");
+          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
         }
       }
 
       lockHeldBySelf = false;
-      return { rev: nextRev };
+      return Result.ok({ rev: nextRev });
     } finally {
       if (lockHeldBySelf) {
         await this.tryClearLock(statusEtag);
@@ -383,14 +399,13 @@ export class CloudSyncCoordinator {
     }
   }
 
-  private async readRemoteStatus(): Promise<{
-    status: CloudSyncStatus;
-    etag?: string;
-  }> {
+  private async readRemoteStatus(): Promise<
+    Result<{ status: CloudSyncStatus; etag?: string }, AppError>
+  > {
     const key = statusKey(this.pathPrefix);
     const head = await this.storage.head(key);
     if (!head.exists) {
-      return { status: { ...EMPTY_CLOUD_SYNC_STATUS }, etag: undefined };
+      return Result.ok({ status: { ...EMPTY_CLOUD_SYNC_STATUS }, etag: undefined });
     }
 
     const { body, etag } = await this.storage.get(key);
@@ -398,10 +413,12 @@ export class CloudSyncCoordinator {
     try {
       parsed = JSON.parse(new TextDecoder().decode(body));
     } catch (error) {
-      throw new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.unparseable"}}, {cause: error});
+      return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.unparseable"}}, {cause: error}));
     }
 
-    return { status: parseCloudSyncStatus(parsed), etag };
+    const validated = parseCloudSyncStatus(parsed);
+    if (!validated.ok) return Result.err(validated.error);
+    return Result.ok({ status: validated.value, etag });
   }
 
   private encodeStatus(status: CloudSyncStatus): Uint8Array {
@@ -433,7 +450,9 @@ export class CloudSyncCoordinator {
   /** Push 失败时尝试将锁清空（仅当仍由本机持有有效锁） */
   private async tryClearLock(lastKnownEtag?: string): Promise<void> {
     try {
-      const { status, etag } = await this.readRemoteStatus();
+      const remoteStatus = await this.readRemoteStatus();
+      if (!remoteStatus.ok) return;
+      const { status, etag } = remoteStatus.value;
       const effectiveEtag = etag ?? lastKnownEtag;
       if (effectiveEtag == null) {
         return;

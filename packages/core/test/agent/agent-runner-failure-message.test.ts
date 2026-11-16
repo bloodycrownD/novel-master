@@ -15,7 +15,9 @@
  */
 
 import assert from "node:assert/strict";
+import { Result } from "../../src/errors/either.js";
 import { describe, it } from "node:test";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -201,12 +203,12 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     const msgs = await session.list();
@@ -271,15 +273,14 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
       failedPayloads.push(p);
     });
 
-    // 超时错误非 AbortError：走主 catch else 分支（失败收尾），原错误上抛
-    await assert.rejects(
-      () =>
-        runner.run({
+    // 超时错误非 AbortError：走主 catch else 分支（失败收尾）；五期起 AppError 沿 Result.err 到达，不再 throw
+    await rejectsErr(
+      runner.run({
           maxSteps: 3,
           definition: minimalDefinition(),
           ...defaultRunScope,
         }),
-      (e: unknown) => isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle",
+      (e: unknown) => assert.ok(isAppError(e, "PROVIDER_STREAM_TIMEOUT") && e.details?.phase === "idle"),
     );
 
     // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）
@@ -323,7 +324,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
         if (r == null) {
           throw new Error("第二轮网络失败");
         }
-        return r;
+        return Result.ok(r);
       },
     };
     const registry = new ToolRegistry();
@@ -358,7 +359,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     await session.append("user", textBlocks("go"));
 
     const model: ModelRequestService = {
-      request: async () => ({ assistantText: "", blocks: [], raw: {} }),
+      request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -372,11 +373,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       finishedPayloads.push(p);
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     // run 本身照常成功收尾
     assert.equal(result.finished, true);
@@ -402,11 +403,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     await session.append("user", textBlocks("go"));
 
     const model: ModelRequestService = {
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "  \n\t",
         blocks: [{ type: "text", text: "  \n\t" }],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -414,11 +415,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -445,7 +446,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       request: async () => {
         const r = responses[calls];
         calls += 1;
-        return r ?? { assistantText: "", blocks: [], raw: {} };
+        return Result.ok(r ?? { assistantText: "", blocks: [], raw: {} });
       },
     };
     const registry = new ToolRegistry();
@@ -454,11 +455,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     // step2 空回复照常 completed 收尾
     assert.equal(result.stopReason, "completed");
@@ -475,7 +476,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     await session.append("user", textBlocks("go"));
 
     const model: ModelRequestService = {
-      request: async () => ({ assistantText: "", blocks: [], raw: {} }),
+      request: async () => (Result.ok({ assistantText: "", blocks: [], raw: {} })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -483,12 +484,12 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       persistMessages: false,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     // base session 不增消息（overlay 只进内存，占位落了也不可见）
@@ -502,11 +503,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     await session.append("user", textBlocks("go"));
 
     const model: ModelRequestService = {
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "hello",
         blocks: [{ type: "text", text: "hello" }],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -514,11 +515,11 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const msgs = await session.list();
@@ -539,7 +540,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       request: async () => {
         // 请求正常返回空 blocks，但 signal 已置 abort（provider 未透传中断）
         controller.abort();
-        return { assistantText: "", blocks: [], raw: {} };
+        return Result.ok({ assistantText: "", blocks: [], raw: {} });
       },
     };
     const registry = new ToolRegistry();
@@ -548,12 +549,12 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     // abort 分支不落占位：保持「用户主动停止、无 partial 不写」的原语义

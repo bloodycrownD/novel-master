@@ -93,12 +93,16 @@ export function ModelSamplingScreen() {
     }
     setLoading(true);
     try {
-      const saved = await runtime.providerModels.getSavedById(savedModelId);
+      const got = await runtime.providerModels.getSavedById(savedModelId);
+      if (!got.ok) throw got.error;
+      const saved = got.value;
       if (saved == null) {
         showToast(toastMessage('加载失败', '模型不存在'));
         return;
       }
-      const provider = await runtime.providers.get(saved.providerId);
+      const gotProvider = await runtime.providers.get(saved.providerId);
+      if (!gotProvider.ok) throw gotProvider.error;
+      const provider = gotProvider.value;
       setProtocol(provider.protocol);
       setModelName(saved.modelName);
       setInitialModelName(saved.modelName);
@@ -156,22 +160,24 @@ export function ModelSamplingScreen() {
           savedModelId,
           trimmedName,
         );
-        setInitialModelName(updated.modelName);
-        setModelName(updated.modelName);
+        if (!updated.ok) throw updated.error;
+        setInitialModelName(updated.value.modelName);
+        setModelName(updated.value.modelName);
         setModelSubtitle(
-          buildModelSubtitle(updated.modelName, updated.vendorModelId),
+          buildModelSubtitle(updated.value.modelName, updated.value.vendorModelId),
         );
       }
       const sampling =
         paramsEmpty(params) || !params
           ? {enabled: false as const}
           : {enabled: true as const, params};
-      await runtime.providerModels.updateSettings(savedModelId, {
+      const stored = await runtime.providerModels.updateSettings(savedModelId, {
         contextWindowTokens: contextWindow,
         sampling,
         tokenCounterMode,
         thinkingLevel,
       });
+      if (!stored.ok) throw stored.error;
       showToast('已保存模型设置');
       navigation.goBack();
     } catch (error) {
@@ -190,11 +196,13 @@ export function ModelSamplingScreen() {
       const updated = await runtime.providerModels.resetContextWindowToDefault(
         savedModelId,
       );
-      await runtime.providerModels.updateSettings(savedModelId, {
+      if (!updated.ok) throw updated.error;
+      const cleared = await runtime.providerModels.updateSettings(savedModelId, {
         sampling: {enabled: false},
       });
+      if (!cleared.ok) throw cleared.error;
       setContextWindowTokens(
-        String(savedModelContextWindowTokens(updated.settings)),
+        String(savedModelContextWindowTokens(updated.value.settings)),
       );
       setParams(undefined);
       showToast('已恢复默认采样参数');

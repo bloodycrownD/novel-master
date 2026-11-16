@@ -12,15 +12,15 @@ import type {
 import { type AppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { formatIpcError } from "../format-ipc-error.js";
-import { ipcErr } from "../ipc-result.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
+import { toIpcResult } from "../ipc-result.js";
 
 /** Loads persisted pointers and reconciles against project/session lists. */
 async function loadDesktopScope(
-  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
+  rt: DesktopNovelMasterRuntime,
 ): Promise<Result<ScopeSnapshotDto, AppError>> {
   const currentProject = await rt.state.getCurrentProjectId();
-  // 已知失败沿 Result 上行（错误通道迁移四期），handleScopeGet 转码。
+  // 已知失败沿 Result 上行（错误通道迁移四期），handleScopeGet 经 toIpcResult 转码。
   if (!currentProject.ok) return Result.err(currentProject.error);
   let projectId = currentProject.value;
   const currentSession = await rt.state.getCurrentSessionId();
@@ -58,52 +58,43 @@ async function loadDesktopScope(
   return Result.ok({ projectId, sessionId });
 }
 
-export async function handleScopeGet(): Promise<IpcResult<ScopeSnapshotDto>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const scope = await loadDesktopScope(rt);
-    if (!scope.ok) return { ok: false, error: formatIpcError(scope.error) };
-    return { ok: true, data: scope.value };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+export function handleScopeGet(): Promise<IpcResult<ScopeSnapshotDto>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
+    return loadDesktopScope(rt);
+  });
 }
 
-export async function handleScopeSetProject(
-  req: ScopeSetProjectRequest,
-): Promise<IpcResult<ScopeSnapshotDto>> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleScopeSetProject(req: ScopeSetProjectRequest): Promise<IpcResult<ScopeSnapshotDto>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     await rt.state.setCurrentProjectId(req.projectId);
     const sessions = await rt.sessions.listByProject(req.projectId);
-    if (!sessions.ok) return ipcErr(formatIpcError(sessions.error));
+    if (!sessions.ok) return Result.err(sessions.error);
     const sessionId = sessions.value[0]?.id;
     if (sessionId != null) {
       await rt.state.setCurrentSessionId(sessionId);
     } else {
       await rt.state.resetCurrentSessionId();
     }
-    return {
-      ok: true,
-      data: { projectId: req.projectId, sessionId },
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok({ projectId: req.projectId, sessionId });
+  });
 }
 
-export async function handleScopeSetSession(
-  req: ScopeSetSessionRequest,
-): Promise<IpcResult<ScopeSnapshotDto>> {
-  try {
-    const rt = await getDesktopRuntime();
+export function handleScopeSetSession(req: ScopeSetSessionRequest): Promise<IpcResult<ScopeSnapshotDto>> {
+  return toIpcResult(async () => {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return Result.err(built.error);
+    const rt = built.value;
     await rt.state.setCurrentProjectId(req.projectId);
     await rt.state.setCurrentSessionId(req.sessionId);
-    return {
-      ok: true,
-      data: { projectId: req.projectId, sessionId: req.sessionId },
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+    return Result.ok({ projectId: req.projectId, sessionId: req.sessionId });
+  });
 }

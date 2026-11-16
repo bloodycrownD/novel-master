@@ -2,7 +2,8 @@ import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import { decode as decodeRaw } from "@novel-master/core";
+import type { ZodType } from "zod";
 import {
   agentDefinitionSchema,
   createAgentRegistryService,
@@ -16,6 +17,11 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../../helpers/novel-master-fixture.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 
 novelMasterTestFixture();
 

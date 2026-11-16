@@ -111,11 +111,11 @@ function singleTextModel(text: string): ModelRequestService & { callCount: () =>
     callCount: () => calls,
     request: mock.fn(async () => {
       calls += 1;
-      return {
+      return Result.ok({
         assistantText: text,
         blocks: [{ type: "text", text }],
         raw: {},
-      } satisfies LlmChatResult;
+      }) satisfies LlmChatResult;
     }),
   };
 }
@@ -127,7 +127,7 @@ function singleToolUseModel(): ModelRequestService & { callCount: () => number }
     callCount: () => calls,
     request: mock.fn(async () => {
       calls += 1;
-      return {
+      return Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -138,7 +138,7 @@ function singleToolUseModel(): ModelRequestService & { callCount: () => number }
           },
         ],
         raw: {},
-      } satisfies LlmChatResult;
+      } satisfies LlmChatResult);
     }),
   };
 }
@@ -190,12 +190,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -229,12 +229,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -266,12 +266,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -288,11 +288,11 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "partial",
           blocks: [{ type: "text", text: "partial" }],
           raw: { partial: true },
-        };
+        });
       },
     };
     const registry = new ToolRegistry();
@@ -306,12 +306,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -353,12 +353,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -392,12 +392,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = abortBeforeToolRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -413,7 +413,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -424,7 +424,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -451,12 +451,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -474,7 +474,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const controller = new AbortController();
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -485,7 +485,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
@@ -518,12 +518,12 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     const msgs = await session.list();
@@ -537,7 +537,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     const model: ModelRequestService & { callCount: () => number } = {
       callCount: () => 1,
-      request: async () => ({
+      request: async () => (Result.ok({
         assistantText: "",
         blocks: [
           {
@@ -548,7 +548,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
           },
         ],
         raw: {},
-      }),
+      })),
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);

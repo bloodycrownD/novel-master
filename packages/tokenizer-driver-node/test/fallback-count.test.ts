@@ -78,14 +78,14 @@ describe("兜底计数口径", () => {
 
       const layout = { system: CHINESE, persist: [], dynamic: [] };
       const ctx = { workplaceDisplay: "", messages: [] };
-      const result = await countPromptLlmInput({
+      const result = (await countPromptLlmInput({
         layout,
         ctx,
         savedModelId: "openai/my-custom/foo",
         registry: createDefaultTokenCounterRegistry({} as Record<string, never>),
-      });
+      })).value;
       const serialized =
-        (await serializePromptLlmInput(layout, ctx)) +
+        (await serializePromptLlmInput(layout, ctx)).value +
         serializeToolsForTokenCount(undefined);
 
       assert.equal(result.counterKind, "heuristic");

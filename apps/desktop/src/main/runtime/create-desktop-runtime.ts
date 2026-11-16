@@ -57,6 +57,8 @@ import { getPlatformSkspName } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
 import { ensureLlmFetchConfigured } from "./setup-llm-fetch.js";
 import { getDefaultNodeEncoding } from "@novel-master/tokenizer-driver-node";
+import type { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "./types.js";
 
 /**
@@ -93,7 +95,7 @@ function scheduleCl100kEncodingWarmup(): void {
 /**
  * Opens the app DB once and returns service handles aligned with CLI/mobile runtime.
  */
-export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMasterRuntime> {
+export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
   ensureLlmFetchConfigured();
   const conn = await getDesktopConnection();
   const dbPath = resolveDbPath();
@@ -102,7 +104,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
   const unifiedTurnPref = await preferences.getUserVfsUnifiedToolTurn();
-  if (!unifiedTurnPref.ok) throw unifiedTurnPref.error;
+  // 已知失败沿 Result 上行（错误通道迁移七期）：singleton 链按 Result 接力，
+  // 由各 IPC 消费方经 toIpcResult / formatIpcError 收口，不再走 throw。
+  if (!unifiedTurnPref.ok) return Result.err(unifiedTurnPref.error);
   userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
   const smartSortRule = createSmartSortRuleService(conn);
 
@@ -155,7 +159,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   // 避免第一次兜底读数在主进程同步阻塞 ~250ms。
   scheduleCl100kEncodingWarmup();
 
-  return {
+  return Result.ok({
     conn,
     dbPath,
     state,
@@ -200,5 +204,5 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     smartSortRule,
     userVfsTurn,
     searchConfig,
-  };
+  });
 }

@@ -323,8 +323,10 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
       }
       const WP_SENTINEL = "W";
       const sentinelInput = { ...params.ctx, workplaceDisplay: WP_SENTINEL };
-      const sentinelSerialized = (await serializePromptLlmInput(params.layout, sentinelInput)) + serializeToolsForTokenCount(params.tools);
-      const tokenCount = wpEstimate + estimateTokensCjkAware(sentinelSerialized) - estimateTokensCjkAware(WP_SENTINEL);
+      const sentinelSerialized = await serializePromptLlmInput(params.layout, sentinelInput);
+      if (!sentinelSerialized.ok) return { kind: "failed", error: sentinelSerialized.error };
+      const sentinelText = sentinelSerialized.value + serializeToolsForTokenCount(params.tools);
+      const tokenCount = wpEstimate + estimateTokensCjkAware(sentinelText) - estimateTokensCjkAware(WP_SENTINEL);
       rememberChatTokenEstimateMemo(sessionId, memoKey!, {
         tokenCount,
         estimated: true,
@@ -340,7 +342,9 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
         },
       };
     }
-    const serialized = (await serializePromptLlmInput(params.layout, params.ctx)) + serializeToolsForTokenCount(params.tools);
+    const serializedResolved = await serializePromptLlmInput(params.layout, params.ctx);
+    if (!serializedResolved.ok) return { kind: "failed", error: serializedResolved.error };
+    const serialized = serializedResolved.value + serializeToolsForTokenCount(params.tools);
     const cached = await lookupWholeCacheEntry(sessionId, params, serialized, sessionKkv);
     if (cached != null) {
       // 命中即原样返回（与驱动层 L1 命中同语义；条目可能是精确档或
@@ -421,6 +425,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // sessionId 一项，调用方显式传的值本就以本读口实参为准（读口签名必带
   // sessionId，两者冲突时以读口为准才是正确归属）。
   const local = await countPromptLlmInput({ ...params, sessionId });
+  if (!local.ok) return { kind: "failed", error: local.error };
   tokenChunkCache.advanceGeneration(sessionId, {
     persist: { sessionKkv },
     realRefresh: true,
@@ -432,18 +437,18 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // 同样如实入册：同键复用与当场重算同值，不是缓存污染。
   if (preciseMemoKey != null) {
     rememberChatTokenEstimateMemo(sessionId, preciseMemoKey, {
-      tokenCount: local.tokenCount,
-      estimated: local.estimated,
-      counterKind: local.counterKind,
+      tokenCount: local.value.tokenCount,
+      estimated: local.value.estimated,
+      counterKind: local.value.counterKind,
     });
   }
   return {
     kind: "completed",
     value: {
-      tokenCount: local.tokenCount,
+      tokenCount: local.value.tokenCount,
       source: "local",
-      estimated: local.estimated,
-      counterKind: local.counterKind,
+      estimated: local.value.estimated,
+      counterKind: local.value.counterKind,
     },
   };
 }

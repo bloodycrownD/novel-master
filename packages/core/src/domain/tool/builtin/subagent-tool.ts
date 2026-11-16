@@ -150,7 +150,7 @@ function isSessionNotFound(error: unknown): boolean {
  *
  * @returns 校验通过的子会话 id（= 请求的 id 原样）；Err 分两类：infra 故障
  * （非 `NOT_FOUND` 的 `sessions.get` 错误）原样接力，业务失败（不存在 /
- * 非本会话子会话 / 活跃中 / 历史超限）抛 `TOOL_FAILED` 文案。
+ * 非本会话子会话 / 活跃中 / 历史超限）落 `TOOL_FAILED` 文案。
  *
  * 已知失败走返回值通道（四期门⑦）：infra 故障与业务失败分流，前者由
  * `return r` 接力给 tool-runner 的统一收口，不落业务文案。
@@ -161,21 +161,21 @@ async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSu
     if (!isSessionNotFound(sessionResult.error)) {
       return Result.err(sessionResult.error);
     }
-    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`});
+    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`}));
   }
   const session = sessionResult.value;
   // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
   if (session.parentSessionId !== subagent.parentSessionId) {
-    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`});
+    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`}));
   }
   // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
   if (subagent.isSessionRunActive(sessionId)) {
-    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`});
+    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`}));
   }
   // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
   const existing = await subagent.messages.listBySession(sessionId);
   if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
-    throw new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`});
+    return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`}));
   }
   return Result.ok(sessionId);
 }
@@ -235,11 +235,13 @@ ${formatCallableList(callable)}
     }
 
     const defs = await subagent.agentRegistry.list();
+    // 毒行 decode 失败（五期门⑦沿 Result 到达）原样上递给工具边界。
+    if (!defs.ok) return Result.err(defs.error);
     // mode !== "primary" 过滤：主 agent（mode=primary）不能被当子 agent 调，防自递归。
-    const def = defs.find((d) => d.name === input.subagentName && d.mode !== "primary");
+    const def = defs.value.find((d) => d.name === input.subagentName && d.mode !== "primary");
     if (def == null) {
-      const callableNames = defs.filter((d) => d.mode !== "primary").map((d) => d.name);
-      throw new AppError("TOOL_FAILED", {toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`});
+      const callableNames = defs.value.filter((d) => d.mode !== "primary").map((d) => d.name);
+      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`}));
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
@@ -258,7 +260,7 @@ ${formatCallableList(callable)}
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
       const materialized = attachmentScanner.fromPaths(filePaths);
-      if (!materialized.ok) throw new AppError("TOOL_FAILED", {toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}`});
+      if (!materialized.ok) return Result.err(new AppError("TOOL_FAILED", {toolName: "task", detail: `fileAttachment 路径非法：${materialized.error.message}`}));
       attachments = materialized.value;
     }
 

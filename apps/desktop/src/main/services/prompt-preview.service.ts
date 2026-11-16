@@ -50,7 +50,12 @@ async function budgetSkillsIndex(
     return undefined;
   }
   const effective = await runtime.skills().effectiveSkills(projectId);
-  return effective
+  if (!effective.ok) {
+    // 装配失败沿异常通道上抛（原行为）：清单读取失败不静默降级成无索引。
+    const failure = effective.error;
+    throw failure;
+  }
+  return effective.value
     .filter((s) => s.effective)
     .map((s) => ({
       name: s.name,
@@ -63,11 +68,14 @@ export async function buildRealPromptPreviewTurns(
   runtime: DesktopNovelMasterRuntime,
   scope: PromptPreviewScope,
 ): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
-  const { definition } = await resolveAgentForProject(
+  // 错误通道迁移五期：resolveAgentForProject 沿 Result 回传，Err 并进本函数通道。
+  const resolvedAgent = await resolveAgentForProject(
     runtime,
     scope.projectId,
     scope.sessionId,
   );
+  if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
+  const definition = resolvedAgent.value.definition;
   const built = await buildSessionPromptInput(runtime, scope, definition);
   // build 的已知失败沿 Result 原样上行（错误通道迁移四期）。
   if (!built.ok) return Result.err(built.error);
@@ -85,13 +93,16 @@ export async function buildRealPromptPreviewTurns(
   // 已知失败沿 Result 返回（错误通道迁移四期）：唯一调用方 handlePromptRealPreview
   // 转 `ipcErr(formatIpcError(...))`；本函数其余 await 链仍是未知 throw 面。
   if (!sessionConfig.ok) return Result.err(sessionConfig.error);
-  const thinking = await resolvePreviewThinkingContext({
+  // 错误通道迁移五期：resolvePreviewThinkingContext 沿 Result 回传。
+  const thinkingResult = await resolvePreviewThinkingContext({
     preferences: runtime.preferences,
     savedModels: runtime.savedModelRepo,
     providers: runtime.providerRepo,
     agentModelId: definition.model,
     sessionModelId: sessionConfig.value.modelId,
   });
+  if (!thinkingResult.ok) return Result.err(thinkingResult.error);
+  const thinking = thinkingResult.value;
   // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
   // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。
   const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
@@ -104,9 +115,9 @@ export async function buildRealPromptPreviewTurns(
     skillsIndex != null
       ? { ...ctx, skillsIndex, messages: filteredMessages }
       : { ...ctx, messages: filteredMessages };
-  return Result.ok(
-    await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
-      includeThinkingBlocks: thinking.enabled,
-    }),
-  );
+  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
+    includeThinkingBlocks: thinking.enabled,
+  });
+  if (!turns.ok) return Result.err(turns.error);
+  return Result.ok(turns.value);
 }

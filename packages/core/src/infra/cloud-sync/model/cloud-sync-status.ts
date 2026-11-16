@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /** 租约锁 */
 export type CloudSyncLock = {
@@ -55,12 +56,12 @@ export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
 };
 
 /**
- * 解析并校验 status.json 载荷；失败抛出 `CLOUD_SYNC_INVALID_STATUS`。
+ * 解析并校验 status.json 载荷；失败沿 `Result.err` 返回 `CLOUD_SYNC_INVALID_STATUS`。
  */
-export function parseCloudSyncStatus(raw: unknown): CloudSyncStatus {
+export function parseCloudSyncStatus(raw: unknown): Result<CloudSyncStatus, AppError> {
   const result = cloudSyncStatusSchema.safeParse(raw);
   if (!result.success) {
-    throw new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.schema_invalid"}}, {cause: result.error});
+    return Result.err(new AppError("CLOUD_SYNC_INVALID_STATUS", {descriptor: {key: "error.cloud_sync.invalid_status.schema_invalid"}}, {cause: result.error}));
   }
-  return result.data;
+  return Result.ok(result.data);
 }

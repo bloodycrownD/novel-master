@@ -56,14 +56,8 @@ function triggersFromConditions(
       new TokenRatioConditionTrigger(
         {
           tokenRatio: conditions.tokenRatio,
-          resolveContextWindow: async (evaluation) =>
-            deps.providerModels.getContextWindow(
-              evaluation.modelContext.savedModelId
-            ),
-          resolveTokenizerOverride: async (evaluation) =>
-            deps.providerModels.getTokenCounterMode(
-              evaluation.modelContext.savedModelId
-            ),
+          resolveContextWindow: (evaluation) => deps.providerModels.getContextWindow(evaluation.modelContext.savedModelId),
+          resolveTokenizerOverride: (evaluation) => deps.providerModels.getTokenCounterMode(evaluation.modelContext.savedModelId),
         },
         deps.tokenCounters
       )
@@ -92,7 +86,7 @@ export function createCompactionConditionEvaluator(
       if (trigger == null) {
         return Result.ok(false);
       }
-      return Result.ok(await trigger.shouldTrigger(session, evaluation));
+      return trigger.shouldTrigger(session, evaluation);
     },
     async getHideStartDepth() {
       const conditions = await deps.conditionsStore.getConditions();

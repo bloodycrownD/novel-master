@@ -3,7 +3,8 @@ import {describe, expect, it, jest} from '@jest/globals';
 const mockDecode = jest.fn(() => {
   throw new Error('decode failed');
 });
-const mockParseText = jest.fn(() => ({}));
+// 四期签名：parseText 沿 Result 回传——默认实现按 Ok 形态给出。
+const mockParseText = jest.fn(() => ({ok: true as const, value: {}}));
 const mockStringifyText = jest.fn(() => 'yaml');
 const mockValidateAgentDefinition = jest.fn(async () => ({
   ok: true,
@@ -72,9 +73,13 @@ describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
     const runtime = {
       agentRegistry: {
+        // 四期签名：registry.get 沿 Result 回传——fake 与真实 service 同语义。
         get: jest.fn(async () => ({
-          name: 'A',
-          prompts: {persist: [], dynamic: []},
+          ok: true as const,
+          value: {
+            name: 'A',
+            prompts: {persist: [], dynamic: []},
+          },
         })),
       },
     } as any;
@@ -105,9 +110,13 @@ describe('agent-yaml.service', () => {
       {status: 'success', localUri: 'file:///tmp/local-a1.agent.yaml'},
     ]);
     mockReadFile.mockResolvedValueOnce('name: imported');
+    // 四期签名：decode 沿 Result 回传——fake 与真实契约同语义。
     mockDecode.mockImplementationOnce(() => ({
-      name: 'imported',
-      prompts: {persist: [], dynamic: []},
+      ok: true as const,
+      value: {
+        name: 'imported',
+        prompts: {persist: [], dynamic: []},
+      },
     }));
     const runtime = {
       agentRegistry: {
@@ -126,9 +135,11 @@ describe('agent-yaml.service', () => {
   });
 
   it('rejects invalid yaml text', () => {
-    mockParseText.mockImplementationOnce(() => {
-      throw new Error('bad yaml');
-    });
+    // 四期签名：parseText 失败沿 Result.err 回传，decodeAgentYamlText 还原抛错契约。
+    mockParseText.mockImplementationOnce(() => ({
+      ok: false as const,
+      error: new Error('bad yaml'),
+    }));
     expect(() => decodeAgentYamlText('name: [oops')).toThrow();
   });
 

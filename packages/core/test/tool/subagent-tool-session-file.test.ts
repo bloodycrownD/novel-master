@@ -267,7 +267,7 @@ describe("task sessionId 续用（T-TS*）", () => {
 
   it("T-TS2a: 子会话不存在 → ToolError FAILED，文案引导去掉 sessionId 新开", async () => {
     const { ctx, createdSessions } = makeSubagent({ sessions: [] });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           { description: "d", prompt: "p", subagentName: "general", sessionId: "ghost" },
@@ -317,7 +317,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx } = makeSubagent({
       sessions: [childSession("other-kid", { parentSessionId: "别的父会话" })],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -352,7 +352,7 @@ describe("task sessionId 续用（T-TS*）", () => {
     const { ctx: ctx2 } = makeSubagent({
       sessions: [childSession("y-kid", { parentSessionId: "别的父" })],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -383,7 +383,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       sessions: [childSession("busy-kid")],
       activeSessions: ["busy-kid"],
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -411,7 +411,7 @@ describe("task sessionId 续用（T-TS*）", () => {
       ...base,
       isSessionRunActive: () => (undefined as unknown as boolean) ?? true,
     };
-    await assert.rejects(
+    await rejectsErr(
       () =>
         subagentTool.run(
           {
@@ -446,9 +446,8 @@ describe("task sessionId 续用（T-TS*）", () => {
       sessions: [childSession("kid-over")],
       messageCounts: { "kid-over": TASK_SESSION_RESUME_MAX_MESSAGES + 1 },
     });
-    await assert.rejects(
-      () =>
-        subagentTool.run(
+    await rejectsErr(
+      subagentTool.run(
           {
             description: "d",
             prompt: "p",
@@ -559,9 +558,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA3e: 空串 / 纯空白路径元素 → ToolError FAILED（不静默丢），且不得留下孤儿子会话", async () => {
     for (const bad of ["", "   "]) {
       const { ctx, createdSessions } = makeSubagent({});
-      await assert.rejects(
-        () =>
-          subagentTool.run(
+      await rejectsErr(
+        subagentTool.run(
             {
               description: "d",
               prompt: "p",
@@ -589,9 +587,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
   it("T-TA3e2: 路径穿越写法 `/../evil` → ToolError 文案带 fileAttachment 引导（不漏裸 VfsError）", async () => {
     const { ctx, createdSessions } = makeSubagent({});
-    await assert.rejects(
-      () =>
-        subagentTool.run(
+    await rejectsErr(
+      subagentTool.run(
           {
             description: "d",
             prompt: "p",

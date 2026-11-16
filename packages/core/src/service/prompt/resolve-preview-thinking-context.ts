@@ -19,6 +19,8 @@ import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
+import type { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { PersistentPreferences } from "../persistent-preferences/persistent-preferences.port.js";
 
 /** 预览思考上下文解析入参（端口窄切片 + 已解析的模型 id）。 */
@@ -45,20 +47,20 @@ export interface ResolvedPreviewThinkingContext {
   readonly protocol: LlmProtocolKind;
 }
 
-/** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）。 */
+/** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）；偏好/读档失败沿 `Result.err` 回传。 */
 export async function resolvePreviewThinkingContext(
   input: ResolvePreviewThinkingContextInput
-): Promise<ResolvedPreviewThinkingContext> {
+): Promise<Result<ResolvedPreviewThinkingContext, AppError>> {
   const { preferences, savedModels, providers, agentModelId, sessionModelId } =
     input;
   const enabledPref = await preferences.getThinkingContextEnabled();
-  if (!enabledPref.ok) throw enabledPref.error;
+  if (!enabledPref.ok) return Result.err(enabledPref.error);
   const enabled = enabledPref.value;
   const savedModelId = agentModelId ?? sessionModelId;
   let requestThinkingEnabled = true;
   if (savedModelId != null && savedModelId !== "") {
     const saved = await savedModels.findById(savedModelId);
-    if (!saved.ok) throw saved.error;
+    if (!saved.ok) return Result.err(saved.error);
     if (saved.value != null) {
       requestThinkingEnabled =
         saved.value.settings.generation.thinkingLevel !== "off";
@@ -72,5 +74,5 @@ export async function resolvePreviewThinkingContext(
           providers
         )
       : "anthropic";
-  return { enabled, requestThinkingEnabled, protocol };
+  return Result.ok({ enabled, requestThinkingEnabled, protocol });
 }

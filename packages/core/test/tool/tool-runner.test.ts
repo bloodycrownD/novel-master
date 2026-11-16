@@ -1,4 +1,5 @@
 import { isAppError } from "../../src/errors/app-error.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
@@ -9,7 +10,7 @@ describe("ToolRunner", () => {
   it("throws NOT_FOUND for missing tool", async () => {
     const registry = new ToolRegistry();
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("no.such.tool", {}, {}),
       (e) => isAppError(e, "TOOL_NOT_FOUND"),
     );
@@ -27,7 +28,7 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("test.sum", { a: 1 }, {}),
       (e) =>
         isAppError(e) && e.key.startsWith("TOOL_") &&
@@ -48,6 +49,7 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
+    // 工具闭包 throw（未知异常）走 runner 的归一化抛出通道；返回 Err 才走 Result。
     await assert.rejects(
       () => runner.call("test.fail", {}, {}),
       (e) =>
@@ -70,7 +72,7 @@ describe("ToolRunner", () => {
       },
     });
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("test.badOutput", {}, {}),
       (e) => isAppError(e, "TOOL_FAILED"),
     );

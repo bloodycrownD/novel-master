@@ -132,10 +132,11 @@ async function readRemoteRev(
   }
   const {body} = await storage.get(key);
   try {
-    const parsed = JSON.parse(decodeUtf8Bytes(body));
-    return Result.ok(parseCloudSyncStatus(parsed).rev);
+    const parsedStatus = parseCloudSyncStatus(JSON.parse(decodeUtf8Bytes(body)));
+    if (!parsedStatus.ok) return Result.err(parsedStatus.error);
+    return Result.ok(parsedStatus.value.rev);
   } catch (error) {
-    throw new AppError('CLOUD_SYNC_INVALID_STATUS', {detail: '云端状态文件无法解析'}, {cause: error});
+    return Result.err(new AppError('CLOUD_SYNC_INVALID_STATUS', {detail: '云端状态文件无法解析'}, {cause: error}));
   }
 }
 
@@ -237,16 +238,21 @@ async function createCoordinator(
         // 必须 return：不 return 完全合法、零类型错误，但运行时
         // databaseReplaced === undefined ⇒ pullCloudSync 永不重建 runtime ⇒
         // 后续所有记账/读写绑在已关连接上。
-        const outcome = await importDatabaseBackupFromBytes(bytes);
+        const imported = await importDatabaseBackupFromBytes(bytes);
+        // 已知失败沿 Result 回传（DbSyncPort 已转 Result 通道）：coordinator
+        // 据此短路 pull；DatabaseReplacedError 这类抛错路径自然向上传播。
+        if (!imported.ok) return imported;
         progress?.step('db_import_done', {ms: Date.now() - importStart});
-        return outcome;
+        return Result.ok(imported.value);
       },
       importSnapshotFromPath: async path => {
         progress?.step('db_import_start', {fromPath: true});
         const importStart = Date.now();
-        const outcome = await importDatabaseBackupFromPath(path);
+        const imported = await importDatabaseBackupFromPath(path);
+        // 同 importSnapshot：Result 回传失败位。
+        if (!imported.ok) return imported;
         progress?.step('db_import_done', {ms: Date.now() - importStart});
-        return outcome;
+        return Result.ok(imported.value);
       },
     },
   });
@@ -402,9 +408,34 @@ export async function pullCloudSync(
     importTempPath = created.value.importTempPath;
 
     progress.step('coordinator_pull_start', {});
-    const result = await coordinator.pull({
+    const pulled = await coordinator.pull({
       lastSyncedRev: local.value.lastSyncedRev,
     });
+    if (!pulled.ok) {
+      if (isAppError(pulled.error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
+        // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
+        // 本行在失败分支内部，记账一旦抛错会**从分支里再抛**出去 ⇒ 直接跳过
+        // 下面的 `progress?.done`，把「已是最新」这个正常语义换成一个裸错误
+        // 往上冒。该分支确实不换代（runtime 是活的），但「抛错概率低」不等于
+        // 「不抛」——账本写盘撞上库忙/锁冲突一样会失败。
+        // 记账是旁路，让它失败，不要拿它污染主语义。
+        await patchCloudSyncLocalStatus(runtime, {
+          lastPullAt: now,
+          lastPullResult: 'already_up_to_date',
+        }).catch(() => undefined);
+        progress?.done({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
+        return Result.ok({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
+      }
+      // 业务失败（快照缺失 / 校验和不符 / agent 在跑等）都发生在换库之前，
+      // 用 accountingRuntime（此刻仍等于传入 runtime）记账即可。
+      await patchCloudSyncLocalStatus(accountingRuntime, {
+        lastPullAt: now,
+        lastPullResult: 'error',
+      }).catch(() => undefined);
+      progress?.fail(pulled.error);
+      return Result.err(pulled.error);
+    }
+    const result = pulled.value;
     if (result.databaseReplaced) {
       // 先重建，再用新 runtime 记账。
       accountingRuntime = await onRebootstrap();
@@ -425,20 +456,6 @@ export async function pullCloudSync(
     progress.done({rev: result.rev});
     return Result.ok({rev: result.rev, alreadyUpToDate: false});
   } catch (error) {
-    if (isAppError(error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
-      // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
-      // 本行在 catch 块内部，记账一旦抛错会**从 catch 里再抛**出去 ⇒ 直接跳过
-      // 下面的 `progress?.fail` 与 `mapSdkError`，把「已是最新」这个正常语义
-      // 换成一个裸错误往上冒。该分支确实不换代（runtime 是活的），但
-      // 「抛错概率低」不等于「不抛」——账本写盘撞上库忙/锁冲突一样会失败。
-      // 记账是旁路，让它失败，不要拿它污染主语义。
-      await patchCloudSyncLocalStatus(runtime, {
-        lastPullAt: now,
-        lastPullResult: 'already_up_to_date',
-      }).catch(() => undefined);
-      progress?.done({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
-      return Result.ok({rev: local.value.lastSyncedRev, alreadyUpToDate: true});
-    }
     if (error instanceof DatabaseReplacedError) {
       // 库已换代但后续步骤抛错：runtime 换代优先于报错。mobile 的 runtime 是
       // React state、没有 desktop `getDesktopRuntime()` 的懒建自愈 ⇒ 不补这条，
@@ -507,10 +524,21 @@ export async function pushCloudSync(
 
     try {
       progress.step('coordinator_push_start', {});
-      const result = await coordinator.push({
+      const pushed = await coordinator.push({
         lastSyncedRev: local.value.lastSyncedRev,
         forceOverwriteRemote: options?.forceOverwriteRemote,
       });
+      if (!pushed.ok) {
+        // 业务失败（需先拉取 / 锁被他人持有 / 互斥超时等）：与 catch 的未知
+        // 异常通道分开，沿 Result.err 上行，屏幕按 NEED_PULL_FIRST 分流转。
+        await patchCloudSyncLocalStatus(runtime, {
+          lastPushAt: now,
+          lastPushResult: 'error',
+        });
+        progress.fail(pushed.error);
+        return Result.err(pushed.error);
+      }
+      const result = pushed.value;
       await patchCloudSyncLocalStatus(runtime, {
         lastSyncedRev: result.rev,
         lastPushAt: now,

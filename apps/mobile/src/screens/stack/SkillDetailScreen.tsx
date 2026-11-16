@@ -51,7 +51,8 @@ export function SkillDetailScreen() {
       const list = await runtime
         .skills()
         .listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      const found = list.find(entry => entry.name === name) ?? null;
+      if (!list.ok) throw list.error;
+      const found = list.value.find(entry => entry.name === name) ?? null;
       setItem(found);
       if (found == null && !kickedRef.current) {
         kickedRef.current = true;

@@ -178,9 +178,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       // 换算 exit code（错误通道迁移四期）；未知异常仍沿 throw 汇入下方 catch。
       let outcome: Outcome<void> | undefined;
       switch (top) {
-        case "preferences":
-          await runPreferences(rt.preferences, sub, rest);
+        case "preferences": {
+          const r = await runPreferences(rt.preferences, sub, rest);
+          if (!r.ok) return failExit(r.error);
           break;
+        }
         case "project":
           if (sub === "vfs") {
             const { flags } = parseCliArgs(rest);
@@ -223,9 +225,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           if (!r.ok) return failExit(r.error);
           break;
         }
-        case "compaction-conditions":
-          await runCompactionConditions(rt, sub, rest);
+        case "compaction-conditions": {
+          const r = await runCompactionConditions(rt, sub, rest);
+          if (!r.ok) return failExit(r.error);
           break;
+        }
         case "sort-rule": {
           const r = await runSortRule(rt, sub, rest);
           if (!r.ok) return failExit(r.error);

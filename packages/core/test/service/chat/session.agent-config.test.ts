@@ -17,13 +17,16 @@ import {
 novelMasterTestFixture();
 
 function def(name: string) {
-  return decode(
-    {
-      schemaVersion: 1,
-      name,
-      prompts: { persist: {}, dynamic: {} },
-    },
-    agentDefinitionSchema,
+  // 四期签名：decode 失败沿 Result.err 回传——upsert 需要裸定义，这里解包。
+  return unwrap(
+    decode(
+      {
+        schemaVersion: 1,
+        name,
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    ),
   );
 }
 
@@ -214,16 +217,15 @@ describe("SessionService agent config（v2，T-S3）", () => {
     const session = unwrap(await ctx.sessions.create(project.id, "reject-empty"));
 
     // partial overlay 下 agentId 会从 baseline 继承，schema 主要兌锋点变成 modelId。
-    // 空串 modelId 不满足 min(1)，会被 schema 拒绝（校验失败保留 throw 契约）。
-    // 这里按 name 判定（避免 tsx 双实例下 instanceof prototype 不匹配）；一期统一后 AppError 的 name 即 key。
-    await assert.rejects(
-      () =>
-        ctx.sessions.updateSessionAgentConfig(session.id, {
-          modelId: "",
-        }),
-      (error: unknown) =>
-        error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
-    );
+    // 空串 modelId 不满足 min(1)，会被 schema 拒绝。
+    // 四期签名：updateSessionAgentConfig 的校验失败沿 Result.err 回传，不再 throw。
+    const rejectResult = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      modelId: "",
+    });
+    assert.ok(!rejectResult.ok);
+    if (!rejectResult.ok) {
+      assert.equal(rejectResult.error.name, "CONFIG_DECODE_INVALID_SCHEMA");
+    }
   });
 
   it("getSessionAgentConfig 列 NULL 视为异常抛错", async () => {

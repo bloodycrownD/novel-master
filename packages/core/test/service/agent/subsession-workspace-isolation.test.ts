@@ -27,6 +27,7 @@
  */
 
 import { Result } from "../../../src/errors/either.js";
+import type { AppError } from "../../../src/errors/app-error.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -135,7 +136,7 @@ interface ScriptedModelOptions {
 function scriptedModel(opts: ScriptedModelOptions): ModelRequestService {
   let calls = 0;
   return {
-    request: async (_savedModelId: string, _userContent: string, _options?: ModelRequestOptions): Promise<LlmChatResult> => {
+    request: async (_savedModelId: string, _userContent: string, _options?: ModelRequestOptions): Promise<Result<LlmChatResult, AppError>> => {
       const idx = calls;
       calls += 1;
       opts.onCall?.[idx]?.();
@@ -143,7 +144,7 @@ function scriptedModel(opts: ScriptedModelOptions): ModelRequestService {
       if (r == null) {
         throw new Error(`scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${opts.responses.length}）`);
       }
-      return r;
+      return Result.ok(r);
     },
   };
 }

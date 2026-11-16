@@ -97,7 +97,9 @@ describe("handleCompactionManual", () => {
   });
 
   it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const pendingJson = JSON.stringify([
       {
         actionXml: '<action name="mkdir"><path>/keep</path></action>',
@@ -196,7 +198,9 @@ describe("handleCompactionManual", () => {
    * 防「空对空恒真」。
    */
   it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
     const session = await handleSessionsCreate({
@@ -329,7 +333,9 @@ describe("handleCompactionManual", () => {
    * 后台暖机推送精确档——这正是「交给常规刷新自然跟进」的形态。
    */
   it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
     // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
@@ -347,7 +353,9 @@ describe("handleCompactionManual", () => {
       provider.data.providerId,
       "gpt-4o",
     );
-    await rt.state.setCurrentModelId(saved.id);
+    // 四期签名：save 沿 Result 回传，解包取实体。
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
 
     const project = await handleProjectsCreate({
       name: "compaction-nowarm-ipc",

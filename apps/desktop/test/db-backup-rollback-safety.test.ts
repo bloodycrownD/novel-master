@@ -59,7 +59,9 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   });
 
   it("备份拷贝失败时抛错且不覆盖活动库文件", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-src.db");
     await exportDatabaseBackupToPath(runtime, src);
     // 造一行「只在本机存在」的内容：覆盖一旦发生就能看出来。
@@ -100,7 +102,9 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   });
 
   it("回滚拷贝失败时错误信息含备份路径且副本保留在磁盘", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-src2.db");
     await exportDatabaseBackupToPath(runtime, src);
     await rm(bakPath, { recursive: true, force: true });
@@ -143,11 +147,16 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   });
 
   it("正常导入成功后回滚副本被清理且回报 databaseReplaced", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-ok.db");
     await exportDatabaseBackupToPath(runtime, src);
 
-    const outcome = await importDatabaseBackupFromPath(src);
+    // 四期签名：importDatabaseBackupFromPath 沿 Result 回传，解包取回执。
+    const imported = await importDatabaseBackupFromPath(src);
+    if (!imported.ok) throw imported.error;
+    const outcome = imported.value;
     assert.equal(outcome.databaseReplaced, true);
     assert.equal(outcome.providerTablesRestored, true);
     assert.equal(existsSync(bakPath), false, "回滚成功时 bak 冗余，必须清理");
@@ -155,7 +164,9 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
   });
 
   it("覆盖已成功但收尾失败时抛 DatabaseReplacedError 且不回滚", async () => {
-    const runtime = await getDesktopRuntime();
+    const runtimeR = await getDesktopRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const src = join(tempDir, "rollback-provider-fail.db");
     await exportDatabaseBackupToPath(runtime, src);
     await rm(bakPath, { recursive: true, force: true });
@@ -242,11 +253,13 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       }) as unknown as typeof openFileHandle,
     });
     try {
-      // 魔数不匹配 ⇒ 校验步抛错，导入不会开始（不破坏后续用例的库文件）。
-      await assert.rejects(
-        () => importDatabaseBackupFromPath(notSqlite),
-        /不是有效的 SQLite 数据库备份/,
-      );
+      // 魔数不匹配 ⇒ 校验步失败（四期签名沿 Result.err 回传，不再 throw），
+      // 导入不会开始（不破坏后续用例的库文件）。
+      const rejected = await importDatabaseBackupFromPath(notSqlite);
+      assert.ok(!rejected.ok, "非 SQLite 备份必须被拒");
+      if (!rejected.ok) {
+        assert.match(rejected.error.message, /不是有效的 SQLite 数据库备份/);
+      }
     } finally {
       __setDbBackupFsOpsForTest(null);
     }

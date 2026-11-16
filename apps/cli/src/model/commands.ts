@@ -61,17 +61,19 @@ export async function runModel(
       const saved = await rt.savedModels.findById(modelId);
       if (!saved.ok) return Result.err(saved.error);
       if (saved.value == null) {
-        throw new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Saved model not found: ${modelId}`, modelId });
+        return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Saved model not found: ${modelId}`, modelId }));
       }
       const provider = await rt.providers.get(saved.value.providerId);
-      console.log(savedModelDisplayName(saved.value, provider.displayName));
+      if (!provider.ok) return Result.err(provider.error);
+      console.log(savedModelDisplayName(saved.value, provider.value.displayName));
       return RESULT_OK;
     }
     case "list": {
       const providers = await rt.providers.list();
       for (const provider of providers) {
         const list = await rt.providerModels.savedList(provider.id);
-        for (const m of list) {
+        if (!list.ok) return Result.err(list.error);
+        for (const m of list.value) {
           console.log(
             `${m.id}\t${savedModelDisplayName(m, provider.displayName)}\t${m.vendorModelId}`,
           );
@@ -95,9 +97,11 @@ export async function runModel(
         await rt.messages.append(sessionId, "user", textBlocks(content));
         const all = await rt.messages.listBySession(sessionId);
         const history = all.filter((m) => !m.hidden);
-        const result = await rt.modelRequests.request(modelId, content, {
+        const requested = await rt.modelRequests.request(modelId, content, {
           history,
         });
+        if (!requested.ok) return Result.err(requested.error);
+        const result = requested.value;
         await rt.messages.append(
           sessionId,
           "assistant",
@@ -112,7 +116,9 @@ export async function runModel(
         return RESULT_OK;
       }
 
-      const result = await rt.modelRequests.request(modelId, content);
+      const requested = await rt.modelRequests.request(modelId, content);
+      if (!requested.ok) return Result.err(requested.error);
+      const result = requested.value;
       if (flags.get("raw") === true) {
         console.log(JSON.stringify(result.raw));
       } else {

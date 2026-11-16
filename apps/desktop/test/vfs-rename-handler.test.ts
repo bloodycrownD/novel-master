@@ -132,7 +132,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(subRule.data.sortField, DISTINCT_RULE.sortField);
 
     // VFS 侧条目确实换到了新路径
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const listed = await rt.projectVfs(projectId).list("/");
     if (!listed.ok) throw listed.error;
     const entries = listed.value;
@@ -183,7 +185,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
     assert.equal(newRule.data.sortOrder, DISTINCT_RULE.sortOrder);
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const listed = await rt.sessionVfs(projectId, sessionId).list("/");
     if (!listed.ok) throw listed.error;
     const entries = listed.value;
@@ -228,7 +232,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
     assert.equal(newRule.data.sortOrder, DISTINCT_RULE.sortOrder);
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const listed = await rt.sessionVfs(projectId, sessionId).list("/");
     if (!listed.ok) throw listed.error;
     assert.ok(listed.value.some((e) => e.path === "/改名空会话目录"));
@@ -264,7 +270,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     assert.ok(newRule.ok && newRule.data != null);
     assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
 
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const listed = await rt.projectVfs(projectId).list("/");
     if (!listed.ok) throw listed.error;
     assert.ok(listed.value.some((e) => e.path === "/改名空项目目录"));

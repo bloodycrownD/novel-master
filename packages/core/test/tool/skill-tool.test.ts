@@ -1,4 +1,5 @@
 import { Result } from "../../src/errors/either.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -70,33 +71,35 @@ function fakeSkillService(overrides?: {
     ) as SkillService["editSkillFile"],
     effectiveSkills: record(
       "effectiveSkills",
-      overrides?.effective ??
-        (async () =>
-          [
-            {
-              name: "demo",
-              description: "演示技能",
-              domain: "project",
-              overridden: false,
-              disabled: false,
-              valid: true,
-              effective: true,
-            },
-            {
-              name: "global-only",
-              description: null,
-              domain: "global",
-              overridden: false,
-              disabled: true,
-              valid: true,
-              effective: false,
-            },
-          ] satisfies EffectiveSkill[]),
-    ) as SkillService["effectiveSkills"],
+      // 错误通道迁移四期：effectiveSkills 走 Result 通道——裸数组统一包 Ok。
+      (async (...args: Parameters<SkillService["effectiveSkills"]>) =>
+        okv(await (overrides?.effective ?? (async () => [
+          {
+            name: "demo",
+            description: "演示技能",
+            domain: "project",
+            overridden: false,
+            disabled: false,
+            valid: true,
+            effective: true,
+          },
+          {
+            name: "global-only",
+            description: null,
+            domain: "global",
+            overridden: false,
+            disabled: true,
+            valid: true,
+            effective: false,
+          },
+        ] satisfies EffectiveSkill[]))(...args))) as SkillService["effectiveSkills"],
+    ),
     listSkills: record(
       "listSkills",
-      overrides?.list ?? (async () => []),
-    ) as SkillService["listSkills"],
+      // 错误通道迁移四期：listSkills 走 Result 通道。
+      (async (...args: Parameters<SkillService["listSkills"]>) =>
+        okv(await (overrides?.list ?? (async () => []))(...args as never))) as SkillService["listSkills"],
+    ),
     setDisabled: record("setDisabled", async () => undefined),
     deleteSkill: record("deleteSkill", async () => undefined),
   } as unknown as SkillService & {
@@ -154,11 +157,11 @@ describe("skill 工具", () => {
         },
       ],
     });
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "load", name: "demo" },
       skillToolCtx(svc),
-    );
+    ));
     const parsed = out as {
       action: string;
       domain: string;
@@ -190,11 +193,11 @@ describe("skill 工具", () => {
       }),
     });
     const referenced = new Set(["demo"]);
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "load", name: "demo" },
       skillToolCtx(svc, [], referenced),
-    );
+    ));
     const parsed = out as {
       content: string;
       files: string[];
@@ -211,7 +214,7 @@ describe("skill 工具", () => {
 
   it("load：name 缺失报 INVALID_ARGUMENT", async () => {
     const { runner } = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -224,11 +227,11 @@ describe("skill 工具", () => {
 
   it("read：缺省域透传 undefined 由服务层解析生效副本，输出携带实际命中域", async () => {
     const { runner } = makeRunner();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "read", name: "demo" },
       skillToolCtx(fakeSkillService()),
-    );
+    ));
     assert.deepEqual(
       (out as { domain: string }).domain,
       "project",
@@ -253,11 +256,11 @@ describe("skill 工具", () => {
         };
       },
     });
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "read", name: "shared-name" },
       skillToolCtx(svc),
-    );
+    ));
     const parsed = out as {
       domain: string;
       content: string;
@@ -270,7 +273,7 @@ describe("skill 工具", () => {
 
   it("read：分页 offset 超出文件长度报 INVALID_ARGUMENT", async () => {
     const { runner } = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -284,11 +287,11 @@ describe("skill 工具", () => {
   it("write：domain 缺省补 project，content 缺失报 INVALID_ARGUMENT", async () => {
     const { runner } = makeRunner();
     const svc = fakeSkillService();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "write", name: "demo", content: "新内容" },
       skillToolCtx(svc),
-    );
+    ));
     const writeCall = svc.calls.find((c) => c.method === "writeSkillFile");
     assert.ok(writeCall != null);
     assert.equal(writeCall.args[0], "project", "write 缺省域应为 project");
@@ -298,7 +301,7 @@ describe("skill 工具", () => {
     assert.equal(writeCall.args[4], "proj-1");
     assert.equal((out as { path: string }).path, "SKILL.md");
 
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -315,7 +318,7 @@ describe("skill 工具", () => {
     const svc = fakeSkillService({
       edit: async () => ({ version: 7, replacements: 2 }),
     });
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       {
         action: "edit",
@@ -326,7 +329,7 @@ describe("skill 工具", () => {
         replaceAll: true,
       },
       skillToolCtx(svc),
-    );
+    ));
     const editCall = svc.calls.find((c) => c.method === "editSkillFile");
     assert.ok(editCall != null);
     assert.equal(editCall.args[0], "global");
@@ -341,7 +344,7 @@ describe("skill 工具", () => {
   it("edit：缺 domain 被 schema 拦截（不再静默缺省 project）", async () => {
     const { runner } = makeRunner();
     const svc = fakeSkillService();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -379,7 +382,7 @@ describe("skill 工具", () => {
     ];
     for (const c of cases) {
       const svc = fakeSkillService();
-      await assert.rejects(
+      await rejectsErr(
         () => runner.call(SKILL_TOOL_NAME, c.input, skillToolCtx(svc)),
         (e: unknown) =>
           isAppError(e) && e.key.startsWith("TOOL_") &&
@@ -394,7 +397,7 @@ describe("skill 工具", () => {
   it("path 含 .. 段被 schema 拒绝（INVALID_ARGUMENT，不触达服务层）", async () => {
     const { runner } = makeRunner();
     const svc = fakeSkillService();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -416,11 +419,11 @@ describe("skill 工具", () => {
   it("list：缺省域走 effectiveSkills 合并视图，条目含禁用/覆盖标记", async () => {
     const { runner } = makeRunner();
     const svc = fakeSkillService();
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "list" },
       skillToolCtx(svc),
-    );
+    ));
     assert.equal((out as { total: number }).total, 2);
     const entries = (out as { entries: { name: string; disabled?: boolean }[] })
       .entries;
@@ -434,11 +437,11 @@ describe("skill 工具", () => {
   it("list：显式 global 域走 listSkills('global')", async () => {
     const { runner } = makeRunner();
     const svc = fakeSkillService();
-    await runner.call(
+    unwrap(await runner.call(
       SKILL_TOOL_NAME,
       { action: "list", domain: "global" },
       skillToolCtx(svc),
-    );
+    ));
     const listCall = svc.calls.find((c) => c.method === "listSkills");
     assert.ok(listCall != null);
     assert.equal(listCall.args[0], "global");

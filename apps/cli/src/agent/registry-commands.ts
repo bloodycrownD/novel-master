@@ -84,13 +84,14 @@ export async function runAgentRegistryCommand(
     }
     case "list": {
       const defs = await registry.list();
-      if (defs.length === 0) {
+      if (!defs.ok) return Result.err(defs.error);
+      if (defs.value.length === 0) {
         console.log(
           "No agents in registry. Run: nm agent create --name <name>",
         );
         return RESULT_OK;
       }
-      for (const def of defs) {
+      for (const def of defs.value) {
         console.log(def.name);
       }
       return RESULT_OK;
@@ -101,7 +102,10 @@ export async function runAgentRegistryCommand(
         throw new Error("Usage: nm agent show <agent-id>");
       }
       const def = await registry.get(agentId);
-      console.log(JSON.stringify(encode(def, agentDefinitionSchema), null, 2));
+      if (!def.ok) return Result.err(def.error);
+      const wire = encode(def.value, agentDefinitionSchema);
+      if (!wire.ok) return Result.err(wire.error);
+      console.log(JSON.stringify(wire.value, null, 2));
       return RESULT_OK;
     }
     case "delete": {
@@ -109,7 +113,8 @@ export async function runAgentRegistryCommand(
       if (agentId == null || agentId === "") {
         throw new Error("Usage: nm agent delete <agent-id>");
       }
-      await registry.delete(agentId);
+      const deleted = await registry.delete(agentId);
+      if (!deleted.ok) return Result.err(deleted.error);
       console.log(`Deleted agent: ${agentId}`);
       return RESULT_OK;
     }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
@@ -49,7 +50,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
       },
     ];
 
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await buildPromptLlmInputFromLayout(
       {
         persistEnabled: true,
         persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],
@@ -59,7 +60,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
         workplaceDisplay: "",
         messages,
       },
-    );
+    ));
     const normalized = normalizeOrphanToolResultsForLlm(input.messages);
     assert.equal(normalized.length, 3);
     assert.equal(normalized[0]!.id, "prompt:ctx");

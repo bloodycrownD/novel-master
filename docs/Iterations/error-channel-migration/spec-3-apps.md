@@ -125,6 +125,44 @@ export type IpcResult<T> = { readonly ok: true; readonly data: T } | { readonly 
 
 **注意双导出位**：`AppError` / `isAppError` 在 `public/agent.ts:15` 与 `public/vfs.ts:13` 各一处；撤并时两个位置同步（`kkvNotFound` 的两个位置一期已删，不再涉及）。
 
+**逐符号清单（2026-11-16 四期收口复核，T-A8 的 8/3/30 逐个落名）**：基准 = spec 写作时点（基线 `f6624b9b4`）public 面的 errors 通道符号（机械提取：`public/*.ts` + `index.ts` 的 export 语句，扣除 §2.2/§3.6 单独裁决的 8 个类——`AgentTurnError`、`SqlTemplateError`、`TdbcError`、`ProviderTableSnapshotError`、`LlmStreamTimeoutError`、`AgentRunResolveError`、两个哨兵类），计 41 个，与 T-A8 的 8 + 3 + 30 对齐。每格都给了当前树（HEAD `e408fe00f` + 在途改动）的证据；「落点」列标注实际执行期。
+
+**保留 8（7 runtime + 1 type）——现状仍在导出、apps 有生产消费**：
+
+| 符号 | 现导出位 | apps 生产消费证据 | 落点 |
+|---|---|---|---|
+| `AppError` | `public/errors.ts:16`、`public/agent.ts:15`、`public/vfs.ts:12` | 99 个文件（构造 / catch / format 链） | 三期进 `errors.ts`，双导出位保留 |
+| `isAppError` | 同上三处 | 20 个文件（`cli-errors.ts`、双端 format 链、`handlers/physical.ts`） | 同上 |
+| `isVfsError` | `public/vfs.ts:1` | **现状 apps 零生产消费**——消费已随 domainOf 化（Step 8 ⑧）收敛到 core 内部（`format-tool-output.ts:324`、`message-rollback.service.ts:234`），保留依据已衰减，是否比照 `isSessionFsError` 撤出，留待下期复核 | 三期收成 `errors/guards.ts:51` `inDomain` 的一行组合 |
+| `isRollbackVfsDegradableError` | `public/session-fs.ts:10-14`（实现在 `errors/guards.ts:94`） | mobile `useChatTabMessageActions.ts` | 三期 |
+| `isRollbackRevisionBackfillRequiredError` | 同上（`guards.ts:75`） | 同上 | 三期 |
+| `readRollbackRevisionBackfillMissingPaths` | 同上（`guards.ts:80`） | 同上 | 三期 |
+| `vfsUserMessage` | `public/vfs.ts:93` | desktop `shared/logic/vfs.ts` + mobile `format-error.ts` | 一期改 key、形态保留 |
+| `ErrorKey`（type，即「1 type」） | `public/agent.ts:18`、`public/errors.ts:22` | desktop `shared/ipc-types.ts`（`code: ErrorKey`）+ `format-ipc-error.ts` + `resolve-vfs-scope.ts` | 三期随 `errors.ts` 落位 |
+
+**仅测试 3——按基线时点的消费面判定，执行后测试改走 src 路径**：
+
+| 符号 | 基线时点证据（`f6624b9b4`） | 现状 |
+|---|---|---|
+| `isSessionFsError` | core 测试 6 处 import、apps 生产零 import（CR 第 3 轮纠正「apps 已实证」假断言） | 导出已撤；core 内部照用（`errors/session-fs-errors.ts` 定义、`message-rollback.service.ts` 消费），测试走 src 路径（`public/session-fs.ts:7-9` 注释即执行记录） |
+| `ConfigDecodeError` | core 测试 5 处 import、apps 生产零 import | 类随一期退役（2 码迁 `CONFIG_DECODE_*`），测试只剩标题字符串引用 |
+| `CurlParseError` | 仅 `test/tool/curl-import.test.ts:4` 经 src 路径 import | **撤导出未落地**：`index.ts:166` 仍在导出——T-A8 的「不再导出」对它未完成，待办 |
+
+**零消费者 30——当前树已验证零代码引用（apps/core 的命中只剩注释与测试标题字符串）**：
+
+| 组 | 符号 |
+|---|---|
+| 类（9） | `CloudSyncError`、`isCloudSyncError`、`PromptError`、`ProviderError`、`SessionFsError`、`VfsError`、`VfsZipError`、`ToolError`、`AttachmentPathArgumentError` |
+| 工厂 / 守卫（4） | `kkvNotFound`、`preferencesInvalidValue`、`compactionConditionsInvalidSchema`、`formatRollbackRevisionBackfillAlertMessage` |
+| sessionFs（7） | `sessionFsRollbackConflict` / `sessionFsRollbackMessageNotFound` / `sessionFsRollbackMessageSessionMismatch` / `sessionFsRollbackNoCheckpoint` / `sessionFsRollbackRevisionBackfillRequired` / `sessionFsRollbackUndoSendEmptyTarget` / `sessionFsRollbackVfsRestoreFailed` |
+| skill（10） | `skillAlreadyExists`、`skillBuiltin`、`skillBuiltinNameReserved`、`skillBuiltinRename`、`skillInvalidName`、`skillInvalidPath`、`skillMissingDomain`、`skillMissingProjectId`、`skillNotFound`、`skillNotFoundInDomain` |
+
+表注（复核时发现的与 T-A8 有出入的三处）：
+
+- `isRollbackConflictError`：与 `isSessionFsError` 同款「公开面撤、内部照用」——撤导出后在 `message-rollback.service.ts:117` 内联为私有函数，故不计入零消费者 30。
+- `ErrorCodes` / `ErrorNumber`：规则表第三行判「保留」，现状在 `public/errors.ts:22` 导出，但 apps 全树零 import——按 T-A8 的 8 符号口径属零消费者，与规则表冲突，留待复核。
+- 执行落点与本文预设不同：30 个零消费者里的大多数（7 类 + 全部工厂）**一期 Steps 5-8 就撤出了 public 面**，三期 Step 6 实际裁决的是残余（`CloudSyncError` / `isCloudSyncError` / `isSessionFsError`、码表三符号的再导出位迁移到 `errors.ts`）；「一期已删除的符号不在本期裁决范围」的注记正是为此写的。
+
 **锁测试的真实位置**（不是 `package-exports-t0.test.ts` 或 `duplicate-export-consistency.test.ts`）：
 
 - `packages/core/test/package-exports/public-subpath-allowlist.test.ts:5-21`——`SUBPATHS` 数组（现 15 项）需加 `"errors"`；
@@ -139,10 +177,21 @@ export type IpcResult<T> = { readonly ok: true; readonly data: T } | { readonly 
 ```ts
 // packages/core/src/public/errors.ts（新）
 export { Result, Ok, Err, type ResultWire } from "../errors/either.js";
-export { type Outcome, type Interrupt, mapOutcome, andThenOutcome, matchOutcome, interruptOf } from "../errors/outcome.js";
+export { type AbortReason, type Interrupt, type Outcome, mapOutcome, andThenOutcome, matchOutcome, interruptOf } from "../errors/outcome.js";
 export { AppError, isAppError, type AppErrorWire } from "../errors/app-error.js";
-export { type ErrorKey, type ErrorNumber, ErrorCodes } from "../errors/error-codes.js";   // 注意：两个类型定义在 error-codes.ts，不在 app-error.ts
+// domainOf 是域判定唯一入口（§3.7）；DOMAIN_RANGES 段表留在 errors/domain.ts 供 core 内部与 test 引用，不进 public 面。
+export { domainOf } from "../errors/guards.js";
+export type { ErrorDomain } from "../errors/domain.js";
+export { ErrorCodes, type ErrorKey, type ErrorNumber } from "../errors/error-codes.js";   // 注意：两个类型定义在 error-codes.ts，不在 app-error.ts
 ```
+
+**外延修订（2026-11-16 按实际落地回写）**：实际 `public/errors.ts` 比本节初稿多出三个符号，均已验证在导出面——
+
+- `AbortReason`（type，`errors/outcome.ts`）：`Interrupt` 的原因类型，`Outcome.cancelled/replaced` 携带的中断语义，随 outcome 一起出（spec-2 §最终项目结构里「`common/abort-reason.ts` 若一期未并入 outcome.ts」的悬念就此落定——已并入）；
+- `domainOf`（`errors/guards.ts`，实现见 §3.7 的「域判定收成一处」）：apps 判域唯一入口，apps 的 `key.startsWith` 判域已在 Step 8 门⑧ 清零；
+- `ErrorDomain`（type，`errors/domain.ts`）：域名联合的纯类型，供 apps 对 `domainOf` 的返回值做 switch 穷尽；`DOMAIN_RANGES` 段表本身留在 core 内部不导出。
+
+运行时值导出共 11 个（`Result`、`Ok`、`Err`、`mapOutcome`、`andThenOutcome`、`matchOutcome`、`interruptOf`、`AppError`、`isAppError`、`domainOf`、`ErrorCodes`），由新增快照 `public-errors-allowlist.json` 锁定；其余 8 个是纯类型导出（`ResultWire`、`AbortReason`、`Interrupt`、`Outcome`、`AppErrorWire`、`ErrorDomain`、`ErrorKey`、`ErrorNumber`），不进运行时快照。
 
 `package.json` 新增 `"./errors"` 子路径；`public-subpath-allowlist.test.ts` 的 `SUBPATHS` 与快照同步。
 
@@ -219,7 +268,7 @@ apps/cli/src/cli-errors.ts                      # 两链合一 + EXIT_CANCELLED
 - Step 5 — phase-cli — blocking: yes — qa: auto：`cli-errors` 两链合一 + `EXIT_CANCELLED`；`main.ts` cancelled 管线；134 处 throw 处置；T-A7。
 - Step 6 — phase-public-exports — blocking: yes — qa: auto：新增 `public/errors.ts`；errors 相关导出面按 3.3 规则逐符号裁决（以 Step 开工时的 grep 实际输出为清单，结果写进提交说明）；`package.json` 加子路径；删 `legacy-vfs-error.ts`；`public-subpath-allowlist.test.ts` + 16 个快照更新 + 新建 `errors` 快照；T-A8。
 - Step 7 — phase-mirror-diff — blocking: yes — qa: auto：17 对镜像 service 逐字 diff；已知差异（desktop `createLogger` / mobile `__DEV__`、`skipComposerStatusRefresh`、`PromptCountCancelledError`）列入白名单；T-A9。
-- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + 三端测试 + `check-style` 三段 + **三期 grep 门**：① 全仓 `throw new AppError` 命中 ⊆ 二期白名单（spec-2 §2.3 的 16 处 + 26 处事务回调）∪ **apps 边界白名单**（Step 1 开工前先 `grep -rn "throw new AppError" apps/` 生成文件清单，作为本次提交的附件冻存，后续期次不变）；② `packages/{core,apps}/src` 内 `instanceof (Vfs|Tool|Provider|SessionFs|VfsZip|Prompt|ConfigDecode)Error` 为空（一期已清 core 7 处与 apps 全量，本期只需确认无回潮）；③ `grep -rn "isVfsError([^)]*, *\"" packages/core/src/errors packages/core/src/domain packages/core/src/service apps/*/src` **带字符串短码实参**的调用为零（双形态守卫本身保留，不算命中——门只抓 `isVfsError(x, "NOT_FOUND")` 这种旧短码实参）。**已知不达标点**：`apps/desktop/src/main/ipc/handlers/physical.ts:87` 就是 `isVfsError(err, "NOT_FOUND")`，一期只认领 core 内部，**本期的 Step 2 必须顺手改成 `isAppError(err, "VFS_NOT_FOUND")`**，否则门永红；④ `grep -rn "IpcErrorPayload" apps/desktop | grep "code:"` 抽查取值全为 ErrorKey。⑥ `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（§3.7 的第二套码清零）。
+- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + 三端测试 + `check-style` 三段 + **三期 grep 门**：① 全仓 `throw new AppError` 命中 ⊆ 二期白名单（口径按 spec-2 §2.3.1 四期复核修订：不变量 8 处按站点清单、平台 44 处按机制类别 + 文件清单、业务 53 处为迁移债台账只减不增；四期门①实测 171 处、生产码 105 处的分布与三分法见该节）∪ **apps 边界白名单**（Step 1 开工前先 `grep -rn "throw new AppError" apps/` 生成文件清单，作为本次提交的附件冻存，后续期次不变）；② `packages/{core,apps}/src` 内 `instanceof (Vfs|Tool|Provider|SessionFs|VfsZip|Prompt|ConfigDecode)Error` 为空（一期已清 core 7 处与 apps 全量，本期只需确认无回潮）；③ `grep -rn "isVfsError([^)]*, *\"" packages/core/src/errors packages/core/src/domain packages/core/src/service apps/*/src` **带字符串短码实参**的调用为零（双形态守卫本身保留，不算命中——门只抓 `isVfsError(x, "NOT_FOUND")` 这种旧短码实参）。**已知不达标点**：`apps/desktop/src/main/ipc/handlers/physical.ts:87` 就是 `isVfsError(err, "NOT_FOUND")`，一期只认领 core 内部，**本期的 Step 2 必须顺手改成 `isAppError(err, "VFS_NOT_FOUND")`**，否则门永红；④ `grep -rn "IpcErrorPayload" apps/desktop | grep "code:"` 抽查取值全为 ErrorKey。⑥ `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（§3.7 的第二套码清零）。
 ⑤ 全仓 `grep -rnE "class +[A-Za-z0-9_]+.*extends +Error" packages/*/src apps/*/src`（排除 `class AppError`）的输出，必须与 §3.6 的保留白名单**逐字一致**——多一个少一个都算门红，新增类必须先在 §3.6 登记。
 ⑥ `grep -rn "SessionFsErrorCode\|VfsErrorCode\|VfsErrorKey\|LegacyVfsError" packages/*/src apps/*/src` 应为空（§3.7 的第二套码清零）。
 ⑦ `node scripts/check-unwrap-throw.mjs` 必须 exit 0（解包 throw 全落在「同函数有 catch」的边界位置或白名单内，判据见该脚本头部注释）。

@@ -36,8 +36,9 @@ describe("serializePromptLlmInput", () => {
         messages,
       },
     );
-    assert.match(out, /system: You are helpful\./);
-    assert.match(out, /user: hi/);
-    assert.match(out, /assistant: hello/);
+    assert.ok(out.ok, JSON.stringify(out));
+    assert.match(out.value, /system: You are helpful\./);
+    assert.match(out.value, /user: hi/);
+    assert.match(out.value, /assistant: hello/);
   });
 });

@@ -31,7 +31,9 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
   });
 
   it("currentModelId 指向被删服务商的模型时，删除后必须清空", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
 
     const created = await rt.providers.create({
       protocol: "openai",
@@ -40,7 +42,10 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
       apiKey: "sk-cr-f04",
     });
     if (!created.ok) throw created.error;
-    const saved = await rt.providerModels.create(created.value.id, "cr-f04-model");
+    // 四期签名：providerModels.create 沿 Result 回传，解包取实体。
+    const savedCreated = await rt.providerModels.create(created.value.id, "cr-f04-model");
+    if (!savedCreated.ok) throw savedCreated.error;
+    const saved = savedCreated.value;
 
     await rt.state.setCurrentProviderId(created.value.id);
     await rt.state.setCurrentModelId(saved.id);
@@ -68,8 +73,11 @@ describe("providers.delete 级联清理 currentModelId（CR-F04）", () => {
 
     // 半套防护：模型行本身确实已被级联抹掉（证明用例不是空跑）。
     // ⚠️ 不能用 savedList 验：provider 已被删，savedList 开头 providers.get 会抛 NOT_FOUND。
+    // 四期签名：getSavedById 沿 Result 回传（Ok(null) = 行不存在）。
+    const ghost = await rt.providerModels.getSavedById(saved.id);
+    if (!ghost.ok) throw ghost.error;
     assert.equal(
-      await rt.providerModels.getSavedById(saved.id),
+      ghost.value,
       null,
       "被删服务商的模型行应已级联抹掉",
     );

@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
@@ -61,24 +62,21 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
 }
 
 /**
- * 事务回调内解包（总纲 §五例外 2）：本函数只在 `import` 段 B0 的
- * `conn.transaction` 回调内调用，parentCheck / repo 写入失败靠抛错回滚。
+ * 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：本函数只在 `import` 段 B0 的
+ * `conn.transaction` 回调内调用，失败靠抛错回滚。
  */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
     return;
   }
-  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
-  if (!parentCheck.ok) throw parentCheck.error;
-  const existing = await repo.findByPath(sk, logical);
-  if (!existing.ok) throw existing.error;
-  if (existing.value == null) {
-    const inserted = await repo.insertDirectory(sk, logical);
-    if (!inserted.ok) throw inserted.error;
+  unwrapOrRollback(await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`));
+  const existing = unwrapOrRollback(await repo.findByPath(sk, logical));
+  if (existing == null) {
+    unwrapOrRollback(await repo.insertDirectory(sk, logical));
     return;
   }
-  if (existing.value.entryKind !== "directory") {
+  if (existing.entryKind !== "directory") {
     throw new AppError("VFS_NOT_A_DIRECTORY", {path: logical, detail: `Not a directory: ${logical}`});
   }
 }
@@ -181,8 +179,11 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   }
 
   async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<Result<void, AppError>> {
+    // 五期业务抛点收编：confirmed 门闸在首个写之前、零副作用，走返回值通道
+    //（本方法自四期起已是 Result 签名，段 B0 之前的路径全部 Result.err）。
+    // 导入事务链（段 B0 起）仍按边界抛出，由 wrapImportError 收口。
     if (options.confirmed !== true) {
-      throw new AppError("VFS_ZIP_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"});
+      return Result.err(new AppError("VFS_ZIP_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"}));
     }
 
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
@@ -254,9 +255,8 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
               throw new Error("test import failure");
             }
-            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
-            // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
-            if (!parentCheck.ok) throw parentCheck.error;
+            // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+            unwrapOrRollback(await ensureParentDirectories(repoTx, sk, logical));
             await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });

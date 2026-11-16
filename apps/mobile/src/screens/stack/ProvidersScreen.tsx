@@ -60,9 +60,10 @@ export function ProvidersScreen() {
       const enriched: ProviderRow[] = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);
+        if (!saved.ok) throw saved.error;
         enriched.push({
           ...provider,
-          savedCount: saved.length,
+          savedCount: saved.value.length,
         });
       }
       return enriched;
@@ -87,7 +88,8 @@ export function ProvidersScreen() {
       let clearCurrentModel = false;
       if (currentModelId) {
         const saved = await runtime.providerModels.getSavedById(currentModelId);
-        clearCurrentModel = saved?.providerId === providerId;
+        if (!saved.ok) return Result.err(saved.error);
+        clearCurrentModel = saved.value?.providerId === providerId;
       }
       const deleted = await runtime.providers.delete(providerId);
       if (!deleted.ok) return deleted;

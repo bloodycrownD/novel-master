@@ -112,10 +112,12 @@ export function SkillsSettingsScreen() {
         runtime.projects.list(),
         runtime.skills().listSkills('global'),
       ]);
+      if (!globalList.ok) throw globalList.error;
       const perProject = await Promise.all(
         projectList.map(async p => {
           const list = await runtime.skills().listSkills({projectId: p.id});
-          return list.map(
+          if (!list.ok) throw list.error;
+          return list.value.map(
             (item): SkillRow => ({
               domain: 'project',
               name: item.name,
@@ -128,7 +130,7 @@ export function SkillsSettingsScreen() {
       );
       return {
         projects: projectList,
-        globalSkills: globalList,
+        globalSkills: globalList.value,
         projectSkills: perProject.flat(),
       };
     }, [runtime]),

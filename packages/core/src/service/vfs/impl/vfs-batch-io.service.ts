@@ -7,6 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { joinTargetLogicalPath, normalizeBatchRelativePath, relativePathUnderAnchor } from "@/domain/vfs/logic/vfs-batch-path.js";
 import { writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
@@ -48,42 +49,37 @@ function tryDecodeUtf8(bytes: Uint8Array): string | null {
 }
 
 /**
- * 事务回调内解包（总纲 §五例外 2）：本函数只在 `applyBatchIngest` 段 B0 的
- * `conn.transaction` 回调内调用，parentCheck / repo 写入失败靠抛错回滚。
+ * 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：本函数只在 `applyBatchIngest`
+ * 段 B0 的 `conn.transaction` 回调内调用，失败靠抛错回滚。
  */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
-  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_batch_placeholder`);
-  if (!parentCheck.ok) throw parentCheck.error;
-  const existing = await repo.findByPath(sk, logical);
-  if (!existing.ok) throw existing.error;
-  if (existing.value == null) {
-    const inserted = await repo.insertDirectory(sk, logical);
-    if (!inserted.ok) throw inserted.error;
+  unwrapOrRollback(await ensureParentDirectories(repo, sk, `${logical}/__vfs_batch_placeholder`));
+  const existing = unwrapOrRollback(await repo.findByPath(sk, logical));
+  if (existing == null) {
+    unwrapOrRollback(await repo.insertDirectory(sk, logical));
     return;
   }
-  if (existing.value.entryKind === "file") {
+  if (existing.entryKind === "file") {
     throw new AppError("VFS_NOT_A_DIRECTORY", { detail: `path is a file, not a directory: ${logical}`, path: logical });
   }
 }
 
 /**
  * 分块写入单个文件：走共享的 revision 写路径（不再绕开 revision 层）。
- * 事务回调内解包（总纲 §五例外 2）：只在 `applyBatchIngest` 段 B1..Bk 的
- * `conn.transaction` 回调内调用，parentCheck / 写入失败靠抛错回滚。
+ * 事务回调内解包走 unwrapOrRollback（总纲 §五例外 2）：只在 `applyBatchIngest`
+ * 段 B1..Bk 的 `conn.transaction` 回调内调用，失败靠抛错回滚。
  */
 async function writeOrUpdateFile(entryRepo: VfsEntryRepository, revisionRepo: SqliteVfsRevisionRepository, scope: VfsScope, logical: string, content: string): Promise<void> {
   const sk = scopeKey(scope);
   // WHY 外面保底父链：writeWithRevision 只在**新建**分支调 ensureParentDirectories，
   // 而批量 ingest 允许覆盖已有路径 ⇒ 已有路径的父链不由它兜。
-  const parentCheck = await ensureParentDirectories(entryRepo, sk, logical);
-  if (!parentCheck.ok) throw parentCheck.error;
+  unwrapOrRollback(await ensureParentDirectories(entryRepo, sk, logical));
   // skipNameValidation=true：批量 ingest 是 zip 导入的创建通道，输入是**外部
   // 文件名**；`validate-entry-name.ts` 的 JSDoc 明确导入链路不走名校验
   // （外部文件名可先导入再用改名纠正）。传 false 会把「以前能导入的外部文件名」
   // 变成「导入失败」，改变一条已拍板的导入语义。
-  const written = await writeWithRevision(entryRepo, revisionRepo, sk, logical, content, { skipNameValidation: true });
-  if (!written.ok) throw written.error;
+  unwrapOrRollback(await writeWithRevision(entryRepo, revisionRepo, sk, logical, content, { skipNameValidation: true }));
 }
 
 function emptyReport(skipped: string[] = [], failed: BatchApplyReport["failed"] = []): BatchApplyReport {
@@ -315,10 +311,8 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
             const repoTx = new SqliteVfsEntryRepository(tx);
             const revisionTx = new SqliteVfsRevisionRepository(tx);
             for (const write of shard) {
-              const logicalResult = joinTargetLogicalPath(target, write.relativePath);
-              // 解包 throw 边界（事务回调）：失败靠抛错回滚（总纲 §五例外 2）。
-              if (!logicalResult.ok) throw logicalResult.error;
-              const logical = logicalResult.value;
+              // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
+              const logical = unwrapOrRollback(joinTargetLogicalPath(target, write.relativePath));
               if (this.testHook?.throwOnWriteLogical === logical) {
                 // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
                 throw new Error("test batch ingest failure");
@@ -400,7 +394,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
 
     for (const dirLogical of plan.mkdirPaths) {
       try {
-        await writer.mkdir(dirLogical);
+        const made = await writer.mkdir(dirLogical);
+        // 已知失败沿 Result 到达（错误通道迁移七期），与未知异常同落 Report.failed。
+        if (!made.ok) failed.push({ path: dirLogical, message: made.error.message });
       } catch (error) {
         const message = error instanceof Error ? error.message : "mkdir failed";
         failed.push({ path: dirLogical, message });
@@ -415,8 +411,12 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
       const logical = logicalResult.value;
       try {
-        await writer.writeFile(logical, write.content);
-        written.push(logical);
+        const writtenOne = await writer.writeFile(logical, write.content);
+        if (writtenOne.ok) {
+          written.push(logical);
+        } else {
+          failed.push({ path: logical, message: writtenOne.error.message });
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "write failed";
         failed.push({ path: logical, message });

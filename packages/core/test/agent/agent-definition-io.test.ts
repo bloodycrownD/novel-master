@@ -1,8 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode, parseText, stringifyText } from "@novel-master/core";
+import { decode as decodeRaw, encode as encodeRaw, parseText as parseTextRaw, stringifyText } from "@novel-master/core";
+import type { ZodType } from "zod";
 
 import { agentDefinitionSchema, isAppError, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
+import { unwrap } from "../helpers/result-unwrap.js";
+
+/** decode / parseText 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（等价 `if (!r.ok) throw r.error`）。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
+
+function parseText(source: string, format: Parameters<typeof parseTextRaw>[1]): unknown {
+  return unwrap(parseTextRaw(source, format));
+}
+
+/** encode 已改返回 Result（五期门⑦ toWire 门禁）：测试内统一解包，同 decode 模式。 */
+function encode<T>(value: T, schema: Parameters<typeof encodeRaw>[1]): unknown {
+  return unwrap(encodeRaw(value, schema));
+}
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 

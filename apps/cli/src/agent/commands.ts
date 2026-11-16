@@ -8,7 +8,7 @@ import {readFile} from "node:fs/promises";
 import {registerBuiltinTools, ToolRegistry} from "@novel-master/core";
 
 import {isAppError, type AgentDefinition, runAgentTurn, validateAgentDefinition,} from "@novel-master/core/agent";
-import { type AppError, Result } from "@novel-master/core/errors";
+import { AppError, Result } from "@novel-master/core/errors";
 
 import {assertSavedModelUuid, type LlmStreamEvent} from "@novel-master/core/provider";
 import type {NovelMasterRuntime} from "../runtime.js";
@@ -81,18 +81,18 @@ async function tryResolveDefinitionFromFlags(
 
     let definition: AgentDefinition;
     if (agentConfigPath != null) {
-        definition = await loadAgentFromConfig(agentConfigPath);
+        const loaded = await loadAgentFromConfig(agentConfigPath);
+        if (!loaded.ok) return Result.err(loaded.error);
+        definition = loaded.value;
     } else if (agentId != null && agentId !== "") {
-        try {
-            definition = await rt.agentRegistry.get(agentId);
-        } catch (error) {
-            if (isAppError(error, "AGENT_NOT_FOUND")) {
-                throw new Error(
-                    `agent not found in registry: ${agentId} (run nm agent list to see registered agents)`,
-                );
+        const loaded = await rt.agentRegistry.get(agentId);
+        if (!loaded.ok) {
+            if (isAppError(loaded.error, "AGENT_NOT_FOUND")) {
+                return Result.err(new AppError("AGENT_NOT_FOUND", {agentId, detail: `agent not found in registry: ${agentId} (run nm agent list to see registered agents)`}));
             }
-            throw error;
+            return Result.err(loaded.error);
         }
+        definition = loaded.value;
     } else if (promptPath != null) {
         const source = await readFile(promptPath, "utf8");
         const layout = loadAgentPromptLayoutFromYaml(source);

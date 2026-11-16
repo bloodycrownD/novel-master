@@ -71,7 +71,10 @@ export async function handleWorkplaceBuildListRows(
   req: WorkplaceBuildListRowsRequest,
 ): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const wt = getWorkplaceForScope(rt, scopeRes.data);
@@ -87,7 +90,10 @@ export async function handleWorkplaceSetDirRule(
   req: WorkplaceSetDirRuleRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -113,7 +119,10 @@ export async function handleWorkplaceSetFileRule(
   req: WorkplaceSetFileRuleRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
@@ -134,7 +143,10 @@ export async function handleWorkplaceGetDirRule(
   req: WorkplaceGetDirRuleRequest,
 ): Promise<IpcResult<WorkplaceSetDirRuleRequest | null>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const rt = built.value;
     const scopeRes = resolveVfsScopeFromRequest(req);
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;

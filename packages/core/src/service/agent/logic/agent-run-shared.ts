@@ -8,7 +8,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import type { Result } from "@/errors/either.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * Agent run 共享的最小 runtime 表面。
@@ -24,7 +24,7 @@ export interface AgentRunRuntimePort {
   };
   readonly agentRegistry: {
     listAgentIds(): Promise<readonly string[]>;
-    get(agentId: string): Promise<AgentDefinition>;
+    get(agentId: string): Promise<Result<AgentDefinition, AppError>>;
   };
   readonly sessions: {
     getSessionAgentConfig(id: string): Promise<Result<SessionAgentConfig, AppError>>;
@@ -43,17 +43,17 @@ export const AGENT_RUN_RESOLVE_KEYS: ReadonlySet<ErrorKey> = new Set<ErrorKey>([
   "AGENT_REFERENCED_NOT_FOUND",
 ]);
 
-/** Resolves current agent id from state or registry fallback. */
+/** Resolves current agent id from state or registry fallback；state 读取失败沿 `Result.err` 回传。 */
 export async function resolveCurrentAgentId(
   runtime: AgentRunRuntimePort
-): Promise<string | undefined> {
+): Promise<Result<string | undefined, AppError>> {
   const fromState = await runtime.state.getCurrentAgentId();
-  if (!fromState.ok) throw fromState.error;
+  if (!fromState.ok) return Result.err(fromState.error);
   if (fromState.value != null && fromState.value !== "") {
-    return fromState.value;
+    return Result.ok(fromState.value);
   }
   const ids = await runtime.agentRegistry.listAgentIds();
-  return ids[0];
+  return Result.ok(ids[0]);
 }
 
 /**
@@ -69,33 +69,34 @@ export async function resolveWorkspaceAgentForNewSession(deps: {
   readonly agentRegistry: {
     listAgentIds(): Promise<readonly string[]>;
   };
-}): Promise<string | undefined> {
+}): Promise<Result<string | undefined, AppError>> {
   const fromState = await deps.state.getCurrentAgentId();
-  if (!fromState.ok) throw fromState.error;
+  if (!fromState.ok) return Result.err(fromState.error);
   if (fromState.value != null && fromState.value !== "") {
-    return fromState.value;
+    return Result.ok(fromState.value);
   }
   const ids = await deps.agentRegistry.listAgentIds();
-  return ids[0];
+  return Result.ok(ids[0]);
 }
 
-/** Loads agent definition for the current agent pointer. */
+/** Loads agent definition for the current agent pointer；未配置/找不到 agent 沿 `Result.err` 回传（repository 未知异常仍走 throw 通道）。 */
 export async function resolveCurrentAgentDefinition(
   runtime: AgentRunRuntimePort
-): Promise<{ agentId: string; definition: AgentDefinition }> {
-  const agentId = await resolveCurrentAgentId(runtime);
+): Promise<Result<{ agentId: string; definition: AgentDefinition }, AppError>> {
+  const resolvedId = await resolveCurrentAgentId(runtime);
+  if (!resolvedId.ok) return Result.err(resolvedId.error);
+  const agentId = resolvedId.value;
   if (agentId == null || agentId === "") {
-    throw new AppError("AGENT_NOT_CONFIGURED");
+    return Result.err(new AppError("AGENT_NOT_CONFIGURED"));
   }
-  try {
-    const definition = await runtime.agentRegistry.get(agentId);
-    return { agentId, definition };
-  } catch (error) {
-    if (isAppError(error, "AGENT_NOT_FOUND")) {
-      throw new AppError("AGENT_NOT_FOUND", {agentId});
+  const definition = await runtime.agentRegistry.get(agentId);
+  if (!definition.ok) {
+    if (isAppError(definition.error, "AGENT_NOT_FOUND")) {
+      return Result.err(new AppError("AGENT_NOT_FOUND", {agentId}));
     }
-    throw error;
+    return Result.err(definition.error);
   }
+  return Result.ok({ agentId, definition: definition.value });
 }
 
 /**
@@ -104,28 +105,29 @@ export async function resolveCurrentAgentDefinition(
  * workspace 层已移除：不再从 state.getCurrentModelId() 回退。返回的
  * `workspaceModelId` 仅用于下游压缩评估等消费方，由 state 读取后透传，
  * 不参与 savedModelId 解析优先级。
-  * 解包 throw 边界（错误通道迁移三期门⑦）：runtime.sessions 的 `Result` 失败原样上抛——Result → agent run 异常通道转码点，由 agent turn loop / 调用端点 catch 收口。
+ * 五期门⑦：state / sessions 的 `Result` 失败与「模型未设置」沿 `Result.err` 回传，
+ * 由 turn loop（mapResolveError）/ 调用端点收口。
  */
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,
   definition: AgentDefinition,
   sessionId?: string
-): Promise<{ savedModelId: string; workspaceModelId: string }> {
+): Promise<Result<{ savedModelId: string; workspaceModelId: string }, AppError>> {
   const currentModel = await runtime.state.getCurrentModelId();
-  if (!currentModel.ok) throw currentModel.error;
+  if (!currentModel.ok) return Result.err(currentModel.error);
   const workspaceModelId = currentModel.value ?? "";
   let sessionModelId: string | undefined;
   if (sessionId != null && sessionId !== "") {
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       sessionId
     );
-    if (!sessionConfig.ok) throw sessionConfig.error;
+    if (!sessionConfig.ok) return Result.err(sessionConfig.error);
     // modelId 可选；空串归一化为 undefined（与 workspaceModelId 同约束）
     sessionModelId = sessionConfig.value.modelId || undefined;
   }
   const resolved = definition.model ?? sessionModelId;
   if (resolved == null || resolved === "") {
-    throw new AppError("AGENT_MODEL_NOT_SET");
+    return Result.err(new AppError("AGENT_MODEL_NOT_SET"));
   }
-  return { savedModelId: resolved, workspaceModelId };
+  return Result.ok({ savedModelId: resolved, workspaceModelId });
 }

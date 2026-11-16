@@ -4,6 +4,7 @@
  * 等长请求）占住线程、停止按钮点不动。
  */
 import { isAppError } from "../../src/errors/app-error.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { getEventListeners } from "node:events";
 import { describe, it } from "node:test";
@@ -45,7 +46,7 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
       run: async (input: { text: string }) => Result.ok(input.text),
     });
     const runner = new ToolRunner(registry);
-    assert.equal(await runner.call("echo", { text: "ok" }, {}), "ok");
+    assert.equal(unwrap(await runner.call("echo", { text: "ok" }, {})), "ok");
   });
 
   it("进入时 signal 已 abort：run 零启动，call 直接拒绝（B-1 / G-1①：副作用前早退）", async () => {
@@ -82,11 +83,11 @@ describe("ToolRunner：回合取消竞速（A-24）", () => {
     const runner = new ToolRunner(registry);
     const controller = new AbortController();
     for (let i = 0; i < 3; i += 1) {
-      assert.equal(await runner.call("echo", { text: `ok-${i}` }, { signal: controller.signal }), `ok-${i}`);
+      assert.equal(unwrap(await runner.call("echo", { text: `ok-${i}` }, { signal: controller.signal })), `ok-${i}`);
       assert.equal(getEventListeners(controller.signal, "abort").length, 0, `第 ${i + 1} 次 call 结束后 abort listener 应已移除`);
     }
     // 清理成立 ⇒ 后续 call 照常工作（不被残留 listener 影响）。
-    assert.equal(await runner.call("echo", { text: "after" }, { signal: controller.signal }), "after");
+    assert.equal(unwrap(await runner.call("echo", { text: "after" }, { signal: controller.signal })), "after");
   });
 
   it("runParallel 中途 abort：逐 outcome 记失败且顺序对齐 calls，abort 后不再发起新 run（B-1② / G-1③）", async () => {

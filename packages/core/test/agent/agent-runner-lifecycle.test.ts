@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
+import { Result } from "../../src/errors/either.js";
 import {
   createAgentRunner,
   InMemoryAgentSession,
@@ -99,7 +101,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
         captured.push(options);
         const step = captured.length - 1;
         if (step === 0) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -110,13 +112,13 @@ describe("AgentRunner dynamic 区 once 语义", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          } satisfies LlmChatResult);
         }
-        return {
+        return Result.ok({
           assistantText: "done",
           blocks: [{ type: "text", text: "done" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
@@ -131,14 +133,14 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
       maxSteps: 3,
-    });
+    }));
 
     assert.equal(captured.length, 2);
     const step0Kick = captured[0]!.history.find((m) => m.id === "prompt:kick");
@@ -164,7 +166,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       async request(_id, _prompt, options) {
         captured.push(options);
         if (captured.length % 2 === 1) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -175,13 +177,13 @@ describe("AgentRunner dynamic 区 once 语义", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          } satisfies LlmChatResult);
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
@@ -251,11 +253,11 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     const model: ModelRequestService = {
       async request(_id, _prompt, options) {
         systemArg = options.system;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        } satisfies LlmChatResult);
       },
     };
 
@@ -270,13 +272,13 @@ describe("AgentRunner dynamic 区 once 语义", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(systemArg, "你是助手");
   });

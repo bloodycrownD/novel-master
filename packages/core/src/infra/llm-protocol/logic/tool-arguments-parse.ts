@@ -4,10 +4,6 @@
  * @module infra/llm-protocol/logic/tool-arguments-parse
  */
 
-import { truncateText } from "@/common/text.js";
-import { AppError } from "@/errors/app-error.js";
-import type { LlmProtocolKind } from "../ports/adapter.port.js";
-
 export type TryParseToolArgumentsResult =
   | { readonly ok: true; readonly value: Record<string, unknown> }
   | { readonly ok: false; readonly raw: string };
@@ -26,14 +22,3 @@ export function tryParseToolArgumentsJson(
   }
 }
 
-/** 解析 tool arguments；空串为 {}，非空非法 JSON 抛错。 */
-export function parseToolArgumentsJson(
-  raw: string,
-  protocol: LlmProtocolKind
-): Record<string, unknown> {
-  const parsed = tryParseToolArgumentsJson(raw);
-  if (parsed.ok) {
-    return parsed.value;
-  }
-  throw new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", { detail: `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})` });
-}

@@ -27,7 +27,10 @@ export async function handleCloudSyncGetConfig(): Promise<
   IpcResult<CloudSyncConfigDto>
 > {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    // runtime 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     return toIpcResult(await service.getConfig());
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -38,7 +41,9 @@ export async function handleCloudSyncSetConfig(
   req: CloudSyncSetConfigRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     const r = await service.setConfig(req);
     if (!r.ok) return ipcErr(formatIpcError(r.error));
     return { ok: true, data: undefined };
@@ -51,7 +56,9 @@ export async function handleCloudSyncSetEnabled(
   enabled: boolean,
 ): Promise<IpcResult<void>> {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     await service.setEnabled(enabled);
     return { ok: true, data: undefined };
   } catch (err) {
@@ -61,7 +68,9 @@ export async function handleCloudSyncSetEnabled(
 
 export async function handleCloudSyncTestConnection(): Promise<IpcResult<void>> {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     const r = await service.testConnection();
     if (!r.ok) return ipcErr(formatIpcError(r.error));
     return { ok: true, data: undefined };
@@ -74,7 +83,9 @@ export async function handleCloudSyncGetLocalStatus(): Promise<
   IpcResult<CloudSyncLocalStatusDto>
 > {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     const status = await service.getLocalStatus();
     if (!status.ok) return ipcErr(formatIpcError(status.error));
     return { ok: true, data: status.value };
@@ -98,13 +109,17 @@ export async function handleCloudSyncPull(): Promise<
   // ALREADY_UP_TO_DATE 早返回路径污染，且会让「已是最新」白付一次全量重建。
   acquireDesktopDbMaintenanceBusy();
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     const pulled = await service.pull();
-    // 已知失败沿 Result 到达（错误通道迁移四期）；coordinator 侧故障仍走下方 catch。
+    // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
     if (!pulled.ok) return ipcErr(formatIpcError(pulled.error));
     const result = pulled.value;
     if (result.databaseReplaced) {
-      await rebootstrapDesktopRuntime();
+      // 重建的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
+      const rebuilt = await rebootstrapDesktopRuntime();
+      if (!rebuilt.ok) return ipcErr(formatIpcError(rebuilt.error));
       // 记账必须用重建后的 runtime：service 实例是 rebootstrap 之前捕获的旧代，
       // 它自带的 configStore 背后的连接已被换库关掉。
       await service.recordPullSuccess(result.rev);
@@ -114,7 +129,8 @@ export async function handleCloudSyncPull(): Promise<
     // 库已换代但后续步骤抛错：runtime 换代优先于报错——「库已换却不重建」
     // 比「记账失败」更糟（后续请求继续绑在已关连接上）。
     if (err instanceof DatabaseReplacedError) {
-      await rebootstrapDesktopRuntime();
+      const rebuilt = await rebootstrapDesktopRuntime();
+      if (!rebuilt.ok) return { ok: false, error: formatIpcError(rebuilt.error) };
       // ⚠️ 这段文案是**给用户看的 toast**（CR cloudsync P2-2）：不要把
       // `providerTablesRestored` 这类 TypeScript 字段名拼进去——它对用户零信息量，
       // 只会让人对着一个内部布尔名发懵。要判断成没成，看这里的中文措辞即可；
@@ -139,7 +155,9 @@ export async function handleCloudSyncPush(
   req?: CloudSyncPushRequest,
 ): Promise<IpcResult<CloudSyncPushResult>> {
   try {
-    const service = await getDesktopCloudSyncService();
+    const serviceR = await getDesktopCloudSyncService();
+    if (!serviceR.ok) return ipcErr(formatIpcError(serviceR.error));
+    const service = serviceR.value;
     const pushed = await service.push({
       forceOverwriteRemote: req?.forceOverwriteRemote,
     });

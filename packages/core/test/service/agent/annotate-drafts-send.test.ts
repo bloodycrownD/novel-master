@@ -66,7 +66,8 @@ function makeRuntime(overrides: {
     agentRegistry: {
       listAgentIds: async () => ["a1"],
       list: async () => [sampleDefinition],
-      get: async () => sampleDefinition,
+      // 错误通道迁移四期：agentRegistry.get 走 Result 通道。
+      get: async () => Result.ok(sampleDefinition) as never,
     },
     projects: {
       getAgentConfig: async () => Result.ok({ mode: "follow" }),

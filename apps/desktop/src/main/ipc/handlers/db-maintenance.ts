@@ -15,7 +15,9 @@ import { formatIpcError } from "../ipc-error.js";
 export async function handleDbStats(): Promise<IpcResult<DbStatsResult>> {
   try {
     const stats = await getDbMaintenanceStats();
-    return { ok: true, data: stats };
+    // 装配的已知失败沿 Result 到达（错误通道迁移七期），就地转码。
+    if (!stats.ok) return { ok: false, error: formatIpcError(stats.error) };
+    return { ok: true, data: stats.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -26,7 +28,8 @@ export async function handleDbMaintenance(): Promise<
 > {
   try {
     const result = await runDbMaintenance();
-    return { ok: true, data: result };
+    if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
+    return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

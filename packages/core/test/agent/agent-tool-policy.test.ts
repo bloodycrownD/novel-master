@@ -6,6 +6,7 @@ import { AppError, isAppError, resolveAgentToolRegistry, validateAgentDefinition
 
 import { toolsFromRegistry } from "@novel-master/core/provider";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
+import { rejectsErr } from "../helpers/result-unwrap.js";
 
 const BASE_DEF: AgentDefinition = {
   name: "test",
@@ -146,9 +147,9 @@ describe("agent tool policy", () => {
     const filtered = resolveAgentToolRegistry(base, def);
     const runner = new ToolRunner(filtered);
 
-    await assert.rejects(
-      () => runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
-      (e: unknown) => isAppError(e, "TOOL_NOT_FOUND")
+    await rejectsErr(
+      runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
+      (e: unknown) => assert.ok(isAppError(e, "TOOL_NOT_FOUND"))
     );
   });
 

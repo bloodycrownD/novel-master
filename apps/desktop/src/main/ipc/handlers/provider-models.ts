@@ -3,6 +3,7 @@
  */
 import { savedModelDisplayName } from "@novel-master/core/provider";
 import type { SavedModel } from "@novel-master/core/provider";
+import { type AppError, Result } from "@novel-master/core/errors";
 import type {
   IpcResult,
   ProviderModelSavedDetailDto,
@@ -18,7 +19,9 @@ import type {
   ProviderModelsUpdateSettingsRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
 
 function toSavedDto(
   model: SavedModel,
@@ -49,26 +52,32 @@ function toSavedDetailDto(
 }
 
 async function resolveProviderDisplayName(
-  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
+  rt: DesktopNovelMasterRuntime,
   providerId: string,
-): Promise<string> {
+): Promise<Result<string, AppError>> {
   const provider = await rt.providers.get(providerId);
-  return provider.displayName;
+  if (!provider.ok) return Result.err(provider.error);
+  return Result.ok(provider.value.displayName);
 }
 
 export async function handleProviderModelsSavedList(
   req: ProviderModelsSavedListRequest,
 ): Promise<IpcResult<ProviderModelSavedDto[]>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const providerDisplayName = await resolveProviderDisplayName(
       rt,
       req.providerId,
     );
+    if (!providerDisplayName.ok) return ipcErr(formatIpcError(providerDisplayName.error));
     const saved = await rt.providerModels.savedList(req.providerId);
+    if (!saved.ok) return ipcErr(formatIpcError(saved.error));
     return {
       ok: true,
-      data: saved.map((model) => toSavedDto(model, providerDisplayName)),
+      data: saved.value.map((model) => toSavedDto(model, providerDisplayName.value)),
     };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -79,8 +88,12 @@ export async function handleProviderModelsFetch(
   req: ProviderModelsFetchRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
-    await rt.providerModels.fetch(req.providerId);
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
+    const fetched = await rt.providerModels.fetch(req.providerId);
+    if (!fetched.ok) return ipcErr(formatIpcError(fetched.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -91,9 +104,13 @@ export async function handleProviderModelsSuggestList(
   req: ProviderModelsSavedListRequest,
 ): Promise<IpcResult<ProviderModelSuggestionDto[]>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const suggestions = await rt.providerModels.suggestList(req.providerId);
-    const rows = suggestions.map((m) => ({
+    if (!suggestions.ok) return ipcErr(formatIpcError(suggestions.error));
+    const rows = suggestions.value.map((m) => ({
       vendorModelId: m.vendorModelId,
       displayName: m.displayName?.trim() || m.vendorModelId,
       stale: m.stale,
@@ -108,12 +125,16 @@ export async function handleProviderModelsSave(
   req: ProviderModelsSaveRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
-    await rt.providerModels.save(
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
+    const savedModel = await rt.providerModels.save(
       req.providerId,
       req.vendorModelId,
       req.modelName,
     );
+    if (!savedModel.ok) return ipcErr(formatIpcError(savedModel.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -124,16 +145,21 @@ export async function handleProviderModelsEditSaved(
   req: ProviderModelsEditSavedRequest,
 ): Promise<IpcResult<ProviderModelSavedDetailDto>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const updated = await rt.providerModels.editSaved(
       req.savedModelId,
       req.modelName,
     );
+    if (!updated.ok) return ipcErr(formatIpcError(updated.error));
     const providerDisplayName = await resolveProviderDisplayName(
       rt,
-      updated.providerId,
+      updated.value.providerId,
     );
-    return { ok: true, data: toSavedDetailDto(updated, providerDisplayName) };
+    if (!providerDisplayName.ok) return ipcErr(formatIpcError(providerDisplayName.error));
+    return { ok: true, data: toSavedDetailDto(updated.value, providerDisplayName.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -143,10 +169,14 @@ export async function handleProviderModelsDeleteSaved(
   req: ProviderModelsDeleteSavedRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     if (req.providerId != null) {
       const saved = await rt.providerModels.getSavedById(req.savedModelId);
-      if (saved != null && saved.providerId !== req.providerId) {
+      if (!saved.ok) return ipcErr(formatIpcError(saved.error));
+      if (saved.value != null && saved.value.providerId !== req.providerId) {
         return {
           ok: false,
           error: {
@@ -156,7 +186,8 @@ export async function handleProviderModelsDeleteSaved(
         };
       }
     }
-    await rt.providerModels.deleteSaved(req.savedModelId);
+    const deleted = await rt.providerModels.deleteSaved(req.savedModelId);
+    if (!deleted.ok) return ipcErr(formatIpcError(deleted.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -167,16 +198,21 @@ export async function handleProviderModelsGetSaved(
   req: ProviderModelsGetSavedRequest,
 ): Promise<IpcResult<ProviderModelSavedDetailDto | null>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const saved = await rt.providerModels.getSavedById(req.savedModelId);
-    if (saved == null) {
+    if (!saved.ok) return ipcErr(formatIpcError(saved.error));
+    if (saved.value == null) {
       return { ok: true, data: null };
     }
     const providerDisplayName = await resolveProviderDisplayName(
       rt,
-      saved.providerId,
+      saved.value.providerId,
     );
-    return { ok: true, data: toSavedDetailDto(saved, providerDisplayName) };
+    if (!providerDisplayName.ok) return ipcErr(formatIpcError(providerDisplayName.error));
+    return { ok: true, data: toSavedDetailDto(saved.value, providerDisplayName.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -186,8 +222,11 @@ export async function handleProviderModelsUpdateSettings(
   req: ProviderModelsUpdateSettingsRequest,
 ): Promise<IpcResult<void>> {
   try {
-    const rt = await getDesktopRuntime();
-    await rt.providerModels.updateSettings(req.savedModelId, {
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
+    const updated = await rt.providerModels.updateSettings(req.savedModelId, {
       ...(req.contextWindowTokens != null
         ? { contextWindowTokens: req.contextWindowTokens }
         : {}),
@@ -203,6 +242,7 @@ export async function handleProviderModelsUpdateSettings(
         : {}),
       ...(req.thinkingLevel != null ? { thinkingLevel: req.thinkingLevel } : {}),
     });
+    if (!updated.ok) return ipcErr(formatIpcError(updated.error));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -213,15 +253,20 @@ export async function handleProviderModelsResetContextWindow(
   req: ProviderModelsResetContextWindowRequest,
 ): Promise<IpcResult<ProviderModelSavedDetailDto>> {
   try {
-    const rt = await getDesktopRuntime();
+    const built = await getDesktopRuntime();
+    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
     const updated = await rt.providerModels.resetContextWindowToDefault(
       req.savedModelId,
     );
+    if (!updated.ok) return ipcErr(formatIpcError(updated.error));
     const providerDisplayName = await resolveProviderDisplayName(
       rt,
-      updated.providerId,
+      updated.value.providerId,
     );
-    return { ok: true, data: toSavedDetailDto(updated, providerDisplayName) };
+    if (!providerDisplayName.ok) return ipcErr(formatIpcError(providerDisplayName.error));
+    return { ok: true, data: toSavedDetailDto(updated.value, providerDisplayName.value) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

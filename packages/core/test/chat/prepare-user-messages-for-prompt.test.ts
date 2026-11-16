@@ -619,10 +619,10 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       persist: [] as const,
       dynamic: [] as const,
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "",
       messages: realPromptPrepared,
-    });
+    }));
     const realPromptUser = input.messages.find((m) => m.id === stored.id);
     assert.ok(realPromptUser, "layout 须含原 user 消息");
     const realPromptUserWrap = messageBodyTextFromBlocks(realPromptUser.content.blocks);

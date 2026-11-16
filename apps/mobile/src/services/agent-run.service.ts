@@ -2,14 +2,7 @@
  * Mobile agent run — thin wrapper over core {@link runAgentTurn}.
  */
 import {
-  AGENT_RUN_RESOLVE_KEYS,
-  AgentTurnError,
-  isAppError,
-  resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
-  resolveCurrentAgentId as resolveCoreAgentId,
   runAgentTurn as coreRunAgentTurn,
-  type AgentDefinition,
   type AgentRunResult,
   type AgentTurnScope,
 } from '@novel-master/core/agent';
@@ -22,45 +15,6 @@ import type {
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export type AgentRunScope = AgentTurnScope;
-
-function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
-  return fn().catch(error => {
-    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
-      throw new AgentTurnError(error.message);
-    }
-    throw error;
-  });
-}
-
-/** Resolves current agent id from state or registry fallback. */
-export async function resolveCurrentAgentId(
-  runtime: MobileNovelMasterRuntime,
-): Promise<string | undefined> {
-  return resolveCoreAgentId(runtime);
-}
-
-/** Loads agent definition for the current agent pointer. */
-export async function resolveCurrentAgentDefinition(
-  runtime: MobileNovelMasterRuntime,
-): Promise<{agentId: string; definition: AgentDefinition}> {
-  return mapResolveError(() => resolveCoreAgentDefinition(runtime));
-}
-
-/**
- * 解析对话 savedModelId。
- *
- * 优先级链：agent pin → 会话 bind 的 modelId → workspace 当前模型。
- * sessionId 透传给 core 解析链，让其读取会话级绑定配置。
- */
-export async function resolveMobileSavedModelId(
-  runtime: MobileNovelMasterRuntime,
-  definition: AgentDefinition,
-  sessionId: string,
-): Promise<{savedModelId: string; workspaceModelId: string}> {
-  return mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition, sessionId),
-  );
-}
 
 /** Appends a user message and runs the agent loop (streaming via event bus). */
 export async function runAgentTurn(

@@ -16,6 +16,8 @@
  */
 
 import { z } from "zod";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { SMART_SORT_CAPTURE_KINDS, type SmartSortCaptureKind, type SmartSortRule } from "./smart-sort-rule.js";
 
@@ -55,10 +57,10 @@ export function encodeSmartSortRuleBundle(rules: readonly SmartSortRule[]): Smar
 /**
  * Parses + validates an unknown payload as a bundle document.
  *
- * 这里是 bundle 文档的 schema 入口边界：`decode()` 的 CONFIG_DECODE_INVALID_SCHEMA 由
- * service / app 的导入通道捕获并贴「YAML 无效」标签，保持既有错误契约。
+ * 这里是 bundle 文档的 schema 入口边界：decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+ * 沿 `Result.err` 回传，由 service / app 的导入通道贴「YAML 无效」标签，保持既有错误契约。
  */
-export function decodeSmartSortRuleBundle(raw: unknown): SmartSortRuleBundleDocument {
+export function decodeSmartSortRuleBundle(raw: unknown): Result<SmartSortRuleBundleDocument, AppError> {
   // v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
   // 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
   // 的规则原样通过，description 与 example 同时存在时以 description 为准）。
@@ -83,7 +85,10 @@ export function decodeSmartSortRuleBundle(raw: unknown): SmartSortRuleBundleDocu
       };
     }
   }
-  return decode(migrated, smartSortRuleBundleDocumentSchema);
+  // decode 已 Result 化（错误通道迁移四期）；decode 失败（CONFIG_DECODE_INVALID_SCHEMA）
+  // 原样接力，由 service / app 的导入通道贴「YAML 无效」标签。
+  const decoded = decode(migrated, smartSortRuleBundleDocumentSchema);
+  return decoded;
 }
 
 /** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */

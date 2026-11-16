@@ -1,5 +1,5 @@
 import { Result } from "../../src/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
@@ -112,7 +112,7 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return r;
+      return Result.ok(r);
     }),
   };
 }
@@ -123,17 +123,19 @@ function createMockModel(
  */
 function fakeSkillService(): SkillService {
   return {
-    effectiveSkills: async () => [
-      {
-        name: "demo",
-        description: null,
-        domain: "project",
-        overridden: false,
-        disabled: false,
-        valid: true,
-        effective: true,
-      },
-    ],
+    // 错误通道迁移四期：effectiveSkills 走 Result 通道。
+    effectiveSkills: async () =>
+      Result.ok([
+        {
+          name: "demo",
+          description: null,
+          domain: "project",
+          overridden: false,
+          disabled: false,
+          valid: true,
+          effective: true,
+        },
+      ]) as unknown as ReturnType<SkillService["effectiveSkills"]>,
     // 错误通道迁移二期：readSkillFile 走 Result 通道。
     readSkillFile: async () =>
       Result.ok({
@@ -175,11 +177,11 @@ describe("AgentRunner", () => {
     const model: ModelRequestService = {
       request: async (_savedModelId, _userContent, options) => {
         histories.push(options?.history);
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        };
+        });
       },
     };
 
@@ -196,11 +198,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     const historyText = JSON.stringify(histories[0]);
@@ -236,12 +238,12 @@ describe("AgentRunner", () => {
 
     const controller = new AbortController();
     controller.abort();
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
@@ -276,11 +278,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 1);
@@ -304,14 +306,14 @@ describe("AgentRunner", () => {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "partial",
           blocks: [
             { type: "thinking", text: "hmm" },
             { type: "text", text: "partial" },
           ],
           raw: { partial: true },
-        };
+        });
       },
     };
 
@@ -332,12 +334,12 @@ describe("AgentRunner", () => {
       eventBus: bus,
     });
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -362,7 +364,7 @@ describe("AgentRunner", () => {
       callCount: () => 1,
       request: async () => {
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "",
           blocks: [
             {
@@ -373,7 +375,7 @@ describe("AgentRunner", () => {
             },
           ],
           raw: {},
-        };
+        });
       },
     };
 
@@ -397,12 +399,12 @@ describe("AgentRunner", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -429,11 +431,11 @@ describe("AgentRunner", () => {
       request: mock.fn(async () => {
         calls += 1;
         controller.abort();
-        return {
+        return Result.ok({
           assistantText: "once",
           blocks: [{ type: "text", text: "once" }],
           raw: {},
-        };
+        });
       }),
     };
 
@@ -448,12 +450,12 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -502,12 +504,12 @@ describe("AgentRunner", () => {
     );
     (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = abortAfterToolsRunner;
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
       signal: controller.signal,
-    });
+    }));
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
@@ -549,11 +551,11 @@ describe("AgentRunner", () => {
       callCount: () => 0,
       request: async (_id, _prompt, options) => {
         options.onStream?.({ type: "text-delta", text: "stream" });
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        };
+        });
       },
     };
 
@@ -575,12 +577,12 @@ describe("AgentRunner", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
       stream: true,
-    });
+    }));
 
     await Promise.resolve();
 
@@ -620,11 +622,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 1);
@@ -687,11 +689,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 3);
     assert.equal(result.finished, true);
@@ -728,11 +730,11 @@ describe("AgentRunner", () => {
     });
     // agent-runner 不再 publish session.message.received；
     // run 正常完成不报错即说明没有残留对该事件的依赖。
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.equal(result.finished, true);
   });
 
@@ -782,11 +784,11 @@ describe("AgentRunner", () => {
           materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
@@ -855,11 +857,11 @@ describe("AgentRunner", () => {
           materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(toolResultSteps.length, 2);
     assert.equal(toolResultSteps[0]!.vfsMutated, false);
@@ -895,15 +897,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await assert.rejects(
-      () =>
-        runner.run({
+    await rejectsErr(
+      runner.run({
           maxSteps: 3,
           definition: { ...minimalDefinition(), prompts: { persist: [], dynamic: [] } },
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
+        assert.ok(e instanceof AppError && e.key === "AGENT_DOOM_LOOP"),
     );
   });
 
@@ -963,14 +964,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
       (m) => m.role === "assistant",
@@ -1038,14 +1039,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
       (m) => m.role === "assistant",
@@ -1102,14 +1103,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const messages = await ctx.messages.listBySession(session.id);
     const toolResultMsg = messages.find(
@@ -1201,14 +1202,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1268,14 +1269,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     // 版本参数已从 write 工具移除：stale options 被忽略，覆盖成功无 [CONFLICT]
@@ -1339,14 +1340,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1407,14 +1408,14 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 2,
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const resultBlock = await firstToolResultBlock(session.id);
     assert.equal(resultBlock.ok, false);
@@ -1456,15 +1457,14 @@ describe("AgentRunner", () => {
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
-    await assert.rejects(
-      () =>
-        runner.run({
+    await rejectsErr(
+      runner.run({
           maxSteps: 6,
           definition: minimalDefinition(),
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
+        assert.ok(e instanceof AppError && e.key === "AGENT_DOOM_LOOP"),
     );
   });
 
@@ -1512,11 +1512,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(runFailed, false);
     assert.equal(result.stopReason, "completed");
@@ -1575,11 +1575,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    const result = await runner.run({
+    const result = unwrap(await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 2);
@@ -1624,19 +1624,19 @@ describe("AgentRunner", () => {
     };
 
     // 第一轮：只有一条 user 消息。跑完后 session 里追加 assistant。
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       ...defaultRunScope,
-    });
+    }));
 
     // 第二轮：再追一条 user 消息，此时 history 含两条 user（中间隔 assistant），不会被合并。
     unwrap(await session.append("user", textBlocks("第二问")));
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       ...defaultRunScope,
-    });
+    }));
 
     assert.equal(model.callCount(), 2);
     const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
@@ -1673,11 +1673,11 @@ describe("AgentRunner", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
-    });
+    }));
 
     const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
       .mock.calls[0]!.arguments[2] as { history: Array<{ role: string }> };
@@ -1706,11 +1706,11 @@ describe("AgentRunner", () => {
       const model: ModelRequestService = {
         request: async (_savedModelId, _userContent, options) => {
           histories.push(options?.history);
-          return {
+          return Result.ok({
             assistantText: "ok",
             blocks: [{ type: "text", text: "ok" }],
             raw: {},
-          };
+          });
         },
       };
 
@@ -1735,11 +1735,11 @@ describe("AgentRunner", () => {
         }),
       );
 
-      const result = await runner.run({
+      const result = unwrap(await runner.run({
         maxSteps: 1,
         definition: minimalDefinition(),
         ...defaultRunScope,
-      });
+      }));
 
       // run 正常完成，不因坏值炸掉
       assert.equal(result.stopReason, "completed");

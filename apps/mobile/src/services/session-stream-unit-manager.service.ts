@@ -1513,10 +1513,14 @@ export class SessionStreamUnitManager {
         // starting 单元仍需按 FINISHED 同款语义收尾（cancelled 归 finished
         // 家族，流式中途停止同样走 finishRun('finished')）。
         // RunAgentTurnFn 契约是 Promise<unknown>，按 stopReason 字段窄化取用。
-        if (
-          (result as {stopReason?: unknown} | null | undefined)?.stopReason ===
-          'cancelled'
-        ) {
+        // 四期起生产实现沿 Result 回传——cancelled 的 stopReason 在 ok 分支的
+        // value 上（顶层读到的是 undefined，取消兜底会静默失效，spec-2-core
+        // §2.2 的「停止被当成功」形态）；兼容注入 mock 的裸 AgentRunResult。
+        const runStopReason =
+          (result as {ok?: unknown} | null | undefined)?.ok === true
+            ? (result as {value: {stopReason?: unknown}}).value?.stopReason
+            : (result as {stopReason?: unknown} | null | undefined)?.stopReason;
+        if (runStopReason === 'cancelled') {
           const current = this.units.get(sessionId);
           if (current === unit && current.getRunId() == null) {
             this.finishRun(sessionId, '', {status: 'finished'});

@@ -87,7 +87,8 @@ export function ProfileTabScreen() {
       return;
     }
     try {
-      setModelLabel(await resolveModelDisplayLabel(runtime, currentId));
+      const label = await resolveModelDisplayLabel(runtime, currentId);
+      setModelLabel(label.ok ? label.value : currentId);
     } catch {
       setModelLabel(currentId);
     }

@@ -229,11 +229,9 @@ export class AttachmentHydrator {
     const projectId = this.runtime.projectId;
     const skills = this.runtime.skills;
     this.skillNames ??= (async () => {
-      try {
-        return new Set((await skills.effectiveSkills(projectId)).map((skill) => skill.name));
-      } catch {
-        return new Set<string>();
-      }
+      const effective = await skills.effectiveSkills(projectId);
+      // 清单读取失败（已知失败）与旧 catch 同款兜底：按空清单收口，走「不存在提示」。
+      return new Set<string>(effective.ok ? effective.value.map((skill) => skill.name) : []);
     })();
     const names = await this.skillNames;
     if (!names.has(name)) {

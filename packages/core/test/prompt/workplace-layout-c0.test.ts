@@ -1,7 +1,14 @@
 import { outcomeValue } from "../helpers/outcome-value.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode } from "@novel-master/core";
+import { decode as decodeRaw, encode } from "@novel-master/core";
+import type { ZodType } from "zod";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import {
   buildPromptAssemblyFromLayout,
@@ -48,11 +55,11 @@ describe("Workplace C0 协议", () => {
     assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
 
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 0);
   });
 
@@ -63,11 +70,11 @@ describe("Workplace C0 协议", () => {
       persist: [{ name: "u", type: "text", role: "user", content: "hidden" }],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
@@ -116,11 +123,11 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
       workplaceDisplay: "WT-BODY",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.deepEqual(
       input.messages.map((m) => m.id),
       ["prompt:workplace", "prompt:workplace:done"],
@@ -135,11 +142,11 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const segments = await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     const wt = segments.find((s) => s.id === "prompt-workplace");
     const done = segments.find((s) => s.id === "prompt-workplace-done");
     assert.equal(wt?.role, "user");
@@ -193,18 +200,18 @@ describe("Workplace C0 协议", () => {
     assert.equal(health.value.prompts.workplace, undefined);
     assert.deepEqual(health.value.prompts.persist, []);
 
-    const input = await buildPromptLlmInputFromLayout(health.value.prompts, {
+    const input = unwrap(await buildPromptLlmInputFromLayout(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.equal(input.messages.length, 0);
 
-    const segments = await buildPromptAssemblyFromLayout(health.value.prompts, {
+    const segments = unwrap(await buildPromptAssemblyFromLayout(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
-    });
+    }));
     assert.ok(segments.every((s) => !s.id.startsWith("prompt-workplace")));
   });
 });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../src/errors/either.js";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
@@ -57,7 +58,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
 
   it("顺序：system 字段 + worktree 对 + persist 文本 + chat + dynamic", async () => {
     const workplace = mockWorktree("/\n└── readme.md 全部加载");
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await buildPromptLlmInputFromLayout(
       layout,
       {
         workplaceDisplay: "WT-BODY",
@@ -66,7 +67,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         workplace,
       },
       { agentStepIndex: 0 }
-    );
+    ));
     assert.equal(input.system, "sys");
     assert.equal(input.messages.length, 6);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
@@ -78,11 +79,11 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   });
 
   it("dynamic 块在 step≥1 跳过（once 语义）", async () => {
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await buildPromptLlmInputFromLayout(
       layout,
       { workplaceDisplay: "WT", messages: [], workplace: mockWorktree("/") },
       { agentStepIndex: 1 }
-    );
+    ));
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
@@ -98,7 +99,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     const vfs = {
       list,
     } as unknown as import("@novel-master/core/vfs").VfsService;
-    const input = await buildPromptLlmInputFromLayout(
+    const input = unwrap(await buildPromptLlmInputFromLayout(
       {
         dynamicEnabled: true,
         persist: [],
@@ -107,7 +108,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         ],
       },
       { workplaceDisplay: "", messages: [], workplace, vfs }
-    );
+    ));
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.equal(list.mock.callCount(), 0);
     assert.match(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
@@ -116,10 +117,10 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
 
 describe("formatPromptLlmInputForCliFromLayout", () => {
   it("system 段在首行", async () => {
-    const out = await formatPromptLlmInputForCliFromLayout(
+    const out = unwrap(await formatPromptLlmInputForCliFromLayout(
       { system: "ctx", persist: [], dynamic: [] },
       { workplaceDisplay: "", messages: [] }
-    );
+    ));
     assert.equal(out, "system: ctx");
   });
 });

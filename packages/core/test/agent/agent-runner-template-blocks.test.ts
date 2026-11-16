@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { Result } from "../../src/errors/either.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
@@ -145,11 +147,11 @@ describe("AgentRunner template blocks", () => {
     const model: ModelRequestService = {
       request: mock.fn(async (_modelId, _content, options) => {
         captured.options = options;
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
@@ -163,14 +165,14 @@ describe("AgentRunner template blocks", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 1,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 3);
@@ -203,7 +205,7 @@ describe("AgentRunner template blocks", () => {
       request: mock.fn(async (_modelId, _content, options) => {
         histories.push(options);
         if (histories.length < 2) {
-          return {
+          return Result.ok({
             assistantText: "",
             blocks: [
               {
@@ -214,13 +216,13 @@ describe("AgentRunner template blocks", () => {
               },
             ],
             raw: {},
-          } satisfies LlmChatResult;
+          }) satisfies LlmChatResult;
         }
-        return {
+        return Result.ok({
           assistantText: "ok",
           blocks: [{ type: "text", text: "ok" }],
           raw: {},
-        } satisfies LlmChatResult;
+        }) satisfies LlmChatResult;
       }),
     };
 
@@ -237,14 +239,14 @@ describe("AgentRunner template blocks", () => {
       }),
     );
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 3,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
+    }));
 
     assert.equal(histories.length, 2);
     for (const opts of histories) {

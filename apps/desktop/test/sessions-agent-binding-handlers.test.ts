@@ -49,7 +49,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const { getDesktopRuntime } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-x", {
       name: "Agent X",
@@ -104,7 +106,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const { getDesktopRuntime } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-y", {
       name: "Agent Y",
@@ -155,7 +159,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const { getDesktopRuntime } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-plain", {
       name: "普通",
@@ -235,7 +241,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     const { getDesktopRuntime } = await import(
       "../src/main/runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     await rt.agentRegistry.upsert("agent-gone", {
       name: "将被删除",
@@ -304,7 +312,9 @@ async function verifyBindingCommitted(
   const { getDesktopRuntime } = await import(
     "../src/main/runtime/desktop-runtime-singleton.js"
   );
-  const rt = await getDesktopRuntime();
+  const rtR = await getDesktopRuntime();
+  if (!rtR.ok) throw rtR.error;
+  const rt = rtR.value;
   // 错误通道迁移二期后 getSessionAgentConfig 走 Result，解包取配置。
   const read = await rt.sessions.getSessionAgentConfig(sessionId);
   if (!read.ok) throw read.error;

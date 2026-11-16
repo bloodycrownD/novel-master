@@ -83,7 +83,8 @@ export function ModelPickerModal({
     }> = [];
     for (const provider of providers) {
       const saved = await runtime.providerModels.savedList(provider.id);
-      for (const model of saved) {
+      if (!saved.ok) return Result.err(saved.error);
+      for (const model of saved.value) {
         allModels.push({
           id: model.id,
           providerId: model.providerId,

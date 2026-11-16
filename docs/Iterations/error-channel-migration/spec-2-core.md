@@ -69,6 +69,43 @@ date: 2026-11-14
 
 `request-abort.ts:37` 是 `if (signal?.aborted === true) return true`——**无 throw**，不属于本清单（早期版本误列）。
 
+### 2.3.1 门① 口径修订：16+26 与实测的差距（2026-11-16 四期收口复核）
+
+上面「16 处 + 约 26 处事务回调」是二期拍板时的**终态白名单预估**，与四期收口时的实测对不上：四期门①实测 **171 处**（`throw new AppError` 全仓 grep，运行上下文给值）。本次复核在同工作树（HEAD `e408fe00f` + 未提交的四期余量迁移与测试修复）复现的口径矩阵如下——171 落在「解包全量」口径的 170（`b4d1c036e` 仅 `.ts`）到 175（HEAD 与 tag，`.ts`+`.tsx`）之间，差在 grep 后缀过滤与量测时点，工作树在途改动会让计数持续漂移，**复测必须连命令带时点一起记录**：
+
+| 口径（命令见下） | 处数 | 时点 |
+|---|---|---|
+| `throw new AppError`，生产码（`packages/*/src` + `apps/*/src` + `apps/*/shared`，排除测试） | **105** | 工作树（本次三分法分类基线） |
+| 同上，含测试 | 130 | 工作树 |
+| `throw new AppError`，全部跟踪 `.ts`/`.tsx` | 255 | HEAD `e408fe00f` |
+| 同上 | 261 | `b4d1c036e`（tag `p4-unwrap-partial`） |
+| 解包 `throw X.error`，全部跟踪 `.ts`/`.tsx` | 175 / 181 | HEAD·tag / 工作树 |
+| 解包 `throw X.error`，仅 `.ts` | 170 | `b4d1c036e` |
+| 解包 `throw X.error`，生产码 | 100–106 | HEAD / 工作树 |
+
+复核命令：`grep -rn "throw new AppError" packages/*/src apps/*/src apps/*/shared --include="*.ts" --include="*.tsx" | grep -vE "\.test\.|/test/"`；解包侧把模式换成 `throw [A-Za-z_][A-Za-z0-9_.]*\.error`。105 处生产码的分层：core 94（service 54 / domain 25 / infra 10 / bootstrap 3 / common 2）+ `cloud-sync-driver-s3` 6 + apps 5（desktop 1、mobile 4）。
+
+**实测站点的三分法**（判据：事务回调按 `.transaction(` 回调花括号配对判定；不变量按 `*_INVARIANT_VIOLATION` key；工具协议按「站点在 `domain/tool`、经 `tool-runner` 的 `Promise.allSettled` 只有 throw/reject 通道」）：
+
+| 类 | 处数 | 构成 | 代表站点 |
+|---|---|---|---|
+| 业务（业务语义仍走 throw 契约：所在函数返回 `void`/普通类型，未列入四期 333 个签名改造） | **53** | `character-card-import.service.ts` 15 处路径校验（另有 1 处在事务回调桶）、`common/release.ts:15/20`、`session.service.ts:252` | `import()` 签名 `Promise<void>`（`character-card-import.service.ts:98`） |
+| 不变量（合法保留） | **8** | 全部 `*_INVARIANT_VIOLATION` key | `schema-migrations/index.ts:68`、`agent-runner.ts:504`（原 `:474`）、`vfs-zip-io.service.ts:58`（原 `:60`） |
+| 平台（机制要求 throw） | **44** | 事务回调 13 + 工具并发协议 11 + infra/bootstrap 边界 14 + 跨包驱动 6 | `message.service.ts:273`（事务内；同一 `CHAT_NOT_FOUND` 在事务外走 `Result.err`，见 `:257`）、`tool-runner.ts:83`、`http-util.ts:38`、`create-s3-object-storage.ts:76` |
+
+另有 1 处 `INFRA_INVARIANT_VIOLATION` key 落在 mobile 原生桥边界（`apps/mobile/src/services/rn-file-io.ts:49`），按机制计入平台桶。**硬清单本身也在漂移**：§2.3 的 16 处按内容重定位后仅 8 处仍在位（行号已移），其余 8 处（`i18n/catalog.ts` 4 处、`coordinated-write.ts` 2 处、`either.ts:219`、`integrity-repair.ts:104`）已在二至四期改造中迁移或摘除。
+
+**原口径为什么低估**：
+
+1. **两段 grep 混进了一个白名单**：16 处是 `throw new AppError`（C 类），约 26 处是**解包 `throw r.error`** 的事务子集——门① 实测抓的是全量 `throw new AppError`，两个清单不可加，42 的预估从一开始就不是同一个口径的数。
+2. **apps 边界与跨包驱动没有数字**：s3 driver 6 处（跨包只能靠 throw 传错）、apps 服务 5 处（IPC/原生桥）、bootstrap 2 处，当时只写进「apps 边界白名单另册」的叙述，没进 16+26 的计数。
+3. **工具并发协议整层没算**：`tool-runner` 的 `Promise.allSettled` 协议只有 throw/reject 通道（§2.2 路径二），`domain/tool` 下 11 处构造点当时只在「建议保留协议」的段落里出现，未入白名单。
+4. **硬清单按行号锁死且覆盖不全**：16 处行号在后续期次里漂移（`agent-runner:474`→`:504`），而 `vfs-tree-copy:39`、`rn-file-io:49` 这类同形站点当时未列。
+5. **四期有意留下业务类站点**：`b4d1c036e` 提交说明自报「门⑦ 实测余 77 处未迁」（解包侧 344 → 77），业务直构与解包的清偿是渐进的，收口时点实测必然远高于二期拍的终态白名单。
+6. **处数类验收必然漂移**（总纲既定教训）：门应按**文件清单**锁（哪类文件允许哪些形态），处数只作参考。
+
+因此门①白名单的现行写法以本节三分法为准：不变量 8 处按站点清单锁；平台 44 处按机制类别（事务回调 / 工具协议 / 边界 infra / 跨包驱动）+ 文件清单锁；业务 53 处是**迁移债台账**，逐期清偿、只减不增。解包侧归门⑦（`node scripts/check-unwrap-throw.mjs`），不与门①混算。
+
 ### 2.4 事务外/内解包判定
 
 core 现有 105 处 `if (!r.ok) throw r.error`（domain 74 / service 31）：
@@ -140,7 +177,7 @@ packages/core/src/
 - Step 5 — phase-vfs-services — blocking: yes — qa: auto：`revision-aware-vfs` 12 处调用点裁决；`legacy-vfs-error` 形态不动；T-C6。
 - Step 6 — phase-domain-dual — blocking: yes — qa: auto：`vfs-path-mapper` 与 `search-config` 单一通道统一；T-C5。
 - Step 7 — phase-skills-kkv-sort — blocking: yes — qa: auto：三组改写。
-- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + core 全量测试 + `check-style` 三段 + **二期 grep 门**（`throw new AppError` 命中 ⊆ 白名单：§2.3 的 16 处 + 26 处事务回调 + 边界文件；`throw r.error` 解包命中 ⊆ 事务回调与边界清单）。
+- Step 8 — phase-verify — blocking: yes — qa: auto：`npm run typecheck` + core 全量测试 + `check-style` 三段 + **二期 grep 门**（`throw new AppError` 命中 ⊆ 白名单：口径按 §2.3.1 四期复核修订——不变量按站点清单、平台按机制类别 + 文件清单、业务为迁移债台账；`throw r.error` 解包命中 ⊆ 事务回调与边界清单，归门⑦ 不与门①混算）。
 
 依赖：1 → 2 → 3 → 4 → 5 → 6 → 7 → 8。Step 1 必须先于其余（Outcome 唯一真实用户）；Step 3-7 文件集不相交，可并行波。
 

@@ -6,6 +6,7 @@
 import { stat } from "node:fs/promises";
 import { createDbMaintenanceService } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
@@ -16,20 +17,21 @@ import {
 } from "./db-maintenance-busy.js";
 
 /** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）。 */
-export async function getDbMaintenanceStats(): Promise<{
-  fileBytes: number;
-  reclaimableBytes: number;
-}> {
+export async function getDbMaintenanceStats(): Promise<
+  Result<{ fileBytes: number; reclaimableBytes: number }, AppError>
+> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
-  // bootstrap 落盘）时拿到 ENOENT。
-  const runtime = await getDesktopRuntime();
+  // bootstrap 落盘）时拿到 ENOENT。装配的已知失败沿 Result 上行（错误通道迁移七期）。
+  const built = await getDesktopRuntime();
+  if (!built.ok) return Result.err(built.error);
+  const runtime = built.value;
   const fileInfo = await stat(resolveDbPath());
   const maintenance = createDbMaintenanceService(runtime.conn);
   const storage = await maintenance.getStorageStats();
-  return {
+  return Result.ok({
     fileBytes: fileInfo.size,
     reclaimableBytes: storage.reclaimableBytes,
-  };
+  });
 }
 
 /**
@@ -40,12 +42,11 @@ export async function getDbMaintenanceStats(): Promise<{
  * busy 必须在进入本函数后立刻置位（renderer 侧也不得不前置 busy，不
  * 能依赖 main 推送），并用 try/finally 保证任何失败路径都复位。
  */
-export async function runDbMaintenance(): Promise<{
-  beforeBytes: number;
-  afterBytes: number;
-}> {
+export async function runDbMaintenance(): Promise<
+  Result<{ beforeBytes: number; afterBytes: number }, AppError>
+> {
   if (isDesktopAgentActive()) {
-    throw new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再操作"});
+    return Result.err(new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再操作"}));
   }
   if (isDesktopCloudSyncBusy()) {
     throw new Error("云同步进行中，请稍后再操作");
@@ -56,16 +57,19 @@ export async function runDbMaintenance(): Promise<{
   setDesktopDbMaintenanceBusy(true);
   try {
     // 与 getDbMaintenanceStats 同口径：先确保 runtime/库文件就绪再 stat，
-    // 冷启动（库尚未 bootstrap 落盘）时避免 ENOENT。
-    const runtime = await getDesktopRuntime();
+    // 冷启动（库尚未 bootstrap 落盘）时避免 ENOENT。装配的已知失败沿 Result
+    // 上行（错误通道迁移七期），busy 由 finally 复位。
+    const built = await getDesktopRuntime();
+    if (!built.ok) return Result.err(built.error);
+    const runtime = built.value;
     const dbPath = resolveDbPath();
     const beforeInfo = await stat(dbPath);
     await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
     const afterInfo = await stat(dbPath);
-    return {
+    return Result.ok({
       beforeBytes: beforeInfo.size,
       afterBytes: afterInfo.size,
-    };
+    });
   } finally {
     setDesktopDbMaintenanceBusy(false);
   }

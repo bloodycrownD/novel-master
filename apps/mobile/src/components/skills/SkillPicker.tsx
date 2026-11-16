@@ -42,7 +42,8 @@ export function SkillPicker({
     Result<PickerListLoadResult<EffectiveSkill>, AppError>
   > => {
     const list = await runtime.skills().effectiveSkills(projectId);
-    return Result.ok({rows: list.filter(s => s.valid)});
+    if (!list.ok) return Result.err(list.error);
+    return Result.ok({rows: list.value.filter(s => s.valid)});
   }, [runtime, projectId]);
 
   return (

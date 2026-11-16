@@ -68,22 +68,23 @@ describe("ProjectService agent config", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
 
-    await assert.rejects(
-      () =>
-        ctx.projects.updateAgentConfig(project.id, {
-          mode: "custom",
-        }),
-      (error: unknown) => error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
-    );
+    // 四期签名：updateAgentConfig 的域校验失败沿 Result.err 回传，不再 throw。
+    const r1 = await ctx.projects.updateAgentConfig(project.id, {
+      mode: "custom",
+    });
+    assert.ok(!r1.ok);
+    if (!r1.ok) {
+      assert.equal(r1.error.name, "CONFIG_DECODE_INVALID_SCHEMA");
+    }
 
-    await assert.rejects(
-      () =>
-        ctx.projects.updateAgentConfig(project.id, {
-          mode: "custom",
-          definition: customDefinition(""),
-        }),
-      (error: unknown) => error instanceof Error && error.name === "CONFIG_DECODE_INVALID_SCHEMA",
-    );
+    const r2 = await ctx.projects.updateAgentConfig(project.id, {
+      mode: "custom",
+      definition: customDefinition(""),
+    });
+    assert.ok(!r2.ok);
+    if (!r2.ok) {
+      assert.equal(r2.error.name, "CONFIG_DECODE_INVALID_SCHEMA");
+    }
   });
 
   it("delete 后 getAgentConfig 不可访问", async () => {

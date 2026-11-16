@@ -17,6 +17,7 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import {
   copyVfsTree,
   deleteVfsPrefix,
@@ -51,15 +52,15 @@ function reposFor(conn: TdbcConnection) {
   };
 }
 
-function parseStoredSessionAgentConfig(json: string): SessionAgentConfig {
+function parseStoredSessionAgentConfig(json: string): Result<SessionAgentConfig, AppError> {
   return decode(JSON.parse(json), sessionAgentConfigSchema);
 }
 
-/** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。 */
+/** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。toWire 失败沿 `Result.err` 上递（五期门⑦）。 */
 function serializeSessionAgentConfigForStorage(
   config: SessionAgentConfig
-): string {
-  return JSON.stringify(sessionAgentConfigSchema.toWire(config));
+): Result<string, AppError> {
+  return sessionAgentConfigSchema.toWire(config).map((wire) => JSON.stringify(wire));
 }
 
 /** Dependencies for {@link DefaultSessionService}. */
@@ -109,21 +110,25 @@ export class DefaultSessionService implements SessionService {
     }
     // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
     // 读取放在事务外：state / agentRegistry 走的是另一套表，不需要在 chat_session 事务内同步。
-    const agentId = await resolveWorkspaceAgentForNewSession({
+    const agentIdResult = await resolveWorkspaceAgentForNewSession({
       state: this.deps.state,
       agentRegistry: this.deps.agentRegistry,
     });
+    if (!agentIdResult.ok) return Result.err(agentIdResult.error);
+    const agentId = agentIdResult.value;
     if (agentId == null || agentId === "") {
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {descriptor: {key: "error.chat.session_create_agent_missing"}}));
     }
     const currentModel = await this.deps.state.getCurrentModelId();
-    if (!currentModel.ok) throw currentModel.error;
+    if (!currentModel.ok) return Result.err(currentModel.error);
     const workspaceModelId = currentModel.value;
     const config: SessionAgentConfig =
       workspaceModelId == null || workspaceModelId === ""
         ? { agentId }
         : { agentId, modelId: workspaceModelId };
-    const configJson = serializeSessionAgentConfigForStorage(config);
+    const serialized = serializeSessionAgentConfigForStorage(config);
+    if (!serialized.ok) return Result.err(serialized.error);
+    const configJson = serialized.value;
     const created = await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
@@ -293,7 +298,7 @@ export class DefaultSessionService implements SessionService {
       // C 类（不变量破坏）保留 throw：处置是跑迁移，不是调用方可分支的返回值。
       throw new AppError("CHAT_INVALID_ARGUMENT", {detail: "session agent config missing, run migration session-agent-config-v2"});
     }
-    return Result.ok(parseStoredSessionAgentConfig(json));
+    return parseStoredSessionAgentConfig(json);
   }
 
   async updateSessionAgentConfig(
@@ -322,15 +327,20 @@ export class DefaultSessionService implements SessionService {
     const merged: SessionAgentConfig =
       modelId == null ? { agentId } : { agentId, modelId };
     // merge 完走 schema 校验（agentId 必填）+ 规范化（含 strict）。
+    const wire = sessionAgentConfigSchema.toWire(merged);
+    if (!wire.ok) return Result.err(wire.error);
     const validated = decode(
-      sessionAgentConfigSchema.toWire(merged),
+      wire.value,
       sessionAgentConfigSchema
     );
+    if (!validated.ok) return validated;
+    const config = validated.value;
     const updatedAtMs = Date.now();
-    const configJson = serializeSessionAgentConfigForStorage(validated);
+    const configJson = serializeSessionAgentConfigForStorage(config);
+    if (!configJson.ok) return Result.err(configJson.error);
     const updated = await this.deps.sessions.setSessionAgentConfig(
       id,
-      configJson,
+      configJson.value,
       updatedAtMs
     );
     if (!updated) {
@@ -343,15 +353,15 @@ export class DefaultSessionService implements SessionService {
     // 口径收窄：只比较 overlay merge 前后真正变化的字段，避免把「patch 里
     // 出现但值相同」的无效写也清掉（那会让收窄白写，还多一次 KKV 写）。
     if (
-      validated.agentId !== baseline.value.agentId ||
-      validated.modelId !== baseline.value.modelId
+      config.agentId !== baseline.value.agentId ||
+      config.modelId !== baseline.value.modelId
     ) {
       await invalidateSessionApiPromptTokenEntry(
         createSessionKkvService(this.deps.conn),
         id
       );
     }
-    return Result.ok(validated);
+    return Result.ok(config);
   }
 
   /**
@@ -422,9 +432,9 @@ export class DefaultSessionService implements SessionService {
         { contentStore: new SqliteVfsContentStore(tx) }
       );
       await r.messages.batchInsert(copyMessages);
-      const seeded = await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages });
-      // 解包 throw 边界（事务回调）：seed 失败靠抛错回滚（总纲 §五例外 2），异常穿出 transaction 由调用链端点 catch 收口。
-      if (!seeded.ok) throw seeded.error;
+      // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 copy，
+      // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
+      await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));
       return copy;
     });
     return Result.ok(copied);

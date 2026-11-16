@@ -61,7 +61,9 @@ describe("handleVfsDelete", () => {
   });
 
   it("VFS delete 成功且不写 file_cache（无 capture）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
     const result = await handleVfsDelete({

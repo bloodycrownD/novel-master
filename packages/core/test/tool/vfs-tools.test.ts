@@ -40,7 +40,7 @@ describe("Builtin file tools V2 (unit)", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("replace", { path: "/t.txt", oldString: "a", newString: "b" }, {} as BuiltinToolContext),
       (e: unknown) => isAppError(e, "TOOL_NOT_FOUND"),
     );
@@ -89,11 +89,11 @@ describe("Builtin file tools V2 (unit)", () => {
     registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
 
-    const result = await runner.call<{ version: number }>(
+    const result = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "drafts/a.md", content: "hi" },
       ctx,
-    );
+    ));
     assert.equal(result.version, 1);
     // vfs.write 收到规范化后的绝对路径
     assert.equal(writes[0].path, "/drafts/a.md");
@@ -129,7 +129,7 @@ describe("Builtin file tools V2 (unit)", () => {
     const runner = new ToolRunner(registry);
 
     // 全新嵌套路径：各层祖先（跳过根、不含文件自身）都补上默认规则
-    await runner.call("write", { path: "x/y/z/n.md", content: "hi" }, ctx);
+    unwrap(await runner.call("write", { path: "x/y/z/n.md", content: "hi" }, ctx));
     assert.deepEqual(setCalls, [
       { logicalPath: "/x" },
       { logicalPath: "/x/y" },
@@ -138,7 +138,7 @@ describe("Builtin file tools V2 (unit)", () => {
 
     // 已有 rule_off 行的层级不覆盖，只补后面的新层级
     setCalls.length = 0;
-    await runner.call("write", { path: "off/deeper/a.md", content: "hi" }, ctx);
+    unwrap(await runner.call("write", { path: "off/deeper/a.md", content: "hi" }, ctx));
     assert.deepEqual(setCalls, [{ logicalPath: "/off/deeper" }]);
   });
 
@@ -163,7 +163,7 @@ describe("Builtin file tools V2 (unit)", () => {
     registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
 
-    await runner.call("fs", { action: "mkdir", path: "m/n" }, ctx);
+    unwrap(await runner.call("fs", { action: "mkdir", path: "m/n" }, ctx));
     // mkdir 自身也是新目录：连同祖先一起补
     assert.deepEqual(setCalls, [
       { logicalPath: "/m" },
@@ -204,11 +204,11 @@ describe("Builtin file tools V2 (unit)", () => {
     registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
 
-    const result = await runner.call<{ version: number }>(
+    const result = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/e/f/g/a.md", content: "new" },
       ctx,
-    );
+    ));
     assert.equal(result.version, 2);
     assert.deepEqual(writes, [{ path: "/e/f/g/a.md", content: "new" }]);
     // 编辑已有文件：祖先目录一条规则都不补
@@ -239,11 +239,11 @@ describe("Builtin file tools V2 (unit)", () => {
     const runner = new ToolRunner(registry);
 
     // write 主流程不受探测失败影响，但补规则被保守跳过
-    const result = await runner.call<{ version: number }>(
+    const result = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/p/q/a.md", content: "hi" },
       ctx,
-    );
+    ));
     assert.equal(result.version, 1);
     assert.deepEqual(setCalls, []);
   });
@@ -263,25 +263,25 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const written = await runner.call<{ version: number }>(
+    const written = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/t.txt", content: "hello world" },
       baseCtx,
-    );
+    ));
     assert.equal(written.version, 1);
 
-    const edited = await runner.call<{ version: number; replacements: number }>(
+    const edited = unwrap(await runner.call<{ version: number; replacements: number }>(
       "edit",
       { path: "/t.txt", oldString: "world", newString: "there" },
       baseCtx,
-    );
+    ));
     assert.equal(edited.replacements, 1);
 
-    const read = await runner.call<{ content: string; version: number }>(
+    const read = unwrap(await runner.call<{ content: string; version: number }>(
       "read",
       { path: "/t.txt" },
       baseCtx,
-    );
+    ));
     assert.equal(read.content, "hello there");
     assert.equal(read.version, 2);
   });
@@ -297,13 +297,13 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx);
-    await runner.call("write", { path: "/t.txt", content: "v2" }, baseCtx);
-    const read = await runner.call<{ content: string }>(
+    unwrap(await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx));
+    unwrap(await runner.call("write", { path: "/t.txt", content: "v2" }, baseCtx));
+    const read = unwrap(await runner.call<{ content: string }>(
       "read",
       { path: "/t.txt" },
       baseCtx,
-    );
+    ));
     assert.equal(read.content, "v2");
   });
 
@@ -318,9 +318,9 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx);
+    unwrap(await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx));
     // 旧调用方（或 LLM 顺手）多传的 options 字段被 schema 剥离，不报错、不启校验。
-    const second = await runner.call<{ version: number }>(
+    const second = unwrap(await runner.call<{ version: number }>(
       "write",
       {
         path: "/t.txt",
@@ -328,14 +328,14 @@ describe("Builtin file tools V2 (integration)", () => {
         options: { expectedVersion: 1, versionCheck: true },
       } as never,
       baseCtx,
-    );
+    ));
     assert.equal(second.version, 2);
 
-    const third = await runner.call<{ version: number }>(
+    const third = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/t.txt", content: "stale" },
       baseCtx,
-    );
+    ));
     assert.equal(third.version, 3);
     assert.equal((unwrap(await vfs.read("/t.txt"))).content, "stale");
   });
@@ -353,26 +353,26 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const listed = await runner.call<{
+    const listed = unwrap(await runner.call<{
       entries: Array<{ path: string; kind: string }>;
       total: number;
       truncated: boolean;
-    }>("fs", { action: "ls", path: "/docs" }, baseCtx);
+    }>("fs", { action: "ls", path: "/docs" }, baseCtx));
     const paths = listed.entries.map((e) => e.path).sort();
     assert.deepEqual(paths, ["/docs/a.md", "/docs/b.txt"].sort());
 
-    const md = await runner.call<{ paths: string[] }>(
+    const md = unwrap(await runner.call<{ paths: string[] }>(
       "glob",
       { pattern: "**/*.md" },
       baseCtx,
-    );
+    ));
     assert.deepEqual(md.paths, ["/docs/a.md"]);
 
-    const hits = await runner.call<{ matches: any[] }>(
+    const hits = unwrap(await runner.call<{ matches: any[] }>(
       "grep",
       { pattern: "#" },
       baseCtx,
-    );
+    ));
     assert.equal(hits.matches.length, 1);
     assert.equal(hits.matches[0]!.path, "/docs/a.md");
   });
@@ -388,10 +388,10 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "mkdir", path: "/agent-dir" }, baseCtx);
-    const listed = await runner.call<{
+    unwrap(await runner.call("fs", { action: "mkdir", path: "/agent-dir" }, baseCtx));
+    const listed = unwrap(await runner.call<{
       entries: Array<{ path: string; kind: string }>;
-    }>("fs", { action: "ls", path: "/" }, baseCtx);
+    }>("fs", { action: "ls", path: "/" }, baseCtx));
     assert.ok(
       listed.entries.some((e) => e.path === "/agent-dir" && e.kind === "directory"),
     );
@@ -410,7 +410,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx);
+    unwrap(await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx));
     await rejectsErr(
       () => vfs.read("/dir/a.txt"),
         (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
@@ -430,7 +430,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx);
+    unwrap(await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx));
     await rejectsErr(
       () => vfs.read("/dir/a.txt"),
         (e: unknown) => isAppError(e, "VFS_NOT_FOUND"),
@@ -449,7 +449,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "mv", from: "/old.md", to: "/new.md" }, baseCtx);
+    unwrap(await runner.call("fs", { action: "mv", from: "/old.md", to: "/new.md" }, baseCtx));
     assert.equal((unwrap(await vfs.read("/new.md"))).content, "body");
     await rejectsErr(
       () => vfs.read("/old.md"),
@@ -469,7 +469,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "cp", from: "/src/x.md", to: "/dst/x.md" }, baseCtx);
+    unwrap(await runner.call("fs", { action: "cp", from: "/src/x.md", to: "/dst/x.md" }, baseCtx));
     assert.equal((unwrap(await vfs.read("/src/x.md"))).content, "x");
     assert.equal((unwrap(await vfs.read("/dst/x.md"))).content, "x");
   });
@@ -487,7 +487,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "cp", from: "/src", to: "/dst", recursive: true }, baseCtx);
+    unwrap(await runner.call("fs", { action: "cp", from: "/src", to: "/dst", recursive: true }, baseCtx));
     assert.equal((unwrap(await vfs.read("/src/x.md"))).content, "x");
     assert.equal((unwrap(await vfs.read("/dst/x.md"))).content, "x");
   });
@@ -505,12 +505,12 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{
+    const read = unwrap(await runner.call<{
       truncated: boolean;
       returnedLines: number;
       nextOffset?: number;
       totalLines: number;
-    }>("read", { path: "/big.txt" }, baseCtx);
+    }>("read", { path: "/big.txt" }, baseCtx));
 
     assert.equal(read.totalLines, 5000);
     assert.equal(read.returnedLines, TOOL_OUTPUT_MAX_LINES);
@@ -530,8 +530,8 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { action: "rm", path: "/a.txt" }, baseCtx);
-    await assert.rejects(
+    unwrap(await runner.call("fs", { action: "rm", path: "/a.txt" }, baseCtx));
+    await rejectsErr(
       () => runner.call("read", { path: "/a.txt" }, baseCtx),
       (e: unknown) => isAppError(e, "TOOL_FAILED"),
     );
@@ -549,7 +549,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("read", { path: "/small.txt", offset: 100 }, baseCtx),
       (e: unknown) => isAppError(e, "TOOL_INVALID_ARGUMENT"),
     );
@@ -567,11 +567,11 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{ content: string; truncated: boolean }>(
+    const read = unwrap(await runner.call<{ content: string; truncated: boolean }>(
       "read",
       { path: "/long.txt" },
       baseCtx,
-    );
+    ));
     // 旧行为（truncateLine 2000 字符 + 后缀）已废：3000 字符单行在 50KB
     // 预算内完整返回，无截断标记。
     assert.equal(read.content, "a".repeat(3000));
@@ -593,14 +593,14 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{
+    const read = unwrap(await runner.call<{
       content: string;
       truncated: boolean;
       lastLineTruncated?: boolean;
       nextOffset?: number;
       returnedLines: number;
       totalLines: number;
-    }>("read", { path: "/long-oneline.txt" }, baseCtx);
+    }>("read", { path: "/long-oneline.txt" }, baseCtx));
 
     assert.equal(read.totalLines, 1);
     assert.equal(read.returnedLines, 1);
@@ -639,14 +639,14 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{
+    const read = unwrap(await runner.call<{
       content: string;
       truncated: boolean;
       lastLineTruncated?: boolean;
       nextOffset?: number;
       returnedLines: number;
       totalLines: number;
-    }>("read", { path: "/multi-big.txt" }, baseCtx);
+    }>("read", { path: "/multi-big.txt" }, baseCtx));
 
     assert.equal(read.totalLines, 11);
     assert.equal(read.truncated, true);
@@ -661,19 +661,19 @@ describe("Builtin file tools V2 (integration)", () => {
     // 不是同一行——重读被截行会因预算不变再次截断，死循环）。
     assert.equal(read.nextOffset, 6);
     // 续读一：第 6-9 行完整 + 第 10 行('c' 100KB 单行)截断前缀。
-    const next = await runner.call<{ content: string; nextOffset?: number }>(
+    const next = unwrap(await runner.call<{ content: string; nextOffset?: number }>(
       "read",
       { path: "/multi-big.txt", offset: 6 },
       baseCtx,
-    );
+    ));
     assert.ok(next.content.startsWith("bbbb"));
     assert.ok(next.content.endsWith("c"));
     // 续读二：跳过被截的 'c' 行，从第 11 行 'd' 起（预算重置可整行读出）。
-    const final = await runner.call<{ content: string }>(
+    const final = unwrap(await runner.call<{ content: string }>(
       "read",
       { path: "/multi-big.txt", offset: 11 },
       baseCtx,
-    );
+    ));
     assert.equal(final.content, "d-line");
   });
 
@@ -690,13 +690,13 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{
+    const read = unwrap(await runner.call<{
       content: string;
       truncated: boolean;
       returnedLines: number;
       totalLines: number;
       lastLineTruncated?: boolean;
-    }>("read", { path: "/normal.txt" }, baseCtx);
+    }>("read", { path: "/normal.txt" }, baseCtx));
 
     // 全量返回：content 与原文一致、无任何截断标记（与旧行为快照一致）。
     assert.equal(read.content, content);
@@ -719,12 +719,12 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{
+    const read = unwrap(await runner.call<{
       truncated: boolean;
       returnedLines: number;
       nextOffset?: number;
       lastLineTruncated?: boolean;
-    }>("read", { path: "/big-t-r2.txt" }, baseCtx);
+    }>("read", { path: "/big-t-r2.txt" }, baseCtx));
 
     assert.equal(read.returnedLines, TOOL_OUTPUT_MAX_LINES);
     assert.equal(read.truncated, true);
@@ -747,20 +747,20 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const grep = await runner.call<{ total: number; truncated: boolean; matches: unknown[] }>(
+    const grep = unwrap(await runner.call<{ total: number; truncated: boolean; matches: unknown[] }>(
       "grep",
       { pattern: "needle" },
       baseCtx,
-    );
+    ));
     assert.equal(grep.total, 120);
     assert.equal(grep.truncated, true);
     assert.equal(grep.matches.length, TOOL_OUTPUT_MAX_MATCHES);
 
-    const glob = await runner.call<{ total: number; truncated: boolean; paths: string[] }>(
+    const glob = unwrap(await runner.call<{ total: number; truncated: boolean; paths: string[] }>(
       "glob",
       { pattern: "**/m-*.txt" },
       baseCtx,
-    );
+    ));
     assert.equal(glob.total, 120);
     assert.equal(glob.truncated, true);
     assert.equal(glob.paths.length, TOOL_OUTPUT_MAX_MATCHES);
@@ -801,11 +801,11 @@ describe("Builtin file tools V2 (integration)", () => {
       fetchFn,
     };
 
-    const out = await runner.call(
+    const out = unwrap(await runner.call(
       "curl",
       { url: "https://example.com/big" },
       baseCtx,
-    );
+    ));
     const rec = out as {
       body: string;
       truncated: boolean;
@@ -836,21 +836,21 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(unwrap(await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
 
     // read 工具分页读回：页 1（行 1-50）+ 页 2（行 51-62）拼回全文。
-    const page1 = await runner.call<{
+    const page1 = unwrap(await runner.call<{
       content: string;
       truncated: boolean;
       lastLineTruncated?: boolean;
       nextOffset?: number;
-    }>("read", { path: rec.savedPath! }, baseCtx);
+    }>("read", { path: rec.savedPath! }, baseCtx));
     assert.equal(page1.truncated, true);
     // 预算恰耗尽 → 末行整行丢弃，不是部分截断。
     assert.equal(page1.lastLineTruncated, undefined);
     assert.equal(page1.nextOffset, 51);
-    const page2 = await runner.call<{ content: string; truncated: boolean }>(
+    const page2 = unwrap(await runner.call<{ content: string; truncated: boolean }>(
       "read",
       { path: rec.savedPath!, offset: 51 },
       baseCtx,
-    );
+    ));
     assert.equal(page2.truncated, false);
     assert.equal(`${page1.content}\n${page2.content}`, body);
   });
@@ -866,7 +866,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("read", { path: "/missing.txt" }, baseCtx),
       (e: unknown) => {
         assert.ok(isAppError(e) && e.key.startsWith("TOOL_"));
@@ -900,14 +900,14 @@ describe("Builtin file tools V2 (integration)", () => {
     // 预置一条 rule_off：write 补规则时不应覆盖
     await workplace.setDirRule({ logicalPath: "/w", ruleEnabled: false });
 
-    await runner.call("write", { path: "/w/x/y/a.md", content: "hi" }, baseCtx);
+    unwrap(await runner.call("write", { path: "/w/x/y/a.md", content: "hi" }, baseCtx));
     assert.equal(unwrap(await workplace.getDirRule("/w"))?.ruleEnabled, false);
     assert.equal(unwrap(await workplace.getDirRule("/w/x"))?.ruleEnabled, true);
     assert.equal(unwrap(await workplace.getDirRule("/w/x/y"))?.ruleEnabled, true);
 
     // 真实 VFS 的 mkdir 不递归：逐层创建，每层都应补上默认规则
-    await runner.call("fs", { action: "mkdir", path: "/m" }, baseCtx);
-    await runner.call("fs", { action: "mkdir", path: "/m/n" }, baseCtx);
+    unwrap(await runner.call("fs", { action: "mkdir", path: "/m" }, baseCtx));
+    unwrap(await runner.call("fs", { action: "mkdir", path: "/m/n" }, baseCtx));
     assert.equal(unwrap(await workplace.getDirRule("/m"))?.ruleEnabled, true);
     assert.equal(unwrap(await workplace.getDirRule("/m/n"))?.ruleEnabled, true);
   });
@@ -938,11 +938,11 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(unwrap(await workplace.getDirRule("/e/f/g")), undefined);
 
     // 编辑：经工具 write 同一路径，内容更新但祖先目录仍无规则行
-    const edited = await runner.call<{ version: number }>(
+    const edited = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/e/f/g/a.md", content: "v2" },
       baseCtx,
-    );
+    ));
     assert.ok(edited.version >= 2);
     assert.equal((unwrap(await vfs.read("/e/f/g/a.md"))).content, "v2");
     assert.equal(unwrap(await workplace.getDirRule("/e")), undefined);
@@ -950,11 +950,11 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(unwrap(await workplace.getDirRule("/e/f/g")), undefined);
 
     // 同树新建：父链各层补上 rule_on（现有行为回归保护）
-    await runner.call(
+    unwrap(await runner.call(
       "write",
       { path: "/e/f/h/b.md", content: "hi" },
       baseCtx,
-    );
+    ));
     assert.equal(unwrap(await workplace.getDirRule("/e"))?.ruleEnabled, true);
     assert.equal(unwrap(await workplace.getDirRule("/e/f"))?.ruleEnabled, true);
     assert.equal(unwrap(await workplace.getDirRule("/e/f/h"))?.ruleEnabled, true);
@@ -991,15 +991,15 @@ describe("Builtin file tools V2 (integration)", () => {
       workplace: brokenWorkplace,
     };
 
-    const written = await runner.call<{ version: number }>(
+    const written = unwrap(await runner.call<{ version: number }>(
       "write",
       { path: "/boom/x/a.md", content: "hi" },
       baseCtx,
-    );
+    ));
     assert.ok(written.version >= 1);
     assert.equal((unwrap(await vfs.read("/boom/x/a.md"))).content, "hi");
 
-    await runner.call("fs", { action: "mkdir", path: "/boom/d" }, baseCtx);
+    unwrap(await runner.call("fs", { action: "mkdir", path: "/boom/d" }, baseCtx));
     const listed = unwrap(await vfs.list("/boom"));
     assert.ok(
       listed.some((e) => e.path === "/boom/d" && e.kind === "directory"),

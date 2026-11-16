@@ -9,6 +9,7 @@ import {
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
+import { rejectsErr } from "../helpers/result-unwrap.js";
 
 novelMasterTestFixture();
 
@@ -48,10 +49,10 @@ describe("AgentRegistryService.delete 不解码", () => {
 
     assert.equal(await repo.exists(agentId), false);
     assert.equal(await repo.get(agentId), null);
-    await assert.rejects(
-      () => registry.get(agentId),
+    await rejectsErr(
+      registry.get(agentId),
       (err: unknown) =>
-        isAppError(err, "AGENT_NOT_FOUND"),
+        assert.ok(isAppError(err, "AGENT_NOT_FOUND")),
     );
   });
 
@@ -60,10 +61,10 @@ describe("AgentRegistryService.delete 不解码", () => {
     const registry = createAgentRegistryService(ctx.conn);
     const missingId = `missing-${testIsolationSuffix()}`;
 
-    await assert.rejects(
-      () => registry.delete(missingId),
+    await rejectsErr(
+      registry.delete(missingId),
       (err: unknown) =>
-        isAppError(err, "AGENT_NOT_FOUND"),
+        assert.ok(isAppError(err, "AGENT_NOT_FOUND")),
     );
   });
 });

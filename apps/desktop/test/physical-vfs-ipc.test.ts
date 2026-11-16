@@ -160,7 +160,9 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("list：某 scope 拉取抛 NOT_FOUND 时跳过该子树，其余域行照常返回（B-1）", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     // rt.physicalVfs() 每次返回新实例，注入需 wrap 工厂方法：
     // /meta scope 拉取抛 NOT_FOUND（等价于拉取期间子树被删）
     const originalFactory = rt.physicalVfs.bind(rt);
@@ -281,7 +283,9 @@ describe("physical 只读物理树 IPC（T-PB4）", () => {
   });
 
   it("无写通道：PhysicalVfsService 运行时对象无任何写方法", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const svc = rt.physicalVfs() as unknown as Record<string, unknown>;
     for (const method of ["write", "mkdir", "delete", "rename", "move"]) {
       assert.equal(svc[method], undefined, `physicalVfs 不应存在 ${method}`);

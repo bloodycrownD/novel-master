@@ -52,7 +52,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
       const ctx = getNovelMasterTestContext();
       const bundle = createProviderServices(ctx.conn, memorySecretStore());
       const providerId = BUILTIN_KEY_TO_UUID[key]!;
-      const saved = await bundle.providerModels.create(providerId, vendorModelId);
+      const saved = unwrap(await bundle.providerModels.create(providerId, vendorModelId));
       assert.equal(
         await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
         expected,
@@ -63,10 +63,10 @@ describe("inferLlmProtocolFromSavedModelId", () => {
   it("T-PI5b：providerId 为固定内置 UUID 时仍解析到正确 protocol", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const saved = await bundle.providerModels.create(
+    const saved = unwrap(await bundle.providerModels.create(
       BUILTIN_PROVIDER_UUID_OPENAI,
       "gpt-4o",
-    );
+    ));
     assert.equal(
       await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
       "openai",
@@ -82,7 +82,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
       displayName: "custom-gateway",
       apiKey: "k",
     }));
-    const saved = await bundle.providerModels.create(created.id, "some-model");
+    const saved = unwrap(await bundle.providerModels.create(created.id, "some-model"));
     assert.equal(
       await inferLlmProtocolFromSavedModelId(saved.id, bundle.savedModelRepo),
       "anthropic",

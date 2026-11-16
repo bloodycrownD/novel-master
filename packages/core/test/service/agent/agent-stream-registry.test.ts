@@ -14,6 +14,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { Result } from "../../../src/errors/either.js";
+import { unwrap } from "../../helpers/result-unwrap.js";
 import {
   createAgentRunner,
   createAgentStreamRegistry,
@@ -235,8 +237,7 @@ function scriptedModel(
         for (const ch of r.assistantText) {
           hooks.onStreamDelta(idx, { type: "text-delta", text: ch });
         }
-      }
-      return r;
+      }      return Result.ok(r);
     }),
   };
 }
@@ -321,7 +322,7 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
         }) as never,
     });
 
-    await runner.run({
+    unwrap(await runner.run({
       maxSteps: 5,
       definition: minimalDefinition(),
       sessionId: SESSION_ID,
@@ -330,7 +331,7 @@ describe("AgentStreamRegistry per-step reset 集成（CR-2）", () => {
       workspaceModelId: MODEL_ID,
       stream: true,
       // 默认 publishRunLifecycle=true，step commit 会触发 streamRegistry.reset
-    });
+    }));
 
     // step1 commit 后 registry 被 reset；step2 开始时已断言 registry 为空。
     // step2 也 commit + reset，所以 run 结束后 partial 最终为空（最后一步的 assistant

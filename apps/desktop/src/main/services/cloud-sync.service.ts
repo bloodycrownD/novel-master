@@ -310,13 +310,27 @@ export class DesktopCloudSyncService {
       }
       exportTempPath = built.value.exportTempPath;
       importTempPath = built.value.importTempPath;
-      const result = await built.value.coordinator.pull({
+      const pulled = await built.value.coordinator.pull({
         lastSyncedRev: meta.lastSyncedRev,
       });
-      return Result.ok(result);
+      // 错误通道迁移五期：coordinator.pull 沿 Result 回传已知失败。ALREADY_UP_TO_DATE
+      // 走下方 catch 分支的同款记账（「已是最新」+ 不换代）；其余 Err 原样上抛给
+      // handler 的 catch（formatIpcError 收口），不重复记账。
+      if (!pulled.ok) {
+        if (isAppError(pulled.error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
+          await this.configStore.recordPull(true, "已是最新");
+          return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
+        }
+        // 已知失败就地补记账后沿 Result 上行（错误通道迁移七期，与旧 catch 的
+        // 非换代分支同款）；换代失败不经本支——DatabaseReplacedError 仍由
+        // throw 通道抵达下方 catch（isDatabaseReplacedError 判定跳过记账）。
+        await this.configStore.recordPull(false, pulled.error.message).catch(() => undefined);
+        return Result.err(pulled.error);
+      }
+      return Result.ok(pulled.value);
     } catch (error) {
       if (isAppError(error, "CLOUD_SYNC_ALREADY_UP_TO_DATE")) {
-        // 该错误只可能由 coordinator.pull 抛出，此时 meta 必已赋值。
+        // 兼容 coordinator 侧仍走 throw 通道的路径：此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
         return Result.ok({ rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false });
       }
@@ -355,10 +369,12 @@ export class DesktopCloudSyncService {
    * 之后会懒建出一个**新对象**，这里的 store 因此必然绑在活连接上。
    */
   async recordPullSuccess(rev: number): Promise<void> {
-    const { getDesktopRuntime } = await import(
+    const { getDesktopRuntimeOrThrow } = await import(
       "../runtime/desktop-runtime-singleton.js"
     );
-    const rt = await getDesktopRuntime();
+    // 调用契约：handler 在 `rebootstrapDesktopRuntime()` 成功之后才进本方法，
+    // 单例 runtime 字段必已就位（换库懒建已发生），同步取即可。
+    const rt = getDesktopRuntimeOrThrow();
     const store = createCloudSyncConfigStore(rt.kkv, rt.secretStore);
     await store.setLastSyncedRev(rev);
     await store.recordPull(true, `已同步至 rev ${rev}`);
@@ -392,13 +408,20 @@ export class DesktopCloudSyncService {
           .catch(() => undefined);
         return Result.err(meta.error);
       }
-      const result = await built.value.coordinator.push({
+      const pushed = await built.value.coordinator.push({
         lastSyncedRev: meta.value.lastSyncedRev,
         forceOverwriteRemote: options?.forceOverwriteRemote,
       });
-      await this.configStore.setLastSyncedRev(result.rev);
-      await this.configStore.recordPush(true, `已推送至 rev ${result.rev}`);
-      return Result.ok(result);
+      // 已知失败（NEED_PULL_FIRST / LOCK_HELD_BY_OTHER 等）就地补记账后沿
+      // Result 上行（错误通道迁移七期，与旧 catch 失败分支同款）；coordinator
+      // 侧未知故障仍走 throw 通道。
+      if (!pushed.ok) {
+        await this.configStore.recordPush(false, pushed.error.message).catch(() => undefined);
+        return Result.err(pushed.error);
+      }
+      await this.configStore.setLastSyncedRev(pushed.value.rev);
+      await this.configStore.recordPush(true, `已推送至 rev ${pushed.value.rev}`);
+      return Result.ok(pushed.value);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       await this.configStore.recordPush(false, detail).catch(() => undefined);
@@ -426,7 +449,10 @@ export class DesktopCloudSyncService {
     }
     const { body } = await storage.value.get(key);
     const parsed = JSON.parse(new TextDecoder().decode(body));
-    return Result.ok(parseCloudSyncStatus(parsed).rev);
+    // 错误通道迁移四期：parseCloudSyncStatus 沿 Result 回传（校验失败是已知失败），
+    // 远端 status 损坏按 0 处理（与 head 缺失同款宽容口径）。
+    const status = parseCloudSyncStatus(parsed);
+    return Result.ok(status.ok ? status.value.rev : 0);
   }
 
   private async buildStorage(): Promise<
@@ -526,6 +552,8 @@ export class DesktopCloudSyncService {
         );
         // 必须 return：不 return 完全合法、零类型错误，但运行时
         // databaseReplaced === undefined ⇒ handler 永不 rebootstrap ⇒ P0 原样复发。
+        // 已知失败沿 Result 通道交给 coordinator（错误通道迁移七期：DbSyncPort
+        // 导入面已 Result 化）；DatabaseReplacedError 仍走 throw 通道。
         return importDatabaseBackupFromBytes(bytes);
       },
       importSnapshotFromPath: async (path: string) => {
@@ -584,15 +612,17 @@ export function __setDesktopCloudSyncStorageOverrideForTest(
  */
 let service: DesktopCloudSyncService | undefined;
 
-export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncService> {
+export async function getDesktopCloudSyncService(): Promise<Result<DesktopCloudSyncService, AppError>> {
   const { getDesktopRuntime } = await import(
     "../runtime/desktop-runtime-singleton.js"
   );
-  const runtime = await getDesktopRuntime();
+  const built = await getDesktopRuntime();
+  if (!built.ok) return Result.err(built.error);
+  const runtime = built.value;
   if (service == null || !service.isForRuntime(runtime)) {
     service = new DesktopCloudSyncService(runtime);
   }
-  return service;
+  return Result.ok(service);
 }
 
 /**

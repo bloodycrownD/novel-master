@@ -7,7 +7,7 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
-import { CloudSyncError } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/errors";
 import { createS3ObjectStorage, isAliyunOssEndpoint } from "../src/create-s3-object-storage.js";
 import type { S3StorageConfig } from "../src/s3-config.js";
 
@@ -114,8 +114,8 @@ describe("createS3ObjectStorage", () => {
           ifMatch: "stale-etag",
         }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "LOCK_CONTENTION");
+        // 错误通道迁移三期：CloudSyncError 退役，收敛为 AppError + 码表 key。
+        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_CONTENTION"));
         return true;
       },
     );
@@ -172,8 +172,8 @@ describe("createS3ObjectStorage", () => {
           ifMatch: "expected-etag",
         }),
       (error: unknown) => {
-        assert.ok(error instanceof CloudSyncError);
-        assert.equal(error.code, "LOCK_CONTENTION");
+        // 错误通道迁移三期：CloudSyncError 退役，收敛为 AppError + 码表 key。
+        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_CONTENTION"));
         return true;
       },
     );

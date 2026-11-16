@@ -75,7 +75,9 @@ describe("workplace ipc handlers", () => {
   });
 
   it("T-CR2: setDirRule → 写 rule_snapshot canon；file_cache 空；不推差集 suggest", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
@@ -114,7 +116,9 @@ describe("workplace ipc handlers", () => {
   });
 
   it("T-CR2: setFileRule → 写 rule_snapshot；file_cache 空", async () => {
-    const rt = await getDesktopRuntime();
+    const rtR = await getDesktopRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",

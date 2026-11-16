@@ -20,29 +20,26 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
-function parseHeaders(flags: ReadonlyMap<string, string | true>): Record<string, string> | undefined {
+function parseHeaders(flags: ReadonlyMap<string, string | true>): Result<Record<string, string> | undefined, AppError> {
   const raw = flagString(flags, "headers");
   if (raw == null) {
-    return undefined;
+    return Result.ok(undefined);
   }
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON object"});
+      return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON object"}));
     }
     const out: Record<string, string> = {};
     for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof v !== "string") {
-        throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: `Header ${k} must be a string`});
+        return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", {detail: `Header ${k} must be a string`}));
       }
       out[k] = v;
     }
-    return out;
-  } catch (e) {
-    if (e instanceof AppError) {
-      throw e;
-    }
-    throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON"});
+    return Result.ok(out);
+  } catch {
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "Invalid --headers JSON"}));
   }
 }
 
@@ -89,11 +86,13 @@ export async function runProvider(
           "Usage: nm provider create --name <name> --protocol <openai|anthropic|gemini> --baseUrl <url> [--headers] [--apiKey]",
         );
       }
+      const headers = parseHeaders(flags);
+      if (!headers.ok) return Result.err(headers.error);
       const created = await rt.providers.create({
         protocol,
         baseUrl,
         displayName: name,
-        headers: parseHeaders(flags),
+        headers: headers.value,
         apiKey: flagString(flags, "apiKey"),
       });
       if (!created.ok) return Result.err(created.error);
@@ -109,7 +108,8 @@ export async function runProvider(
       let clearCurrentModel = false;
       if (currentModelId != null && currentModelId !== "") {
         const saved = await rt.providerModels.getSavedById(currentModelId);
-        clearCurrentModel = saved?.providerId === id;
+        if (!saved.ok) return Result.err(saved.error);
+        clearCurrentModel = saved.value?.providerId === id;
       }
       const deleted = await rt.providers.delete(id);
       if (!deleted.ok) return Result.err(deleted.error);
@@ -143,13 +143,14 @@ export async function runProvider(
       if (flags.has("name")) {
         const name = flagString(flags, "name") ?? "";
         if (name.trim() === "") {
-          throw new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "displayName 不能为空"});
+          return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", {detail: "displayName 不能为空"}));
         }
         patch.displayName = name;
       }
       const headers = parseHeaders(flags);
-      if (headers) {
-        patch.headers = headers;
+      if (!headers.ok) return Result.err(headers.error);
+      if (headers.value) {
+        patch.headers = headers.value;
       }
       if (flags.has("clear-api-key")) {
         patch.apiKey = "";
@@ -167,7 +168,8 @@ export async function runProvider(
     }
     case "use": {
       const id = requireProviderId(flags);
-      await rt.providers.get(id);
+      const got = await rt.providers.get(id);
+      if (!got.ok) return Result.err(got.error);
       await rt.state.setCurrentProviderId(id);
       return RESULT_OK;
     }
@@ -181,7 +183,8 @@ export async function runProvider(
         );
       }
       const provider = await rt.providers.get(id);
-      console.log(`${provider.displayName}\t${provider.id}`);
+      if (!provider.ok) return Result.err(provider.error);
+      console.log(`${provider.value.displayName}\t${provider.value.id}`);
       return RESULT_OK;
     }
     default:

@@ -5,7 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
-import type { Result } from "@/errors/either.js";
+import { Result } from "@/errors/either.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -28,10 +28,10 @@ const TOOL_PASSTHROUGH_KEYS = new Set(["TOOL_NOT_FOUND", "TOOL_CONFLICT", "TOOL_
  * 工具失败归一化：TOOL_* 族直通，其余包成 TOOL_FAILED（cause 带原错误）。
  * 工具闭包的 Err 返回值与未知异常共用这一条出口，模型可见错误不变。
  */
-function normalizeToolFailure(name: string, e: unknown): unknown {
+function normalizeToolFailure(name: string, e: unknown): AppError {
   // 工具内部抛的 ToolError 族 AppError（5 码，key 在 name 上、code 是数字）直通；
   // 用形状判定：跨 duplicate module 实例（src / dist）instanceof 会漏。
-  if (typeof e === "object" && e !== null && typeof (e as { name?: unknown }).name === "string" && TOOL_PASSTHROUGH_KEYS.has((e as { name: string }).name) && typeof (e as { code?: unknown }).code === "number") return e;
+  if (typeof e === "object" && e !== null && typeof (e as { name?: unknown }).name === "string" && TOOL_PASSTHROUGH_KEYS.has((e as { name: string }).name) && typeof (e as { code?: unknown }).code === "number") return e as AppError;
   return new AppError("TOOL_FAILED", {toolName: name, cause: e, detail: `Tool failed: ${name}`});
 }
 
@@ -48,27 +48,30 @@ export class ToolRunner<Ctx = unknown> {
   /**
    * Calls a tool by name with input and context.
    *
-   * @throws ToolError NOT_FOUND when tool missing
-   * @throws ToolError INVALID_ARGUMENT when input invalid
-   * @throws ToolError FAILED when tool throws or output violates schema
-   * @throws AppError TOOL_CANCELLED when the turn signal aborted（预检与竞速同一码，UI 不弹错误文案）
+   * @remarks
+   * - 已知失败（NOT_FOUND / INVALID_ARGUMENT / FORBIDDEN / FAILED）走 `Result.err`，
+   *   与工具闭包 Err 共用 {@link normalizeToolFailure} 归一化出口（TOOL_* 直通、
+   *   其余包 TOOL_FAILED），模型可见错误不变（五期门⑦：返回值通道）。
+   * - 取消仍走异常通道（spec-2 §2.2 路径二）：`AppError TOOL_CANCELLED` when the
+   *   turn signal aborted（预检与竞速同一码，UI 不弹错误文案）；并发协议只有
+   *   throw / reject 通道，不迁返回值。
    */
-  async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Output> {
+  async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Result<Output, AppError>> {
     const tool = this.registry.get(name);
     if (!tool) {
-      throw new AppError("TOOL_NOT_FOUND", {toolName: name, detail: `Tool not registered: ${name}`});
+      return Result.err(new AppError("TOOL_NOT_FOUND", {toolName: name, detail: `Tool not registered: ${name}`}));
     }
 
     const parsedIn = tool.inputSchema.safeParse(input);
     if (!parsedIn.success) {
-      throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: name, issues: parsedIn.error.issues, detail: `Invalid input for tool: ${name}`});
+      return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: name, issues: parsedIn.error.issues, detail: `Invalid input for tool: ${name}`}));
     }
 
     // A-14: path 白名单二次校验（schema 之后的第二道闸）。
     // ctx 上没有 allowedPaths 时 checkToolPathPolicy 直接返回 null，向后兼容。
     const disallowedPath = checkToolPathPolicy(parsedIn.data, ctx);
     if (disallowedPath !== null) {
-      throw new AppError("TOOL_FORBIDDEN", {toolName: name, path: disallowedPath, detail: `Tool path outside allowed scope: ${name} -> ${disallowedPath}`});
+      return Result.err(new AppError("TOOL_FORBIDDEN", {toolName: name, path: disallowedPath, detail: `Tool path outside allowed scope: ${name} -> ${disallowedPath}`}));
     }
 
     try {
@@ -109,18 +112,19 @@ export class ToolRunner<Ctx = unknown> {
       }
 
       // 工具闭包不再解包 throw（门⑦）：Err 交回 runner，与未知异常走同一条
-      // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），模型可见错误不变。
-      if (!out.ok) throw normalizeToolFailure(name, out.error);
+      // 归一化出口（TOOL_* 直通、其余包 TOOL_FAILED），已知失败沿 Result.err
+      // 接力（五期门⑦）；取消等异常通道照旧由下方 catch 抛出。
+      if (!out.ok) return Result.err(normalizeToolFailure(name, out.error));
 
       if (tool.outputSchema) {
         const parsedOut = tool.outputSchema.safeParse(out.value);
         if (!parsedOut.success) {
-          throw new AppError("TOOL_FAILED", {toolName: name, cause: parsedOut.error, detail: `Tool failed: ${name}`});
+          return Result.err(new AppError("TOOL_FAILED", {toolName: name, cause: parsedOut.error, detail: `Tool failed: ${name}`}));
         }
-        return parsedOut.data as Output;
+        return Result.ok(parsedOut.data as Output);
       }
 
-      return out.value as Output;
+      return Result.ok(out.value as Output);
     } catch (e: unknown) {
       throw normalizeToolFailure(name, e);
     }
@@ -162,10 +166,10 @@ export class ToolRunner<Ctx = unknown> {
         }
         try {
           try {
-            outcomes[index] = {
-              ok: true,
-              output: await this.call(call.name, call.input, ctx),
-            };
+            const result = await this.call(call.name, call.input, ctx);
+            // 已知失败沿 Result.err 落 outcome；取消等异常通道（TOOL_CANCELLED）
+            // 仍由下方 catch 捕获落 outcome，ParallelToolOutcome 形态不变。
+            outcomes[index] = result.ok ? { ok: true, output: result.value } : { ok: false, error: result.error };
           } catch (error: unknown) {
             outcomes[index] = { ok: false, error };
           }

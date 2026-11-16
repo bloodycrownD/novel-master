@@ -7,7 +7,7 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { Result } from "@/errors/either.js";
-import { unwrap } from "../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { subagentTool, SUBAGENT_STOP_REASON_USER } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
@@ -194,14 +194,13 @@ describe("subagent-tool / task", () => {
 
   it("T-T3: 不存在的 subagentName 抛 ToolError", async () => {
     const { ctx } = makeMockSubagent({ defs: [generalDef] });
-    await assert.rejects(
-      () =>
+    await rejectsErr(
         subagentTool.run(
           { description: "t", prompt: "p", subagentName: "ghost" },
           makeToolCtx(ctx),
         ),
       (err: unknown) =>
-        isAppError(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到"),
+        assert.ok(isAppError(err) && err.key.startsWith("TOOL_") && err.message.includes("未找到")),
     );
   });
 

@@ -20,7 +20,8 @@ export function isSessionVfsScope(
 /**
  * 经 userVfsTurn 执行；失败沿 `Result` 返回，由调用方转码（handlers/vfs.ts 各
  * handler 的 `ipcErr(formatIpcError(...))`；vfs-batch 侧经 core BatchIngestWriter
- * 协议落 handleVfsBatchIngestFromPaths 的 catch）。错误侧照 core port 契约保持
+ * 协议聚进 Report.failed——错误通道迁移七期起 writer 端口收
+ * `Result<void, AppError>`）。错误侧照 core port 契约保持
  * `unknown`（`user-vfs-turn.port.ts` 的 UserVfsTurnExecuteResult：合成 tool 失败
  * 是异构形态），转码统一走 formatIpcError。成功后轻量 refresh：读 main 侧
  * annotate store 投影推送（无净 diff preview）。

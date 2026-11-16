@@ -169,7 +169,14 @@ function detachMainEventBusListeners(): void {
 
 async function bootstrapMainServices(): Promise<void> {
   registerIpcHandlers();
-  const runtime = await getDesktopRuntime();
+  const built = await getDesktopRuntime();
+  // 装配的已知失败在进程级边界收口（错误通道迁移七期）：落日志后继续，
+  // 窗口仍在（与旧 catch 的未知异常分支同一终点）；未知异常仍走下方 catch。
+  if (!built.ok) {
+    log.error("bootstrap failed", { error: built.error });
+    return;
+  }
+  const runtime = built.value;
   detachMainEventBusListeners();
   detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
   detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(

@@ -285,7 +285,8 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
 
   async importRules(raw: unknown): Promise<Result<SmartSortRule[], AppError>> {
     const doc = decodeSmartSortRuleBundle(raw);
-    const entities = bundleRulesToEntities(doc, Date.now());
+    if (!doc.ok) return Result.err(doc.error);
+    const entities = bundleRulesToEntities(doc.value, Date.now());
     const seen = new Set<string>();
     for (const entity of entities) {
       if (seen.has(entity.ruleId)) {

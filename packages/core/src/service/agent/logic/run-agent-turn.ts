@@ -38,6 +38,14 @@ import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
 import { Result } from "@/errors/either.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+
+/**
+ * runner.run / session.append 已知失败转异常：复用调用方 catch 的既有收口
+ * （终态补发判定 / onRunFailed / AppError→Result.err 分流），不新增解包字面。
+ */
+function rethrowRunFailure(error: AppError): never {
+  throw error;
+}
 import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_SUBAGENT_CHILD_SESSION_CREATED } from "@/domain/events/model/event-types.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
@@ -203,8 +211,13 @@ export async function assembleSkillsToolContext(
   if (service == null) return undefined;
   if (!registry.list().includes(SKILL_TOOL_NAME)) return undefined;
   const effective = await service.effectiveSkills(projectId);
+  if (!effective.ok) {
+    // 装配失败沿异常通道上抛（原行为）：技能清单读取失败不静默降级成「无技能工具」。
+    const failure = effective.error;
+    throw failure;
+  }
   // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
-  return { service, projectId, effective, referencedNames: new Set<string>() };
+  return { service, projectId, effective: effective.value, referencedNames: new Set<string>() };
 }
 
 /**
@@ -335,15 +348,22 @@ interface RunAgentTurnOptions {
   readonly onRunFailed?: (ctx: { readonly stage: string; readonly error: unknown; readonly scope: AgentTurnScope; readonly savedModelId?: string; readonly stream: boolean }) => void;
 }
 
-async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (error) {
-    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
-      throw new AgentTurnError(error.message);
+/**
+ * resolve 链失败转码（Result 入参，五期门⑦）：已知 resolve 失败 key 转
+ * `AgentTurnError`（turn 异常通道，双端按同一 key 口径归一文案）；其余原样抛，
+ * 由本函数 catch（AppError → `Result.err`）收口。
+ */
+async function mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T> {
+  const result = await fn();
+  if (!result.ok) {
+    if (AGENT_RUN_RESOLVE_KEYS.has(result.error.key)) {
+      throw new AgentTurnError(result.error.message);
     }
-    throw error;
+    // 未知错误原样抛（本函数是 resolve 链 → turn 异常通道的转码边界）。
+    const failure = result.error;
+    throw failure;
   }
+  return result.value;
 }
 
 /** 子代理模型解析结果（与 `BuiltinToolSubagentContext.resolveChildModelId` 的返回形状一致）。 */
@@ -744,7 +764,19 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
       // task 是静态内置工具，registerBuiltinTools 已注册（probe 也含 task）；
       // 这里不单独注册 task，只把 callable 塞进下方 toolCtx.subagent.callableAgents 供 description lambda 读。
-      const allDefs = await runtime.agentRegistry.list();
+      const allDefsResult = await runtime.agentRegistry.list();
+      // 毒行 decode 失败（五期门⑦沿 Result 到达）：前奏期已知失败，终态记账与
+      // 上方 validation 失败同款；Outcome.cancelled 路由不受影响（见检查点③）。
+      if (!allDefsResult.ok) {
+        safePublish(runtime, EVENT_AGENT_RUN_FAILED, {
+          sessionId: scope.sessionId,
+          projectId: scope.projectId,
+          runId: "",
+          error: allDefsResult.error instanceof Error ? allDefsResult.error.message : String(allDefsResult.error),
+        });
+        return Result.err(allDefsResult.error);
+      }
+      const allDefs = allDefsResult.value;
 
       // 检查点③（r3-run-4，:565 之后）：`agentRegistry.list()` 是前奏尾段的
       // 第一件真 IO 活（拉全部 agent 定义），大会话上窗口不小。停在这里比跑完
@@ -899,7 +931,12 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       try {
         const abortSignal = internalController.signal;
         const runInput = { definition, sessionId: scope.sessionId, projectId: scope.projectId, savedModelId, workspaceModelId, maxSteps, stream, signal: abortSignal, onStream: options?.onStream };
-        result = await runner.run(runInput);
+        const runResult = await runner.run(runInput);
+        // runner 已知失败沿返回值到达（五期门⑦）：转异常进本函数既有收口——
+        // runnerEmittedTerminal 已因 runner 内发过终态置真（不会重复补 FAILED('')），
+        // 判据二 onRunFailed 与 AppError→Result.err 分流照旧。
+        if (!runResult.ok) rethrowRunFailure(runResult.error);
+        result = runResult.value;
       } finally {
         // 同步分发下这里退订不会漏事件；退订后 runnerEmittedTerminal 冻结为本 run 的事实。
         offTerminalWatch.unsubscribe();
@@ -1128,14 +1165,16 @@ async function runChildAgent(args: {
   try {
     // 并发硬互斥的 claim 落点（spec D5）：由无条件覆盖的 `register` 换成
     // 抢占式 `tryRegister`。这一行排在下面的 `session.append(prompt)` **之前**，
-    // 所以 claim 失败抛错时子会话里连 task prompt 都还没写——不留孤儿 user 消息。
+    // 所以 claim 失败提前返回时子会话里连 task prompt 都还没写——不留孤儿 user 消息。
     //
     // 判别：`false` = 同一 childSessionId 上已有 in-flight run（典型是同一步里两个
     // task 并发续用同一个子会话），一律一成一败；败方 finally 的 `unregister` 因
     // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
     // 按旧行为；CLI 已补注入，见 D6）。
     if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
-      throw new AppError("TOOL_FAILED", {toolName: "task", descriptor: {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}}});
+      // 五期门⑦：claim 失败（同一子会话已有 in-flight run）沿 `Result.err` 交回，
+      // task 工具按 `!ok` 转给模型（child_session_busy 可重试）。
+      return Result.err(new AppError("TOOL_FAILED", {toolName: "task", descriptor: {key: "error.agent.child_session_busy", params: {child_session_id: childSessionId}}}));
     }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。
@@ -1160,7 +1199,11 @@ async function runChildAgent(args: {
     registerBuiltinTools(baseRegistry);
     // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
     // task 是否对 LLM 可见由下方 resolveAgentToolRegistry 的 depth 判断控制（depth>=2 deny）。
-    const childAllDefs = await runtime.agentRegistry.list();
+    const childAllDefsResult = await runtime.agentRegistry.list();
+    // 毒行 decode 失败（五期门⑦沿 Result 到达）转 catch 通道：streamHandle 的
+    // finally 反注册与终态记账由外层 run 的既有 catch 收口。
+    if (!childAllDefsResult.ok) rethrowRunFailure(childAllDefsResult.error);
+    const childAllDefs = childAllDefsResult.value;
     const callable = childAllDefs.filter((d) => d.mode !== "primary" && d.name !== def.name).map((d) => ({ name: d.name, description: d.description }));
     const registry = resolveAgentToolRegistry(baseRegistry, def, {
       depth: childDepth,
@@ -1200,12 +1243,14 @@ async function runChildAgent(args: {
     // 纯空白串（" "），若只按 prompt 判空，这条 user 消息连同已物化的 fileAttachment
     // 会一起不落库——task 却照常「正常」返回，附件静默蒸发、模型毫不知情。
     if ((opts.prompt != null && opts.prompt.trim().length > 0) || (opts.attachments != null && opts.attachments.length > 0)) {
-      await session.append("user", textBlocks(opts.prompt ?? ""), {
+      const appended = await session.append("user", textBlocks(opts.prompt ?? ""), {
         // fileAttachment 预算内物化的附件（spec G5）：与主会话附件同链路——
         // `content:null` 落库、view-time hydrate、alreadyReferenced 去重都复用既有
         // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
         ...(opts.attachments != null && opts.attachments.length > 0 ? { attachments: opts.attachments } : {}),
       });
+      // prompt / 附件落库失败必须中断子 run：静默返回会让附件蒸发、模型毫不知情。
+      if (!appended.ok) rethrowRunFailure(appended.error);
     }
     // search 装配前置（排障插桩版，同主 run）：先算 ctx 再展开，结果与 toolCtx 对账。
     const childSearchCtx = runtime.searchConfig != null ? await assembleSearchToolContext(runtime.searchConfig) : undefined;
@@ -1302,7 +1347,7 @@ async function runChildAgent(args: {
     }
 
     const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-    return Result.ok(await runner.run({
+    const childResult = await runner.run({
       definition: def,
       sessionId: childSessionId,
       projectId: parentProjectId,
@@ -1314,7 +1359,11 @@ async function runChildAgent(args: {
       publishRunLifecycle: true,
       stream: childStream,
       signal: childController.signal,
-    }));
+    });
+    // 子 run 已知失败沿返回值到达（五期门⑦）：转异常冒泡（本函数无 catch，
+    // 反注册 finally 照跑），与旧 throw 通道逐字一致。
+    if (!childResult.ok) rethrowRunFailure(childResult.error);
+    return Result.ok(childResult.value);
   } finally {
     // 反注册带所有权比对，防误删新 run 的 controller / partial。
     runtime.abortRegistry?.unregister(childSessionId, childController);

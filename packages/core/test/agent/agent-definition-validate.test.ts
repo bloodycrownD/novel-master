@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import { decode as decodeRaw } from "@novel-master/core";
+import type { ZodType } from "zod";
 
 import { agentDefinitionSchema, isAppError, validateAgentDefinition } from "@novel-master/core/agent";
 import type { AgentDefinition, ErrorKey, ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
 import { tCore } from "../helpers/core-i18n.js";
+import { unwrap } from "../helpers/result-unwrap.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 const TEST_SAVED_MODEL_GHOST = "22222222-2222-4222-8222-222222222222";

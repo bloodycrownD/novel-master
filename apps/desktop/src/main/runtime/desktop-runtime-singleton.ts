@@ -2,22 +2,31 @@
  * Main-process runtime singleton lifecycle.
  * Invariant: one open DB + service graph per app session; rebootstrap closes first.
  */
+import type { AppError } from "@novel-master/core/agent";
+import { Result } from "@novel-master/core/errors";
 import { closeDesktopConnection } from "./connection.js";
 import { createDesktopNovelMasterRuntime } from "./create-desktop-runtime.js";
 import type { DesktopNovelMasterRuntime } from "./types.js";
 
 let runtime: DesktopNovelMasterRuntime | undefined;
-let initPromise: Promise<DesktopNovelMasterRuntime> | undefined;
+let initPromise: Promise<Result<DesktopNovelMasterRuntime, AppError>> | undefined;
 
-/** Returns the shared runtime, creating it on first call. */
-export async function getDesktopRuntime(): Promise<DesktopNovelMasterRuntime> {
+/**
+ * Returns the shared runtime, creating it on first call.
+ * 装配的已知失败沿 `Result.err` 上行（错误通道迁移七期），消费方按各自
+ * 通道收口（IPC 经 toIpcResult / formatIpcError；进程级 bootstrap 落日志）；
+ * 未知的装配异常仍走 rejection 通道。
+ */
+export async function getDesktopRuntime(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
   if (runtime) {
-    return runtime;
+    return Result.ok(runtime);
   }
   if (!initPromise) {
-    initPromise = createDesktopNovelMasterRuntime().then((rt) => {
-      runtime = rt;
-      return rt;
+    initPromise = createDesktopNovelMasterRuntime().then((built) => {
+      if (built.ok) {
+        runtime = built.value;
+      }
+      return built;
     });
   }
   return initPromise;
@@ -32,7 +41,7 @@ export function getDesktopRuntimeOrThrow(): DesktopNovelMasterRuntime {
 }
 
 /** Closes DB and rebuilds the full service graph (backup import, etc.). */
-export async function rebootstrapDesktopRuntime(): Promise<DesktopNovelMasterRuntime> {
+export async function rebootstrapDesktopRuntime(): Promise<Result<DesktopNovelMasterRuntime, AppError>> {
   await resetDesktopRuntimeForTest();
   return getDesktopRuntime();
 }

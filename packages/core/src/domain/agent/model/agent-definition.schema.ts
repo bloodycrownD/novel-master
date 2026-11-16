@@ -5,6 +5,8 @@
  */
 
 import { z } from "zod";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { dynamicBlockToWire, persistBlockToWire } from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
 import { validateAgentPromptLayout, validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
 import { stripLegacyAgentWire, stripLegacyPrompts, stripLifecycleFromTextBlock } from "./agent-definition-preprocess.js";
@@ -76,30 +78,49 @@ type AgentDefinitionDocument = z.infer<typeof agentDefinitionDocumentSchema>;
 const agentDefinitionWireSchema = z.preprocess(stripLegacyAgentWire, agentDefinitionDocumentSchema);
 
 /** Domain parser: wire document → {@link AgentDefinition}（toWire 由下面的 {@link agentDefinitionSchema} 挂载）。 */
-const agentDefinitionBaseSchema = agentDefinitionWireSchema.transform((doc) => {
-  const prompts = validateAgentPromptLayoutFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
-    persistEnabled: doc.prompts.persistEnabled,
-    dynamicEnabled: doc.prompts.dynamicEnabled,
-    workplace: doc.prompts.workplace,
-    customAttach: doc.prompts.customAttach,
-    skillsEnabled: doc.prompts.skillsEnabled,
-    skillsPrefix: doc.prompts.skillsPrefix,
+const agentDefinitionBaseSchema = agentDefinitionWireSchema
+  .superRefine((doc, ctx) => {
+    const prompts = validateAgentPromptLayoutFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+      persistEnabled: doc.prompts.persistEnabled,
+      dynamicEnabled: doc.prompts.dynamicEnabled,
+      workplace: doc.prompts.workplace,
+      customAttach: doc.prompts.customAttach,
+      skillsEnabled: doc.prompts.skillsEnabled,
+      skillsPrefix: doc.prompts.skillsPrefix,
+    });
+    if (!prompts.ok) {
+      // zod 回调签名由框架锁定，无法返 Result（五期门⑦）：布局校验的域 AppError
+      // 挂进 issue params 走**数据通道**出 zod 管道，decode() 失败分支原样提取进
+      // Err——key / detail / descriptor 零漂移，替代旧「transform 内 throw 解包」
+      // 的异常通道。superRefine 有 issue 时后续 transform 不执行。
+      ctx.addIssue({ code: "custom", message: prompts.error.message, params: { appError: prompts.error } });
+    }
+  })
+  .transform((doc) => {
+    // superRefine 段已用同一入参跑过同一校验并拒绝非法布局（纯函数，两遍同结果），
+    // 此处恒 Ok；unwrapOr 的空布局仅为类型兜底，不会出现在输出里。
+    const prompts = validateAgentPromptLayoutFromMaps(doc.prompts.persist, doc.prompts.dynamic, doc.prompts.system, {
+      persistEnabled: doc.prompts.persistEnabled,
+      dynamicEnabled: doc.prompts.dynamicEnabled,
+      workplace: doc.prompts.workplace,
+      customAttach: doc.prompts.customAttach,
+      skillsEnabled: doc.prompts.skillsEnabled,
+      skillsPrefix: doc.prompts.skillsPrefix,
+    });
+    return {
+      name: doc.name,
+      ...(doc.description != null && doc.description.length > 0 ? { description: doc.description } : {}),
+      ...(doc.mode != null ? { mode: doc.mode } : {}),
+      prompts: prompts.unwrapOr({ persist: [], dynamic: [] }),
+      model: doc.model,
+      runtime: doc.runtime,
+      ...(doc.tools != null ? { tools: doc.tools } : {}),
+    };
   });
-  if (!prompts.ok) throw prompts.error;
-  return {
-    name: doc.name,
-    ...(doc.description != null && doc.description.length > 0 ? { description: doc.description } : {}),
-    ...(doc.mode != null ? { mode: doc.mode } : {}),
-    prompts: prompts.value,
-    model: doc.model,
-    runtime: doc.runtime,
-    ...(doc.tools != null ? { tools: doc.tools } : {}),
-  };
-});
 
 /** Domain parser + serializer（decode / encode 共用）。 */
 export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
-  toWire: (def: AgentDefinition): AgentDefinitionDocument => {
+  toWire: (def: AgentDefinition): Result<AgentDefinitionDocument, AppError> => {
     // 块名唯一性门禁（RT-04）：wire 形态是「块名 → 块」的对象映射，同名块在这里
     // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 validateAgentPromptLayoutFromMaps
     // 天然唯一、写侧此前是裸的 ⇒ 只补写侧这一处。
@@ -107,7 +128,7 @@ export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
     // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 toWire，
     // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
     const validated = validateAgentPromptLayout(def.prompts);
-    if (!validated.ok) throw validated.error;
+    if (!validated.ok) return Result.err(validated.error);
     const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
     for (const block of def.prompts.persist) {
       persist[block.name] = persistBlockToWire(block);
@@ -116,7 +137,7 @@ export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
     for (const block of def.prompts.dynamic) {
       dynamic[block.name] = dynamicBlockToWire(block);
     }
-    return {
+    return Result.ok({
       schemaVersion: 1,
       name: def.name,
       ...(def.description != null && def.description.trim().length > 0 ? { description: def.description } : {}),
@@ -142,6 +163,6 @@ export const agentDefinitionSchema = Object.assign(agentDefinitionBaseSchema, {
             },
           }
         : {}),
-    };
+    });
   },
 });

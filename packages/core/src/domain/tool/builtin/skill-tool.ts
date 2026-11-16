@@ -323,7 +323,8 @@ action 说明：
         const { content, truncated } = deriveSkillLoadTruncation(result.value.content);
         // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
         const list = await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId });
-        const files = list.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
+        if (!list.ok) return Result.err(list.error);
+        const files = list.value.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
         // v1.5.30 unref 回迁：load 不再同步 +1、不再产 contentRef 引用块
         // （alreadyReferenced 分支恒返回常量 tip，本分支恒返回全文）。
         return Result.ok({
@@ -350,7 +351,7 @@ action 说明：
         // 报错文案与「推导前先判定」逐字一致。
         const { content, returnedLines, totalLines, truncated, nextOffset } = deriveSkillReadTruncation(result.value.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
-          throw new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`});
+          return Result.err(new AppError("TOOL_INVALID_ARGUMENT", {toolName: SKILL_TOOL_NAME, detail: `offset ${offset} exceeds file length (${totalLines} lines)`}));
         }
         // v1.5.30 unref 回迁：read 不再同步 +1、不再产 contentRef 引用块。
         return Result.ok({
@@ -403,9 +404,10 @@ action 说明：
         if (input.domain == null) {
           // 缺省列合并视图（当前项目视角的生效清单，含禁用/覆盖标记）
           const effective = await service.effectiveSkills(skills.projectId);
+          if (!effective.ok) return Result.err(effective.error);
           return Result.ok({
             action: "list",
-            entries: effective.map((s) => ({
+            entries: effective.value.map((s) => ({
               name: s.name,
               ...(s.description != null ? { description: s.description } : {}),
               domain: s.domain,
@@ -413,19 +415,20 @@ action 说明：
               ...(s.disabled ? { disabled: true } : {}),
               ...(s.overridden ? { overridden: true } : {}),
             })),
-            total: effective.length,
+            total: effective.value.length,
           });
         }
         const items = await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId });
+        if (!items.ok) return Result.err(items.error);
         return Result.ok({
           action: "list",
-          entries: items.map((s) => ({
+          entries: items.value.map((s) => ({
             name: s.name,
             ...(s.description != null ? { description: s.description } : {}),
             domain: s.domain,
             valid: s.valid,
           })),
-          total: items.length,
+          total: items.value.length,
         });
       }
     }

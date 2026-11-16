@@ -1,7 +1,8 @@
-import { unwrap } from "../../helpers/result-unwrap.js";
+import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode } from "@novel-master/core";
+import { decode as decodeRaw } from "@novel-master/core";
+import type { ZodType } from "zod";
 import {
   agentDefinitionSchema,
   createAgentRegistryService,
@@ -15,6 +16,11 @@ import {
   testIsolationSuffix,
 } from "../../helpers/novel-master-fixture.js";
 import { tCore } from "../../helpers/core-i18n.js";
+
+/** decode 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error。 */
+function decode<T>(raw: unknown, schema: ZodType<T>): T {
+  return unwrap(decodeRaw(raw, schema));
+}
 
 novelMasterTestFixture();
 
@@ -63,7 +69,8 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = await resolveAgentForProject(runtime, project.id, session.id);
+    // 五期门⑦：resolveAgentForProject 沿 Result 回传，测试边界解包。
+    const resolved = unwrap(await resolveAgentForProject(runtime, project.id, session.id));
     // 项目智能体下线后永远走 session 分支，返回 session 级 definition + agentId。
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
@@ -108,7 +115,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
     // 项目智能体下线后，即便 projects.getAgentConfig 返回 custom 缺 definition，
     // resolve 也不再读取它——直接走 session.agentId，不抛错。
-    const resolved = await resolveAgentForProject(runtime, project.id, session.id);
+    const resolved = unwrap(await resolveAgentForProject(runtime, project.id, session.id));
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
       assert.equal(resolved.agentId, "global-agent");
@@ -162,11 +169,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = await resolveAgentForProject(
+    const resolved = unwrap(await resolveAgentForProject(
       runtime,
       project.id,
       session.id,
-    );
+    ));
     // 不再被 custom 截断，走 session 分支拿 session-agent。
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
@@ -215,11 +222,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = await resolveAgentForProject(
+    const resolved = unwrap(await resolveAgentForProject(
       runtime,
       project.id,
       session.id,
-    );
+    ));
     assert.equal(resolved.source, "session");
     if (resolved.source === "session") {
       assert.equal(resolved.agentId, "session-agent");
@@ -257,13 +264,15 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    await assert.rejects(
-      () => resolveAgentForProject(runtime, project.id, session.id),
+    await rejectsErr(
+      resolveAgentForProject(runtime, project.id, session.id),
       (error: unknown) =>
-        isAppError(error, "AGENT_REFERENCED_NOT_FOUND") &&
-        error.messageKey === "error.agent.referenced_not_found" &&
-        error.messageParams?.agent_id === "ghost-agent" &&
-        error.messageParams?.detail != null,
+        assert.ok(
+          isAppError(error, "AGENT_REFERENCED_NOT_FOUND") &&
+          error.messageKey === "error.agent.referenced_not_found" &&
+          error.messageParams?.agent_id === "ghost-agent" &&
+          error.messageParams?.detail != null,
+        ),
     );
   });
 
@@ -293,11 +302,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       sessions: ctx.sessions,
     };
 
-    const first = await resolveAgentForProject(
+    const first = unwrap(await resolveAgentForProject(
       runtime,
       project.id,
       session.id,
-    );
+    ));
     assert.equal(first.source, "session");
     if (first.source !== "session") return;
     assert.equal(first.definition.name, "v1");
@@ -315,11 +324,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       ),
     );
 
-    const second = await resolveAgentForProject(
+    const second = unwrap(await resolveAgentForProject(
       runtime,
       project.id,
       session.id,
-    );
+    ));
     assert.equal(second.source, "session");
     if (second.source !== "session") return;
     // 每次 resolve 都从 registry 现取，拿到的是最新 definition（引用语义）。
