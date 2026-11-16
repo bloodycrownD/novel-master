@@ -17,10 +17,12 @@ async function loadOpSqlite(): Promise<OpSqliteBindings> {
       "@op-engineering/op-sqlite"
     )) as unknown as Partial<OpSqliteBindings>;
     if (typeof mod.open !== "function") {
+      // nm-throw: keep — 第三方驱动模块契约边界：op-sqlite 导出缺失属依赖装配失败。
       throw new Error("@op-engineering/op-sqlite 导出缺失（需要 open）");
     }
     return mod as OpSqliteBindings;
   } catch (cause) {
+    // nm-throw: keep — 第三方驱动加载边界：op-sqlite 未安装/加载失败，交装配层处理。
     throw new Error(
       "@op-engineering/op-sqlite 未安装或加载失败。请将其安装为 peer 依赖并重新构建原生应用。",
       { cause },
@@ -69,6 +71,7 @@ export class OpSqliteDynamicAdapter implements OpSqliteAdapter {
 
   private requireDelegate(): BaseOpSqliteAdapter {
     if (!this.delegate) {
+      // nm-throw: keep — 驱动层 API 误用不变量：未 open 即调用属编程错误。
       throw new Error("Adapter not open");
     }
     return this.delegate;

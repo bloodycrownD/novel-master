@@ -537,6 +537,7 @@ export function useChatComposerController({
         // fire-and-forget；refcount 与收尾归 manager。
         const manager = runtime.sessionStreamUnitManager;
         if (manager == null) {
+          // nm-throw: keep — invariant：Provider 仅在 manager 装配完成后才置 status='ready'（类型亦非可空），此分支不可达
           throw new Error('运行时尚未就绪，请稍后重试');
         }
         const started = manager.startRun(sessionId, scope.projectId, content, {

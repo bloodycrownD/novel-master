@@ -41,6 +41,7 @@ export function decryptUtf8(
   try {
     const buf = Buffer.from(ciphertext);
     if (buf.length < TAG_BYTES) {
+      // nm-throw: keep — OS 加密解密边界：密文短于 GCM tag 属输入损坏检错，随即由 SkspError 收口。
       throw new Error("ciphertext too short");
     }
     const tag = buf.subarray(buf.length - TAG_BYTES);

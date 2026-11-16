@@ -56,11 +56,13 @@ export function __setAppInfoSeamsForTests(overrides: Partial<AppInfoSeams> | nul
     runUpdateCheck:
       overrides.runUpdateCheck ??
       (async () => {
+        // nm-throw: keep — 测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。
         throw new Error("runUpdateCheck not configured for tests");
       }),
     openExternal:
       overrides.openExternal ??
       (async () => {
+        // nm-throw: keep — 测试 seam 未配置属编程错误（用例忘了覆盖），必须显式炸掉而不是静默给默认值。
         throw new Error("openExternal not configured for tests");
       }),
   };

@@ -189,6 +189,7 @@ export function runConformanceTests(options: ConformanceOptions): void {
             await tx.execute("INSERT INTO conformance_tx_rb (id) VALUES (?)", [
               2,
             ]);
+            // nm-throw: keep — conformance 测试夹具：故意抛错验证事务回滚，非业务错误。
             throw new Error("rollback me");
           });
         });

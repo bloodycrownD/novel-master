@@ -226,6 +226,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
+              // nm-throw: keep — 测试故障注入点：failImport 按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。

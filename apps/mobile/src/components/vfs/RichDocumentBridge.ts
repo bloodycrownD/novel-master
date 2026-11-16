@@ -115,9 +115,11 @@ export function encodeRichDocumentToHost(message: RichDocumentToHostMessage): st
 export function decodeRichDocumentToHost(raw: string): RichDocumentToHostMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
+    // nm-throw: keep — webview bridge 边界：from-web 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope version');
   }
   if (typeof parsed.type !== 'string' || !isRecord(parsed.payload)) {
+    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope shape');
   }
   return parsed as RichDocumentToHostMessage;
@@ -126,9 +128,11 @@ export function decodeRichDocumentToHost(raw: string): RichDocumentToHostMessage
 export function decodeHostToRichDocument(raw: string): HostToRichDocumentMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
+    // nm-throw: keep — webview bridge 边界：to-host 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope version');
   }
   if (typeof parsed.type !== 'string') {
+    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope shape');
   }
   return parsed as HostToRichDocumentMessage;

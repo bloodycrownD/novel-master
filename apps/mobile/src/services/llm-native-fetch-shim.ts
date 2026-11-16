@@ -188,6 +188,7 @@ export function createNativeRequestFetch(deps: LlmNativeRequestDeps): FetchLike 
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const method = (init?.method ?? 'GET').toUpperCase();
     if (method !== 'GET' && method !== 'POST') {
+      // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错（测试钉 'GET/POST' 拒绝）
       throw new Error(`llm-native-fetch 仅支持 GET/POST 非流式请求（收到 ${method}）`);
     }
     const rawBody = init?.body;
@@ -196,6 +197,7 @@ export function createNativeRequestFetch(deps: LlmNativeRequestDeps): FetchLike 
       if (rawBody != null && typeof rawBody !== 'string') {
         // 消费面（fetchJson）只发 JSON string；其它 body 形态属误用，明确报错
         // 而不是静默丢弃或序列化出意外载荷。
+        // nm-throw: keep — native bridge fetch 适配层：fetch 形状契约以 reject 报错
         throw new Error(`llm-native-fetch 仅支持 string body（收到 ${typeof rawBody}）`);
       }
       body = rawBody ?? null;

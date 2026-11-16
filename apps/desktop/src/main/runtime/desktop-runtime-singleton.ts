@@ -35,6 +35,7 @@ export async function getDesktopRuntime(): Promise<Result<DesktopNovelMasterRunt
 /** Synchronous access when handlers know bootstrap already completed. */
 export function getDesktopRuntimeOrThrow(): DesktopNovelMasterRuntime {
   if (!runtime) {
+    // nm-throw: keep — 同步访问器的不变量：调用方契约保证 bootstrap 已完成（名字即契约），未初始化属编程错误。
     throw new Error("Desktop runtime not initialized");
   }
   return runtime;

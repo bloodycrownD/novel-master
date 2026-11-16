@@ -296,7 +296,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
   }
 
   if (syncBusy) {
-    throw new Error('云同步进行中，请稍后再试');
+    return Result.err(new AppError('AGENT_BUSY', {detail: '云同步进行中，请稍后再试'}));
   }
   syncBusy = true;
   // 任务级取消作用域：key 固定 `sync:local`（S3 配置无 provider 概念，
@@ -442,7 +442,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
   }
 
   if (syncBusy) {
-    throw new Error('云同步进行中，请稍后再试');
+    return Result.err(new AppError('AGENT_BUSY', {detail: '云同步进行中，请稍后再试'}));
   }
   syncBusy = true;
   // 任务级取消作用域：与 pull 共用 `sync:local`（syncBusy 全局互斥，同一时刻

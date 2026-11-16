@@ -20,6 +20,7 @@ import { getNodeEncodingForModel } from "./encoding-cache.js";
 function getEncoding(tiktokenModel: string) {
   const enc = getNodeEncodingForModel(tiktokenModel);
   if (enc == null) {
+    // nm-throw: keep — tiktoken 第三方编码表加载边界：拿不到表按契约抛给驱动层降级。
     throw new Error(`tiktoken encoding unavailable: ${tiktokenModel}`);
   }
   return enc;

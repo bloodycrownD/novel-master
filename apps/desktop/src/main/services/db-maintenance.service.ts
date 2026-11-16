@@ -49,10 +49,10 @@ export async function runDbMaintenance(): Promise<
     return Result.err(new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再操作"}));
   }
   if (isDesktopCloudSyncBusy()) {
-    throw new Error("云同步进行中，请稍后再操作");
+    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再操作" }));
   }
   if (isDesktopDbMaintenanceBusy()) {
-    throw new Error("数据清理进行中，请稍后再操作");
+    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "数据清理进行中，请稍后再操作" }));
   }
   setDesktopDbMaintenanceBusy(true);
   try {

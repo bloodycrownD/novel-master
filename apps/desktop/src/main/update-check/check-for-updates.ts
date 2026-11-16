@@ -16,6 +16,7 @@ export async function checkForUpdates(localVersion: string, fetchFn?: FetchFn): 
   // 仅在编排入口短路，不改 UI 错误呈现路径：renderer 收到错误照常处理（s3-update
   // 的「检查更新」用例验证的就是错误态呈现）。
   if (process.env.NOVEL_MASTER_DISABLE_UPDATE_CHECK === "1") {
+    // nm-throw: keep — e2e 专用短路钩子，刻意走 reject 模拟「更新检查失败」错误态；update-check 属 infra 适配层。
     throw new Error("更新检查已禁用（测试环境）");
   }
   const release = await resolveLatestRelease(fetchFn);

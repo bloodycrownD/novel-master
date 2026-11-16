@@ -88,6 +88,7 @@ export function createNativeSseTransport(): SseTransport {
   }
   const bridge = createBridge();
   if (bridge == null) {
+    // nm-throw: keep — native bridge 边界：LlmSseNative 模块不可用（非 Android / 未 autolink），须先经 isNativeSseAvailable 判定。
     throw new Error(
       "LlmSseNative 模块不可用（非 Android 或未 autolink）；请先经 isNativeSseAvailable() 判定",
     );

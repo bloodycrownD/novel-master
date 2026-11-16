@@ -20,6 +20,7 @@ function blobFs(): typeof ReactNativeBlobUtil.fs {
   const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
   const fs = anyMod.fs ?? anyMod.default?.fs;
   if (fs == null) {
+    // nm-throw: keep — 平台边界：react-native-blob-util 原生模块不可用，同步路径解析无失败位
     throw new Error('react-native-blob-util.fs unavailable');
   }
   return fs;
@@ -37,6 +38,7 @@ export function buildMobileDatabaseFilePathCandidates(dirs: typeof ReactNativeBl
   const dirsWithSupport = dirs as typeof dirs & {ApplicationSupportDir?: string};
   const base = dirs.DocumentDir ?? dirs.LibraryDir ?? dirsWithSupport.ApplicationSupportDir;
   if (typeof base !== 'string' || base.length === 0) {
+    // nm-throw: keep — 平台边界：设备未返回可用的数据库根目录，同步路径解析无失败位
     throw new Error('无法定位应用数据库目录');
   }
   const fileNames = [MOBILE_VFS_DB_NAME, `${MOBILE_VFS_DB_NAME}.db`];

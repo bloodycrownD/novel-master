@@ -163,6 +163,7 @@ export async function doCloudSyncPull(scope: AbortScope): Promise<Outcome<CloudS
       log.warn("库已换代但服务商配置表未完全恢复", { providerTablesRestored: err.providerTablesRestored });
       // 补偿链的「已换代 + 三表未恢复」不是业务失败通道能表达的状态，保留既有
       // 未知通道抛错，由 runAbortable 的边界统一 formatIpcError。
+      // nm-throw: keep — 库已换代但服务商配置表未恢复属故障态不变量，Outcome 的 failed 表达不了「库已变但重建未完成」。
       throw new Error(`${err.message}（服务商配置未能恢复，请检查模型服务商设置）`);
     }
     throw err;

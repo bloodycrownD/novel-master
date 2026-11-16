@@ -131,6 +131,7 @@ export class BaseOpSqliteAdapter implements OpSqliteAdapter {
 
   private requireDb(): OpSqliteDb {
     if (!this.db) {
+      // nm-throw: keep — 驱动层 API 误用不变量：未 open 即调用属编程错误。
       throw new Error("op-sqlite adapter is not open");
     }
     return this.db;

@@ -37,6 +37,7 @@ export async function protectUtf8(plain: string, ref: string): Promise<Uint8Arra
   try {
     const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
     if (!isPlatformSupported) {
+      // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
       throw new Error("DPAPI platform not supported");
     }
     return Dpapi.protectData(data, null, "CurrentUser");
@@ -69,6 +70,7 @@ export async function unprotectUtf8(
   try {
     const { Dpapi, isPlatformSupported } = await import("@primno/dpapi");
     if (!isPlatformSupported) {
+      // nm-throw: keep — OS 加密平台边界：DPAPI 能力探测失败，随即由 SkspError 收口。
       throw new Error("DPAPI platform not supported");
     }
     const out = Dpapi.unprotectData(Buffer.from(ciphertext), null, "CurrentUser");

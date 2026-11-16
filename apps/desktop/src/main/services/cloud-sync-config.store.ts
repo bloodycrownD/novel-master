@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { normalizePrefix } from "@novel-master/core";
-import { isAppError, type AppError } from "@novel-master/core/agent";
+import { AppError, isAppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
@@ -114,10 +114,12 @@ async function kkvGet(kkv: KkvService, key: string): Promise<Result<string | und
   return Result.ok(raw.value);
 }
 
-function assertNonEmpty(label: string, value: string): void {
-  if (value.trim().length === 0) {
-    throw new Error(`${label}不能为空`);
-  }
+/**
+ * 参数校验失败返回错误对象（调用方 `setConfig` 沿 `Result.err` 收口）：
+ * 空值属用户可纠正的已知失败，不再走 throw。
+ */
+function nonEmptyError(label: string, value: string): AppError | null {
+  return value.trim().length === 0 ? new AppError("CLI_INVALID_ARGUMENT", { detail: `${label}不能为空` }) : null;
 }
 
 export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretStore): CloudSyncConfigStore {
@@ -190,16 +192,15 @@ export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretS
     },
 
     async setConfig(input) {
-      assertNonEmpty("Endpoint", input.endpoint);
-      assertNonEmpty("Bucket", input.bucket);
-      assertNonEmpty("Access Key", input.accessKeyId);
+      const invalidField = nonEmptyError("Endpoint", input.endpoint) ?? nonEmptyError("Bucket", input.bucket) ?? nonEmptyError("Access Key", input.accessKeyId);
+      if (invalidField != null) return Result.err(invalidField);
 
       const existing = await readPublicConfig();
       if (!existing.ok) return Result.err(existing.error);
       const hasSecret = await secretStore.has(CLOUD_SYNC_SKSP_SECRET_REF);
       const secret = input.secretAccessKey?.trim() ?? "";
       if (!hasSecret && secret.length === 0) {
-        throw new Error("Secret Key 不能为空");
+        return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "Secret Key 不能为空" }));
       }
 
       const deviceId = existing.value.deviceId.trim().length > 0 ? existing.value.deviceId : randomUUID();

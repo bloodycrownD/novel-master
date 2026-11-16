@@ -49,6 +49,7 @@ export async function exportBytesViaDocumentPicker(options: ExportViaPickerOptio
   try {
     const [result] = (await saveDocuments({sourceUris: [toFileUri(tmpPath)], mimeType: options.mimeType, fileName: options.fileName, copy: options.copy ?? true})) ?? [];
     if (result?.error) {
+      // nm-throw: keep — 第三方 SDK（react-native-documents/picker）返回的错误，原样上抛由业务域映射
       throw new Error(result.error);
     }
     return 'saved';

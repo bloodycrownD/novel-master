@@ -68,13 +68,16 @@ export function encodeCodeEditorToHost(message: CodeEditorToHostMessage): string
 export function decodeCodeEditorToHost(raw: string): CodeEditorToHostMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope shape');
   }
   const record = parsed as Record<string, unknown>;
   if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
+    // nm-throw: keep — webview bridge 边界：from-web 信封版本不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope version');
   }
   if (typeof record.type !== 'string' || typeof record.payload !== 'object') {
+    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope shape');
   }
   return parsed as CodeEditorToHostMessage;
@@ -83,13 +86,16 @@ export function decodeCodeEditorToHost(raw: string): CodeEditorToHostMessage {
 export function decodeHostToCodeEditor(raw: string): HostToCodeEditorMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope shape');
   }
   const record = parsed as Record<string, unknown>;
   if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
+    // nm-throw: keep — webview bridge 边界：to-host 信封版本不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope version');
   }
   if (typeof record.type !== 'string') {
+    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid code-editor bridge envelope shape');
   }
   return parsed as HostToCodeEditorMessage;

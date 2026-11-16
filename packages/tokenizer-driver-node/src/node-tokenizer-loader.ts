@@ -42,6 +42,7 @@ export function setNodeTokenizerLoader(loader: TokenizerLoader): void {
 /** Returns the active loader set by {@link registerTokenizerNodeDriver}. */
 export function getNodeTokenizerLoader(): TokenizerLoader {
   if (activeLoader == null) {
+    // nm-throw: keep — 驱动装配不变量：未注册 loader 即调用属编程错误。
     throw new Error("Node tokenizer loader not installed. Call registerTokenizerNodeDriver() first.");
   }
   return activeLoader;

@@ -81,10 +81,12 @@ export function createS3ObjectStorage(config: S3StorageConfig, deps?: S3ObjectSt
       const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
       const etag = normalizeEtag(response.ETag);
       if (etag == null) {
+        // nm-throw: keep — S3 第三方 SDK 边界：GetObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。
         throw new Error(`S3 GetObject 未返回 ETag: ${key}`);
       }
       const body = await response.Body?.transformToByteArray();
       if (body == null) {
+        // nm-throw: keep — S3 第三方 SDK 边界：GetObject 响应缺 Body 属服务端异常，由上层基础设施错误收口。
         throw new Error(`S3 GetObject 未返回 Body: ${key}`);
       }
       return { body, etag };
@@ -118,6 +120,7 @@ export function createS3ObjectStorage(config: S3StorageConfig, deps?: S3ObjectSt
         const response = await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, IfMatch: putOptions?.ifMatch, IfNoneMatch: putOptions?.ifNoneMatch }));
         const etag = normalizeEtag(response.ETag);
         if (etag == null) {
+          // nm-throw: keep — S3 第三方 SDK 边界：PutObject 响应缺 ETag 属服务端异常，由上层基础设施错误收口。
           throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
         }
         return Result.ok({ etag });

@@ -37,6 +37,7 @@ export const DOMAIN_RANGES = {
   WORKPLACE: [121000, 121999],
   CLOUD_SYNC: [122000, 122999],
   IPC: [123000, 123999],
+  CLI: [124000, 124999],
 } as const satisfies Record<string, readonly [number, number]>;
 
 /** 错误域：号段表的键名。 */

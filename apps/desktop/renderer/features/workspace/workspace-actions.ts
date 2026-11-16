@@ -309,6 +309,7 @@ export async function confirmSingleFileImport(
   }
   if (result.data.status !== "applied") {
     // 已确认覆盖后 core 仍报 needs_confirm 属协议破损；宁可显式失败也不静默当成功。
+    // nm-throw: keep — 两段式协议不变量破坏（带 overwriteConfirmed 仍回 needs_confirm），属不可达分支。
     throw new Error("导入未完成");
   }
   return {

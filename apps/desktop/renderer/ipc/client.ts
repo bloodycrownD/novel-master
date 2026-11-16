@@ -19,6 +19,7 @@ export function getDesktopBridge() {
   const inBrowser = typeof navigator !== "undefined" && !/Electron/i.test(navigator.userAgent);
   let reason = "novelMasterDesktop preload bridge is unavailable（preload 未加载，请重新 build 后启动 Electron）";
   if (inBrowser) reason = "novelMasterDesktop 仅在 Electron 中可用。请运行 npm run desktop:dev，不要直接在浏览器打开 localhost:5173。";
+  // nm-throw: keep — preload bridge 平台边界：浏览器直开/未注入 preload 时根本没有 IPC 通道，属环境故障。
   throw new Error(reason);
 }
 

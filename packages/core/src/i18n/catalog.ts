@@ -17,6 +17,7 @@ import { CORE_MESSAGE_KEY_PATTERN, ERROR_KEY_DOMAINS, LABEL_KEY_DOMAINS, type Co
 export function parseCoreCatalog(text: string): MessageCatalog<CoreMessageKey> {
   const root: unknown = parseYaml(text);
   if (root === null || typeof root !== "object" || Array.isArray(root)) {
+    // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
     throw new Error("[parseCoreCatalog] 根节点必须是对象映射（error / label 两棵子树）");
   }
   const flat: Record<string, string> = {};
@@ -31,6 +32,7 @@ export function parseCoreCatalog(text: string): MessageCatalog<CoreMessageKey> {
         continue;
       }
       if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
         throw new Error(`[parseCoreCatalog] ${key || "<根>"} 的中间节点必须是对象映射、叶子必须是字符串（形似数字/布尔的裸值必须加引号），实际是 ${value === null ? "null" : Array.isArray(value) ? "数组" : typeof value}`);
       }
       pending.push([value as Record<string, unknown>, key]);
@@ -38,11 +40,13 @@ export function parseCoreCatalog(text: string): MessageCatalog<CoreMessageKey> {
   }
   for (const key of Object.keys(flat)) {
     if (!CORE_MESSAGE_KEY_PATTERN.test(key)) {
+      // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
       throw new Error(`[parseCoreCatalog] key 不匹配 keyRule（^(error|label)\\.域.名字段，全小写 snake_case，3-5 段）：${key}`);
     }
     const [area, domain] = key.split(".") as [string, string];
     const domains: readonly string[] = area === "error" ? ERROR_KEY_DOMAINS : LABEL_KEY_DOMAINS;
     if (!domains.includes(domain)) {
+      // nm-throw: keep — catalog 结构不变量：构建期内嵌资源写坏即打包错误，非用户可触发失败。
       throw new Error(`[parseCoreCatalog] key 的域不在词表内（${area}.* 只允许 ${domains.join(" / ")}）：${key}`);
     }
   }

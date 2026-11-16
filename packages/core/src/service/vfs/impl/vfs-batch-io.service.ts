@@ -234,6 +234,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
               const logical = unwrapOrRollback(joinTargetLogicalPath(target, write.relativePath));
               if (this.testHook?.throwOnWriteLogical === logical) {
                 // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
+                // nm-throw: keep — 测试故障注入点：故意裸抛模拟事务内未知失败（失败 message 进批次报告），非业务错误。
                 throw new Error("test batch ingest failure");
               }
               // WHY 外面保底父链：writeWithRevision 只在**新建**分支调 ensureParentDirectories，

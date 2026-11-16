@@ -214,7 +214,7 @@ class DesktopCloudSyncService {
    */
   async pull(): Promise<Result<{ rev: number; databaseReplaced: boolean }, AppError>> {
     if (syncBusy) {
-      throw new Error("云同步进行中，请稍后再试");
+      return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
     syncBusy = true;
     let meta: CloudSyncLocalMeta | undefined;
@@ -313,7 +313,7 @@ class DesktopCloudSyncService {
 
   async push(options?: { forceOverwriteRemote?: boolean }): Promise<Result<{ rev: number }, AppError>> {
     if (syncBusy) {
-      throw new Error("云同步进行中，请稍后再试");
+      return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
     syncBusy = true;
     let exportTempPath: string | undefined;

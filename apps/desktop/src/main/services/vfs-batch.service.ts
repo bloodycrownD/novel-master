@@ -55,6 +55,7 @@ function resolveDragIcon(): Electron.NativeImage {
   }
   const fallback = nativeImage.createFromBuffer(FALLBACK_DRAG_ICON_PNG);
   if (fallback.isEmpty()) {
+    // nm-throw: keep — 固定 1×1 PNG 解码失败属平台不变量破坏（nativeImage 异常），用户无纠正路径。
     throw new Error("拖出图标无效");
   }
   return fallback;
@@ -249,7 +250,7 @@ export async function exportVfsFileWithDialog(runtime: DesktopNovelMasterRuntime
   if (!planned.ok) return Result.err(planned.error);
   const plan = planned.value;
   if (plan.files.length !== 1) {
-    throw new Error(`只能导出单个文件（收到 ${plan.files.length} 个条目）：${options.logicalPath}`);
+    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: `只能导出单个文件（收到 ${plan.files.length} 个条目）：${options.logicalPath}` }));
   }
   const file = plan.files[0]!;
   // 逻辑路径 → 末段文件名（`/a/b.md` → `b.md`；根路径返回 null）。与 `vfs-zip.service.ts`
@@ -259,7 +260,7 @@ export async function exportVfsFileWithDialog(runtime: DesktopNovelMasterRuntime
   const normalizedExportPath = options.logicalPath.replace(/\/+$/, "");
   const base = normalizedExportPath === "" || normalizedExportPath === "/" ? null : normalizedExportPath.slice(normalizedExportPath.lastIndexOf("/") + 1) || null;
   if (base == null) {
-    throw new Error(`无法解析导出文件名：${options.logicalPath}`);
+    return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: `无法解析导出文件名：${options.logicalPath}` }));
   }
 
   const win = parentWindow ?? undefined;
@@ -368,6 +369,7 @@ export async function stageVfsBatchExport(runtime: DesktopNovelMasterRuntime, sc
 
     const filePaths = [...topNames].map((name) => join(stagingRoot, name));
     if (filePaths.length === 0) {
+      // nm-throw: keep — 不可达分支：本函数早段已挡掉 files 与 mkdirPaths 皆空的情况，topNames 必非空，命中即不变量破坏。
       throw new Error("导出物化失败：无顶层条目");
     }
 

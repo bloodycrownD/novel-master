@@ -173,12 +173,12 @@ export async function getCloudSyncLocalStatus(runtime: MobileNovelMasterRuntime)
   });
 }
 
-/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。已知失败沿 `Result.err` 上行，校验非空仍走异常（校验本就 reject，屏幕 catch 提示）。 */
+/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。校验失败与已知失败统一沿 `Result.err` 上行。 */
 export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, input: CloudSyncConfigInput): Promise<Result<CloudSyncConfigPublic, AppError>> {
-  if (!input.endpoint.trim()) throw new Error('请填写 Endpoint');
-  if (!input.bucket.trim()) throw new Error('请填写 Bucket');
-  if (!input.accessKeyId.trim()) throw new Error('请填写 Access Key');
-  if (!input.secretAccessKey.trim()) throw new Error('请填写 Secret Key');
+  if (!input.endpoint.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Endpoint'}));
+  if (!input.bucket.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Bucket'}));
+  if (!input.accessKeyId.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Access Key'}));
+  if (!input.secretAccessKey.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Secret Key'}));
   const {kkv, secretStore} = runtime;
 
   const existingDeviceId = await kkvGet(kkv, KEY_DEVICE_ID);

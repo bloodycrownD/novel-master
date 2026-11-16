@@ -18,7 +18,8 @@
  * 111 DEPTH / 112 EVENTS / 113 FEATURE_FLAGS / 114 FORMAT / 115 KKV /
  * 116 SESSION_FS / 117 PROMPT / 118 SESSION_KKV / 119 SESSION_RUN_STATE /
  * 120 USAGE / 121 WORKPLACE / 122 CLOUD_SYNC（三期 CloudSyncError 退役迁入）/
- * 123 IPC（TASK_CANCELLED / TASK_REPLACED 与 handler 直构码；控制流码 TOOL_CANCELLED 落 104 段）。
+ * 123 IPC（TASK_CANCELLED / TASK_REPLACED 与 handler 直构码；控制流码 TOOL_CANCELLED 落 104 段）/
+ * 124 CLI（apps/cli 子命令的用法提示与参数校验）。
  *
  * messageKey 是该码的缺省用户文案模板（i18n 契约 key，见 i18n/keys.ts 与
  * catalog/*.yaml，三处缺一即红）：descriptor 通道优先于它，动态诊断文案走
@@ -236,6 +237,11 @@ export const ErrorCodes = {
   IPC_ABORTED: {code: 123007, desc: "operation aborted", messageKey: "error.infra.aborted"},
   IPC_INVALID_ABORT_TARGET: {code: 123008, desc: "unknown abort target kind", messageKey: "error.infra.invalid_abort_target"},
   PROVIDER_MODELS_IN_FLIGHT: {code: 123009, desc: "provider models fetch already in flight", messageKey: "error.provider.models_in_flight"},
+
+  // 124 CLI 001-999：apps/cli 子命令的用法提示与参数校验（九期裸 throw 收敛）。文案随
+  // params.detail 走、不配 messageKey——cli 出口按 message 的 "Usage:" 前缀判 EXIT_USAGE，
+  // 配模板会把 message 换成翻译文案，断掉该既有约定。
+  CLI_INVALID_ARGUMENT: {code: 124001, desc: "invalid cli argument"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;
