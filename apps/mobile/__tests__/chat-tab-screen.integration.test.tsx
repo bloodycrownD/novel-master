@@ -116,10 +116,10 @@ const mockRuntime: any = {
     setComposerDraftJson: jest.fn(async () => ({ok: true, value: true})),
   },
   messages: {
-    listBySession: jest.fn(async () => [{id: 'legacy', seq: 999}]),
+    listBySession: jest.fn(async () => ({kind: 'completed' as const, value: [{id: 'legacy', seq: 999}]})),
     // 单元消息管线的窄口（tail 回源 + hasMore 探针共用分页口）。
-    listBySessionTail: jest.fn(async () => [mockTailMessage]),
-    listBySessionPage: jest.fn(async () => [{id: 'older-probe', seq: 1}]),
+    listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: [mockTailMessage]})),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: [{id: 'older-probe', seq: 1}]})),
     hide: jest.fn(),
     show: jest.fn(),
     delete: jest.fn(),
@@ -451,9 +451,10 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.messages.listBySessionTail.mockClear();
     mockRuntime.messages.listBySessionPage.mockClear();
     // tail 默认实现每用例重置（个别用例会覆盖成「多取一条」形态）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      mockTailMessage,
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [mockTailMessage],
+    }));
     // 每用例重建 eventBus 与 manager（与 Provider retry 重建同形：先 dispose）。
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
@@ -483,16 +484,19 @@ describe('ChatTabScreen integration', () => {
     // Step 2 单查询化造数：tail 一次取 41 条（页大小 40 + 1）——最旧一行
     // （seq=1）被裁去，裁剪后首行仍为 mockTailMessage（分页锚点不变），
     // hasMore=true 使「加载更早消息」入口可见。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      mockOlderMessage,
-      mockTailMessage,
-      ...Array.from({length: 39}, (_, i) => ({
-        id: `m-fill-${i}`,
-        seq: 3 + i,
-        role: 'assistant' as const,
-        content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
-      })),
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [
+        mockOlderMessage,
+        mockTailMessage,
+        ...Array.from({length: 39}, (_, i) => ({
+          id: `m-fill-${i}`,
+          seq: 3 + i,
+          role: 'assistant' as const,
+          content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
+        })),
+      ],
+    }));
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
@@ -519,16 +523,19 @@ describe('ChatTabScreen integration', () => {
   it('有单元时消息面走单元管线：tail 由 listBySessionTail 回源、分页走单元窄口', async () => {
     // Step 2 单查询化造数：同上——tail 一次取 41 条，最旧一行被裁去，
     // hasMore=true 且裁剪后首行为 mockTailMessage（beforeSeq=2 不变）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      mockOlderMessage,
-      mockTailMessage,
-      ...Array.from({length: 39}, (_, i) => ({
-        id: `m-fill-${i}`,
-        seq: 3 + i,
-        role: 'assistant' as const,
-        content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
-      })),
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [
+        mockOlderMessage,
+        mockTailMessage,
+        ...Array.from({length: 39}, (_, i) => ({
+          id: `m-fill-${i}`,
+          seq: 3 + i,
+          role: 'assistant' as const,
+          content: {blocks: [{type: 'text' as const, text: `fill-${i}`}]},
+        })),
+      ],
+    }));
     // 先建立 s1 的活跃单元（startRun 受理 + RUN_STARTED 回填）。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
@@ -899,10 +906,10 @@ describe('ChatTabScreen integration', () => {
 
     // run 收尾：DB tail 变为「本轮用户消息 + assistant 最终回复」，settle 的
     // force reload 把最终行写进单元消息面与视图缓存（无条件写）。
-    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
-      finalUserMessage,
-      finalAssistantMessage,
-    ]);
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => ({
+      kind: 'completed' as const,
+      value: [finalUserMessage, finalAssistantMessage],
+    }));
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
         sessionId: 's1',

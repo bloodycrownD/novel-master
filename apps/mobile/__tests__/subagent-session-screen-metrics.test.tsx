@@ -140,9 +140,9 @@ function buildHarness(): {
       sessions: {get: async () => ({id: CHILD_SESSION_ID, title: '子会话'})},
       projects: {get: async () => ({id: 'p1', name: '项目'})},
       messages: {
-        listBySession: jest.fn(async () => []),
-        listBySessionTail: jest.fn(async () => []),
-        listBySessionPage: jest.fn(async () => []),
+        listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
       },
     } as never,
     settledGraceMs: 30_000,

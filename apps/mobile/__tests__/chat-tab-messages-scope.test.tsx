@@ -48,8 +48,8 @@ function createHarness(tailImpl: (sid: string) => Promise<ChatMessageData[]>) {
     sessions: {get: jest.fn(async (sid: string) => ({id: sid}))},
     projects: {get: jest.fn(async (pid: string) => ({id: pid}))},
     messages: {
-      listBySessionTail: jest.fn((sid: string) => tailImpl(sid)),
-      listBySessionPage: jest.fn(async () => []),
+      listBySessionTail: jest.fn(async (sid: string) => ({kind: 'completed' as const, value: await tailImpl(sid)})),
+      listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
     },
   } as unknown as MobileNovelMasterRuntime;
   const manager = new SessionStreamUnitManager({
@@ -126,7 +126,8 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     ).runtime.messages.listBySessionPage.mockImplementation(
       () =>
         new Promise(resolve => {
-          releaseOlder = (list: ChatMessageData[]) => resolve(list ?? []);
+          releaseOlder = (list: ChatMessageData[]) =>
+            resolve({kind: 'completed' as const, value: list ?? []});
         }),
     );
     // 预置 B 的 idle 视图（缓存水合路径）
@@ -161,7 +162,7 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
     const {manager, runtime} = createHarness(async () => finalRows);
     (
       runtime.messages as {listBySessionPage: jest.Mock}
-    ).listBySessionPage.mockImplementation(async () => []);
+    ).listBySessionPage.mockImplementation(async () => ({kind: 'completed' as const, value: []}));
 
     // 水合 idle（缓存 miss → 回源 tail）。
     await manager.loadSessionTailMessages('sess-A', {projectId: 'proj-1'});

@@ -33,16 +33,19 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 function makeStubRuntime(): MobileNovelMasterRuntime {
   return {
     messages: {
-      listBySession: jest.fn(async () => [
-        {
-          id: 'm1',
-          sessionId: 's1',
-          role: 'user',
-          content: textBlocks('你好'),
-          attachments: [],
-          hidden: false,
-        },
-      ]),
+      listBySession: jest.fn(async () => ({
+        kind: 'completed' as const,
+        value: [
+          {
+            id: 'm1',
+            sessionId: 's1',
+            role: 'user',
+            content: textBlocks('你好'),
+            attachments: [],
+            hidden: false,
+          },
+        ],
+      })),
     },
     state: {},
     workplace: jest.fn(() => ({})),

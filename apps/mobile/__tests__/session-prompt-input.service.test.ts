@@ -114,7 +114,7 @@ function makeStubRuntime(options?: {
   ];
   return {
     messages: {
-      listBySession: jest.fn(async () => options?.messages ?? defaultMessages),
+      listBySession: jest.fn(async () => ({kind: 'completed' as const, value: options?.messages ?? defaultMessages})),
     },
     state: {},
     workplace: jest.fn(() => ({

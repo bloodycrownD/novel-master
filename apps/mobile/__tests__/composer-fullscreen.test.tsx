@@ -100,9 +100,9 @@ const mockRuntime: Record<string, any> = {
     }),
   },
   messages: {
-    listBySession: jest.fn(async () => []),
-    listBySessionTail: jest.fn(async () => []),
-    listBySessionPage: jest.fn(async () => []),
+    listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+    listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
   },
   state: {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),

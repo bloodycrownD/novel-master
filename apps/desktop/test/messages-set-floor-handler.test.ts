@@ -141,8 +141,10 @@ describe("handleMessagesSetFloor", () => {
     const anchorResult = await rt.messages.get(anchorId);
     if (!anchorResult.ok) throw anchorResult.error;
     const anchor = anchorResult.value;
-    const messages = await rt.messages.listBySession(sessionId);
-    for (const m of messages) {
+    // 八期把 listBySession 改为 Outcome：completed 才取值，cancelled/replaced 不该出现在这里。
+    const messagesRead = await rt.messages.listBySession(sessionId);
+    if (messagesRead.kind !== "completed") throw new Error("listBySession 未 completed");
+    for (const m of messagesRead.value) {
       if (m.seq < anchor.seq) {
         assert.equal(m.hidden, true, `seq=${m.seq} 应为 hidden`);
       } else {

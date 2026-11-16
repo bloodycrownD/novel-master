@@ -48,8 +48,8 @@ function buildHarness(options?: {
       sessions: {get: async () => ({id: 's', title: '会话'})},
       projects: {get: async () => ({id: 'p', name: '项目'})},
       messages: {
-        listBySessionTail: jest.fn(async () => []),
-        listBySessionPage: jest.fn(async () => []),
+        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
       },
     } as never,
     runAgentTurn: mockRunAgentTurn as never,

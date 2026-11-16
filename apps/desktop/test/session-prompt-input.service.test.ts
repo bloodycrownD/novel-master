@@ -369,7 +369,10 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
         runtime,
         { projectId, sessionId },
         undefined,
-        { shouldBail: bailAt(3) },
+        // 八期给 listBySession 加了 checkpoint（分片级），shouldBail 的调用次数
+        // 因此前移，"第 N 次调用" 不再是稳定坐标。改用**足迹判据**：workplace 句柄
+        // 已取过（装配起步）且 skills 还没取（prepare 未进）时才翻真。
+        { shouldBail: () => counts.workplace > 0 && counts.skills === 0 },
       ),
       (error: unknown) => error instanceof ChatPromptBuildBailedError,
     );
@@ -391,7 +394,9 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
         runtime,
         { projectId, sessionId },
         undefined,
-        { shouldBail: bailAt(4) },
+        // 同上：四段足迹全部出现过（list/workplace/skills 各 ≥1）才翻真，
+        // 不依赖 shouldBail 的调用序号。
+        { shouldBail: () => counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1 },
       ),
       (error: unknown) => error instanceof ChatPromptBuildBailedError,
     );

@@ -115,23 +115,25 @@ function makeMessage(
  */
 function makeMessageStore(db: Map<string, ChatMessageData[]>) {
   return {
+    // 八期起读口返回 Outcome：mock 必须给 {kind:'completed', value}，
+    // 直接返回裸数组会让 unit 走「非 completed → 本次不采纳」分支，消息面恒空。
     listBySessionTail: jest.fn(
-      async (sid: string, options: {limit: number}): Promise<ChatMessageData[]> => {
+      async (sid: string, options: {limit: number}): Promise<{kind: 'completed'; value: ChatMessageData[]}> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
-        return rows.slice(-options.limit);
+        return {kind: 'completed' as const, value: rows.slice(-options.limit)};
       },
     ),
     listBySessionPage: jest.fn(
       async (
         sid: string,
         options: {limit: number; beforeSeq?: number},
-      ): Promise<ChatMessageData[]> => {
+      ): Promise<{kind: 'completed'; value: ChatMessageData[]}> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
         const filtered =
           options.beforeSeq == null
             ? rows
             : rows.filter(r => r.seq < options.beforeSeq);
-        return filtered.slice(-options.limit);
+        return {kind: 'completed' as const, value: filtered.slice(-options.limit)};
       },
     ),
   };
@@ -777,9 +779,12 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
           options.beforeSeq == null
             ? rows
             : rows.filter(r => r.seq < options.beforeSeq);
-        return new Promise<ChatMessageData[]>(resolve => {
-          releasePage = () => resolve(filtered.slice(-options.limit));
-        });
+        return new Promise<{kind: 'completed'; value: ChatMessageData[]}>(
+          resolve => {
+            releasePage = () =>
+              resolve({kind: 'completed', value: filtered.slice(-options.limit)});
+          },
+        );
       },
     );
 

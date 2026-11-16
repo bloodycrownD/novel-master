@@ -125,8 +125,8 @@ function buildHarness(options?: {
       sessions: {get: async (sessionId: string) => ({id: sessionId, title: '会话'})},
       projects: {get: async (projectId: string) => ({id: projectId, name: '项目'})},
       messages: {
-        listBySessionTail: jest.fn(async () => []),
-        listBySessionPage: jest.fn(async () => []),
+        listBySessionTail: jest.fn(async () => ({kind: 'completed' as const, value: []})),
+        listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
       },
       ...(options?.sessionKkv == null
         ? {}

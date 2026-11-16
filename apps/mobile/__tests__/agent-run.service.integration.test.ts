@@ -45,9 +45,9 @@ function baseRuntime(overrides: Partial<any> = {}) {
       backfillMissingBaselines: jest.fn(async () => undefined),
     },
     messages: {
-      listBySession: async () => [],
+      listBySession: async () => ({kind: 'completed' as const, value: []}),
       // 续跑判定走 tail(1) 单行读（2026-09-30 替换全量 listBySession）。
-      listBySessionTail: async () => [],
+      listBySessionTail: async () => ({kind: 'completed' as const, value: []}),
       append: jest.fn(async () => undefined),
     },
     sessionVfs: () => ({}),
@@ -79,8 +79,8 @@ describe('runAgentTurn integration', () => {
   it('empty input + last user → allowed, no empty message appended', async () => {
     const runtime = baseRuntime({
       messages: {
-        listBySession: async () => [{role: 'user', content: {blocks: []}}],
-        listBySessionTail: async () => [{role: 'user', content: {blocks: []}}],
+        listBySession: async () => ({kind: 'completed' as const, value: [{role: 'user', content: {blocks: []}}]}),
+        listBySessionTail: async () => ({kind: 'completed' as const, value: [{role: 'user', content: {blocks: []}}]}),
         append: jest.fn(async () => undefined),
       },
     });
@@ -97,10 +97,11 @@ describe('runAgentTurn integration', () => {
   it('empty input + last non-user → blocked', async () => {
     const runtime = baseRuntime({
       messages: {
-        listBySession: async () => [{role: 'assistant', content: {blocks: []}}],
-        listBySessionTail: async () => [
-          {role: 'assistant', content: {blocks: []}},
-        ],
+        listBySession: async () => ({kind: 'completed' as const, value: [{role: 'assistant', content: {blocks: []}}]}),
+        listBySessionTail: async () => ({
+          kind: 'completed' as const,
+          value: [{role: 'assistant', content: {blocks: []}}],
+        }),
         append: jest.fn(async () => undefined),
       },
     });
