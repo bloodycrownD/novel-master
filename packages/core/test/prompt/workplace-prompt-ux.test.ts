@@ -71,7 +71,8 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
       agentDefinitionSchema
     );
     assert.equal(def.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
-    const wire = encode(def, agentDefinitionSchema) as {
+    // encode 已改返回 Result（五期签名）：unwrap 解包后取 wire。
+    const wire = unwrap(encode(def, agentDefinitionSchema)) as {
       prompts: { workplace?: boolean | string };
     };
     assert.equal(wire.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
@@ -89,7 +90,9 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
           },
           agentDefinitionSchema
         ),
-      (e: unknown) => isAppError(e, "CONFIG_DECODE_INVALID_SCHEMA") && /workplace/.test(e.message)
+      // 空白 workplace 的拒绝统一收进布局校验（PROMPT_INVALID_LAYOUT），与后半段
+      // validateAgentPromptLayoutFromMaps 的断言同一条通道（五期 schema 收敛）。
+      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT")
     );
     const blank = validateAgentPromptLayoutFromMaps({}, {}, undefined, {
       workplace: "   ",

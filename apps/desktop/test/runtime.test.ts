@@ -21,17 +21,21 @@ describe("createDesktopNovelMasterRuntime", () => {
 
   it("registers the platform SKSP driver", () => {
     const name = registerPlatformSkspDriver();
+    assert.ok(name.ok, "桌面三平台均受支持，不应失败");
     if (process.platform === "darwin") {
-      assert.equal(name, "macos");
+      assert.equal(name.value, "macos");
     } else if (process.platform === "linux") {
-      assert.equal(name, "linux");
+      assert.equal(name.value, "linux");
     } else {
-      assert.equal(name, "windows");
+      assert.equal(name.value, "windows");
     }
   });
 
   it("bootstraps SQLite and supports project.create smoke", async () => {
-    const runtime = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const runtimeR = await createDesktopNovelMasterRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     assert.ok(runtime.dbPath);
     // 错误通道迁移二期后 projects.create 走 Result，解包取实体。
     const created = await runtime.projects.create("Desktop test");
@@ -43,7 +47,9 @@ describe("createDesktopNovelMasterRuntime", () => {
   });
 
   it("round-trips secretStore set/get via platform SKSP", async () => {
-    const runtime = await createDesktopNovelMasterRuntime();
+    const runtimeR = await createDesktopNovelMasterRuntime();
+    if (!runtimeR.ok) throw runtimeR.error;
+    const runtime = runtimeR.value;
     const ref = "provider/desktop-test/apiKey";
     const value = "sk-desktop-round-trip";
     await runtime.secretStore.set(ref, value);

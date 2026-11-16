@@ -1,4 +1,4 @@
-import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";

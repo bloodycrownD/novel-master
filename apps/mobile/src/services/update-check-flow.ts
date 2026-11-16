@@ -75,7 +75,14 @@ export async function runAutoUpdateCheckFlow(
   snoozed = isSnoozed(snoozeResult.value);
 
   try {
-    const data = await checkForUpdates();
+    const checked = await checkForUpdates();
+    // 已知失败（版本比较非法）沿 Result.err 与未预期异常同终端——fail 收口
+    // （错误通道迁移六期）；网络等未知异常仍走下方 catch。
+    if (!checked.ok) {
+      await fail();
+      return;
+    }
+    const data = checked.value;
     await persistUpdateCheckResult(appUi, data);
 
     if (data.status === 'up-to-date') {

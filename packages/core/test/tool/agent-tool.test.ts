@@ -69,7 +69,8 @@ function fakeAgentRegistry(options?: {
     listAgentIds: record("listAgentIds", async () => [...persisted.keys()]),
     list: record(
       "list",
-      async () => options?.list ?? [GENERAL_DEF, ...persisted.values()],
+      // 错误通道迁移五期：registry.list 走 Result 通道，fake 与真实 service 同语义。
+      async () => Result.ok(options?.list ?? [GENERAL_DEF, ...persisted.values()]),
     ),
     getRawWire: record("getRawWire", async (id: string) =>
       persisted.has(id) ? { ...persisted.get(id) } : null,
@@ -221,10 +222,9 @@ describe("agent 管理工具", () => {
       projectId: "p",
       sessionId: "s",
     };
-    await assert.rejects(
+    await rejectsErr(
       () => runner.call("agent", { action: "list" }, bare),
-      (e: unknown) =>
-        isAppError(e, "TOOL_FAILED") && e.message.includes("agents"),
+      (e) => isAppError(e, "TOOL_FAILED") && e.message.includes("agents"),
     );
   });
 

@@ -146,6 +146,8 @@ checkpoint(): Interrupt | null;   // null = 继续跑
 2. **`better-sqlite3` 的事务回滚**——`db.transaction(fn)` 只认「抛错回滚」，`fn` 内 `if (!r.ok) throw r.error` 是必需的。
 3. **`Promise.race` / `raceWithAbort` 的 reject**——Promise 只有 reject 通道，没有返回值通道。
 4. **`AbortSignal.throwIfAborted()`**——标准库 API，形态固定。
+5. **`LlmProtocolAdapter` 与 sse parser 出口的 ProviderError throw 通道**（2026-11-16 六期收口裁决）——port 契约 `listModels`/`chat` 返回 `LlmListModelsResult`/`LlmChatResult`（无失败位），retry 按 catch + code 分派是 spec-2 §2.1 明文保留的协议；内部 `fetchJson`/`assertOk`/`assertSseParseSucceededOrThrow` 已 Result 化，adapter 与 `*-sse-parser` 的流出口把 Result 失败解包转 throw 喂给 transport 的 catch → reject。仅限 `infra/llm-protocol` 的三个 adapter 与三个 sse-parser 文件。
+6. **`IntegrityRepairOperation.detect/repair` 的报告契约**（同上裁决）——接口「只认报告/异常」，`runAll` 捕异常写进修复报告；repo 已 Result 化，操作实现在读 repo 处解包转 throw 由 `runAll` 收口。仅限 `domain/provider/logic/provider-identity-repair.ts`（同形新增操作须逐个登记，不放行整个目录）。
 
 ## 六、三期路线
 

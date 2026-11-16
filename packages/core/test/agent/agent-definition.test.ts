@@ -80,8 +80,9 @@ describe("agentDefinitionSchema", () => {
       },
       agentDefinitionSchema
     );
-    const doc = encode(def, agentDefinitionSchema);
-    assert.equal((doc as { model?: string }).model, TEST_SAVED_MODEL);
+    // encode 已 Result 化（错误通道迁移）：Err 抛出断言失败，Ok 解包取 wire
+    const doc = unwrap(encode(def, agentDefinitionSchema)) as { model?: string };
+    assert.equal(doc.model, TEST_SAVED_MODEL);
     const again = decode(doc, agentDefinitionSchema);
     assert.equal(again.model, TEST_SAVED_MODEL);
   });
@@ -297,12 +298,13 @@ describe("agentDefinitionSchema", () => {
     };
   }
 
-  it("toWire 对重名 persist 块抛 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
+  it("toWire 对重名 persist 块返 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
     const def = defWithDuplicatePersist();
-    assert.throws(
-      () => agentDefinitionSchema.toWire(def),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
-    );
+    const wired = agentDefinitionSchema.toWire(def);
+    assert.ok(!wired.ok, "重名 persist 块应走 Err 通道");
+    if (!wired.ok) {
+      assert.ok(isAppError(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+    }
   });
 
   it("toWire 对重名 dynamic 块抛 PROMPT_INVALID_LAYOUT", () => {
@@ -327,38 +329,41 @@ describe("agentDefinitionSchema", () => {
         dynamic: [...base.prompts.dynamic, { ...base.prompts.dynamic[0]! }],
       },
     };
-    assert.throws(
-      () => agentDefinitionSchema.toWire(dup),
-      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && e.messageKey === "error.prompt.invalid_layout.duplicate_block_name"
-    );
+    const wired = agentDefinitionSchema.toWire(dup);
+    assert.ok(!wired.ok, "重名 dynamic 块应走 Err 通道");
+    if (!wired.ok) {
+      assert.ok(isAppError(wired.error, "PROMPT_INVALID_LAYOUT") && wired.error.messageKey === "error.prompt.invalid_layout.duplicate_block_name");
+    }
   });
 
-  it("toWire 抛错后不改写入方对象（无副作用污染）", () => {
+  it("toWire 失败后不改写入方对象（无副作用污染）", () => {
     const def = defWithDuplicatePersist();
     const before = JSON.stringify(def);
-    assert.throws(() => agentDefinitionSchema.toWire(def));
-    assert.equal(JSON.stringify(def), before, "toWire 抛错不得就地改写入方传入的对象");
+    const wired = agentDefinitionSchema.toWire(def);
+    assert.ok(!wired.ok, "重名块应走 Err 通道");
+    assert.equal(JSON.stringify(def), before, "toWire 失败不得就地改写入方传入的对象");
   });
 
   it("合法 definition（多块不重名）toWire 往返等值（既有行为不受影响）", () => {
-    const again = decode(
-      agentDefinitionSchema.toWire(
-        decode(
-          {
-            schemaVersion: 1,
-            name: "ok-writer",
-            prompts: {
-              persist: {
-                persona: { type: "text", role: "user", content: "人设" },
-                notes: { type: "text", role: "assistant", content: "笔记" },
-              },
-              dynamic: {},
+    const wireDoc = agentDefinitionSchema.toWire(
+      decode(
+        {
+          schemaVersion: 1,
+          name: "ok-writer",
+          prompts: {
+            persist: {
+              persona: { type: "text", role: "user", content: "人设" },
+              notes: { type: "text", role: "assistant", content: "笔记" },
             },
-            model: TEST_SAVED_MODEL,
+            dynamic: {},
           },
-          agentDefinitionSchema
-        )
-      ),
+          model: TEST_SAVED_MODEL,
+        },
+        agentDefinitionSchema
+      )
+    );
+    const again = decode(
+      unwrap(wireDoc),
       agentDefinitionSchema
     );
     assert.deepEqual(

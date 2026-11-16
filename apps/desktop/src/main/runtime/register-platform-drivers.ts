@@ -9,6 +9,7 @@ import {
   resolveSkspNameFromPlatform,
   type PlatformSkspName,
 } from "@novel-master/core/sksp";
+import { type AppError, Result } from "@novel-master/core/errors";
 
 export type { PlatformSkspName };
 
@@ -18,16 +19,17 @@ export type { PlatformSkspName };
  * Node 的 `process.platform` 显式注入进去——RN 下 `process.platform`
  * 没有 shim（见 apps/mobile/src/polyfills.ts），所以 core 端不做隐式读取。
  */
-export function getPlatformSkspName(): PlatformSkspName {
+export function getPlatformSkspName(): Result<PlatformSkspName, AppError> {
   return resolveSkspNameFromPlatform(process.platform);
 }
 
 /** Registers the OS-appropriate SKSP driver and returns its registry name. */
-export function registerPlatformSkspDriver(): PlatformSkspName {
+export function registerPlatformSkspDriver(): Result<PlatformSkspName, AppError> {
   const name = getPlatformSkspName();
-  if (name === "macos") {
+  if (!name.ok) return name;
+  if (name.value === "macos") {
     registerSkspMacDriver();
-  } else if (name === "linux") {
+  } else if (name.value === "linux") {
     registerSkspLinuxDriver();
   } else {
     registerSkspWindowsDriver();

@@ -362,7 +362,9 @@ export function finishAnthropicSse(
 
   flushActiveBlock(state, onStream, toolNames);
 
-  assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
+  // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+  const asserted = assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
+  if (!asserted.ok) throw asserted.error;
   return {
     blocks: state.blocks,
     streamRaw: mergeAnthropicStreamRaw(state),

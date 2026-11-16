@@ -447,9 +447,9 @@ describe("skill 工具", () => {
     assert.equal(listCall.args[0], "global");
   });
 
-  it("ctx.skills 缺失时 run 抛 FAILED（照 task 未装配先例）", async () => {
+  it("ctx.skills 缺失时 run 报 FAILED（照 task 未装配先例）", async () => {
     const { runner } = makeRunner();
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runner.call(
           SKILL_TOOL_NAME,
@@ -460,7 +460,7 @@ describe("skill 工具", () => {
             sessionId: "s",
           },
         ),
-      (e: unknown) => isAppError(e, "TOOL_FAILED"),
+      (e) => isAppError(e, "TOOL_FAILED"),
     );
   });
 

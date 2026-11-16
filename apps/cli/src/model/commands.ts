@@ -69,8 +69,9 @@ export async function runModel(
       return RESULT_OK;
     }
     case "list": {
-      const providers = await rt.providers.list();
-      for (const provider of providers) {
+      const listed = await rt.providers.list();
+      if (!listed.ok) return Result.err(listed.error);
+      for (const provider of listed.value) {
         const list = await rt.providerModels.savedList(provider.id);
         if (!list.ok) return Result.err(list.error);
         for (const m of list.value) {

@@ -10,6 +10,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
@@ -23,11 +24,11 @@ import type { TemplatePullService } from "../template-pull.port.js";
 export class DefaultTemplatePullService implements TemplatePullService {
   constructor(private readonly conn: TdbcConnection) {}
 
-  async sessionTemplatePull(sessionId: string): Promise<void> {
+  async sessionTemplatePull(sessionId: string): Promise<Result<void, AppError>> {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
     await this.conn.transaction(async (tx) => {
       await initializeSessionWorkspace(tx, session.projectId, sessionId, {
@@ -43,18 +44,20 @@ export class DefaultTemplatePullService implements TemplatePullService {
     // sessionTemplatePush 不加：push 是会话 → 项目方向，会话侧文件树不变，
     // 自己的 file_cache 依然有效，清了只会让下一 step 无谓重算。
     await clearSessionPromptCaches(sessionId, createSessionKkvService(this.conn));
+    return Result.ok(undefined);
   }
 
-  async sessionTemplatePush(sessionId: string): Promise<void> {
+  async sessionTemplatePush(sessionId: string): Promise<Result<void, AppError>> {
     // 推送与拉取同一套校验/事务/GC 骨架，只是方向对调（session → project）。
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
-      throw new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId });
+      return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
     }
     await this.conn.transaction(async (tx) => {
       await pushSessionWorkspace(tx, session.projectId, sessionId);
     });
     await runDeferredBlobGc(this.conn);
+    return Result.ok(undefined);
   }
 }

@@ -7,6 +7,7 @@
 import { isRecord } from "@/common/guards.js";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -175,7 +176,7 @@ function buildSyntheticModelTurn(
 export function blocksToGeminiParts(
   blocks: readonly ContentBlock[],
   ctx: ResolveContext = { lookup: buildToolUseLookup([]) }
-): GeminiPart[] {
+): Result<GeminiPart[], AppError> {
   const parts: GeminiPart[] = [];
   let toolUseSignatureEmitted = false;
   for (const block of blocks) {
@@ -215,12 +216,12 @@ export function blocksToGeminiParts(
       case "redacted_thinking":
         break;
       case "image":
-        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "Gemini outbound messages do not support image blocks in this iteration" });
+        return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "Gemini outbound messages do not support image blocks in this iteration" }));
       default:
         break;
     }
   }
-  return parts;
+  return Result.ok(parts);
 }
 
 /** Gemini `parts` → NM blocks. */
@@ -323,7 +324,7 @@ function mergeAdjacentUserContents(
 export function chatMessagesToGeminiContents(
   messages: readonly ChatMessageData[],
   options: ChatMessagesToGeminiContentsOptions = {}
-): GeminiContent[] {
+): Result<GeminiContent[], AppError> {
   const out: GeminiContent[] = [];
   const lookupSource =
     options.toolLookupMessages != null && options.toolLookupMessages.length > 0
@@ -368,15 +369,17 @@ export function chatMessagesToGeminiContents(
     }
 
     if (other.length > 0) {
+      const parts = blocksToGeminiParts(other, ctx);
+      if (!parts.ok) return Result.err(parts.error);
       out.push({
         role: msg.role === "assistant" ? "model" : "user",
-        parts: blocksToGeminiParts(other, ctx),
+        parts: parts.value,
       });
     }
   }
 
   // 先完成 model turn 修补，再合并相邻 user（Step A2 顺序约束）。
-  return mergeAdjacentUserContents(out);
+  return Result.ok(mergeAdjacentUserContents(out));
 }
 
 /** NM tool definitions → Gemini `tools` array entry. */

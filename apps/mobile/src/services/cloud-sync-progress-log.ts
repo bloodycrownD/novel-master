@@ -122,9 +122,15 @@ export function withCloudSyncStorageProgress(
         conditional: options?.ifMatch != null || options?.ifNoneMatch != null,
       });
       const result = await storage.put(key, body, options);
+      // put/putFile/getToPath 已知失败走 Result.err（错误通道迁移六期）：
+      // 记一条失败阶段便于 dev 日志定位，结果原样转发给协调器收口。
+      if (!result.ok) {
+        progress.step('storage_put_failed', {key: shortStorageKey(key)});
+        return result;
+      }
       progress.step('storage_put_done', {
         key: shortStorageKey(key),
-        etagPrefix: result.etag?.slice(0, 12),
+        etagPrefix: result.value.etag.slice(0, 12),
       });
       return result;
     },
@@ -138,9 +144,13 @@ export function withCloudSyncStorageProgress(
         conditional: options?.ifMatch != null || options?.ifNoneMatch != null,
       });
       const result = await storage.putFile!(key, filePath, options);
+      if (!result.ok) {
+        progress.step('storage_put_file_failed', {key: shortStorageKey(key)});
+        return result;
+      }
       progress.step('storage_put_file_done', {
         key: shortStorageKey(key),
-        etagPrefix: result.etag?.slice(0, 12),
+        etagPrefix: result.value.etag.slice(0, 12),
       });
       return result;
     };
@@ -153,9 +163,15 @@ export function withCloudSyncStorageProgress(
         toPath: true,
       });
       const result = await storage.getToPath!(key, destPath);
+      if (!result.ok) {
+        progress.step('storage_get_to_path_failed', {
+          key: shortStorageKey(key),
+        });
+        return result;
+      }
       progress.step('storage_get_to_path_done', {
         key: shortStorageKey(key),
-        etagPrefix: result.etag?.slice(0, 12),
+        etagPrefix: result.value.etag.slice(0, 12),
       });
       return result;
     };

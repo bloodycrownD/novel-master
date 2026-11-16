@@ -66,7 +66,8 @@ export async function runProvider(
   switch (subcommand) {
     case "list": {
       const list = await rt.providers.list();
-      for (const p of list) {
+      if (!list.ok) return Result.err(list.error);
+      for (const p of list.value) {
         console.log(
           `${p.id}\t${p.displayName}\t${p.protocol}\t${p.baseUrl}\tapiKey: ${p.apiKeyStatus}`,
         );

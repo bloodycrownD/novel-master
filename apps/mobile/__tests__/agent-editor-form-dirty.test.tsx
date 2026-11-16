@@ -9,6 +9,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 const mockGetRawWire = jest.fn();
 const mockGoBack = jest.fn();
@@ -28,7 +29,7 @@ const mockRuntime = {
     delete: jest.fn(),
     upsert: jest.fn().mockResolvedValue(undefined),
   },
-  providers: {list: jest.fn().mockResolvedValue([])},
+  providers: {list: jest.fn().mockResolvedValue(Result.ok([]))},
   providerModels: {
     savedList: jest.fn().mockResolvedValue([]),
     getSavedById: jest.fn().mockResolvedValue(null),

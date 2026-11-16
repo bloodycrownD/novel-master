@@ -42,10 +42,9 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(
       req.apiKey
     )}`;
-    const data = (await fetchJson(this.fetchFn, url, {
-      method: "GET",
-      headers: { ...req.extraHeaders },
-    })) as { models?: Array<{ name?: string; displayName?: string }> };
+    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders } });
+    if (!fetched.ok) throw fetched.error;
+    const data = fetched.value as { models?: Array<{ name?: string; displayName?: string }> };
     const models = (data.models ?? [])
       .filter((m) => typeof m.name === "string")
       .map((m) => {
@@ -70,17 +69,17 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   }
 
   private buildContents(req: LlmChatRequest) {
-    return req.history != null && req.history.length > 0
-      ? chatMessagesToGeminiContents(req.history, {
-          toolLookupMessages: req.toolUseLookupMessages,
-          knownToolNames: req.tools?.map((t) => t.name),
-        })
-      : [
-          {
-            role: "user",
-            parts: blocksToGeminiParts(textBlocks(req.userContent).blocks),
-          },
-        ];
+    if (req.history != null && req.history.length > 0) {
+      const mapped = chatMessagesToGeminiContents(req.history, {
+        toolLookupMessages: req.toolUseLookupMessages,
+        knownToolNames: req.tools?.map((t) => t.name),
+      });
+      if (!mapped.ok) throw mapped.error;
+      return mapped.value;
+    }
+    const parts = blocksToGeminiParts(textBlocks(req.userContent).blocks);
+    if (!parts.ok) throw parts.error;
+    return [{ role: "user", parts: parts.value }];
   }
 
   private buildRequestBody(req: LlmChatRequest): Record<string, unknown> {
@@ -115,15 +114,9 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
   private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = this.modelUrl(req, "generateContent");
-    const raw = await fetchJson(this.fetchFn, url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(this.buildRequestBody(req)),
-      signal: req.signal,
-    });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers: { "Content-Type": "application/json", ...req.extraHeaders }, body: JSON.stringify(this.buildRequestBody(req)), signal: req.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
     const record = raw as {
       candidates?: Array<{
         content?: { parts?: unknown[] };

@@ -79,18 +79,9 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   async listModels(
     req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
   ): Promise<LlmListModelsResult> {
-    const data = (await fetchJson(
-      this.fetchFn,
-      joinUrl(req.baseUrl, "/v1/models"),
-      {
-        method: "GET",
-        headers: {
-          "x-api-key": req.apiKey,
-          "anthropic-version": ANTHROPIC_API_VERSION,
-          ...req.extraHeaders,
-        },
-      }
-    )) as { data?: Array<{ id?: string; display_name?: string }> };
+    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers: { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders } });
+    if (!fetched.ok) throw fetched.error;
+    const data = fetched.value as { data?: Array<{ id?: string; display_name?: string }> };
     const models = (data.data ?? [])
       .filter((m) => typeof m.id === "string")
       .map((m) => ({
@@ -163,17 +154,9 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
     const toolNames = resolveAnthropicToolNameWire(req);
     const url = joinUrl(req.baseUrl, "/v1/messages");
-    const raw = await fetchJson(this.fetchFn, url, {
-      method: "POST",
-      headers: {
-        "x-api-key": req.apiKey,
-        "anthropic-version": ANTHROPIC_API_VERSION,
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(this.buildBody(req, false, toolNames)),
-      signal: req.signal,
-    });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers: { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders }, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
     const assistantText = messageBodyTextFromBlocks(blocks);

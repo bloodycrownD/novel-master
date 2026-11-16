@@ -1,6 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 import {UpdateCheckHost} from '@/components/update/UpdateCheckHost';
 
 const {isSnoozed: isSnoozedActual} = jest.requireActual<
@@ -97,10 +98,13 @@ describe('useAutoUpdateCheck', () => {
     mockPersistUpdateCheckResult.mockResolvedValue(undefined);
     mockPersistFailedUpdateCheck.mockResolvedValue(undefined);
     mockWriteSnoozeUntil.mockResolvedValue(undefined);
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'up-to-date',
-      remoteVersion: '1.0.0',
-    });
+    // checkForUpdates 已知失败走 Result（错误通道迁移六期），mock 同步包一层。
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'up-to-date',
+        remoteVersion: '1.0.0',
+      }),
+    );
     mockShowToast.mockClear();
   });
 
@@ -184,12 +188,14 @@ describe('useAutoUpdateCheck', () => {
   });
 
   it('update-available keeps toast flow without result modal', async () => {
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -206,12 +212,14 @@ describe('useAutoUpdateCheck', () => {
   it('update-available still shows toast while snooze is active', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     mockReadSnoozeUntil.mockResolvedValue({ok: true, value: future});
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);
@@ -287,12 +295,14 @@ describe('useAutoUpdateCheck', () => {
   });
 
   it('B-5: 前往下载外跳失败 toast（对齐 AboutScreen openLink）', async () => {
-    mockCheckForUpdates.mockResolvedValue({
-      status: 'update-available',
-      remoteVersion: '9.9.9',
-      releaseUrl: 'https://example.com',
-      releaseNotesExcerpt: '',
-    });
+    mockCheckForUpdates.mockResolvedValue(
+      Result.ok({
+        status: 'update-available',
+        remoteVersion: '9.9.9',
+        releaseUrl: 'https://example.com',
+        releaseNotesExcerpt: '',
+      }),
+    );
 
     act(() => {
       TestRenderer.create(<TestHost />);

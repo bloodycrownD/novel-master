@@ -32,8 +32,8 @@ function createService(
   vendorModelId = "test-model",
 ) {
   const providerRepo: ProviderRepository = {
-    list: async () => [],
-    findById: async () => ({
+    list: async () => Result.ok([]),
+    findById: async () => Result.ok({
       id: protocol,
       builtinKey: null,
       protocol,

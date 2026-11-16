@@ -4,20 +4,15 @@ import { isAppError } from "../../src/errors/app-error.js";
 import { blocksToTextOnly } from "../../src/infra/llm-protocol/logic/text-only-content.js";
 
 describe("blocksToTextOnly", () => {
-  it("throws UNSUPPORTED_CONTENT for image blocks", () => {
-    assert.throws(
-      () =>
-        blocksToTextOnly([
-          {
-            type: "image",
-            source: { kind: "url", url: "https://example.com/a.png" },
-          },
-        ]),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_UNSUPPORTED_CONTENT"));
-        assert.match(err.message, /image/);
-        return true;
+  it("returns UNSUPPORTED_CONTENT error for image blocks", () => {
+    const result = blocksToTextOnly([
+      {
+        type: "image",
+        source: { kind: "url", url: "https://example.com/a.png" },
       },
-    );
+    ]);
+    assert.ok(!result.ok);
+    assert.ok(isAppError(result.error, "PROVIDER_UNSUPPORTED_CONTENT"));
+    assert.match(result.error.message, /image/);
   });
 });

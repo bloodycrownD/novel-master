@@ -21,7 +21,9 @@ export async function handleProvidersList(): Promise<
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    const providers = await rt.providers.list();
+    const listed = await rt.providers.list();
+    if (!listed.ok) return ipcErr(formatIpcError(listed.error));
+    const providers = listed.value;
     const rows: ProviderListItemDto[] = [];
     for (const provider of providers) {
       const saved = await rt.providerModels.savedList(provider.id);
@@ -53,7 +55,9 @@ export async function handleProvidersGet(
     const got = await rt.providers.get(req.providerId);
     if (!got.ok) return ipcErr(formatIpcError(got.error));
     const provider = got.value;
-    const listed = (await rt.providers.list()).find((p) => p.id === req.providerId);
+    const all = await rt.providers.list();
+    if (!all.ok) return ipcErr(formatIpcError(all.error));
+    const listed = all.value.find((p) => p.id === req.providerId);
     return {
       ok: true,
       data: {

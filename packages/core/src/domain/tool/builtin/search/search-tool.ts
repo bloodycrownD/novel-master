@@ -109,7 +109,7 @@ export const searchTool: Tool<SearchToolInput, SearchToolOutput, BuiltinToolCont
   name: SEARCH_TOOL_NAME,
   description: (ctx) => {
     // 空快照三路径语义：未注入闭包（CLI/旧 mock）→ 中性「未装配」文案
-    //（run 必抛，不承诺任何 run 行为）；已注入但快照为空 → 保留配置指引
+    //（run 返回 TOOL_FAILED err）；已注入但快照为空 → 保留配置指引
     //（软化为不承诺 run 返回——实际行为以 run 内链解析为准）。逐引擎段
     // 来自装配期快照（口径同串行链：enabled ∩ 配置完整，按 engineOrderV2 序）。
     const engineList = ctx.search?.engineSnapshot;
@@ -152,7 +152,7 @@ ${engineSection}
     if (search == null) {
       // 未装配闭包（CLI 无 kkv / 旧测试 mock）：可读错误而非崩溃。
       log.warn("search run：ctx.search 未注入（工具未装配搜索上下文）");
-      throw new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`});
+      return Result.err(new AppError("TOOL_FAILED", {toolName: SEARCH_TOOL_NAME, cause: new Error("search 工具未装配搜索上下文（当前运行时未注入搜索配置）"), detail: `Tool failed: ${SEARCH_TOOL_NAME}`}));
     }
 
     // 引擎链解析：engineOrderV2 优先级序（显式 input.engine 时先钉该引擎，

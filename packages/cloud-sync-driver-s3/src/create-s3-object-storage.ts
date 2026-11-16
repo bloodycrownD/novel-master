@@ -7,7 +7,8 @@ import {
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import { AppError } from "@novel-master/core/agent";
-import type { ObjectStorageHeadResult, ObjectStoragePort } from "@novel-master/core";
+import { Result } from "@novel-master/core/errors";
+import type { ObjectStoragePort } from "@novel-master/core";
 import type { S3StorageConfig } from "./s3-config.js";
 import type { FileSystemPort } from "./ports/file-system.port.js";
 
@@ -67,26 +68,6 @@ export function isAliyunOssEndpoint(endpoint: string): boolean {
   return host != null && host.includes("aliyuncs.com");
 }
 
-function assertConditionalPutPreconditions(
-  head: ObjectStorageHeadResult,
-  options?: { ifMatch?: string; ifNoneMatch?: string },
-): void {
-  if (options?.ifMatch != null) {
-    if (!head.exists || head.etag !== options.ifMatch) {
-      throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
-    }
-  }
-  if (options?.ifNoneMatch != null) {
-    if (options.ifNoneMatch === "*") {
-      if (head.exists) {
-        throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
-      }
-    } else if (head.exists && head.etag === options.ifNoneMatch) {
-      throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"});
-    }
-  }
-}
-
 function isPreconditionFailedError(error: unknown): boolean {
   if (
     typeof error === "object" &&
@@ -134,18 +115,6 @@ export function createS3ObjectStorage(
   const bucket = config.bucket;
   const emulateConditionalPut = isAliyunOssEndpoint(config.endpoint);
   const fileSystem = deps?.fileSystem;
-  const readLocalFile = (path: string): Promise<Uint8Array> => {
-    if (fileSystem == null) {
-      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法读取本地文件（A-26）"});
-    }
-    return fileSystem.readFile(path);
-  };
-  const writeLocalFile = (path: string, bytes: Uint8Array): Promise<void> => {
-    if (fileSystem == null) {
-      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法写入本地文件（A-26）"});
-    }
-    return fileSystem.writeFile(path, bytes);
-  };
 
   const storage: ObjectStoragePort = {
     async head(key) {
@@ -187,8 +156,22 @@ export function createS3ObjectStorage(
       let putOptions = options;
 
       if (emulateConditionalPut && hasConditionalPut) {
+        // 阿里云 OSS 无条件头：head 后按 If-Match / If-None-Match 语义判冲突（Result.err 上行）。
         const head = await this.head(key);
-        assertConditionalPutPreconditions(head, options);
+        if (options?.ifMatch != null) {
+          if (!head.exists || head.etag !== options.ifMatch) {
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+          }
+        }
+        if (options?.ifNoneMatch != null) {
+          if (options.ifNoneMatch === "*") {
+            if (head.exists) {
+              return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+            }
+          } else if (head.exists && head.etag === options.ifNoneMatch) {
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}));
+          }
+        }
         putOptions = undefined;
       }
 
@@ -206,17 +189,20 @@ export function createS3ObjectStorage(
         if (etag == null) {
           throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
         }
-        return { etag };
+        return Result.ok({ etag });
       } catch (error) {
         if (isPreconditionFailedError(error)) {
-          throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}, {cause: error});
+          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "同步冲突，请重试"}, {cause: error}));
         }
         throw error;
       }
     },
 
     async putFile(key, filePath, options) {
-      const raw = await readLocalFile(filePath);
+      if (fileSystem == null) {
+        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法读取本地文件（A-26）"}));
+      }
+      const raw = await fileSystem.readFile(filePath);
       // `readFile` 的返回类型本身就是 Uint8Array，`new Uint8Array(raw)` 是
       // 逐元素复制（不是视图化、不是零拷贝）⇒ 对已经是 Uint8Array 的输入
       // 白拷一份，峰值 = 1 份 + 1 份（mobile 侧还要再加 base64 的放大）。
@@ -232,8 +218,11 @@ export function createS3ObjectStorage(
 
     async getToPath(key, destPath) {
       const { body, etag } = await storage.get(key);
-      await writeLocalFile(destPath, body);
-      return { etag };
+      if (fileSystem == null) {
+        return Result.err(new AppError("CLOUD_SYNC_NOT_CONFIGURED", {detail: "未注入 FileSystemPort，无法写入本地文件（A-26）"}));
+      }
+      await fileSystem.writeFile(destPath, body);
+      return Result.ok({ etag });
     },
   };
 

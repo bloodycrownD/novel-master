@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  chatMessagesToGeminiContents,
+  chatMessagesToGeminiContents as chatMessagesToGeminiContentsImpl,
   geminiPartsToBlocks,
   toolsToGeminiFunctionDeclarations,
 } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+
+// 六期签名适配：chatMessagesToGeminiContents 返回 Result，本文件的既有断言
+// 全部跑在成功值上——本地同名 wrapper 拆包（失败原样抛出 AppError），调用点
+// 与断言语义零改动。
+const chatMessagesToGeminiContents = (
+  messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
+  options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
+) => {
+  const result = chatMessagesToGeminiContentsImpl(messages, options);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
 
 describe("gemini-content-mapper", () => {
   it("T5: multi-turn history with tool_result", () => {

@@ -91,7 +91,9 @@ describe("createS3ObjectStorage", () => {
       ifMatch: "prev-etag",
       ifNoneMatch: "*",
     });
-    assert.equal(result.etag, "new-etag");
+    // 错误通道迁移五期：put 走 Result 通道，失败沿返回值上递。
+    assert.ok(result.ok, "put 应成功");
+    assert.equal(result.value.etag, "new-etag");
   });
 
   it("CS-S1: put If-Match 冲突映射为 LOCK_CONTENTION", async () => {
@@ -108,17 +110,14 @@ describe("createS3ObjectStorage", () => {
       }),
     });
 
-    await assert.rejects(
-      () =>
-        storage.put("status.json", new Uint8Array([1]), {
-          ifMatch: "stale-etag",
-        }),
-      (error: unknown) => {
-        // 错误通道迁移三期：CloudSyncError 退役，收敛为 AppError + 码表 key。
-        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_CONTENTION"));
-        return true;
-      },
-    );
+    const result = await storage.put("status.json", new Uint8Array([1]), {
+      ifMatch: "stale-etag",
+    });
+    // 错误通道迁移五期 + 三期：失败走 Result 通道，收敛为 AppError + 码表 key。
+    assert.ok(!result.ok, "If-Match 冲突应走 Err 通道");
+    if (!result.ok) {
+      assert.ok(isAppError(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
+    }
   });
 
   it("阿里云 OSS：条件 PUT 改为 Head 校验 etag，不传 If-Match", async () => {
@@ -145,11 +144,13 @@ describe("createS3ObjectStorage", () => {
     const result = await storage.put("status.json", body, {
       ifMatch: "current-etag",
     });
-    assert.equal(result.etag, "new-etag");
+    // 错误通道迁移五期：put 走 Result 通道。
+    assert.ok(result.ok, "OSS 条件 PUT 应成功");
+    assert.equal(result.value.etag, "new-etag");
     assert.equal(headCalls, 1);
   });
 
-  it("阿里云 OSS：If-Match 与远端 etag 不一致时抛 LOCK_CONTENTION", async () => {
+  it("阿里云 OSS：If-Match 与远端 etag 不一致时报 LOCK_CONTENTION", async () => {
     const ossConfig: S3StorageConfig = {
       ...testConfig,
       endpoint: "https://oss-cn-beijing.aliyuncs.com",
@@ -166,17 +167,14 @@ describe("createS3ObjectStorage", () => {
       }),
     });
 
-    await assert.rejects(
-      () =>
-        storage.put("status.json", new Uint8Array([1]), {
-          ifMatch: "expected-etag",
-        }),
-      (error: unknown) => {
-        // 错误通道迁移三期：CloudSyncError 退役，收敛为 AppError + 码表 key。
-        assert.ok(isAppError(error, "CLOUD_SYNC_LOCK_CONTENTION"));
-        return true;
-      },
-    );
+    const result = await storage.put("status.json", new Uint8Array([1]), {
+      ifMatch: "expected-etag",
+    });
+    // 错误通道迁移五期 + 三期：失败走 Result 通道，收敛为 AppError + 码表 key。
+    assert.ok(!result.ok, "If-Match 不一致应走 Err 通道");
+    if (!result.ok) {
+      assert.ok(isAppError(result.error, "CLOUD_SYNC_LOCK_CONTENTION"));
+    }
     assert.equal(putCalls, 0);
   });
 
@@ -210,7 +208,9 @@ describe("createS3ObjectStorage", () => {
       });
 
       const result = await storage.putFile!("snapshots/test.nmbackup", filePath);
-      assert.equal(result.etag, "file-etag");
+      // 错误通道迁移五期：putFile 走 Result 通道。
+      assert.ok(result.ok, "putFile 应成功");
+      assert.equal(result.value.etag, "file-etag");
     } finally {
       await unlink(filePath).catch(() => undefined);
     }
@@ -240,7 +240,9 @@ describe("createS3ObjectStorage", () => {
 
     try {
       const result = await storage.getToPath!("snapshots/test.nmbackup", destPath);
-      assert.equal(result.etag, "get-path-etag");
+      // 错误通道迁移五期：getToPath 走 Result 通道。
+      assert.ok(result.ok, "getToPath 应成功");
+      assert.equal(result.value.etag, "get-path-etag");
       const onDisk = await readFile(destPath);
       assert.deepEqual(new Uint8Array(onDisk), payload);
     } finally {

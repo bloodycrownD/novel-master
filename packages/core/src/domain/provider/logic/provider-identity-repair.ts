@@ -30,8 +30,8 @@ import { providerApiKeyRef } from "../model/provider.js";
  * 校验 provider 双身份键形态：内置行必须有非空 builtin_key、所有行必须有非空 display_name。
  *
  * 这是 provider-identity-v1 migration `assertMigratedShape` 的运行时镜像。display_name
- * 的非空校验通常已在 `SqliteProviderRepository.rowToProvider` 读取时强制（空值直接抛
- * ProviderError），但某些路径（如 migration 直接读裸行）可能绕过 repo，所以这里作为
+ * 的非空校验通常已在 `SqliteProviderRepository.rowToProvider` 读取时强制（空值走
+ * `Result.err`），但某些路径（如 migration 直接读裸行）可能绕过 repo，所以这里作为
  * defense-in-depth 再查一次。builtin_key 一致性则是本操作的主要职责——内置行（is_builtin=1）
  * 缺 builtin_key 说明 migration 裂了。
  *
@@ -45,7 +45,10 @@ export function createProviderIdentityRepairOperation(args: { readonly providerR
     name: "provider-identity-shape",
     kind: "repair",
     async detect() {
-      const providers = await providerRepo.list();
+      // detect 的失败通道是 throw（IntegrityRepairOperation 接口只认报告/异常，runAll 捕进报告）。
+      const listed = await providerRepo.list();
+      if (!listed.ok) throw listed.error;
+      const providers = listed.value;
       const offenders: string[] = [];
       for (const p of providers) {
         if (p.displayName.trim() === "") {
@@ -62,7 +65,9 @@ export function createProviderIdentityRepairOperation(args: { readonly providerR
     },
     async repair() {
       // migration 不变量不能在运行时静默修复——重新 detect 一遍，违反则 fail-fast。
-      const providers = await providerRepo.list();
+      const listed = await providerRepo.list();
+      if (!listed.ok) throw listed.error;
+      const providers = listed.value;
       const emptyNames = providers.filter((p) => p.displayName.trim() === "");
       const builtinMissingKey = providers.filter((p) => p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === ""));
       if (emptyNames.length === 0 && builtinMissingKey.length === 0) {

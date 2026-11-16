@@ -48,7 +48,7 @@ describe("ProviderService", () => {
   it("lists opencode with apiKey set via builtin default", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
-    const list = await bundle.providers.list();
+    const list = unwrap(await bundle.providers.list());
     const opencode = list.find((p) => p.id === BUILTIN_PROVIDER_UUID_OPENCODE);
     assert.ok(opencode);
     assert.equal(opencode.builtinKey, "opencode");
@@ -312,9 +312,9 @@ describe("ProviderService", () => {
       "providers.insert 失败后 secretStore 不应残留刚写的 apiKey",
     );
     // providers 表也不应有半套行（displayName sc2gw）
-    const rows = await realProvidersRepo.list();
+    const listed = await realProvidersRepo.list();
     assert.ok(
-      rows.every((p) => p.displayName !== "sc2gw"),
+      listed.ok && listed.value.every((p) => p.displayName !== "sc2gw"),
       "providers 表不应残留失败的半套行",
     );
   });

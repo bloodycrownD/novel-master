@@ -154,7 +154,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
 
     const projectsMatch = normalized.match(/^\/projects\/([^/]+)(\/.*)?$/);
     if (projectsMatch != null) {
-      return this.wrapResult(this.listUnderProject(projectsMatch[1]!, projectsMatch[2]));
+      const listed = await this.listUnderProject(projectsMatch[1]!, projectsMatch[2]);
+      if (!listed.ok) return listed;
+      return Result.ok(listed.value);
     }
 
     const metaMatch = normalized.match(/^\/meta(\/.*)?$/);
@@ -188,12 +190,16 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       ];
       rows.push(...(await this.scopeTreeRows({ kind: "global-meta" }, "/meta")));
       rows.push(...(await this.scopeTreeRows({ kind: "global" }, "/template")));
-      rows.push(...(await this.projectsTreeRows()));
+      const projects = await this.projectsTreeRows();
+      if (!projects.ok) return projects;
+      rows.push(...projects.value);
       return Result.ok(rows.sort(compareEntries));
     }
 
     if (normalized === "/projects") {
-      return Result.ok((await this.projectsTreeRows()).sort(compareEntries));
+      const projects = await this.projectsTreeRows();
+      if (!projects.ok) return projects;
+      return Result.ok(projects.value.sort(compareEntries));
     }
 
     const projectsMatch = normalized.match(/^\/projects\/([^/]+)(\/.*)?$/);
@@ -203,7 +209,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       if (project == null) {
         return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`}));
       }
-      return this.wrapResult(this.projectTreeRows(projectId, projectsMatch[2]).then((rows) => rows.sort(compareEntries)));
+      const rows = await this.projectTreeRows(projectId, projectsMatch[2]!);
+      if (!rows.ok) return rows;
+      return Result.ok(rows.value.sort(compareEntries));
     }
 
     const metaMatch = normalized.match(/^\/meta(\/.*)?$/);
@@ -260,18 +268,18 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   private async listUnderProject(
     projectId: string,
     rest: string | undefined
-  ): Promise<VfsListEntry[]> {
+  ): Promise<Result<VfsListEntry[], AppError>> {
     const project = await this.projects.findById(projectId);
     if (project == null) {
-      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}`, detail: `Path not found: /projects/${projectId}`}));
     }
     if (rest == null || rest === "/") {
       // 项目根：三个子域挂载点均合成目录行（空项目同样显示）
-      return [
+      return Result.ok([
         syntheticDir(`/projects/${projectId}/template`),
         syntheticDir(`/projects/${projectId}/meta`),
         syntheticDir(`/projects/${projectId}/sessions`),
-      ];
+      ]);
     }
     const sessionsMatch = rest.match(/^\/sessions(\/.*)?$/);
     if (sessionsMatch != null) {
@@ -280,19 +288,13 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     const metaMatch = rest.match(/^\/meta(\/.*)?$/);
     if (metaMatch != null) {
       // project-meta：传物理形态目录（逻辑路径自带 /meta 段，挂载前缀仅项目段）
-      return this.listScopeFirstLevel(
-        { kind: "project-meta", projectId },
-        `/projects/${projectId}${rest}`
-      );
+      return Result.ok(await this.listScopeFirstLevel({ kind: "project-meta", projectId }, `/projects/${projectId}${rest}`));
     }
     const templateMatch = rest.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
-      return this.listScopeFirstLevel(
-        { kind: "project", projectId },
-        `/projects/${projectId}${rest}`
-      );
+      return Result.ok(await this.listScopeFirstLevel({ kind: "project", projectId }, `/projects/${projectId}${rest}`));
     }
-    throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`});
+    return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`}));
   }
 
   /** 会话域内是否有任意 VFS 条目（用于过滤无工作区文件的子 agent 会话）。 */
@@ -311,7 +313,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   private async listSessionsUnderProject(
     projectId: string,
     rest: string
-  ): Promise<VfsListEntry[]> {
+  ): Promise<Result<VfsListEntry[], AppError>> {
     if (rest === "/") {
       // 主会话 + 子 agent 会话 BFS 展开；空项目返回空列表。
       // title 为 null（未命名会话）不填 label，展示层回退 UUID。
@@ -333,29 +335,22 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
             (await this.hasSessionEntries(projectId, s.id)),
         }))
       );
-      return withVisibility
+      const sessionRows = withVisibility
         .filter(({ visible }) => visible)
-        .map(({ s }) =>
-          syntheticDir(
-            `/projects/${projectId}/sessions/${s.id}`,
-            s.title ?? undefined
-          )
-        )
+        .map(({ s }) => syntheticDir(`/projects/${projectId}/sessions/${s.id}`, s.title ?? undefined))
         .sort(compareEntries);
+      return Result.ok(sessionRows);
     }
     const sidMatch = rest.match(/^\/([^/]+)(\/.*)?$/);
     if (sidMatch == null) {
-      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`}));
     }
     const sessionId = sidMatch[1]!;
     const session = await this.sessions.findById(sessionId);
     if (session == null || session.projectId !== projectId) {
-      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`}));
     }
-    return this.listScopeFirstLevel(
-      { kind: "session", projectId, sessionId },
-      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`
-    );
+    return Result.ok(await this.listScopeFirstLevel({ kind: "session", projectId, sessionId }, `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`));
   }
 
   /**
@@ -452,21 +447,24 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   }
 
   /** `/projects` 全部项目子树（含项目目录行，虚拟目录合成）。 */
-  private async projectsTreeRows(): Promise<VfsListEntry[]> {
+  private async projectsTreeRows(): Promise<Result<VfsListEntry[], AppError>> {
     const projects = await this.projects.list();
     const rows: VfsListEntry[] = [];
     for (const p of projects) {
       rows.push(syntheticDir(`/projects/${p.id}`, p.name));
-      rows.push(...(await this.projectTreeRows(p.id, "/")));
+      const subtree = await this.projectTreeRows(p.id, "/");
+      // rest 恒为 "/"，不会命中 Err 分支；失败沿 Result 上行由 listTree 接力。
+      if (!subtree.ok) return subtree;
+      rows.push(...subtree.value);
     }
-    return rows;
+    return Result.ok(rows);
   }
 
   /** `/projects/{pid}` 子树（rest 语义同 listUnderProject；不含项目目录行自身）。 */
   private async projectTreeRows(
     projectId: string,
     rest: string | undefined
-  ): Promise<VfsListEntry[]> {
+  ): Promise<Result<VfsListEntry[], AppError>> {
     if (rest == null || rest === "/") {
       // 项目根：三个子域挂载点目录行 + 各子树
       const rows = [
@@ -486,8 +484,10 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
           `/projects/${projectId}/meta`
         ))
       );
-      rows.push(...(await this.sessionsTreeRows(projectId, "/")));
-      return rows;
+      const sessionRows = await this.sessionsTreeRows(projectId, "/");
+      if (!sessionRows.ok) return sessionRows;
+      rows.push(...sessionRows.value);
+      return Result.ok(rows);
     }
     const sessionsMatch = rest.match(/^\/sessions(\/.*)?$/);
     if (sessionsMatch != null) {
@@ -495,26 +495,20 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     const metaMatch = rest.match(/^\/meta(\/.*)?$/);
     if (metaMatch != null) {
-      return this.scopeTreeRows(
-        { kind: "project-meta", projectId },
-        `/projects/${projectId}${rest}`
-      );
+      return Result.ok(await this.scopeTreeRows({ kind: "project-meta", projectId }, `/projects/${projectId}${rest}`));
     }
     const templateMatch = rest.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
-      return this.scopeTreeRows(
-        { kind: "project", projectId },
-        `/projects/${projectId}${rest}`
-      );
+      return Result.ok(await this.scopeTreeRows({ kind: "project", projectId }, `/projects/${projectId}${rest}`));
     }
-    throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`});
+    return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}${rest}`, detail: `Path not found: /projects/${projectId}${rest}`}));
   }
 
   /** `/projects/{pid}/sessions[/...]` 子树（主会话 + 子 agent 会话 BFS 展开）。 */
   private async sessionsTreeRows(
     projectId: string,
     rest: string
-  ): Promise<VfsListEntry[]> {
+  ): Promise<Result<VfsListEntry[], AppError>> {
     if (rest === "/") {
       // 空项目返回空列表；子会话目录行与其子树均 BFS 展平。
       // 子 agent 会话仅当存在 VFS 条目（历史残留）时才输出（同 list 侧
@@ -543,20 +537,17 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
           ))
         );
       }
-      return rows;
+      return Result.ok(rows);
     }
     const sidMatch = rest.match(/^\/([^/]+)(\/.*)?$/);
     if (sidMatch == null) {
-      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions${rest}`, detail: `Path not found: /projects/${projectId}/sessions${rest}`}));
     }
     const sessionId = sidMatch[1]!;
     const session = await this.sessions.findById(sessionId);
     if (session == null || session.projectId !== projectId) {
-      throw new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`});
+      return Result.err(new AppError("VFS_NOT_FOUND", {path: `/projects/${projectId}/sessions/${sessionId}`, detail: `Path not found: /projects/${projectId}/sessions/${sessionId}`}));
     }
-    return this.scopeTreeRows(
-      { kind: "session", projectId, sessionId },
-      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`
-    );
+    return Result.ok(await this.scopeTreeRows({ kind: "session", projectId, sessionId }, `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`));
   }
 }

@@ -259,18 +259,16 @@ export class DefaultSessionService implements SessionService {
   async pullTemplate(sessionId: string): Promise<Result<void, AppError>> {
     const r = await this.get(sessionId);
     if (!r.ok) return Result.err(r.error);
-    await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePull(
-      sessionId
-    );
+    const pulled = await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePull(sessionId);
+    if (!pulled.ok) return pulled;
     return Result.ok(undefined);
   }
 
   async pushTemplate(sessionId: string): Promise<Result<void, AppError>> {
     const r = await this.get(sessionId);
     if (!r.ok) return Result.err(r.error);
-    await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePush(
-      sessionId
-    );
+    const pushed = await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePush(sessionId);
+    if (!pushed.ok) return pushed;
     return Result.ok(undefined);
   }
 

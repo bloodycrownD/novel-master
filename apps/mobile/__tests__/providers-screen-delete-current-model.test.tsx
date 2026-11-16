@@ -16,6 +16,7 @@ import React from 'react';
 import {Alert} from 'react-native';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -120,9 +121,11 @@ function makeFakeRuntime() {
   const callOrder: string[] = [];
   const runtime = {
     providers: {
-      list: jest.fn(async () => [
-        {id: 'P1', displayName: '网关甲', protocol: 'openai', apiKeyStatus: 'set'},
-      ]),
+      list: jest.fn(async () =>
+        Result.ok([
+          {id: 'P1', displayName: '网关甲', protocol: 'openai', apiKeyStatus: 'set'},
+        ]),
+      ),
       delete: jest.fn(async (providerId: string) => {
         callOrder.push('providers.delete');
         for (const [id, m] of [...savedModels]) {
@@ -134,10 +137,10 @@ function makeFakeRuntime() {
       }),
     },
     providerModels: {
-      savedList: jest.fn(async () => []),
+      savedList: jest.fn(async () => Result.ok([])),
       getSavedById: jest.fn(async (id: string) => {
         callOrder.push('getSavedById');
-        return savedModels.get(id) ?? null;
+        return {ok: true as const, value: savedModels.get(id) ?? null};
       }),
     },
     state: {

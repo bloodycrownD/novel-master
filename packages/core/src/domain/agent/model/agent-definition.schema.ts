@@ -46,7 +46,17 @@ const promptsObjectShape = {
 
 const promptsObjectSchema = z.object(promptsObjectShape).strict();
 
-export const promptsDocumentSchema = z.preprocess(stripLegacyPrompts, promptsObjectSchema);
+export const promptsDocumentSchema = z.preprocess((raw, ctx) => {
+  const stripped = stripLegacyPrompts(raw);
+  if (!stripped.ok) {
+    // zod 回调签名由框架锁定，无法返 Result（五期门⑦同款）：removed-feature
+    // 拦截的域 AppError 挂进 issue params 走**数据通道**出 zod 管道，decode()
+    // 失败分支原样提取进 Err——key / detail 零漂移。
+    ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
+    return z.NEVER;
+  }
+  return stripped.value;
+}, promptsObjectSchema);
 
 const agentToolPolicyDocumentSchema = z.object({ allow: z.array(z.string().min(1)).optional(), deny: z.array(z.string().min(1)).optional() }).strict();
 
@@ -75,7 +85,16 @@ export const agentDefinitionDocumentSchema = z.object(agentDefinitionDocumentSha
 
 type AgentDefinitionDocument = z.infer<typeof agentDefinitionDocumentSchema>;
 
-const agentDefinitionWireSchema = z.preprocess(stripLegacyAgentWire, agentDefinitionDocumentSchema);
+const agentDefinitionWireSchema = z.preprocess((raw, ctx) => {
+  const stripped = stripLegacyAgentWire(raw);
+  if (!stripped.ok) {
+    // 数据通道同款（见 promptsDocumentSchema）：preferredModelId / legacy nested
+    // model 拦截的 AppError 原样进 decode() 的 Err。
+    ctx.addIssue({ code: "custom", message: stripped.error.message, params: { appError: stripped.error } });
+    return z.NEVER;
+  }
+  return stripped.value;
+}, agentDefinitionDocumentSchema);
 
 /** Domain parser: wire document → {@link AgentDefinition}（toWire 由下面的 {@link agentDefinitionSchema} 挂载）。 */
 const agentDefinitionBaseSchema = agentDefinitionWireSchema

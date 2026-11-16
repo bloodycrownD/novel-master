@@ -111,7 +111,9 @@ export function finishOpenAiSse(
     state,
     onStream
   );
-  assertSseParseSucceededOrThrow(state, blocks, "openai");
+  // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+  const asserted = assertSseParseSucceededOrThrow(state, blocks, "openai");
+  if (!asserted.ok) throw asserted.error;
   return {
     blocks,
     streamRaw: state.lastUsageEvent ?? state.lastEvent,

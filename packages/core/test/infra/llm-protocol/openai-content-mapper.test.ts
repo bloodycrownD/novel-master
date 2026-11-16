@@ -3,11 +3,24 @@ import { describe, it } from "node:test";
 import { isAppError } from "../../../src/errors/app-error.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import {
-  blocksToOpenAiMessageContent,
-  chatMessagesToOpenAi,
+  blocksToOpenAiMessageContent as blocksToOpenAiMessageContentImpl,
+  chatMessagesToOpenAi as chatMessagesToOpenAiImpl,
   openAiChoiceToBlocks,
 } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
 import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
+
+// 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
+// AppError，assert.throws 用例语义不变），调用点与断言语义零改动。
+const blocksToOpenAiMessageContent = (blocks: Parameters<typeof blocksToOpenAiMessageContentImpl>[0]) => {
+  const result = blocksToOpenAiMessageContentImpl(blocks);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
+const chatMessagesToOpenAi = (messages: Parameters<typeof chatMessagesToOpenAiImpl>[0]) => {
+  const result = chatMessagesToOpenAiImpl(messages);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
 
 describe("openai-content-mapper", () => {
   it("O1: text + tool_use → assistant message with tool_calls", () => {

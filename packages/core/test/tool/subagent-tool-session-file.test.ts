@@ -102,7 +102,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
 
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => ["id-1"],
-    list: async () => [generalDef],
+    list: async () => Result.ok([generalDef]),
     get: async () => generalDef,
     getRawWire: async () => null,
     upsert: async () => undefined,

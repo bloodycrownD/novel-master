@@ -81,7 +81,16 @@ export function AboutScreen() {
     if (!appUi) return;
     setChecking(true);
     try {
-      const data = await checkForUpdates();
+      const checked = await checkForUpdates();
+      // 已知失败（版本比较非法）沿 Result.err 收口，口径对齐下方 catch
+      // （错误通道迁移六期）；网络等未知异常仍走 reject。
+      if (!checked.ok) {
+        await persistFailedUpdateCheck(appUi);
+        setLastStatus('error');
+        showToast(toastMessage('检查失败', checked.error));
+        return;
+      }
+      const data = checked.value;
       await persistUpdateCheckResult(appUi, data);
       setLastStatus(
         data.status === 'update-available' ? 'available' : 'up-to-date',

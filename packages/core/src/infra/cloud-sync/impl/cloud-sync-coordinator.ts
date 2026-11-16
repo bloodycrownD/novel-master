@@ -162,7 +162,8 @@ export class CloudSyncCoordinator {
    * （下载期间 agent 可能启动），两条 import 分支紧邻调用处各一次。
    */
   async pull(options: PullOptions): Promise<Result<PullResult, AppError>> {
-    this.assertConfigured();
+    const unconfigured = this.notConfiguredError();
+    if (unconfigured != null) return Result.err(unconfigured);
 
     const remoteStatus = await this.readRemoteStatus();
     if (!remoteStatus.ok) return Result.err(remoteStatus.error);
@@ -189,7 +190,8 @@ export class CloudSyncCoordinator {
 
       if (this.canUseFilePathPull()) {
         const tempPath = this.importTempPath!;
-        await this.storage.getToPath!(snapKey, tempPath);
+        const downloaded = await this.storage.getToPath!(snapKey, tempPath);
+        if (!downloaded.ok) return Result.err(downloaded.error);
         const localHash = await this.hashSnapshotFile!(tempPath);
         if (
           remote.snapshotSha256 != null &&
@@ -236,7 +238,8 @@ export class CloudSyncCoordinator {
 
   /** 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁） */
   async push(options: PushOptions): Promise<Result<PushResult, AppError>> {
-    this.assertConfigured();
+    const unconfigured = this.notConfiguredError();
+    if (unconfigured != null) return Result.err(unconfigured);
 
     // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
     const lock = await this.acquireSyncLock("push");
@@ -295,7 +298,9 @@ export class CloudSyncCoordinator {
     }
 
     const lockedStatus: CloudSyncStatus = { ...remote, lock: newLock };
-    let statusEtag = await this.conditionalPutStatus(lockedStatus, remoteEtag);
+    const lockPut = await this.conditionalPutStatus(lockedStatus, remoteEtag);
+    if (!lockPut.ok) return Result.err(lockPut.error);
+    let statusEtag: string | null = lockPut.value;
     if (statusEtag == null) {
       return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
     }
@@ -313,11 +318,13 @@ export class CloudSyncCoordinator {
       const uploadStart = Date.now();
       if (this.canUseFilePathPush()) {
         hash = await this.hashSnapshotFile!(this.exportTempPath);
-        await this.storage.putFile!(snapKey, this.exportTempPath);
+        const uploaded = await this.storage.putFile!(snapKey, this.exportTempPath);
+        if (!uploaded.ok) return Result.err(uploaded.error);
       } else {
         const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
         hash = this.computeSha256Hex(snapshotBytes);
-        await this.storage.put(snapKey, snapshotBytes);
+        const uploaded = await this.storage.put(snapKey, snapshotBytes);
+        if (!uploaded.ok) return Result.err(uploaded.error);
       }
       const uploadElapsed = Date.now() - uploadStart;
 
@@ -333,10 +340,11 @@ export class CloudSyncCoordinator {
           ...lockedStatus,
           lock: renewedLock,
         };
-        const renewedEtag = await this.conditionalPutStatus(
+        const renewedPut = await this.conditionalPutStatus(
           renewedStatus,
           statusEtag
         );
+        const renewedEtag = renewedPut.ok ? renewedPut.value : null;
         if (renewedEtag != null) {
           statusEtag = renewedEtag;
         } else {
@@ -359,7 +367,9 @@ export class CloudSyncCoordinator {
         lock: null,
       };
 
-      let finalEtag = await this.conditionalPutStatus(finalStatus, statusEtag);
+      const finalPut = await this.conditionalPutStatus(finalStatus, statusEtag);
+      if (!finalPut.ok) return Result.err(finalPut.error);
+      let finalEtag = finalPut.value;
       if (finalEtag == null) {
         // If-Match 失败 = 远端在我们上传期间被别人改过。重读远端后必须**重新判定**
         // 租约与 rev，禁止只取 etag 就把 finalStatus 覆盖上去：
@@ -378,7 +388,9 @@ export class CloudSyncCoordinator {
         if (latest.rev >= nextRev) {
           return Result.err(new AppError("CLOUD_SYNC_NEED_PULL_FIRST", {descriptor: {key: "error.cloud_sync.need_pull_first.advanced_by_other"}}));
         }
-        finalEtag = await this.conditionalPutStatus(finalStatus, rereadEtag);
+        const retryPut = await this.conditionalPutStatus(finalStatus, rereadEtag);
+        if (!retryPut.ok) return Result.err(retryPut.error);
+        finalEtag = retryPut.value;
         if (finalEtag == null) {
           return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION"));
         }
@@ -393,10 +405,12 @@ export class CloudSyncCoordinator {
     }
   }
 
-  private assertConfigured(): void {
+  /** 未配置 deviceId 时返回业务错误（调用方 `Result.err` 上行），已配置返回 null。 */
+  private notConfiguredError(): AppError | null {
     if (this.deviceId.trim().length === 0) {
-      throw new AppError("CLOUD_SYNC_NOT_CONFIGURED");
+      return new AppError("CLOUD_SYNC_NOT_CONFIGURED");
     }
+    return null;
   }
 
   private async readRemoteStatus(): Promise<
@@ -426,25 +440,21 @@ export class CloudSyncCoordinator {
   }
 
   /**
-   * 条件写入 status.json；If-Match 失败返回 null（不抛错）。
+   * 条件写入 status.json；If-Match 竞态返回 ok(null)（业务态，不是失败），
+   * 其它失败沿 Result.err 上行，决定权交给调用方。
    */
   private async conditionalPutStatus(
     status: CloudSyncStatus,
     ifMatch?: string
-  ): Promise<string | null> {
-    try {
-      const { etag } = await this.storage.put(
-        statusKey(this.pathPrefix),
-        this.encodeStatus(status),
-        ifMatch != null ? { ifMatch } : undefined
-      );
-      return etag;
-    } catch (error) {
-      if (isAppError(error, "CLOUD_SYNC_LOCK_CONTENTION")) {
-        return null;
+  ): Promise<Result<string | null, AppError>> {
+    const put = await this.storage.put(statusKey(this.pathPrefix), this.encodeStatus(status), ifMatch != null ? { ifMatch } : undefined);
+    if (!put.ok) {
+      if (isAppError(put.error, "CLOUD_SYNC_LOCK_CONTENTION")) {
+        return Result.ok(null);
       }
-      throw error;
+      return Result.err(put.error);
     }
+    return Result.ok(put.value.etag);
   }
 
   /** Push 失败时尝试将锁清空（仅当仍由本机持有有效锁） */

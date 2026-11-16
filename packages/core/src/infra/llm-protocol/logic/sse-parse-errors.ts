@@ -5,6 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
 
@@ -41,13 +42,14 @@ export function recordMalformedSseLine(
   }
 }
 
-/** 零内容块且存在畸形行时抛错。 */
+/** 零内容块且存在畸形行时报 PROVIDER_MALFORMED_SSE（失败走返回值通道；名字保留自 throw 时代，调用方按 `Result` 拆包）。 */
 export function assertSseParseSucceededOrThrow(
   diag: SseParseDiagnostics,
   blocks: readonly unknown[],
   protocol: LlmProtocolKind
-): void {
+): Result<void, AppError> {
   if (blocks.length === 0 && diag.malformedLineCount > 0) {
-    throw new AppError("PROVIDER_MALFORMED_SSE", { detail: `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)` });
+    return Result.err(new AppError("PROVIDER_MALFORMED_SSE", { detail: `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)` }));
   }
+  return Result.ok(undefined);
 }

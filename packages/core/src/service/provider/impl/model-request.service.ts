@@ -170,12 +170,13 @@ export class DefaultModelRequestService implements ModelRequestService {
     const saved = asserted.value;
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
-    if (!provider) {
+    if (!provider.ok || provider.value == null) {
       return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${providerId}`, providerId }));
     }
-    const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
+    const row = provider.value;
+    const apiKeyResult = await resolveProviderApiKey(row, this.deps.secretStore);
     if (!apiKeyResult.ok) {
-      return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: provider.id }));
+      return Result.err(new AppError("PROVIDER_API_KEY_NOT_SET", { detail: apiKeyResult.error.message, providerId: row.id }));
     }
     const apiKey = apiKeyResult.value;
     let sampling = options?.sampling;
@@ -192,7 +193,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       if (thinkingLevel !== "off") {
         thinking = resolveThinkingParamsForLevel(
           thinkingLevel,
-          provider.protocol,
+          row.protocol,
           saved.settings.generation.sampling,
           vendorModelId
         );
@@ -200,7 +201,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     }
 
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
-    const adapter = resolveAdapter(provider.protocol);
+    const adapter = resolveAdapter(row.protocol);
     let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
     if (this.deps.retryPolicies != null) {
       const fetched = await this.deps.retryPolicies.getPolicy();
@@ -236,12 +237,12 @@ export class DefaultModelRequestService implements ModelRequestService {
         // 传输层失败仍沿 throw 通道（retry 按 catch + code 分派，spec-2-core §2.1 D 类），
         // 只有预检失败（上方三处 + policy 读取）走 `Result.err`。
         return Result.ok(await adapter.chat({
-          baseUrl: provider.baseUrl,
+          baseUrl: row.baseUrl,
           apiKey,
           vendorModelId,
           userContent,
-          extraHeaders: provider.headers,
-          extraBody: provider.bodyParams,
+          extraHeaders: row.headers,
+          extraBody: row.bodyParams,
           history: options?.history,
           toolUseLookupMessages: options?.toolUseLookupMessages,
           system: options?.system,

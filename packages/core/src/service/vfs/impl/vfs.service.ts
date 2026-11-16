@@ -2,8 +2,8 @@
  * Default VFS application service implementation.
  *
  * entry_id 化后实现 {@link InternalVfsService}（scopeKey + 纯逻辑路径），所有 repo
- * 调用带 scopeKey 透传。`resetHeadToVersion` 维持 unsupported 抛错（无 revision 层）；
- * `hardDelete` 维持走 `delete`；`renamePath` / `renamePrefix` 抛 unsupported（§D）。
+ * 调用带 scopeKey 透传。`resetHeadToVersion` 维持 unsupported 失败（无 revision 层）；
+ * `hardDelete` 维持走 `delete`；`renamePath` / `renamePrefix` 失败 unsupported（§D）。
  *
  * @module service/vfs/impl/vfs.service
  */
@@ -179,7 +179,7 @@ export class DefaultVfsService implements InternalVfsService {
 
   async resetHeadToVersion(scopeKey: string, path: string, _version: number): Promise<Result<void, AppError>> {
     // 无 revision 层：补偿合同依赖 revision，禁止静默 no-op
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}` });
+    return Result.err(new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}` }));
   }
 
   hardDelete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
@@ -187,14 +187,14 @@ export class DefaultVfsService implements InternalVfsService {
     return this.delete(scopeKey, path, options);
   }
 
-  renamePath(_scopeKey: string, fromLogical: string, _toLogical: string, _options?: { overwrite?: boolean }): Promise<Result<void, AppError>> {
+  async renamePath(_scopeKey: string, fromLogical: string, _toLogical: string, _options?: { overwrite?: boolean }): Promise<Result<void, AppError>> {
     // rename 原语依赖事务 + repo + scopeKey，本服务只拿 repo 不在事务里跑；
     // 生产 wiring 走 RevisionAwareVfsService，不会命中此分支。
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePath is unsupported without revision history: ${fromLogical}` });
+    return Result.err(new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePath is unsupported without revision history: ${fromLogical}` }));
   }
 
-  renamePrefix(_scopeKey: string, oldDirLogical: string, _newDirLogical: string): Promise<Result<void, AppError>> {
-    throw new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePrefix is unsupported without revision history: ${oldDirLogical}` });
+  async renamePrefix(_scopeKey: string, oldDirLogical: string, _newDirLogical: string): Promise<Result<void, AppError>> {
+    return Result.err(new AppError("VFS_OPERATION_UNSUPPORTED", { detail: `renamePrefix is unsupported without revision history: ${oldDirLogical}` }));
   }
 }
 

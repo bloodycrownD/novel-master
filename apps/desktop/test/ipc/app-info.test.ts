@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, describe, it, mock } from "node:test";
+import { Result } from "@novel-master/core/errors";
 import {
   __setAppInfoSeamsForTests,
   handleAppCheckForUpdates,
@@ -43,7 +44,8 @@ describe("app-info ipc handlers", () => {
 
   it("handleAppCheckForUpdates returns update-check DTO on success", async () => {
     __setAppInfoSeamsForTests({
-      runUpdateCheck: async () => sampleUpdateData,
+      // 错误通道迁移六期：checkForUpdates 已知失败走 Result，seam 同步。
+      runUpdateCheck: async () => Result.ok(sampleUpdateData),
     });
 
     const result = await handleAppCheckForUpdates();

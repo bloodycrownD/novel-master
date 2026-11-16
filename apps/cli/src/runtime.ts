@@ -101,16 +101,18 @@ const DEFAULT_DB = "./.novel-master/novel.db";
  *
  * 之所以显式走 `resolveSkspNameFromPlatform`，而不是直接写死 `"windows"`，
  * 是因为之前 macOS/Linux 上跑 CLI 时会静默落到 windows driver，行为不对。
- * 现在改成：darwin→macos、win32→windows、linux→linux，其它平台抛错——
- * 这样无 driver 的平台会在启动早期就明确报错，而不是悄悄用错驱动。
+ * 现在改成：darwin→macos、win32→windows、linux→linux，其它平台走
+ * `Result.err`（INFRA_UNSUPPORTED_PLATFORM）——无 driver 的平台在启动
+ * 早期就明确报错，而不是悄悄用错驱动。
  */
 export function registerPlatformSkspDriver(
   platform: string = process.platform,
-): PlatformSkspName {
+): Result<PlatformSkspName, AppError> {
   const name = resolveSkspNameFromPlatform(platform);
-  if (name === "macos") {
+  if (!name.ok) return name;
+  if (name.value === "macos") {
     registerSkspMacDriver();
-  } else if (name === "linux") {
+  } else if (name.value === "linux") {
     registerSkspLinuxDriver();
   } else {
     registerSkspWindowsDriver();
@@ -196,6 +198,7 @@ export async function createNovelMasterRuntime(
 ): Promise<Result<NovelMasterRuntime, AppError>> {
   registerBetterSqlite3Driver();
   const skspName = registerPlatformSkspDriver();
+  if (!skspName.ok) return Result.err(skspName.error);
   registerTokenizerNodeDriver();
   // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
   // 由 CLI 运行时注册。未注册（RN）时 core 全走 fflate，行为不变。
@@ -222,7 +225,7 @@ export async function createNovelMasterRuntime(
   userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
   const scope = new CliScopeResolver(state);
 
-  const dbStore = resolveSkspDriver(skspName).createStore(conn);
+  const dbStore = resolveSkspDriver(skspName.value).createStore(conn);
   const envStore =
     process.env.NM_SKSP_DISABLE_ENV === "1"
       ? undefined

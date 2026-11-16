@@ -1,3 +1,4 @@
+import {Result} from '@novel-master/core/errors';
 import {
   createCloudSyncProgress,
   shortStorageKey,
@@ -34,7 +35,8 @@ describe('cloud-sync-progress-log', () => {
       {
         head: async () => ({exists: false}),
         get: async () => ({body: new Uint8Array(), etag: 'e'}),
-        put: async () => ({etag: '"abc123"'}),
+        // put/putFile/getToPath 已知失败走 Result.err（错误通道迁移六期）。
+        put: async () => Result.ok({etag: '"abc123"'}),
       },
       progress,
     );

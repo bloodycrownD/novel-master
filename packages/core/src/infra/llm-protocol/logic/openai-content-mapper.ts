@@ -8,6 +8,7 @@
 
 import { isRecord } from "@/common/guards.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
@@ -85,12 +86,12 @@ function imageUrlFromBlock(
  */
 export function blocksToOpenAiMessageContent(
   blocks: readonly ContentBlock[]
-): string | OpenAiContentPart[] {
+): Result<string | OpenAiContentPart[], AppError> {
   const contentBlocks = blocks.filter(
     (b) => b.type !== "tool_use" && b.type !== "tool_result"
   );
   if (contentBlocks.length === 0) {
-    return "";
+    return Result.ok("");
   }
 
   const parts: OpenAiContentPart[] = [];
@@ -108,19 +109,19 @@ export function blocksToOpenAiMessageContent(
         });
         break;
       case "thinking":
-        throw new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "OpenAI outbound messages must not include thinking blocks; strip them before mapping" });
+        return Result.err(new AppError("PROVIDER_UNSUPPORTED_CONTENT", { detail: "OpenAI outbound messages must not include thinking blocks; strip them before mapping" }));
       default:
         break;
     }
   }
 
   if (parts.length === 0) {
-    return "";
+    return Result.ok("");
   }
   if (parts.length === 1 && parts[0]!.type === "text") {
-    return (parts[0] as { text: string }).text;
+    return Result.ok((parts[0] as { text: string }).text);
   }
-  return parts;
+  return Result.ok(parts);
 }
 
 function toolCallsFromBlocks(
@@ -146,7 +147,7 @@ function toolCallsFromBlocks(
  */
 export function chatMessagesToOpenAi(
   messages: readonly ChatMessageData[]
-): OpenAiChatMessage[] {
+): Result<OpenAiChatMessage[], AppError> {
   const out: OpenAiChatMessage[] = [];
 
   for (const msg of messages) {
@@ -180,8 +181,9 @@ export function chatMessagesToOpenAi(
 
       if (other.length > 0) {
         const content = blocksToOpenAiMessageContent(other);
-        if (content !== "") {
-          message.content = content;
+        if (!content.ok) return Result.err(content.error);
+        if (content.value !== "") {
+          message.content = content.value;
         }
       }
 
@@ -214,7 +216,7 @@ export function chatMessagesToOpenAi(
     }
   }
 
-  return out;
+  return Result.ok(out);
 }
 
 /**

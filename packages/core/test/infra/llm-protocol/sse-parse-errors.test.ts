@@ -55,15 +55,11 @@ describe("sse-parse-errors", () => {
     }
   });
 
-  it("零 block 且有畸形行时抛 MALFORMED_SSE", () => {
+  it("零 block 且有畸形行时报 MALFORMED_SSE（返回值通道）", () => {
     const diag = { malformedLineCount: 2 };
-    assert.throws(
-      () => assertSseParseSucceededOrThrow(diag, [], "openai"),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "PROVIDER_MALFORMED_SSE"));
-        assert.match(err.message, /malformed SSE line/);
-        return true;
-      },
-    );
+    const result = assertSseParseSucceededOrThrow(diag, [], "openai");
+    assert.ok(!result.ok);
+    assert.ok(isAppError(result.error, "PROVIDER_MALFORMED_SSE"));
+    assert.match(result.error.message, /malformed SSE line/);
   });
 });

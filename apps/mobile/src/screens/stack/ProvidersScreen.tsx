@@ -56,7 +56,9 @@ export function ProvidersScreen() {
   // rows/loading/reload + 聚焦重载走共用 hook；fetcher 抛错进 error 态（配重试）。
   const {rows, loading, error, reload} = useFocusListReload({
     fetcher: useCallback(async () => {
-      const providers = await runtime.providers.list();
+      const listed = await runtime.providers.list();
+      if (!listed.ok) throw listed.error;
+      const providers = listed.value;
       const enriched: ProviderRow[] = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);

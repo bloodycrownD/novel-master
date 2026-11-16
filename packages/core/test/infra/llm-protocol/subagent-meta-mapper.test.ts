@@ -3,8 +3,24 @@ import { describe, it } from "node:test";
 
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { chatMessagesToAnthropic } from "@/infra/llm-protocol/logic/anthropic-content-mapper.js";
-import { chatMessagesToOpenAi } from "@/infra/llm-protocol/logic/openai-content-mapper.js";
-import { chatMessagesToGeminiContents } from "@/infra/llm-protocol/logic/gemini-content-mapper.js";
+import { chatMessagesToOpenAi as chatMessagesToOpenAiImpl } from "@/infra/llm-protocol/logic/openai-content-mapper.js";
+import { chatMessagesToGeminiContents as chatMessagesToGeminiContentsImpl } from "@/infra/llm-protocol/logic/gemini-content-mapper.js";
+
+// 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
+// AppError），调用点与断言语义零改动。
+const chatMessagesToOpenAi = (messages: Parameters<typeof chatMessagesToOpenAiImpl>[0]) => {
+  const result = chatMessagesToOpenAiImpl(messages);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
+const chatMessagesToGeminiContents = (
+  messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
+  options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
+) => {
+  const result = chatMessagesToGeminiContentsImpl(messages, options);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
 
 /**
  * T-M1 / P1-8：LLM adapter 的 content mapper 天然忽略 tool_result 的 meta/summary/ok。

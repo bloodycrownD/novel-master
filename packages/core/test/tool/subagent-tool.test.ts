@@ -63,7 +63,8 @@ function makeMockSubagent(args: {
 
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => defs.map((_, i) => `id-${i}`),
-    list: async () => defs,
+    // 错误通道迁移五期：registry.list 走 Result 通道，fake 与真实 service 同语义。
+    list: async () => Result.ok(defs),
     get: async () => defs[0]!,
     getRawWire: async () => null,
     upsert: async () => undefined,

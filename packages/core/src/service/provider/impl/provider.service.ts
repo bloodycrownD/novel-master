@@ -54,22 +54,26 @@ function requireNonEmptyDisplayName(raw: string, providerId?: string): Result<st
 export class DefaultProviderService implements ProviderService {
   constructor(private readonly deps: DefaultProviderServiceDeps) {}
 
-  async list(): Promise<ProviderListItem[]> {
+  async list(): Promise<Result<ProviderListItem[], AppError>> {
+    // 已知失败走返回值（六期门⑦）：storage 失败收 Result.err，决定权交给上层。
     const rows = await this.deps.providers.list();
-    return Promise.all(
-      rows.map(async (p) => ({
+    if (!rows.ok) return Result.err(rows.error);
+    const items = await Promise.all(
+      rows.value.map(async (p) => ({
         ...p,
         apiKeyStatus: await this.apiKeyStatus(p),
       }))
     );
+    return Result.ok(items);
   }
 
   async get(id: string): Promise<Result<LlmProvider, AppError>> {
     const p = await this.deps.providers.findById(id);
-    if (!p) {
+    if (!p.ok) return Result.err(p.error);
+    if (p.value == null) {
       return Result.err(new AppError("PROVIDER_NOT_FOUND", { detail: `Provider not found: ${id}`, providerId: id }));
     }
-    return Result.ok(p);
+    return Result.ok(p.value);
   }
 
   async create(input: CreateProviderInput): Promise<Result<LlmProvider, AppError>> {

@@ -37,8 +37,9 @@ describe("checkForUpdates env 短路", () => {
           body: "Release notes",
         }),
       }) as Response;
-    const data = await checkForUpdates("2.0.0", mockFetch);
-    assert.equal(data.status, "update-available");
-    assert.equal(data.remoteVersion, "2.1.0");
+    const checked = await checkForUpdates("2.0.0", mockFetch);
+    assert.ok(checked.ok, "合法版本号比较不应失败");
+    assert.equal(checked.value.status, "update-available");
+    assert.equal(checked.value.remoteVersion, "2.1.0");
   });
 });

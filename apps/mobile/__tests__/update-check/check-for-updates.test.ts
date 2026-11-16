@@ -13,8 +13,12 @@ describe('checkForUpdates', () => {
       }),
     });
 
-    const result = await checkForUpdates('0.0.1', mockFetch as typeof fetch);
-    expect(result.status).toBe('update-available');
-    expect(result.remoteVersion).toBe('9.9.9');
+    const checked = await checkForUpdates('0.0.1', mockFetch as typeof fetch);
+    expect(checked.ok).toBe(true);
+    if (!checked.ok) {
+      throw new Error('合法版本号比较不应失败');
+    }
+    expect(checked.value.status).toBe('update-available');
+    expect(checked.value.remoteVersion).toBe('9.9.9');
   });
 });

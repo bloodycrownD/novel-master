@@ -71,7 +71,9 @@ export function ModelPickerModal({
       if (!workspaceModel.ok) return Result.err(workspaceModel.error);
       selectedId = workspaceModel.value ?? undefined;
     }
-    const providers = await runtime.providers.list();
+    const loadedProviders = await runtime.providers.list();
+    if (!loadedProviders.ok) return Result.err(loadedProviders.error);
+    const providers = loadedProviders.value;
     const nameById = new Map(
       providers.map(provider => [provider.id, provider.displayName]),
     );

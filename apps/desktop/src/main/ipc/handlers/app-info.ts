@@ -2,6 +2,7 @@
  * IPC handlers for app metadata and GitHub release update checks (main-process fetch).
  */
 
+import { type AppError, type Result } from "@novel-master/core/errors";
 import { formatIpcError } from "../format-ipc-error.js";
 import type {
   AppCheckForUpdatesResponse,
@@ -15,7 +16,7 @@ type AppInfoSeams = {
   getVersion: () => string;
   getName: () => string;
   getPlatform: () => NodeJS.Platform;
-  runUpdateCheck: () => Promise<UpdateCheckData>;
+  runUpdateCheck: () => Promise<Result<UpdateCheckData, AppError>>;
   openExternal: (url: string) => Promise<void>;
 };
 
@@ -91,8 +92,11 @@ export async function handleAppGetInfo(): Promise<AppGetInfoResponse> {
 export async function handleAppCheckForUpdates(): Promise<AppCheckForUpdatesResponse> {
   try {
     const seams = await getSeams();
-    const data = await seams.runUpdateCheck();
-    return { ok: true, data };
+    // 已知失败（版本比较非法）沿 Result 收口成 IPC 错误 payload；
+    // 网络等未知异常仍走 catch（错误通道迁移六期）。
+    const checked = await seams.runUpdateCheck();
+    if (!checked.ok) return { ok: false, error: formatIpcError(checked.error) };
+    return { ok: true, data: checked.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

@@ -6,6 +6,7 @@
 
 import { truncateText } from "@/common/text.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
 /** Trims trailing slashes from base URL. */
@@ -20,13 +21,13 @@ export function joinUrl(baseUrl: string, path: string): string {
   return `${base}${p}`;
 }
 
-/** Throws `PROVIDER_HTTP_ERROR` AppError on non-2xx responses. */
+/** 非 2xx 响应返回 `PROVIDER_HTTP_ERROR`（失败走返回值通道；名字保留自 throw 时代）。 */
 export async function assertOk(
   response: Response,
   providerId?: string
-): Promise<void> {
+): Promise<Result<void, AppError>> {
   if (response.ok) {
-    return;
+    return Result.ok(undefined);
   }
   let body = "";
   try {
@@ -35,7 +36,7 @@ export async function assertOk(
     body = "";
   }
   const snippet = truncateText(body, 500);
-  throw new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${response.status}: ${snippet}`, providerId });
+  return Result.err(new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${response.status}: ${snippet}`, providerId }));
 }
 
 /** JSON fetch with error handling. */
@@ -44,8 +45,9 @@ export async function fetchJson(
   url: string,
   init: RequestInit,
   providerId?: string
-): Promise<unknown> {
+): Promise<Result<unknown, AppError>> {
   const response = await fetchFn(url, init);
-  await assertOk(response, providerId);
-  return response.json() as Promise<unknown>;
+  const checked = await assertOk(response, providerId);
+  if (!checked.ok) return checked;
+  return Result.ok((await response.json()) as unknown);
 }

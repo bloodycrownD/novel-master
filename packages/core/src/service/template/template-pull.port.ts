@@ -12,9 +12,12 @@
  *
  * @module service/template/template-pull.port
  */
+import type { AppError } from "@/errors/app-error.js";
+import type { Result } from "@/errors/either.js";
+
 export interface TemplatePullService {
-  sessionTemplatePull(sessionId: string): Promise<void>;
+  sessionTemplatePull(sessionId: string): Promise<Result<void, AppError>>;
 
   /** 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板。 */
-  sessionTemplatePush(sessionId: string): Promise<void>;
+  sessionTemplatePush(sessionId: string): Promise<Result<void, AppError>>;
 }

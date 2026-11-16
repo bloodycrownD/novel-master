@@ -611,11 +611,18 @@ export function postSse(
             ...init,
             signal: controller.signal,
           });
-          await assertOk(response, providerId);
+          const checked = await assertOk(response, providerId);
+          if (!checked.ok) {
+            rejectOnce(checked.error);
+            return;
+          }
 
           if (response.body == null) {
             const contentType = response.headers.get("content-type") ?? "none";
-            throw new AppError("PROVIDER_HTTP_ERROR", { detail: `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, providerId });
+            // SSE transport 的失败通道是 Promise reject（与文件内其余错误路径同款）：
+            // transport 边界不返 Result，AppError 经 rejectOnce 上行，由 adapter 收口。
+            rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`, providerId }));
+            return;
           }
 
           logSse(logTag, "fetch stream start", {

@@ -8,6 +8,7 @@ import { deflateSync, inflateSync } from "node:zlib";
 import { bootstrapNovelMaster, open, registerZlibCodecAccelerator, type TdbcConnection } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
+import { type AppError, Result } from "@novel-master/core/errors";
 import { registerPlatformSkspDriver } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
 import { resolveTokenizerAssetsRoot } from "./resolve-tokenizer-assets-root.js";
@@ -16,12 +17,13 @@ let conn: TdbcConnection | undefined;
 let initPromise: Promise<TdbcConnection> | undefined;
 let registered = false;
 
-function ensureDriversRegistered(): void {
+function ensureDriversRegistered(): Result<void, AppError> {
   if (registered) {
-    return;
+    return Result.ok(undefined);
   }
   registerBetterSqlite3Driver();
-  registerPlatformSkspDriver();
+  const sksp = registerPlatformSkspDriver();
+  if (!sksp.ok) return Result.err(sksp.error);
   registerTokenizerNodeDriver({ assetsRoot: resolveTokenizerAssetsRoot() });
   // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
   // 由 desktop main（唯一跑解压的进程；renderer 不引 core 解压路径）注册。
@@ -33,6 +35,7 @@ function ensureDriversRegistered(): void {
     inflate: (data) => inflateSync(data),
   });
   registered = true;
+  return Result.ok(undefined);
 }
 
 /** Opens (once) the app DB with core bootstrap and platform drivers. */
@@ -41,8 +44,12 @@ export async function getDesktopConnection(): Promise<TdbcConnection> {
     return conn;
   }
   if (!initPromise) {
-    initPromise = (async () => {
-      ensureDriversRegistered();
+    initPromise = (async (): Promise<TdbcConnection> => {
+      // SKSP 平台解析失败沿拒绝通道出：本 singleton 的失败通道是 rejection
+      // （bootstrap 的 INFRA_BASELINE_TOO_OLD 同款），不为此把
+      // getDesktopConnection 改成 Result 去波及全部调用方。
+      const drivers = ensureDriversRegistered();
+      if (!drivers.ok) return Promise.reject(drivers.error);
       const dbPath = resolve(resolveDbPath());
       await mkdir(dirname(dbPath), { recursive: true });
       const c = await open(`tdbc:sqlite:file:${dbPath}`, {

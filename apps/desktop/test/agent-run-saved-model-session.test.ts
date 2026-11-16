@@ -27,7 +27,10 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
   });
 
   it("session modelId 在 agent 无 pin 时作为模型来源生效", async () => {
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await createDesktopNovelMasterRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const prompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
     // 无 pin 的 agent definition
     const definition = {

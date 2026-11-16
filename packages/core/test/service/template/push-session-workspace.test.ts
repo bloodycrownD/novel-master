@@ -153,16 +153,14 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     );
   });
 
-  it("T-WP4a: 会话不存在抛 CHAT_NOT_FOUND", async () => {
+  it("T-WP4a: 会话不存在走 Err 通道（CHAT_NOT_FOUND）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    await assert.rejects(
-      createTemplatePullService(ctx.conn).sessionTemplatePush(`missing-${suffix}`),
-      (err: unknown) => {
-        assert.ok(isAppError(err, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");
-        return true;
-      },
-    );
+    const pushed = await createTemplatePullService(ctx.conn).sessionTemplatePush(`missing-${suffix}`);
+    assert.ok(!pushed.ok, "会话不存在应走 Err 通道");
+    if (!pushed.ok) {
+      assert.ok(isAppError(pushed.error, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");
+    }
   });
 
   it("T-WP4b: 事务失败回滚——project 不留半态", async () => {

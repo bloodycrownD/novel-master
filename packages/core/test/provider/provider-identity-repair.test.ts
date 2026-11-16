@@ -13,16 +13,18 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
+import { Result } from "@/errors/either.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { unwrap } from "../helpers/result-unwrap.js";
 
 /** 内存版 ProviderRepository，方便构造异常形态（绕开真实 repo 的读取校验）。 */
 function inMemoryProviderRepo(rows: LlmProvider[]): ProviderRepository {
   return {
     async list() {
-      return [...rows];
+      return Result.ok([...rows]);
     },
     async findById(id) {
-      return rows.find((r) => r.id === id) ?? null;
+      return Result.ok(rows.find((r) => r.id === id) ?? null);
     },
     async insert() {},
     async update() {},
@@ -90,7 +92,7 @@ describe("provider-identity-repair: createProviderIdentityRepairOperation", () =
     const providerRepo = new SqliteProviderRepository(ctx.conn);
 
     // 直接破坏一条内置行的 builtin_key（模拟 migration 裂了）
-    const builtins = await providerRepo.list();
+    const builtins = unwrap(await providerRepo.list());
     const target = builtins.find((p) => p.isBuiltin);
     assert.ok(target != null, "bootstrap 应已种内置 provider");
     await ctx.conn.execute(`UPDATE llm_provider SET builtin_key = NULL WHERE id = ?`, [target.id]);

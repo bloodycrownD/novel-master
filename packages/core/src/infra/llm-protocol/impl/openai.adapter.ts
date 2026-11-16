@@ -73,13 +73,9 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
   ): Promise<LlmListModelsResult> {
     const url = joinUrl(req.baseUrl, "/models");
-    const data = (await fetchJson(this.fetchFn, url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${req.apiKey}`,
-        ...req.extraHeaders,
-      },
-    })) as { data?: Array<{ id?: string }> };
+    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { Authorization: `Bearer ${req.apiKey}`, ...req.extraHeaders } });
+    if (!fetched.ok) throw fetched.error;
+    const data = fetched.value as { data?: Array<{ id?: string }> };
     const models = (data.data ?? [])
       .filter((m) => typeof m.id === "string")
       .map((m) => ({ vendorModelId: m.id! }));
@@ -97,16 +93,17 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   }
 
   private buildMessages(req: LlmChatRequest): unknown[] {
-    const messages =
-      req.history != null && req.history.length > 0
-        ? chatMessagesToOpenAi(req.history)
-        : [
-            {
-              role: "user",
-              content: blocksToTextOnly(textBlocks(req.userContent).blocks),
-            },
-          ];
+    if (req.history != null && req.history.length > 0) {
+      const mapped = chatMessagesToOpenAi(req.history);
+      if (!mapped.ok) throw mapped.error;
+      return this.withSystemMessage(req, mapped.value);
+    }
+    const content = blocksToTextOnly(textBlocks(req.userContent).blocks);
+    if (!content.ok) throw content.error;
+    return this.withSystemMessage(req, [{ role: "user", content: content.value }]);
+  }
 
+  private withSystemMessage(req: LlmChatRequest, messages: unknown[]): unknown[] {
     if (req.system != null && req.system !== "") {
       return [{ role: "system", content: req.system }, ...messages];
     }
@@ -147,31 +144,22 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
   private async chatTextOnly(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = joinUrl(req.baseUrl, "/chat/completions");
-    const userText =
-      req.history != null && req.history.length > 0
-        ? chatMessagesToTextOnly(req.history)
-        : blocksToTextOnly(textBlocks(req.userContent).blocks);
+    const userText = req.history != null && req.history.length > 0 ? chatMessagesToTextOnly(req.history) : blocksToTextOnly(textBlocks(req.userContent).blocks);
+    if (!userText.ok) throw userText.error;
 
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
       stream: false,
-      messages: [{ role: "user", content: userText }],
+      messages: [{ role: "user", content: userText.value }],
       ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
     };
     applyOpenAiThinkingToBody(body, req.thinking);
     // 与 buildBody 一致：自定义参数最后合并，覆盖同名标准字段。
     Object.assign(body, req.extraBody);
 
-    const raw = await fetchJson(this.fetchFn, url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${req.apiKey}`,
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(body),
-      signal: req.signal,
-    });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers: { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders }, body: JSON.stringify(body), signal: req.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
     const record = raw as {
       choices?: Array<{ message?: unknown }>;
     };
@@ -183,16 +171,9 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
   private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = joinUrl(req.baseUrl, "/chat/completions");
-    const raw = await fetchJson(this.fetchFn, url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${req.apiKey}`,
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(this.buildBody(req, false)),
-      signal: req.signal,
-    });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers: { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders }, body: JSON.stringify(this.buildBody(req, false)), signal: req.signal });
+    if (!fetched.ok) throw fetched.error;
+    const raw = fetched.value;
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
     const assistantText = messageBodyTextFromBlocks(blocks);

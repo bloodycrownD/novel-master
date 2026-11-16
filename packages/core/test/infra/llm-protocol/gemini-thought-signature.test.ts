@@ -1,11 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  blocksToGeminiParts,
-  chatMessagesToGeminiContents,
+  blocksToGeminiParts as blocksToGeminiPartsImpl,
+  chatMessagesToGeminiContents as chatMessagesToGeminiContentsImpl,
   geminiPartsToBlocks,
 } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
+
+// 六期签名适配：两个 mapper 返回 Result，本地同名 wrapper 拆包（失败原样抛出
+// AppError），调用点与断言语义零改动。
+const blocksToGeminiParts = (blocks: Parameters<typeof blocksToGeminiPartsImpl>[0]) => {
+  const result = blocksToGeminiPartsImpl(blocks);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
+const chatMessagesToGeminiContents = (
+  messages: Parameters<typeof chatMessagesToGeminiContentsImpl>[0],
+  options?: Parameters<typeof chatMessagesToGeminiContentsImpl>[1],
+) => {
+  const result = chatMessagesToGeminiContentsImpl(messages, options);
+  if (!result.ok) throw result.error;
+  return result.value;
+};
 
 describe("gemini thought_signature", () => {
   it("parses thought_signature on thinking parts", () => {

@@ -386,7 +386,9 @@ export function finishGeminiSse(
     )
   );
 
-  assertSseParseSucceededOrThrow(state, blocks, "gemini");
+  // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+  const asserted = assertSseParseSucceededOrThrow(state, blocks, "gemini");
+  if (!asserted.ok) throw asserted.error;
 
   if (blocks.length === 0 && state.streamRaw != null) {
     const raw = state.streamRaw as {

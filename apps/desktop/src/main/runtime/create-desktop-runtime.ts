@@ -111,7 +111,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const smartSortRule = createSmartSortRuleService(conn);
 
   const skspName = getPlatformSkspName();
-  const dbStore = resolveSkspDriver(skspName).createStore(conn);
+  if (!skspName.ok) return Result.err(skspName.error);
+  const dbStore = resolveSkspDriver(skspName.value).createStore(conn);
   const envStore =
     process.env.NM_SKSP_DISABLE_ENV === "1"
       ? undefined

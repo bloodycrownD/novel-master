@@ -262,7 +262,9 @@ export function TokenUsageStatsScreen() {
   // 归并选项由 UI 侧补上（语义见 ProviderModelFilterValue，覆盖存量行）。
   const reloadModels = useCallback(async () => {
     try {
-      const providerList = await runtime.providers.list();
+      const providerListResult = await runtime.providers.list();
+      if (!providerListResult.ok) throw providerListResult.error;
+      const providerList = providerListResult.value;
       const labels: Record<string, string> = {};
       const providerEntries: Array<{id: string; label: string}> = [];
       const options: ProviderModelOption[] = [];

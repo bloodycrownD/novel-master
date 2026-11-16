@@ -76,18 +76,18 @@ function createStorage(initial?: {
     async put(key, body, options) {
       if (key === statusKey(PREFIX)) {
         if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-          throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"});
+          return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
         }
         const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
         currentStatus = parsed;
         statusWrites.push(structuredClone(parsed));
         etagCounter += 1;
         currentEtag = `etag-${etagCounter}`;
-        return { etag: currentEtag };
+        return Result.ok({ etag: currentEtag });
       }
       const newEtag = `snap-etag-${snapshots.size + 1}`;
       snapshots.set(key, { body, etag: newEtag });
-      return { etag: newEtag };
+      return Result.ok({ etag: newEtag });
     },
 
     async putFile(key, filePath) {
@@ -99,7 +99,7 @@ function createStorage(initial?: {
       const { body, etag } = await storage.get(key);
       const { writeFile } = await import("node:fs/promises");
       await writeFile(destPath, body);
-      return { etag };
+      return Result.ok({ etag });
     },
   };
 
@@ -532,14 +532,14 @@ describe("CloudSyncCoordinator.push", () => {
       async put(key, body, options) {
         if (key === statusKey(PREFIX)) {
           if (options?.ifMatch != null && options.ifMatch !== currentEtag) {
-            throw new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"});
+            return Result.err(new AppError("CLOUD_SYNC_LOCK_CONTENTION", {detail: "etag 不匹配"}));
           }
           const parsed = JSON.parse(new TextDecoder().decode(body)) as CloudSyncStatus;
           currentStatus = parsed;
           statusWrites.push(structuredClone(parsed));
           etagCounter += 1;
           currentEtag = `etag-${etagCounter}`;
-          return { etag: currentEtag };
+          return Result.ok({ etag: currentEtag });
         }
         throw new Error("snapshot upload failed");
       },

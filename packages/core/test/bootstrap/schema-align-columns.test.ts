@@ -452,9 +452,11 @@ describe("schema 列对齐（T-B3）", () => {
         "../../src/domain/provider/repositories/impl/sqlite-provider.repository.js"
       );
       const repo = new SqliteProviderRepository(conn);
+      // 六期签名适配：findById 返回 Result，拆包后断言不变。
       const legacyProvider = await repo.findById(legacyId);
-      assert.ok(legacyProvider);
-      assert.deepEqual(legacyProvider!.bodyParams, {});
+      assert.ok(legacyProvider.ok);
+      assert.ok(legacyProvider.value);
+      assert.deepEqual(legacyProvider.value.bodyParams, {});
 
       const versionRows = await conn.query<{ user_version: number }>(
         "PRAGMA user_version"

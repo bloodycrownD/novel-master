@@ -37,7 +37,7 @@ describe("resolvePreviewThinkingContext", () => {
     const result = unwrap(await resolvePreviewThinkingContext({
       preferences: { getThinkingContextEnabled: async () => Result.ok(true) },
       savedModels: { findById: async () => Result.ok(null) },
-      providers: { findById: async () => null },
+      providers: { findById: async () => Result.ok(null) },
       agentModelId: undefined,
       sessionModelId: undefined,
     }));
@@ -58,7 +58,7 @@ describe("resolvePreviewThinkingContext", () => {
           return Result.ok(id === "m-agent" ? makeSaved("m-agent", "off") : null);
         },
       },
-      providers: { findById: async () => makeProvider("openai") },
+      providers: { findById: async () => Result.ok(makeProvider("openai")) },
       agentModelId: "m-agent",
       sessionModelId: "m-session",
     }));
@@ -76,7 +76,7 @@ describe("resolvePreviewThinkingContext", () => {
       savedModels: {
         findById: async () => Result.ok(makeSaved("m-off", "off")),
       },
-      providers: { findById: async () => makeProvider("gemini") },
+      providers: { findById: async () => Result.ok(makeProvider("gemini")) },
       agentModelId: "m-off",
     }));
     assert.equal(result.requestThinkingEnabled, false);

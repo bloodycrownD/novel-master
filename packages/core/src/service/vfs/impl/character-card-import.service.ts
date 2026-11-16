@@ -70,6 +70,19 @@ function wrapCardImportError(error: unknown, committedShards?: number, failedSha
     : new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {detail: base});
 }
 
+/**
+ * import 的失败出口归一：wrap 后的 AppError 进 `Result.err`（业务失败走返回值
+ * 通道）；测试钩子裸 Error（非域注入）维持直抛——测试按 `instanceof Error`
+ * 断言回滚，不能伪装成业务失败。
+ */
+function failImport(error: unknown, committedShards?: number, failedShard?: number): Result<void, AppError> {
+  const wrapped = wrapCardImportError(error, committedShards, failedShard);
+  if (!isAppError(wrapped)) {
+    throw wrapped;
+  }
+  return Result.err(wrapped);
+}
+
 export type DefaultCharacterCardImportServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: CharacterCardImportTestHook;
@@ -96,19 +109,19 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     this.sessionKkv = options.sessionKkv;
   }
 
-  async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<void> {
+  async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
     if (options.confirmed !== true) {
-      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
+      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
     }
 
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
-    if (!directoryPathResult.ok) throw wrapCardImportError(directoryPathResult.error);
+    if (!directoryPathResult.ok) return failImport(directoryPathResult.error);
     const directoryPath = directoryPathResult.value;
     const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
-    // wrap 对 AppError 直通：repo 查询失败原样上抛，由调用链端点 catch 收口。
-    if (!directoryRow.ok) throw wrapCardImportError(directoryRow.error);
+    // wrap 对 AppError 直通：repo 查询失败原样进 Err。
+    if (!directoryRow.ok) return failImport(directoryRow.error);
     if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
-      throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`});
+      return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `character card target path is a file, not a directory: ${directoryPath}`}));
     }
 
     // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
@@ -117,53 +130,52 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     let totalBytes = 0;
     for (const [relativePath, content] of tree) {
       if (relativePath.length === 0) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: "empty relative path in md tree"});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: "empty relative path in md tree"}));
       }
       if (relativePath.startsWith("/")) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `leading slash in md tree path: ${relativePath}`});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `leading slash in md tree path: ${relativePath}`}));
       }
       if (relativePath.includes("\\")) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `backslash in md tree path: ${relativePath}`});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `backslash in md tree path: ${relativePath}`}));
       }
       if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`}));
       }
       if (WINDOWS_DRIVE_PATH.test(relativePath)) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `absolute Windows path in md tree: ${relativePath}`});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `absolute Windows path in md tree: ${relativePath}`}));
       }
       for (const segment of relativePath.split("/")) {
         if (segment.length === 0) {
-          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `empty segment in md tree path: ${relativePath}`});
+          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `empty segment in md tree path: ${relativePath}`}));
         }
         if (segment === "..") {
-          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `parent segment in md tree path: ${relativePath}`});
+          return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `parent segment in md tree path: ${relativePath}`}));
         }
       }
 
-      let logical: string;
       const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
       if (!logicalResult.ok) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: logicalResult.error.message}));
       }
-      logical = logicalResult.value;
+      const logical = logicalResult.value;
       const allowed = validateLogicalPath(scope, logical);
       if (!allowed.ok) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}`});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", {detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}`}));
       }
 
       const sizeBytes = utf8ByteLength(content);
       if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}}});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.single_file", params: {logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES}}}));
       }
       totalBytes += sizeBytes;
-      // 超限即抛，避免对后续条目做无谓的编码累计
+      // 超限即失败，避免对后续条目做无谓的编码累计
       if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
-        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}}});
+        return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.total_content", params: {total_bytes: totalBytes, limit_bytes: CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES}}}));
       }
       files.set(logical, content);
     }
     if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}}});
+      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.file_count", params: {count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT}}}));
     }
     const sk = scopeKey(scope);
     const fileEntries = [...files];
@@ -187,7 +199,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         }
       });
     } catch (error) {
-      throw wrapCardImportError(error);
+      return failImport(error);
     }
 
     // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
@@ -228,7 +240,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         } catch (compensateError) {
           log.warn("import compensation failed", { error: compensateError });
         }
-        throw wrapCardImportError(error, committedShards, shardIndex + 1);
+        return failImport(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
       await yieldToEventLoop();
@@ -268,25 +280,27 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     if (this.sessionKkv && scope.kind === "session") {
       await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
     }
+    return Result.ok(undefined);
   }
 
   /**
-   * 便捷：bytes → 解析 → import；解析失败走返回值通道（错误通道迁移四期），零写库。
-   * confirmed / 体积闸门与 import 事务链仍按边界抛出，由调用链端点 catch 收口。
+   * 便捷：bytes → 解析 → import；confirmed / 体积闸门、解析失败与导入链失败
+   * 全走返回值通道，零写库。
    */
   async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<Result<void, AppError>> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
-      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"});
+      return Result.err(new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", {detail: "import requires explicit confirmation (CLI --yes or confirm dialog)"}));
     }
     // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
     // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
     if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}});
+      return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", {descriptor: {key: "error.vfs.character_card_too_large.input", params: {size_bytes: bytes.length, limit_bytes: CHARACTER_CARD_MAX_INPUT_BYTES}}}));
     }
     const parsed = parseCharacterCardToMdTree(bytes);
     if (!parsed.ok) return Result.err(parsed.error);
-    await this.import(scope, parsed.value, options);
+    const imported = await this.import(scope, parsed.value, options);
+    if (!imported.ok) return imported;
     return Result.ok(undefined);
   }
 }

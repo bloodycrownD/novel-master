@@ -130,7 +130,9 @@ export function handleModelListPicker(): Promise<IpcResult<ModelListPickerRespon
     const currentModel = await rt.state.getCurrentModelId();
     if (!currentModel.ok) return Result.err(currentModel.error);
     const currentId = currentModel.value ?? undefined;
-    const providers = await rt.providers.list();
+    const listed = await rt.providers.list();
+    if (!listed.ok) return Result.err(listed.error);
+    const providers = listed.value;
     const rows = [];
     for (const provider of providers) {
       const saved = await rt.providerModels.savedList(provider.id);

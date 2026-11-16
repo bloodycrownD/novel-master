@@ -236,7 +236,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
   async run(input, ctx): Promise<Result<AgentToolOutput, AppError>> {
     const agentsCtx = ctx.agents;
     if (agentsCtx == null) {
-      throw new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: "agent 工具未装配 agents 上下文（当前 agent 不允许管理 agent 定义）"});
+      return Result.err(new AppError("TOOL_FAILED", {toolName: AGENT_TOOL_NAME, detail: "agent 工具未装配 agents 上下文（当前 agent 不允许管理 agent 定义）"}));
     }
 
     switch (input.action) {

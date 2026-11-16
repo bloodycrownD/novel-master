@@ -8,6 +8,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -126,8 +127,8 @@ const PROVIDERS = [{id: 'p1', displayName: 'OpenAI', apiKeyStatus: 'ok'}];
 
 describe('ProvidersScreen 列表加载错误态', () => {
   beforeEach(() => {
-    mockList.mockReset().mockResolvedValue(PROVIDERS);
-    mockSavedList.mockReset().mockResolvedValue([]);
+    mockList.mockReset().mockResolvedValue(Result.ok(PROVIDERS));
+    mockSavedList.mockReset().mockResolvedValue(Result.ok([]));
   });
 
   it('B-1: 加载失败渲染错误文案与重试，空态文案不出现', async () => {
@@ -142,7 +143,7 @@ describe('ProvidersScreen 列表加载错误态', () => {
   it('B-1: 点重试成功后恢复列表', async () => {
     mockList
       .mockRejectedValueOnce(new Error('服务商读取失败'))
-      .mockResolvedValueOnce(PROVIDERS);
+      .mockResolvedValueOnce(Result.ok(PROVIDERS));
     const {renderer} = await renderScreen();
     expect(json(renderer)).toContain('服务商读取失败');
 
@@ -154,7 +155,7 @@ describe('ProvidersScreen 列表加载错误态', () => {
   });
 
   it('B-1: 真无数据时仍显示空态', async () => {
-    mockList.mockResolvedValueOnce([]);
+    mockList.mockResolvedValueOnce(Result.ok([]));
     const {renderer} = await renderScreen();
     const text = json(renderer);
     expect(text).toContain('暂无服务商');

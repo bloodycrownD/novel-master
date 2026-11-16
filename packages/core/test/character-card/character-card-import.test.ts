@@ -156,15 +156,15 @@ describe("CharacterCardImportService", () => {
 
     const svc = createCharacterCardImportService(ctx.conn);
     const tree = parseTree(JSON.stringify(SAMPLE_V2));
-    await assert.rejects(
-      () =>
-        svc.import(scope, tree, {
-          confirmed: false,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) =>
-        e instanceof AppError && e.key === "VFS_CHARACTER_CARD_NOT_CONFIRMED",
-    );
+    const unconfirmed = await svc.import(scope, tree, {
+      confirmed: false,
+      directoryPath: "/角色",
+    });
+    assert.ok(!unconfirmed.ok, "未确认应走 Err 通道");
+    if (!unconfirmed.ok) {
+      assert.ok(unconfirmed.error instanceof AppError);
+      assert.equal(unconfirmed.error.key, "VFS_CHARACTER_CARD_NOT_CONFIRMED");
+    }
     assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
@@ -393,9 +393,7 @@ describe("CharacterCardImportService", () => {
       ["角色描述.md", "描述"],
       ["世界书/章节/深层/设定.md", "深层设定"],
     ]);
-    await assert.doesNotReject(
-      svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }),
-    );
+    unwrap(await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }));
 
     // 已写文件完整保留
     assert.equal((unwrap(await vfs.read("/角色/角色描述.md"))).content, "描述");
@@ -486,9 +484,7 @@ describe("CharacterCardImportService", () => {
     const records: LogRecord[] = [];
     setDefaultLogSink({ write: (record) => records.push(record) });
     try {
-      await assert.doesNotReject(
-        svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }),
-      );
+      unwrap(await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }));
     } finally {
       restoreDefaultLogSink();
     }
@@ -782,12 +778,10 @@ describe("CharacterCardImportService", () => {
     setDefaultLogSink({ write: (record) => records.push(record) });
     try {
       const tree = parseTree(JSON.stringify(SAMPLE_V2));
-      await assert.doesNotReject(() =>
-        svc.import(scope, tree, {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      );
+      unwrap(await svc.import(scope, tree, {
+        confirmed: true,
+        directoryPath: "/角色",
+      }));
     } finally {
       restoreDefaultLogSink();
     }
@@ -797,7 +791,7 @@ describe("CharacterCardImportService", () => {
     assert.ok(records.some((record) => record.level === "warn"));
   });
 
-  it("体积闸门：importFromBytes 输入超上限抛 TOO_LARGE 且零写库", async () => {
+  it("体积闸门：importFromBytes 输入超上限走 Err 通道（TOO_LARGE）且零写库", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-toolarge-in-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -812,20 +806,17 @@ describe("CharacterCardImportService", () => {
     const svc = createCharacterCardImportService(ctx.conn);
     // 48MB + 1 字节的任意内容：闸门在解析之前拦截，无需合法 PNG/JSON
     const oversized = new Uint8Array(48 * 1024 * 1024 + 1);
-    // 输入闸门在 src 里仍走 throw 通道（解析失败才收 Result），按 throws 断言
-    await assert.rejects(
-      () =>
-        svc.importFromBytes(scope, oversized, {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) => {
-        assert.ok(e instanceof AppError);
-        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(renderError(e).includes("48"));
-        return true;
-      },
-    );
+    // 输入闸门沿 Result.err 通道（错误通道迁移），按 Err 断言
+    const gated = await svc.importFromBytes(scope, oversized, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    assert.ok(!gated.ok, "输入闸门应走 Err 通道");
+    if (!gated.ok) {
+      assert.ok(gated.error instanceof AppError);
+      assert.equal(gated.error.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+      assert.ok(renderError(gated.error).includes("48"));
+    }
     // 零写库：子树原样保留
     assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
     const entries = unwrap(await vfs.list("/角色", { recursive: true }));
@@ -850,24 +841,21 @@ describe("CharacterCardImportService", () => {
       "巨型设定.md",
       "x".repeat(8 * 1024 * 1024 + 1),
     ]]);
-    await assert.rejects(
-      () =>
-        svc.import(scope, tree, {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) => {
-        assert.ok(e instanceof AppError);
-        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(renderError(e).includes("单文件上限"));
-        return true;
-      },
-    );
+    const singleFileGated = await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    assert.ok(!singleFileGated.ok, "单文件超限应走 Err 通道");
+    if (!singleFileGated.ok) {
+      assert.ok(singleFileGated.error instanceof AppError);
+      assert.equal(singleFileGated.error.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+      assert.ok(renderError(singleFileGated.error).includes("单文件上限"));
+    }
     // 零写库：子树原样保留
     assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
-  it("体积闸门：md 树条目数超上限抛 TOO_LARGE 且零写库", async () => {
+  it("体积闸门：md 树条目数超上限走 Err 通道（TOO_LARGE）且零写库", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-toolarge-count-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -884,23 +872,20 @@ describe("CharacterCardImportService", () => {
       tree.set(`f${i}.md`, "x");
     }
     const svc = createCharacterCardImportService(ctx.conn);
-    await assert.rejects(
-      () =>
-        svc.import(scope, tree, {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) => {
-        assert.ok(e instanceof AppError);
-        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(renderError(e).includes("条目数上限"));
-        return true;
-      },
-    );
+    const countGated = await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    assert.ok(!countGated.ok, "条目数超限应走 Err 通道");
+    if (!countGated.ok) {
+      assert.ok(countGated.error instanceof AppError);
+      assert.equal(countGated.error.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+      assert.ok(renderError(countGated.error).includes("条目数上限"));
+    }
     assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 
-  it("体积闸门：md 树总量超上限抛 TOO_LARGE 且零写库", async () => {
+  it("体积闸门：md 树总量超上限走 Err 通道（TOO_LARGE）且零写库", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-toolarge-total-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -919,19 +904,16 @@ describe("CharacterCardImportService", () => {
       tree.set(`part${i}.md`, chunk);
     }
     const svc = createCharacterCardImportService(ctx.conn);
-    await assert.rejects(
-      () =>
-        svc.import(scope, tree, {
-          confirmed: true,
-          directoryPath: "/角色",
-        }),
-      (e: unknown) => {
-        assert.ok(e instanceof AppError);
-        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
-        assert.ok(renderError(e).includes("总量上限"));
-        return true;
-      },
-    );
+    const totalGated = await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    assert.ok(!totalGated.ok, "总量超限应走 Err 通道");
+    if (!totalGated.ok) {
+      assert.ok(totalGated.error instanceof AppError);
+      assert.equal(totalGated.error.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+      assert.ok(renderError(totalGated.error).includes("总量上限"));
+    }
     assert.equal((unwrap(await vfs.read("/角色/stay.md"))).content, "stay");
   });
 });

@@ -13,8 +13,8 @@ import type { ModelRetryPolicyService } from "../../src/service/provider/model-r
 import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
 
 const providerRepo: ProviderRepository = {
-  list: async () => [],
-  findById: async () => ({
+  list: async () => Result.ok([]),
+  findById: async () => Result.ok({
     id: BUILTIN_PROVIDER_UUID_OPENAI,
     builtinKey: null,
     protocol: "openai",

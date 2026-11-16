@@ -176,9 +176,9 @@ describe("search 工具：run 基础行为", () => {
     }
   });
 
-  it("未装配 search 闭包（CLI / 旧 mock）时抛可读 ToolError 而非崩溃", async () => {
+  it("未装配 search 闭包（CLI / 旧 mock）时报可读 ToolError 而非崩溃", async () => {
     const runner = makeRunner();
-    await assert.rejects(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx()), (err: unknown) => {
+    await rejectsErr(runner.call(SEARCH_TOOL_NAME, { params: { q: "q" } }, makeCtx()), (err) => {
       assert.ok(isAppError(err) && err.key.startsWith("TOOL_"));
       assert.equal(err.key, "TOOL_FAILED");
       assert.match(err.message, /search/);

@@ -20,17 +20,20 @@ export type CharacterCardImportOptions = {
  * 确认后将 md 树整子树替换写入 VFS。
  */
 export interface CharacterCardImportService {
+  /**
+   * confirmed 门闸 / Phase A 路径与体积校验 / 导入事务链失败全走返回值
+   * `Result.err`（错误通道迁移六期）；测试钩子裸 Error 维持直抛。
+   */
   import(
     scope: VfsScope,
     tree: MdTree,
     options: CharacterCardImportOptions
-  ): Promise<void>;
+  ): Promise<Result<void, AppError>>;
 
   /**
    * 便捷：bytes → 解析 → import；解析失败不写库。
    * PNG/JSON 判别与 {@link parseCharacterCardToMdTree} 同一套顺序。
-   * 解析失败走返回值 `Result.err`（错误通道迁移四期）；
-   * confirmed / 体积闸门与导入事务链仍按边界抛出。
+   * confirmed / 体积闸门 / 解析失败与导入事务链失败全走返回值 `Result.err`。
    */
   importFromBytes(
     scope: VfsScope,

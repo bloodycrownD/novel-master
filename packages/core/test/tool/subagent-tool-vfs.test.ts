@@ -48,7 +48,7 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
 
     const agentRegistry: AgentRegistryService = {
       listAgentIds: async () => ["id-1"],
-      list: async () => [generalDef],
+      list: async () => Result.ok([generalDef]),
       get: async () => generalDef,
       getRawWire: async () => null,
       upsert: async () => undefined,

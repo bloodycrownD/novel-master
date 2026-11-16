@@ -224,14 +224,16 @@ export function useAgentEditorFormState(
 
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const loadProviders = useCallback(async () => {
-    const list = await runtime.providers.list();
+    const loaded = await runtime.providers.list();
+    if (!loaded.ok) return Result.err(loaded.error);
+    const list = loaded.value;
     const options = list.map(p => ({
       id: p.id,
       label: p.displayName,
       protocol: p.protocol,
     }));
     setProviders(options);
-    return list;
+    return Result.ok(list);
   }, [runtime]);
 
   // 扁平化：聚合所有服务商下的 savedModels，供「专属模型」下拉直接选。
@@ -239,7 +241,9 @@ export function useAgentEditorFormState(
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const loadAllSavedModels = useCallback(
     async (): Promise<Result<SavedModelEntry[], AppError>> => {
-      const list = await runtime.providers.list();
+      const loaded = await runtime.providers.list();
+      if (!loaded.ok) return Result.err(loaded.error);
+      const list = loaded.value;
       const lists = list.map(p => runtime.providerModels.savedList(p.id));
       const all = await Promise.all(lists);
       // 已知失败沿 Result 接力（错误通道迁移四期）：首个失败服务商即短路，

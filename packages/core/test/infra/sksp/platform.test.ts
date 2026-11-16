@@ -6,28 +6,36 @@ import {
 
 describe("SKSP platform 解析（A-20）", () => {
   it("darwin → macos", () => {
-    assert.equal(resolveSkspNameFromPlatform("darwin"), "macos");
+    const resolved = resolveSkspNameFromPlatform("darwin");
+    assert.ok(resolved.ok);
+    assert.equal(resolved.value, "macos");
   });
 
   it("win32 → windows", () => {
-    assert.equal(resolveSkspNameFromPlatform("win32"), "windows");
+    const resolved = resolveSkspNameFromPlatform("win32");
+    assert.ok(resolved.ok);
+    assert.equal(resolved.value, "windows");
   });
 
   it("linux → linux", () => {
-    assert.equal(resolveSkspNameFromPlatform("linux"), "linux");
+    const resolved = resolveSkspNameFromPlatform("linux");
+    assert.ok(resolved.ok);
+    assert.equal(resolved.value, "linux");
   });
 
-  it("未知 platform 字符串抛错", () => {
-    assert.throws(
-      () => resolveSkspNameFromPlatform("freebsd"),
-      /Unsupported SKSP platform: freebsd/,
-    );
+  it("未知 platform 字符串走 Err 通道", () => {
+    const resolved = resolveSkspNameFromPlatform("freebsd");
+    assert.ok(!resolved.ok, "未知 platform 应走 Err 通道");
+    if (!resolved.ok) {
+      assert.match(resolved.error.message, /Unsupported SKSP platform: freebsd/);
+    }
   });
 
-  it("空串抛错（防 RN 下 process.platform 为 undefined 时静默落到默认）", () => {
-    assert.throws(
-      () => resolveSkspNameFromPlatform(""),
-      /Unsupported SKSP platform/,
-    );
+  it("空串走 Err 通道（防 RN 下 process.platform 为 undefined 时静默落到默认）", () => {
+    const resolved = resolveSkspNameFromPlatform("");
+    assert.ok(!resolved.ok, "空串应走 Err 通道");
+    if (!resolved.ok) {
+      assert.match(resolved.error.message, /Unsupported SKSP platform/);
+    }
   });
 });

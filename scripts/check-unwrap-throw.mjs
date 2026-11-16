@@ -14,13 +14,20 @@
  *     照常计数——它属可辩的边界形态，但统一应写成 toIpcResult 包装器；
  *     是否豁免由编排者裁决，本脚本不给它开后门。
  *
- * 白名单（ALLOW_FILES，三类；新增例外必须先改总纲 §五）：
+ * 白名单（ALLOW_FILES，五类；新增例外必须先改总纲 §五）：
  *   1. better-sqlite3 事务回滚——`db.transaction(fn)` 只认抛错回滚；
  *   2. packages/core/src/infra/tdbc/ 层；
  *   3. 控制信号转码——DatabaseReplacedError 这类携带状态字段的控制信号
  *     Result 装不下（函数抛错时返回值送不到调用方），从 Result 取出后
- *     rethrow 喂给文档写明的 throw 通道 port（2026-11-16 编排者裁决，
- *     只认指定类，不是任何 Error 都能套）。
+ *     rethrow 喂 throw 通道 port（2026-11-16 编排者裁决，
+ *     只认指定类，不是任何 Error 都能套）；
+ *   4. llm-protocol adapter/parser 出口——`LlmProtocolAdapter.listModels/chat`
+ *     port 契约无失败位，ProviderError 按 catch+code 分派 retry（spec-2 §2.1
+ *     保留协议）；内部 fetchJson/assertOk/assertSseParseSucceededOrThrow 已
+ *     Result 化，出口解包转 throw 喂 transport 的 catch→reject（六期收口裁决）；
+ *   5. IntegrityRepairOperation 报告契约——detect/repair「只认报告/异常」，
+ *     runAll 捕异常进报告；repo Result 化后实现在读 repo 处解包转 throw
+ *     （六期收口裁决，仅 provider-identity-repair.ts，不放行整个目录）。
  */
 import fs from "node:fs";
 import cp from "node:child_process";
@@ -42,6 +49,17 @@ const ALLOW_FILES = [
   // dbSync 适配器把 db-backup 的 Result.err 解包上抛由 coordinator 收口。
   // desktop 同款两处由片2另行登记。
   /^apps\/mobile\/src\/services\/cloud-sync\.service\.ts$/,
+  // llm-protocol adapter/parser 出口（2026-11-16 六期收口裁决，总纲 §五 例外 5）：
+  // port 契约无失败位，ProviderError 走 throw 通道供 retry 按 catch+code 分派。
+  /^packages\/core\/src\/infra\/llm-protocol\/impl\/anthropic\.adapter\.ts$/,
+  /^packages\/core\/src\/infra\/llm-protocol\/impl\/gemini\.adapter\.ts$/,
+  /^packages\/core\/src\/infra\/llm-protocol\/impl\/openai\.adapter\.ts$/,
+  /^packages\/core\/src\/infra\/llm-protocol\/logic\/anthropic-sse-parser\.ts$/,
+  /^packages\/core\/src\/infra\/llm-protocol\/logic\/gemini-sse-parser\.ts$/,
+  /^packages\/core\/src\/infra\/llm-protocol\/logic\/openai-sse-parser\.ts$/,
+  // IntegrityRepairOperation 报告契约（2026-11-16 六期收口裁决，总纲 §五 例外 6）：
+  // detect/repair 只认报告/异常，runAll 捕异常进修复报告。
+  /provider-identity-repair\.ts$/,
 ];
 
 // 文件集 = packages/apps 下一层包的 src/*.ts。不用 `src/**/*.ts` glob——

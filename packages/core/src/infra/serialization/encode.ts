@@ -21,7 +21,7 @@ export type EncodableSchema<T> = ZodType<T> & {
 export function encode<T>(value: T, schema: EncodableSchema<T>): Result<unknown, AppError> {
   const encoder = schema.toWire;
   if (encoder == null) {
-    throw new AppError("CONFIG_DECODE_ENCODE_NOT_SUPPORTED", { detail: "schema does not define toWire" });
+    return Result.err(new AppError("CONFIG_DECODE_ENCODE_NOT_SUPPORTED", { detail: "schema does not define toWire" }));
   }
   return encoder(value);
 }

@@ -171,7 +171,8 @@ describe("Workplace C0 协议", () => {
       },
       agentDefinitionSchema,
     );
-    const wire = encode(def, agentDefinitionSchema) as {
+    // encode 已改返回 Result（五期签名）：unwrap 解包后取 wire。
+    const wire = unwrap(encode(def, agentDefinitionSchema)) as {
       prompts: {
         persist: Record<string, { type: string }>;
         workplace?: boolean | string;

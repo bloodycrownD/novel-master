@@ -294,7 +294,7 @@ action 说明：
   async run(input, ctx): Promise<Result<SkillToolOutput, AppError>> {
     const skills = ctx.skills;
     if (skills == null) {
-      throw new AppError("TOOL_FAILED", {toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）"});
+      return Result.err(new AppError("TOOL_FAILED", {toolName: SKILL_TOOL_NAME, detail: "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）"}));
     }
     const service: SkillService = skills.service;
 

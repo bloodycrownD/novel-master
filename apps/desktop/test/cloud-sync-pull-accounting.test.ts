@@ -18,6 +18,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { normalizePrefix, snapshotKey, statusKey, type ObjectStoragePort } from "@novel-master/core";
+import { Result } from "@novel-master/core/errors";
 import {
   __setDesktopCloudSyncStorageOverrideForTest,
   resetDesktopCloudSyncServiceForTest,
@@ -70,14 +71,14 @@ function createMemoryRemote(initial: {
     },
     async put() {
       etag = `etag-${Number(etag.slice(4)) + 1}`;
-      return { etag };
+      return Result.ok({ etag });
     },
     async putFile() {
-      return { etag: "snap-etag" };
+      return Result.ok({ etag: "snap-etag" });
     },
     async getToPath(key: string, destPath: string) {
       await writeFile(destPath, initial.snapshot);
-      return { etag: (await this.get(key)).etag };
+      return Result.ok({ etag: (await this.get(key)).etag });
     },
   };
 }

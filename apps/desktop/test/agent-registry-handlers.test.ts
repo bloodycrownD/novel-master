@@ -30,7 +30,10 @@ describe("agent-registry IPC handlers", () => {
       return;
     }
 
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await createDesktopNovelMasterRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     const brokenWire = {
       schemaVersion: 1,
@@ -87,7 +90,10 @@ describe("agent-registry IPC handlers", () => {
   });
 
   it("get 对失效 wire 返回 assessed invalid", async () => {
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await createDesktopNovelMasterRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     const brokenWire = {
       schemaVersion: 1,
@@ -144,7 +150,10 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
     }
 
     // invalid 行（removed_feature）直接落库，读不出定义 → 天然无 mode。
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await createDesktopNovelMasterRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const now = Date.now();
     await rt.conn.execute(
       `INSERT INTO agent_definition (
@@ -207,7 +216,10 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
     if (!sub.ok) {
       return;
     }
-    const rt = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rtR = await createDesktopNovelMasterRuntime();
+    if (!rtR.ok) throw rtR.error;
+    const rt = rtR.value;
     const subRows = await rt.conn.query<{ prompts_json: string }>(
       `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
       [sub.data.agentId],
@@ -225,7 +237,10 @@ describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
     if (!plain.ok) {
       return;
     }
-    const rt2 = await createDesktopNovelMasterRuntime();
+    // 错误通道迁移七期后 runtime 工厂返回 Result，解包取实体。
+    const rt2R = await createDesktopNovelMasterRuntime();
+    if (!rt2R.ok) throw rt2R.error;
+    const rt2 = rt2R.value;
     const plainRows = await rt2.conn.query<{ prompts_json: string }>(
       `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
       [plain.data.agentId],

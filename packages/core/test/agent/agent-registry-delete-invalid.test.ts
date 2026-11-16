@@ -1,7 +1,8 @@
-import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createAgentRegistryService } from "@novel-master/core/agent";
+// isAppError 与 service 同源（@novel-master/core/agent barrel）：src/dist 双模块
+// 实例下跨 instanceof 会漏判（见 tool-runner normalizeToolFailure 同款注释）。
+import { createAgentRegistryService, isAppError } from "@novel-master/core/agent";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,
@@ -39,16 +40,18 @@ describe("AgentRegistryService.delete 不解码", () => {
 
     assert.equal(await repo.exists(agentId), true);
 
-    await assert.rejects(
-      () => repo.get(agentId),
-      (err: unknown) =>
-        err instanceof Error && /prompts\.blocks/.test(err.message),
-    );
+    // 错误通道迁移五期：repo.get 走 Result 通道，毒行 decode 失败沿返回值上递。
+    const poisoned = await repo.get(agentId);
+    assert.ok(!poisoned.ok, "毒行 get 应走 Err 通道");
+    if (!poisoned.ok) {
+      assert.match(poisoned.error.message, /prompts\.blocks/);
+    }
 
     await registry.delete(agentId);
 
     assert.equal(await repo.exists(agentId), false);
-    assert.equal(await repo.get(agentId), null);
+    const gone = await repo.get(agentId);
+    assert.ok(gone.ok && gone.value === null, "删除后 get 返回 Ok(null)");
     await rejectsErr(
       registry.get(agentId),
       (err: unknown) =>

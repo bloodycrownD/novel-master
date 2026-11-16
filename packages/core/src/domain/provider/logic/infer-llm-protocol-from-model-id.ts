@@ -30,13 +30,14 @@ export async function inferLlmProtocolFromSavedModelId(savedModelId: string, sav
     }
 
     const provider = await providers.findById(saved.value.providerId);
-    if (provider == null) {
+    if (!provider.ok || provider.value == null) {
       return "anthropic";
     }
-    if (provider.builtinKey != null) {
-      return BUILTIN_PROVIDER_PROTOCOLS[provider.builtinKey] ?? provider.protocol;
+    const row = provider.value;
+    if (row.builtinKey != null) {
+      return BUILTIN_PROVIDER_PROTOCOLS[row.builtinKey] ?? row.protocol;
     }
-    return provider.protocol;
+    return row.protocol;
   } catch {
     return "anthropic";
   }

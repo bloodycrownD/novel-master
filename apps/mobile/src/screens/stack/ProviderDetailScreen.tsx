@@ -428,11 +428,11 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
       const got = await runtime.providers.get(providerId);
       if (!got.ok) throw got.error;
       const provider = got.value;
-      const listed = (await runtime.providers.list()).find(
-        p => p.id === providerId,
-      );
+      const listed = await runtime.providers.list();
+      if (!listed.ok) throw listed.error;
+      const listedItem = listed.value.find(p => p.id === providerId);
       setIsBuiltin(provider.isBuiltin);
-      setApiKeyStatus(listed?.apiKeyStatus ?? 'not set');
+      setApiKeyStatus(listedItem?.apiKeyStatus ?? 'not set');
       setInitial({
         displayName: provider.displayName,
         protocol: provider.protocol,

@@ -16,6 +16,8 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { createLogger } from "@/infra/log/logger.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
@@ -403,22 +405,23 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
  * v1.4.06 库已被 baseline 登记命中提前 return，漏判就会拿裸
  * `no such column` 顶掉升级提示。`some()` 语义不动。
  */
-export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
+export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
 
   if (await hasVfsEntryWithoutContentHash(tx)) {
-    throw new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE });
+    return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
 
   const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
   if (hasBaseline) {
-    return;
+    return Result.ok(undefined);
   }
 
   if (await detectLegacyShape(tx)) {
-    throw new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE });
+    return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
+  return Result.ok(undefined);
 }
 
 /**
@@ -443,7 +446,7 @@ export async function bootstrapNovelMaster(
     const bootVersion = await readSchemaBootVersion(tx);
     if (bootVersion >= SCHEMA_BOOT_VERSION) {
       // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
-      await assertMinimumBaseline(tx);
+      unwrapOrRollback(await assertMinimumBaseline(tx));
       await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
       await seedBuiltinSmartSortRules(tx);
@@ -454,7 +457,7 @@ export async function bootstrapNovelMaster(
     //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
     //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
     // 先后顺序对非 legacy 库无持久影响。
-    await assertMinimumBaseline(tx);
+    unwrapOrRollback(await assertMinimumBaseline(tx));
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
