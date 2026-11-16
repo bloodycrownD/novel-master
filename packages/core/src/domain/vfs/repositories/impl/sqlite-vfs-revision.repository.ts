@@ -208,6 +208,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     });
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysUnderScope 端口方法；唯一生产调用来自同类 deleteExceptReachable（同为端口方法），内联会在调用点复制 JOIN 扫描 SQL，且端口仍要求此方法存在。 */
   async listKeysUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number }>> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
@@ -234,6 +235,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }));
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.deleteExceptReachable 端口方法；可达集 fallback 已退役（revision-gc.ts），生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async deleteExceptReachable(scopeKey: string, pathPrefix: string, reachable: ReadonlySet<string>): Promise<number> {
     const candidates = await this.listKeysUnderScope(scopeKey, pathPrefix);
     const toDelete = candidates.filter(({ entryId, version }) => !reachable.has(revisionPairKey(entryId, version)));
@@ -317,6 +319,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
   }
 
+  /** nm-style: keep-public — 实现 VfsRevisionRepository.repairRefCountFloor 端口方法；integrity-repair 注明保留逐条版，生产对账走 batchRepairRefCountFloor，端口契约仍在且端口文件不在本轮范围。 */
   async repairRefCountFloor(entryId: number, version: number, expected: number): Promise<boolean> {
     const sql59 = "SELECT ref_count FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
     const rows = await queryTemplate<{ ref_count: number }>(this.conn, this.parser, sql59, { entryId, version });

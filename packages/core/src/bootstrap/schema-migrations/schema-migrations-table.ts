@@ -6,63 +6,36 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 
 const TABLE = "schema_migrations";
 const parser = new SqlTemplateParser();
 
 /** 确保 migration 登记表存在（不在 NOVEL_MASTER_SCHEMA_STATEMENTS 内）。 */
-export async function ensureSchemaMigrationsTable(
-  tx: TdbcConnection
-): Promise<void> {
-  await tx.execute(
-    `CREATE TABLE IF NOT EXISTS ${TABLE} (
+export async function ensureSchemaMigrationsTable(tx: TdbcConnection): Promise<void> {
+  await tx.execute(`CREATE TABLE IF NOT EXISTS ${TABLE} (
   id TEXT PRIMARY KEY,
   applied_at_ms INTEGER NOT NULL
-)`
-  );
+)`);
 }
 
 /** 是否已 apply 指定 migration id。 */
-export async function isSchemaMigrationApplied(
-  tx: TdbcConnection,
-  id: string
-): Promise<boolean> {
-  const rows = await queryTemplate<{ id: string }>(
-    tx,
-    parser,
-    `SELECT id FROM ${TABLE} WHERE id = #{id}`,
-    { id }
-  );
+export async function isSchemaMigrationApplied(tx: TdbcConnection, id: string): Promise<boolean> {
+  const rows = await queryTemplate<{ id: string }>(tx, parser, `SELECT id FROM ${TABLE} WHERE id = #{id}`, { id });
   return rows.length > 0;
 }
 
 /** 一次读出全部已 apply 的 migration id（供 runner 避免 N+1）。 */
-export async function listAppliedSchemaMigrationIds(
-  tx: TdbcConnection
-): Promise<Set<string>> {
-  const rows = await queryTemplate<{ id: string }>(
-    tx,
-    parser,
-    `SELECT id FROM ${TABLE}`,
-    {}
-  );
+export async function listAppliedSchemaMigrationIds(tx: TdbcConnection): Promise<Set<string>> {
+  const rows = await queryTemplate<{ id: string }>(tx, parser, `SELECT id FROM ${TABLE}`, {});
   return new Set(rows.map((row) => String(row.id)));
 }
 
-/** 登记 migration 已 apply（调用方须在同一事务内保证幂等）。 */
-export async function markSchemaMigrationApplied(
-  tx: TdbcConnection,
-  id: string,
-  appliedAtMs: number
-): Promise<void> {
-  await executeTemplate(
-    tx,
-    parser,
-    `INSERT INTO ${TABLE} (id, applied_at_ms) VALUES (#{id}, #{appliedAtMs})`,
-    { id, appliedAtMs }
-  );
+/**
+ * 登记 migration 已 apply（调用方须在同一事务内保证幂等）。
+ *
+ * nm-style: keep-public — 登记表写入口；TABLE/parser 是本模块私有建表状态，内联会让 runner 复刻表名与解析器。
+ */
+export async function markSchemaMigrationApplied(tx: TdbcConnection, id: string, appliedAtMs: number): Promise<void> {
+  await executeTemplate(tx, parser, `INSERT INTO ${TABLE} (id, applied_at_ms) VALUES (#{id}, #{appliedAtMs})`, { id, appliedAtMs });
 }

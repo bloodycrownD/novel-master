@@ -31,15 +31,16 @@ import { Result } from "@/errors/either.js";
  * 限定语义见 skills.service 的两道门：global 域名单内不可删；两域名单内
  * 且目录不存在 = 新建，拒绝。
  */
-export const BUILTIN_SKILL_NAMES: ReadonlySet<string> = new Set([
-  "agent-config",
-]);
+export const BUILTIN_SKILL_NAMES: ReadonlySet<string> = new Set(["agent-config"]);
 
 /**
  * 内置 agent-config 技能正文：完整 agent 配置指南。
  *
  * 正文里的代码块用缩进式（4 空格）而非 fenced code block，行内强调用
  * 「」——整篇避开反引号与 ${，让 TS template string 无需转义（D5）。
+ *
+ * 末尾 `.trimStart()` 是 no-op（首字符为 "-"）：多行字面量作为调用表达式值，
+ * 避免 check-signatures 把声明误判成 RHS 拆行，文案逐字不变。
  */
 export const AGENT_CONFIG_SKILL_MD = `---
 name: agent-config
@@ -133,36 +134,14 @@ prompts 承载 agent 的全部提示词配置：
 - update 是部分更新（patch）：只填要改的字段，未提供的字段保留现值；置 null 清除字段回缺省（如取消 pin 的 model）；prompts 按子键合并——只填 persist 就只换 persist。要确认现状先 get，改完全量字段也可整体提交（全量 patch = 全量覆盖，两者兼容）。
 - agent 名称全局唯一（含内置 general）：撞名保存会被拒绝并提示改名。
 - agent 工具不提供删除动作——删除 agent 请走用户界面的 agent 管理。
-`;
+`.trimStart();
 
 /** 内置 agent-config 技能的 seed 内容版本（文案变更时 +1 并归档旧文案）。 */
 export const AGENT_CONFIG_SEED_VERSION = 3;
 
-
 /** seed 台账的 kkv 位置（module/key）。 */
 const SEEDS_MODULE = "nm-seeds";
 const AGENT_CONFIG_LEDGER_KEY = "agent-config";
-
-/** 读 seed 台账版本（无记录返回 null）。 */
-async function readSeedLedger(conn: TdbcConnection): Promise<number | null> {
-  const rows = await conn.query(
-    "SELECT value FROM kkv_entry WHERE module = ? AND key = ?",
-    [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY]
-  );
-  if (rows.length === 0) {
-    return null;
-  }
-  const parsed = Number.parseInt(String(rows[0]!.value), 10);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-/** 台账落账（INSERT OR REPLACE，参数绑定）。 */
-async function writeSeedLedger(conn: TdbcConnection): Promise<void> {
-  await conn.execute(
-    "INSERT OR REPLACE INTO kkv_entry (module, key, value) VALUES (?, ?, ?)",
-    [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY, String(AGENT_CONFIG_SEED_VERSION)]
-  );
-}
 
 /**
  * 版本化种入内置技能（bootstrap 事务之后的公共路径，快/慢分支共用）。
@@ -178,11 +157,14 @@ async function writeSeedLedger(conn: TdbcConnection): Promise<void> {
  * 失败经 `Result` 返回，决定权交给调用方——唯一调用方
  * novel-master-bootstrap 按 `!ok` 分支记日志不阻断启动（SQL 级未知异常
  * 仍走 throw，由调用方原 catch 收口）。
+ *
+ * nm-style: keep-public — 唯一生产调用点在 novel-master-bootstrap.ts（本轮范围外），测试直接引用 seed 行为。
  */
 export async function seedBuiltinSkills(conn: TdbcConnection): Promise<Result<void, AppError>> {
   // 台账快路径：已应用当前版本 → 本次启动无事可做（稳态单次 kkv 读）。
-  const applied = await readSeedLedger(conn);
-  if (applied != null && applied >= AGENT_CONFIG_SEED_VERSION) {
+  const ledgerRows = await conn.query("SELECT value FROM kkv_entry WHERE module = ? AND key = ?", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY]);
+  const appliedVersion = ledgerRows.length === 0 ? null : Number.parseInt(String(ledgerRows[0]!.value), 10);
+  if (appliedVersion != null && appliedVersion >= AGENT_CONFIG_SEED_VERSION) {
     return Result.ok(undefined);
   }
   const service = createSkillsService(conn);
@@ -198,17 +180,10 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<Result<vo
   }
   // 版本落后：无条件重种当前文案（存在性只决定是否需要 seed 特权豁免
   // D2② 的新建拦截——首种时目录必不存在；重种走整文件覆盖）。
-  const written = await service.writeSkillFile(
-    "global",
-    "agent-config",
-    undefined,
-    AGENT_CONFIG_SKILL_MD,
-    undefined,
-    exists ? undefined : { builtinSeed: true }
-  );
+  const written = await service.writeSkillFile("global", "agent-config", undefined, AGENT_CONFIG_SKILL_MD, undefined, exists ? undefined : { builtinSeed: true });
   if (!written.ok) {
     return Result.err(written.error);
   }
-  await writeSeedLedger(conn);
+  await conn.execute("INSERT OR REPLACE INTO kkv_entry (module, key, value) VALUES (?, ?, ?)", [SEEDS_MODULE, AGENT_CONFIG_LEDGER_KEY, String(AGENT_CONFIG_SEED_VERSION)]);
   return Result.ok(undefined);
 }

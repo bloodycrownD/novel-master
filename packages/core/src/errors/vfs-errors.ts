@@ -35,5 +35,10 @@ export type VfsReplaceNotFoundDetails = {
   readonly fileHintPreview?: string;
 };
 
-/** 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯。 */
+/**
+ * 结构守卫：AppError 且 `code` 落在 VFS 域段（102000-103999），沿 cause 链回溯。
+ *
+ * nm-style: keep-public — VFS 域策略入口（inDomain 的 VFS 段位组合），service 多处
+ * 生产调用 + 域测试直接引用；内联会把段位策略散到各调用点，不能撤导出。
+ */
 export const isVfsError: AppErrorGuard = (e) => inDomain(e, "VFS", "VFS_CHARACTER_CARD");

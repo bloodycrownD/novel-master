@@ -56,6 +56,7 @@ export class ChatAgentSession implements AgentSession {
     return this.messages.hideRange(this.sessionId, fromSeq, toSeq);
   }
 
+  /** nm-style: keep-public — 检查器跨类同名误判：AgentSession 端口契约方法，三个实现共享此名。 */
   async truncateAfterMessage(afterMessageId: string | null): Promise<Result<void, AppError>> {
     return this.messages.truncateAfter(this.sessionId, afterMessageId);
   }

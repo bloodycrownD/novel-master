@@ -112,7 +112,11 @@ export class IntegrityRepairRegistry {
     return [...this.operations.values()];
   }
 
-  /** 对所有操作跑 detect，返回需要修复的列表。 */
+  /**
+   * 对所有操作跑 detect，返回需要修复的列表。
+   *
+   * nm-style: keep-public — 公共批量检测口；registry 是无端口的具体装配组件，生产暂无调用，测试直接锁 needsRepair 过滤。撤方法需同步清测试（跨分片）。
+   */
   async detectAll(): Promise<ReadonlyArray<IntegrityRepairOperation>> {
     const pending: IntegrityRepairOperation[] = [];
     for (const op of this.operations.values()) {
@@ -133,13 +137,18 @@ export class IntegrityRepairRegistry {
    * 跑全部操作：先 detect，needsRepair=true 的才跑 repair，每步独立 try-catch。
    *
    * 任何操作的 detect / repair 抛错都不会中断其他操作，错误挂在返回报告的 `error` 字段。
+   *
+   * nm-style: keep-public — 公共编排入口；bootstrap 装配链单点调用（runByFilter 保持私有阶段）。
    */
-  /** nm-style: keep-public — 公共编排入口；bootstrap 装配链单点调用（runByFilter 保持私有阶段）。 */
   async runAll(): Promise<IntegrityRepairReport[]> {
     return this.runByFilter(() => true);
   }
 
-  /** 只跑指定种类的操作。 */
+  /**
+   * 只跑指定种类的操作。
+   *
+   * nm-style: keep-public — 按 kind 过滤的公共调度口（类文档承诺的用法），生产暂无调用，测试直接锁 rename 过滤；撤方法需同步清测试（跨分片）。
+   */
   async runOnly(kind: IntegrityRepairKind): Promise<IntegrityRepairReport[]> {
     return this.runByFilter((op) => op.kind === kind);
   }

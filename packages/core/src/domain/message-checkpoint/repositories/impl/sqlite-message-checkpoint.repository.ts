@@ -194,6 +194,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     await revisionRepo.batchAdjustRefCountWithDelta(pointers, msgCount);
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.loadFileTree 端口方法；回滚主链走 loadFilePointerTree，生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async loadFileTree(sessionId: string, messageId: string): Promise<Map<string, number> | null> {
     const pointers = await this.loadFilePointerTree(sessionId, messageId);
     if (pointers == null) {
@@ -255,6 +256,7 @@ export class SqliteMessageCheckpointRepository implements MessageCheckpointRepos
     return rows.map((row) => rowToFilePointer(row));
   }
 
+  /** nm-style: keep-public — 实现 MessageCheckpointRepository.listDistinctCheckpointPointersForSession 端口方法；生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async listDistinctCheckpointPointersForSession(sessionId: string): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>> {
     const sql12 = "SELECT DISTINCT entry_id, revision_version\n       FROM message_checkpoint_file\n       WHERE session_id = #{sessionId}";
     const rows = await queryTemplate<{ entry_id: number; revision_version: number }>(this.conn, this.parser, sql12, { sessionId });

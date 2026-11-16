@@ -42,11 +42,7 @@ import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
 import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
-import {
-  ensureSchemaMigrationsTable,
-  listAppliedSchemaMigrationIds,
-  runPendingSchemaMigrations,
-} from "./schema-migrations/index.js";
+import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, runPendingSchemaMigrations } from "./schema-migrations/index.js";
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
@@ -184,19 +180,6 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   "DROP TABLE IF EXISTS regex_group;",
 ];
 
-async function readSchemaBootVersion(tx: TdbcConnection): Promise<number> {
-  const rows = await tx.query<{ user_version: number }>("PRAGMA user_version");
-  return Number(rows[0]?.user_version ?? 0);
-}
-
-async function writeSchemaBootVersion(
-  tx: TdbcConnection,
-  version: number
-): Promise<void> {
-  // user_version 为整数 pragma，不能参数绑定。
-  await tx.execute(`PRAGMA user_version = ${version}`);
-}
-
 /**
  * v1.5.23 之前上线的 schema migration id 清单。
  *
@@ -253,146 +236,6 @@ const BASELINE_TOO_OLD_MESSAGE: CoreMessageDescriptor = {
   params: { minimum_version: BASELINE_MINIMUM_VERSION },
 };
 
-/** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
-async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
-  const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'llm_saved_model'`
-  );
-  if (tables.length === 0) {
-    return false;
-  }
-  const cols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('llm_saved_model')`
-  );
-  const names = new Set(cols.map((c) => c.name));
-  return !names.has("id");
-}
-
-/** 存在 `worktree_*` 规则表 → 未走 rename-worktree-tables-to-workplace-v1。 */
-async function hasLegacyWorktreeTables(tx: TdbcConnection): Promise<boolean> {
-  const rows = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master
-     WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`
-  );
-  return rows.length > 0;
-}
-
-/**
- * `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）
- * → 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
- */
-async function hasLegacyVfsEntryShape(tx: TdbcConnection): Promise<boolean> {
-  const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`
-  );
-  if (tables.length === 0) {
-    return false;
-  }
-  const cols = await tx.query<{ name: string; pk: number }>(
-    `SELECT name, pk FROM pragma_table_info('vfs_entry')`
-  );
-  const entryId = cols.find((c) => c.name === "entry_id");
-  return !(entryId != null && entryId.pk > 0);
-}
-
-/**
- * `vfs_entry` 存在但缺 `content_hash` 列
- * → vfs-entry-id-redesign-v1 之前的老库形态。
- *
- * 与 {@link hasBaseline} 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起
- * 就登记，v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并
- * 提前 return，若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
- * `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
- * `no such column`，把本应给出的升级提示顶掉。故单列此探测。
- */
-async function hasVfsEntryWithoutContentHash(tx: TdbcConnection): Promise<boolean> {
-  const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`
-  );
-  if (tables.length === 0) {
-    return false;
-  }
-  const cols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('vfs_entry')`
-  );
-  return !cols.some((c) => c.name === "content_hash");
-}
-
-/**
- * `chat_session` 存在但缺 `agent_config_json` 列
- * → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
- */
-async function hasLegacyChatSessionShape(tx: TdbcConnection): Promise<boolean> {
-  const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_session'`
-  );
-  if (tables.length === 0) {
-    return false;
-  }
-  const cols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('chat_session')`
-  );
-  return !cols.some((c) => c.name === "agent_config_json");
-}
-
-/**
- * `chat_project` 存在且 `agent_config_json` 有非 NULL 残留
- * → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
- */
-async function hasLegacyChatProjectShape(tx: TdbcConnection): Promise<boolean> {
-  const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_project'`
-  );
-  if (tables.length === 0) {
-    return false;
-  }
-  const cols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('chat_project')`
-  );
-  if (!cols.some((c) => c.name === "agent_config_json")) {
-    return false;
-  }
-  const rows = await tx.query<{ cnt: number }>(
-    `SELECT COUNT(*) AS cnt FROM chat_project WHERE agent_config_json IS NOT NULL`
-  );
-  return Number(rows[0]?.cnt ?? 0) > 0;
-}
-
-/**
- * `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，
- * canonical DDL 之外没有别处会改它）→ 未走 table-constraints-v1b（< v1.4.28）。
- * 判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
- */
-async function hasLegacyVfsRevisionShape(tx: TdbcConnection): Promise<boolean> {
-  const rows = await tx.query<{ sql: string | null }>(
-    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`
-  );
-  if (rows.length === 0 || rows[0]?.sql == null) {
-    return false;
-  }
-  return !/WITHOUT\s+ROWID/i.test(String(rows[0]?.sql ?? ""));
-}
-
-/** 任一 legacy 形态命中即视为未升级到最低支持版本。 */
-async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
-  if (await hasLegacySavedModelShape(tx)) {
-    return true;
-  }
-  if (await hasLegacyWorktreeTables(tx)) {
-    return true;
-  }
-  if (await hasLegacyVfsEntryShape(tx)) {
-    return true;
-  }
-  if (await hasLegacyChatSessionShape(tx)) {
-    return true;
-  }
-  if (await hasLegacyVfsRevisionShape(tx)) {
-    return true;
-  }
-  return hasLegacyChatProjectShape(tx);
-}
-
 /**
  * 版本基线检查：migration runner 之前 fail-fast。
  *
@@ -401,25 +244,69 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
  * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
  *
  * **vfs_entry 缺 content_hash 列的形态单列前置判定**（不在 `hasBaseline`
- * 短路之内）：见 {@link hasVfsEntryWithoutContentHash} 的注释——v1.3.10~
- * v1.4.06 库已被 baseline 登记命中提前 return，漏判就会拿裸
- * `no such column` 顶掉升级提示。`some()` 语义不动。
+ * 短路之内）：见下方前置探测的注释——v1.3.10~v1.4.06 库已被 baseline 登记
+ * 命中提前 return，漏判就会拿裸 `no such column` 顶掉升级提示。`some()` 语义不动。
  */
 export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<void, AppError>> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
 
-  if (await hasVfsEntryWithoutContentHash(tx)) {
+  // `vfs_entry` 存在但缺 `content_hash` 列 → vfs-entry-id-redesign-v1 之前的老库形态。
+  // 与 hasBaseline 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起就登记，
+  // v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并提前 return，
+  // 若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
+  // `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
+  // `no such column`，把本应给出的升级提示顶掉。故单列此探测。
+  const contentHashProbeTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`);
+  if (contentHashProbeTables.length > 0) {
+    const contentHashProbeCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('vfs_entry')`);
+    if (!contentHashProbeCols.some((c) => c.name === "content_hash")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+  }
+
+  if (BASELINE_MIGRATION_IDS.some((id) => applied.has(id))) return Result.ok(undefined);
+
+  // 任一 legacy 形态命中即视为未升级到最低支持版本。
+  // `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。
+  const savedModelTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'llm_saved_model'`);
+  if (savedModelTables.length > 0) {
+    const savedModelCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('llm_saved_model')`);
+    if (!new Set(savedModelCols.map((c) => c.name)).has("id")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+  }
+
+  // 存在 `worktree_*` 规则表 → 未走 rename-worktree-tables-to-workplace-v1。
+  const worktreeRuleRows = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`);
+  if (worktreeRuleRows.length > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+
+  // `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）→ 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
+  const vfsEntryTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`);
+  if (vfsEntryTables.length > 0) {
+    const vfsEntryCols = await tx.query<{ name: string; pk: number }>(`SELECT name, pk FROM pragma_table_info('vfs_entry')`);
+    const entryId = vfsEntryCols.find((c) => c.name === "entry_id");
+    if (!(entryId != null && entryId.pk > 0)) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+  }
+
+  // `chat_session` 存在但缺 `agent_config_json` 列 → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
+  const chatSessionTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_session'`);
+  if (chatSessionTables.length > 0) {
+    const chatSessionCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_session')`);
+    if (!chatSessionCols.some((c) => c.name === "agent_config_json")) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+  }
+
+  // `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，canonical DDL 之外没有别处会改它）
+  // → 未走 table-constraints-v1b（< v1.4.28）。判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
+  const vfsRevisionRows = await tx.query<{ sql: string | null }>(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`);
+  if (vfsRevisionRows.length > 0 && vfsRevisionRows[0]?.sql != null && !/WITHOUT\s+ROWID/i.test(String(vfsRevisionRows[0]?.sql ?? ""))) {
     return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
   }
 
-  const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
-  if (hasBaseline) {
-    return Result.ok(undefined);
-  }
-
-  if (await detectLegacyShape(tx)) {
-    return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+  // `chat_project` 存在且 `agent_config_json` 有非 NULL 残留 → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
+  const chatProjectTables = await tx.query<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_project'`);
+  if (chatProjectTables.length > 0) {
+    const chatProjectCols = await tx.query<{ name: string }>(`SELECT name FROM pragma_table_info('chat_project')`);
+    if (chatProjectCols.some((c) => c.name === "agent_config_json")) {
+      const chatProjectRows = await tx.query<{ cnt: number }>(`SELECT COUNT(*) AS cnt FROM chat_project WHERE agent_config_json IS NOT NULL`);
+      if (Number(chatProjectRows[0]?.cnt ?? 0) > 0) return Result.err(new AppError("INFRA_BASELINE_TOO_OLD", { descriptor: BASELINE_TOO_OLD_MESSAGE }));
+    }
   }
   return Result.ok(undefined);
 }
@@ -438,13 +325,11 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<
  *
  * @param conn - 已打开的 TDBC 连接
  */
-export async function bootstrapNovelMaster(
-  conn: TdbcConnection
-): Promise<void> {
+export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
   clearDecodedContentCaches();
   await conn.transaction(async (tx) => {
-    const bootVersion = await readSchemaBootVersion(tx);
-    if (bootVersion >= SCHEMA_BOOT_VERSION) {
+    const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
+    if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {
       // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
       unwrapOrRollback(await assertMinimumBaseline(tx));
       await runPendingSchemaMigrations(tx);
@@ -465,12 +350,11 @@ export async function bootstrapNovelMaster(
     await alignSchemaColumns(tx);
     // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
     // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
-    await tx.execute(
-      "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)"
-    );
+    await tx.execute("CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)");
     await seedBuiltinProviders(tx);
     await seedBuiltinSmartSortRules(tx);
-    await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
+    // user_version 为整数 pragma，不能参数绑定。
+    await tx.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);
   });
 
   // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
@@ -502,9 +386,7 @@ export async function bootstrapNovelMaster(
   // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
   // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
   try {
-    const reports = await new IntegrityRepairRegistry()
-      .register(createVfsEntrySequenceRepairOperation(conn))
-      .runAll();
+    const reports = await new IntegrityRepairRegistry().register(createVfsEntrySequenceRepairOperation(conn)).runAll();
     for (const report of reports) {
       if (report.error != null) {
         log.warn(`发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）`, { error: report.error });

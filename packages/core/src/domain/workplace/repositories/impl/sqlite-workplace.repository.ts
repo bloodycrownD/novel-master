@@ -185,6 +185,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     return Result.ok(rowToDirRule(rows[0]!));
   }
 
+  /** nm-style: keep-public — 实现 WorkplaceRepository.findFileRule 端口方法；生产零调用，但端口契约仍在且端口文件不在本轮范围，测试经端口直接覆盖。 */
   async findFileRule(scopeKey: string, logicalPath: string): Promise<Result<WorkplaceFileRule | null, AppError>> {
     const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}

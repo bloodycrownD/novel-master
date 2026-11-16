@@ -80,29 +80,34 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return entries;
   }
 
+  /**
+   * 原始偏好值（未设置为 `undefined`）；`KKV_NOT_FOUND` 归一为 `undefined`，其余 KKV 失败经 `Result.err` 原样接力。
+   *
+   * nm-style: keep-public — PersistentPreferences 端口 raw 读口（public barrel 导出类型）；实现类必须提供，外部暂无调用；撤口需同步端口/barrel（跨分片）。
+   */
   async getPreference(key: string): Promise<Result<string | undefined, AppError>> {
-    return this.getRaw(key);
+    const raw = await this.kkv.get(PREFERENCES_MODULE, key);
+    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
+    return Result.ok(raw.ok ? raw.value : undefined);
   }
 
+  /**
+   * 写入原始偏好值。
+   *
+   * nm-style: keep-public — PersistentPreferences 端口 raw 写口（public barrel 导出类型）；实现类必须提供，生产暂无调用，撤口需同步端口/barrel（跨分片）。
+   */
   async setPreference(key: string, value: string): Promise<void> {
     await this.kkv.set(PREFERENCES_MODULE, key, value);
   }
 
   private async getBooleanPref(key: string, defaultValue: boolean): Promise<Result<boolean, AppError>> {
-    const raw = await this.getRaw(key);
+    const raw = await this.getPreference(key);
     if (!raw.ok) return Result.err(raw.error);
     if (raw.value === undefined) return Result.ok(defaultValue);
     const parsed = parseBoolean(raw.value);
     if (!parsed.ok)
       return Result.err(new AppError("PREFERENCES_INVALID_VALUE", { detail: `Preference key "${key}" expected boolean, got: ${raw.value}`, key, expectedType: "boolean", actualValue: raw.value }));
     return Result.ok(parsed.value);
-  }
-
-  /** `KKV_NOT_FOUND` 归一为 `undefined`，其余 KKV 失败经 `Result.err` 原样接力。 */
-  private async getRaw(key: string): Promise<Result<string | undefined, AppError>> {
-    const raw = await this.kkv.get(PREFERENCES_MODULE, key);
-    if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
-    return Result.ok(raw.ok ? raw.value : undefined);
   }
 
   /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */

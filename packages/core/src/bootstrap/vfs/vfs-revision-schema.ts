@@ -90,8 +90,7 @@ BEGIN
 END`.trim();
 
 /** 归零删除的守卫子串（bootstrap 对齐段与测试用它判定「新触发器已生效」）。 */
-export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT =
-  "NOT EXISTS (SELECT 1 FROM vfs_entry";
+export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT = "NOT EXISTS (SELECT 1 FROM vfs_entry";
 
 /**
  * `vfs_entry(content_hash)` **部分索引**——守卫子查询的落地索引（CR-F06 同批）。
@@ -119,10 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
 export const VFS_ENTRY_CONTENT_HASH_INDEX_NAME = "idx_vfs_entry_content_hash";
 
 /** 两个 blob 归零触发器的**新名**（含版本后缀）。 */
-export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = [
-  "trg_revision_delete_dec_blob_ref_v2",
-  "trg_revision_update_transfer_blob_ref_v2",
-] as const;
+export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = ["trg_revision_delete_dec_blob_ref_v2", "trg_revision_update_transfer_blob_ref_v2"] as const;
 
 /**
  * 两个 blob 归零触发器的**旧名**。
@@ -132,10 +128,7 @@ export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = [
  * 的东西 ⇒ 光 `CREATE <新名>` 不够：那样新旧两条会**同时注册**、同一次
  * DELETE 归零两次，旧那条照样把 blob 删掉。必须先显式 DROP 旧名。
  */
-export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
-  "trg_revision_delete_dec_blob_ref",
-  "trg_revision_update_transfer_blob_ref",
-] as const;
+export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = ["trg_revision_delete_dec_blob_ref", "trg_revision_update_transfer_blob_ref"] as const;
 
 /**
  * blob 归零触发器的 DROP 前缀语句（CS-07 存量库生效机制·子动作一）。
@@ -157,12 +150,8 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
  * 惯例去掉，零行为变化。
  */
 export const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
-  ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name}`
-  ),
-  ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name}`
-  ),
+  ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
+  ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
 ];
 
 /** All vfs_revision bootstrap statements in execution order.

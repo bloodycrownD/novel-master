@@ -64,7 +64,11 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     }
   }
 
-  /** 校验失败（`validatePolicy` 的 `Result.err`）原样接力，由上层决定提示。 */
+  /**
+   * 校验失败（`validatePolicy` 的 `Result.err`）原样接力，由上层决定提示。
+   *
+   * nm-style: keep-public — ModelRetryPolicyService 端口写口（public/provider 类型面）；实现类必须提供，撤方法需同步改端口与 public barrel（跨分片）。
+   */
   async setPolicy(policy: ModelRetryPolicy): Promise<Result<void, AppError>> {
     const valid = validatePolicy(policy);
     if (!valid.ok) return Result.err(valid.error);
@@ -73,7 +77,11 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     return Result.ok(undefined);
   }
 
-  /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */
+  /**
+   * `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。
+   *
+   * nm-style: keep-public — ModelRetryPolicyService 端口清口；实现类必须提供，生产暂无调用，撤方法需同步改端口（跨分片）。
+   */
   async clearPolicy(): Promise<Result<void, AppError>> {
     const deleted = await this.kkv.delete(MODULE, KEY);
     if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;

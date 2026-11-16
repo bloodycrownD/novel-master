@@ -8,11 +8,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
-import {
-  ensureSchemaMigrationsTable,
-  listAppliedSchemaMigrationIds,
-  markSchemaMigrationApplied,
-} from "./schema-migrations-table.js";
+import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";
 
 const log = createLogger("bootstrap.migrations");
 
@@ -56,9 +52,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [];
  *
  * 须在 bootstrap 事务内、DDL 之后、alignSchemaColumns 之前调用。
  */
-export async function runPendingSchemaMigrations(
-  tx: TdbcConnection
-): Promise<void> {
+export async function runPendingSchemaMigrations(tx: TdbcConnection): Promise<void> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
 
@@ -82,9 +76,4 @@ export async function runPendingSchemaMigrations(
 }
 
 export type { SchemaMigration } from "./schema-migration.types.js";
-export {
-  ensureSchemaMigrationsTable,
-  isSchemaMigrationApplied,
-  listAppliedSchemaMigrationIds,
-  markSchemaMigrationApplied,
-} from "./schema-migrations-table.js";
+export { ensureSchemaMigrationsTable, isSchemaMigrationApplied, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";

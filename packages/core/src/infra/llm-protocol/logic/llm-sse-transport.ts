@@ -327,37 +327,32 @@ export function postSse(url: string, init: RequestInit, onChunk: SseByteHandler,
       const postOptions = { providerId, signal: controller.signal, logTag, wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS };
 
       // native 侧已合批（~10 事件/s），JS 侧直投（与 fetch 同款即时转发）。
-      void transport
-        .post(
-          url,
-          init,
-          (chunk) => {
-            noteActivity(chunk.length);
-            dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) => logSse(logTag, "native first chunk", { bytes }));
-          },
-          postOptions
-        )
-        .then(
-          (result) => {
-            resolveOnce(result);
-          },
-          (error: unknown) => {
-            if (settled) {
-              // 公共层已以超时错误 settle：断流导致的迟到错误在此丢弃，
-              // 不让它顶替/竞态超时错误。
-              return;
-            }
-            const transportError = typeof error === "object" && error !== null ? (error as { name?: unknown; kind?: unknown }) : undefined;
-            if (transportError != null && (transportError.name === "LlmSseTimeoutError" || transportError.kind === "timeout")) {
-              // native 整调用 callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
-              // detail 透传 wrapper 错误的真实信息；终版无流式空闲界，
-              // SocketTimeoutException 仅存防御性文案路径。
-              handleWholeCallTimeout(`native timeout: ${error instanceof Error ? error.message : String(error)}`);
-              return;
-            }
-            rejectOnce(error instanceof Error ? error : new Error(String(error)));
+      // nm-style: keep-local — 内联回 .post 第 3 实参会让 url/init/postOptions 三个普通实参跨行（check-signatures ARGS），单点内联与「调用写一行」互斥。
+      const deliverNativeChunk = (chunk: string): void => {
+        noteActivity(chunk.length);
+        dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) => logSse(logTag, "native first chunk", { bytes }));
+      };
+      void transport.post(url, init, deliverNativeChunk, postOptions).then(
+        (result) => {
+          resolveOnce(result);
+        },
+        (error: unknown) => {
+          if (settled) {
+            // 公共层已以超时错误 settle：断流导致的迟到错误在此丢弃，
+            // 不让它顶替/竞态超时错误。
+            return;
           }
-        );
+          const transportError = typeof error === "object" && error !== null ? (error as { name?: unknown; kind?: unknown }) : undefined;
+          if (transportError != null && (transportError.name === "LlmSseTimeoutError" || transportError.kind === "timeout")) {
+            // native 整调用 callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
+            // detail 透传 wrapper 错误的真实信息；终版无流式空闲界，
+            // SocketTimeoutException 仅存防御性文案路径。
+            handleWholeCallTimeout(`native timeout: ${error instanceof Error ? error.message : String(error)}`);
+            return;
+          }
+          rejectOnce(error instanceof Error ? error : new Error(String(error)));
+        }
+      );
     } else if (kind === "xhr") {
       /** XHR 分支：RN 上 fetch 无流式 body 时的主力路径（无 native 注册时）。 */
       const XhrCtor = getXmlHttpRequestCtor();
