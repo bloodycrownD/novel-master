@@ -34,6 +34,14 @@ export interface AbortableRunOptions {
   readonly timeoutMs?: number;
   /** true 走 `tryRegister` 独占 claim（providerModels 并发冲突），缺省 `register` 覆盖语义。 */
   readonly exclusive?: boolean;
+  /**
+   * `exclusive` claim 失败时返回的业务错误；缺省 `PROVIDER_MODELS_IN_FLIGHT`。
+   *
+   * 固定 key 的任务（cloud-sync 的 `sync:local`、compaction 的 sessionId）必须走
+   * exclusive：覆盖式 register 会让在途任务从 registry 消失，`nm:run/abort`
+   * 变成静默 no-op（随后第二请求的 finally 还会删掉该 key）。
+   */
+  readonly conflictError?: AppError;
 }
 
 /** `runId`/`id` 缺省或空串时不登记（renderer 只在会展示取消按钮的任务上生成）。 */
@@ -58,8 +66,8 @@ export function outcomeIfAborted(scope: AbortScope): Outcome<never> | null {
 /**
  * 建 scope →（可选）登记 → `doWork` → 边界三分派 → `finally` 反注册 + `dispose`。
  *
- * `exclusive` 的 claim 失败返回 `PROVIDER_MODELS_IN_FLIGHT`，且不改动既有登记
- * （`tryRegister` 判重与写入同同步段完成）。
+ * `exclusive` 的 claim 失败返回 `conflictError`（缺省 `PROVIDER_MODELS_IN_FLIGHT`），
+ * 且不改动既有登记（`tryRegister` 判重与写入同同步段完成）。
  */
 export async function runAbortable<T>(opts: AbortableRunOptions, doWork: (scope: AbortScope) => Promise<Outcome<T>>): Promise<IpcResult<T>> {
   const controller = new AbortController();
@@ -69,7 +77,7 @@ export async function runAbortable<T>(opts: AbortableRunOptions, doWork: (scope:
     if (opts.exclusive === true) {
       if (!opts.registry.tryRegister(key, scope)) {
         scope.dispose();
-        return ipcErr(formatIpcError(new AppError("PROVIDER_MODELS_IN_FLIGHT", { detail: key })));
+        return ipcErr(formatIpcError(opts.conflictError ?? new AppError("PROVIDER_MODELS_IN_FLIGHT", { detail: key })));
       }
     } else {
       opts.registry.register(key, scope);

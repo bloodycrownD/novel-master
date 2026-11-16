@@ -14,6 +14,7 @@
  */
 import {createDbMaintenanceService} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
+import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
@@ -53,14 +54,26 @@ export async function runDatabaseMaintenance(runtime: MobileNovelMasterRuntime):
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
-  acquireMobileDbMaintenanceBusy();
+  // 任务级取消 scope（spec §五移动表：dbMaintenance("local")，**仅入口**；
+  // VACUUM / checkpoint 同步段不可中断，UI 不提供取消按钮）。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.dbMaintenance('local'), abortScope);
   try {
-    const beforeBytes = await statDatabaseFileBytes();
-    await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
-    const afterBytes = await statDatabaseFileBytes();
-    return Result.ok({beforeBytes, afterBytes});
+    if (abortScope.checkpoint() != null) {
+      throw createAbortError();
+    }
+    acquireMobileDbMaintenanceBusy();
+    try {
+      const beforeBytes = await statDatabaseFileBytes();
+      await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
+      const afterBytes = await statDatabaseFileBytes();
+      return Result.ok({beforeBytes, afterBytes});
+    } finally {
+      releaseMobileDbMaintenanceBusy();
+    }
   } finally {
-    releaseMobileDbMaintenanceBusy();
+    runtime.abortRegistry.unregister(ABORT_KEY.dbMaintenance('local'), abortScope);
+    abortScope.dispose();
   }
 }
 

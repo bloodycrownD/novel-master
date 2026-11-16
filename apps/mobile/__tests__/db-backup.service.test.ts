@@ -5,6 +5,7 @@ import {
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
 } from '@/services/db-backup.service';
+import {createAbortRegistry} from '@novel-master/core/abort';
 import {isMobileDbMaintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockCheckpoint = jest.fn();
@@ -95,7 +96,9 @@ const emptySnapshot = {
 };
 
 describe('db-backup.service', () => {
-  const runtime = {conn: liveConn} as never;
+  // signal-abort-scope Step 11：export/import 会建 scope 并登记 backup("local")，
+  // 测试桩必须提供泛化 registry。
+  const runtime = {conn: liveConn, abortRegistry: createAbortRegistry()} as never;
   const onRebootstrap = jest.fn();
 
   beforeEach(() => {
@@ -159,7 +162,7 @@ describe('db-backup.service', () => {
   it('rejects import when agent is running (guard fires before picker)', async () => {
     mockAgentActive.mockReturnValue(true);
     // 四期签名：已知失败沿 Result.err 回传，不再 reject。
-    const importGuard = await importDatabaseBackup(onRebootstrap);
+    const importGuard = await importDatabaseBackup(runtime, onRebootstrap);
     expect(importGuard.ok).toBe(false);
     if (!importGuard.ok) {
       expect(importGuard.error.message).toMatch(/Agent/);
@@ -176,7 +179,7 @@ describe('db-backup.service', () => {
       {status: 'success', localUri: 'file:///cache/import.nmbackup'},
     ]);
 
-    await importDatabaseBackup(onRebootstrap);
+    await importDatabaseBackup(runtime, onRebootstrap);
 
     expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
     expect(mockClose).toHaveBeenCalled();
@@ -212,7 +215,7 @@ describe('db-backup.service', () => {
     mockStat.mockResolvedValue({size: 8});
 
     // 四期签名：已知失败沿 Result.err 回传，不再 reject。
-    const tinyResult = await importDatabaseBackup(onRebootstrap);
+    const tinyResult = await importDatabaseBackup(runtime, onRebootstrap);
     expect(tinyResult.ok).toBe(false);
     if (!tinyResult.ok) {
       expect(tinyResult.error.message).toMatch(/文件过小/);
@@ -331,7 +334,7 @@ describe('db-backup.service', () => {
       busyAtRestore.push(isMobileDbMaintenanceBusy());
     });
 
-    await importDatabaseBackup(onRebootstrap);
+    await importDatabaseBackup(runtime, onRebootstrap);
 
     // 底层 + 外层嵌套计数期间为 true；结束后（onRebootstrap 已先于 release
     // 执行）归零

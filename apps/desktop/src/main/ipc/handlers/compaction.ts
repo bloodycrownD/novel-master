@@ -20,7 +20,7 @@
  * 弹出这里的文案，零改动。
  */
 import { ABORT_KEY, type AbortScope, type LongTaskHooks } from "@novel-master/core/abort";
-import type { Outcome } from "@novel-master/core/errors";
+import { AppError, type Outcome } from "@novel-master/core/errors";
 import {
   runCompaction,
   type RunCompactionDeps,
@@ -59,7 +59,18 @@ export async function handleCompactionManual(req: CompactionManualRequest): Prom
       message: "Agent 运行中无法压缩",
     });
   }
-  return runAbortable({ registry: rt.abortRegistry, key: ABORT_KEY.compaction(req.sessionId), timeoutMs: 180_000 }, (scope) => doCompactionManual(rt, req, scope));
+  // exclusive：key 固定为 sessionId，同会话并发压缩时第二个请求不得覆盖在途
+  // scope（覆盖会让先跑的那一轮失去 nm:run/abort 入口）。
+  return runAbortable(
+    {
+      registry: rt.abortRegistry,
+      key: ABORT_KEY.compaction(req.sessionId),
+      timeoutMs: 180_000,
+      exclusive: true,
+      conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "压缩进行中，请稍后再试" }),
+    },
+    (scope) => doCompactionManual(rt, req, scope)
+  );
 }
 
 /** 可中断的压缩段：入口 + hide 前检查点，尾段交给不可中断契约。 */

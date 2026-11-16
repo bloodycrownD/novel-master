@@ -14,6 +14,7 @@ import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
 import {dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
+import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
 import {checkpointMobileDatabase, closeMobileConnection, getMobileConnection, registerMobileOpSqliteDriver} from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
@@ -69,11 +70,15 @@ function errorDetail(error: unknown): string {
  * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
  * 也能被覆盖，期间归一/压缩后台循环让路。
  */
-export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string): Promise<void> {
+export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
   acquireMobileDbMaintenanceBusy();
   try {
     await checkpointMobileDatabase(runtime.conn);
     const dbPath = await resolveMobileDatabaseFilePath();
+    // 策略表：copyFile 前 checkpoint（云同步直调底层不传，行为不变）。
+    if (checkpoint?.() != null) {
+      throw createAbortError();
+    }
     await blobFs().cp(dbPath, destPath);
     await scrubProviderTablesInDatabase(runtime.conn, destPath, EXPORT_ATTACH_ALIAS);
   } finally {
@@ -208,21 +213,33 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'}));
   }
 
-  // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
-  // 互斥——底层 exportDatabaseBackupToPath 内部另有一层自平衡的
-  // acquire/release，嵌套计数不会互相提前清位。
-  acquireMobileDbMaintenanceBusy();
+  // 任务级取消 scope（spec §五移动表：backup("local")，入口 + copyFile 前）。
+  // 取消只抛出 AbortError（T-S16 边界形态）；选择器自身取消仍是 Result.ok('cancelled')。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
   try {
-    const exportOptions: ExportViaPickerOptions = {
-      fileName: 'nmbackup.db',
-      mimeType: 'application/octet-stream',
-      copy: Platform.OS === 'ios',
-      write: destPath => exportDatabaseBackupToPath(runtime, destPath),
-    };
-    const saved = await exportBytesViaDocumentPicker(exportOptions);
-    return Result.ok(saved);
+    if (abortScope.checkpoint() != null) {
+      throw createAbortError();
+    }
+    // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
+    // 互斥——底层 exportDatabaseBackupToPath 内部另有一层自平衡的
+    // acquire/release，嵌套计数不会互相提前清位。
+    acquireMobileDbMaintenanceBusy();
+    try {
+      const exportOptions: ExportViaPickerOptions = {
+        fileName: 'nmbackup.db',
+        mimeType: 'application/octet-stream',
+        copy: Platform.OS === 'ios',
+        write: destPath => exportDatabaseBackupToPath(runtime, destPath, () => abortScope.checkpoint()),
+      };
+      const saved = await exportBytesViaDocumentPicker(exportOptions);
+      return Result.ok(saved);
+    } finally {
+      releaseMobileDbMaintenanceBusy();
+    }
   } finally {
-    releaseMobileDbMaintenanceBusy();
+    runtime.abortRegistry.unregister(ABORT_KEY.backup('local'), abortScope);
+    abortScope.dispose();
   }
 }
 
@@ -231,28 +248,40 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
  * 大文件仅 keepLocalCopy + 路径级 cp，不读入 JS 堆。
  * 调用方须在成功后执行 `onRebootstrap`（例如 NovelMasterProvider.retry）。
  */
-export async function importDatabaseBackup(onRebootstrap: () => void): Promise<Result<void, AppError>> {
+export async function importDatabaseBackup(runtime: MobileNovelMasterRuntime, onRebootstrap: () => void): Promise<Result<void, AppError>> {
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'}));
   }
 
-  // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
-  // 链路纳入互斥——底层 importDatabaseBackupFromPath 内部的
-  // acquire/release 只覆盖到它自己返回，库文件已替换、连接仍处重建窗口
-  // 的尾段由这层兜住。release 放 finally 且 onRebootstrap 在 try 内最后
-  // 一步执行，故清位必然发生在 rebootstrap 完成之后。
-  acquireMobileDbMaintenanceBusy();
+  // 任务级取消 scope（spec §五移动表：backup("local")，**仅入口**）。
+  // `close → cp → restore` 整段不可中断，禁止 race 早 settle。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.backup('local'), abortScope);
   try {
-    const picked = await pickToLocalPath({mimeTypes: [types.allFiles], localFileName: 'import.nmbackup'});
-    if (picked == null) {
-      return Result.ok(undefined);
+    if (abortScope.checkpoint() != null) {
+      throw createAbortError();
     }
+    // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
+    // 链路纳入互斥——底层 importDatabaseBackupFromPath 内部的
+    // acquire/release 只覆盖到它自己返回，库文件已替换、连接仍处重建窗口
+    // 的尾段由这层兜住。release 放 finally 且 onRebootstrap 在 try 内最后
+    // 一步执行，故清位必然发生在 rebootstrap 完成之后。
+    acquireMobileDbMaintenanceBusy();
+    try {
+      const picked = await pickToLocalPath({mimeTypes: [types.allFiles], localFileName: 'import.nmbackup'});
+      if (picked == null) {
+        return Result.ok(undefined);
+      }
 
-    const imported = await importDatabaseBackupFromPath(picked.fsPath);
-    if (!imported.ok) return Result.err(imported.error);
-    onRebootstrap();
-    return Result.ok(undefined);
+      const imported = await importDatabaseBackupFromPath(picked.fsPath);
+      if (!imported.ok) return Result.err(imported.error);
+      onRebootstrap();
+      return Result.ok(undefined);
+    } finally {
+      releaseMobileDbMaintenanceBusy();
+    }
   } finally {
-    releaseMobileDbMaintenanceBusy();
+    runtime.abortRegistry.unregister(ABORT_KEY.backup('local'), abortScope);
+    abortScope.dispose();
   }
 }

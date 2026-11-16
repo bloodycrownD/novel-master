@@ -2,7 +2,7 @@
  * 云同步 IPC 处理器：配置、测试连接、Pull/Push。
  */
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
-import type { Outcome } from "@novel-master/core/errors";
+import { AppError, type Outcome } from "@novel-master/core/errors";
 import type {
   CloudSyncConfigDto,
   CloudSyncLocalStatusDto,
@@ -120,7 +120,12 @@ export async function handleCloudSyncPull(): Promise<
     const built = await getDesktopRuntime();
     if (!built.ok) return ipcErr(formatIpcError(built.error));
     const rt = built.value;
-    return await runAbortable({ registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local") }, (scope) => doCloudSyncPull(scope));
+    // exclusive：pull/push 共用固定 key，第二个请求必须在不覆盖在途 scope 的前提下
+    // 被拒（register 覆盖会让在途任务的取消入口静默消失，见 T-S15 的 key 语义）。
+    return await runAbortable(
+      { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
+      (scope) => doCloudSyncPull(scope)
+    );
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
@@ -134,7 +139,9 @@ export async function doCloudSyncPull(scope: AbortScope): Promise<Outcome<CloudS
     const serviceR = await getDesktopCloudSyncService();
     if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
     const service = serviceR.value;
-    const pulled = await service.pull();
+    // 阶段边界 checkpoint 由 core coordinator 在 pull:downloaded / pull:before-import 调用；
+    // 换库窗口之前命中即抛 AbortError，原样经 runAbortable 收成 IPC_ABORTED。
+    const pulled = await service.pull({ checkpoint: () => scope.checkpoint() });
     // 已知失败沿 Result 到达；coordinator 侧故障仍走下方 catch。
     if (!pulled.ok) return { kind: "failed", error: pulled.error };
     const result = pulled.value;
@@ -178,7 +185,10 @@ export async function handleCloudSyncPush(req?: CloudSyncPushRequest): Promise<I
   const built = await getDesktopRuntime();
   if (!built.ok) return ipcErr(formatIpcError(built.error));
   const rt = built.value;
-  return runAbortable({ registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local") }, (scope) => doCloudSyncPush(req, scope));
+  return runAbortable(
+    { registry: rt.abortRegistry, key: ABORT_KEY.cloudSync("local"), exclusive: true, conflictError: new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }) },
+    (scope) => doCloudSyncPush(req, scope)
+  );
 }
 
 /** 可中断的 push 段：仅入口检查点（上传完成即自然终态，不把已推送翻成取消）。 */
@@ -187,6 +197,7 @@ export async function doCloudSyncPush(req: CloudSyncPushRequest | undefined, sco
   if (stopped != null) return stopped;
   const serviceR = await getDesktopCloudSyncService();
   if (!serviceR.ok) return { kind: "failed", error: serviceR.error };
-  const pushed = await serviceR.value.push({ forceOverwriteRemote: req?.forceOverwriteRemote });
+  // push:exported / push:before-upload 阶段边界由 core coordinator 判停。
+  const pushed = await serviceR.value.push({ forceOverwriteRemote: req?.forceOverwriteRemote, checkpoint: () => scope.checkpoint() });
   return pushed.ok ? { kind: "completed", value: pushed.value } : { kind: "failed", error: pushed.error };
 }

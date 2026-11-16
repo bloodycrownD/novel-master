@@ -68,7 +68,7 @@ export type PullOptions = {
   /**
    * 真实阶段边界检查点（入口 / 下载完成 / 哈希校验前 / 换库前）。
    *
-   * 命中即抛 `AbortError`：Promise 没有 Result 通道，取消只能在异步边界转异常；
+   * 命中即抛 `AbortError`：取消是控制流信号，不塞进 `Result.err`（业务失败通道）；
    * service 出口对 `isAbortLikeError` 原样上抛（spec §五 移动云同步）。
    */
   readonly checkpoint?: () => Interrupt | null;

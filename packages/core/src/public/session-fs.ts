@@ -4,12 +4,13 @@
  * @module public/session-fs
  */
 
-// isSessionFsError 已撤（apps 全树零命中，core 内部 message-rollback 照用，测试走 src 路径）；
-// 旧域短码联合已撤（全仓零消费者）。保留的三个守卫已随 guards 统一搬进 errors/guards.ts
-// （原样搬运），apps 生产消费者在 mobile useChatTabMessageActions。
+// 四个守卫统一从 errors/guards.ts 转发（T-S27 要求 isVfsError / isSessionFsError 都能从
+// public/* 拿到）：isVfsError 在 public/vfs.ts，isSessionFsError 在本文件；其余三个是
+// rollback 专用守卫，apps 生产消费者在 mobile useChatTabMessageActions。
 export {
   isRollbackVfsDegradableError,
   isRollbackRevisionBackfillRequiredError,
+  isSessionFsError,
   readRollbackRevisionBackfillMissingPaths,
 } from "../errors/guards.js";
 export type { RollbackOptions } from "../service/message-checkpoint/message-rollback.port.js";

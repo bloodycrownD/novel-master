@@ -13,7 +13,8 @@ import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
 import { dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
-import { Result } from "@novel-master/core/errors";
+import { createAbortError } from "@novel-master/core/abort";
+import { Result, type Interrupt } from "@novel-master/core/errors";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { checkpointDesktopDatabase, closeDesktopConnection, getDesktopConnection } from "../runtime/connection.js";
 import { clearDesktopRuntimeHandle } from "../runtime/desktop-runtime-singleton.js";
@@ -105,11 +106,17 @@ function errorDetail(error: unknown): string {
  * 最外层流程（备份导入 / 云同步 pull）另持一枚令牌、在 rebootstrap 完成
  * 之后 release，含重建窗口的完整互斥。计数语义下嵌套调用互不提前清位。
  */
-export async function exportDatabaseBackupToPath(runtime: DesktopNovelMasterRuntime, destPath: string): Promise<void> {
+export async function exportDatabaseBackupToPath(runtime: DesktopNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
   acquireDesktopDbMaintenanceBusy();
   try {
     await checkpointDesktopDatabase(runtime.conn);
     const dbPath = resolveDbPath();
+    // 策略表：copyFile 前 checkpoint（scope 由调用方在保存对话框 resolve 后创建）。
+    // 命中走 AbortError（平台协议例外：Promise 无 Result 通道），由 doWork 边界转
+    // Outcome.cancelled / runAbortable 映射 IPC_ABORTED。
+    if (checkpoint?.() != null) {
+      throw createAbortError();
+    }
     await copyFile(dbPath, destPath);
     await scrubProviderTablesInDatabase(runtime.conn, destPath, EXPORT_ATTACH_ALIAS);
   } finally {
@@ -267,7 +274,13 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
   return Result.ok({ databaseReplaced: true, providerTablesRestored: true });
 }
 
-export async function exportDatabaseBackup(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<Result<"saved" | "cancelled", AppError>> {
+/**
+ * 只负责「Agent 守卫 + 原生保存对话框」：返回目标路径（用户取消返回 `null`）。
+ *
+ * 单独拆出是取消策略表的硬要求：备份导出的取消 scope **必须在对话框 resolve
+ * 之后才创建**（对话框期间的 abort 不承诺生效），300s deadline 也只覆盖 copy 段。
+ */
+export async function pickDatabaseExportPath(parentWindow?: BrowserWindow | null): Promise<Result<string | null, AppError>> {
   if (isDesktopAgentActive()) {
     return Result.err(new AppError("AGENT_BUSY", { detail: "Agent 运行中，请稍后再导出数据库" }));
   }
@@ -278,10 +291,17 @@ export async function exportDatabaseBackup(runtime: DesktopNovelMasterRuntime, p
   const dialogOptions: Electron.SaveDialogOptions = { defaultPath: fileName, filters: [{ name: "Novel Master Backup", extensions: ["db", "nmbackup"] }] };
   const result = win ? await dialog.showSaveDialog(win, dialogOptions) : await dialog.showSaveDialog(dialogOptions);
   if (result.canceled || result.filePath == null) {
-    return Result.ok("cancelled");
+    return Result.ok(null);
   }
+  return Result.ok(result.filePath);
+}
 
-  await exportDatabaseBackupToPath(runtime, result.filePath);
+export async function exportDatabaseBackup(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<Result<"saved" | "cancelled", AppError>> {
+  const picked = await pickDatabaseExportPath(parentWindow);
+  if (!picked.ok) return Result.err(picked.error);
+  if (picked.value == null) return Result.ok("cancelled");
+
+  await exportDatabaseBackupToPath(runtime, picked.value);
   return Result.ok("saved");
 }
 

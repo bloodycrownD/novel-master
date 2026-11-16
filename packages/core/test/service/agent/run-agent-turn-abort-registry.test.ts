@@ -28,7 +28,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
-import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import { createAbortScope, scopeFromController } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import { createAgentStreamRegistry } from "@/service/agent/create-agent-stream-registry.js";
@@ -395,7 +395,17 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    // T-S24：捕获主 run 注册的 internalController，abort 后经同一 memoize 实例
+    // 断言根 scope 的 reason（不是 null、不是 parent）。
+    const baseAbortRegistry = createAgentAbortRegistry();
+    let rootController: AbortController | undefined;
+    const abortRegistry: AgentAbortRegistry = {
+      ...baseAbortRegistry,
+      register(sessionId, controller) {
+        rootController = controller;
+        baseAbortRegistry.register(sessionId, controller);
+      },
+    };
     const seenChildIds: string[] = [];
 
     const modelRequests = scriptedModel({
@@ -415,6 +425,12 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
           // registry.abort(parentSessionId) → internalController.abort
           // → parentSignal fire → childController.abort → 子 run cancelled。
           abortRegistry.abort(session.id);
+          assert.ok(rootController != null, "主 run 应已把 internalController 注册进 registry");
+          assert.equal(
+            scopeFromController(rootController!).reason,
+            "user-stop",
+            "registry.abort 命中后根 scope 的 reason 必须是 user-stop（T-S24）"
+          );
         },
       },
     });

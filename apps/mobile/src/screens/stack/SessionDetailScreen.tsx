@@ -170,7 +170,8 @@ export function SessionDetailScreen() {
               await load();
             },
           };
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks);
+          // 取消是唯一会 reject 的出口（T-S16）：吞掉，避免 unhandled rejection。
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks).catch(() => undefined);
         },
       },
     ]);

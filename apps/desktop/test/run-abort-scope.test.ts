@@ -11,6 +11,7 @@
  * 断言 IPC_ABORTED——它们按自然终态 settle，见 spec T-S15 例外条款。
  */
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { ABORT_KEY, createAbortScope, type AbortScope } from "@novel-master/core/abort";
 import { doBackupExport, doBackupImport } from "../src/main/ipc/handlers/backup.js";
@@ -44,8 +45,10 @@ describe("六类长任务 doWork 的入口检查点（T-S15）", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("backup export / import：已 abort 时不进入对话框与拷贝", async () => {
-    assert.deepEqual(await doBackupExport(rt, abortedScope()), CANCELLED);
+  it("backup export / import：已 abort 时不进入拷贝", async () => {
+    // export 的 scope 在保存对话框 resolve 后才创建；doWork 层因此只覆盖
+    // 「对话框已选路径、copy 前已 abort」这一段，目标路径不会被写入。
+    assert.deepEqual(await doBackupExport(rt, join(tempDir, "abort-export.db"), abortedScope()), CANCELLED);
     assert.deepEqual(await doBackupImport(abortedScope()), CANCELLED);
   });
 

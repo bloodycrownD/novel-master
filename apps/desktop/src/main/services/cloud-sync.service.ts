@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
-import { domainOf, Result } from "@novel-master/core/errors";
+import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
@@ -212,7 +212,7 @@ class DesktopCloudSyncService {
    * 此时旧 runtime 仍是活的，记账句柄有效。该早返回对象的
    * `databaseReplaced` 恒为 `false`。
    */
-  async pull(): Promise<Result<{ rev: number; databaseReplaced: boolean }, AppError>> {
+  async pull(options?: { readonly checkpoint?: () => Interrupt | null }): Promise<Result<{ rev: number; databaseReplaced: boolean }, AppError>> {
     if (syncBusy) {
       return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
@@ -238,7 +238,7 @@ class DesktopCloudSyncService {
       }
       exportTempPath = built.value.exportTempPath;
       importTempPath = built.value.importTempPath;
-      const pulled = await built.value.coordinator.pull({ lastSyncedRev: meta.lastSyncedRev });
+      const pulled = await built.value.coordinator.pull({ lastSyncedRev: meta.lastSyncedRev, ...(options?.checkpoint != null ? { checkpoint: options.checkpoint } : {}) });
       // 错误通道迁移五期：coordinator.pull 沿 Result 回传已知失败。ALREADY_UP_TO_DATE
       // 走下方 catch 分支的同款记账（「已是最新」+ 不换代）；其余 Err 原样上抛给
       // handler 的 catch（formatIpcError 收口），不重复记账。
@@ -311,7 +311,7 @@ class DesktopCloudSyncService {
     await store.recordPull(true, `已同步至 rev ${rev}`);
   }
 
-  async push(options?: { forceOverwriteRemote?: boolean }): Promise<Result<{ rev: number }, AppError>> {
+  async push(options?: { forceOverwriteRemote?: boolean; readonly checkpoint?: () => Interrupt | null }): Promise<Result<{ rev: number }, AppError>> {
     if (syncBusy) {
       return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
@@ -333,7 +333,7 @@ class DesktopCloudSyncService {
         await this.configStore.recordPush(false, meta.error.message).catch(() => undefined);
         return Result.err(meta.error);
       }
-      const pushed = await built.value.coordinator.push({ lastSyncedRev: meta.value.lastSyncedRev, forceOverwriteRemote: options?.forceOverwriteRemote });
+      const pushed = await built.value.coordinator.push({ lastSyncedRev: meta.value.lastSyncedRev, forceOverwriteRemote: options?.forceOverwriteRemote, ...(options?.checkpoint != null ? { checkpoint: options.checkpoint } : {}) });
       // 已知失败（NEED_PULL_FIRST / LOCK_HELD_BY_OTHER 等）就地补记账后沿
       // Result 上行（错误通道迁移七期，与旧 catch 失败分支同款）；coordinator
       // 侧未知故障仍走 throw 通道。

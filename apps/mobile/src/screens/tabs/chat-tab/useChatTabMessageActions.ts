@@ -110,7 +110,9 @@ export function useChatTabMessageActions({
               showToast('已压缩');
             },
           };
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks);
+          // 取消是 runManualCompaction 唯一会 reject 的出口（T-S16）：调用侧必须
+          // 显式收掉，否则 Step 14 接真实取消按钮后会变成 unhandled rejection。
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks).catch(() => undefined);
         },
       },
     ]);

@@ -205,7 +205,7 @@ export function StorageConfigScreen() {
               text: '继续选择文件',
               onPress: () => {
                 setDbBusy(true);
-                importDatabaseBackup(retry)
+                importDatabaseBackup(runtime, retry)
                   .then(result => {
                     if (result.ok) {
                       showToast('正在重新加载，请稍候…');

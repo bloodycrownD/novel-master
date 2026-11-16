@@ -12,6 +12,7 @@
  *
  * 真机 RN 环境难入 Jest，照 db-backup.service.test.ts 的全模块 mock 版式。
  */
+import {createAbortRegistry} from '@novel-master/core/abort';
 import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
@@ -68,7 +69,9 @@ const MAINTENANCE_RESULT = {
 };
 
 describe('db-maintenance.service', () => {
-  const runtime = {conn: liveConn} as never;
+  // signal-abort-scope Step 11：runDatabaseMaintenance 会建 scope 并登记
+  // dbMaintenance("local")，测试桩必须提供泛化 registry。
+  const runtime = {conn: liveConn, abortRegistry: createAbortRegistry()} as never;
 
   beforeEach(() => {
     mockGetPath.mockReset().mockResolvedValue('/db/novel_master_vfs');

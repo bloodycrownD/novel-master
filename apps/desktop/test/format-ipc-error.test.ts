@@ -5,6 +5,7 @@ import { createAbortError } from "@novel-master/core/abort";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
+import { AssertionError } from "../../../packages/core/src/common/assert.js";
 import { formatIpcError } from "../src/main/ipc/format-ipc-error.js";
 
 describe("formatIpcError", () => {
@@ -97,6 +98,18 @@ describe("formatIpcError", () => {
     assert.equal(payload.message, "已取消");
     // 取消不是业务错误：不得落成 INFRA_UNEXPECTED_ERROR。
     assert.notEqual(payload.code, "INFRA_UNEXPECTED_ERROR");
+  });
+
+  it("AssertionError（不变量破坏）→ INFRA_UNEXPECTED_ERROR（不是 AppError 通道，T-S25）", () => {
+    let thrown: unknown;
+    try {
+      throw new AssertionError("穷尽分支破坏");
+    } catch (error) {
+      thrown = error;
+    }
+    const payload = formatIpcError(thrown);
+    assert.equal(payload.code, "INFRA_UNEXPECTED_ERROR");
+    assert.equal(payload.message, "[invariant] 穷尽分支破坏");
   });
 
   it("maps AgentTurnError to AGENT_RUN_FAILED", () => {
