@@ -1,6 +1,10 @@
 /**
  * C-orch-1 单测专用 mock：desktop-runtime-singleton。
  * 不拉起真实 SQLite runtime，返回带 abortRegistry 占位的 fake runtime。
+ *
+ * 契约对齐错误通道迁移七期：getDesktopRuntime / rebootstrapDesktopRuntime
+ * 都返回 Result（`{ ok: true, value }`），与 desktop-runtime-singleton.ts
+ * 的真实签名一致——handler 侧先判 built.ok 再取 built.value。
  */
 const fakeRuntime = {
   abortRegistry: {
@@ -12,7 +16,7 @@ const fakeRuntime = {
 };
 
 export async function getDesktopRuntime() {
-  return fakeRuntime;
+  return { ok: true, value: fakeRuntime };
 }
 
 export function getDesktopRuntimeOrThrow() {
@@ -22,7 +26,7 @@ export function getDesktopRuntimeOrThrow() {
 export async function resetDesktopRuntimeForTest() {}
 
 export async function rebootstrapDesktopRuntime() {
-  return fakeRuntime;
+  return { ok: true, value: fakeRuntime };
 }
 
 export function clearDesktopRuntimeHandle() {}

@@ -52,6 +52,14 @@ const cl100kRanksModule = require('js-tiktoken/ranks/cl100k_base');
 const realCl100k = new Tiktoken(cl100kRanksModule.default ?? cl100kRanksModule);
 const cl100kCount = (text: string): number => realCl100k.encode(text).length;
 
+/** 驱动入口已改 Result（错误通道迁移四期）：测试面按裸值断言，err 直接炸出。 */
+async function countOk(params: unknown) {
+  const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+  const counted = await countPromptLlmInputRn(params);
+  if (!counted.ok) throw counted.error;
+  return counted.value;
+}
+
 /** 中文正文（100 字符；折算会低估约 2 倍）。 */
 const ZH_TEXT =
   '夜色如水，林间小径上落满了枯叶，风一吹便沙沙作响。她停下脚步，抬头望向灯火。';
@@ -496,7 +504,6 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   });
 
   it('tools 段计入计数：非空变大，空数组与缺省一致', async () => {
-    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
     const registry = {
       heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
       getTokenizerOverride: async () => 'heuristic',
@@ -509,8 +516,8 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       tokenizerOverride: 'heuristic',
     };
 
-    const withoutTools = await countPromptLlmInputRn(base);
-    const withTools = await countPromptLlmInputRn({
+    const withoutTools = await countOk(base);
+    const withTools = await countOk({
       ...base,
       tools: [
         {
@@ -520,7 +527,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
         },
       ],
     });
-    const withEmptyTools = await countPromptLlmInputRn({...base, tools: []});
+    const withEmptyTools = await countOk({...base, tools: []});
 
     expect(withTools.tokenCount).toBeGreaterThan(withoutTools.tokenCount);
     expect(withEmptyTools.tokenCount).toBe(withoutTools.tokenCount);
@@ -561,7 +568,6 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
     const params = {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
@@ -571,12 +577,12 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
       },
     };
 
-    const first = await countPromptLlmInputRn(params);
+    const first = await countOk(params);
     expect(first.tokenCount).toBe(42);
     expect(first.counterKind).toBe('claude');
     expect(mockCountPrompt).toHaveBeenCalledTimes(1);
 
-    const second = await countPromptLlmInputRn(params);
+    const second = await countOk(params);
     expect(second.tokenCount).toBe(42);
     expect(second.counterKind).toBe('claude');
     expect(second.estimated).toBe(false);
@@ -588,7 +594,7 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
 
   it('JS 档：同输入两次计数，第二次编码表 encode 调用 0 次（L1 命中）', async () => {
     let encodeCalls = 0;
-    const {__test__, countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
     __test__.setEncodingSourceForTests(() => ({
       encode: (text: string) => {
         encodeCalls += 1;
@@ -604,12 +610,12 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
         heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
       },
     };
-    const first = await countPromptLlmInputRn(params);
+    const first = await countOk(params);
     expect(first.counterKind).toBe('tiktoken');
     const callsAfterFirst = encodeCalls;
     expect(callsAfterFirst).toBeGreaterThan(0);
 
-    const second = await countPromptLlmInputRn(params);
+    const second = await countOk(params);
     expect(second.tokenCount).toBe(first.tokenCount);
     // 原生优先（token-count-perf-r2）：第一轮 tiktoken 先过桥一次（mock 未设
     // 返回值 = 桥 null → 落 js 档完成计数）；第二轮 L1 命中在驱动入口早退，
@@ -915,7 +921,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const second = await countPromptLlmInputRn(params);
+    const second = await countOk(params);
     expect(mockCountPromptCancelable).toHaveBeenCalledTimes(2);
     expect(second.tokenCount).toBe(7);
     expect(second.counterKind).toBe('claude');

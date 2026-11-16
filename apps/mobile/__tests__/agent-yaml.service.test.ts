@@ -135,12 +135,14 @@ describe('agent-yaml.service', () => {
   });
 
   it('rejects invalid yaml text', () => {
-    // 四期签名：parseText 失败沿 Result.err 回传，decodeAgentYamlText 还原抛错契约。
+    // 四期签名：parseText 失败沿 Result.err 回传（decodeAgentYamlText 不再抛错）。
     mockParseText.mockImplementationOnce(() => ({
       ok: false as const,
       error: new Error('bad yaml'),
     }));
-    expect(() => decodeAgentYamlText('name: [oops')).toThrow();
+    const decoded = decodeAgentYamlText('name: [oops');
+    expect(decoded.ok).toBe(false);
+    expect(decoded.ok ? undefined : decoded.error.message).toBe('bad yaml');
   });
 
   it('rejects schema-invalid agent yaml', () => {

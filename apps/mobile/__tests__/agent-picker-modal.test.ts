@@ -11,7 +11,11 @@ const mockGetCurrentAgentId = jest.fn(
   async () => ({ok: true as const, value: undefined as string | undefined}),
 );
 const mockListAgentIds = jest.fn(async () => [] as string[]);
-const mockGet = jest.fn(async () => ({name: 'writer', mode: 'all'} as const));
+// 错误通道迁移后 registry.get 走 Result 通道（生产侧 `def.ok` 判定）。
+const mockGet = jest.fn(async () => ({
+  ok: true as const,
+  value: {name: 'writer', mode: 'all'} as const,
+}));
 
 function mockRuntime() {
   return {
@@ -56,8 +60,8 @@ describe('AgentPickerModal (picker service)', () => {
   it('loads agent display labels from registry', async () => {
     mockListAgentIds.mockResolvedValue(['a1', 'a2']);
     mockGet.mockImplementation(async (id: string) => ({
-      name: id === 'a1' ? 'Alpha' : 'Beta',
-      mode: 'all',
+      ok: true as const,
+      value: {name: id === 'a1' ? 'Alpha' : 'Beta', mode: 'all'},
     }));
 
     const labeled = await loadAgentPickerRows(mockRuntime() as never);
@@ -72,12 +76,12 @@ describe('AgentPickerModal (picker service)', () => {
     mockListAgentIds.mockResolvedValue(['primary', 'sub', 'all']);
     mockGet.mockImplementation(async (id: string) => {
       if (id === 'primary') {
-        return {name: 'Primary', mode: 'primary'};
+        return {ok: true as const, value: {name: 'Primary', mode: 'primary'}};
       }
       if (id === 'sub') {
-        return {name: 'Sub', mode: 'subagent'};
+        return {ok: true as const, value: {name: 'Sub', mode: 'subagent'}};
       }
-      return {name: 'All', mode: 'all'};
+      return {ok: true as const, value: {name: 'All', mode: 'all'}};
     });
 
     const loaded = await loadAgentPickerRows(mockRuntime() as never);

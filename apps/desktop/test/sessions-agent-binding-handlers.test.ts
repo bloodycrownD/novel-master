@@ -277,8 +277,9 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       assert.equal(meta.data.hasDedicatedModel, false);
     }
 
-    // 源码口径断言：内层 catch 只归一 AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败，其余 rethrow
-    // （ChatError 落外层 catch → ok:false，与 mobile loadChatAgentMeta 对称）。
+    // 源码口径断言：只归一 AGENT_RUN_RESOLVE_KEYS 内的 agent 解析失败（→ source='none'），
+    // 其余沿 Result 上行交 toIpcResult 转码成 ok:false（与 mobile loadChatAgentMeta 对称）。
+    // 错误通道迁移后不再有内层 catch / rethrow，判据落在 Result 通道的两条分支上。
     const promptSrc = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -291,8 +292,10 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       ),
       "utf8"
     );
-    assert.match(promptSrc, /if \(isAppError\(error\) && AGENT_RUN_RESOLVE_KEYS\.has\(error\.key\)\)/);
-    assert.match(promptSrc, /throw error;/);
+    assert.match(promptSrc, /if \(AGENT_RUN_RESOLVE_KEYS\.has\(resolved\.error\.key\)\)/);
+    // 非 resolve key 的失败沿 Result.err 上行，由 toIpcResult 转成 ok:false ——
+    // 与旧「其余 rethrow → 外层 catch」同一落点，语义强度不变。
+    assert.match(promptSrc, /return Result\.err\(resolved\.error\);/);
     assert.doesNotMatch(promptSrc, /ChatError/);
   });
 });

@@ -7,8 +7,10 @@ import {runAgentTurn} from '@/services/agent-run.service';
 function baseRuntime(overrides: Partial<any> = {}) {
   return {
     state: {
-      getCurrentAgentId: async () => 'a1',
-      getCurrentModelId: async () => 'openai/gpt',
+      // 错误通道迁移后 state 读口走 Result（resolveCurrentAgentId /
+      // resolveApplicationModelIdForRun 均按 `!ok` 解包）。
+      getCurrentAgentId: async () => ({ok: true, value: 'a1'}),
+      getCurrentModelId: async () => ({ok: true, value: 'openai/gpt'}),
     },
     projects: {
       getAgentConfig: async () => ({
@@ -28,10 +30,14 @@ function baseRuntime(overrides: Partial<any> = {}) {
     },
     agentRegistry: {
       listAgentIds: async () => ['a1'],
+      // 错误通道迁移后 registry.get 走 Result（resolveAgentForProject `!ok` 即归一）。
       get: async () => ({
-        name: 'x',
-        prompts: {persist: [], dynamic: []},
-        model: 'openai/gpt',
+        ok: true,
+        value: {
+          name: 'x',
+          prompts: {persist: [], dynamic: []},
+          model: 'openai/gpt',
+        },
       }),
     },
     messageCheckpoint: {
@@ -98,8 +104,8 @@ describe('runAgentTurn integration', () => {
         append: jest.fn(async () => undefined),
       },
     });
-    // 迁移后抛的是带 messageKey 的 descriptor（Error.message 为 key 原文），
-    // 经 core translator 解析后再断言用户可见中文。
+    // 前奏期空输入拦截走 AgentTurnError（带 messageKey 的 descriptor，
+    // Error.message 为 key 原文），经 core translator 解析后再断言用户可见中文。
     const error = await runAgentTurn(
       runtime as any,
       {projectId: 'p', sessionId: 's'},

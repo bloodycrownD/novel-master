@@ -12,8 +12,10 @@ function mockRuntime(sessionAgentConfig: {agentId: string; modelId?: string}) {
     },
     agentRegistry: {
       listAgentIds: jest.fn(async () => ['agent-a', 'workspace-agent']),
+      // 错误通道迁移后 registry.get 走 Result 通道（生产侧 `def.ok` 判定）。
       get: jest.fn(async (id: string) => ({
-        name: `显示名-${id}`,
+        ok: true as const,
+        value: {name: `显示名-${id}`},
       })),
     },
     sessions: {

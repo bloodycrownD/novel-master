@@ -115,7 +115,7 @@ describe('useChatTabMessageActions rollback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     chatAnnotateDraftStore.resetForTests();
-    mockRollbackToMessage.mockResolvedValue(undefined);
+    mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
       (updater: number | ((t: number) => number)) => {

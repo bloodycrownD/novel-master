@@ -46,7 +46,11 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 }));
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
+  // 错误通道迁移四期：读口走 Result（hook 按 `!ok` 清标签），桩按线上结构配置。
+  loadChatPromptTokenLabelResilient: jest.fn(async () => ({
+    ok: true as const,
+    value: '1K tokens · 预估',
+  })),
   // hook 侧换会话/卸载时的精确升级延迟计时收口出口（cr2-E-2）
   cancelPreciseUpgradeDelay: jest.fn(),
   // 在途原生精确计数的取消下发出口（tokenizer-native-cancel，与上者同点并调）
@@ -242,7 +246,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
   it('计算在途时新触发复用在途（不并发第二轮），追赶轮保证最终一致', async () => {
     harness = await mountScopeHarness();
     // 第一轮 service 调用挂起（受控 deferred）：制造「计算在途」窗口。
-    const pendingLabel = createDeferred<string>();
+    const pendingLabel = createDeferred<{ok: true; value: string}>();
     loadLabelMock.mockImplementationOnce(() => pendingLabel.promise);
 
     await act(async () => {
@@ -262,7 +266,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
 
     // 放行第一轮：排队的追赶轮随后执行（新触发最终必被计算）。
     await act(async () => {
-      pendingLabel.resolve('9K tokens · 预估');
+      pendingLabel.resolve({ok: true, value: '9K tokens · 预估'});
       await flushMicrotasks();
     });
     expect(loadLabelMock).toHaveBeenCalledTimes(2);
@@ -289,13 +293,11 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
       async (
         _runtime: unknown,
         scope: {sessionId: string},
-        onUpgrade?: unknown,
+        options?: {onPreciseUpgrade?: (label: string) => void},
       ) => {
+        const onUpgrade = options?.onPreciseUpgrade;
         if (typeof onUpgrade === 'function') {
-          callbacksBySession.set(
-            scope.sessionId,
-            onUpgrade as (label: string) => void,
-          );
+          callbacksBySession.set(scope.sessionId, onUpgrade);
         }
         return {ok: true as const, value: '1K tokens · 预估'};
       },
@@ -359,7 +361,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     expect(harness!.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
 
     // 再制造「s1 还有一轮读数在途」的窗口（受控 deferred）。
-    const pendingS1 = createDeferred<string>();
+    const pendingS1 = createDeferred<{ok: true; value: string}>();
     loadLabelMock.mockImplementationOnce(() => pendingS1.promise);
     await act(async () => {
       void harness!.api().refreshChatTokenLabel();
@@ -428,7 +430,6 @@ describe('useChatTabScope 精确升级的会话身份弃权与延迟收口（cr2
       async (
         _runtime: unknown,
         scope: {sessionId: string},
-        _onUpgrade?: unknown,
         options?: {shouldBailPrecise?: () => boolean},
       ) => {
         if (options?.shouldBailPrecise != null) {
@@ -705,7 +706,7 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
     expect(harness.api().agentMeta?.tokenLabel).toBe('10K tokens · deepseek');
 
     // 第二轮读数挂起——模拟 build + 计数还在路上。
-    const pending = createDeferred<string>();
+    const pending = createDeferred<{ok: true; value: string}>();
     loadLabelMock.mockImplementationOnce(() => pending.promise);
     await act(async () => {
       void harness.api().refreshChatTokenLabel();
@@ -746,7 +747,10 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
 
     // 第二轮被 run 起步打断（服务层 shouldBail 命中返回 ''）：旧标签保留，
     // 绝不能把 chip 清成空/占位。
-    loadLabelMock.mockImplementationOnce(async () => '');
+    loadLabelMock.mockImplementationOnce(async () => ({
+      ok: true as const,
+      value: '',
+    }));
     await act(async () => {
       void harness.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(1200);

@@ -93,7 +93,7 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
     expect(src).toContain('const {conflictCount, confirm} = result;');
     expect(src).toContain('const applied = await confirm();');
     expect(flat).toContain(
-      'importVfsSingleFile(runtime, scope, { targetDir: targetPath, });',
+      'importVfsSingleFile(runtime, scope, {targetDir: targetPath});',
     );
     // 二进制跳过明示（D6）。
     expect(src).toContain('跳过 ${skippedBinary.length} 个非 UTF-8 文件');

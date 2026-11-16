@@ -471,12 +471,9 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       200,
-      0,
-      0,
-      400,
-      800,
-      400,
-      800,
+      {x: 0, y: 0},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(centered.scale).toBe(2);
     expect(centered.pan).toEqual({x: 0, y: 0});
@@ -486,12 +483,9 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       200,
-      50,
-      40,
-      400,
-      800,
-      400,
-      800,
+      {x: 50, y: 40},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(anchored.scale).toBe(2);
     expect(anchored.pan.x).toBeCloseTo(-50);
@@ -502,12 +496,9 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
       {scale: 1, pan: {x: 0, y: 0}},
       100,
       0,
-      0,
-      0,
-      400,
-      800,
-      400,
-      800,
+      {x: 0, y: 0},
+      {width: 400, height: 800},
+      {width: 400, height: 800},
     );
     expect(clamped.scale).toBe(MERMAID_VIEWER_MIN_SCALE);
     expect(Number.isFinite(clamped.pan.x)).toBe(true);

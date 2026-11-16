@@ -108,7 +108,7 @@ describe('token 刷新错峰（T-R5 hook 半）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-    mockRollbackToMessage.mockResolvedValue(undefined);
+    mockRollbackToMessage.mockResolvedValue({ok: true, value: undefined});
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
       (updater: number | ((t: number) => number)) => {

@@ -14,11 +14,18 @@ export function __hasPendingRun() {
   return pending != null;
 }
 
-/** 让挂起的 run 以 resolve 收尾（模拟 core 正常返回）。 */
+/**
+ * 让挂起的 run 以 resolve 收尾（模拟 core 正常返回）。
+ * 契约对齐错误通道迁移：runAgentTurn 返回 Result，成功分支是 `{ ok: true, value }`
+ * ——直接 resolve 裸 outcome 会被 handler 的 `if (!outcome.ok)` 判成失败。
+ */
 export function __settleRun(value) {
   const p = pending;
   pending = null;
-  p?.resolve(value ?? { stepsExecuted: 0, finished: true, stopReason: "completed", rounds: [] });
+  p?.resolve({
+    ok: true,
+    value: value ?? { stepsExecuted: 0, finished: true, stopReason: "completed", rounds: [] },
+  });
 }
 
 /** 让挂起的 run 以 reject 收尾（模拟 core 抛错）。 */

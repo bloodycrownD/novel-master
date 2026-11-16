@@ -23,7 +23,8 @@ describe('copyCode 共享委托模块源码契约 (T-CB19)', () => {
     const src = webSrc('shared/code-copy.ts');
     // 监听挂 document：innerHTML 整段替换不丢；捕获阶段先于 rows 等冒泡委托
     expect(src).toMatch(/document\.addEventListener\(\s*'click'/);
-    expect(src).toMatch(/,\s*true,?\s*\n\s*\);/);
+    // nm style 并一行后第三参 true（捕获阶段）仍在原位：不再是跨行实参列表。
+    expect(src).toMatch(/document\.addEventListener\('click', \w+, true\);/);
     // 委托命中：点击点向上找 span.code-copy 按钮
     expect(src).toContain("target.closest('.code-copy')");
     // 命中后立刻拦断冒泡，防「复制 + 折叠」双触发

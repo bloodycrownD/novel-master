@@ -40,13 +40,12 @@ function mockRuntime(overrides: {
     },
     agentRegistry: {
       listAgentIds: jest.fn(async () => [currentAgentId]),
-      // core 解析链用 sessionConfig.agentId 直接取 registry，这里统一兜底。
-      get: jest.fn(async (id: string) => {
-        if (id === 'session-agent-x') {
-          return sessionAgentDefinition;
-        }
-        return globalDefinition;
-      }),
+      // core 解析链用 sessionConfig.agentId 直接取 registry（错误通道迁移后走
+      // Result 通道），这里统一兜底包成 ok。
+      get: jest.fn(async (id: string) => ({
+        ok: true as const,
+        value: id === 'session-agent-x' ? sessionAgentDefinition : globalDefinition,
+      })),
     },
     projects: {
       getAgentConfig: jest.fn(async () => agentConfig),
@@ -66,7 +65,8 @@ function mockRuntime(overrides: {
 }
 
 jest.mock('@/services/model-display-label', () => ({
-  resolveModelDisplayLabel: jest.fn(async () => 'GPT-4'),
+  // 错误通道迁移后显示名读口走 Result（生产侧 `label.ok` 解包）。
+  resolveModelDisplayLabel: jest.fn(async () => ({ok: true, value: 'GPT-4'})),
 }));
 
 describe('loadChatAgentMeta', () => {
@@ -164,10 +164,12 @@ describe('loadChatAgentMeta', () => {
 describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
   it('agent 解析失败（AGENT_REFERENCED_NOT_FOUND）归一 source=none 待重选 meta（既有口径不回归）', async () => {
     const runtime: any = mockRuntime({});
-    // registry.get 抛错会被 resolveAgentForProject 归一为 AGENT_REFERENCED_NOT_FOUND。
-    runtime.agentRegistry.get = jest.fn(async () => {
-      throw new Error('AGENT_NOT_FOUND');
-    });
+    // registry.get 的已知失败会被 resolveAgentForProject 归一为
+    // AGENT_REFERENCED_NOT_FOUND（错误通道迁移后走 Result.err）。
+    runtime.agentRegistry.get = jest.fn(async () => ({
+      ok: false as const,
+      error: new Error('AGENT_NOT_FOUND'),
+    }));
     const loaded = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
     if (!loaded.ok) throw loaded.error;
     const meta = loaded.value;

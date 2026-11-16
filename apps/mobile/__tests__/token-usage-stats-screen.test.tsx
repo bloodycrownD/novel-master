@@ -56,7 +56,8 @@ const mockRuntime = {
       wireOk(mockListRequestUsage, ...args),
   },
   providers: {
-    list: mockProvidersList,
+    // 错误通道迁移后 providers.list 也走 Result（screen 侧 !ok 回退空选项）。
+    list: (...args: unknown[]) => wireOk(mockProvidersList, ...args),
   },
   savedModelRepo: {
     // 错误通道迁移四期：listByProvider 走 Result（screen 侧 !ok 回退空选项）。

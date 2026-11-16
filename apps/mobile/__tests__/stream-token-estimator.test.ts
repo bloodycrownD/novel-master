@@ -212,10 +212,15 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
         }),
       },
       agentRegistry: {
-        get: async () => ({model: 'saved-1'}),
+        // 五期门⑦：registry 读口走 Result 线上结构。
+        get: async () => ({ok: true as const, value: {model: 'saved-1'}}),
       },
       providerModels: {
-        getSavedById: async () => ({vendorModelId: 'gpt-5'}),
+        // 五期门⑦：getSavedById 走 Result 线上结构。
+        getSavedById: async () => ({
+          ok: true as const,
+          value: {vendorModelId: 'gpt-5'},
+        }),
       },
     };
     primeStreamTokenModelHint(runtime, 'session-o200k');
@@ -282,9 +287,9 @@ describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
     }));
     const runtime: StreamTokenModelHintRuntime = {
       sessions: {getSessionAgentConfig},
-      agentRegistry: {get: async () => ({model: 'saved-1'})},
+      agentRegistry: {get: async () => ({ok: true as const, value: {model: 'saved-1'}})},
       providerModels: {
-        getSavedById: async () => ({vendorModelId}),
+        getSavedById: async () => ({ok: true as const, value: {vendorModelId}}),
       },
     };
     return {

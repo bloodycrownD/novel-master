@@ -113,7 +113,11 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
             return;
           }
         } else {
-          await runtime.state.setCurrentModelId(savedModelId);
+          const updated = await runtime.state.setCurrentModelId(savedModelId);
+          if (!updated.ok) {
+            showToast(toastMessage('设置失败', updated.error));
+            return;
+          }
         }
       } catch (cause) {
         showToast(toastMessage('设置失败', cause));

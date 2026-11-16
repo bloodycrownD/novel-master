@@ -180,12 +180,15 @@ describe('vfs-zip.service', () => {
     ]);
     mockReadFile.mockResolvedValue(TRUNCATED_ZIP_BASE64);
 
-    await expect(
-      importVfsZip(runtime, scope, {confirmed: true}),
-    ).rejects.toMatchObject({
+    // 错误通道迁移后 import 沿 Result.err 回传（不再 reject）。
+    const imported = await importVfsZip(runtime, scope, {confirmed: true});
+    expect(imported).toMatchObject({
+      ok: false,
       // VfsZipError 类退役：zip 解析失败统一 AppError（name 即 key，code 为数字码）。
-      name: 'VFS_ZIP_INVALID_ARCHIVE',
-      message: expect.stringContaining('missing EOCD'),
+      error: {
+        name: 'VFS_ZIP_INVALID_ARCHIVE',
+        message: expect.stringContaining('missing EOCD'),
+      },
     });
     expect(mockImport).not.toHaveBeenCalled();
   });

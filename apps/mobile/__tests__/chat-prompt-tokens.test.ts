@@ -9,6 +9,7 @@ import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
   PRECISE_UPGRADE_START_DELAY_MS,
+  type TokenLabelOptions,
 } from '@/services/chat-prompt-tokens.service';
 // jest.mock 拦截后这里拿到的是工厂里的同构类——被测服务的 instanceof 与
 // 测试里 throw 的实例同源（中途弃权用例的观测前提）。
@@ -76,10 +77,16 @@ jest.mock('@novel-master/core/provider', () => ({
     }
     return value;
   },
-  resolveTokenCounterModeForModel: (...args: unknown[]) =>
-    mockResolveTokenCounterModeForModel(...args),
-  serializePromptLlmInput: (...args: unknown[]) =>
-    mockSerializePromptLlmInput(...args),
+  // 端口走 Result 通道（错误通道迁移）：桩仍按裸结果配置，出口统一包成
+  // ok——被测服务的 `!counterMode.ok` / `!serialized.ok` 解包面保持原样。
+  resolveTokenCounterModeForModel: async (...args: unknown[]) => ({
+    ok: true as const,
+    value: await mockResolveTokenCounterModeForModel(...args),
+  }),
+  serializePromptLlmInput: async (...args: unknown[]) => ({
+    ok: true as const,
+    value: await mockSerializePromptLlmInput(...args),
+  }),
 }));
 
 jest.mock('@novel-master/core/prompt', () => ({
@@ -110,8 +117,18 @@ async function loadLabelOrThrow(...args: Parameters<typeof loadChatPromptTokenLa
   return r.value;
 }
 
-async function loadResilientOrThrow(...args: Parameters<typeof loadChatPromptTokenLabelResilient>) {
-  const r = await loadChatPromptTokenLabelResilient(...args);
+// 服务公开签名收成单 options 对象（nm style 收口后的形态）；套件里「升级回调 +
+// 追加弃权判据」沿用分参写法，这里做一次形态映射，被测行为一字不动。
+async function loadResilientOrThrow(
+  runtime: Parameters<typeof loadChatPromptTokenLabelResilient>[0],
+  scope: Parameters<typeof loadChatPromptTokenLabelResilient>[1],
+  onPreciseUpgrade?: (label: string) => void,
+  options?: Omit<TokenLabelOptions, 'onPreciseUpgrade'>,
+) {
+  const r = await loadChatPromptTokenLabelResilient(runtime, scope, {
+    ...options,
+    onPreciseUpgrade,
+  });
   if (!r.ok) throw r.error;
   return r.value;
 }
@@ -130,9 +147,12 @@ function stubRuntime(overrides?: {
       }),
     },
     providerModels: {
-      getContextWindow: jest
-        .fn()
-        .mockResolvedValue(overrides?.contextWindow ?? 128_000),
+      // getContextWindow 端口走 Result（错误通道迁移）：桩按裸值配置，
+      // 出口包成 ok——服务侧 `!window.ok` 解包面保持原样。
+      getContextWindow: jest.fn().mockResolvedValue({
+        ok: true,
+        value: overrides?.contextWindow ?? 128_000,
+      }),
       getTokenCounterMode: jest
         .fn()
         .mockResolvedValue(overrides?.tokenCounterMode ?? 'auto'),

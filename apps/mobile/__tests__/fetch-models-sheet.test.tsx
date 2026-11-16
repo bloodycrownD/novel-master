@@ -15,6 +15,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Result} from '@novel-master/core/errors';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -180,9 +181,9 @@ function json(renderer: TestRenderer.ReactTestRenderer) {
 
 describe('FetchModelsSheet 过滤 (T-FM1-4)', () => {
   beforeEach(() => {
-    mockProviderModels.fetch.mockReset().mockResolvedValue(undefined);
-    mockProviderModels.suggestList.mockReset().mockResolvedValue(SUGGESTIONS);
-    mockProviderModels.save.mockReset().mockResolvedValue(undefined);
+    mockProviderModels.fetch.mockReset().mockResolvedValue(Result.ok(undefined));
+    mockProviderModels.suggestList.mockReset().mockResolvedValue(Result.ok(SUGGESTIONS));
+    mockProviderModels.save.mockReset().mockResolvedValue(Result.ok(undefined));
   });
 
   it('T-FM1: 输入即过滤——大小写混合命中 displayName 与 vendorModelId', async () => {
@@ -306,9 +307,9 @@ describe('FetchModelsSheet 过滤 (T-FM1-4)', () => {
 
 describe('FetchModelsSheet 勾选批量与全选 (T-FM5-7)', () => {
   beforeEach(() => {
-    mockProviderModels.fetch.mockReset().mockResolvedValue(undefined);
-    mockProviderModels.suggestList.mockReset().mockResolvedValue(SUGGESTIONS);
-    mockProviderModels.save.mockReset().mockResolvedValue(undefined);
+    mockProviderModels.fetch.mockReset().mockResolvedValue(Result.ok(undefined));
+    mockProviderModels.suggestList.mockReset().mockResolvedValue(Result.ok(SUGGESTIONS));
+    mockProviderModels.save.mockReset().mockResolvedValue(Result.ok(undefined));
   });
 
   it('T-FM5: 全选/全不选只作用于当前过滤后且未添加的行', async () => {
@@ -413,8 +414,8 @@ describe('FetchModelsSheet 勾选批量与全选 (T-FM5-7)', () => {
 
   it('T-FM7: 保存中途失败即停止并报错，已成功行标「已添加」、失败行保留勾选', async () => {
     mockProviderModels.save
-      .mockImplementationOnce(() => Promise.resolve(undefined))
-      .mockImplementationOnce(() => Promise.reject(new Error('boom')));
+      .mockResolvedValueOnce(Result.ok(undefined))
+      .mockResolvedValueOnce(Result.err(new Error('boom')));
     const {renderer, onSaved} = await renderSheet();
     act(() => {
       findClickableByText(renderer.root, '全选')!.props.onPress();
