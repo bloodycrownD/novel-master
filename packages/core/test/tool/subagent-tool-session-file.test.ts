@@ -110,12 +110,16 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
   };
 
   const messages: MessageService = {
+    // 错误通道迁移八期：大结果集读口走 Outcome，fake 与真实 service 同语义。
     listBySession: async (sessionId: string) => {
       const n = counts[sessionId] ?? 0;
-      return Array.from({ length: n }, (_, i) => ({
-        role: "user",
-        content: { blocks: [{ type: "text", text: `m${i}` }] },
-      })) as unknown as ChatMessageData[];
+      return {
+        kind: "completed" as const,
+        value: Array.from({ length: n }, (_, i) => ({
+          role: "user",
+          content: { blocks: [{ type: "text", text: `m${i}` }] },
+        })) as unknown as ChatMessageData[],
+      };
     },
     // repo-mega-cr Wave C 的 subagent 窄读消费口（src 端已切换，mock 缺方法
     // 会 TypeError——「加方法先扫手写假实现」同族坑；实现抄
@@ -126,9 +130,12 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
         role: "user",
         content: { blocks: [{ type: "text", text: `m${i}` }] },
       })) as unknown as ChatMessageData[];
-      return all
-        .filter((m) => m.role === options.role)
-        .slice(-Math.max(1, Math.floor(options.limit)));
+      return {
+        kind: "completed" as const,
+        value: all
+          .filter((m) => m.role === options.role)
+          .slice(-Math.max(1, Math.floor(options.limit))),
+      };
     },
   } as unknown as MessageService;
 

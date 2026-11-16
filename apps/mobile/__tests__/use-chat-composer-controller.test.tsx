@@ -76,6 +76,7 @@ import {
 } from '../src/storage/chat-composer-draft';
 import {scanTokensToRanges} from '../src/components/chat/native-composer/token-ranges';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 
 /** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
 const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
@@ -171,7 +172,7 @@ beforeEach(() => {
     },
     sessionStreamUnitManager: {
       startRun: mockStartRun,
-      stopRun: mockStopRun,
+      stop: mockStopRun,
     },
   });
 });
@@ -467,7 +468,7 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(mockStartRun).not.toHaveBeenCalled();
   });
 
-  it('running 态：send 与 terminate 都落到 stopRun', async () => {
+  it('running 态：send 与 terminate 都落到 stop(agent key)', async () => {
     await mount({running: true});
 
     await act(async () => {
@@ -478,7 +479,7 @@ describe('useChatComposerController · send 三分支路由', () => {
     });
 
     expect(mockStopRun).toHaveBeenCalledTimes(2);
-    expect(mockStopRun).toHaveBeenCalledWith('s1');
+    expect(mockStopRun).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
     expect(mockStartRun).not.toHaveBeenCalled();
   });
 

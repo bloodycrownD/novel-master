@@ -11,6 +11,7 @@
  * T-CR4 验证清域失败只 warn、不把压缩成功翻成失败。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -184,7 +185,7 @@ describe("runCompaction", () => {
       assert.equal(result.ok, true);
 
       // hide-message 确实 hide 了消息（depth>=6 的前缀被置 hidden）。
-      const list = await ctx.messages.listBySession(sessionId);
+      const list = outcomeValue(await ctx.messages.listBySession(sessionId));
       const hiddenCount = list.filter((m) => m.hidden).length;
       assert.ok(hiddenCount > 0, "expected some messages to be hidden");
 
@@ -243,7 +244,7 @@ describe("runCompaction", () => {
     assert.equal(result.ok, true);
 
     // hide 语义不变。
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.ok(
       list.filter((m) => m.hidden).length > 0,
       "expected some messages to be hidden",
@@ -293,7 +294,7 @@ describe("runCompaction", () => {
     assert.equal(result.ok, true);
 
     // 一条都没隐藏（本用例存在的意义：盖住「hide 命中 0 条」这条分支）。
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.equal(list.filter((m) => m.hidden).length, 0);
 
     // 两域照清：把清域挪进 `hiddenCount > 0` 分支（看似自然的优化）时本用例红。
@@ -368,7 +369,7 @@ describe("runCompaction", () => {
       `expected warn from compaction.run, got ${JSON.stringify(warns)}`,
     );
     // hide 与 token 失效都不受清域异常影响。
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.ok(list.filter((m) => m.hidden).length > 0);
   });
 
@@ -407,7 +408,7 @@ describe("runCompaction", () => {
     assert.equal(result.ok, true);
 
     // startDepth=10 超过消息总数，不应 hide 任何消息。
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.equal(list.filter((m) => m.hidden).length, 0);
 
     // 但 cache 失效仍执行（hide-message 无匹配不视为失败）；

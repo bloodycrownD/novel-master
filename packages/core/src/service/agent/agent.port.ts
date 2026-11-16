@@ -6,6 +6,7 @@
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
@@ -26,8 +27,12 @@ export interface AgentRunOptions {
   readonly persistMessages?: boolean;
   /** When false, skip `agent.run.*` / stream bus events; default true. */
   readonly publishRunLifecycle?: boolean;
-  /** Aborts an in-flight run from caller UI/runtime controls. */
-  readonly signal?: AbortSignal;
+  /**
+   * 取消作用域：调用方 UI / runtime 的中断经它级联进本 run。
+   *
+   * 缺省（CLI / 测试直接调用）视为不可取消；`run-agent-turn` 总会传入根 scope。
+   */
+  readonly scope?: AbortScope;
 }
 
 /** Drives multi-step model round-trips with tool execution. */

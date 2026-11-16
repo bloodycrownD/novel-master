@@ -14,11 +14,11 @@
  *
  * fixture 两种形态（r4-app-3：检查点计数不许依赖「组装恰好短路」这个隐形前提）：
  * - **最小形态**（缺省；T-CA5 与「不传 shouldBail」用例）：workplace layout
- *   不开 → assembleWorkplaceDisplay 短路，组装段的 shouldStop 一次都不问；
+ *   不开 → assembleWorkplaceDisplay 短路，组装段的 checkpoint 一次都不问；
  *   user 消息无附件 → prepare 内不触 vfs/sessionKkv。
  * - **组装参与形态**（`workplaceFiles` 非空；分段弃权用例）：workplace 块
  *   真开，组装段真跑（规则快照 → evaluateRuleView → file_cache 预取命中 →
- *   逐文件渲染），组装内 shouldStop（快照加载后 1 次 + 每文件 1 次）真实
+ *   逐文件渲染），组装内 checkpoint（快照加载后 1 次 + 每文件 1 次）真实
  *   发生。检查点序号与总数按「build 段界 4 道 + 组装内 1 + N」写死。
  * - **S0 双读形态**（`workplaceStatuses` 混合 full/header + 带附件的历史
  *   消息；S0 双读用例）：组装照上条真跑并分出 `prefixPaths`（仅 full 档）与
@@ -66,7 +66,7 @@ type WorkplaceStatus = 'full' | 'header' | 'filename';
  * @param options.workplaceFiles 非空时开 workplace 块并让组装段真跑
  *   （r4-app-3）：`workplace.evaluateRuleView` 给出这批 file 行、
  *   `sessionKkv.getMany` 直接命中 file_cache 预取（不触 vfs、不排后台
- *   回填），组装内按文件粒度的 shouldStop 检查点因此真实发生。
+ *   回填），组装内按文件粒度的 checkpoint 检查点因此真实发生。
  * @param options.workplaceStatuses 逐文件覆盖展示档位（缺省全 `full`）。
  *   与 `evaluateRuleView` 的 displayState、`file_cache` 预取键（`{status}:{path}`）
  *   三处同源——档位写错的话 assemble 的 `prefixPaths`/`visiblePaths` 分家就跟着错。
@@ -246,7 +246,7 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
     const bundle = bundleResult.value;;
     expect(bundle.input).toBeDefined();
     // 构成：build 的四道段界检查点（resolve 后 / messages 后 / 组装后 /
-    // prepare 后）+ 组装内 shouldStop（快照加载后 1 次 + 每文件 1 次）。
+    // prepare 后）+ 组装内 checkpoint（快照加载后 1 次 + 每文件 1 次）。
     // 本夹具 N=2，实测总数 = 4 + 3 = 7（开块前是 4）。
     expect(shouldBail).toHaveBeenCalledTimes(TOTAL_CHECKPOINTS);
     // 前提：组装段真的跑了（否则总数退化成 4，断言就不表达「组装参与」了）。

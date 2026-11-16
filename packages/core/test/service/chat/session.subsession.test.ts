@@ -11,6 +11,7 @@
  * @module test/service/chat/session.subsession.test
  */
 
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -141,8 +142,8 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
     assert.equal(await repo.findById(grandchild.id), null);
 
     // 消息也被级联清。
-    assert.deepEqual(await ctx.messages.listBySession(child.id), []);
-    assert.deepEqual(await ctx.messages.listBySession(grandchild.id), []);
+    assert.deepEqual(outcomeValue(await ctx.messages.listBySession(child.id)), []);
+    assert.deepEqual(outcomeValue(await ctx.messages.listBySession(grandchild.id)), []);
   });
 
   it("delete 单独子 session 不影响父与兄弟", async () => {
@@ -181,7 +182,7 @@ describe("SessionSubsession T-S3：删父 session 级联删子", () => {
     assert.equal(await repo.findById(parent.id), null);
     assert.equal(await repo.findById(child.id), null);
     // 子 session 的消息也应被清掉（项目删除路径走 BFS 展开了子 session）。
-    assert.deepEqual(await ctx.messages.listBySession(child.id), []);
+    assert.deepEqual(outcomeValue(await ctx.messages.listBySession(child.id)), []);
   });
 });
 

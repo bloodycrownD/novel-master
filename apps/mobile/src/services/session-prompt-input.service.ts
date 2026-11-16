@@ -90,7 +90,13 @@ export async function buildSessionPromptInput(runtime: MobileRuntime, scope: Ses
   // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
   // 曾实测 700+ 条会话秒级卡顿。rawMessages 透传给 resolve 的回填参数已
   // 废弃（仅签名兼容），可见口径对其无影响。
-  const visibleMessages = await runtime.messages.listBySession(scope.sessionId, {includeHidden: false});
+  // 分片判停复用 build 的弃权判据（shouldBail）：run 起步后读口在第一个分片
+  // 边界就死；中断转抛 build 的统一哨兵（与下方 assemble 同款收口）。
+  const readOptions = shouldBail == null ? undefined : {checkpoint: (): Interrupt | null => (shouldBail() === true ? {kind: 'replaced'} : null)};
+  const visibleRead = await runtime.messages.listBySession(scope.sessionId, {includeHidden: false}, readOptions);
+  if (visibleRead.kind === 'failed') return Result.err(visibleRead.error);
+  if (visibleRead.kind !== 'completed') throw new ChatPromptBuildBailedError();
+  const visibleMessages = visibleRead.value;
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] messages(n=${visibleMessages.length}) +${Date.now() - diagT0}ms`);
@@ -108,7 +114,7 @@ export async function buildSessionPromptInput(runtime: MobileRuntime, scope: Ses
   // replaced 返回，此处转抛 build 的统一哨兵，读口 catch 的判定不变。
   // fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉重复序列化/计数。
   const workplaceContext = {sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts};
-  const stopOptions = {shouldStop: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
+  const stopOptions = {checkpoint: (): Interrupt | null => (shouldBail?.() === true ? {kind: 'replaced'} : null)};
   const assembled = await assembleWorkplaceDisplay(wtScope, workplaceContext, stopOptions);
   if (assembled.kind === 'failed') {
     // 组装内的已知失败（如路径解析）：沿 Result 通道接力，不吞成弃权。

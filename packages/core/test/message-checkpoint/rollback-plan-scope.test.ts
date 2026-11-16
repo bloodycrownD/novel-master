@@ -9,6 +9,7 @@
  * - 计数快照改走 countBySession（COUNT(*) 单行）后 A-22 冲突检测仍生效
  *   （既有 rollback-optimistic-lock.test.ts 回归兜底，此处断言 SQL 口径）。
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -59,7 +60,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     // 之后、本应仍在拉取窗口内），锚点会退回 assistant1 自身 → 截掉
     // toolResult 与总结、只剩 3 条——长度断言即失败，以此证明配对不受
     // 收窄影响。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 4);
     assert.equal(left[0]!.id, user0.id);
     assert.equal(left[1]!.id, assistant0.id);
@@ -86,7 +87,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
       skipVfsReconcile: true,
     });
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[0]!.id, user0.id);
     assert.equal(left[1]!.id, assistant0.id);
@@ -131,7 +132,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
       "plan 阶段不应再发出无 seq 限定的全量 listBySession",
     );
     // 回滚语义不受收窄影响：rewind 保留锚点，其后两条截断。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, assistant0.id);
   });

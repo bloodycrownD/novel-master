@@ -8,6 +8,7 @@ import type {
   PersistentState,
   TdbcConnection,
 } from "@novel-master/core";
+import type { AbortRegistry } from "@novel-master/core/abort";
 import type {
   AgentAbortRegistry,
   AgentRegistryService,
@@ -90,8 +91,15 @@ export interface DesktopNovelMasterRuntime {
   /** 智能排序规则管理（列表/增删改/启停/调序/导入导出/预览，设置页数据源）。 */
   readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
-  /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
-  readonly abortRegistry: AgentAbortRegistry;
+  /** 进程内泛化取消注册表：按 `ABORT_KEY` 命名空间索引，长任务 handler 共用。 */
+  readonly abortRegistry: AbortRegistry;
+  /**
+   * Agent 门面：按 sessionId 索引 in-flight run 的 controller，供停止按钮 /
+   * core run 端口消费。与 {@link abortRegistry} 是**同一个泛化实例**（内部走
+   * `ABORT_KEY.agent` + `scopeFromController`），字段名刻意不同——core 若沿
+   * 同名 `abortRegistry` 取用会拿到泛化实例，裸 sessionId 派发永远 miss。
+   */
+  readonly agentAbortRegistry: AgentAbortRegistry;
   /** 按 sessionId 索引 in-flight run 的流句柄，供 IPC 订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;

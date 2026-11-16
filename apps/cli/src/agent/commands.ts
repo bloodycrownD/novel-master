@@ -9,6 +9,7 @@ import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import { isAppError, type AgentDefinition, runAgentTurn, validateAgentDefinition } from "@novel-master/core/agent";
 import { AppError, Result } from "@novel-master/core/errors";
+import { createAbortError } from "@novel-master/core/abort";
 
 import { assertSavedModelUuid, type LlmStreamEvent } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
@@ -138,7 +139,11 @@ export async function runAgent(rt: NovelMasterRuntime, subcommand: string, args:
       // 仅用于 --save 路径（写 agent registry）。
 
       if (subcommand === "continue" && (content == null || content === "")) {
-        const all = await rt.messages.listBySession(sessionId);
+        const allRead = await rt.messages.listBySession(sessionId);
+        if (allRead.kind === "failed") return Result.err(allRead.error);
+        // CLI 侧未注入 hooks：中断分支不可达；命中按取消边界语义转抛 AbortError。
+        if (allRead.kind !== "completed") throw createAbortError();
+        const all = allRead.value;
         const visible = all.filter((m) => !m.hidden);
         const lastVisible = visible[visible.length - 1];
         if (lastVisible?.role === "user") {

@@ -38,6 +38,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {chatAnnotateDraftStore, composerSendPolicy, attachmentScanner, type MessageAttachment} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {formatError} from '@/errors/format-error';
@@ -610,7 +611,7 @@ export function useChatComposerController({
 
   const terminate = useCallback(() => {
     // 经 manager 的 abort 语义（retain/freeze 时序由 core 负责；收尾照常走事件路径）。
-    runtime.sessionStreamUnitManager.stopRun(sessionId);
+    runtime.sessionStreamUnitManager.stop(ABORT_KEY.agent(sessionId));
   }, [runtime, sessionId]);
 
   /** 发送三分支（现网 `ChatComposer.tsx:500-538` 逐字保留）。 */

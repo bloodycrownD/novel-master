@@ -92,6 +92,13 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/agent.js',
     ),
+    // 取消域 barrel（ABORT_KEY / AbortRegistry / createAbortScope 等）：
+    // exports 只声明 import 条件，Jest 的 require 解析不到，同其它 core
+    // 子路径直连 dist 真实文件。
+    '^@novel-master/core/abort$': path.join(
+      repoRoot,
+      'packages/core/dist/public/abort.js',
+    ),
     '^@novel-master/core/format$': path.join(
       repoRoot,
       'packages/core/dist/public/format.js',

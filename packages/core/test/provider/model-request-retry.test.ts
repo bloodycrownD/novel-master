@@ -4,6 +4,7 @@ import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/bu
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
@@ -213,7 +214,7 @@ describe("DefaultModelRequestService retry", () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(() =>
-      svc.request(SAVED_MODEL_ID, "hello", { signal: controller.signal }),
+      svc.request(SAVED_MODEL_ID, "hello", { scope: createAbortScope({ controller }) }),
     );
     assert.equal(calls, 1);
   });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import {
   createAnthropicSseParserState,
   feedAnthropicSseChunk,
@@ -56,7 +57,7 @@ describe("anthropic partial stream", () => {
       vendorModelId: "claude",
       userContent: "hi",
       stream: true,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     });
 
     assert.equal(result.blocks.length, 1);

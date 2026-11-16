@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -54,7 +55,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
     assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 
@@ -93,7 +94,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     assert.equal(unwrap(await svfs.read("/keep.md")).content, "v1");
     // tail.md 不在 assistant1 的 checkpoint 里——回滚会删除它。
     assert.ok(!(await svfs.read("/tail.md")).ok, "tail.md 应已被回滚删除");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1);
   });
@@ -134,7 +135,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     // 会话里没有任何文件，backfill 应直接返回，不写入 checkpoint。
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
 
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 1);
   });
 });

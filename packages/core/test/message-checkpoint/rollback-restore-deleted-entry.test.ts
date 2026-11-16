@@ -19,6 +19,7 @@
  * @module test/message-checkpoint/rollback-restore-deleted-entry.test
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
@@ -153,7 +154,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.equal(unwrap(await svfs.read("/docs/a.md")).content, "alpha");
     assert.equal(unwrap(await svfs.read("/docs/b.md")).content, "beta");
     assert.equal(unwrap(await svfs.read("/docs/sub/c.md")).content, "gamma");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);

@@ -1,4 +1,5 @@
 import { Result } from "../../src/errors/either.js";
+import type { Outcome } from "../../src/errors/outcome.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
@@ -47,6 +48,8 @@ function fakeSkillService(overrides?: {
   // 错误通道迁移二期：readSkillFile / writeSkillFile / editSkillFile 已改
   // `Result` 通道——override 仍写裸值（测试可读性好），在这里统一包成 Ok。
   const okv = async <T>(value: T) => Result.ok(value);
+  // 错误通道迁移七期：listSkills 走 Outcome 通道——override 仍写裸值，统一包成 completed。
+  const outcomev = async <T>(value: T): Promise<Outcome<T>> => ({ kind: "completed", value });
   const service = {
     readSkillFile: record(
       "readSkillFile",
@@ -96,9 +99,9 @@ function fakeSkillService(overrides?: {
     ),
     listSkills: record(
       "listSkills",
-      // 错误通道迁移四期：listSkills 走 Result 通道。
+      // 错误通道迁移七期：listSkills 走 Outcome 通道。
       (async (...args: Parameters<SkillService["listSkills"]>) =>
-        okv(await (overrides?.list ?? (async () => []))(...args as never))) as SkillService["listSkills"],
+        outcomev(await (overrides?.list ?? (async () => []))(...args as never))) as SkillService["listSkills"],
     ),
     setDisabled: record("setDisabled", async () => undefined),
     deleteSkill: record("deleteSkill", async () => undefined),

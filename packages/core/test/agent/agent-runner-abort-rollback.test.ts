@@ -20,6 +20,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
 import {
   registerBuiltinTools,
@@ -194,7 +195,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -233,7 +234,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -270,7 +271,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -310,7 +311,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -357,7 +358,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -396,7 +397,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -455,7 +456,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -522,7 +523,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");

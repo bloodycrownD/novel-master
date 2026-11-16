@@ -17,6 +17,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {type ChatSession} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 
 import {type VfsScope, type VfsService} from '@novel-master/core/vfs';
 
@@ -137,7 +138,7 @@ function ChatSessionListPanelInner({
     (sid: string) => {
       // 走单元的 abort 语义（retain/freeze 时序由 core 负责）；后续
       // FINISHED 照常经事件路径收尾（投影回落、集合更新、按钮消失）。
-      manager.stopRun(sid);
+      manager.stop(ABORT_KEY.agent(sid));
     },
     [manager],
   );

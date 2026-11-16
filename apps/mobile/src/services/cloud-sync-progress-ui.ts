@@ -53,6 +53,8 @@ const PUSH_RULES: Record<string, StepRule> = {
   storage_put_file_done: {label: '快照已上传', progress: 0.88},
   storage_put_done_large: {label: '快照已上传', progress: 0.88},
   push_done: {label: '推送完成', progress: 1},
+  // 取消终态（spec T-S16）：阶段级取消在下一个真实边界生效，UI 静默收尾。
+  push_cancelled: {label: '推送已取消', progress: 1},
 };
 
 /** Pull 事件 → UI 规则 */
@@ -80,6 +82,8 @@ const PULL_RULES: Record<string, StepRule> = {
   db_import_start: {label: '导入数据库…', progress: 0.86},
   db_import_done: {label: '导入完成', progress: 0.95},
   pull_done: {label: '拉取完成', progress: 1},
+  // 取消终态（spec T-S16）：阶段级取消在下一个真实边界生效，UI 静默收尾。
+  pull_cancelled: {label: '拉取已取消', progress: 1},
 };
 
 const SNAPSHOT_BYTE_THRESHOLD = 64 * 1024;

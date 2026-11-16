@@ -14,6 +14,7 @@ import { resolvePriorRollbackTargetTree, resolveRollbackTargetTree } from "@/dom
 import { resolvePathsNeedDeleteInTransaction, resolveReconcilePathSets } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
 import { restorePathToRevision, restorePathToRevisionWithBackfill } from "@/domain/message-checkpoint/logic/restore-path.js";
 import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -342,7 +343,11 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 全量，改用 countBySession（COUNT(*) 单行）取同一口径，事务内对比
     // 逻辑零变化。
     const messagesRepo = this.deps.messages;
-    const [messagesFromClicked, messageCountSnapshot] = await Promise.all([messagesRepo.listBySessionFromSeq(sessionId, clicked.seq), messagesRepo.countBySession(sessionId)]);
+    const [messagesRead, messageCountSnapshot] = await Promise.all([messagesRepo.listBySessionFromSeq(sessionId, clicked.seq), messagesRepo.countBySession(sessionId)]);
+    if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
+    // plan 装配阶段未注入 hooks：中断分支不可达；命中按边界语义转抛 AbortError。
+    if (messagesRead.kind !== "completed") throw createAbortError();
+    const messagesFromClicked = messagesRead.value;
     if (this.deps.probe != null) {
       // 字节量（源消息 content JSON 尺寸）只在探针注入时统计——量测本身
       // 是 O(总字节) 的 stringify，生产路径不付这笔账。

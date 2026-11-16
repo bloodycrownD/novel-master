@@ -25,6 +25,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -207,7 +208,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -553,7 +554,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");

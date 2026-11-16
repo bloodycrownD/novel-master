@@ -6,6 +6,7 @@
 
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, fileCacheKey, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
@@ -14,7 +15,7 @@ import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-co
 import { joinFileBlocks, renderFileBlock, renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import { parseRuleSnapshotJson, ruleViewToSnapshotEntries, serializeRuleSnapshot, type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { Interrupt, Outcome } from "@/errors/outcome.js";
+import type { Outcome } from "@/errors/outcome.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
@@ -85,9 +86,9 @@ interface WorkplaceAssembledFile {
   readonly body: string;
 }
 
-/** {@link assembleWorkplaceDisplay} 可选参数。 */
+/** {@link assembleWorkplaceDisplay} 可选参数（长任务中断观察点注入 `LongTaskHooks.checkpoint`）。 */
 // nm-style: keep-public — public/workplace.ts 门面再导出，导出函数签名类型；脚本不统计签名内类型引用。
-export interface AssembleWorkplaceDisplayOptions {
+export interface AssembleWorkplaceDisplayOptions extends LongTaskHooks {
   /**
    * rule_snapshot / file_cache 的 KKV 归属 session id；缺省用 `scope.sessionId`。
    *
@@ -95,14 +96,6 @@ export interface AssembleWorkplaceDisplayOptions {
    * 进行，但快照与缓存写进子 session 自己的 KKV。
    */
   readonly kkvSessionId?: string;
-  /**
-   * 按文件粒度的中止观察点（2026-09-30；错误通道迁移二期改返回值）：返回非
-   * null {@link Interrupt} 即在该文件边界收成 `Outcome.cancelled` /
-   * `Outcome.replaced` 返回，不再抛哨兵。检查点在快照加载后 + 每个文件的
-   * 缓存解析/VFS 回填之前——单个大文件的读取本身仍是原子单元（可接受：
-   * 粒度从「整个组装 16s」细化到「单个文件」）。缺省不检查。
-   */
-  readonly shouldStop?: () => Interrupt | null;
 }
 
 /**
@@ -117,7 +110,7 @@ export interface AssembleWorkplaceDisplayOptions {
  * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；
  *    `visiblePaths` = 快照全部可见 path（规范化，全量语义）；
  *    `prefixPaths` = 其中 `status === "full"` 的子集（attach 去重 S0 入集口径）
- * 5. 错误通道迁移二期：`shouldStop` 命中 → `cancelled` / `replaced`（中断不
+ * 5. 错误通道迁移二期：`checkpoint` 命中 → `cancelled` / `replaced`（中断不
  *    伪装成错误）；`resolveLogicalPath` 失败 → `failed`（决定权交上层）。
  *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛，由调用链端点 catch 收口。
@@ -166,7 +159,7 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   }
   // 快照加载是组装的第一段 IO（可能触发规则评估），加载完先看一眼再进
   // 文件循环——批量预取那条 IN 查询之后全是逐文件重活。
-  const stopped = options?.shouldStop?.();
+  const stopped = options?.checkpoint?.();
   if (stopped != null) {
     return stopped;
   }
@@ -183,10 +176,10 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
   const files: WorkplaceAssembledFile[] = [];
   const fingerprintParts: string[] = [];
   for (const entry of entries) {
-    // 按文件粒度的中止观察点（见 AssembleWorkplaceDisplayOptions.shouldStop）
+    // 按文件粒度的中止观察点（见 LongTaskHooks.checkpoint）
     // ——2026-09-30 实锤：16s 原子组装段里 17 次停止点按全部真派发却无从
     // 兑现。单文件的「缓存解析 + VFS 回填」仍是本轮的最小原子单元。
-    const stopped = options?.shouldStop?.();
+    const stopped = options?.checkpoint?.();
     if (stopped != null) {
       return stopped;
     }

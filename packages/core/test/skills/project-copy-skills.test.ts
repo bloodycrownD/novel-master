@@ -9,6 +9,7 @@
  */
 
 import { unwrap } from "../helpers/result-unwrap.js";
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
@@ -63,7 +64,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const copy = unwrap(await ctx.projects.copy(source.id));
 
     // 技能文件随整树复制到新项目
-    const copyList = unwrap(await skills.listSkills({ projectId: copy.id }));
+    const copyList = outcomeValue(await skills.listSkills({ projectId: copy.id }));
     const helper = copyList.find((s) => s.name === "novel-helper");
     assert.ok(helper != null, "项目技能应随复制携带");
     assert.equal(helper.valid, true);
@@ -117,9 +118,9 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     assert.equal(copySessions.length, 0);
 
     // 技能在新项目、原项目也还在；其他项目（新建第三个项目）不串
-    const copyList = unwrap(await skills.listSkills({ projectId: copy.id }));
+    const copyList = outcomeValue(await skills.listSkills({ projectId: copy.id }));
     assert.ok(copyList.some((s) => s.name === "solo-skill"));
-    const sourceList = unwrap(await skills.listSkills({ projectId: source.id }));
+    const sourceList = outcomeValue(await skills.listSkills({ projectId: source.id }));
     assert.ok(sourceList.some((s) => s.name === "solo-skill"));
 
     const third = unwrap(await ctx.projects.create(`P3-${suffix}`));

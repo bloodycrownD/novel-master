@@ -120,6 +120,8 @@ const ERROR_MESSAGE_KEYS = [
   "error.infra.baseline_too_old",
   "error.infra.decode_invalid_schema",
   "error.infra.encode_not_supported",
+  "error.infra.aborted",
+  "error.infra.invalid_abort_target",
   // prompt：布局校验与动态宏校验（PROMPT_INVALID_LAYOUT / PROMPT_INVALID_MACRO）
   "error.prompt.invalid_layout.workplace_nonempty_string",
   "error.prompt.invalid_layout.workplace_type",
@@ -170,6 +172,7 @@ const ERROR_MESSAGE_KEYS = [
   "error.provider.invalid_tool_arguments",
   "error.provider.migration_orphan_pointer",
   "error.provider.invalid_model_name",
+  "error.provider.models_in_flight",
   // session_fs：回滚 / 恢复（restore 三处复用 restore_revision_missing）
   "error.session_fs.rollback_message_not_found",
   "error.session_fs.rollback_message_session_mismatch",

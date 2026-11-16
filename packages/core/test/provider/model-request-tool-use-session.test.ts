@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
@@ -63,7 +64,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("find foo")));
 
-    const history = (await ctx.messages.listBySession(session.id)).filter(
+    const history = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => !m.hidden,
     );
     const result = unwrap(await bundle.modelRequests.request(

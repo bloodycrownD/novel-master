@@ -6,9 +6,9 @@ import { ErrorCodes } from "../../src/errors/error-codes.js";
 import { CORE_MESSAGE_KEYS, type CoreMessageKey } from "../../src/i18n/keys.js";
 import { CORE_CATALOGS } from "../../src/i18n/generated-catalog.js";
 
-/** 取 key 的域：最长已登记前缀 + `_`，覆盖 VFS_CHARACTER_CARD / SMART_SORT_RULE / SESSION_FS 等多段 token；TASK_* 控制流码落在 IPC 段。 */
+/** 取 key 的域：最长已登记前缀 + `_`，覆盖 VFS_CHARACTER_CARD / SMART_SORT_RULE / SESSION_FS 等多段 token；TASK_* 与 PROVIDER_MODELS_IN_FLIGHT（handler 级并发冲突）等控制流码落在 IPC 段。 */
 function domainOf(key: string): string {
-  if (key.startsWith("TASK_")) {
+  if (key.startsWith("TASK_") || key === "PROVIDER_MODELS_IN_FLIGHT") {
     return "IPC";
   }
   const matched = Object.keys(DOMAIN_RANGES)

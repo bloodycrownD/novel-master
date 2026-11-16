@@ -6,6 +6,7 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type {
   SessionAgentConfig,
@@ -49,8 +50,13 @@ export interface SessionService {
 
   delete(id: string): Promise<Result<void, AppError>>;
 
-  /** Copies session VFS tree and all messages to a new session. */
-  copy(id: string): Promise<Result<ChatSession, AppError>>;
+  /**
+   * Copies session VFS tree and all messages to a new session.
+   *
+   * `hooks` 透传给源会话全量读与 `batchInsert`：中断在事务边界转
+   * `throw createAbortError()` 整体回滚（不留半写 copy）。
+   */
+  copy(id: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>>;
 
   /**
    * Overwrites session VFS + worktree from project template;

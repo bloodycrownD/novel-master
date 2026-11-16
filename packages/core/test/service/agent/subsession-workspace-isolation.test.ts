@@ -26,6 +26,7 @@
  * @module test/service/agent/subsession-workspace-isolation.test
  */
 
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { Result } from "../../../src/errors/either.js";
 import type { AppError } from "../../../src/errors/app-error.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
@@ -287,7 +288,7 @@ function captureChildSessions(runtime: AgentTurnRuntimePort, sink: string[]): vo
 
 /** 从 session 消息里提取全部 tool_result 文本，供共享工作区读回断言。 */
 async function collectToolResultTexts(ctx: ReturnType<typeof getNovelMasterTestContext>, sessionId: string): Promise<string[]> {
-  const messages = await ctx.messages.listBySession(sessionId);
+  const messages = outcomeValue(await ctx.messages.listBySession(sessionId));
   const texts: string[] = [];
   for (const m of messages) {
     for (const block of m.content.blocks) {

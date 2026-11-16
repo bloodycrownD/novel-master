@@ -7,10 +7,9 @@
  * 不是错误：不带错误码、不进 i18n、不计入错误率；AppError 只表达业务失败。
  * 禁止把 Interrupt 塞进 failed，也禁止把 AppError 塞进 cancelled。
  *
- * AbortReason 按 spec §2.1 的依赖方向约定内联在本模块：errors/ 是全仓最底层，
+ * `AbortReason` 与 `Interrupt` 的**唯一权威定义处**：errors/ 是全仓最底层，
  * 不允许反向 import domain/abort（否则与 74 个 domain 文件的 errors/either
- * import 成环）；signal-abort-scope 尚未落地，待其定义同一联合后把这里换成
- * import，成员与语义以那边为准。
+ * import 成环）；domain/abort 反向 re-export 从这里取，成员与语义以本模块为准。
  *
  * @module errors/outcome
  */

@@ -95,14 +95,14 @@ describe('chat-session-view-cache', () => {
         messageStore: {
           listBySessionTail: async (_sid, options) => {
             tailCalls += 1;
-            return db.slice(-options.limit);
+            return {kind: 'completed' as const, value: db.slice(-options.limit)};
           },
           listBySessionPage: async (_sid, options) => {
             const filtered =
               options.beforeSeq == null
                 ? db
                 : db.filter(row => row.seq < options.beforeSeq);
-            return filtered.slice(-options.limit);
+            return {kind: 'completed' as const, value: filtered.slice(-options.limit)};
           },
         },
       });

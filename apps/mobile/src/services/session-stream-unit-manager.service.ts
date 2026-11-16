@@ -4,7 +4,7 @@
  * 以 agent-run-manager.service.ts 为模板原样吸收其契约（Step 2；旧文件的
  * 拆除与调用方接线分别在 Step 7 / Step 6 完成）：
  * - per-session 门禁：该会话存在 starting|running 状态的单元，或
- *   abortRegistry.has(sessionId) 任一为真即拒绝（registry 是 run 在途的第二
+ *   abortRegistry.has(ABORT_KEY.agent(sessionId)) 任一为真即拒绝（registry 是 run 在途的第二
  *   道判据，core 的 register 在 runAgentTurn 函数入口执行，受理即在途；
  *   starting 单元判据仍独立保留）；settled 单元（interrupted/finished/failed，
  *   含宽限中）不阻塞新 run——interrupted 单元在 startRun 时被替换/吸收（删旧
@@ -104,6 +104,7 @@ import {parseStreamFinalRateSnapshot, serializeStreamFinalRateSnapshot} from '@n
 import {SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN, STREAM_METRICS_FINAL_RATE_KEY as FINAL_RATE_KEY} from '@novel-master/core/session-kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SessionRunState, SessionRunStateSettleInput, SessionRunStatus} from '@novel-master/core/session-run-state';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {decrementAgentActive, incrementAgentActive} from '@/runtime/agent-activity';
 import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
 import {bootTimingLog, timingLog} from '@/debug/run-timing';
@@ -601,7 +602,7 @@ export class SessionStreamUnitManager {
     // 与注册时机无关；该场景由 finally 兜底）。
     this.calibrationProbe = createRunFinishCalibrationProbe({
       activeSessionIds: () => this.listCalibratableSessionIds(),
-      isRunRegistered: sessionId => this.runtime.abortRegistry.has(sessionId),
+      isRunRegistered: sessionId => this.runtime.abortRegistry.has(ABORT_KEY.agent(sessionId)),
       // 校准收尾（终态事件丢失的兜底）：走与 FAILED 事件等效的收尾路径——
       // runId 所有权匹配则 settle('failed')，refcount/持久层/通知/保活照常
       // 收口。经 startRun 发起的 run 的 runAgentTurn promise 挂死场景同样
@@ -1058,7 +1059,16 @@ export class SessionStreamUnitManager {
       }
     }
     const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
-    const fetched = await this.runtime.messages.listBySessionTail(sessionId, {limit});
+    const fetchedRead = await this.runtime.messages.listBySessionTail(sessionId, {limit});
+    if (fetchedRead.kind === 'failed') {
+      // 读口已换 Outcome：已知失败在 manager 边界转异常，沿用既有上抛出口。
+      throw fetchedRead.error;
+    }
+    if (fetchedRead.kind !== 'completed') {
+      // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现有 idle 面。
+      return [...(this.idleMessageViews.get(sessionId)?.messages ?? [])];
+    }
+    const fetched = fetchedRead.value;
     const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
     const list = hasMore ? fetched.slice(1) : fetched;
     if (cacheKey != null) {
@@ -1100,7 +1110,16 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
     try {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
-      const older = await this.runtime.messages.listBySessionPage(sessionId, page);
+      const olderRead = await this.runtime.messages.listBySessionPage(sessionId, page);
+      if (olderRead.kind === 'failed') {
+        // 同 loadSessionTailMessages：已知失败在 manager 边界转异常。
+        throw olderRead.error;
+      }
+      if (olderRead.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
+        return;
+      }
+      const older = olderRead.value;
       const inFlight = this.idleLoadingMore.get(sessionId);
       if (inFlight == null) {
         // 窗口期内会话被遗忘（forgetSession）或 manager 已 dispose：本次结果
@@ -1230,8 +1249,8 @@ export class SessionStreamUnitManager {
   /**
    * 发起 run：per-session 门禁 + fire-and-forget。
    *
-   * 门禁钉死「该会话存在 starting|running 单元或 abortRegistry.has 为真即
-   * 拒绝，返回明确错误而非静默」——core 的 register 在 runAgentTurn 函数
+   * 门禁钉死「该会话存在 starting|running 单元或
+   * abortRegistry.has(ABORT_KEY.agent(sessionId)) 为真即拒绝，返回明确错误而非静默」——core 的 register 在 runAgentTurn 函数
    * 入口执行（受理即在途），单看 registry 仍会在受理空窗内漏放第二个同会话
    * run。settled 单元不阻塞：interrupted/finished/failed（含宽限中）
    * 的旧单元被替换吸收——删旧建新（run_id 更新、状态机回 starting、
@@ -1252,7 +1271,7 @@ export class SessionStreamUnitManager {
     const existing = this.units.get(sessionId);
     if (
       (existing != null && this.isActiveUnit(existing)) ||
-      this.runtime.abortRegistry.has(sessionId)
+      this.runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))
     ) {
       return {ok: false, error: '该会话已有进行中的生成，请先等待完成或停止'};
     }
@@ -1469,19 +1488,19 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 停止指定会话的活跃 run（会话列表「停止生成」入口，Step 6 接线）。
+   * 停止指定 registry key 的活跃任务（会话列表「停止生成」入口，Step 6 接线）。
    *
-   * 走 abortRegistry 的 abort 语义（retain/freeze 时序由 core 负责）；
-   * 未注册（无在途 controller）返回 false。后续 FINISHED 事件照常经
-   * 事件路径收尾。
+   * 收完整的 `ABORT_KEY.x(id)` 产物（agent 调用点传 `ABORT_KEY.agent(sessionId)`）；
+   * 走泛化 abortRegistry 的 abort 语义（retain/freeze 时序由 core 负责）。
+   * 未注册（无在途任务）返回 false。后续 FINISHED 事件照常经事件路径收尾。
    */
-  stopRun(sessionId: string): boolean {
-    if (!this.runtime.abortRegistry.has(sessionId)) {
-      timingLog('stopRun: no controller (dropped)');
+  stop(key: string): boolean {
+    if (!this.runtime.abortRegistry.has(key)) {
+      timingLog('stop: no controller (dropped)');
       return false;
     }
-    this.runtime.abortRegistry.abort(sessionId);
-    timingLog('stopRun: abort dispatched');
+    this.runtime.abortRegistry.abort(key);
+    timingLog('stop: abort dispatched');
     return true;
   }
 

@@ -115,8 +115,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    *
    * 「谁取消的」只有本模块知道，所以用显式标记而不是读 OkHttp 的状态。
    * 一次性消费（`remove`，不是 `containsKey`）——见 [handleStreamFailure] 开头
-   * 的顺序说明。标记的三处生命周期：`sseAbort` 写入、`handleStreamFailure`
-   * 与 `finishStream` 消费、`shutdown` 清空。
+   * 的顺序说明。标记的生命周期：`sseAbort` / `requestAbort` 写入；
+   * `handleStreamFailure`、`finishStream` 与 `request` 的 catch 消费；
+   * `request` 的 finally 与 `shutdown` 清空。
    */
   private val userAborted = ConcurrentHashMap<String, Boolean>()
 
@@ -233,10 +234,16 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   /**
    * 非流式请求（listModels GET / chatNonStream POST 底座）。
    * 非 2xx 不 reject——status 与 body 原样带回，由 JS 侧 assertOk 处理；
-   * 网络类失败 reject，code 取错误分类（"network" | "timeout"）。
+   * 网络类失败 reject，code 取错误分类（"network" | "timeout" | "abort"）。
+   *
+   * `requestId` 是取消路由键：`Call` 必须在 `executor.execute` **之前**登记进
+   * [calls]（关闭「requestAbort 先于登记到达」的竞态——否则 cancel 落空、连接
+   * 仍跑满 callTimeout）。重复 id 不 execute、不覆盖登记，直接
+   * `promise.reject("invalid")`——覆盖会让已在跑的 call 失去 abort 面。
    */
   @ReactMethod
   fun request(
+    requestId: String,
     method: String,
     url: String,
     headersKv: ReadableArray,
@@ -244,18 +251,27 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     callTimeoutMs: Int,
     promise: Promise,
   ) {
+    if (requestId.isEmpty()) {
+      promise.reject("invalid", "requestId must not be empty")
+      return
+    }
+    val effectiveMethod = if (method.equals("GET", ignoreCase = true)) "GET" else "POST"
+    val request = try {
+      buildRequest(effectiveMethod, url, headersKv, body)
+    } catch (t: Throwable) {
+      // URL 非法等同步失败：与非流式网络失败同一条 reject 通道。
+      promise.reject("network", t.message ?: "build request failed", t)
+      return
+    }
+    val call = clientWithCallTimeout(callTimeoutMs).newCall(request)
+    if (calls.putIfAbsent(requestId, call) != null) {
+      promise.reject("invalid", "duplicate requestId: $requestId")
+      return
+    }
+    val startedAtNanos = System.nanoTime()
     executor.execute {
       try {
-        val effectiveMethod = if (method.equals("GET", ignoreCase = true)) "GET" else "POST"
-        val request = buildRequest(effectiveMethod, url, headersKv, body)
-        val client = if (callTimeoutMs > 0) {
-          baseClient.newBuilder()
-            .callTimeout(callTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-            .build()
-        } else {
-          baseClient
-        }
-        client.newCall(request).execute().use { response ->
+        call.execute().use { response ->
           val result = Arguments.createMap()
           result.putInt("status", response.code)
           result.putString("contentType", response.header("Content-Type"))
@@ -263,20 +279,50 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           promise.resolve(result)
         }
       } catch (t: Throwable) {
-        // 非流式走 baseClient：读超时已恒禁用（此处传默认数值仅供防御性文案）。
-        // 非流式的 callTimeout 会正常抛 InterruptedIOException("timeout")
-        // （messageDone 路径可达），已能归 timeout —— 只需补上新参数。
+        // 用户 abort 的判据是显式标记（不是 OkHttp isCanceled）：callTimeout
+        // 到点同样会 cancel 这个 call，二者只能靠 [userAborted] 区分。
+        val userAbortedHit = userAborted[requestId] == true
         val (kind, message) = classifyError(
           t,
           DEFAULT_READ_TIMEOUT_MS,
-          call = null,
-          userAbortedHit = false,
-          startedAtNanos = 0L,
-          effectiveCallTimeoutMs = DEFAULT_CALL_TIMEOUT_MS,
+          call,
+          userAbortedHit,
+          startedAtNanos,
+          effectiveCallTimeoutMs(callTimeoutMs),
         )
         promise.reject(kind, message, t)
+      } finally {
+        // 取消迟到（call 已结束才到）时也要清：双清不留残标记，否则同一
+        // requestId 复用时会误判 abort。
+        calls.remove(requestId, call)
+        userAborted.remove(requestId)
       }
     }
+  }
+
+  /**
+   * 取消进行中的非流式 request（OkHttp `Call.cancel()` 真断连）。
+   *
+   * 标记必须**先于** cancel 写入：executor 里的 catch 靠它把 cancel 引起的
+   * IOException 归成 "abort"（`Call.isCanceled()` 对 callTimeout 同样为真，
+   * 不能当用户取消判据）。request 路径不发事件——取消经原 promise 的
+   * `reject("abort", ...)` 回传；未知 id（已结束/从未发起）静默 no-op，
+   * 与 [sseAbort] 的幂等口径一致。
+   */
+  @ReactMethod
+  fun requestAbort(requestId: String) {
+    val call = calls[requestId]
+    if (call == null) {
+      debugLog("request_abort_miss requestId=$requestId")
+      return
+    }
+    userAborted[requestId] = true
+    try {
+      call.cancel()
+    } catch (_: Throwable) {
+      // cancel 失败无需处理：callTimeout 兜底
+    }
+    debugLog("request_abort requestId=$requestId userAbortedPending=${userAborted.size}")
   }
 
   // ------------------------------------------------------------------
@@ -516,9 +562,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       // 一次性消费结果，classifyError 锁内**不再读 map** ⇒ spec 风险 R2 登记的
       // 「消费 vs 写入」错位窗口（abort 打在分类之后）并未被本锁消除，此处只是已知的
       // 残余窗口，不是「已闭合」的证明。
-      // userAbortedHit 到这里可证恒为 false（上面的 userAbortedHit 早退已滤掉 true），
-      // 故 classifyError 里的 `&& !userAbortedHit` 是恒真的死条件；参数按签名保留，
-      // 供将来非流式路径复用，不作删减。
+      // 流式路径到这里 userAbortedHit 可证恒为 false（上面的早退已滤掉 true），
+      // 故 classifyError 的 "abort" 分支只服务 request 路径；参数按签名保留。
       val (kind, message) = classifyError(
         t,
         effectiveReadTimeoutMs,
@@ -537,10 +582,16 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   }
 
   /**
-   * 错误分类：callTimeout 归 timeout，其余按异常类型归类。
+   * 错误分类：用户 abort 归 abort，callTimeout 归 timeout，其余按异常类型归类。
    *
-   * 新增的 callTimeout 分支：`call.isCanceled() && 非用户 abort` 时读循环抛的
-   * 是 IOException，而「本模块里谁会 cancel 一个 call」只有三处——`sseAbort`
+   * **abort 分支（request 路径）**：[requestAbort] 先写 [userAborted] 标记再
+   * `call.cancel()`，executor 的 catch 读到标记后必须归 "abort"——cancel 抛的
+   * IOException 与真实网络失败、callTimeout 在异常类型上无法区分。流式路径
+   * 传进来的 userAbortedHit 恒为 false（[handleStreamFailure] 已早退），事件
+   * 通道不出 "abort" kind。
+   *
+   * 新增的 callTimeout 分支：`call.isCanceled()` 时读循环抛的是 IOException，而
+   * 「本模块里谁会 cancel 一个 call」只有四处——`sseAbort` / `requestAbort`
    * （用户，已被 userAborted 标记排除）、`shutdown()`（走 streams.clear()，
    * state==null 已在闸门处拦掉）、OkHttp 自己的 callTimeout。所以这个组合的
    * 唯一可能来源就是 callTimeout，elapsed 判定只是把「万一是别的原因」排除掉
@@ -561,7 +612,13 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     startedAtNanos: Long,
     effectiveCallTimeoutMs: Long,
   ): Pair<String, String> {
-    if (call?.isCanceled() == true && !userAbortedHit) {
+    // 用户主动取消优先于一切异常形态：cancel 引起的 IOException("Canceled")
+    // 若落到下面的 when 会误报 network。callTimeout 也会 cancel，不能用
+    // isCanceled 判据，只能信显式标记。
+    if (userAbortedHit) {
+      return "abort" to "aborted by user"
+    }
+    if (call?.isCanceled() == true) {
       val elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000
       if (elapsedMs >= effectiveCallTimeoutMs) {
         return "timeout" to "call timeout after ${effectiveCallTimeoutMs}ms"

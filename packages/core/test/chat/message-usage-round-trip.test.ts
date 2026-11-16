@@ -12,6 +12,7 @@
  * - 仅 cache 有值（基础三列 NULL）→ usage 只含 cache 字段。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -74,7 +75,7 @@ describe("message usage round-trip (T-S1)", () => {
     });
 
     // listBySession 读回
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     const reloaded = listed.find((m) => m.id === appended.id);
     assert.ok(reloaded);
     assert.deepEqual(reloaded!.usage, {
@@ -104,7 +105,7 @@ describe("message usage round-trip (T-S1)", () => {
     ));
     assert.equal(appended.usage, undefined);
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     const reloaded = listed.find((m) => m.id === appended.id);
     assert.ok(reloaded);
     assert.equal(reloaded!.usage, undefined);
@@ -274,7 +275,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     assert.equal(byId.modelName, "claude-sonnet-4-5");
     assert.deepEqual(byId.usage, usage);
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     const reloaded = listed.find((m) => m.id === appended.id);
     assert.ok(reloaded);
     assert.equal(reloaded!.provider, "anthropic");

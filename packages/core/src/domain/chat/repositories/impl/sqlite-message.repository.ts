@@ -9,7 +9,10 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { nullableText } from "@/common/coerce.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError } from "@/errors/app-error.js";
+import type { Interrupt, Outcome } from "@/errors/outcome.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
 import { parseAttachmentsJson } from "../../model/message-attachment.schema.js";
 import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
@@ -171,10 +174,15 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     this.yieldFn = yieldFn;
   }
 
-  /** rows → ChatMessageData 列表转换：无 yieldFn 直通同步 map，有则分片让步。 */
-  private async mapRows(rows: Row[]): Promise<ChatMessageData[]> {
-    if (this.yieldFn == null) {
-      return rows.map(rowToMessage);
+  /** rows → ChatMessageData 列表转换：无让路/判停诉求时直通同步 map，有则分片判停 + 让步。 */
+  private async mapRows(rows: Row[], hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    // 入口判停：必然取消时不再做任何一次 JSON.parse。
+    const entryHit = hooks?.checkpoint?.();
+    if (entryHit != null) return entryHit;
+    // 分片条件：既有让路函数或新注入的同步判停任一存在。桌面/CLI 缺省无
+    // yieldFn，但注入了 hooks 时同样要按片判停，否则中断只能等在入口。
+    if (this.yieldFn == null && hooks?.checkpoint == null) {
+      return { kind: "completed", value: rows.map(rowToMessage) };
     }
     const messages: ChatMessageData[] = [];
     // 注意：分片步长是类静态常量，须以类名引用（this 上取不到 static
@@ -187,13 +195,18 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
         messages.push(rowToMessage(rows[i]!));
       }
       if (end < rows.length) {
-        await this.yieldFn();
+        // 分片边界（紧挨既有 yieldFn 之前）：先同步判停，命中即返回中断、
+        // 不返回半份结果。`hooks?.checkpoint?.()` 未注入时是 undefined，
+        // 判空必须用宽松的 `!= null`——`!== null` 会误判为命中并取 .reason 崩。
+        const hit = hooks?.checkpoint?.();
+        if (hit != null) return hit;
+        await this.yieldFn?.();
       }
     }
-    return messages;
+    return { kind: "completed", value: messages };
   }
 
-  async listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]> {
+  async listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // includeHidden=false 在 SQL 层就滤掉 hidden 行：置位产物不必捞回——
     // 大会话（数千条、hidden 占多数）的 UI 读口（token chip 的 prompt 组装
     // 只消费可见历史）因此不必把不可见行的正文字节取回来，也省掉逐行
@@ -201,32 +214,32 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     const hiddenFilter = options?.includeHidden === false ? " AND hidden = 0" : "";
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]> {
+  async listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq >= #{fromSeq} ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, fromSeq });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
   /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 fork 单点消费。 */
-  async listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessageData[]> {
+  async listBySessionUpToSeq(sessionId: string, maxSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
     // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
     // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq <= #{maxSeq} ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, maxSeq });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionTailOfRole(sessionId: string, role: string, limit: number): Promise<ChatMessageData[]> {
+  async listBySessionTailOfRole(sessionId: string, role: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
     // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND role = #{role} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, role, limit: clampedLimit });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
   /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 truncateAfter 空锚分支消费。 */
@@ -269,18 +282,18 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     return rows.map(rowToHeader);
   }
 
-  async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]> {
+  async listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, limit: clampedLimit });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
-  async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number): Promise<ChatMessageData[]> {
+  async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq}) ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
     const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit });
-    return this.mapRows(rows);
+    return this.mapRows(rows, hooks);
   }
 
   async nextSeq(sessionId: string): Promise<number> {
@@ -302,12 +315,15 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     return result.changes > 0;
   }
 
-  async batchInsert(messages: readonly ChatMessageData[]): Promise<void> {
+  async batchInsert(messages: readonly ChatMessageData[], hooks?: LongTaskHooks): Promise<Outcome<void>> {
     // 空数组直接返回，避免驱动对空 parametersList 的行为分歧，
     // 也让 fork/copy 在源会话无消息时不用特殊判断。
     if (messages.length === 0) {
-      return;
+      return { kind: "completed", value: undefined };
     }
+    // 入口判停：必然取消时不开启事务、不构造任何参数。
+    const entryHit = hooks?.checkpoint?.();
+    if (entryHit != null) return entryHit;
     // 参数按片构造、按片下发：峰值内存 O(片大小)。
     // this.conn 可能是根连接（测试直调）也可能是事务句柄（生产 fork/copy 在
     // 外层事务内调 batchInsert：session.service 的 copy、message.service 的
@@ -320,15 +336,35 @@ export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessag
     // 让步语义照旧：mobile 注入 createQuantumYield 时真正让出事件循环，
     // desktop/CLI/测试缺省注入时退化为一次 microtask 让步（与构造器注入的
     // mapRows 共用同一个 yieldFn，装配端只注入一处）。
+    //
+    // 中断语义（T-S13）：分片边界命中 checkpoint 时必须**在事务闭包内 throw**
+    // 才能让 better-sqlite3 回滚整个小事务（平台协议例外）——直接 return 会让
+    // 小事务 commit 已下发的分片，留下半批；外层 catch 再把这次 throw 转回
+    // `Outcome.cancelled` / `replaced`。外层事务路径（copy/fork）的回滚由外层
+    // 事务边界负责，本方法只交出中断结果。
     const chunkSize = SqliteMessageRepository.BATCH_PARAM_BUILD_CHUNK;
-    await runInTransactionOrConn(this.conn, async (c) => {
-      for (let start = 0; start < messages.length; start += chunkSize) {
-        const end = Math.min(start + chunkSize, messages.length);
-        const parameters = messages.slice(start, end).map(toMessageParams);
-        await c.batch(MESSAGE_INSERT_SQL, parameters);
-        await this.yieldFn?.();
-      }
-    });
+    let interrupt: Interrupt | null = null;
+    try {
+      await runInTransactionOrConn(this.conn, async (c) => {
+        for (let start = 0; start < messages.length; start += chunkSize) {
+          const end = Math.min(start + chunkSize, messages.length);
+          const parameters = messages.slice(start, end).map(toMessageParams);
+          await c.batch(MESSAGE_INSERT_SQL, parameters);
+          // 分片边界（紧挨既有 yieldFn 之前）：先同步判停，命中即抛出触发回滚。
+          const hit = hooks?.checkpoint?.();
+          if (hit != null) {
+            interrupt = hit;
+            throw createAbortError();
+          }
+          await this.yieldFn?.();
+        }
+      });
+      return { kind: "completed", value: undefined };
+    } catch (error) {
+      // 取消不是错误：AbortError 只是事务回滚的载体，转回 Outcome 中断分支。
+      if (interrupt != null) return interrupt;
+      throw error;
+    }
   }
 
   async deleteBySession(sessionId: string): Promise<void> {

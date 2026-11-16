@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -104,7 +105,7 @@ describe("Chat services", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const m = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
     unwrap(await ctx.messages.delete(m.id));
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 0);
   });
 
@@ -117,7 +118,7 @@ describe("Chat services", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tool_results")));
 
     unwrap(await ctx.messages.truncateAfter(session.id, u1.id));
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 1, "仅保留 anchor");
     assert.equal(list[0]!.id, u1.id);
   });
@@ -130,7 +131,7 @@ describe("Chat services", () => {
     unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("b")));
 
     unwrap(await ctx.messages.truncateAfter(session.id, null));
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 0, "session 被清空");
   });
 
@@ -156,7 +157,7 @@ describe("Chat services", () => {
       false,
       "被删 assistant 的 checkpoint 指针应同步清掉",
     );
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 1);
   });
 
@@ -180,7 +181,7 @@ describe("Chat services", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("hey")));
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 2);
     assert.equal(list[0]!.seq, 1);
     assert.equal(list[1]!.seq, 2);
@@ -193,24 +194,24 @@ describe("Chat services", () => {
     for (let i = 1; i <= 8; i += 1) {
       unwrap(await ctx.messages.append(session.id, "user", textBlocks(`m${i}`)));
     }
-    const all = await ctx.messages.listBySession(session.id);
-    const tail = await ctx.messages.listBySessionTail(session.id, { limit: 3 });
+    const all = outcomeValue(await ctx.messages.listBySession(session.id));
+    const tail = outcomeValue(await ctx.messages.listBySessionTail(session.id, { limit: 3 }));
     assert.deepEqual(
       tail.map(m => firstTextBlock(m.content)),
       ["m6", "m7", "m8"],
     );
-    const older = await ctx.messages.listBySessionPage(session.id, {
+    const older = outcomeValue(await ctx.messages.listBySessionPage(session.id, {
       limit: 3,
       beforeSeq: tail[0]!.seq,
-    });
+    }));
     assert.deepEqual(
       older.map(m => firstTextBlock(m.content)),
       ["m3", "m4", "m5"],
     );
-    const oldest = await ctx.messages.listBySessionPage(session.id, {
+    const oldest = outcomeValue(await ctx.messages.listBySessionPage(session.id, {
       limit: 3,
       beforeSeq: older[0]!.seq,
-    });
+    }));
     const rebuilt = [...oldest, ...older, ...tail].map(m => m.id);
     assert.deepEqual(rebuilt, all.map(m => m.id));
   });
@@ -227,7 +228,7 @@ describe("Chat services", () => {
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
     assert.equal(forked.title, "会话_ckpt_1");
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 2);
     assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
     assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
@@ -235,7 +236,7 @@ describe("Chat services", () => {
       unwrap(await ctx.sessionVfs(project.id, forked.id).read("/note.md")).content,
       "edited",
     );
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
+    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 3);
   });
 
   it("message fork titles session as sourceName_ckpt_n", async () => {
@@ -299,11 +300,11 @@ describe("Chat services", () => {
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
     unwrap(await ctx.messages.append(forked.id, "user", textBlocks("fork-only")));
 
-    const sourceMsgs = await ctx.messages.listBySession(session.id);
+    const sourceMsgs = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(sourceMsgs.length, 3);
     assert.equal(firstTextBlock(sourceMsgs[2]!.content), "3");
 
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 3);
     assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
     assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
@@ -323,11 +324,11 @@ describe("Chat services", () => {
     const copy = unwrap(await ctx.sessions.copy(session.id));
     const copyVfs = ctx.sessionVfs(project.id, copy.id);
     assert.equal(unwrap(await copyVfs.read("/note.md")).content, "body");
-    const copyMsgs = await ctx.messages.listBySession(copy.id);
+    const copyMsgs = outcomeValue(await ctx.messages.listBySession(copy.id));
     assert.equal(copyMsgs.length, 2);
     assert.equal(firstTextBlock(copyMsgs[0]!.content), "hi");
     assert.equal(firstTextBlock(copyMsgs[1]!.content), "hey");
-    assert.notEqual(copyMsgs[0]!.id, (await ctx.messages.listBySession(session.id))[0]!.id);
+    assert.notEqual(copyMsgs[0]!.id, (outcomeValue(await ctx.messages.listBySession(session.id)))[0]!.id);
 
     await svfs.write("/note.md", "mutated", { versionCheck: false });
     assert.equal(unwrap(await copyVfs.read("/note.md")).content, "body");

@@ -12,6 +12,7 @@
  */
 
 import { unwrap } from "../helpers/result-unwrap.js";
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
@@ -57,7 +58,7 @@ describe("技能存储重定位（T-SR1）", () => {
     );
 
     // 上层行为不变：清单可见且有效
-    const list = unwrap(await skills.listSkills("global"));
+    const list = outcomeValue(await skills.listSkills("global"));
     const item = list.find((s) => s.name === name);
     assert.ok(item != null && item.valid);
     const read = unwrap(await skills.readSkillFile("global", name));

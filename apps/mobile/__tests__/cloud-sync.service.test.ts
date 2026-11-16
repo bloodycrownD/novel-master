@@ -1,4 +1,5 @@
 import {AppError, Result} from '@novel-master/core';
+import {ABORT_KEY, createAbortError, createAbortRegistry, isAbortLikeError} from '@novel-master/core/abort';
 import {
   pullCloudSync,
   pushCloudSync,
@@ -116,6 +117,8 @@ const runtime = {
     delete: jest.fn(),
   },
   conn: {},
+  // 泛化取消注册表（signal-abort-scope Step 11）：云同步任务级 scope 登记处。
+  abortRegistry: createAbortRegistry(),
 } as never;
 
 const storage = {
@@ -236,7 +239,13 @@ describe('pullCloudSync', () => {
     const result = await pullCloudSync(runtime, rebootstrap);
 
     expect(result).toEqual({ok: true, value: {rev: 3, alreadyUpToDate: false}});
-    expect(mockCoordinatorPull).toHaveBeenCalledWith({lastSyncedRev: 1});
+    // checkpoint 由 service 注入，coordinator 在真实阶段边界调它（T-S16）。
+    expect(mockCoordinatorPull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastSyncedRev: 1,
+        checkpoint: expect.any(Function),
+      }),
+    );
     expect(rebootstrap).toHaveBeenCalledTimes(1);
     expect(order).toEqual(['rebootstrap', 'patch']);
     // 记账必须落在新 runtime 上。
@@ -382,10 +391,13 @@ describe('pushCloudSync', () => {
     const result = await pushCloudSync(runtime, undefined);
 
     expect(result).toEqual({ok: true, value: {rev: 2}});
-    expect(mockCoordinatorPush).toHaveBeenCalledWith({
-      lastSyncedRev: 1,
-      forceOverwriteRemote: undefined,
-    });
+    expect(mockCoordinatorPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lastSyncedRev: 1,
+        forceOverwriteRemote: undefined,
+        checkpoint: expect.any(Function),
+      }),
+    );
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
       runtime,
       expect.objectContaining({
@@ -410,5 +422,95 @@ describe('pushCloudSync', () => {
       runtime,
       expect.objectContaining({lastPushResult: 'error'}),
     );
+  });
+});
+
+/**
+ * T-S16：移动云同步任务级取消。
+ *
+ * 取消经 `runtime.abortRegistry.abort(ABORT_KEY.cloudSync('local'))` 派发；
+ * 协调器在下一个真实阶段边界抛 AbortError，service 出口**原样上抛**——
+ * 账本记 cancelled、进度走取消终态、临时文件仍由 finally 清理。
+ */
+describe('云同步任务级取消（T-S16）', () => {
+  const cancelKey = ABORT_KEY.cloudSync('local');
+
+  async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+    return promise.then(
+      () => null,
+      (error: unknown) => error,
+    );
+  }
+
+  it('pull：异步段 abort 后 promise 以 AbortError 原样 reject、账本记 cancelled、进度进终态', async () => {
+    const onProgress = jest.fn();
+    mockCoordinatorPull.mockImplementation(async (options: {checkpoint?: () => unknown}) => {
+      // 协调器在真实阶段边界命中：先由用户取消，再问 checkpoint。
+      runtime.abortRegistry.abort(cancelKey);
+      expect(options.checkpoint?.()).toEqual({kind: 'cancelled', reason: 'user-stop'});
+      throw createAbortError();
+    });
+
+    const error = await captureRejection(pullCloudSync(runtime, jest.fn(), {onProgress}));
+
+    // 原样上抛：不得被 mapCloudSyncSdkError 包成 CLOUD_SYNC_NETWORK。
+    expect(isAbortLikeError(error)).toBe(true);
+    expect(error).not.toMatchObject({key: 'CLOUD_SYNC_NETWORK'});
+    expect(mockPatchLocalStatus).toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPullResult: 'cancelled'}),
+    );
+    expect(mockPatchLocalStatus).not.toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPullResult: 'error'}),
+    );
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({op: 'pull', event: 'pull_cancelled', progress: 1}),
+    );
+    // finally 反注册：任务结束后 key 不残留。
+    expect(runtime.abortRegistry.has(cancelKey)).toBe(false);
+  });
+
+  it('push：异步段 abort 后同上，且临时导出文件照常清理', async () => {
+    const onProgress = jest.fn();
+    mockCoordinatorPush.mockImplementation(async (options: {checkpoint?: () => unknown}) => {
+      runtime.abortRegistry.abort(cancelKey, 'timeout');
+      expect(options.checkpoint?.()).toEqual({kind: 'cancelled', reason: 'timeout'});
+      throw createAbortError();
+    });
+
+    const error = await captureRejection(pushCloudSync(runtime, {onProgress}));
+
+    expect(isAbortLikeError(error)).toBe(true);
+    expect(error).not.toMatchObject({key: 'CLOUD_SYNC_NETWORK'});
+    expect(mockPatchLocalStatus).toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPushResult: 'cancelled'}),
+    );
+    expect(mockPatchLocalStatus).not.toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPushResult: 'error'}),
+    );
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({op: 'push', event: 'push_cancelled', progress: 1}),
+    );
+    expect(mockUnlink.mock.calls.map(call => call[0])).toEqual([
+      expect.stringContaining('/cache/cloud-sync-export-'),
+    ]);
+    expect(runtime.abortRegistry.has(cancelKey)).toBe(false);
+  });
+
+  it('coordinator 的业务失败（Result.err）仍沿 Result 上行，不误判成取消', async () => {
+    const onProgress = jest.fn();
+    mockCoordinatorPush.mockResolvedValue(Result.err(new AppError('CLOUD_SYNC_LOCK_HELD_BY_OTHER', {detail: '锁被占用'})));
+
+    const result = await pushCloudSync(runtime, {onProgress});
+
+    expect(result.ok).toBe(false);
+    expect(mockPatchLocalStatus).toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPushResult: 'error'}),
+    );
+    expect(onProgress).not.toHaveBeenCalledWith(expect.objectContaining({event: 'push_cancelled'}));
   });
 });

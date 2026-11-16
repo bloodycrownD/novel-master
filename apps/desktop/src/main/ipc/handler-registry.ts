@@ -5,7 +5,6 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { IPC_CHANNELS } from "../../../shared/ipc-types.js";
 import { handleAppUiGet, handleAppUiSet } from "./handlers/app-ui.js";
 import {
-  handleAgentAbort,
   handleAgentListPicker,
   handleAgentResolveCurrent,
   handleAgentRun,
@@ -14,6 +13,7 @@ import {
   handleModelListPicker,
   handleModelSetCurrent,
 } from "./handlers/agent.js";
+import { handleAgentAbortAlias, handleRunAbort } from "./handlers/run-abort.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import { handleBootstrapRebootstrap, handleBootstrapStatus } from "./handlers/bootstrap.js";
 import { handleCompactionManual } from "./handlers/compaction.js";
@@ -247,7 +247,10 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.USAGE_STATS_QUERY, handleUsageStatsQuery);
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
-  bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbort);
+  // 取消入口：nm:agent/abort 是转发别名（转 ABORT_KEY.agent），nm:run/abort 按
+  // { kind, id } 分发到 6 类长任务的 key 命名空间。
+  bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbortAlias);
+  bindReq(IPC_CHANNELS.NM_RUN_ABORT, handleRunAbort);
   bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, handleAgentRunIsActive);
   bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
     active: isDesktopAgentActive(),
@@ -323,11 +326,13 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.COMPACTION_CONDITIONS_GET, handleCompactionConditionsGet);
   bindReq(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, handleCompactionConditionsSet);
 
-  bindNoArg(IPC_CHANNELS.BACKUP_EXPORT, handleBackupExport);
-  bindNoArg(IPC_CHANNELS.BACKUP_IMPORT, handleBackupImport);
+  // 可选请求体 `{ runId? }`：renderer 只为会展示取消按钮的任务生成 runId，
+  // 缺省时 handler 只建 scope + deadline、不注册进 abort registry（既有调用零改动）。
+  bindReq(IPC_CHANNELS.BACKUP_EXPORT, handleBackupExport);
+  bindReq(IPC_CHANNELS.BACKUP_IMPORT, handleBackupImport);
 
   bindNoArg(IPC_CHANNELS.DB_STATS, handleDbStats);
-  bindNoArg(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
+  bindReq(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
 
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, handleCloudSyncGetConfig);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, handleCloudSyncSetConfig);

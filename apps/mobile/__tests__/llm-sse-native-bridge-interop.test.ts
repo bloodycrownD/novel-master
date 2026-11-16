@@ -16,14 +16,17 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
 jest.mock('react-native', () => {
-  // 原型上放三个方法（模拟 TurboModule HostObject 原型查找）；Proxy 的 get
+  // 原型上放四个方法（模拟 TurboModule HostObject 原型查找）；Proxy 的 get
   // trap 把访问过的属性写回本体缓存——精确复刻 RN jsRepresentation 的
   // 「首次属性访问实体化为 own property」语义。Object.keys() 初始为 []，
   // 与真机 BRIDGEKEYS 实测一致（stop-button P0 取证构建）。
+  // requestAbort 与 sseAbort 同理：可用性探测失败会让流式 transport 整体被
+  // 判不可用（回落 XHR），非流式取消则退化为假取消。
   const proto = {
     sseConnect: jest.fn(),
     sseAbort: jest.fn(),
     request: jest.fn(() => Promise.reject(new Error('unused'))),
+    requestAbort: jest.fn(),
   };
   const lazyModule = new Proxy({} as Record<string, unknown>, {
     get(target, prop) {
@@ -59,6 +62,7 @@ describe('stop-button P0 防回归：lazy interop bridge 方法完整性', () =>
     const nm = NativeModules.LlmSseNative as unknown as Record<string, unknown>;
     expect(Object.keys(nm)).toEqual([]);
     expect(typeof nm.sseAbort).toBe('function');
+    expect(typeof nm.requestAbort).toBe('function');
   });
 
   it('挂起流中 abort → 原型上的 sseAbort 被调用 + postSse 形态 reject', async () => {

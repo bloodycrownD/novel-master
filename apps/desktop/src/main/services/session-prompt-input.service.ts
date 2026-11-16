@@ -80,7 +80,13 @@ export async function buildSessionPromptInput(runtime: DesktopNovelMasterRuntime
   // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
   // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
   // 在大会话上是秒级卡顿（与 mobile 同款修法）。
-  const visibleMessages = await runtime.messages.listBySession(scope.sessionId, { includeHidden: false });
+  // 分片判停复用 build 的弃权判据（shouldBail）：run 起步后读口在第一个分片
+  // 边界就死，不必等整份可见历史 parse 完；中断转抛 build 的统一哨兵。
+  const readOptions = shouldBail == null ? undefined : { checkpoint: (): Interrupt | null => (shouldBail() === true ? { kind: "replaced" } : null) };
+  const visibleRead = await runtime.messages.listBySession(scope.sessionId, { includeHidden: false }, readOptions);
+  if (visibleRead.kind === "failed") return Result.err(visibleRead.error);
+  if (visibleRead.kind !== "completed") throw new ChatPromptBuildBailedError();
+  const visibleMessages = visibleRead.value;
   bail();
   const wtScope = {
     kind: "session" as const,
@@ -96,7 +102,7 @@ export async function buildSessionPromptInput(runtime: DesktopNovelMasterRuntime
   // 的判定不变。fingerprint 透传给 ctx——token 估算读数的记忆缓存靠它免掉
   // 重复序列化/计数。
   const workplaceArgs = { sessionKkv: runtime.sessionKkv, workplace: wt, vfs, layout: resolved.prompts };
-  const assembleOptions = { shouldStop: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
+  const assembleOptions = { checkpoint: (): Interrupt | null => (shouldBail?.() === true ? { kind: "replaced" } : null) };
   const assembled = await assembleWorkplaceDisplay(wtScope, workplaceArgs, assembleOptions);
   if (assembled.kind === "failed") {
     // 组装内的已知失败（如路径解析）沿 Result 返回（错误通道迁移四期），

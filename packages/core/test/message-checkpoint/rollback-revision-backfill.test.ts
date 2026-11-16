@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
@@ -111,7 +112,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     assert.equal(unwrap(await svfs.read("/a.md")).content, "tail-a");
     assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 4);
   });
 
@@ -130,7 +131,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     assert.equal(unwrap(await svfs.read("/a.md")).content, "anchor-a");
     assert.equal(unwrap(await svfs.read("/b.md")).content, "tail-b");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -192,7 +193,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/gone.md")).content, "anchor-gone");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -277,7 +278,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       const r = await svfs.read("/gone.md");
       assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "降级路径读取应走 Err 且为 VFS_NOT_FOUND");
     }
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -297,7 +298,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -314,7 +315,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);

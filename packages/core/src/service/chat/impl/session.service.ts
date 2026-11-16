@@ -15,6 +15,8 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
@@ -315,13 +317,17 @@ export class DefaultSessionService implements SessionService {
    * ⚠️ 引入的 TOCTOU 窗口后果是「复制到一个稍旧快照」——copy 的语义本就是快照，
    * 可接受；这里刻意不引入新锁（引入就退化成今天的全事务形态）。
    */
-  async copy(id: string): Promise<Result<ChatSession, AppError>> {
+  async copy(id: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
     const source = await this.get(id);
     if (!source.ok) return source;
     const src = source.value;
     // 事务外读：repo 绑 `this.deps.conn`（不是 tx）——在事务回调里用外层 conn
     // 会撞驱动层 AsyncMutex 不可重入，那是死锁不是报错。
-    const messages = await reposFor(this.deps.conn).messages.listBySession(src.id);
+    const messagesRead = await reposFor(this.deps.conn).messages.listBySession(src.id, undefined, hooks);
+    if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
+    // 中断不是错误：本方法出口是边界，转抛 AbortError（未注入 hooks 时不可达）。
+    if (messagesRead.kind !== "completed") throw createAbortError();
+    const messages = messagesRead.value;
     const now = Date.now();
     const copy: ChatSession = {
       id: randomUUID(),
@@ -353,8 +359,15 @@ export class DefaultSessionService implements SessionService {
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
-      await copyVfsTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", { contentStore: new SqliteVfsContentStore(tx) });
-      await r.messages.batchInsert(copyMessages);
+      // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
+      // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 copy。
+      const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
+      const vfsCopied = await copyVfsTree(r.vfs, { scopeKey: `session:${src.projectId}:${src.id}` }, "/", { scopeKey: `session:${src.projectId}:${copy.id}` }, "/", copyOptions);
+      if (vfsCopied.kind === "failed") throw vfsCopied.error;
+      if (vfsCopied.kind !== "completed") throw createAbortError();
+      const inserted = await r.messages.batchInsert(copyMessages, hooks);
+      if (inserted.kind === "failed") throw inserted.error;
+      if (inserted.kind !== "completed") throw createAbortError();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 copy，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
       await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: src.projectId, sourceSessionId: src.id, targetSessionId: copy.id, newMessages }));

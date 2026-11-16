@@ -3,6 +3,7 @@
  * T-SR6：Agent prepare 与 RealPrompt `buildSessionPromptInput` 同源路径用户段 wrap 一致。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -607,7 +608,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
     const agentUserWrap = messageBodyTextFromBlocks(agentPrepared[0]!.content.blocks);
 
     // RealPrompt / buildSessionPromptInput 同源：重新 list → prepare → layout
-    const listed = (await ctx.messages.listBySession(session.id)).filter(
+    const listed = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => !m.hidden,
     );
     const realPromptPrepared = unwrap(await promptAssembler.prepare(

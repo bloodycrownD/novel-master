@@ -12,6 +12,7 @@
  * @module test/message-checkpoint/backfill-transaction-scope
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -322,7 +323,7 @@ describe("CS-05b backfill 事务边界", () => {
     // 两条会话：gap 都是最后 3 条，但消息总数分别是 4 与 200。
     const small = await seedSession(ctx, conn, "b3m4", 4);
     const smallAnchor = (
-      await ctx.messages.listBySession(small.sessionId)
+      outcomeValue(await ctx.messages.listBySession(small.sessionId))
     )[0]!;
     unwrap(await checkpoint.capture(
       small.sessionId,
@@ -331,7 +332,7 @@ describe("CS-05b backfill 事务边界", () => {
     ));
 
     const big = await seedSession(ctx, conn, "b3m200", 200);
-    const bigAnchor = (await ctx.messages.listBySession(big.sessionId))[196]!;
+    const bigAnchor = (outcomeValue(await ctx.messages.listBySession(big.sessionId)))[196]!;
     unwrap(await checkpoint.capture(big.sessionId, big.projectId, bigAnchor.id));
 
     probe.reset();

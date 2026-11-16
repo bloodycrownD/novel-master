@@ -4,16 +4,27 @@
  * @module domain/chat/repositories/message.port
  */
 
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import type { Outcome } from "@/errors/outcome.js";
 import type { ChatMessageData, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 
-/** Persistence for `chat_message` rows. */
+/**
+ * Persistence for `chat_message` rows.
+ *
+ * 大结果集读（`mapRows` 分片解析的六个读口）与批量写 `batchInsert` 接受方法级
+ * 可选 `hooks`，**不塞构造器**：注入方按调用点决定是否可中断，repository 实例
+ * 本身保持无状态（同连接可能同时服务可中断与不可中断的调用方）。
+ *
+ * 中断语义：分片边界先 `hooks.checkpoint()` 同步判停，命中返回 `Outcome` 的
+ * `cancelled` / `replaced` 分支、**不返回半份结果**；`failed` 只装业务失败。
+ */
 export interface MessageRepository {
   /**
    * 按 seq 升序列出会话消息。`includeHidden: false` 在 SQL 层滤掉 hidden
    * 行（默认含 hidden——回滚锚定等既有口径依赖「含隐藏全量」）。
    */
-  listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]>;
+  listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
   /**
    * 消息头投影（无正文，不取 content 列）：压缩 hide / 置位锚定等只需要
@@ -75,7 +86,7 @@ export interface MessageRepository {
    *          ——fork 明确「Preserve hidden state」，滤掉 hidden 行会让 fork
    *          出来的会话**静默丢消息**。
    */
-  listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessageData[]>;
+  listBySessionUpToSeq(sessionId: string, maxSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
   /**
    * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
@@ -90,7 +101,7 @@ export interface MessageRepository {
    *          多半是 tool_result，直接落空。`role` 必须在 SQL 子查询里过滤、
    *          `limit` 只数该 role，子会话 41 条时也不再整条倒扫。
    */
-  listBySessionTailOfRole(sessionId: string, role: string, limit: number): Promise<ChatMessageData[]>;
+  listBySessionTailOfRole(sessionId: string, role: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
   /**
    * 列出会话内全部消息 id（清空会话场景的删除链素材），不投影任何其他列。
@@ -116,11 +127,11 @@ export interface MessageRepository {
    * 对消息列表的全部消费都落在「触发消息自身 + seq 更大方向」（锚点解析只做
    * tool_result 前向配对、tail 过滤只取锚点之后），锚点之前的消息不拉取。
    */
-  listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]>;
+  listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]>;
+  listBySessionTail(sessionId: string, limit: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
-  listBySessionPage(sessionId: string, limit: number, beforeSeq?: number): Promise<ChatMessageData[]>;
+  listBySessionPage(sessionId: string, limit: number, beforeSeq?: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>>;
 
   findById(id: string): Promise<ChatMessageData | null>;
 
@@ -131,8 +142,13 @@ export interface MessageRepository {
   /**
    * 批量写入消息：同一事务内按 200 条分片多次 `conn.batch`；空数组是 no-op
    * （不发出 SQL），方便调用方在不判断长度时直接传入。
+   *
+   * `hooks.checkpoint` 在分片边界（紧挨既有让路点之前）同步判停：命中时**在
+   * 事务闭包内 throw `createAbortError()`** 让 better-sqlite3 整体回滚（平台
+   * 协议例外），外层 catch 转回 `Outcome.cancelled` / `replaced`——目标表无本批
+   * 残留；外层事务路径（copy/fork）的回滚由外层事务边界负责。
    */
-  batchInsert(messages: readonly ChatMessageData[]): Promise<void>;
+  batchInsert(messages: readonly ChatMessageData[], hooks?: LongTaskHooks): Promise<Outcome<void>>;
 
   /**
    * 替换存储的消息正文。行缺失时返回 false。

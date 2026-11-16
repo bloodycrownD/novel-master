@@ -22,7 +22,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
-    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders } });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { ...req.extraHeaders }, signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { models?: Array<{ name?: string; displayName?: string }> };
     const models = (data.models ?? [])
@@ -45,15 +45,15 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
       try {
         const headers = { "Content-Type": "application/json", ...req.extraHeaders };
-        const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.signal };
-        await postSse(url, init, (chunk) => feedGeminiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.signal });
+        const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal };
+        await postSse(url, init, (chunk) => feedGeminiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
-        if (!isRequestAborted(error, req.signal)) {
+        if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
         }
       }
 
-      const aborted = req.signal?.aborted === true;
+      const aborted = req.scope?.signal.aborted === true;
       const finishResult = aborted ? finishGeminiSsePartial(state, req.onStream) : finishGeminiSse(state, req.onStream);
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = messageBodyTextFromBlocks(blocks);
@@ -71,7 +71,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
     const url = this.modelUrl(req, "generateContent");
     const headers = { "Content-Type": "application/json", ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.signal });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { candidates?: Array<{ content?: { parts?: unknown[] } }> };

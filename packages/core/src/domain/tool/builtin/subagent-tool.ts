@@ -30,6 +30,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
@@ -206,7 +207,11 @@ ${callableList}
         return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 正在运行中，不能同时续用。${resumeGuide()}` }));
       }
       // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
-      const existing = await subagent.messages.listBySession(requestedSessionId);
+      const existingRead = await subagent.messages.listBySession(requestedSessionId);
+      if (existingRead.kind === "failed") return Result.err(existingRead.error);
+      // 未注入 hooks，中断分支不可达；命中按取消边界语义上抛（tool-runner 统一收口）。
+      if (existingRead.kind !== "completed") throw createAbortError();
+      const existing = existingRead.value;
       if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
         return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}` }));
       }
@@ -245,7 +250,10 @@ ${callableList}
     // 已知差异：子代理连续 8 个 step 只发 tool_use 且更早处有正文时，改后取不到
     // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
     // 的 T-SUB-TAIL3 钉成期望。
-    const childMessages = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
+    const childMessagesRead = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
+    if (childMessagesRead.kind === "failed") return Result.err(childMessagesRead.error);
+    if (childMessagesRead.kind !== "completed") throw createAbortError();
+    const childMessages = childMessagesRead.value;
     let lastText: string | undefined;
     for (let i = childMessages.length - 1; i >= 0; i--) {
       const msg = childMessages[i]!;

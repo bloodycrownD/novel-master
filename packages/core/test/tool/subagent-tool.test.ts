@@ -71,13 +71,16 @@ function makeMockSubagent(args: {
     delete: async () => undefined,
   };
   const messages: MessageService = {
-    listBySession: async (sid) => childMsgsBySession.get(sid) ?? [],
+    // 错误通道迁移八期：大结果集读口走 Outcome，fake 与真实 service 同语义。
+    listBySession: async (sid) => ({ kind: "completed", value: childMsgsBySession.get(sid) ?? [] }),
     // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条，
     // 口径与 SqliteMessageRepository.listBySessionTailOfRole 一致。
-    listBySessionTailOfRole: async (sid, options) =>
-      (childMsgsBySession.get(sid) ?? [])
+    listBySessionTailOfRole: async (sid, options) => ({
+      kind: "completed",
+      value: (childMsgsBySession.get(sid) ?? [])
         .filter((m) => m.role === options.role)
         .slice(-Math.max(1, Math.floor(options.limit))),
+    }),
   } as unknown as MessageService;
   const sessions: SessionService = {
     createSubSession: async (_parent, _project, title) => {

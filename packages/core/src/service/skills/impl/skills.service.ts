@@ -11,6 +11,8 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -18,6 +20,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { Outcome } from "@/errors/outcome.js";
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
@@ -161,20 +164,19 @@ export class SkillsService implements SkillService {
     return new AppError("SKILL_NOT_FOUND", { descriptor: { key: "error.skill.not_found_in_domain", params: { name, domain, path, hint } }, skillName: name, path, domain });
   }
 
-  async listSkills(scope: SkillListScope): Promise<Result<SkillListItem[], AppError>> {
+  async listSkills(scope: SkillListScope, hooks?: LongTaskHooks): Promise<Outcome<SkillListItem[]>> {
     const vfs = scope === "global" ? this.deps.globalMetaVfs() : this.deps.projectMetaVfs(scope.projectId);
     const domain: SkillDomain = scope === "global" ? "global" : "project";
     const listed = await vfs.list(SKILLS_ROOT, { recursive: true });
     let entries: VfsListEntry[];
     if (listed.ok) {
       entries = listed.value;
-    } else {
+    } else if (isAppError(listed.error, "VFS_NOT_FOUND")) {
       // 技能根目录尚不存在 = 无技能（write 首个 SKILL.md 时才会建目录行）
-      if (isAppError(listed.error, "VFS_NOT_FOUND")) {
-        return Result.ok([]);
-      }
+      return { kind: "completed", value: [] };
+    } else {
       // 其余清单读取失败沿返回值接力（五期门⑦），由调用方收口。
-      return Result.err(listed.error);
+      return { kind: "failed", error: listed.error };
     }
 
     const rootPrefix = `${SKILLS_ROOT}/`;
@@ -200,6 +202,9 @@ export class SkillsService implements SkillService {
 
     const items: SkillListItem[] = [];
     for (const [name, files] of filesBySkill) {
+      // 每个技能一条同步检查点：命中即收成中断，不返回半份清单。
+      const hit = hooks?.checkpoint?.();
+      if (hit != null) return hit;
       // 读取 SKILL.md 解析 front matter，拼清单条目（读不到按无效处理）。
       let source: string | null = null;
       if (files.includes(SKILL_ENTRY_FILE)) {
@@ -230,13 +235,15 @@ export class SkillsService implements SkillService {
       });
     }
     items.sort((a, b) => a.name.localeCompare(b.name));
-    return Result.ok(items);
+    return { kind: "completed", value: items };
   }
 
   async effectiveSkills(projectId: string): Promise<Result<EffectiveSkill[], AppError>> {
     const [global, project, disabledNames] = await Promise.all([this.listSkills("global"), this.listSkills({ projectId }), this.disabledRules.listDisabledNames(`project:${projectId}`)]);
-    if (!global.ok) return Result.err(global.error);
-    if (!project.ok) return Result.err(project.error);
+    if (global.kind === "failed") return Result.err(global.error);
+    if (project.kind === "failed") return Result.err(project.error);
+    // 本方法不注入 hooks，listSkills 不会产生中断；命中说明调用链被改动，按取消边界语义上抛。
+    if (global.kind !== "completed" || project.kind !== "completed") throw createAbortError();
     return Result.ok(computeEffectiveSkills({ global: global.value, project: project.value, disabledNames }));
   }
 

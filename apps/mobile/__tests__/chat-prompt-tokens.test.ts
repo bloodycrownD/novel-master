@@ -164,7 +164,8 @@ function stubRuntime(overrides?: {
       // 错误通道迁移后走 Result 通道（生产侧 `!ok` 即 throw）。
       getSessionAgentConfig: jest.fn().mockResolvedValue({ok: true, value: {}}),
     },
-    messages: {listBySession: jest.fn(async () => [])},
+    // 大结果集读口已换 Outcome（signal-abort-scope 长循环 hooks）。
+    messages: {listBySession: jest.fn(async () => ({kind: 'completed' as const, value: []}))},
     // 读口会把它透传给 core 的 resolvePromptTokensWithBackfill（跨重启取 API 值）
     sessionKkv: {
       get: jest.fn().mockResolvedValue(null),
@@ -350,13 +351,16 @@ describe('chat-prompt-tokens.service', () => {
       ok: true,
       value: '',
     });
-    (runtime.messages.listBySession as jest.Mock).mockResolvedValue([
-      {
-        role: 'user',
-        content: {blocks: [{type: 'text', text: 'hello'}]},
-        hidden: false,
-      },
-    ]);
+    (runtime.messages.listBySession as jest.Mock).mockResolvedValue({
+      kind: 'completed',
+      value: [
+        {
+          role: 'user',
+          content: {blocks: [{type: 'text', text: 'hello'}]},
+          hidden: false,
+        },
+      ],
+    });
 
     const label = await loadResilientOrThrow(runtime, {
       sessionId: 's1',
@@ -969,13 +973,16 @@ describe('chat-prompt-tokens.service', () => {
     mockResolvePromptTokensWithBackfill.mockResolvedValue({kind: 'replaced'});
 
     const runtime = stubRuntime({contextWindow: 128_000});
-    (runtime.messages.listBySession as jest.Mock).mockResolvedValue([
-      {
-        role: 'user',
-        content: {blocks: [{type: 'text', text: 'hello'}]},
-        hidden: false,
-      },
-    ]);
+    (runtime.messages.listBySession as jest.Mock).mockResolvedValue({
+      kind: 'completed',
+      value: [
+        {
+          role: 'user',
+          content: {blocks: [{type: 'text', text: 'hello'}]},
+          hidden: false,
+        },
+      ],
+    });
 
     const upgrades: string[] = [];
     const label = await loadResilientOrThrow(

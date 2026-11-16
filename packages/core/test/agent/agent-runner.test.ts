@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { Result } from "../../src/errors/either.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
@@ -11,6 +12,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
@@ -242,7 +244,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -338,7 +340,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -403,7 +405,7 @@ describe("AgentRunner", () => {
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -454,7 +456,7 @@ describe("AgentRunner", () => {
       maxSteps: 6,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -508,7 +510,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
 
     assert.equal(result.stopReason, "cancelled");
@@ -973,7 +975,7 @@ describe("AgentRunner", () => {
       workspaceModelId: RUN_MODEL_ID,
     }));
 
-    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+    const assistantMsgs = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => m.role === "assistant",
     );
     assert.equal(assistantMsgs.length, 2);
@@ -1048,7 +1050,7 @@ describe("AgentRunner", () => {
       workspaceModelId: RUN_MODEL_ID,
     }));
 
-    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+    const assistantMsgs = (outcomeValue(await ctx.messages.listBySession(session.id))).filter(
       (m) => m.role === "assistant",
     );
     const firstAssistant = assistantMsgs[0]!;
@@ -1112,7 +1114,7 @@ describe("AgentRunner", () => {
       workspaceModelId: RUN_MODEL_ID,
     }));
 
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     const toolResultMsg = messages.find(
       (m) =>
         m.role === "user" &&
@@ -1135,7 +1137,7 @@ describe("AgentRunner", () => {
   /** 从会话消息中提取首个 tool_result block。 */
   async function firstToolResultBlock(sessionId: string) {
     const ctx = getNovelMasterTestContext();
-    const messages = await ctx.messages.listBySession(sessionId);
+    const messages = outcomeValue(await ctx.messages.listBySession(sessionId));
     const toolResultMsg = messages.find(
       (m) =>
         m.role === "user" &&

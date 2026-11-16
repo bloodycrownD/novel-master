@@ -13,6 +13,14 @@ const fakeRuntime = {
     register: () => {},
     unregister: () => {},
   },
+  // Agent 门面（spec §二）：handler 判活 / abort 走 `agentAbortRegistry`。
+  agentAbortRegistry: {
+    has: () => false,
+    abort: () => {},
+    register: () => {},
+    tryRegister: () => true,
+    unregister: () => {},
+  },
 };
 
 export async function getDesktopRuntime() {

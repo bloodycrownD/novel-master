@@ -19,8 +19,9 @@ import type {
   SkillsUpdateInfoRequest,
   SkillsWriteRequest,
 } from "../../../../shared/ipc-types.js";
-import { Result } from "@novel-master/core/errors";
-import type { SkillListScope, SkillLocation } from "@novel-master/core/skills";
+import { Result, matchOutcome, type AppError } from "@novel-master/core/errors";
+import { createAbortError } from "@novel-master/core/abort";
+import type { SkillListItem, SkillListScope, SkillLocation } from "@novel-master/core/skills";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { toIpcResult } from "../ipc-result.js";
@@ -40,7 +41,15 @@ export async function handleSkillsList(req: SkillsListRequest): Promise<IpcResul
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
     const scope: SkillListScope = req.domain === "global" ? "global" : { projectId: req.projectId ?? "" };
-    const listed = await rt.skills().listSkills(scope);
+    // listSkills 走 Outcome：cancelled/replaced 在 boundary 转 AbortError，failed 归 Result.err。
+    // 显式标注 R（与 core skill-tool 同款）：否则轮询式推断会把 completed 分支的
+    // `Result<T, never>` 当成唯一候选，failed 分支被误判为不可赋值。
+    const listed = matchOutcome<SkillListItem[], Result<SkillListItem[], AppError>>(await rt.skills().listSkills(scope), {
+      completed: (items) => Result.ok(items),
+      cancelled: () => { throw createAbortError(); },
+      replaced: () => { throw createAbortError(); },
+      failed: (error) => Result.err(error),
+    });
     return listed.map((items) => items.map((item) => ({
       name: item.name,
       description: item.description,

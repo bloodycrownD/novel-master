@@ -16,6 +16,7 @@
  * @module test/chat/message-content-perf-threshold
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -67,9 +68,9 @@ async function timeTail(
 ): Promise<{ count: number; ms: number }> {
   const repo = new SqliteMessageRepository(getNovelMasterTestContext().conn);
   // 预热一次（JIT / SQLite 页缓存），再计时取稳定值。
-  await repo.listBySessionTail(sessionId, ROWS);
+  outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
   const t0 = Date.now();
-  const tail = await repo.listBySessionTail(sessionId, ROWS);
+  const tail = outcomeValue(await repo.listBySessionTail(sessionId, ROWS));
   return { count: tail.length, ms: Date.now() - t0 };
 }
 
@@ -107,7 +108,7 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
 
     // 内容深比对：读回同一份正文，防「护栏量的是一个空/错结果的库」
     // （空 blocks / 内容错位必须红——原护栏同款口径）。
-    const tail = await repo.listBySessionTail(plainSession.id, ROWS);
+    const tail = outcomeValue(await repo.listBySessionTail(plainSession.id, ROWS));
     assert.deepEqual(
       tail.map((message) => message.content),
       messages.map((message) => message.content)

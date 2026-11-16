@@ -6,6 +6,7 @@
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
+import {ABORT_KEY, createAbortRegistry, isAbortLikeError} from '@novel-master/core/abort';
 import {runManualCompaction} from '@/services/manual-compaction.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -18,6 +19,8 @@ jest.mock('@novel-master/core/compaction', () => ({
 
 function stubRuntime(): MobileNovelMasterRuntime {
   return {
+    // 泛化取消注册表（signal-abort-scope Step 11）：手动压缩任务级 scope 登记处。
+    abortRegistry: createAbortRegistry(),
     compactionConditionEvaluator: {
       getHideStartDepth: (...args: unknown[]) =>
         mockGetHideStartDepth(...args),
@@ -150,5 +153,54 @@ describe('runManualCompaction（r3-orc-1）', () => {
     });
     expect(onFailed).toHaveBeenCalledTimes(1);
     expect(onFailed).toHaveBeenCalledWith(tailBoom);
+  });
+
+  it('T-S16：hide 前取消 → promise 以 AbortError reject、不跑 runCompaction、只跑 onFinally', async () => {
+    const runtime = stubRuntime();
+    const sessionId = 's-cancel';
+    mockGetHideStartDepth.mockImplementation(async () => {
+      // 模拟用户在「入口通过后、hide 开始前」点取消（UI 经 registry 派发）。
+      runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
+      return {ok: true, value: 3};
+    });
+    const onSucceeded = jest.fn();
+    const onFailed = jest.fn();
+    const onFinally = jest.fn();
+
+    const error = await runManualCompaction(runtime, {projectId: 'p', sessionId}, {onSucceeded, onFailed, onFinally}).then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+    expect(isAbortLikeError(error)).toBe(true);
+    expect(mockRunCompaction).not.toHaveBeenCalled();
+    expect(onSucceeded).not.toHaveBeenCalled();
+    // 取消不是失败：不弹「压缩失败」尾巴。
+    expect(onFailed).not.toHaveBeenCalled();
+    expect(onFinally).toHaveBeenCalledWith(expect.objectContaining({ok: false}));
+    // finally 反注册：key 不残留（否则后续同会话压缩会被旧 scope 污染）。
+    expect(runtime.abortRegistry.has(ABORT_KEY.compaction(sessionId))).toBe(false);
+  });
+
+  it('T-S16：取消后再派发 abort 是 no-op（scope 已 dispose）', async () => {
+    const runtime = stubRuntime();
+    const sessionId = 's-cancel-late';
+    mockGetHideStartDepth.mockImplementation(async () => {
+      runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
+      return {ok: true, value: 3};
+    });
+    await runManualCompaction(runtime, {projectId: 'p', sessionId}).catch(() => undefined);
+    expect(() => runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId))).not.toThrow();
+  });
+
+  it('getHideStartDepth 返回已知失败：onFailed 收到 err、不抛（业务失败不走取消通道）', async () => {
+    const depthError = new Error('depth read failed');
+    mockGetHideStartDepth.mockResolvedValue({ok: false, error: depthError});
+    const onFailed = jest.fn();
+    const onFinally = jest.fn();
+    await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-depth-result'}, {onFailed, onFinally});
+    expect(onFailed).toHaveBeenCalledWith(depthError);
+    expect(onFinally).toHaveBeenCalledWith({ok: false, error: depthError});
+    expect(mockRunCompaction).not.toHaveBeenCalled();
   });
 });

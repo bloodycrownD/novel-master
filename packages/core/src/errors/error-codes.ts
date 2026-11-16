@@ -22,7 +22,9 @@
  *
  * messageKey 是该码的缺省用户文案模板（i18n 契约 key，见 i18n/keys.ts 与
  * catalog/*.yaml，三处缺一即红）：descriptor 通道优先于它，动态诊断文案走
- * params.detail；中断/控制流码（TASK_CANCELLED 等）按总纲 §3.2 不带 i18n key。
+ * params.detail；中断/控制流码（TASK_CANCELLED / TASK_REPLACED）按总纲 §3.2
+ * 不带 i18n key；`IPC_ABORTED` 例外——它是 IPC 边界的取消终态（renderer 据
+ * code 静默收尾），messageKey 只作兜底文案。
  *
  * @module errors/error-codes
  */
@@ -228,6 +230,12 @@ export const ErrorCodes = {
   IPC_INVALID_MENU: {code: 123004, desc: "unknown menu id"},
   IPC_NO_WINDOW: {code: 123005, desc: "no available window"},
   IPC_INVALID_ARGUMENT: {code: 123006, desc: "invalid ipc argument"},
+  // 123 IPC 007-009：取消链路（signal-abort-scope §五）。IPC_ABORTED 是取消终态，
+  // 供 IpcErrorPayload.code 与 renderer 静默收尾；PROVIDER_MODELS_IN_FLIGHT 虽按
+  // provider 命名，但按 spec 落 123 段（handler 级并发冲突，不是 provider 业务失败）。
+  IPC_ABORTED: {code: 123007, desc: "operation aborted", messageKey: "error.infra.aborted"},
+  IPC_INVALID_ABORT_TARGET: {code: 123008, desc: "unknown abort target kind", messageKey: "error.infra.invalid_abort_target"},
+  PROVIDER_MODELS_IN_FLIGHT: {code: 123009, desc: "provider models fetch already in flight", messageKey: "error.provider.models_in_flight"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

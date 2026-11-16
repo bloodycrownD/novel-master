@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -320,7 +321,7 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(
       session.id,
       project.id,
-      AbortSignal.abort()
+      createAbortScope({ signal: AbortSignal.abort() })
     ));
     assert.equal(
       await readCursor(session.id),
@@ -334,7 +335,7 @@ describe("backfillMissingBaselines(service) 弃权信号", () => {
     );
 
     // 第二轮：正常 backfill（不传 signal）→ 幂等补齐全部 4 条 + 游标落库。
-    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
+    unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id, createAbortScope()));
     for (const m of msgs) {
       assert.ok(
         await hasCheckpoint(session.id, m.id),

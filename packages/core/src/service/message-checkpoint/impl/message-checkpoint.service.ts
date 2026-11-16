@@ -13,6 +13,7 @@ import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/im
 import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { MessageCheckpointService } from "../message-checkpoint.port.js";
 
 /** Dependencies for {@link DefaultMessageCheckpointService}. */
@@ -71,15 +72,16 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
    * 入口的两段式「无空窗」短路判定（游标计数比对 + 新增段有界覆盖比对）
    * 判定不确定时保守回退全量扫描。
    *
-   * r3-run-4：`signal` 供前奏期的停止意图在扫描/补写前兑现弃权。**中途退出
+   * r3-run-4：`scope` 供前奏期的停止意图在扫描/补写前兑现弃权。**中途退出
    * 保留已写部分**（事务正常提交）——安全，因为 backfill 幂等：已写的
    * checkpoint 行不会被覆盖、下一轮发送接着补齐剩余空窗；且中断路径下
    * `confirmedNoGap` 恒为 false → 游标**不写** → 下轮判定必然回退全量，
-   * 绝不会把「只补了一半」误认成「已确认无空窗」。不传 signal 时与旧版等价。
+   * 绝不会把「只补了一半」误认成「已确认无空窗」。旧调用方不传时按
+   * 不可取消处理（宽松判空，见下）。
    *
    * nm-style: keep-public — MessageCheckpointService 端口方法；run-agent-turn 发送编排单点消费。
    */
-  async backfillMissingBaselines(sessionId: string, projectId: string, signal?: AbortSignal): Promise<void> {
+  async backfillMissingBaselines(sessionId: string, projectId: string, scope?: AbortScope): Promise<void> {
     const { conn } = this.deps;
     // 段 0（事务外，只读）：两段式短路判定。
     const messageRepo = new SqliteMessageRepository(conn);
@@ -90,7 +92,9 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
       // 弃权点（r3-run-4）：短路判定本身就是几次单行读、窗口极短，但把它放在
       // 游标写入**之前**检查——短路写入只前移游标、不补数据，中途退出无害，
       // 而「停了却仍写游标」纯属没必要的副作用。
-      if (signal?.aborted === true) {
+      // 判空宽松：旧测试不传 scope 时得到 undefined，不能被误判为已取消。
+      const hit = scope?.checkpoint?.() ?? null;
+      if (hit != null) {
         return;
       }
       // 游标只在值前移时写（count == 游标的短路不产生写入）。
@@ -108,7 +112,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
       checkpointRepo,
       projectId,
       sessionId,
-      signal,
+      signal: scope?.signal,
     };
     const scan = await scanBackfillGap(scanInput);
     if (scan.gapMessageIds.length === 0 && !scan.confirmedNoGap) {
@@ -120,7 +124,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     await conn.transaction(async (tx) => {
       // 事务回调里**所有** repo 都必须用回调传入的 tx 构造；用外层 conn 会撞
       // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-      const result = await writeBackfillGap({ checkpointRepo: new SqliteMessageCheckpointRepository(tx), sessionId, scan, signal });
+      const result = await writeBackfillGap({ checkpointRepo: new SqliteMessageCheckpointRepository(tx), sessionId, scan, signal: scope?.signal });
       if (result.confirmedNoGap) {
         const kkv = new SqliteSessionKkvRepository(tx);
         await kkv.set(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, String(decision.count));

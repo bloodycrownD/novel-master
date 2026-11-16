@@ -11,6 +11,7 @@
  * @module test/chat/fork-copy-batch-insert
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -117,8 +118,8 @@ describe("T-FK2 fork/copy 消息批量化", () => {
     );
 
     // 正确性：fork 出的会话消息数 = 源会话，且逐条 seq/role/content/hidden 一致。
-    const sourceMsgs = await c.messages.listBySession(session.id);
-    const forkedMsgs = await c.messages.listBySession(forked.id);
+    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
+    const forkedMsgs = outcomeValue(await c.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, MSG_COUNT);
     assertMessagesClone(sourceMsgs, forkedMsgs, "fork");
   });
@@ -160,10 +161,10 @@ describe("T-FK2 fork/copy 消息批量化", () => {
       "chat_message INSERT 应走 batch 路径（batchInsert）",
     );
 
-    const copiedMsgs = await c.messages.listBySession(copied.id);
+    const copiedMsgs = outcomeValue(await c.messages.listBySession(copied.id));
     assert.equal(copiedMsgs.length, MSG_COUNT);
     // 逐条校验 copy 也保留 seq/role/content/hidden。
-    const sourceMsgs = await c.messages.listBySession(session.id);
+    const sourceMsgs = outcomeValue(await c.messages.listBySession(session.id));
     assertMessagesClone(sourceMsgs, copiedMsgs, "copy");
   });
 });

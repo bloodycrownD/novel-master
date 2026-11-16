@@ -18,6 +18,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
 import {
   resolveCurrentPromptTokens,
@@ -417,7 +418,7 @@ describe("AgentRunner session API prompt token cache", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       ...defaultRunScope,
-      signal: controller.signal,
+      scope: createAbortScope({ controller }),
     }));
     assert.equal(result.stopReason, "cancelled");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);

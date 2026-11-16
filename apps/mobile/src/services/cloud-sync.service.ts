@@ -4,6 +4,7 @@
  * @module services/cloud-sync.service
  */
 import {CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '@novel-master/core';
+import {ABORT_KEY, createAbortError, createAbortScope, isAbortLikeError} from '@novel-master/core/abort';
 import {AppError, isAppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
 import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
@@ -298,6 +299,10 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     throw new Error('云同步进行中，请稍后再试');
   }
   syncBusy = true;
+  // 任务级取消作用域：key 固定 `sync:local`（S3 配置无 provider 概念，
+  // syncBusy 全局互斥）。pull/push 各自建 scope 并登记，finally 反注册 + dispose。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.cloudSync('local'), abortScope);
 
   // 外层 acquire（计数/令牌配对）：底层导入函数的 acquire/release 只
   // 覆盖到它自己返回，「库文件已替换、连接仍处重建窗口」的尾段由这层
@@ -332,6 +337,8 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
       onUiProgress: options?.onProgress,
     });
     progress.step('start', {lastSyncedRev: local.value.lastSyncedRev});
+    // 入口检查点：登记之后、进入协调器之前（UI 取消与启动的竞态窗口）。
+    if (abortScope.checkpoint() != null) throw createAbortError();
     const created = await createCoordinator(runtime, undefined, progress);
     if (!created.ok) return Result.err(created.error);
     coordinator = created.value.coordinator;
@@ -339,7 +346,7 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     importTempPath = created.value.importTempPath;
 
     progress.step('coordinator_pull_start', {});
-    const pulled = await coordinator.pull({lastSyncedRev: local.value.lastSyncedRev});
+    const pulled = await coordinator.pull({lastSyncedRev: local.value.lastSyncedRev, checkpoint: () => abortScope.checkpoint()});
     if (!pulled.ok) {
       if (isAppError(pulled.error, 'CLOUD_SYNC_ALREADY_UP_TO_DATE')) {
         // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
@@ -385,6 +392,16 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     progress.done({rev: result.rev});
     return Result.ok({rev: result.rev, alreadyUpToDate: false});
   } catch (error) {
+    if (isAbortLikeError(error)) {
+      // 取消不是错误：账本记 cancelled（不记 error）、进度走取消终态，
+      // AbortError 原样上抛——绝不能进 mapCloudSyncSdkError 被包成 NETWORK。
+      await patchCloudSyncLocalStatus(accountingRuntime, {
+        lastPullAt: now,
+        lastPullResult: 'cancelled',
+      }).catch(() => undefined);
+      progress?.step('pull_cancelled', {reason: abortScope.reason ?? undefined});
+      throw error;
+    }
     if (error instanceof DatabaseReplacedError) {
       // 库已换代但后续步骤抛错：runtime 换代优先于报错。mobile 的 runtime 是
       // React state、没有 desktop `getDesktopRuntime()` 的懒建自愈 ⇒ 不补这条，
@@ -404,6 +421,8 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
     return Result.err(mapCloudSyncSdkError(error));
   } finally {
     syncBusy = false;
+    runtime.abortRegistry.unregister(ABORT_KEY.cloudSync('local'), abortScope);
+    abortScope.dispose();
     releasePullBusy();
     if (exportTempPath != null) {
       await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
@@ -426,6 +445,10 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
     throw new Error('云同步进行中，请稍后再试');
   }
   syncBusy = true;
+  // 任务级取消作用域：与 pull 共用 `sync:local`（syncBusy 全局互斥，同一时刻
+  // 只有一个云同步任务在册）。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.cloudSync('local'), abortScope);
 
   const progress = createCloudSyncProgress('push', {
     onUiProgress: options?.onProgress,
@@ -437,6 +460,8 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
 
   const now = new Date().toISOString();
   try {
+    // 入口检查点：登记之后、进入协调器之前（UI 取消与启动的竞态窗口）。
+    if (abortScope.checkpoint() != null) throw createAbortError();
     const created = await createCoordinator(runtime, undefined, progress);
     if (!created.ok) {
       progress.fail(created.error);
@@ -446,7 +471,7 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
 
     try {
       progress.step('coordinator_push_start', {});
-      const pushed = await coordinator.push({lastSyncedRev: local.value.lastSyncedRev, forceOverwriteRemote: options?.forceOverwriteRemote});
+      const pushed = await coordinator.push({lastSyncedRev: local.value.lastSyncedRev, forceOverwriteRemote: options?.forceOverwriteRemote, checkpoint: () => abortScope.checkpoint()});
       if (!pushed.ok) {
         // 业务失败（需先拉取 / 锁被他人持有 / 互斥超时等）：与 catch 的未知
         // 异常通道分开，沿 Result.err 上行，屏幕按 NEED_PULL_FIRST 分流转。
@@ -466,6 +491,11 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
       progress.done({rev: result.rev});
       return Result.ok(result);
     } catch (error) {
+      if (isAbortLikeError(error)) {
+        // 取消不在这里记账：交给外层 catch 统一收口（入口取消与协调器阶段
+        // 边界取消走同一条），且绝不能被下面的 mapCloudSyncSdkError 包成 NETWORK。
+        throw error;
+      }
       await patchCloudSyncLocalStatus(runtime, {
         lastPushAt: now,
         lastPushResult: 'error',
@@ -477,8 +507,21 @@ export async function pushCloudSync(runtime: MobileNovelMasterRuntime, options: 
         await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
       }
     }
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      // 取消不是错误：账本记 cancelled（不记 error）、进度走取消终态，
+      // AbortError 原样上抛（不得被 mapCloudSyncSdkError 包成 NETWORK）。
+      await patchCloudSyncLocalStatus(runtime, {
+        lastPushAt: now,
+        lastPushResult: 'cancelled',
+      }).catch(() => undefined);
+      progress.step('push_cancelled', {reason: abortScope.reason ?? undefined});
+    }
+    throw error;
   } finally {
     syncBusy = false;
+    runtime.abortRegistry.unregister(ABORT_KEY.cloudSync('local'), abortScope);
+    abortScope.dispose();
   }
 }
 

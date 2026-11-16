@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -89,7 +90,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 4);
   });
 
@@ -107,7 +108,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -131,7 +132,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -148,7 +149,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -174,7 +175,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
 
     assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, textOnly.id);
   });
@@ -252,7 +253,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     });
 
     assert.equal(unwrap(await svfs.read("/keep.md")).content, "mutated");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 
@@ -281,7 +282,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     });
 
     assert.equal(unwrap(await svfs.read("/state.md")).content, "baseline");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, priorAsst.id);
   });
@@ -304,7 +305,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "violets");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);

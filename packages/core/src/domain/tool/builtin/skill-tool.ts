@@ -23,9 +23,10 @@
 
 import { z } from "zod";
 
-import type { SkillService } from "@/service/skills/skills.port.js";
+import type { SkillListItem, SkillService } from "@/service/skills/skills.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import { matchOutcome } from "@/errors/outcome.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
@@ -304,8 +305,14 @@ action 说明：
         // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
         // （skill-tool 执行侧与读侧共享同一份推导函数）。
         const { content, truncated } = deriveSkillLoadTruncation(result.value.content);
-        // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
-        const list = await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId });
+        // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件。
+        // listSkills 走 Outcome 通道：取消按工具取消码回收（TOOL_CANCELLED 只作展示标签）。
+        const list = matchOutcome<SkillListItem[], Result<SkillListItem[], AppError>>(await service.listSkills(result.value.domain === "global" ? "global" : { projectId: skills.projectId }), {
+          completed: (entries) => Result.ok(entries),
+          cancelled: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          replaced: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          failed: (error) => Result.err(error),
+        });
         if (!list.ok) return Result.err(list.error);
         const files = list.value.find((entry) => entry.name === name)?.files.filter((f) => f !== "SKILL.md") ?? [];
         // v1.5.30 unref 回迁：load 不再同步 +1、不再产 contentRef 引用块
@@ -408,7 +415,12 @@ action 说明：
             total: effective.value.length,
           });
         }
-        const items = await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId });
+        const items = matchOutcome<SkillListItem[], Result<SkillListItem[], AppError>>(await service.listSkills(input.domain === "global" ? "global" : { projectId: skills.projectId }), {
+          completed: (entries) => Result.ok(entries),
+          cancelled: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          replaced: () => Result.err(new AppError("TOOL_CANCELLED", { toolName: SKILL_TOOL_NAME })),
+          failed: (error) => Result.err(error),
+        });
         if (!items.ok) return Result.err(items.error);
         return Result.ok({
           action: "list",

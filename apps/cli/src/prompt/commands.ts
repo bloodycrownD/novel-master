@@ -81,8 +81,11 @@ export async function runPrompt(rt: PromptRuntime, subcommand: string, args: rea
   const resolvedScope = await rt.scope.resolveProjectSession(flags);
   if (!resolvedScope.ok) return { kind: "failed", error: resolvedScope.error };
   const { projectId, sessionId } = resolvedScope.value;
-  const allMessages = await rt.messages.listBySession(sessionId);
-  const messages = allMessages.filter((m) => !m.hidden);
+  const allMessagesRead = await rt.messages.listBySession(sessionId);
+  // 中断/失败沿本命令既有的 Outcome 通道交回 main 边界（cancelled → 130）。
+  if (allMessagesRead.kind === "failed") return { kind: "failed", error: allMessagesRead.error };
+  if (allMessagesRead.kind !== "completed") return allMessagesRead;
+  const messages = allMessagesRead.value.filter((m) => !m.hidden);
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
   const assembled = await assembleWorkplaceDisplay(wtScope, { sessionKkv: rt.sessionKkv, workplace: rt.workplace(wtScope), vfs, layout });

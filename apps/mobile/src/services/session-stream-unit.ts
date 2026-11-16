@@ -45,6 +45,7 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessageData} from '@novel-master/core/chat';
+import type {Outcome} from '@novel-master/core/errors';
 import type {AgentStepCommittedPhase} from '@novel-master/core/events';
 import {
   composeStreamTokens,
@@ -237,17 +238,19 @@ type SessionStreamUnitTokenSource = StreamTokenSource;
  * 消息仓库窄口（单元消息管线回源 DB 用）。
  *
  * 单元本体不持有 runtime——由 manager 构造时从 runtime.messages 透传
- * （结构上就是 core MessageService 的子集）。
+ * （结构上就是 core MessageService 的子集）。大结果集读口返回 `Outcome`
+ * （分片边界可被 hooks 中断）；单元不注入 hooks，中断分支实际不可达，
+ * 但通道形状必须与 core 对齐。
  */
 interface SessionStreamMessageStore {
   listBySessionTail(
     sessionId: string,
     options: {limit: number},
-  ): Promise<readonly ChatMessageData[]>;
+  ): Promise<Outcome<readonly ChatMessageData[]>>;
   listBySessionPage(
     sessionId: string,
     options: {limit: number; beforeSeq?: number},
-  ): Promise<readonly ChatMessageData[]>;
+  ): Promise<Outcome<readonly ChatMessageData[]>>;
 }
 
 /** 单元只读投影：snapshot(sessionId) 的返回形状，屏幕订阅的唯一消费面。 */
@@ -1240,7 +1243,17 @@ export class SessionStreamUnit {
         return [...this.messagesValue];
       }
       const limit = SESSION_STREAM_MESSAGES_PAGE_SIZE + 1;
-      const fetched = await store.listBySessionTail(this.sessionId, {limit});
+      const fetchedOutcome = await store.listBySessionTail(this.sessionId, {limit});
+      if (fetchedOutcome.kind === 'failed') {
+        // 单元没有 Outcome 通道：回源失败在边界转异常，沿用既有上抛语义
+        // （kickTailReloadQuietly 的 catch 与调用方 catch 依赖它）。
+        throw fetchedOutcome.error;
+      }
+      if (fetchedOutcome.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；真出现时按「本次不采纳」保留现状。
+        return [...this.messagesValue];
+      }
+      const fetched = fetchedOutcome.value;
       const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
       const list = hasMore ? fetched.slice(1) : fetched;
       // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
@@ -1289,7 +1302,16 @@ export class SessionStreamUnit {
     this.onProjectionChanged?.();
     try {
       const page = {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq};
-      const older = await store.listBySessionPage(this.sessionId, page);
+      const olderOutcome = await store.listBySessionPage(this.sessionId, page);
+      if (olderOutcome.kind === 'failed') {
+        // 同 loadTailMessages：边界转异常，保持既有错误出口。
+        throw olderOutcome.error;
+      }
+      if (olderOutcome.kind !== 'completed') {
+        // 未注入 hooks 时中断分支不可达；中断按「本次翻页不落地」处理。
+        return;
+      }
+      const older = olderOutcome.value;
       if (this.destroyed) {
         return;
       }

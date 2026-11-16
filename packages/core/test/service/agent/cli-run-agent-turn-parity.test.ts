@@ -1,6 +1,7 @@
 /**
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
@@ -206,7 +207,7 @@ describe("cli-run-agent-turn parity", () => {
       { allowResumeWithoutInput: true },
     );
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
     assert.equal(listed[1]!.role, "user");
@@ -234,7 +235,7 @@ describe("cli-run-agent-turn parity", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
 
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("已有 user")));
-    const before = await ctx.messages.listBySession(session.id);
+    const before = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(before.length, 1);
 
     const runtime = makeRuntime(ctx, registry);
@@ -245,7 +246,7 @@ describe("cli-run-agent-turn parity", () => {
       { allowResumeWithoutInput: true },
     );
 
-    const after = await ctx.messages.listBySession(session.id);
+    const after = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(after.length, 1);
     const tailText = after[0]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "已有 user");

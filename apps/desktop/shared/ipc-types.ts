@@ -101,6 +101,8 @@ export const IPC_CHANNELS = {
 
   AGENT_RUN: "nm:agent/run",
   AGENT_ABORT: "nm:agent/abort",
+  /** 统一取消入口：请求体 `{ kind, id }`，取消对应类别的在途任务。 */
+  NM_RUN_ABORT: "nm:run/abort",
   AGENT_RUN_IS_ACTIVE: "nm:agent/runIsActive",
   AGENT_RESOLVE_CURRENT: "nm:agent/resolveCurrent",
   AGENT_LIST_PICKER: "nm:agent/listPicker",
@@ -787,6 +789,18 @@ export type AgentAbortRequest = {
 };
 
 /**
+ * `nm:run/abort` 请求体：`kind` 选择取消目标类别，`id` 是 renderer 生成的 runId
+ * （models 用 providerId、sync 固定 "local"、compaction 用 sessionId）。
+ * 未知 kind 由 handler 回 `IPC_INVALID_ABORT_TARGET`；id 不存在时静默 ok。
+ */
+export type RunAbortRequest = {
+  readonly kind: "backup" | "dbmaint" | "stats" | "models" | "sync" | "compaction";
+  readonly id: string;
+};
+
+export type RunAbortResponse = IpcResult<null>;
+
+/**
  * renderer 查询某 session 是否有 in-flight run 的请求体；
  * main 侧转调 rt.abortRegistry.has(sessionId)。
  */
@@ -1152,6 +1166,8 @@ export type UsageStatsQueryRequest = {
   readonly limit?: number;
   /** kind='sessionDetail' 的目标会话 id。 */
   readonly sessionId?: string;
+  /** renderer 生成的 runId；缺省时 handler 只建 scope + deadline，不注册进 abort registry。 */
+  readonly runId?: string;
 };
 
 export type CompactionManualRequest = PromptScopeRequest;
@@ -1724,6 +1740,8 @@ export type CloudSyncPullResult = {
 
 export type CloudSyncPushRequest = {
   readonly forceOverwriteRemote?: boolean;
+  /** renderer 生成的 runId；缺省时 handler 只建 scope + deadline，不注册进 abort registry。 */
+  readonly runId?: string;
 };
 
 export type CloudSyncPushResult = {

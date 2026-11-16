@@ -10,6 +10,7 @@
  * @module test/chat/tool-result-meta.test
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -154,7 +155,7 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
 
     unwrap(await ctx.messages.append(session.id, "user", { blocks: [block] }));
 
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list.length, 1);
     const loaded = list[0]!;
     assert.equal(loaded.role, "user");
@@ -186,7 +187,7 @@ describe("ToolResultBlock.meta 持久化闭环（T-S5，集成）", () => {
     };
     unwrap(await ctx.messages.append(parent.id, "user", { blocks: [block] }));
 
-    const parentMessages = await ctx.messages.listBySession(parent.id);
+    const parentMessages = outcomeValue(await ctx.messages.listBySession(parent.id));
     assert.equal(parentMessages.length, 1);
     const loaded = parentMessages[0]!.content.blocks[0] as ToolResultBlock;
     assert.equal(loaded.meta?.subagentSessionId, child.id);

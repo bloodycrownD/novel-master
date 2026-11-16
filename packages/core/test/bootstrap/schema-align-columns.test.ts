@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
@@ -130,7 +131,7 @@ describe("schema 列对齐（T-B3）", () => {
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
 
     const repo = new SqliteMessageRepository(conn);
-    const messages = await repo.listBySession(sessionId);
+    const messages = outcomeValue(await repo.listBySession(sessionId));
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, messageId);
     assert.equal(messages[0]!.hidden, false);

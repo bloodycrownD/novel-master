@@ -145,12 +145,16 @@ export interface NovelMasterRuntime {
    * Agent abort registry：按 sessionId 索引在途 run 的 controller。
    *
    * D6（CLI 补注入）：此前 CLI 不注入、`runAgentTurn` 走
-   * `abortRegistry?.register(...)` 空安全分支——后果是 task `sessionId`
-   * 续用子会话的并发硬互斥闭包 `runtime.abortRegistry?.has(id) ?? true`
+   * `agentAbortRegistry?.register(...)` 空安全分支——后果是 task `sessionId`
+   * 续用子会话的并发硬互斥闭包 `runtime.agentAbortRegistry?.has(id) ?? true`
    * 永远走保守拒绝分支（在途判据恒真、续用能力形同虚设）。补注入后三端
    * 判据同源，生产路径不再命中那个缺 registry 的降级分支。
+   *
+   * 字段名与 core `AgentTurnRuntimePort` 对齐：同名 `abortRegistry` 在 app
+   * runtime 上是泛化 registry（desktop/mobile），CLI 只有 Agent 一种长任务，
+   * 因此直接以门面字段注入，避免被 core 当成泛化实例按裸 sessionId 派发。
    */
-  readonly abortRegistry: AgentAbortRegistry;
+  readonly agentAbortRegistry: AgentAbortRegistry;
   /** 按 sessionId 索引 in-flight run 的流句柄，供订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
@@ -218,7 +222,7 @@ export async function createNovelMasterRuntime(argv: readonly string[]): Promise
   const agentRegistry = createAgentRegistryService(conn, state);
   const streamRegistry = createAgentStreamRegistry();
   // D6：进程内单例（Map 薄封装），runAgentTurn 入口即注册 controller。
-  const abortRegistry = createAgentAbortRegistry();
+  const agentAbortRegistry = createAgentAbortRegistry();
 
   return Result.ok({
     conn,
@@ -230,7 +234,7 @@ export async function createNovelMasterRuntime(argv: readonly string[]): Promise
     compactionConditionEvaluator,
     agentRegistry,
     streamRegistry,
-    abortRegistry,
+    agentAbortRegistry,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),

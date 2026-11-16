@@ -18,6 +18,7 @@ import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicy, ModelRetryPolicyService } from "../model-retry-policy.port.js";
 import type { ModelRequestOptions, ModelRequestService } from "../model-request.port.js";
 import { createAbortError, isAbortLikeError } from "@/infra/llm-protocol/logic/request-abort.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 
 interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -160,6 +161,8 @@ export class DefaultModelRequestService implements ModelRequestService {
 
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
     const adapter = resolveAdapter(row.protocol);
+    // 无 options 的调用方显式表达「不可取消」：建一个无定时器、无父的 scope。
+    const scope = options?.scope ?? createAbortScope();
     let policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
     if (this.deps.retryPolicies != null) {
       const fetched = await this.deps.retryPolicies.getPolicy();
@@ -209,7 +212,7 @@ export class DefaultModelRequestService implements ModelRequestService {
           onStream,
           sampling,
           thinking,
-          signal: options?.signal,
+          scope,
         };
         return Result.ok(await adapter.chat(chatArgs));
       } catch (error) {
@@ -221,7 +224,7 @@ export class DefaultModelRequestService implements ModelRequestService {
         const retryPolicy = policy ?? DEFAULT_RETRY_POLICY;
         const baseDelay = Math.min(retryPolicy.baseDelayMs * 2 ** Math.max(0, attempt - 1), retryPolicy.maxDelayMs);
         const jitterRange = baseDelay * retryPolicy.jitterRatio;
-        await delayWithSignal(Math.max(0, Math.round(baseDelay + (Math.random() * 2 - 1) * jitterRange)), options?.signal);
+        await delayWithSignal(Math.max(0, Math.round(baseDelay + (Math.random() * 2 - 1) * jitterRange)), scope.signal);
       }
     }
   }

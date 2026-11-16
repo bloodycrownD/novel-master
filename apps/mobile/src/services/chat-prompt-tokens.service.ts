@@ -16,6 +16,7 @@
  * `heuristic`、`estimated: true`——**近似**这件事不变，变的是读数本身）。
  */
 
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
 
 import {resolvePromptTokensWithBackfill, resolveTokenCounterModeForModel, serializePromptLlmInput, type CountPromptLlmInputParams, type Interrupt} from '@novel-master/core/provider';
@@ -554,7 +555,7 @@ export async function loadChatPromptTokenLabelResilient(runtime: MobileNovelMast
   // 触发的升级轮曾把 40 条消息会话的前奏从亚秒拖到 11s（期间停止信号无观察点
   // 可兑现，用户连点 15 次无效）。run 在途时跳过升级（chip 保持估算档），run
   // 结束后的刷新（onSettled → transcript 变化）会补上——彼时无竞争。
-  const runInFlight = runtime.abortRegistry.has(sessionId);
+  const runInFlight = runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
   const onPreciseUpgrade = options?.onPreciseUpgrade;
   if (frame.upgradeWorthy && onPreciseUpgrade != null && !runInFlight) {
     const request: UpgradeRequest = {
@@ -565,7 +566,7 @@ export async function loadChatPromptTokenLabelResilient(runtime: MobileNovelMast
       // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
       // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
       // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
-      shouldBail: () => runtime.abortRegistry.has(scope.sessionId) || options?.shouldBailPrecise?.() === true,
+      shouldBail: () => runtime.abortRegistry.has(ABORT_KEY.agent(scope.sessionId)) || options?.shouldBailPrecise?.() === true,
       round: ++preciseUpgradeRoundSeq,
       savedModelId: frame.savedModelId ?? '',
     };
@@ -603,7 +604,12 @@ export async function loadChatPromptTokenLabelResilient(runtime: MobileNovelMast
 // nm-style: keep-local — 44 行兜底装配（消息序列化 + 模型/上下文探测）内联进唯一
 // catch 调用点会淹没主流程；其两参签名（runtime 长类型）单行化超 80 列。
 async function loadChatPromptTokenLabelFallback(runtime: MobileNovelMasterRuntime, scope: SessionPromptScope): Promise<Result<string, AppError>> {
-  const all = await runtime.messages.listBySession(scope.sessionId);
+  const allOutcome = await runtime.messages.listBySession(scope.sessionId);
+  // 读口已换 Outcome（长循环 hooks）：未注入 hooks 时中断分支不可达；
+  // 业务失败沿 Result 接力，中断按本文件既有的「弃权空串」哨兵处理。
+  if (allOutcome.kind === 'failed') return Result.err(allOutcome.error);
+  if (allOutcome.kind !== 'completed') return Result.ok('');
+  const all = allOutcome.value;
   const visible = all.filter(m => !m.hidden);
   const bodyText = messageBodyTextFromBlocks;
   const lines = visible.map(m => `${m.role}: ${bodyText(m.content.blocks)}`);

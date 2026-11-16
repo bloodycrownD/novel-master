@@ -11,6 +11,7 @@ import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/ses
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
 
 /** tail 截断事务参数。 */
@@ -57,8 +58,12 @@ export async function truncateTailInTransaction(deps: TruncateTailDeps, params: 
 
   // 拉 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表删除链素材。
   // read 引用 −1（尾截断的消息不再持有 revision）已随 E1 清理版退役。
-  const tailMessages = await deps.messages.listBySessionFromSeq(sessionId, afterSeq + 1);
-  const tailIds = tailMessages.map((m) => m.id);
+  // 本函数在事务内执行：已知失败与中断都必须抛错才能触发整体回滚。
+  const tailRead = await deps.messages.listBySessionFromSeq(sessionId, afterSeq + 1);
+  if (tailRead.kind === "failed") throw tailRead.error;
+  // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按事务边界语义转抛。
+  if (tailRead.kind !== "completed") throw createAbortError();
+  const tailIds = tailRead.value.map((m) => m.id);
 
   if (tailIds.length > 0) {
     await deps.checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);

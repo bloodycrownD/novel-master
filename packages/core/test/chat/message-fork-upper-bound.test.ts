@@ -5,6 +5,7 @@
  * `listBySessionUpToSeq` 的调用数），不是「服务内部调了哪个方法」——后者在换实现后
  * 立刻失真（RULE「给读路径换实现后观测面必须同步换」）。
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
@@ -91,7 +92,7 @@ describe("fork 上界读口（CD-13）", () => {
 
     assert.equal(spy.listBySession(), 0, "fork 不得触发全量读口");
     assert.equal(spy.listBySessionUpToSeq(), 1, "fork 必须恰好一次上界读口");
-    const forkedMsgs = await ctx.messages.listBySession(forkedId);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forkedId));
     assert.equal(forkedMsgs.length, 3);
   });
 
@@ -104,7 +105,7 @@ describe("fork 上界读口（CD-13）", () => {
     const anchorId = ids[20]!;
     const anchor = unwrap(await ctx.messages.get(anchorId));
     const repo = new SqliteMessageRepository(ctx.conn);
-    const all = await repo.listBySession(session.id);
+    const all = outcomeValue(await repo.listBySession(session.id));
     const expected = all.filter((m) => m.seq <= anchor.seq);
     assert.ok(
       expected.filter((m) => m.hidden).length >= 2,
@@ -115,7 +116,7 @@ describe("fork 上界读口（CD-13）", () => {
       "夹具须含锚点两侧的可见行",
     );
 
-    const actual = await repo.listBySessionUpToSeq(session.id, anchor.seq);
+    const actual = outcomeValue(await repo.listBySessionUpToSeq(session.id, anchor.seq));
     assert.deepEqual(actual, expected, "上界读口必须逐条等价");
     // hidden 行逐条保留（若实现误加 `AND hidden = 0`，此处必红）。
     assert.equal(
@@ -124,7 +125,7 @@ describe("fork 上界读口（CD-13）", () => {
     );
 
     const forked = unwrap(await ctx.messages.fork(session.id, anchorId));
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, expected.length);
     for (const m of forkedMsgs) {
       const src = expected.find((e) => e.seq === m.seq);
@@ -146,7 +147,7 @@ describe("fork 上界读口（CD-13）", () => {
     const origTx = ctx.conn.transaction;
     let txCalls = 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (proto as any).listBySessionUpToSeq = async () => [];
+    (proto as any).listBySessionUpToSeq = async () => ({ kind: "completed", value: [] });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ctx.conn as any).transaction = (...args: never[]) => {
       txCalls += 1;
@@ -175,7 +176,7 @@ describe("fork 上界读口（CD-13）", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const { ids } = await seedSession(session.id, 12);
     const forked = unwrap(await ctx.messages.fork(session.id, ids[11]!));
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 12);
   });
 
@@ -189,7 +190,7 @@ describe("fork 上界读口（CD-13）", () => {
     const repo = new SqliteMessageRepository(ctx.conn, async () => {
       yieldCount += 1;
     });
-    const rows = await repo.listBySessionUpToSeq(session.id, 1000);
+    const rows = outcomeValue(await repo.listBySessionUpToSeq(session.id, 1000));
     assert.equal(rows.length, 120);
     // 120 行 = 3 片（每片 ≤50）⇒ 2 个片间让步点。
     assert.equal(yieldCount, 2, "必须走 mapRows 的分片让步分支");

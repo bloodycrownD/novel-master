@@ -37,15 +37,17 @@ const nativeModule = NativeModules.LlmSseNative as
 
 /** Android 且 Kotlin 模块已 autolink 时为 true（iOS / 测试环境 false，装配点据此跳过注册回落 XHR）。 */
 export function isNativeSseAvailable(): boolean {
-  // 三个方法逐个 typeof 访问（而非 spread/keys 枚举）：bridgeless lazy
-  // jsRepresentation 的方法要靠属性访问实体化，sseAbort 必须在此显式探测
-  // （stop-button P0：漏探测导致 spread bridge 缺该方法）。
+  // 四个方法逐个 typeof 访问（而非 spread/keys 枚举）：bridgeless lazy
+  // jsRepresentation 的方法要靠属性访问实体化，sseAbort / requestAbort 必须
+  // 在此显式探测（stop-button P0：漏探测导致 spread bridge 缺该方法；取消对
+  // request 路径同样是「方法缺失 → 静默失效、连接跑满 callTimeout」）。
   return (
     Platform.OS === "android" &&
     nativeModule != null &&
     typeof nativeModule.sseConnect === "function" &&
     typeof nativeModule.sseAbort === "function" &&
-    typeof nativeModule.request === "function"
+    typeof nativeModule.request === "function" &&
+    typeof nativeModule.requestAbort === "function"
   );
 }
 
@@ -70,9 +72,10 @@ function createBridge(): LlmSseNativeBridge | null {
   // 「已被访问过」的方法子集：isNativeSseAvailable 只访问过 sseConnect/
   // request，sseAbort 缺失 → 终止链 bridge.sseAbort 为 undefined，abort
   // 时抛 "undefined is not a function" 且连接不断（挂死 run 只能等 callTimeout 兜底）。
-  // 解构的属性访问走原型查找，三个方法引用在此刻全部取到。
-  const {sseConnect, sseAbort, request} = nativeModule;
-  return {sseConnect, sseAbort, request, events};
+  // requestAbort 同款：非流式取消靠它真断连，spread 漏掉就退化成假取消。
+  // 解构的属性访问走原型查找，四个方法引用在此刻全部取到。
+  const {sseConnect, sseAbort, request, requestAbort} = nativeModule;
+  return {sseConnect, sseAbort, request, requestAbort, events};
 }
 
 /** 已缓存的 transport 单例（共享事件订阅，避免重复 addListener）。 */

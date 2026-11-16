@@ -33,6 +33,8 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { MessageParams } from "@/common/i18n.js";
 import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
 import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
@@ -116,9 +118,13 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * Agent abort registry：按 sessionId 索引 in-flight run 的 controller，
    * 给 mobile / desktop 停止按钮一个统一中断入口。
    *
-   * CLI 不注入也能跑（`abortRegistry?.register(...)` 空安全）。
+   * 字段名固定为 `agentAbortRegistry`（不能与 runtime 上的泛化 `abortRegistry`
+   * 同名）：泛化 registry 的 key 是 `ABORT_KEY.agent(sessionId)`，用裸 sessionId
+   * 注册会让停止按钮按 `agent:<sessionId>` 派发永远 miss。
+   *
+   * CLI 不注入也能跑（`agentAbortRegistry?.register(...)` 空安全）。
    */
-  readonly abortRegistry?: AgentAbortRegistry;
+  readonly agentAbortRegistry?: AgentAbortRegistry;
   /**
    * Agent stream registry：按 sessionId 索引 in-flight run 的流式累积文本，
    * 供子会话页首次进入时查询已生成的 partial（eventBus 无 replay）。
@@ -310,7 +316,12 @@ interface RunAgentTurnOptions {
    * 三端共用（mobile/desktop/CLI）的空续跑能力，保留不动。
    */
   readonly allowResumeWithoutInput?: boolean;
-  readonly signal?: AbortSignal;
+  /**
+   * 调用方的取消作用域：作为本 run 根 scope 的 parent 级联。
+   *
+   * 取消不是错误（`checkpoint()` 返回 `Interrupt | null`）；不传视为不可取消。
+   */
+  readonly scope?: AbortScope;
   /** CLI stdout 流式回调；App 经 eventBus，通常不传。 */
   readonly onStream?: (event: LlmStreamEvent) => void;
   /**
@@ -389,7 +400,7 @@ function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, w
  *
  * **abort 注册前移（2026-09-30 实锤，用户报「发送期间无法终止」）**：controller
  * 原先直到 runner 起步前才注册，中间隔着 backfill / resolve / append / capture /
- * 技能预算等**整段前奏**（大会话上是秒级）——期间 `abortRegistry.abort(sessionId)`
+ * 技能预算等**整段前奏**（大会话上是秒级）——期间 `agentAbortRegistry.abort(sessionId)`
  * 找不到 controller，`stopRun` 返回 false 把停止意图**整个丢掉**（不是延迟，是丢），
  * 用户体感就是「点了停止没反应，然后它照旧开始生成」。现在从函数入口就注册：
  * run 被受理即视为在途（与 mobile 发送门禁 / 校准探针的「在途」口径一致），
@@ -401,24 +412,27 @@ function resolveChildModel(def: AgentDefinition, fallbackSavedModelId: string, w
  *
  * 反注册仍由内层 finally 完成（保持原顺序）；这里再挂一道**幂等**兜底，
  * 覆盖「前奏抛错、内层 try 尚未进入」的路径——否则陈旧 controller 会让
- * `abortRegistry.has` 永久为真，卡死该会话后续的发送门禁。
+ * `agentAbortRegistry.has` 永久为真，卡死该会话后续的发送门禁。
  */
 /** 已知失败沿 `Result.err` 交回（四期门⑦）：前奏期失败由本函数内联补 FAILED(runId:'')（与 catch 同款记账）；未知异常仍抛，调用方 catch 兜底。 */
 export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTurnScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
-  // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
-  // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
-  // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
-  // 的 parentSignal，让 registry.abort(sessionId) 也能级联到子 run。
+  // 主 run 始终自建 internalController 作为注册目标。根 scope 与它绑定在同一个
+  // WeakMap memoize 上：`agentAbortRegistry.register(sessionId, internalController)`
+  // 内部取到的就是本 run 的根 scope，`registry.abort(sessionId)` → controller.abort()
+  // → `rootScope.reason === "user-stop"`，不会出现「signal 停了但 reason 恒 null」。
+  //
+  // **必须先进根 scope 再注册**（spec §已知限制）：反序会让门面先 memoize 出无
+  // parent 的实例，caller 传入的 `options.scope` 级联静默丢失。
+  //
+  // runner.run 拿根 scope（`AgentRunOptions.scope`）；根 scope 的 signal 同时作为
+  // task 工具内子 agent run 的 parentSignal，让 registry.abort(sessionId) 也能级联
+  // 到子 run。
   const internalController = new AbortController();
-  const callerSignal = options?.signal;
-  if (callerSignal != null) {
-    if (callerSignal.aborted) {
-      internalController.abort(callerSignal.reason);
-    } else {
-      callerSignal.addEventListener("abort", () => internalController.abort(callerSignal.reason), { once: true });
-    }
-  }
-  runtime.abortRegistry?.register(scope.sessionId, internalController);
+  const rootScope = createAbortScope({
+    controller: internalController,
+    ...(options?.scope !== undefined ? { parent: options.scope } : {}),
+  });
+  runtime.agentAbortRegistry?.register(scope.sessionId, internalController);
   try {
     let stage = "start";
     /**
@@ -482,8 +496,8 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
     const composerAttachOnly = (options?.attachments ?? []).filter((a) => a.source === "attach");
 
     // 前奏停止检查点（2026-09-30 真机实锤，用户连点 15 次停止需等 11s 前奏跑完
-    // 才在 loop_start 兑现）：前奏各阶段之间检查 signal，命中即跳过剩余前奏、
-    // 返回合成 cancelled 结果。合成结果与 runner loop_start 取消路径同款；runner
+    // 才在 loop_start 兑现）：前奏各阶段之间检查根 scope 的 reason，命中即跳过剩余
+    // 前奏、返回合成 cancelled 结果。合成结果与 runner loop_start 取消路径同款；runner
     // 从未起步，故不发 RUN_STARTED，但**发一条 FINISHED(runId:'') 收口**
     // （r3-run-1：此前不补这条，desktop 前奏取消会让 refcount 永久泄漏、
     // 转录冻结永久挂起；mobile 靠 .then 手工补丁——双端都在事件系统之外打补丁，
@@ -493,7 +507,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
     //   ⓪ backfill 之前 —— 这次发送**根本没发生**（用户消息未落库），见下；
     //   ① append+capture 之后 —— 消息已落库，停止不改变「本次发送已发生」；
     //   ② agentRegistry.list() 之后 / skills 装配之后 / runner.run 之前。
-    const preludeAbortResult = (): AgentRunResult | undefined => (internalController.signal.aborted ? syntheticCancelledResult() : undefined);
+    const preludeAbortResult = (): AgentRunResult | undefined => (rootScope.reason !== null ? syntheticCancelledResult() : undefined);
 
     // 收口 try（r3-run-1 步骤 2）：从 backfill 到 `runner.run` 全程包起来。
     //
@@ -535,9 +549,9 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
       // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
       stage = "backfill-baseline-checkpoints";
-      // 传 internalController.signal（r3-run-4）：这段扫描是大会话上秒级的第一站，
+      // 传根 scope（r3-run-4）：这段扫描是大会话上秒级的第一站，
       // 用户在这段窗口按停止时在扫描循环内提前退出，而不是被逼着等它跑完。
-      await runtime.messageCheckpoint.backfillMissingBaselines(scope.sessionId, scope.projectId, internalController.signal);
+      await runtime.messageCheckpoint.backfillMissingBaselines(scope.sessionId, scope.projectId, rootScope);
 
       stage = "resolve-agent";
       const definition = (await mapResolveError(() => resolveAgentForProject(runtime, scope.projectId, scope.sessionId))).definition;
@@ -553,7 +567,15 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         // listBySession——含 hidden 整表解压，压缩会话上秒级（2026-09-30 真机
         // 实锤 ~4s：续跑/「继续」按钮每轮白付，且这段前奏无停止观察点，用户
         // 连点停止无响应）。
-        const tail = await runtime.messages.listBySessionTail(scope.sessionId, { limit: 1 });
+        const tailRead = await runtime.messages.listBySessionTail(scope.sessionId, { limit: 1 }, { checkpoint: () => rootScope.checkpoint() });
+        if (tailRead.kind === "failed") throw tailRead.error;
+        if (tailRead.kind !== "completed") {
+          // 读分片间命中取消：与前奏其它检查点同款合成 cancelled 收尾（先发
+          // FINISHED('')，双端 composer 解锁链路不变）。
+          publishPreludeRunFinished(runtime, scope);
+          return Result.ok(syntheticCancelledResult());
+        }
+        const tail = tailRead.value;
         // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
         if (tail[tail.length - 1]?.role !== "user") {
           throw new AgentTurnError({ key: "error.agent.message_empty" });
@@ -810,11 +832,10 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
       const agentsCtx = assembleAgentsToolContext(runtime.agentRegistry, allDefs, toolProbe.list(), registry);
       const session = new ChatAgentSession(runtime.messages, scope.sessionId);
-      // internalController 在本函数入口建好并**已注册**（见函数头注释：
-      // 前奏期间的停止不能被丢掉）。这里只取它的 signal：runner.run 用它，
-      // 同时作为 task 工具内子 agent run 的 parentSignal，让
-      // registry.abort(sessionId) 也能级联到子 run。
-      const parentSignal = internalController.signal;
+      // 根 scope 在本函数入口建好并**已注册**（见函数头注释：前奏期间的停止
+      // 不能被丢掉）。这里取它的 signal：toolCtx.signal 用它，同时作为 task 工具
+      // 内子 agent run 的 parentSignal，让 registry.abort(sessionId) 也能级联到子 run。
+      const parentSignal = rootScope.signal;
       // search 装配前置（排障插桩版）：先算出 ctx 再展开进 toolCtx，装配结果自身
       // 打一条日志——「assembleSearchToolContext 打了日志但 toolCtx 里没有」这类
       // 悬空现象可以靠这一条与下面「toolCtx 构造完成」的对账直接定位。
@@ -865,10 +886,10 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
           },
           // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
           parentSessionId: scope.sessionId,
-          // 并发软闸（spec D6）：绑 abortRegistry.has；**缺 registry 保守拒绝续用**
+          // 并发软闸（spec D6）：绑 agentAbortRegistry.has；**缺 registry 保守拒绝续用**
           // （?? true）——宁可让模型新开，也不要在无并发信息时赌一把。
           // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
-          isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
+          isSessionRunActive: (id: string): boolean => runtime.agentAbortRegistry?.has(id) ?? true,
           // 子 agent pin → 父 savedModelId（四期门⑦：已知失败沿 Result 回传给 task 工具）。
           resolveChildModelId: (def: AgentDefinition): Result<ChildModelIds, AppError> => {
             return resolveChildModel(def, savedModelId, workspaceModelId, "error.agent.subagent_model_missing");
@@ -880,6 +901,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
               parentProjectId: scope.projectId,
               parentSessionId: scope.sessionId,
               parentDepth: 0,
+              parentScope: rootScope,
               def,
               childSessionId,
               opts,
@@ -907,9 +929,9 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         return Result.ok(preRunnerCancelled);
       }
 
-      // abortRegistry 的注册已在入口完成（见 {@link runAgentTurn}），这里不重复。
+      // agentAbortRegistry 的注册已在入口完成（见 {@link runAgentTurn}），这里不重复。
       // streamRegistry.register 返回本次 run 的所有权句柄，finally 反注册时回传，
-      // 防止同一 sessionId 并发 run 时 A 的 finally 误删 B 的 partial（与 abortRegistry 对称）。
+      // 防止同一 sessionId 并发 run 时 A 的 finally 误删 B 的 partial（与 agentAbortRegistry 对称）。
       // 句柄声明在 try 之外：下面的 finally 要读它。
       streamHandle = runtime.streamRegistry?.register(scope.sessionId);
 
@@ -926,8 +948,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       runnerEntered = true;
       let result: AgentRunResult;
       try {
-        const abortSignal = internalController.signal;
-        const runInput = { definition, sessionId: scope.sessionId, projectId: scope.projectId, savedModelId, workspaceModelId, maxSteps, stream, signal: abortSignal, onStream: options?.onStream };
+        const runInput = { definition, sessionId: scope.sessionId, projectId: scope.projectId, savedModelId, workspaceModelId, maxSteps, stream, scope: rootScope, onStream: options?.onStream };
         const runResult = await runner.run(runInput);
         // runner 已知失败沿返回值到达（五期门⑦）：转异常进本函数既有收口——
         // runnerEmittedTerminal 已因 runner 内发过终态置真（不会重复补 FAILED('')），
@@ -980,18 +1001,21 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       throw error;
     } finally {
       // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。
-      runtime.abortRegistry?.unregister(scope.sessionId, internalController);
+      runtime.agentAbortRegistry?.unregister(scope.sessionId, internalController);
       // 句柄为 undefined = 前奏期就抛了、streamRegistry 从未 register。
       // 此刻**不能**反注册：`unregister` 在 handle 省略时按「不带所有权比对直接删」
       // 处理（见 AgentStreamRegistry 注释），会误删同 sessionId 上别的 run 的
-      // partial。abortRegistry 的反注册走本函数外层 finally，同样幂等。
+      // partial。agentAbortRegistry 的反注册走本函数外层 finally，同样幂等。
       if (streamHandle != null) {
         runtime.streamRegistry?.unregister(scope.sessionId, streamHandle);
       }
     }
   } finally {
     // unregister 带所有权比对：内层已反注册时为 no-op（幂等兜底）。
-    runtime.abortRegistry?.unregister(scope.sessionId, internalController);
+    runtime.agentAbortRegistry?.unregister(scope.sessionId, internalController);
+    // 正常收尾释放根 scope：摘掉对 caller scope 的父监听与定时器（不触发自身
+    // onCancel——正常完成不是取消）。子 scope 均已随各自的 run 结束 dispose。
+    rootScope.dispose();
   }
 }
 
@@ -1094,24 +1118,28 @@ function subscribeQuietly(runtime: AgentTurnRuntimePort, type: string, handler: 
  * - 规则快照隔离：ChatAgentSession 构造时第三位传 parentSessionId（规则评估按父
  *   工作区），第四位 kkvScopeSessionId 走默认值=自身（rule_snapshot / file_cache
  *   存子 session 自己的 KKV）。
- * - abort 派生（P1-6）：`new AbortController()` + `parentSignal.addEventListener("abort", ..., { once: true })`。
+ * - abort 派生（P1-6）：子 scope 以父 scope 为 parent 派生（等价 `parentScope.fork()`；
+ *   额外带 controller 供 agent 门面做所有权登记），父 abort → 子以 `"parent"` 级联，
+ *   子退出/完成不反向影响父。
  * - registry（P1-10）：`resolveAgentToolRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
  *   孙 agent（depth >= 2）强制 deny task。
  * - 装配期 vs run 期（P0-2）：`assembleAgentRunnerDeps({ ..., includeCompactionOrchestrator: false })`
  *   是装配期字段，不在 `AgentRunOptions`。
  */
-// nm-style: keep-local — 子 run 生命周期状态机：childController 的 tryRegister claim / 反注册、streamHandle 所有权、两道前奏检查点绑成一条链，且整段经 subagent 闭包递归到孙代理；内联进 toolCtx 对象字面量会把同一份 claim/清理状态拆进匿名递归闭包。
+// nm-style: keep-local — 子 run 生命周期状态机：childAbortScope 的 tryRegister claim / 反注册、streamHandle 所有权、两道前奏检查点绑成一条链，且整段经 subagent 闭包递归到孙代理；内联进 toolCtx 对象字面量会把同一份 claim/清理状态拆进匿名递归闭包。
 async function runChildAgent(args: {
   readonly runtime: AgentTurnRuntimePort;
   readonly parentProjectId: string;
   /** 根父会话 id（工作区归属；嵌套时透传，不指向中间子会话）。 */
   readonly parentSessionId: string;
   readonly parentDepth: number;
+  /** 父 run 的取消 scope：子 scope 由它派生（父 abort → 子 `"parent"` 级联）。 */
+  readonly parentScope: AbortScope;
   readonly def: AgentDefinition;
   readonly childSessionId: string;
   readonly opts: RunChildAgentOptions;
 }): Promise<Result<AgentRunResult, AppError>> {
-  const { runtime, parentProjectId, parentSessionId, parentDepth, def, childSessionId, opts } = args;
+  const { runtime, parentProjectId, parentSessionId, parentDepth, parentScope, def, childSessionId, opts } = args;
   const childDepth = parentDepth + 1;
 
   // 子 run 的 scope（终态事件的 payload 归属用，r3-run-3）：
@@ -1124,40 +1152,39 @@ async function runChildAgent(args: {
     projectId: parentProjectId,
   };
 
-  // abort 派生（P1-6）：子 agent 退出/完成不应反向影响父 signal。
+  // abort 派生（P1-6）：子 agent 退出/完成不应反向影响父 scope。
   //
   // r3-run-3 前移：本块原先位于 VFS 装配之后，与下面 `try` 里的 register 之间
   // 隔着 baseRegistry 装配 + `agentRegistry.list()`（拉全部 agent 定义）+
-  // registry resolve + 技能预算——这段窗口内 childController 还没建好、子
+  // registry resolve + 技能预算——这段窗口内子 scope 还没建好、子
   // 会话页的停止按钮找不到 controller，停止意图**整个丢掉**（不是延迟）。
   // 现在紧跟 childDepth 落地，下面 try 里的 register 紧随其后，中间不留 IO。
+  //
+  // 派生用父 scope 作 parent（语义等同 `parentScope.fork()`）；额外显式带
+  // childController，是因为 agent 门面的 register / tryRegister / unregister
+  // 需要 controller 做引用所有权比对——`fork()` 不暴露内部 controller，纯
+  // fork 出的 scope 无法登记进 registry。父 abort → 本 scope 以 `"parent"` 级联；
+  // registry.abort(childSessionId) → controller.abort() → `"user-stop"`。
   const childController = new AbortController();
-  const parentSignal = opts.signal;
-  if (parentSignal.aborted) {
-    childController.abort();
-  } else {
-    parentSignal.addEventListener("abort", () => childController.abort(), {
-      once: true,
-    });
-  }
+  const childAbortScope = createAbortScope({ controller: childController, parent: parentScope });
 
   /**
-   * 子 run 的前奏检查点（主 run 的同款，判据是 childController.signal）。
+   * 子 run 的前奏检查点（主 run 的同款，判据是子 scope 的 reason）。
    *
    * 与主 run 的差别只有一处：**没有**「用户消息已落库 / 未落库」之分——子 run
    * 唯一的落库动作是 `session.append(prompt)`，它排在两道检查点**之后**，所以
    * 两道命中时子会话里连 task prompt 都还没写，语义比主 run ①②更接近主 run ⓪
    * （「这次派发根本没发生」）。这也正是它们必须**早于** append 的原因。
    */
-  const childPreludeAbortResult = (): AgentRunResult | undefined => (childController.signal.aborted ? syntheticCancelledResult() : undefined);
+  const childPreludeAbortResult = (): AgentRunResult | undefined => (childAbortScope.reason !== null ? syntheticCancelledResult() : undefined);
 
   // 子 run controller 挂进 registry，让外部（子会话页停止按钮）能按 childSessionId
   // 中断子 run。r3-run-3 前移：register 从「装配全部完成之后」提到所有前奏 IO
-  // 之前（紧跟上面 childController 块），并保持 register 起就纳入 try/finally
+  // 之前（紧跟上面 childAbortScope 块），并保持 register 起就纳入 try/finally
   // 包络——覆盖中间每一个 await（list / skills / session.append）抛错的路径，
   // 否则那些 await 一抛错 finally 不执行，registry 留下孤儿 controller。
   // finally 反注册带所有权比对，防误删新 run 的 controller / partial。形态对齐 runAgentTurn。
-  // streamHandle 在 try 外声明（同 childController），保证 finally 能读到。
+  // streamHandle 在 try 外声明（同 childAbortScope），保证 finally 能读到。
   let streamHandle: string | undefined;
   try {
     // 并发硬互斥的 claim 落点（spec D5）：由无条件覆盖的 `register` 换成
@@ -1166,9 +1193,9 @@ async function runChildAgent(args: {
     //
     // 判别：`false` = 同一 childSessionId 上已有 in-flight run（典型是同一步里两个
     // task 并发续用同一个子会话），一律一成一败；败方 finally 的 `unregister` 因
-    // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
+    // 所有权比对不会误删赢家的 controller。缺 agentAbortRegistry 时放行（无法判定，
     // 按旧行为；CLI 已补注入，见 D6）。
-    if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
+    if (runtime.agentAbortRegistry?.tryRegister(childSessionId, childController) === false) {
       // 五期门⑦：claim 失败（同一子会话已有 in-flight run）沿 `Result.err` 交回，
       // task 工具按 `!ok` 转给模型（child_session_busy 可重试）。
       return Result.err(new AppError("TOOL_FAILED", { toolName: "task", descriptor: { key: "error.agent.child_session_busy", params: { child_session_id: childSessionId } } }));
@@ -1262,8 +1289,8 @@ async function runChildAgent(args: {
       vfs,
       projectId: parentProjectId,
       sessionId: childSessionId,
-      // 子回合的取消信号（由父 signal 派生）：取消竞速 + 长请求 abort。
-      signal: childController.signal,
+      // 子回合的取消信号（由父 scope 派生）：取消竞速 + 长请求 abort。
+      signal: childAbortScope.signal,
       sessionKkv: runtime.sessionKkv,
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
@@ -1299,7 +1326,7 @@ async function runChildAgent(args: {
         // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。
         parentSessionId: childSessionId,
         // 并发软闸与主装配点同款（缺 registry 保守拒绝）。
-        isSessionRunActive: (id: string): boolean => runtime.abortRegistry?.has(id) ?? true,
+        isSessionRunActive: (id: string): boolean => runtime.agentAbortRegistry?.has(id) ?? true,
         // 孙 agent pin → 父子 agent 的 savedModelId（四期门⑦：已知失败沿 Result 回传）。
         resolveChildModelId: (grandchildDef: AgentDefinition): Result<ChildModelIds, AppError> => {
           return resolveChildModel(grandchildDef, opts.savedModelId, opts.workspaceModelId, "error.agent.grandchild_model_missing");
@@ -1311,13 +1338,14 @@ async function runChildAgent(args: {
             parentProjectId,
             parentSessionId,
             parentDepth: childDepth,
+            parentScope: childAbortScope,
             def: grandchildDef,
             childSessionId: grandchildSessionId,
             opts: grandchildOpts,
           });
         },
         depth: childDepth,
-        parentSignal: childController.signal,
+        parentSignal: childAbortScope.signal,
         callableAgents: callable,
       },
       // A-14：子 agent 同样不限制路径。
@@ -1356,7 +1384,7 @@ async function runChildAgent(args: {
       persistMessages: true,
       publishRunLifecycle: true,
       stream: childStream,
-      signal: childController.signal,
+      scope: childAbortScope,
     };
     const childResult = await runner.run(childRunInput);
     // 子 run 已知失败沿返回值到达（五期门⑦）：转异常冒泡（本函数无 catch，
@@ -1365,7 +1393,9 @@ async function runChildAgent(args: {
     return Result.ok(childResult.value);
   } finally {
     // 反注册带所有权比对，防误删新 run 的 controller / partial。
-    runtime.abortRegistry?.unregister(childSessionId, childController);
+    runtime.agentAbortRegistry?.unregister(childSessionId, childController);
+    // 正常收尾释放子 scope：从父 scope 的 children 集摘除并清定时器。
+    childAbortScope.dispose();
     // 句柄为 undefined = 子检查点①命中（streamRegistry.register 之前就返回了）
     // 或前奏抛错。此时**不能**反注册：unregister 在 handle 省略时按「不带所有权
     // 比对直接删」处理，会误删同 childSessionId 上别的 run 的 partial。与主 run

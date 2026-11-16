@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -48,7 +49,7 @@ describe("ChatAgentSession", () => {
         },
       ],
     }));
-    const all = await ctx.messages.listBySession(chatSession.id);
+    const all = outcomeValue(await ctx.messages.listBySession(chatSession.id));
     const toolUse = all
       .flatMap((m) => m.content.blocks)
       .find((b) => b.type === "tool_use");
@@ -68,7 +69,7 @@ describe("ChatAgentSession", () => {
     assert.equal(unwrap(await agentSession.hideRange(2, hiddenTail.seq)), 2);
 
     // 牙齿：全量读确实含 hidden 行（不是「库里本来就没有」的恒真断言）
-    const all = await ctx.messages.listBySession(chatSession.id);
+    const all = outcomeValue(await ctx.messages.listBySession(chatSession.id));
     assert.equal(all.length, 4);
     assert.equal(all.filter((m) => m.hidden).length, 2);
 

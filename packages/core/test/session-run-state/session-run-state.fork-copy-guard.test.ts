@@ -9,6 +9,7 @@
  * @module test/session-run-state/session-run-state.fork-copy-guard.test
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -127,7 +128,7 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
     // 消息 tail 已删，但 run 态不是消息面数据——行原样。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 1);
     assert.deepEqual(unwrap(await svc.get(session.id)), row);
   });

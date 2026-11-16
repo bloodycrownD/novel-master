@@ -246,10 +246,10 @@ export function onCoreRunFailed({
 /**
  * 会话是否有在途 run（r3-dt-align 第 1 层的唯一判活源）。
  *
- * 判据写死 `rt.abortRegistry.has(sessionId)`，不用上面的 `activeRuns`：
+ * 判据写死 `rt.agentAbortRegistry.has(sessionId)`，不用上面的 `activeRuns`：
  * - `activeRuns` 只在 desktop 自己的 `handleAgentRun` 入口登记，靠终态事件
  *   清理，是 **refcount 影子**，语义上「desktop 认为有 run 在跑」；
- * - `abortRegistry` 在 core `runAgentTurn` **函数入口**注册（受理即在途），
+ * - `agentAbortRegistry` 在 core `runAgentTurn` **函数入口**注册（受理即在途），
  *   由 core 自己的 finally 反注册，额外覆盖子 run，且不依赖终态事件到没到
  *   ——前奏期抛错/取消那些「refcount 已被回收、core 却还在跑」的窗口，它照样
  *   判真。`handleAgentRunIsActive` 早就是这条判据，本函数是它的同步版。
@@ -258,7 +258,7 @@ export function onCoreRunFailed({
  * 同一个 runtime（单测还会传 Proxy 探针），走参数才不会被绕开。
  */
 export function isDesktopSessionRunInFlight(runtime: DesktopNovelMasterRuntime, sessionId: string): boolean {
-  return runtime.abortRegistry.has(sessionId);
+  return runtime.agentAbortRegistry.has(sessionId);
 }
 
 /**
@@ -344,7 +344,7 @@ export async function handleAgentAbort(req: AgentAbortRequest): Promise<IpcResul
 }
 
 /**
- * 查询某 session 是否有 in-flight run——转调 rt.abortRegistry.has(sessionId)。
+ * 查询某 session 是否有 in-flight run——转调 rt.agentAbortRegistry.has(sessionId)。
  * renderer 的 readOnly 子面板用它判断 stale，避免在 run 进行中渲染可交互 UI。
  */
 export async function handleAgentRunIsActive(req: AgentRunIsActiveRequest): Promise<IpcResult<boolean>> {
@@ -352,7 +352,7 @@ export async function handleAgentRunIsActive(req: AgentRunIsActiveRequest): Prom
   // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
   if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
   const rt = built.value;
-  return { ok: true, data: rt.abortRegistry.has(req.sessionId) };
+  return { ok: true, data: rt.agentAbortRegistry.has(req.sessionId) };
 }
 
 /**
@@ -381,8 +381,8 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
     await resolveDesktopSavedModelId(rt, (await resolveCurrentAgentDefinition(rt)).definition, req.sessionId);
     const { sessionId } = req;
     // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
-    // core runAgentTurn 内部自建 internalController 注册到 rt.abortRegistry，
-    // 停止按钮经 ipcAgentAbort → rt.abortRegistry.abort(sessionId) 中断。
+    // core runAgentTurn 内部自建 internalController 注册到 rt.agentAbortRegistry，
+    // 停止按钮经 ipcAgentAbort → rt.agentAbortRegistry.abort(sessionId) 中断。
     // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
     // runId 比对 + finishTrackedRun 的 decrementDesktopAgentActive()。
     activeRuns.set(sessionId, { runId: null, terminalSeen: false });
@@ -454,7 +454,7 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
 /**
  * 中断指定 sessionId 的当前 run——Phase 3 Step 24(a)。
  *
- * 改调 core registry（rt.abortRegistry.abort），不再依赖 activeRuns 里的
+ * 改调 core registry（rt.agentAbortRegistry.abort），不再依赖 activeRuns 里的
  * controller。refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
  */
 export async function abortAgentRun(sessionId: string): Promise<void> {
@@ -465,7 +465,7 @@ export async function abortAgentRun(sessionId: string): Promise<void> {
     return;
   }
   const rt = built.value;
-  rt.abortRegistry.abort(sessionId);
+  rt.agentAbortRegistry.abort(sessionId);
   // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
 }
 

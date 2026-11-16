@@ -1,4 +1,5 @@
 import { unwrap } from "../../helpers/result-unwrap.js";
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -121,10 +122,12 @@ function makeRuntime(overrides: {
       getAgentConfig: async () => Result.ok({ mode: "follow" }),
     } as AgentTurnRuntimePort["projects"],
     messages: {
-      listBySession:
-        overrides.listBySession ?? (async () => []),
-      listBySessionTail:
-        overrides.listBySessionTail ?? (async () => []),
+      // 错误通道迁移八期：读口走 Outcome——override 仍写裸数组，这里统一包 completed。
+      listBySession: async () => ({ kind: "completed" as const, value: await (overrides.listBySession ?? (async () => []))() }),
+      listBySessionTail: async (sessionId: string, options: { limit: number }) => ({
+        kind: "completed" as const,
+        value: await (overrides.listBySessionTail ?? (async () => []))(sessionId, options),
+      }),
       // 错误通道迁移二期：append/delete 走 Result 通道——override 仍写裸值，这里统一包 Ok。
       append:
         overrides.append != null
@@ -572,7 +575,7 @@ describe("runAgentTurn", () => {
       },
     );
     assert.equal(appendCount, 0, "末条 assistant 不得误 append");
-    const after = await runtime.messages.listBySession("s");
+    const after = outcomeValue(await runtime.messages.listBySession("s"));
     assert.equal(after.length, existing.length, "listBySession 长度不变");
     assert.equal(
       after.some((m) => m.role === "user"),

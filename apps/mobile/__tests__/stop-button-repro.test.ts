@@ -83,7 +83,7 @@ describe('stop-button 复现：native 分支挂死 + abort 传导', () => {
     await Promise.resolve();
     expect(recorded.connects).toHaveLength(1);
 
-    // tap 终止：等价 stopRun → registry.abort → controller.abort()
+    // tap 终止：等价 stop(ABORT_KEY.agent(...)) → registry.abort → controller.abort()
     controller.abort();
 
     // 断言一：连接被客户端主动关闭（sseAbort 到达 native 侧）

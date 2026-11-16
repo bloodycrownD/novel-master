@@ -4,7 +4,8 @@
  *
  * @module runtime/create-desktop-runtime
  */
-import { createAgentAbortRegistry, createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
+import { ABORT_KEY, createAbortRegistry, scopeFromController } from "@novel-master/core/abort";
+import { createAgentRegistryService, createAgentStreamRegistry, type AgentAbortRegistry } from "@novel-master/core/agent";
 import { createCompactionConditionEvaluator, createCompactionConditionsStore } from "@novel-master/core/compaction";
 import { createDefaultTokenCounterRegistry, createProviderServices } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
@@ -66,7 +67,18 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
   const agentRegistry = createAgentRegistryService(conn, state);
-  const abortRegistry = createAgentAbortRegistry();
+  // 泛化 registry + Agent 门面（spec §二「实例拓扑」）：门面把 core 的
+  // `(sessionId, AbortController)` 契约适配到 `agent:` 命名空间，scope 经
+  // `scopeFromController` 取——与 run 根 scope 共用同一 WeakMap memoize 实例，
+  // 不另建缓存 Map。两者必须同实例，否则停止按钮与 run 注册各说各话。
+  const abortRegistry = createAbortRegistry();
+  const agentAbortRegistry: AgentAbortRegistry = {
+    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    abort: (sessionId) => abortRegistry.abort(ABORT_KEY.agent(sessionId)),
+    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    has: (sessionId) => abortRegistry.has(ABORT_KEY.agent(sessionId)),
+  };
   const streamRegistry = createAgentStreamRegistry();
 
   // 消息列表行解析让步（ic-08B 方案 B）：与 mobile 的 messageParseYield 同款
@@ -113,6 +125,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     compactionConditionEvaluator,
     agentRegistry,
     abortRegistry,
+    agentAbortRegistry,
     streamRegistry,
     tokenCounters,
     projects,

@@ -101,6 +101,7 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
     const request = nativeModuleState.request as jest.Mock;
     await registered('https://api.example.com/v1/models', {method: 'GET'});
     expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/^llm-native-fetch-/),
       'GET',
       'https://api.example.com/v1/models',
       [],
@@ -126,6 +127,7 @@ describe('setup-llm-fetch 装配 (T-N4)', () => {
       body: '{"m":1}',
     });
     expect(request).toHaveBeenCalledWith(
+      expect.stringMatching(/^llm-native-fetch-/),
       'POST',
       'https://api.example.com/v1/chat/completions',
       [],

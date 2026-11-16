@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -58,7 +59,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     assert.equal(unwrap(await svfs.read("/keep-a.md")).content, "a");
     assert.equal(unwrap(await svfs.read("/keep-b.md")).content, "b");
     assert.equal(unwrap(await svfs.read("/later.md")).content, "later");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
   });
 
@@ -81,7 +82,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     });
 
     assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 

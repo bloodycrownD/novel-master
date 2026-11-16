@@ -4,7 +4,8 @@
  * @module runtime/create-mobile-runtime
  */
 
-import {createAgentAbortRegistry, createAgentRegistryService, createAgentStreamRegistry} from '@novel-master/core/agent';
+import {ABORT_KEY, createAbortRegistry, scopeFromController} from '@novel-master/core/abort';
+import {createAgentRegistryService, createAgentStreamRegistry, type AgentAbortRegistry} from '@novel-master/core/agent';
 import {createCompactionConditionEvaluator, createCompactionConditionsStore} from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle} from '@novel-master/core/chat';
@@ -65,7 +66,17 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
 
   const smartSortRule = createSmartSortRuleService(conn);
   const agentRegistry = createAgentRegistryService(conn, state);
-  const abortRegistry = createAgentAbortRegistry();
+  const abortRegistry = createAbortRegistry();
+  // Agent 门面：把 core 的 `(sessionId, AbortController)` 契约适配到泛化 registry
+  // 的 `agent:` 命名空间。scope 经 `scopeFromController` 取——与 run 根 scope 共用
+  // 同一 WeakMap memoize 实例，不另建缓存 Map（spec §二）。
+  const agentAbortRegistry: AgentAbortRegistry = {
+    register: (sessionId, controller) => abortRegistry.register(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    tryRegister: (sessionId, controller) => abortRegistry.tryRegister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    abort: sessionId => abortRegistry.abort(ABORT_KEY.agent(sessionId)),
+    unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
+    has: sessionId => abortRegistry.has(ABORT_KEY.agent(sessionId)),
+  };
   const streamRegistry = createAgentStreamRegistry();
 
   const secretStore = createCompositeSecretStore({
@@ -126,6 +137,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     compactionConditionEvaluator: lazyCompactionConditionEvaluator,
     agentRegistry,
     abortRegistry,
+    agentAbortRegistry,
     streamRegistry,
     searchConfig,
     tokenCounters,

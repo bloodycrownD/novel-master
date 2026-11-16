@@ -47,7 +47,7 @@ describe("agent run lifecycle", () => {
   });
 
   it("T14: abort 不碰 refcount，保持 busy 直至 RUN_FINISHED", () => {
-    // Phase 3 Step 24：abortAgentRun 改调 rt.abortRegistry.abort(sessionId)，
+    // Phase 3 Step 24：abortAgentRun 改调 rt.agentAbortRegistry.abort(sessionId)，
     // 不再依赖 activeRuns / 不再 decrement。refcount 单一归属 finishTrackedRun。
     // 这里不直接调 abortAgentRun（需 runtime 单例），而是验证契约本身：
     // 在收到 RUN_FINISHED 之前，refcount 恒为 true。

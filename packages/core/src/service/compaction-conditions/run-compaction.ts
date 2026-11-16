@@ -30,6 +30,7 @@ import { messageIdsInSlice } from "@/domain/depth/logic/depth-slice.js";
 import { resolveHideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -62,11 +63,30 @@ interface RunCompactionParams {
    * 刷新，吞错 warn）；`"auto"`：两域保留（回合内前缀冻结，见模块头注释）。
    */
   readonly trigger?: CompactionTrigger;
+  /**
+   * 长任务注入钩子（可选）：入口与 hide 前各一个同步检查点，并穿透到压缩
+   * 路径最大的一次读（`listBySessionFromSeq` 的分片边界）。
+   *
+   * `hide → token cache 失效 → KKV 清理` 是不可中断尾段：中途取消会留下
+   * 「消息已隐藏、缓存未清」的半应用态，因此 hide 开始后不再看 checkpoint。
+   */
+  readonly hooks?: LongTaskHooks;
 }
 
-/** 压缩执行结果：只关心成败，不暴露 failures 细节。 */
+/**
+ * 压缩执行结果。
+ *
+ * `{ ok: false }` 分不出「取消」与「真失败」，中断单独收
+ * `{ ok: false, cancelled: true }`（IPC 边界据此转 `IPC_ABORTED`）。
+ */
 interface RunCompactionResult {
   readonly ok: boolean;
+  readonly cancelled?: true;
+}
+
+/** 检查点命中 → 压缩取消形态；未命中返回 null。 */
+function cancelledResult(hooks?: LongTaskHooks): RunCompactionResult | null {
+  return hooks?.checkpoint?.() == null ? null : { ok: false, cancelled: true };
 }
 
 /**
@@ -78,6 +98,10 @@ interface RunCompactionResult {
  * 该早 return 结构天然保证「manual 场景 hide 失败 → 两域不清」。
  */
 export async function runCompaction(deps: RunCompactionDeps, params: RunCompactionParams): Promise<RunCompactionResult> {
+  // 入口检查点：压缩还没动任何状态，取消零代价。未注入 hooks 时恒不可达。
+  const entryCancelled = cancelledResult(params.hooks);
+  if (entryCancelled != null) return entryCancelled;
+
   const startDepth = params.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH;
   const slice: DepthSlice = { startDepth };
 
@@ -92,11 +116,19 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
     if (ids.value.length > 0) {
       const idSet = new Set(ids.value);
       const minSeq = Math.min(...visible.filter((m) => idSet.has(m.id)).map((m) => m.seq));
-      const fullRows = await deps.messages.listBySessionFromSeq(params.sessionId, minSeq);
+      // hooks 必须穿透到这次读：它是压缩路径最大的一次读，不传则整段对取消盲。
+      const fullRowsOutcome = await deps.messages.listBySessionFromSeq(params.sessionId, minSeq, params.hooks);
+      if (fullRowsOutcome.kind === "failed") return { ok: false };
+      if (fullRowsOutcome.kind !== "completed") return { ok: false, cancelled: true };
+      const fullRows = fullRowsOutcome.value;
       const fullById = new Map(fullRows.map((m) => [m.id, m]));
       const mergedVisible = visible.map((m) => fullById.get(m.id) ?? m);
       const range = resolveHideMessageRange(mergedVisible, slice, ids.value);
       if (range != null) {
+        // hide 前最后一个检查点：从这里开始进入不可中断尾段（hide → token cache
+        // 失效 → KKV 清理），中途抛错会留下半应用态。
+        const hideCancelled = cancelledResult(params.hooks);
+        if (hideCancelled != null) return hideCancelled;
         await deps.messageTranscriptEffects.hideMessagesInRange(params.projectId, params.sessionId, range.fromSeq, range.toSeq);
       }
     }

@@ -29,7 +29,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const url = joinUrl(req.baseUrl, "/models");
-    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { Authorization: `Bearer ${req.apiKey}`, ...req.extraHeaders } });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "GET", headers: { Authorization: `Bearer ${req.apiKey}`, ...req.extraHeaders }, signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string }> };
     const models = (data.data ?? []).filter((m) => typeof m.id === "string").map((m) => ({ vendorModelId: m.id! }));
@@ -53,7 +53,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       Object.assign(body, req.extraBody);
 
       const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
-      const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(body), signal: req.signal });
+      const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(body), signal: req.scope?.signal });
       if (!fetched.ok) throw fetched.error;
       const raw = fetched.value;
       const record = raw as { choices?: Array<{ message?: unknown }> };
@@ -69,15 +69,15 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
       try {
         const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
-        const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true)), signal: req.signal };
-        await postSse(url, init, (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.signal });
+        const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true)), signal: req.scope?.signal };
+        await postSse(url, init, (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
-        if (!isRequestAborted(error, req.signal)) {
+        if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
         }
       }
 
-      const aborted = req.signal?.aborted === true;
+      const aborted = req.scope?.signal.aborted === true;
       const abortedResult = {
         blocks: openAiStreamAccumulatorsToPartialBlocks(state, req.onStream),
         streamRaw: state.lastUsageEvent ?? state.lastEvent ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
@@ -100,7 +100,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
     const url = joinUrl(req.baseUrl, "/chat/completions");
     const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false)), signal: req.signal });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false)), signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { choices?: Array<{ message?: unknown }> };

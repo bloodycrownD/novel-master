@@ -12,6 +12,7 @@
  *
  * @module test/chat/message-repository-yield
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -75,7 +76,7 @@ describe("message repository 行解析分片让步（T-R2）", () => {
 
     // 直通基准（desktop/cli 形态：不传 yieldFn）。
     const plain = new SqliteMessageRepository(ctx.conn);
-    const baseline = await plain.listBySession(session.id);
+    const baseline = outcomeValue(await plain.listBySession(session.id));
     assert.equal(baseline.length, 120);
 
     const gate = createGatedYield();
@@ -110,7 +111,8 @@ describe("message repository 行解析分片让步（T-R2）", () => {
     await macroTick();
     assert.equal(gate.calls(), 2);
 
-    const result = await pending;
+    // pending 故意不立即 await（要观察片间挂起）；落定后按 completed 收窄再比对。
+    const result = outcomeValue(await pending);
     assert.deepEqual(result, baseline);
   });
 
@@ -133,9 +135,9 @@ describe("message repository 行解析分片让步（T-R2）", () => {
       yieldCount += 1;
     });
 
-    const all = await repo.listBySession(session.id);
+    const all = outcomeValue(await repo.listBySession(session.id));
     assert.equal(all.length, 50);
-    const tail = await repo.listBySessionTail(session.id, 51);
+    const tail = outcomeValue(await repo.listBySessionTail(session.id, 51));
     assert.equal(tail.length, 50);
     // 50 行整 = 单片，两处列表均零让步点。
     assert.equal(yieldCount, 0);
@@ -145,8 +147,8 @@ describe("message repository 行解析分片让步（T-R2）", () => {
       unwrap(await ctx.messages.append(session.id, "user", textBlocks(`行 ${i}`)));
     }
     const plain = new SqliteMessageRepository(ctx.conn);
-    const tailBaseline = await plain.listBySessionTail(session.id, 61);
-    const tailYielded = await repo.listBySessionTail(session.id, 61);
+    const tailBaseline = outcomeValue(await plain.listBySessionTail(session.id, 61));
+    const tailYielded = outcomeValue(await repo.listBySessionTail(session.id, 61));
     assert.equal(yieldCount, 1);
     assert.deepEqual(tailYielded, tailBaseline);
   });
@@ -163,8 +165,8 @@ describe("message repository 行解析分片让步（T-R2）", () => {
     // 60 行在直通下可正常返回且结果稳定（与注入路径的逐条等价由 T-R2a
     // deepEqual 兜底；全量回归由 T-R6 既有用例群承担）。
     const repo = new SqliteMessageRepository(ctx.conn);
-    const first = await repo.listBySession(session.id);
-    const second = await repo.listBySession(session.id);
+    const first = outcomeValue(await repo.listBySession(session.id));
+    const second = outcomeValue(await repo.listBySession(session.id));
     assert.equal(first.length, 60);
     assert.deepEqual(first, second);
   });

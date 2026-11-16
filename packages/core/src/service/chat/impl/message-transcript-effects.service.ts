@@ -6,6 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
@@ -67,7 +68,11 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `set-floor anchor role must be user, got: ${anchor.role}` }));
     }
 
-    const tail = await this.deps.messages.listBySessionTail(sessionId, { limit: 1 });
+    const tailRead = await this.deps.messages.listBySessionTail(sessionId, { limit: 1 });
+    if (tailRead.kind === "failed") return Result.err(tailRead.error);
+    // 未注入 hooks：中断分支不可达；命中按边界语义转抛 AbortError。
+    if (tailRead.kind !== "completed") throw createAbortError();
+    const tail = tailRead.value;
     const sessionMaxSeq = tail.length > 0 ? tail[0]!.seq : 0;
     const hidePrefix = anchor.seq > 1 ? { fromSeq: 1 as const, toSeq: anchor.seq - 1 } : null;
     const showSuffix = anchor.seq <= sessionMaxSeq ? { fromSeq: anchor.seq, toSeq: sessionMaxSeq } : null;

@@ -17,6 +17,9 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import type { Outcome } from "@/errors/outcome.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -89,28 +92,28 @@ export class DefaultMessageService implements MessageService {
     }
   }
 
-  listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySession(sessionId, options);
+  listBySession(sessionId: string, options?: { includeHidden?: boolean }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySession(sessionId, options, hooks);
   }
 
   listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]> {
     return this.deps.messages.listMessageHeadersBySession(sessionId);
   }
 
-  listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq);
+  listBySessionFromSeq(sessionId: string, fromSeq: number, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq, hooks);
   }
 
-  listBySessionTail(sessionId: string, options: { limit: number }): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionTail(sessionId, options.limit);
+  listBySessionTail(sessionId: string, options: { limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionTail(sessionId, options.limit, hooks);
   }
 
-  listBySessionTailOfRole(sessionId: string, options: { role: string; limit: number }): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionTailOfRole(sessionId, options.role, options.limit);
+  listBySessionTailOfRole(sessionId: string, options: { role: string; limit: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionTailOfRole(sessionId, options.role, options.limit, hooks);
   }
 
-  listBySessionPage(sessionId: string, options: { limit: number; beforeSeq?: number }): Promise<ChatMessageData[]> {
-    return this.deps.messages.listBySessionPage(sessionId, options.limit, options.beforeSeq);
+  listBySessionPage(sessionId: string, options: { limit: number; beforeSeq?: number }, hooks?: LongTaskHooks): Promise<Outcome<ChatMessageData[]>> {
+    return this.deps.messages.listBySessionPage(sessionId, options.limit, options.beforeSeq, hooks);
   }
 
   async get(id: string): Promise<Result<ChatMessageData, AppError>> {
@@ -241,7 +244,7 @@ export class DefaultMessageService implements MessageService {
     return Result.ok(message.value);
   }
 
-  async fork(sessionId: string, upToMessageId: string): Promise<Result<ChatSession, AppError>> {
+  async fork(sessionId: string, upToMessageId: string, hooks?: LongTaskHooks): Promise<Result<ChatSession, AppError>> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `session not found: ${sessionId}`, kind: "session", id: sessionId }));
@@ -253,7 +256,11 @@ export class DefaultMessageService implements MessageService {
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
     // seedForkCopyParity 吃同一份 toCopy），锚点之后的
     // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
-    const all = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq);
+    const allRead = await this.deps.messages.listBySessionUpToSeq(sessionId, upTo.seq, hooks);
+    if (allRead.kind === "failed") return Result.err(allRead.error);
+    // 中断不是错误：本方法出口是边界，转抛 AbortError 交给上层（IPC / CLI）收口。
+    if (allRead.kind !== "completed") throw createAbortError();
+    const all = allRead.value;
     if (all.length === 0) {
       // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
       // 没有时直接拒绝，不为一个必然回滚的动作开事务。
@@ -299,9 +306,12 @@ export class DefaultMessageService implements MessageService {
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
-      await copyVfsTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", {
-        contentStore: new SqliteVfsContentStore(tx),
-      });
+      // 事务边界（平台协议例外）：VFS 复制与批量写入的中断/失败都必须抛错，
+      // 才能让驱动整体回滚——直接 return Outcome 会 commit 半写 fork。
+      const copyOptions = { contentStore: new SqliteVfsContentStore(tx), hooks };
+      const vfsCopied = await copyVfsTree(r.vfs, { scopeKey: `session:${source.projectId}:${source.id}` }, "/", { scopeKey: `session:${source.projectId}:${forked.id}` }, "/", copyOptions);
+      if (vfsCopied.kind === "failed") throw vfsCopied.error;
+      if (vfsCopied.kind !== "completed") throw createAbortError();
 
       const newMessages: { id: string }[] = [];
       let seq = 1;
@@ -314,7 +324,11 @@ export class DefaultMessageService implements MessageService {
         newMessages.push({ id });
         seq++;
       }
-      await r.messages.batchInsert(forkedMessages);
+      const inserted = await r.messages.batchInsert(forkedMessages, hooks);
+      // 事务边界（平台协议例外）：中断/失败都必须抛错才能让驱动整体回滚，
+      // 不能把 Outcome 直接 return——那样外层事务会 commit 半批 fork。
+      if (inserted.kind === "failed") throw inserted.error;
+      if (inserted.kind !== "completed") throw createAbortError();
       // seed 失败靠抛错回滚（总纲 §五例外 2）：事务回调内 return r 不回滚会留下半写 fork，
       // 解包字收口在 unwrapOrRollback（门⑦），异常穿出 transaction 由调用链端点 catch 收口。
       await unwrapOrRollback(await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages }));
@@ -410,7 +424,11 @@ export class DefaultMessageService implements MessageService {
     }
 
     // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。
-    const tailMessages = await this.deps.messages.listBySessionFromSeq(sessionId, anchor.seq + 1);
+    const tailRead = await this.deps.messages.listBySessionFromSeq(sessionId, anchor.seq + 1);
+    if (tailRead.kind === "failed") return Result.err(tailRead.error);
+    // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按边界语义转抛。
+    if (tailRead.kind !== "completed") throw createAbortError();
+    const tailMessages = tailRead.value;
     if (tailMessages.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
       await this.invalidatePromptTokens(sessionId);

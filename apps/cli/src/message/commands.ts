@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
 import { type ChatMessageData } from "@novel-master/core/chat";
 import { type AppError, Result } from "@novel-master/core/errors";
+import { createAbortError } from "@novel-master/core/abort";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { RESULT_OK } from "../cli-errors.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -65,7 +66,11 @@ export async function runMessage(rt: Pick<NovelMasterRuntime, "messages" | "scop
 
   switch (subcommand) {
     case "list": {
-      const all = await rt.messages.listBySession(sessionId);
+      const allRead = await rt.messages.listBySession(sessionId);
+      if (allRead.kind === "failed") return Result.err(allRead.error);
+      // CLI 侧未注入 hooks：中断分支不可达；命中按取消边界语义转抛 AbortError。
+      if (allRead.kind !== "completed") throw createAbortError();
+      const all = allRead.value;
       const visible = all.filter((m) => !m.hidden);
       const displayById = new Map(visible.map((m) => [m.id, m]));
       const showSeq = flags.get("show-seq") === true;
@@ -143,8 +148,10 @@ export async function runMessage(rt: Pick<NovelMasterRuntime, "messages" | "scop
         if (!hidden.ok) return hidden;
         return RESULT_OK;
       }
-      const list = await rt.messages.listBySession(sessionId);
-      const { fromSeq, toSeq } = resolveSeqRange(flags, list);
+      const listRead = await rt.messages.listBySession(sessionId);
+      if (listRead.kind === "failed") return Result.err(listRead.error);
+      if (listRead.kind !== "completed") throw createAbortError();
+      const { fromSeq, toSeq } = resolveSeqRange(flags, listRead.value);
       const count = await rt.messages.hideRange(sessionId, fromSeq, toSeq);
       if (!count.ok) return Result.err(count.error);
       console.log(`Hidden ${count.value} message(s)`);
@@ -157,8 +164,10 @@ export async function runMessage(rt: Pick<NovelMasterRuntime, "messages" | "scop
         if (!shown.ok) return shown;
         return RESULT_OK;
       }
-      const list = await rt.messages.listBySession(sessionId);
-      const { fromSeq, toSeq } = resolveSeqRange(flags, list);
+      const listRead = await rt.messages.listBySession(sessionId);
+      if (listRead.kind === "failed") return Result.err(listRead.error);
+      if (listRead.kind !== "completed") throw createAbortError();
+      const { fromSeq, toSeq } = resolveSeqRange(flags, listRead.value);
       const count = await rt.messages.showRange(sessionId, fromSeq, toSeq);
       if (!count.ok) return Result.err(count.error);
       console.log(`Shown ${count.value} message(s)`);

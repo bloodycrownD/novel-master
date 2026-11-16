@@ -9,6 +9,7 @@
  * @module test/service/agent/run-agent-turn-abort-registry.test
  */
 
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { Result } from "../../../src/errors/either.js";
 import { unwrap, rejectsErr } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
@@ -27,6 +28,8 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import { createAgentStreamRegistry } from "@/service/agent/create-agent-stream-registry.js";
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
@@ -188,7 +191,7 @@ function makeRuntime(
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
-    abortRegistry: args.abortRegistry,
+    agentAbortRegistry: args.abortRegistry,
     projects: ctx.projects,
     messages: ctx.messages,
     messageCheckpoint: ctx.messageCheckpoint,
@@ -464,7 +467,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     // 子 agent 被 abort 后的回流语义验证：task 工具 cancelled 分支返回 stopped=true。
     // 由于主 run 被 abort 后不会 append tool_result（主 runner L507 在 append 前 break），
     // 这里改为验证子 session 中无完整 assistant 完成消息——证明子 run 被级联中断。
-    const childMessages = await ctx.messages.listBySession(childSessionId);
+    const childMessages = outcomeValue(await ctx.messages.listBySession(childSessionId));
     const childAssistantTexts = childMessages.filter((m) => m.role === "assistant");
     // 子 run 被 cancel 后不应有「已完成」语义的末条 assistant（被中断了）。
     // mock 子 agent 返回的半成品文本可能被 append（abort 后 runner 会 append meaningful blocks），
@@ -544,7 +547,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     assert.equal(modelCalls, 0, "停止后不得再发模型请求");
     // 用户消息在 append 阶段已落库（停止发生在「已发送」之后）：保留，可由
     // undo_send 回收——与「流式中途停止」的语义一致。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(
       messages.some((m) => m.role === "user"),
       "停止前已 append 的用户消息应保留"
@@ -671,9 +674,9 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     runtime.messageCheckpoint = new Proxy(realCheckpoint, {
       get(target, prop, receiver) {
         if (prop === "backfillMissingBaselines") {
-          return async (sessionId: string, projectId: string, signal?: AbortSignal) => {
+          return async (sessionId: string, projectId: string, scope?: AbortScope) => {
             backfillCalls += 1;
-            return target.backfillMissingBaselines(sessionId, projectId, signal);
+            return target.backfillMissingBaselines(sessionId, projectId, scope!);
           };
         }
         return Reflect.get(target, prop, receiver);
@@ -684,13 +687,13 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     // 入口就带一个已 aborted 的 caller signal（等价于「受理瞬间用户已按停止」）。
-    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, signal: AbortSignal.abort() }));
+    const result = unwrap(await runAgentTurn(runtime, { projectId: project.id, sessionId: session.id }, "入口就按了停止", { stream: false, scope: createAbortScope({ signal: AbortSignal.abort() }) }));
 
     assert.equal(result.stopReason, "cancelled", "入口已 aborted 必须由检查点⓪兑现为 cancelled");
     assert.equal(backfillCalls, 0, "⓪ 必须在 backfill 之前兑现（backfill 是前奏第一站、大会话秒级）");
     assert.equal(modelCalls, 0);
     // ⓪ 的语义差一档：用户消息**未落库**——「这次发送根本没发生」。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0, "⓪ 命中时用户消息未落库；与①②「已 append、停止不改变已发送事实」不同");
     // 终态仍要恰好一条 FINISHED('')：双端靠它收口（r3-run-1）。
     assert.equal(events.finished().length, 1, "⓪ 命中同样必须发 FINISHED('') 收口");
@@ -784,7 +787,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     assert.equal(streams.has(session.id), false, "子会话/主会话都不该残留 partial 条目");
     // runner 未产出：一次模型请求都没有。
     assert.equal(modelCalls, 0, "停止后不得发模型请求（runner 未产出）");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(
       messages.some((m) => m.role === "user"),
       "检查点①之前已 append 的用户消息应保留（与流式中途停止语义一致）"
@@ -936,7 +939,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     // 那时本轮用户消息已经 append（21 条）。所以对着**实际**条数断言。
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
     const cursor = unwrap(await ctx.sessionKkv.get(session.id, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY));
-    const allMessages = await ctx.messages.listBySession(session.id);
+    const allMessages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(cursor, String(allMessages.length), "下一轮不带信号必须把剩余空窗补齐并写游标（中途退出提交已写部分，幂等可恢复）");
     assert.ok(allMessages.length > MSG_COUNT, "中断之后 run 仍走到了检查点①，本轮用户消息已落库");
   });
@@ -1407,7 +1410,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     assert.equal(cp.vfsMutated, false, "vfsMutated 硬约束：子 run 前奏没跑过任何 tool 轮");
 
     // 子 run 从未起步：子会话里连 task prompt 都没落库。
-    const childMessages = await ctx.messages.listBySession(childSessionId);
+    const childMessages = outcomeValue(await ctx.messages.listBySession(childSessionId));
     assert.equal(childMessages.length, 0, "子 run 在 append(prompt) 之前就兑现了停止 ⇒ 子会话一条消息都没有");
 
     // 主 run 的终态另算一条（真实 runId），不与子 run 的空串那条混淆。
@@ -1487,7 +1490,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     const childSessionId = seenChildIds[0]!;
     assert.equal(streams.registerCallsFor(childSessionId), 0, "子检查点①刻意排在 streamRegistry.register 之前：命中时不得给子会话页留一个永远等不到 delta 的空 partial");
     assert.equal(streams.has(childSessionId), false, "从未 register 就不该残留条目（finally 的 unregister 必须容忍 streamHandle===undefined）");
-    const childMessages = await ctx.messages.listBySession(childSessionId);
+    const childMessages = outcomeValue(await ctx.messages.listBySession(childSessionId));
     assert.equal(childMessages.length, 0, "子检查点①早于 append(prompt)，一条消息都没有");
     const childFinished = events.finished().filter((e) => e.payload.sessionId === childSessionId);
     assert.equal(childFinished.length, 1, "子检查点①命中同样发一条 FINISHED('')，且归属子会话");

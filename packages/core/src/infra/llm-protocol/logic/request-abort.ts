@@ -11,16 +11,8 @@ export function isAbortLikeError(error: unknown): boolean {
   return typeof error === "object" && error != null && "name" in error && (error as { name: string }).name === "AbortError";
 }
 
-/** Creates an abort error in Node (DOMException) or RN (Error + name). */
-export function createAbortError(message = "Request aborted"): Error {
-  const DOMEx = (globalThis as { DOMException?: new (msg: string, name: string) => Error }).DOMException;
-  if (typeof DOMEx === "function") {
-    return new DOMEx(message, "AbortError");
-  }
-  const err = new Error(message);
-  err.name = "AbortError";
-  return err;
-}
+/** `createAbortError` 已上移 `domain/abort`（唯一权威定义处），这里保留 re-export 兼容既有导入点。 */
+export { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 
 /** True when `signal` was aborted or `error` is an abort-shaped failure. */
 export function isRequestAborted(error: unknown, signal?: AbortSignal): boolean {

@@ -3,7 +3,8 @@
  */
 import { savedModelDisplayName } from "@novel-master/core/provider";
 import type { SavedModel } from "@novel-master/core/provider";
-import { type AppError, Result } from "@novel-master/core/errors";
+import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
+import { type AppError, Result, type Outcome } from "@novel-master/core/errors";
 import type {
   IpcResult,
   ProviderModelSavedDetailDto,
@@ -22,6 +23,7 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
+import { outcomeIfAborted, runAbortable } from "../run-scope.js";
 
 function toSavedDetailDto(model: SavedModel, providerDisplayName: string): ProviderModelSavedDetailDto {
   return {
@@ -66,18 +68,32 @@ export async function handleProviderModelsSavedList(req: ProviderModelsSavedList
   }
 }
 
+/**
+ * 拉取并保存模型列表（signal-abort-scope §五）。
+ *
+ * timeout 60s；key 用 providerId，`tryRegister` 拒绝同一 provider 的并发拉取
+ * （第二路回 `PROVIDER_MODELS_IN_FLIGHT`）。scope 透传到
+ * `provider-model.service.fetch` → `adapter.listModels` → `fetchJson` 的
+ * `signal`：单次网络请求由 signal 真断，请求内部不再插检查点。
+ */
 export async function handleProviderModelsFetch(req: ProviderModelsFetchRequest): Promise<IpcResult<void>> {
-  try {
-    const built = await getDesktopRuntime();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return ipcErr(formatIpcError(built.error));
-    const rt = built.value;
-    const fetched = await rt.providerModels.fetch(req.providerId);
-    if (!fetched.ok) return ipcErr(formatIpcError(fetched.error));
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+  const built = await getDesktopRuntime();
+  if (!built.ok) return ipcErr(formatIpcError(built.error));
+  const rt = built.value;
+  return runAbortable(
+    { registry: rt.abortRegistry, key: ABORT_KEY.providerModels(req.providerId), timeoutMs: 60_000, exclusive: true },
+    (scope) => doProviderModelsFetch(rt, req.providerId, scope)
+  );
+}
+
+/** 可中断的模型拉取段：请求前与请求后（写回建议表之前）各一个检查点。 */
+export async function doProviderModelsFetch(rt: DesktopNovelMasterRuntime, providerId: string, scope: AbortScope): Promise<Outcome<void>> {
+  const stopped = outcomeIfAborted(scope);
+  if (stopped != null) return stopped;
+  const fetched = await rt.providerModels.fetch(providerId, scope);
+  const interrupted = outcomeIfAborted(scope);
+  if (interrupted != null) return interrupted;
+  return fetched.ok ? { kind: "completed", value: undefined } : { kind: "failed", error: fetched.error };
 }
 
 export async function handleProviderModelsSuggestList(req: ProviderModelsSavedListRequest): Promise<IpcResult<ProviderModelSuggestionDto[]>> {

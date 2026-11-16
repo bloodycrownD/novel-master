@@ -88,7 +88,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
     ).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
   });
 
-  it('shouldBail 判据透传进 assemble 的 shouldStop（run 起步即死在文件边界）', async () => {
+  it('shouldBail 判据透传进 assemble 的 checkpoint（run 起步即死在文件边界）', async () => {
     mockAssemble.mockResolvedValue({
       kind: 'completed',
       value: {
@@ -106,15 +106,15 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
       {shouldBail: () => stopRequested},
     );
     const options = mockAssemble.mock.calls[0]?.[2] as
-      | {shouldStop?: () => unknown}
+      | {checkpoint?: () => unknown}
       | undefined;
-    expect(options?.shouldStop).toBeInstanceOf(Function);
+    expect(options?.checkpoint).toBeInstanceOf(Function);
     // 二期后判据返回 Interrupt：未命中 null、命中 {kind:'replaced'}。
-    expect(options?.shouldStop?.()).toBeNull();
+    expect(options?.checkpoint?.()).toBeNull();
     stopRequested = true;
-    expect(options?.shouldStop?.()).toEqual(
+    expect(options?.checkpoint?.()).toEqual(
       {kind: 'replaced'},
-      'shouldStop 必须实时反映 shouldBail',
+      'checkpoint 必须实时反映 shouldBail',
     );
   });
 

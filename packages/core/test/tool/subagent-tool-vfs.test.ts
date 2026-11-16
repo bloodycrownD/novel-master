@@ -55,14 +55,17 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       delete: async () => undefined,
     };
     const messages: MessageService = {
-      listBySession: async () => [
-        { role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData,
-      ],
+      listBySession: async () => ({
+        kind: "completed",
+        value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData],
+      }),
       // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
-      listBySessionTailOfRole: async (_sid, options) =>
-        [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData]
+      listBySessionTailOfRole: async (_sid, options) => ({
+        kind: "completed",
+        value: [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData]
           .filter((m) => m.role === options.role)
           .slice(-Math.max(1, Math.floor(options.limit))),
+      }),
     } as unknown as MessageService;
     const sessions: SessionService = {
       createSubSession: async (parent, project) => {

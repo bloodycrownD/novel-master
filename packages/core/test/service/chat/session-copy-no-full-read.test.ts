@@ -27,6 +27,7 @@
  * @module test/service/chat/session-copy-no-full-read
  */
 
+import { outcomeValue } from "../../helpers/outcome-value.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -247,7 +248,7 @@ describe("C2-3 C1: copy 事务内零全量读", () => {
     const { sessionId } = await seedSession("c0");
     const { reads } = await observe(() =>
       ctx.conn.transaction(async (tx) => {
-        await new SqliteMessageRepository(tx).listBySession(sessionId);
+        outcomeValue(await new SqliteMessageRepository(tx).listBySession(sessionId));
         return null;
       })
     );
@@ -391,8 +392,8 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
     );
 
     const copied = unwrap(await ctx.sessions.copy(session.id));
-    const source = await ctx.messages.listBySession(session.id);
-    const target = await ctx.messages.listBySession(copied.id);
+    const source = outcomeValue(await ctx.messages.listBySession(session.id));
+    const target = outcomeValue(await ctx.messages.listBySession(copied.id));
     assert.equal(target.length, 3, "三条一条不少");
 
     // 逐字段对拍：id / sessionId 换新，其余必须一致。
@@ -468,6 +469,6 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () 
       trace.filter((t) => t.inTx && isFullMessageRead(t.sql)),
       []
     );
-    assert.deepEqual(await ctx.messages.listBySession(copied.id), []);
+    assert.deepEqual(outcomeValue(await ctx.messages.listBySession(copied.id)), []);
   });
 });

@@ -78,15 +78,18 @@ function makeMock(childMessages: readonly ChatMessageData[], counts: Counts): {
   const messages: MessageService = {
     listBySession: async () => {
       counts.listBySession += 1;
-      return [...childMessages];
+      return { kind: "completed", value: [...childMessages] };
     },
     listBySessionTailOfRole: async (_sid, options) => {
       counts.listBySessionTailOfRole += 1;
       // 与 SqliteMessageRepository.listBySessionTailOfRole 同款：先按 role 过滤
       // 再取末 limit 条（夹在中间的其它 role 不占配额）。
-      return childMessages
-        .filter((m) => m.role === options.role)
-        .slice(-Math.max(1, Math.floor(options.limit)));
+      return {
+        kind: "completed",
+        value: childMessages
+          .filter((m) => m.role === options.role)
+          .slice(-Math.max(1, Math.floor(options.limit))),
+      };
     },
   } as unknown as MessageService;
   const sessions: SessionService = {

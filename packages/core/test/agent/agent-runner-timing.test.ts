@@ -19,6 +19,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import {
   type LlmChatRequest,
@@ -249,7 +250,7 @@ describe("agent-runner 请求计时采集（T-AR）", () => {
       const result = unwrap(await runner.run({
         maxSteps: 2,
         definition: minimalDefinition(),
-        signal: controller.signal,
+        scope: createAbortScope({ controller }),
         ...defaultRunScope,
       }));
 

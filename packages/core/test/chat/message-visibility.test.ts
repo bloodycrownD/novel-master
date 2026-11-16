@@ -4,6 +4,7 @@
  * @module test/chat/message-visibility
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -74,7 +75,7 @@ describe("Message visibility", () => {
     const count = unwrap(await ctx.messages.hideRange(session.id, 2, 3));
     assert.equal(count, 2);
 
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list[0]!.hidden, false); // seq 1
     assert.equal(list[1]!.hidden, true); // seq 2
     assert.equal(list[2]!.hidden, true); // seq 3
@@ -90,9 +91,9 @@ describe("Message visibility", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("visible-2")));
     unwrap(await ctx.messages.hide(m2.id));
 
-    const visibleOnly = await ctx.messages.listBySession(session.id, {
+    const visibleOnly = outcomeValue(await ctx.messages.listBySession(session.id, {
       includeHidden: false,
-    });
+    }));
     assert.deepEqual(
       visibleOnly.map((m) => m.hidden),
       [false, false],
@@ -101,7 +102,7 @@ describe("Message visibility", () => {
     assert.equal(visibleOnly.length, 2);
 
     // 默认口径不变：含 hidden 全量（回滚锚定等既有消费方）。
-    const all = await ctx.messages.listBySession(session.id);
+    const all = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(all.length, 3);
     assert.equal(all[1]!.hidden, true);
   });
@@ -198,7 +199,7 @@ describe("Message visibility", () => {
     const repo = new SqliteMessageRepository(conn);
 
     // ① limit 只数该 role：assistant 共 4 条，limit 2 只取最近 2 条（seq 7、8）。
-    const assistantTail = await repo.listBySessionTailOfRole(session.id, "assistant", 2);
+    const assistantTail = outcomeValue(await repo.listBySessionTailOfRole(session.id, "assistant", 2));
     assert.deepEqual(
       assistantTail.map((m) => m.seq),
       [7, 8],
@@ -227,7 +228,7 @@ describe("Message visibility", () => {
     );
 
     // ③ user 侧同样只数 user；另一会话一条都不混进来（session_id 谓词在内层）。
-    const userTail = await repo.listBySessionTailOfRole(session.id, "user", 3);
+    const userTail = outcomeValue(await repo.listBySessionTailOfRole(session.id, "user", 3));
     assert.deepEqual(
       userTail.map((m) => m.seq),
       [3, 4, 5],
@@ -235,7 +236,7 @@ describe("Message visibility", () => {
     );
     const other = unwrap(await ctx.sessions.create(project.id, "S2"));
     unwrap(await ctx.messages.append(other.id, "assistant", textBlocks("other")));
-    const leaked = await repo.listBySessionTailOfRole(session.id, "assistant", 10);
+    const leaked = outcomeValue(await repo.listBySessionTailOfRole(session.id, "assistant", 10));
     assert.equal(
       leaked.some((m) => m.sessionId === other.id),
       false,
@@ -259,7 +260,7 @@ describe("Message visibility", () => {
     const count = unwrap(await ctx.messages.showRange(session.id, 1, 2));
     assert.equal(count, 2);
 
-    const list = await ctx.messages.listBySession(session.id);
+    const list = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(list[0]!.hidden, false);
     assert.equal(list[1]!.hidden, false);
   });
@@ -274,7 +275,7 @@ describe("Message visibility", () => {
     unwrap(await ctx.messages.hide(m1.id));
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
 
     assert.equal(forkedMsgs.length, 2);
     assert.equal(forkedMsgs[0]!.hidden, true); // m1 was hidden
@@ -291,7 +292,7 @@ describe("Message visibility", () => {
     unwrap(await ctx.messages.hide(m1.id));
 
     const copy = unwrap(await ctx.sessions.copy(session.id));
-    const copyMsgs = await ctx.messages.listBySession(copy.id);
+    const copyMsgs = outcomeValue(await ctx.messages.listBySession(copy.id));
 
     assert.equal(copyMsgs.length, 2);
     assert.equal(copyMsgs[0]!.hidden, true); // m1 was hidden

@@ -2,6 +2,7 @@
  * truncate-tail-in-transaction 单测。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -75,7 +76,7 @@ describe("truncateTailInTransaction", () => {
       });
     });
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
 

@@ -7,6 +7,8 @@
 import { createLogger } from "@/infra/log/logger.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { Interrupt } from "@/errors/outcome.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { buildLease, canAcquireLock, DEFAULT_LEASE_SECONDS, isEffectiveLock, renewLease } from "../logic/lock.js";
 import { PushAgentMutex, type PushAgentLockHandle } from "../logic/push-agent-mutex.js";
 import { snapshotKey, statusKey } from "../logic/paths.js";
@@ -63,6 +65,13 @@ export function getDefaultPushAgentMutex(): PushAgentMutex {
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
 export type PullOptions = {
   lastSyncedRev: number;
+  /**
+   * 真实阶段边界检查点（入口 / 下载完成 / 哈希校验前 / 换库前）。
+   *
+   * 命中即抛 `AbortError`：Promise 没有 Result 通道，取消只能在异步边界转异常；
+   * service 出口对 `isAbortLikeError` 原样上抛（spec §五 移动云同步）。
+   */
+  readonly checkpoint?: () => Interrupt | null;
 };
 
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
@@ -81,6 +90,8 @@ export type PullResult = {
 export type PushOptions = {
   lastSyncedRev: number;
   forceOverwriteRemote?: boolean;
+  /** 真实阶段边界检查点（入口 / 快照导出后 / 上传前）；命中即抛 `AbortError`。 */
+  readonly checkpoint?: () => Interrupt | null;
 };
 
 // nm-style: keep-public — packages/core/src/index.ts 主入口再导出的公共类型契约（无生产直引）
@@ -138,6 +149,7 @@ export class CloudSyncCoordinator {
   async pull(options: PullOptions): Promise<Result<PullResult, AppError>> {
     const unconfigured = this.notConfiguredError();
     if (unconfigured != null) return Result.err(unconfigured);
+    this.throwIfInterrupted("pull:entry", options.checkpoint);
 
     const remoteStatus = await this.readRemoteStatus();
     if (!remoteStatus.ok) return Result.err(remoteStatus.error);
@@ -166,10 +178,14 @@ export class CloudSyncCoordinator {
         const tempPath = this.importTempPath!;
         const downloaded = await this.storage.getToPath!(snapKey, tempPath);
         if (!downloaded.ok) return Result.err(downloaded.error);
+        // 下载完成 → 哈希校验前：此时临时文件已落地，取消由 service 的 finally 清理。
+        this.throwIfInterrupted("pull:downloaded", options.checkpoint);
         const localHash = await this.hashSnapshotFile!(tempPath);
         if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
           return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
+        // 换库窗口不可中断：覆盖活动库文件之前的最后一道检查点。
+        this.throwIfInterrupted("pull:before-import", options.checkpoint);
         // 覆盖活动库前二次复检：下载期间 agent 可能已经启动。
         const activeBeforeImport = this.agentActiveError("pull");
         if (activeBeforeImport != null) return Result.err(activeBeforeImport);
@@ -178,10 +194,14 @@ export class CloudSyncCoordinator {
         databaseReplaced = imported.value.databaseReplaced;
       } else {
         const { body } = await this.storage.get(snapKey);
+        // 字节分支同款边界：下载完成 → 哈希校验前。
+        this.throwIfInterrupted("pull:downloaded", options.checkpoint);
         const localHash = this.computeSha256Hex(body);
         if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
           return Result.err(new AppError("CLOUD_SYNC_CHECKSUM_MISMATCH"));
         }
+        // 换库窗口不可中断：覆盖活动库文件之前的最后一道检查点。
+        this.throwIfInterrupted("pull:before-import", options.checkpoint);
         const activeBeforeImport = this.agentActiveError("pull");
         if (activeBeforeImport != null) return Result.err(activeBeforeImport);
         const imported = await this.dbSync.importSnapshot(body);
@@ -193,6 +213,19 @@ export class CloudSyncCoordinator {
     } finally {
       this.pushMutex.release(lock.value);
     }
+  }
+
+  /**
+   * 阶段边界检查点：命中即抛 `AbortError`（Promise 只有 reject 通道），
+   * 由 service 出口对 `isAbortLikeError` 原样上抛。未注入时零开销。
+   */
+  private throwIfInterrupted(phase: string, checkpoint: (() => Interrupt | null) | undefined): void {
+    const hit = checkpoint?.();
+    if (hit == null) {
+      return;
+    }
+    log.info("cloud sync interrupted", { phase, kind: hit.kind, ...(hit.kind === "cancelled" ? { reason: hit.reason } : {}) });
+    throw createAbortError();
   }
 
   /**
@@ -213,6 +246,7 @@ export class CloudSyncCoordinator {
   async push(options: PushOptions): Promise<Result<PushResult, AppError>> {
     const unconfigured = this.notConfiguredError();
     if (unconfigured != null) return Result.err(unconfigured);
+    this.throwIfInterrupted("push:entry", options.checkpoint);
 
     // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
     const lock = await this.acquireSyncLock("push");
@@ -249,6 +283,8 @@ export class CloudSyncCoordinator {
       try {
         await this.dbSync.exportSnapshotToPath(this.exportTempPath);
         const size = await this.getSnapshotBytes(this.exportTempPath);
+        // 快照导出后：导出产物已落地，取消由 service 的 finally 清理临时文件。
+        this.throwIfInterrupted("push:exported", options.checkpoint);
 
         const nextRev = remote.rev + 1;
         const snapKey = snapshotKey(this.pathPrefix, nextRev);
@@ -257,11 +293,15 @@ export class CloudSyncCoordinator {
         const uploadStart = Date.now();
         if (this.hashSnapshotFile != null && typeof this.storage.putFile === "function") {
           hash = await this.hashSnapshotFile!(this.exportTempPath);
+          // 上传前：算完哈希的最后一刻，之后进入单次网络传输（S3 无 abort 面）。
+          this.throwIfInterrupted("push:before-upload", options.checkpoint);
           const uploaded = await this.storage.putFile!(snapKey, this.exportTempPath);
           if (!uploaded.ok) return Result.err(uploaded.error);
         } else {
           const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
           hash = this.computeSha256Hex(snapshotBytes);
+          // 上传前：同上，进入单次网络传输前的最后一道检查点。
+          this.throwIfInterrupted("push:before-upload", options.checkpoint);
           const uploaded = await this.storage.put(snapKey, snapshotBytes);
           if (!uploaded.ok) return Result.err(uploaded.error);
         }

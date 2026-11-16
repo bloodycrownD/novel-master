@@ -5,10 +5,11 @@
  * - 主会话（startRun 发起）+ 子会话（RUN_STARTED lazy 消费型单元）并行：
  *   事件按 sessionId 路由互不串扰，各屏句柄收各自的流式载荷；
  * - 多会话并行时逐个停止互不影响、全部停止后无残留（manager 无 active
- *   单元、agentActive refcount 归零）；stopRun 经 abortRegistry.abort 生效。
+ *   单元、agentActive refcount 归零）；stop 经 abortRegistry.abort 生效。
  */
 import {beforeEach, afterEach, describe, expect, it, jest} from '@jest/globals';
 import {SimpleEventBus} from '@novel-master/core/events';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
@@ -27,7 +28,7 @@ const mockRunAgentTurn = jest.fn(
 );
 
 function buildHarness(options?: {
-  abortHas?: (sessionId: string) => boolean;
+  abortHas?: (key: string) => boolean;
 }): {
   manager: SessionStreamUnitManager;
   eventBus: SimpleEventBus;
@@ -213,16 +214,16 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(isMobileAgentActive()).toBe(true);
   });
 
-  it('多会话并行逐个停止互不影响；全部停止后无残留（stopRun→abortRegistry.abort）', () => {
+  it('多会话并行逐个停止互不影响；全部停止后无残留（stop→abortRegistry.abort）', () => {
     // 两个发起型 run（s1/s3）并行 + abortRegistry 记录在途 controller
     // （abort 即摘除，模拟 core 的 unregister 时序）。
-    const registryBySession = new Set(['s1', 's3']);
+    const registryByKey = new Set([ABORT_KEY.agent('s1'), ABORT_KEY.agent('s3')]);
     h.manager.dispose();
     h = buildHarness({
-      abortHas: sid => registryBySession.has(sid),
+      abortHas: key => registryByKey.has(key),
     });
-    h.abortRegistry.abort.mockImplementation((sid: string) => {
-      registryBySession.delete(sid);
+    h.abortRegistry.abort.mockImplementation((key: string) => {
+      registryByKey.delete(key);
     });
 
     h.manager.startRun('s1', 'p1', 'hi');
@@ -241,8 +242,8 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(h.manager.activeSessionIds()).toEqual(['s1', 's3']);
 
     // 停止 s1（会话列表「停止生成」入口）：abort 只命中 s1，s3 不受影响。
-    expect(h.manager.stopRun('s1')).toBe(true);
-    expect(h.abortRegistry.abort).toHaveBeenCalledWith('s1');
+    expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(true);
+    expect(h.abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
     expect(h.abortRegistry.abort).toHaveBeenCalledTimes(1);
     // 停止后 core 发 FINISHED 收尾（事件路径）——s1 单元 settled、出活跃集。
     h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
@@ -255,7 +256,7 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(h.manager.hasActiveRun('s3')).toBe(true);
 
     // 全部停止后：无 active 单元、refcount 归零。
-    h.manager.stopRun('s3');
+    h.manager.stop(ABORT_KEY.agent('s3'));
     h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
       sessionId: 's3',
       projectId: 'p1',
@@ -265,8 +266,8 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     expect(h.manager.activeSessionIds()).toEqual([]);
     expect(isMobileAgentActive()).toBe(false);
 
-    // 无在途 controller 的会话 stopRun 返回 false（不误触）。
-    expect(h.manager.stopRun('s1')).toBe(false);
+    // 无在途 controller 的会话 stop 返回 false（不误触）。
+    expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(false);
   });
 });
 

@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -79,7 +80,7 @@ describe("rollbackToMessage", () => {
     );
 
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "roses");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
@@ -110,7 +111,7 @@ describe("rollbackToMessage", () => {
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
     assert.equal(unwrap(await svfs.read("/poem.md")).content, "draft");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 4);
   });
 
@@ -134,7 +135,7 @@ describe("rollbackToMessage", () => {
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
     assert.equal(unwrap(await svfs.read("/keep.md")).content, "stable");
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 3);
   });
 
@@ -149,7 +150,7 @@ describe("rollbackToMessage", () => {
     const repo = new SqliteMessageRepository(ctx.conn);
     await repo.deleteAfterSeq(session.id, m1.seq);
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
   });
@@ -170,7 +171,7 @@ describe("rollbackToMessage", () => {
 
     await rollback.rollbackToMessage(session.id, project.id, user1.id);
     // undo_send 语义：锚点 user 消息一并删除（还原为草稿），后续 assistant 同截
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 
@@ -186,7 +187,7 @@ describe("rollbackToMessage", () => {
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
   });
 
@@ -202,7 +203,7 @@ describe("rollbackToMessage", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[0]!.id, user1.id);
     assert.equal(left[1]!.id, assistant1.id);

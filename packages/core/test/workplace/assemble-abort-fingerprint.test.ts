@@ -2,7 +2,7 @@
  * assembleWorkplaceDisplay 的按文件粒度中止 + 内容指纹（2026-09-30
  * 「停止要等 14 秒」与「切会话重算」治本点的回归锁）。
  *
- * - shouldStop：快照加载后 + 每个文件的缓存解析/VFS 回填之前检查，真值收成
+ * - checkpoint：快照加载后 + 每个文件的缓存解析/VFS 回填之前检查，真值收成
  *   Outcome.cancelled / replaced（错误通道迁移二期：哨兵 throw 改返回值）。
  *   观测面用 vfs.read 调用次数——「下一个文件不再读」是中止真正生效的直接证据。
  * - fingerprint：`path|status|mtimeMs|bodyLength` 列表 join。同输入同指纹；
@@ -80,8 +80,8 @@ describe("assembleWorkplaceDisplay：按文件粒度中止（2026-09-30 治本�
   it("快照加载后即命中 → 收成 Outcome.cancelled，一个文件都不读", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
     const { vfs, readCalls } = countingVfs(realVfs);
-    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => ({ kind: "cancelled", reason: "user-stop" }) });
-    assert.equal(stopped.kind, "cancelled", "shouldStop 命中必须收成 Outcome.cancelled（不再抛哨兵错误）");
+    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { checkpoint: () => ({ kind: "cancelled", reason: "user-stop" }) });
+    assert.equal(stopped.kind, "cancelled", "checkpoint 命中必须收成 Outcome.cancelled（不再抛哨兵错误）");
     assert.equal(readCalls(), 0, "快照后命中 → 连第一个文件都不该读");
   });
 
@@ -91,12 +91,12 @@ describe("assembleWorkplaceDisplay：按文件粒度中止（2026-09-30 治本�
     // 只有在逐文件读时才可观测。
     await sk.clearDomain(scope.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
     const { vfs, readCalls } = countingVfs(realVfs);
-    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { shouldStop: () => (readCalls() >= 1 ? { kind: "cancelled", reason: "user-stop" } : null) });
-    assert.equal(stopped.kind, "cancelled", "shouldStop 命中必须收成 Outcome.cancelled");
+    const stopped = await assembleWorkplaceDisplay(scope, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() }, { checkpoint: () => (readCalls() >= 1 ? { kind: "cancelled", reason: "user-stop" } : null) });
+    assert.equal(stopped.kind, "cancelled", "checkpoint 命中必须收成 Outcome.cancelled");
     assert.equal(readCalls(), 1, "第一个文件回填后翻真 → 第二个文件的 read 不该发生（文件粒度检查点）");
   });
 
-  it("不传 shouldStop → 行为与原来一致（含 fingerprint 产出）", async () => {
+  it("不传 checkpoint → 行为与原来一致（含 fingerprint 产出）", async () => {
     const { scope, sk, wt, realVfs } = await seedTwoFiles();
     const out = outcomeValue(await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,

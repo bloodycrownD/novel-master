@@ -2,6 +2,7 @@
  * Step 5：attachments_json + MessageService.append round-trip。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -56,7 +57,7 @@ describe("message attachments round-trip (Step 5)", () => {
     }
     assert.deepEqual(withAtt.attachments, attachments);
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     const reloaded = listed.find((m) => m.id === withAtt.id);
     assert.ok(reloaded);
     assert.deepEqual(reloaded!.attachments, attachments);
@@ -91,7 +92,7 @@ describe("message attachments round-trip (Step 5)", () => {
       { attachments },
     ));
     const forked = unwrap(await ctx.messages.fork(session.id, msg.id));
-    const forkedMessages = await ctx.messages.listBySession(forked.id);
+    const forkedMessages = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMessages.length, 1);
     assert.deepEqual(forkedMessages[0]!.attachments, attachments);
   });
@@ -165,7 +166,7 @@ describe("message attachments round-trip (Step 5)", () => {
       ],
     );
 
-    const listed = await ctx.messages.listBySession(session.id);
+    const listed = outcomeValue(await ctx.messages.listBySession(session.id));
     const reloaded = listed.find((m) => m.id === msg.id);
     assert.ok(reloaded, "消息应能读回");
     // 这才是「用户仍看得到 chip、agent 仍看得到 attach 正文」的真正观测面：

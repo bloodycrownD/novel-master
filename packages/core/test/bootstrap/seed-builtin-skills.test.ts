@@ -10,6 +10,7 @@
  */
 
 import { unwrap } from "../helpers/result-unwrap.js";
+import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -42,7 +43,7 @@ describe("内置 agent-config 技能 seed（T-AS1）", () => {
     await bootstrapNovelMaster(conn);
 
     const skills = createSkillsService(conn);
-    const list = unwrap(await skills.listSkills("global"));
+    const list = outcomeValue(await skills.listSkills("global"));
     const item = list.find((s) => s.name === "agent-config");
     assert.ok(item != null, "bootstrap 后 global 清单应含 agent-config");
     assert.equal(item.valid, true, "front matter 应过 strict 校验");

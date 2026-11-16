@@ -7,6 +7,7 @@
 import { textBlocks } from "@novel-master/core/chat";
 import { AppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
+import { createAbortError, createAbortScope } from "@novel-master/core/abort";
 
 import { assertSavedModelUuid, savedModelDisplayName } from "@novel-master/core/provider";
 
@@ -80,9 +81,14 @@ export async function runModel(rt: NovelMasterRuntime, subcommand: string, args:
 
       if (sessionId != null) {
         await rt.messages.append(sessionId, "user", textBlocks(content));
-        const all = await rt.messages.listBySession(sessionId);
+        const allRead = await rt.messages.listBySession(sessionId);
+        if (allRead.kind === "failed") return Result.err(allRead.error);
+        // CLI 侧未注入 hooks：中断分支不可达；命中按取消边界语义转抛 AbortError。
+        if (allRead.kind !== "completed") throw createAbortError();
+        const all = allRead.value;
         const history = all.filter((m) => !m.hidden);
-        const requested = await rt.modelRequests.request(modelId, content, { history });
+        // 无取消诉求的 CLI 单发请求：显式传不可取消 scope（spec §三 口径）。
+        const requested = await rt.modelRequests.request(modelId, content, { history, scope: createAbortScope() });
         if (!requested.ok) return Result.err(requested.error);
         const result = requested.value;
         await rt.messages.append(sessionId, "assistant", { blocks: result.blocks }, { raw: result.raw as Record<string, unknown> });

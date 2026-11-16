@@ -16,6 +16,8 @@ error:
   infra:
     decode_invalid_schema: "Config data does not match its schema: {detail}"
     encode_not_supported: "Encoding is not supported for this format: {detail}"
+    aborted: Operation cancelled.
+    invalid_abort_target: Unrecognized abort target.
   prompt:
     invalid_yaml: Invalid prompt YAML.
     invalid_block: Invalid prompt block.
@@ -34,6 +36,7 @@ error:
     invalid_tool_arguments: Invalid provider tool arguments.
     migration_orphan_pointer: Migration left an orphan pointer.
     invalid_model_name: Invalid provider model name.
+    models_in_flight: Model list fetch is already in progress; try again later.
   session_fs:
     rollback_message_not_found: "Message not found: {message_id}"
     rollback_no_checkpoint: No rollback checkpoint for this message.

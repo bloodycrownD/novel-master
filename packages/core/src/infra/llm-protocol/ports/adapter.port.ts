@@ -6,6 +6,7 @@
 
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
@@ -71,8 +72,11 @@ export interface LlmChatRequest {
   readonly thinking?: ModelThinkingParams;
   /** 自定义参数：请求体组装最后一步原样合并进顶层，覆盖同名字段（含标准字段）。 */
   readonly extraBody?: Readonly<Record<string, unknown>>;
-  /** Cancels network IO and stream reads when run is terminated. */
-  readonly signal?: AbortSignal;
+  /**
+   * 取消作用域（必填）：adapter 只消费 `scope.signal` 驱动 fetch / SSE 传输，
+   * 不读 `scope.reason`（原因归上层判断）。`listModels` 同样把它透给网络请求。
+   */
+  readonly scope: AbortScope;
 }
 
 /**

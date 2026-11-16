@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -69,7 +70,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 事务开始前持续注入写入——多于重试上限（3），最后一次重试仍会冲突并向上抛。
-    const messagesBefore = (await ctx.messages.listBySession(session.id)).length;
+    const messagesBefore = (outcomeValue(await ctx.messages.listBySession(session.id))).length;
     const sessionFs = createSessionFsService(
       wrapConnWithRaceWrite(
         ctx.conn,
@@ -102,7 +103,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     );
 
     // 冲突 → 未进行任何截断，锡点消息 + 其后的 assistant + 注入的竞态消息都还在。
-    const messagesAfter = await ctx.messages.listBySession(session.id);
+    const messagesAfter = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(messagesAfter.length > messagesBefore);
     // /a.md 未被恢复到锡点版本——根本没有进入 reconcile。
     assert.equal(unwrap(await svfs.read("/a.md")).content, "at-anchor");
@@ -139,7 +140,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     await sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
     // 重试后锡点消息被截断（undo_send 语义含锡点），竞态写入也被一起截掉。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 0);
     assert.equal(unwrap(await svfs.read("/a.md")).content, "v1");
   });
@@ -163,7 +164,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
     // rewind 锡点 assistant1 保留，其后无 tail。
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1.id);
     assert.equal(unwrap(await svfs.read("/a.md")).content, "v2");

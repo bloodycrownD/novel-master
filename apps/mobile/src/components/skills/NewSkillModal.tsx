@@ -151,8 +151,12 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
     try {
       // 域内查重：同名技能已存在时拒绝（整包覆盖语义只在复制/提升链路，新建不覆盖）
       const existing = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (!existing.ok) {
+      if (existing.kind === 'failed') {
         setError(existing.error.message);
+        return;
+      }
+      // listSkills 未注入 hooks：中断分支不可达；真出现时按「本次不创建」收尾。
+      if (existing.kind !== 'completed') {
         return;
       }
       if (existing.value.some(s => s.name === name)) {

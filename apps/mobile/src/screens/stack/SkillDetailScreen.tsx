@@ -41,7 +41,9 @@ export function SkillDetailScreen() {
     setLoading(true);
     try {
       const list = await runtime.skills().listSkills(domain === 'global' ? 'global' : {projectId: projectId!});
-      if (!list.ok) throw list.error;
+      if (list.kind === 'failed') throw list.error;
+      // 未注入 hooks：中断分支不可达；真出现时按「清单不可用」收尾，不伪造空清单。
+      if (list.kind !== 'completed') return;
       const found = list.value.find(entry => entry.name === name) ?? null;
       setItem(found);
       if (found == null && !kickedRef.current) {

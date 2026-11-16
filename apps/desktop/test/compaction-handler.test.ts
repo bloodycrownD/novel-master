@@ -9,7 +9,7 @@
  * COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
  *
- * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.abortRegistry` 真注册一个
+ * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.agentAbortRegistry` 真注册一个
  * controller（`isDesktopSessionRunInFlight` 的判定源；desktop 测试运行器未开
  * `--experimental-test-module-mocks`，**不能用 mock.module**，先例见
  * chat-prompt-tokens-run-suppression.test.ts 的 registerRunInFlight）。
@@ -185,9 +185,9 @@ describe("handleCompactionManual", () => {
   /**
    * T-CR6：run 在途时手动压缩被 main 侧门禁拦下。
    *
-   * 为什么注入 abortRegistry 真态而不是 mock 掉 runCompaction：desktop 测试
+   * 为什么注入 agent 门面真态而不是 mock 掉 runCompaction：desktop 测试
    * 运行器没开 `--experimental-test-module-mocks`，`mock.module` 不可用；判活源
-   * 写死 `rt.abortRegistry.has(sessionId)`，而 abortRegistry 是 core 受理 run 时
+   * 写死 `rt.agentAbortRegistry.has(sessionId)`，而门面记录是 core 受理 run 时
    * 自己登记的，desktop 侧没有可写的影子——只能按 `runAgentTurn` 入口同款真
    * 注册一个 controller（先例：chat-prompt-tokens-run-suppression.test.ts 的
    * registerRunInFlight）。
@@ -236,9 +236,9 @@ describe("handleCompactionManual", () => {
       } as never;
     });
 
-    // 伪造成「run 在途」：向 core abortRegistry 注册一个 controller。
+    // 伪造成「run 在途」：向 core agent 门面注册一个 controller。
     const controller = new AbortController();
-    rt.abortRegistry.register(cr6SessionId, controller);
+    rt.agentAbortRegistry.register(cr6SessionId, controller);
 
     try {
       const result = await handleCompactionManual({
@@ -275,7 +275,7 @@ describe("handleCompactionManual", () => {
         "被拦下时不得清 rule_snapshot",
       );
     } finally {
-      rt.abortRegistry.unregister(cr6SessionId, controller);
+      rt.agentAbortRegistry.unregister(cr6SessionId, controller);
       setComposerAttachmentsSuggestForwardTarget(() => undefined);
     }
   });

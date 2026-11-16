@@ -9,6 +9,7 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
@@ -41,9 +42,12 @@ export class ChatAgentSession implements AgentSession {
     // 每 step 调一次，而压缩/置位后的会话里 hidden 行常占多数——全量拉回再逐条
     // 解压是大会话上的秒级卡顿源（千条会话 212ms → 可见 80 条 14ms；与 UI 读口
     // 同款修法，2026-09-30 首字延迟排查实锤）。
-    return this.messages.listBySession(this.sessionId, {
-      includeHidden: false,
-    });
+    // 读口改 Outcome 后此处转回数组：已知失败抛出交 runner 收口；未注入 hooks，
+    // 中断分支不可达，命中按取消边界语义抛 AbortError（runner 统一 abort 路由识别）。
+    const read = await this.messages.listBySession(this.sessionId, { includeHidden: false });
+    if (read.kind === "failed") throw read.error;
+    if (read.kind !== "completed") throw createAbortError();
+    return read.value;
   }
 
   async append(role: string, content: MessageContent, options?: ChatAgentSessionAppendOptions): Promise<Result<ChatMessageData, AppError>> {

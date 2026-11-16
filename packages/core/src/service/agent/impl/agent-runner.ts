@@ -34,6 +34,7 @@ import type { ProviderRepository } from "@/domain/provider/repositories/provider
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -155,7 +156,11 @@ export class DefaultAgentRunner implements AgentRunner {
      * false、composer 本就解锁，再追加错误消息只会造成双条提示。
      */
     let assistantAppendedInRun = false;
-    const signal = options.signal;
+    // 取消 scope：run-agent-turn 传根 scope；CLI / 测试直接调用时缺省为不可取消。
+    // 本片暂只桥接 `scope.signal` 给既有检查点与 toolCtx（检查点换 `scope.checkpoint()`
+    // 属 phase-port-migration Step 5 的后续改动）。
+    const scope = options.scope ?? createAbortScope();
+    const signal = scope.signal;
     let vfsMutatedInRun = false;
 
     const maxSteps = options.maxSteps ?? options.definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
@@ -329,8 +334,8 @@ export class DefaultAgentRunner implements AgentRunner {
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
         // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
         // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
-        // shouldStop（2026-09-30）：组装段曾是 16s 级无观察点原子块，停止要等
-        // 它跑完才能兑现；按文件粒度检查 signal。错误通道迁移二期：哨兵类已删，
+        // checkpoint（LongTaskHooks，2026-09-30）：组装段曾是 16s 级无观察点原子块，
+        // 停止要等它跑完才能兑现；按文件粒度检查 signal。错误通道迁移二期：哨兵类已删，
         // 中止沿 Outcome.cancelled/replaced 返回值到达，必须在此显式路由进
         // handleAbort——不能再依赖下方 catch 的 signal?.aborted 兜底判定。
         // fingerprint（2026-09-30）：组装顺产的内容指纹不能丢——压缩评估链
@@ -341,7 +346,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const assembleDeps: AssembleWorkplaceDisplayDeps = { sessionKkv: this.deps.sessionKkv, workplace: wt, vfs: this.deps.toolCtx.vfs, layout: options.definition.prompts };
         const assembleOptions: AssembleWorkplaceDisplayOptions = {
           kkvSessionId: session.kkvScopeSessionId,
-          shouldStop: () => (signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null),
+          checkpoint: () => (signal?.aborted === true ? { kind: "cancelled", reason: "user-stop" } : null),
         };
         const assembled = await assembleWorkplaceDisplay(wtScope, assembleDeps, assembleOptions);
         if (assembled.kind === "cancelled" || assembled.kind === "replaced") {
@@ -549,7 +554,7 @@ export class DefaultAgentRunner implements AgentRunner {
             tools: tools.length > 0 ? tools : undefined,
             stream: options.stream,
             onStream,
-            signal,
+            scope,
           };
           const requested = await this.deps.modelRequests.request(options.savedModelId, "", requestOptions);
           if (!requested.ok) raiseRunError(requested.error);

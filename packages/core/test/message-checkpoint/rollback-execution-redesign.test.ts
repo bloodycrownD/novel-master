@@ -2,6 +2,7 @@
  * message-rollback-execution-redesign must-fix 测例：
  * T-RB-PARTIAL-WRITE / T-RB-SQL-ONCE / T-RB-STABLE-CP
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
@@ -165,7 +166,7 @@ describe("rollback execution redesign", () => {
       assistant2.id,
     );
     assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-2");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 4);
+    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 4);
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant2.id));
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant3.id), false);
@@ -176,7 +177,7 @@ describe("rollback execution redesign", () => {
       assistant1.id,
     );
     assert.equal(unwrap(await svfs.read("/stable.md")).content, "chapter-1");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
+    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 2);
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant1.id));
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant2.id), false);
   });

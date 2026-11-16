@@ -180,7 +180,7 @@ function installMockRuntime(): void {
     },
     sessionStreamUnitManager: {
       startRun: jest.fn(async () => ({ok: true})),
-      stopRun: jest.fn(),
+      stop: jest.fn(),
     },
   });
 }

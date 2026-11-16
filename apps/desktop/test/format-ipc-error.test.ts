@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "@novel-master/core/vfs";
+import { createAbortError } from "@novel-master/core/abort";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
@@ -79,6 +80,23 @@ describe("formatIpcError", () => {
     const payload = formatIpcError(err);
     assert.equal(payload.code, "VFS_ALREADY_EXISTS");
     assert.equal(payload.message, "名称不能重复");
+  });
+
+  it("AbortError（DOMException / RN Error 两种形态）→ IPC_ABORTED / 已取消", () => {
+    // Node 侧 DOMException 形态（createAbortError 的优先分支）。
+    const dom = formatIpcError(createAbortError());
+    assert.equal(dom.code, "IPC_ABORTED");
+    assert.equal(dom.message, "已取消");
+
+    // Hermes 无 DOMException 时 createAbortError 退化为 Error + name='AbortError'；
+    // 手搓同形对象锁住 isAbortLikeError 的识别口径。
+    const rnShaped = new Error("Request aborted");
+    rnShaped.name = "AbortError";
+    const payload = formatIpcError(rnShaped);
+    assert.equal(payload.code, "IPC_ABORTED");
+    assert.equal(payload.message, "已取消");
+    // 取消不是业务错误：不得落成 INFRA_UNEXPECTED_ERROR。
+    assert.notEqual(payload.code, "INFRA_UNEXPECTED_ERROR");
   });
 
   it("maps AgentTurnError to AGENT_RUN_FAILED", () => {

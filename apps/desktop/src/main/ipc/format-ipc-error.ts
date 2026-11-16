@@ -6,6 +6,7 @@
  * @module ipc/format-ipc-error
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
+import { isAbortLikeError } from "@novel-master/core/abort";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/agent";
 import { domainOf } from "@novel-master/core/errors";
@@ -35,6 +36,13 @@ const FIELD_LABELS: Record<string, string> = {
  * `code` 只产 ErrorKey；未知错误统一 INFRA_UNEXPECTED_ERROR（name 不进 code）。
  */
 export function formatIpcError(err: unknown): IpcErrorPayload {
+  // 0. AbortError：取消是控制流信号不是业务错误（signal-abort-scope §五）。
+  //    边界统一映射为 IPC_ABORTED，renderer 按 code 静默收尾、不弹错误 toast。
+  //    必须排在 AppError 通配之前：AbortError 是 Error 子类（DOMException 或
+  //    RN 的 Error + name），落到第 9 条会被兜成 INFRA_UNEXPECTED_ERROR。
+  if (isAbortLikeError(err)) {
+    return { code: "IPC_ABORTED", message: "已取消" };
+  }
   // 1. ZodError：参数校验（desktop 独有入口；镜像门对本条豁免）。
   if (err instanceof ZodError) {
     const parts = err.issues.map((issue) => {

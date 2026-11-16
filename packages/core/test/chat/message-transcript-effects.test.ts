@@ -2,6 +2,7 @@
  * MessageTranscriptEffectsService 单测。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
@@ -64,7 +65,7 @@ describe('MessageTranscriptEffectsService', () => {
 
     unwrap(await effects.showMessagesInRange(project.id, session.id, 1, 2));
 
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(messages.every(m => !m.hidden));
   });
 
@@ -86,7 +87,7 @@ describe('MessageTranscriptEffectsService', () => {
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
     assert.equal(unwrap(await svfs.read('/keep.md')).content, 'stable');
@@ -165,7 +166,7 @@ describe('MessageTranscriptEffectsService', () => {
     assert.equal(result.hiddenCount, 2);
     assert.equal(result.shownCount, 2);
 
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 4);
     for (const m of messages) {
       if (m.seq < m3.seq) {
@@ -205,9 +206,9 @@ describe('MessageTranscriptEffectsService', () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, m2.id));
     const m3 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('3')));
 
-    const before = await ctx.messages.listBySession(session.id);
+    const before = outcomeValue(await ctx.messages.listBySession(session.id));
     unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, m3.id));
-    const after = await ctx.messages.listBySession(session.id);
+    const after = outcomeValue(await ctx.messages.listBySession(session.id));
 
     assert.equal(after.length, before.length);
     assert.equal(unwrap(await svfs.read('/keep.md')).content, 'stable');
@@ -259,7 +260,7 @@ describe('MessageTranscriptEffectsService', () => {
     // 先把后两条隐藏，模拟“旧 floor 在 m3 之前”的历史状态
     unwrap(await ctx.messages.hideRange(session.id, 3, 4));
 
-    const before = await ctx.messages.listBySession(session.id);
+    const before = outcomeValue(await ctx.messages.listBySession(session.id));
     const beforeVisibility = before.map(m => ({ id: m.id, hidden: m.hidden }));
 
     // 包一层 sessionKkv：clearDomain(RULE_SNAPSHOT) 抛错，模拟第 3 步失败
@@ -290,7 +291,7 @@ describe('MessageTranscriptEffectsService', () => {
     );
 
     // 可见性回滚：与调用前完全一致（hide-prefix 的 showRange 补偿 + show-suffix 的 hideRange 补偿）
-    const after = await ctx.messages.listBySession(session.id);
+    const after = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.deepEqual(
       after.map(m => ({ id: m.id, hidden: m.hidden })),
       beforeVisibility,
@@ -331,7 +332,7 @@ describe('MessageTranscriptEffectsService', () => {
       blocks: [{ type: 'text', text: 'a' }],
     }));
 
-    const before = await ctx.messages.listBySession(session.id);
+    const before = outcomeValue(await ctx.messages.listBySession(session.id));
 
     await rejectsErr(
       () =>
@@ -347,7 +348,7 @@ describe('MessageTranscriptEffectsService', () => {
       },
     );
 
-    const after = await ctx.messages.listBySession(session.id);
+    const after = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.deepEqual(
       after.map(m => ({ id: m.id, hidden: m.hidden })),
       before.map(m => ({ id: m.id, hidden: m.hidden })),
@@ -391,8 +392,8 @@ describe('MessageTranscriptEffectsService', () => {
       '[]',
     );
 
-    const beforeA = await ctx.messages.listBySession(sessionA.id);
-    const beforeB = await ctx.messages.listBySession(sessionB.id);
+    const beforeA = outcomeValue(await ctx.messages.listBySession(sessionA.id));
+    const beforeB = outcomeValue(await ctx.messages.listBySession(sessionB.id));
 
     await rejectsErr(
       () =>
@@ -406,8 +407,8 @@ describe('MessageTranscriptEffectsService', () => {
     );
 
     // 两会话消息 hidden 状态零变化。
-    const afterA = await ctx.messages.listBySession(sessionA.id);
-    const afterB = await ctx.messages.listBySession(sessionB.id);
+    const afterA = outcomeValue(await ctx.messages.listBySession(sessionA.id));
+    const afterB = outcomeValue(await ctx.messages.listBySession(sessionB.id));
     assert.deepEqual(
       afterA.map(m => ({ id: m.id, hidden: m.hidden })),
       beforeA.map(m => ({ id: m.id, hidden: m.hidden })),

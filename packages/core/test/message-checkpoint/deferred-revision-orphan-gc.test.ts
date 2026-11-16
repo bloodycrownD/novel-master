@@ -11,6 +11,7 @@
  *
  * @module test/message-checkpoint/deferred-revision-orphan-gc
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -92,7 +93,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     assert.equal(Number(orphans[0]!.n), 0, "孤儿 revision 行最终应被清");
 
     // 回滚语义不受影响（rewind 保留锚点，tail 截断）。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, anchor.id);
     await ctx.conn.close();
@@ -146,7 +147,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     await rollback.rollbackToMessage(session.id, project.id, anchor.id, {
       skipVfsReconcile: true,
     });
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[1]!.id, anchor.id);
 

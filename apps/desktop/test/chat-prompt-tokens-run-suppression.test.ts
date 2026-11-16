@@ -48,11 +48,11 @@ const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * 把某 session 伪造成「run 在途」：直接向 core 的 abortRegistry 注册一个
+ * 把某 session 伪造成「run 在途」：直接向 core 的 agent 门面注册一个
  * controller（与 runAgentTurn 入口同款），返回释放函数。
  *
- * 为什么不用 activeRuns 伪造：判活源写死 `rt.abortRegistry.has(sessionId)`，
- * 而 abortRegistry 是 core 受理 run 时自己登记的，desktop 侧没有可写的影子。
+ * 为什么不用 activeRuns 伪造：判活源写死 `rt.agentAbortRegistry.has(sessionId)`，
+ * 而门面记录是 core 受理 run 时自己登记的，desktop 侧没有可写的影子。
  */
 async function registerRunInFlight(
   sessionId: string,
@@ -61,9 +61,9 @@ async function registerRunInFlight(
   if (!rtR.ok) throw rtR.error;
   const rt = rtR.value;
   const controller = new AbortController();
-  rt.abortRegistry.register(sessionId, controller);
+  rt.agentAbortRegistry.register(sessionId, controller);
   return async () => {
-    rt.abortRegistry.unregister(sessionId, controller);
+    rt.agentAbortRegistry.unregister(sessionId, controller);
   };
 }
 

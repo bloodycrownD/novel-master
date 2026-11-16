@@ -6,6 +6,7 @@
  *   连续对话第二轮两段式正反场景 / 删除路径回退全量。
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
@@ -561,7 +562,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     // 清空整会话（anchor=null 分支）。
     unwrap(await ctx.messages.truncateAfter(session.id, null));
     assert.equal(
-      (await ctx.messages.listBySession(session.id)).length,
+      (outcomeValue(await ctx.messages.listBySession(session.id))).length,
       0
     );
     assert.equal(await readCursor(session.id), null, "清空分支必须清游标");

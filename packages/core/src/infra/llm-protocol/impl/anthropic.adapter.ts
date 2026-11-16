@@ -45,7 +45,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   async listModels(req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">): Promise<LlmListModelsResult> {
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers });
+    const fetched = await fetchJson(this.fetchFn, joinUrl(req.baseUrl, "/v1/models"), { method: "GET", headers, signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const data = fetched.value as { data?: Array<{ id?: string; display_name?: string }> };
     const models = (data.data ?? [])
@@ -65,15 +65,15 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
       try {
         const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
-        const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.signal };
-        await postSse(url, init, (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.signal });
+        const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.scope?.signal };
+        await postSse(url, init, (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
-        if (!isRequestAborted(error, req.signal)) {
+        if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
         }
       }
 
-      const aborted = req.signal?.aborted === true;
+      const aborted = req.scope?.signal.aborted === true;
       const finishResult = aborted ? finishAnthropicSsePartial(state, req.onStream, toolNames) : finishAnthropicSse(state, req.onStream, toolNames);
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = messageBodyTextFromBlocks(blocks);
@@ -92,7 +92,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     const toolNames = resolveAnthropicToolNameWire(req);
     const url = joinUrl(req.baseUrl, "/v1/messages");
     const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
-    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.signal });
+    const fetched = await fetchJson(this.fetchFn, url, { method: "POST", headers, body: JSON.stringify(this.buildBody(req, false, toolNames)), signal: req.scope?.signal });
     if (!fetched.ok) throw fetched.error;
     const raw = fetched.value;
     const record = raw as { content?: unknown[] };

@@ -134,7 +134,7 @@ describe("template pull", () => {
       .map((e) => e.path);
     assert.deepEqual(paths, ["/x.md"]);
     assert.equal(unwrap(await svfs.read("/x.md")).content, "NEW");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
+    assert.equal((outcomeValue(await ctx.messages.listBySession(session.id))).length, 2);
     assert.equal(
       (await checkpointRepo.listFilePointersForSession(session.id)).length,
       0,

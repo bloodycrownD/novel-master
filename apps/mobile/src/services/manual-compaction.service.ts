@@ -19,6 +19,8 @@
  */
 
 import {runCompaction} from '@novel-master/core/compaction';
+import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
+import type {Outcome} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /**
@@ -48,6 +50,11 @@ export type ManualCompactionHooks = {
   readonly onFinally?: (outcome: ManualCompactionOutcome) => void | Promise<void>;
 };
 
+/** 中断 → Outcome 四分支的短路形态（completed / failed 不在这里产生）。 */
+function interruptedOutcome(hit: Interrupt): Outcome<never> {
+  return hit.kind === 'cancelled' ? {kind: 'cancelled', reason: hit.reason} : {kind: 'replaced'};
+}
+
 /**
  * 手动压缩的单一编排入口：runCompaction → UI 尾巴。
  *
@@ -55,37 +62,69 @@ export type ManualCompactionHooks = {
  * `trigger` 硬写 "manual"。接自动压缩前必须先给本函数加 trigger 透传参数，
  * 不得沿用这一行——自动压缩清两域会打破回合内前缀冻结。
  *
- * 本函数**不外抛异常**：所有出口（成功 / 明确失败 / 抛错 / 尾巴自身抛错）都在
- * 内部收口，调用方可以直接 `void` 掉它。
+ * 出口：业务失败与尾巴抛错仍在内部收口（不外抛）；**取消是唯一会 reject 的
+ * 出口**——边界把 `Outcome.cancelled`/`replaced` 转 `createAbortError()`，
+ * 让调用方的 promise 以 AbortError 原样 reject（T-S16）。取消只跑 `onFinally`
+ * （清理尾巴），不触发 `onFailed`（取消不是失败）。
  */
 export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<void> {
   const {projectId, sessionId} = scope;
-  let ok = false;
+  // AbortScope 与业务参数 `scope` 撞名：按 spec 约定命名为 abortScope。
+  const abortScope = createAbortScope();
+  runtime.abortRegistry.register(ABORT_KEY.compaction(sessionId), abortScope);
+  let work: Outcome<boolean> | null = null;
   // `null` 表示「压缩本体明确返回失败」（无错误详情）；`{error}` 表示抛错。
   let failure: {readonly error: unknown} | null = null;
   try {
-    const hiddenDepth = await runtime.compactionConditionEvaluator.getHideStartDepth();
-    if (!hiddenDepth.ok) {
-      // 读深度失败（错误通道迁移四期）：与抛错出口同收场（error 非空），
-      // UI 尾巴按「压缩链抛错」口径处理。
-      failure = {error: hiddenDepth.error};
+    // 入口检查点；之后只到 hide 开始前还有一个可中断点。
+    const entry = abortScope.checkpoint();
+    if (entry != null) {
+      work = interruptedOutcome(entry);
     } else {
-      const compactionDeps = {sessionKkv: runtime.sessionKkv, messages: runtime.messages, messageTranscriptEffects: runtime.messageTranscriptEffects};
-      // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
-      // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
-      // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
-      // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
-      // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
-      const compactionOptions = {sessionId, projectId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
-      const result = await runCompaction(compactionDeps, compactionOptions);
-      ok = result.ok;
+      const hiddenDepth = await runtime.compactionConditionEvaluator.getHideStartDepth();
+      if (!hiddenDepth.ok) {
+        // 读深度失败（错误通道迁移四期）：与抛错出口同收场（error 非空），
+        // UI 尾巴按「压缩链抛错」口径处理。
+        work = {kind: 'failed', error: hiddenDepth.error};
+      } else {
+        // hide 前最后一道检查点：hide → invalidate → KKV 清理整段不可中断
+        // （中途抛错会留下「消息已隐藏、缓存未清」的半应用态）。
+        const beforeHide = abortScope.checkpoint();
+        if (beforeHide != null) {
+          work = interruptedOutcome(beforeHide);
+        } else {
+          const compactionDeps = {sessionKkv: runtime.sessionKkv, messages: runtime.messages, messageTranscriptEffects: runtime.messageTranscriptEffects};
+          // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
+          // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
+          // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
+          // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
+          // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
+          const compactionOptions = {sessionId, projectId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
+          const result = await runCompaction(compactionDeps, compactionOptions);
+          // `completed.value` 是压缩本体自己的 `ok`——「明确返回失败」仍是
+          // 完成态的一部分（不是 failed，保留 `onFailed(undefined)` 的既有语义）。
+          work = {kind: 'completed', value: result.ok};
+        }
+      }
     }
   } catch (error) {
     failure = {error};
+  } finally {
+    runtime.abortRegistry.unregister(ABORT_KEY.compaction(sessionId), abortScope);
+    abortScope.dispose();
   }
+  if (work != null && (work.kind === 'cancelled' || work.kind === 'replaced')) {
+    try {
+      await hooks.onFinally?.({ok: false, error: undefined});
+    } catch {
+      // 清理尾巴自身抛错不掩盖取消语义。
+    }
+    throw createAbortError();
+  }
+  const ok = work?.kind === 'completed' ? work.value : false;
   const outcome: ManualCompactionOutcome = {
     ok,
-    error: failure?.error,
+    error: failure != null ? failure.error : work?.kind === 'failed' ? work.error : undefined,
   };
   try {
     if (ok) {
@@ -97,8 +136,8 @@ export async function runManualCompaction(runtime: MobileNovelMasterRuntime, sco
   } catch (error) {
     // 尾巴自身抛错：与旧手工副本同款收口——成功分支的尾巴抛错时补一次失败提示
     // （失败分支的尾巴抛错则不再提示，否则会连弹两条）。这次兜底提示自身再包
-    // 一层 try/catch：它是「不外抛异常」契约的最后一道出口，再抛出去调用方的
-    // void 就变 unhandled rejection 了。
+    // 一层 try/catch：它是「业务失败不外抛」契约的最后一道出口，再抛出去调用方
+    // 的 void 就变 unhandled rejection 了。
     if (ok) {
       try {
         await hooks.onFailed?.(error);

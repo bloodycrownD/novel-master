@@ -69,10 +69,11 @@ function makeMessageStore(db: Map<string, ChatMessageData[]>) {
     listBySessionTail: jest.fn(
       async (sid: string, options: {limit: number}) => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
-        return rows.slice(-options.limit);
+        // 大结果集读口已换 Outcome（signal-abort-scope 长循环 hooks，T-S16 同批）。
+        return {kind: 'completed' as const, value: rows.slice(-options.limit)};
       },
     ),
-    listBySessionPage: jest.fn(async () => []),
+    listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
   };
 }
 
@@ -418,13 +419,13 @@ describe('DB 接管映射（T-SP17）', () => {
         call += 1;
         if (call === 1) {
           // step 边界自动 kick 的 force reload 卡住（模拟查询先于落库行可见）
-          return new Promise<readonly ChatMessageData[]>(resolve => {
-            releaseForce = rows => resolve(rows);
+          return new Promise<{kind: 'completed'; value: readonly ChatMessageData[]}>(resolve => {
+            releaseForce = rows => resolve({kind: 'completed', value: rows});
           });
         }
-        return Promise.resolve<readonly ChatMessageData[]>([row]);
+        return Promise.resolve({kind: 'completed' as const, value: [row]});
       }),
-      listBySessionPage: jest.fn(async () => []),
+      listBySessionPage: jest.fn(async () => ({kind: 'completed' as const, value: []})),
     };
     const onProjectionChanged = jest.fn();
     const unit = new SessionStreamUnit({
@@ -472,8 +473,8 @@ describe('DB 接管映射（T-SP17）', () => {
         sessionId: 'warn-s',
         projectId: 'p',
         messageStore: {
-          listBySessionTail: async () => [],
-          listBySessionPage: async () => [],
+          listBySessionTail: async () => ({kind: 'completed' as const, value: []}),
+          listBySessionPage: async () => ({kind: 'completed' as const, value: []}),
         },
       });
       unit.begin();

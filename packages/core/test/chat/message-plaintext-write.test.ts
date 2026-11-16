@@ -17,6 +17,7 @@
  * @module test/chat/message-plaintext-write
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -123,7 +124,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     }
 
     // 读回等价。
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.equal(list.length, 3);
     assert.deepEqual(list[0]!.content, content);
   });
@@ -166,7 +167,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
       "编辑后必须读到新正文（读到旧正文 = 三列未齐置）"
     );
     // listBySession 同款（读路径不止 findById 一处）。
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.equal(list.length, 1);
     assert.deepEqual(list[0]!.content, newContent);
   });
@@ -190,7 +191,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
       await new SqliteMessageRepository(tx).batchInsert(rows);
     });
 
-    const list = await ctx.messages.listBySession(sessionId);
+    const list = outcomeValue(await ctx.messages.listBySession(sessionId));
     assert.equal(list.length, 3, "事务内 batchInsert 的三行都应落库且已提交");
     assert.deepEqual(
       list.map((m) => m.content),
@@ -215,7 +216,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
         `第 ${i + 1} 次读结果不一致（无池环境下重复读必须稳定）`
       );
     }
-    const list = await repo.listBySession(sessionId);
+    const list = outcomeValue(await repo.listBySession(sessionId));
     assert.deepEqual(list[0]!.content, content);
   });
 });

@@ -1,3 +1,4 @@
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -315,7 +316,7 @@ describe("rollback version short-circuit", () => {
 
     assert.equal(unwrap(await svfs.read("/stable.md")).content, "keep-me");
     assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
-    const messages = await ctx.messages.listBySession(session.id);
+    const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);

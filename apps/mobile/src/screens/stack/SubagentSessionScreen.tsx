@@ -16,8 +16,8 @@
  *   重进 partial——与本页旧的内联注入版语义一致，实现只剩单元一份）；
  * - 消息面：有单元走投影，无单元（run 已结束且单元出表）本地回源。
  *
- * 只读：无 composer；agent 运行中时显示停止按钮（经 manager.stopRun 走
- * abortRegistry 的 abort 语义）。
+ * 只读：无 composer；agent 运行中时显示停止按钮（经 manager.stop 传
+ * `ABORT_KEY.agent(sessionId)` 走 abortRegistry 的 abort 语义）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -27,6 +27,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessageData} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {
   ChatStreamMetricsBarLive,
@@ -108,7 +109,11 @@ export function SubagentSessionScreen() {
         }
       }
       try {
-        return await runtime.messages.listBySession(sessionId);
+        const read = await runtime.messages.listBySession(sessionId);
+        if (read.kind === 'failed') throw read.error;
+        // 未注入 hooks：中断分支不可达；真出现时按「本次不采纳」保留空面。
+        if (read.kind !== 'completed') return [];
+        return read.value;
       } catch (error) {
         showToast(toastMessage('加载子会话失败', error));
         return [];
@@ -287,9 +292,10 @@ export function SubagentSessionScreen() {
     if (sessionId == null) {
       return;
     }
-    // 与主会话停止入口一致：经 manager.stopRun → abortRegistry.abort 触发
-    // core 层中断；后续 FINISHED 照常走事件路径收尾（投影回落、按钮消失）。
-    manager.stopRun(sessionId);
+    // 与主会话停止入口一致：经 manager.stop(ABORT_KEY.agent(...)) →
+    // abortRegistry.abort 触发 core 层中断；后续 FINISHED 照常走事件路径收尾
+    //（投影回落、按钮消失）。
+    manager.stop(ABORT_KEY.agent(sessionId));
   }, [manager, sessionId]);
 
   if (initialLoading) {

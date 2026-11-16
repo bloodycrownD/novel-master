@@ -7,6 +7,7 @@
  * - `content_hash` 列在 `vfs_entry` 和 `vfs_revision` 中均以 entry_id 筛选
  */
 
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -42,7 +43,7 @@ describe("fork/copy parity (F1)", () => {
     assert.ok(sourceHash, "源 entry 须有 content_hash");
 
     const forked = unwrap(await ctx.messages.fork(session.id, m2.id));
-    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 2);
 
     const forkSk = scopeKey({ kind: "session", projectId: project.id, sessionId: forked.id });

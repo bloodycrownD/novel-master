@@ -7,6 +7,7 @@
  * mobile 侧 [nm-rollback] 轴的 __DEV__ 门控断言在 apps/mobile 的
  * rollback-probe-timing.test.ts。
  */
+import { outcomeValue } from "../helpers/outcome-value.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -95,7 +96,7 @@ describe("rollback chain probe (T-R0)", () => {
     assert.ok((planDetail?.contentBytes as number) > 0);
 
     // 回滚语义不受探针影响（rewind 保留锚点，tail 截断）。
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
   });
 
@@ -117,7 +118,7 @@ describe("rollback chain probe (T-R0)", () => {
     await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
       skipVfsReconcile: true,
     });
-    const left = await ctx.messages.listBySession(session.id);
+    const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
   });
 });

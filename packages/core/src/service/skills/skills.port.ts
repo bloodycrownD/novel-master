@@ -4,6 +4,7 @@
  * @module service/skills/skills.port
  */
 
+import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type {
   SkillDomain,
@@ -11,6 +12,7 @@ import type {
 } from "@/domain/skills/model/skill.schema.js";
 import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
+import type { Outcome } from "@/errors/outcome.js";
 
 /** 技能清单查询域：global 全局域，或某个项目域。 */
 export type SkillListScope = "global" | { readonly projectId: string };
@@ -77,9 +79,11 @@ export interface SkillService {
    * 技能清单（含 files 相对路径、front matter 元数据、有效性）。
    *
    * 已知失败走返回值（五期门⑦）：清单读取的非 NOT_FOUND 失败（IO / DB 异常）
-   * 收 `Result.err`；技能根目录不存在不算失败，返回空数组。
+   * 收 `Outcome.failed`；技能根目录不存在不算失败，返回空数组。
+   * `hooks.checkpoint` 在每个技能边界同步判停，命中返回 `Outcome.cancelled` /
+   * `Outcome.replaced`（中断不是错误），不返回半份清单。
    */
-  listSkills(scope: SkillListScope): Promise<Result<SkillListItem[], AppError>>;
+  listSkills(scope: SkillListScope, hooks?: LongTaskHooks): Promise<Outcome<SkillListItem[]>>;
 
   /**
    * 当前项目的合并视图（global ∪ project、同名项目覆盖、禁用过滤），

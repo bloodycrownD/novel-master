@@ -3,6 +3,7 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Alert} from 'react-native';
 import {SimpleEventBus} from '@novel-master/core/events';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
@@ -705,7 +706,7 @@ describe('ChatTabScreen integration', () => {
     });
   });
 
-  it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stopRun', async () => {
+  it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stop(agent key)', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
@@ -725,16 +726,16 @@ describe('ChatTabScreen integration', () => {
       'delete',
     ]);
 
-    // s1 run 活跃（受理即 starting）：菜单出现停止项，点击走 stopRun。
+    // s1 run 活跃（受理即 starting）：菜单出现停止项，点击走 stop。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     await act(async () => {
       await Promise.resolve();
     });
-    const stopSpy = jest.spyOn(mockHarnessManager!, 'stopRun');
+    const stopSpy = jest.spyOn(mockHarnessManager!, 'stop');
     await act(async () => {
       sessionRowMenu().onSelect('stop-generating');
     });
-    expect(stopSpy).toHaveBeenCalledWith('s1');
+    expect(stopSpy).toHaveBeenCalledWith(ABORT_KEY.agent('s1'));
     stopSpy.mockRestore();
   });
 

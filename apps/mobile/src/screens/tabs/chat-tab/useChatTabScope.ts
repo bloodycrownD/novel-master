@@ -8,6 +8,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
 import type {ChatSession} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {toastMessage} from '@/errors/toast-message';
 import {loadChatAgentMeta} from '@/services/chat-agent-meta';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
@@ -164,7 +165,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
     // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
     // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
     const slot = chatTokenLabelDebounceRef.current;
-    if (slot.key === `${projectId}#${sessionId}` && slot.hasLabel && runtime.abortRegistry.has(sessionId)) {
+    if (slot.key === `${projectId}#${sessionId}` && slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))) {
       return;
     }
     // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
@@ -191,7 +192,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
           // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
           // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
           // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
-          chatSubviewRef.current !== 'conversation' || (chatTokenLabelDebounceRef.current.hasLabel && runtime.abortRegistry.has(sessionId)),
+          chatSubviewRef.current !== 'conversation' || (chatTokenLabelDebounceRef.current.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId))),
         // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
         // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
         // 线程与原生模块队列，正是堵返回键的那只手。
@@ -226,7 +227,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       // 新增的一条消息，run 结束后的刷新（onSettled → transcript 变化）会算出
       // 新的精确值；首刷（hasLabel=false）不冻，否则切进运行中会话时 chip 会
       // 空白到 run 结束。
-      const frozen = slot.hasLabel && runtime.abortRegistry.has(sessionId);
+      const frozen = slot.hasLabel && runtime.abortRegistry.has(ABORT_KEY.agent(sessionId));
       if (tokenLabel && tokenLabelSessionRef.current === sessionId && !frozen) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
         // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。

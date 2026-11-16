@@ -10,6 +10,8 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";
 import type { SavedModel } from "@/domain/provider/model/saved-model.js";
+import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
+import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
 import { applySavedModelSettingsPatch, savedModelContextWindowTokens, savedModelTokenCounterMode, type SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
 import { assertSavedModelSettingsPersistable } from "@/domain/provider/model/saved-model-settings-from-json.js";
@@ -58,7 +60,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     return Result.ok(listed.value);
   }
 
-  async fetch(providerId: string): Promise<Result<void, AppError>> {
+  async fetch(providerId: string, scope?: AbortScope): Promise<Result<void, AppError>> {
     const got = await this.deps.providers.get(providerId);
     if (!got.ok) return Result.err(got.error);
     const provider = got.value;
@@ -68,7 +70,8 @@ export class DefaultProviderModelService implements ProviderModelService {
     }
     const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
-    const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers });
+    // 缺省 scope = 不可取消（CLI / 旧调用点）；desktop handler 会传入带 deadline 的 scope。
+    const result = await adapter.listModels({ baseUrl: provider.baseUrl, apiKey, extraHeaders: provider.headers, scope: scope ?? createAbortScope() });
 
     const seen = new Set<string>();
     for (const m of result.models) {

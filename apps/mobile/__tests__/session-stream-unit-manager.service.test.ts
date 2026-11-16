@@ -22,6 +22,7 @@ import {
   SimpleEventBus,
 } from '@novel-master/core/events';
 import type {MessageAttachment} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
@@ -251,7 +252,7 @@ describe('SessionStreamUnitManager', () => {
     // r3-test-1 ②：abortRegistry.has 不再是恒 false 的假模型——按 startRun
     // 调起的 run 生命周期翻真/假（core 的 register 落在 runAgentTurn 函数入口，
     // 受理即在途；run 结束即反注册）。恒值模型下「在途/已收尾」两种 registry
-    // 读数观测不出差别，下面的 stopRun 前后两断与受理即真全都退化成恒假断言。
+    // 读数观测不出差别，下面的 stop 前后两断与受理即真全都退化成恒假断言。
     const eventBus = new SimpleEventBus();
     const registryState = {inFlight: false};
     let releasePrelude!: () => void;
@@ -320,10 +321,10 @@ describe('SessionStreamUnitManager', () => {
     );
     // 受理空窗内 registry 已是真（core register 在 runAgentTurn 入口执行）：
     // 这条正是 r3-doc-1 纠偏的那条时序，恒值模型下观测不到。
-    expect(abortRegistry.has('a')).toBe(true);
-    // 空窗期 stopRun 转发得到（读口真按 registry 判活，非恒假）
-    expect(manager.stopRun('a')).toBe(true);
-    expect(abortRegistry.abort).toHaveBeenCalledWith('a');
+    expect(abortRegistry.has(ABORT_KEY.agent('a'))).toBe(true);
+    // 空窗期 stop 转发得到（读口真按 registry 判活，非恒假）
+    expect(manager.stop(ABORT_KEY.agent('a'))).toBe(true);
+    expect(abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('a'));
 
     // 前奏检查点命中 abort：core 以合成 cancelled 返回
     releasePrelude();
@@ -343,9 +344,9 @@ describe('SessionStreamUnitManager', () => {
     // 数据源侧同步收口：会话列表「 · 活跃中」meta 读的是 activeSessionIds()，
     // 这条沿必须在无终态事件的受理空窗收尾里也出集（否则该 meta 永久残留）。
     expect(manager.activeSessionIds()).toEqual([]);
-    // run 结束后 registry 反注册：读数翻假、stopRun 不再转发、门禁放行下一轮
-    expect(abortRegistry.has('a')).toBe(false);
-    expect(manager.stopRun('a')).toBe(false);
+    // run 结束后 registry 反注册：读数翻假、stop 不再转发、门禁放行下一轮
+    expect(abortRegistry.has(ABORT_KEY.agent('a'))).toBe(false);
+    expect(manager.stop(ABORT_KEY.agent('a'))).toBe(false);
     expect(manager.startRun('a', 'p', '再来一轮').ok).toBe(true);
     await flushAsync();
   });
@@ -388,7 +389,7 @@ describe('SessionStreamUnitManager', () => {
 
   it('T-P2: abortRegistry.has 为 true 时 startRun 被拒并返回明确错误', () => {
     const h = createHarness();
-    h.abortRegistry.has.mockImplementation(sid => sid === 'a');
+    h.abortRegistry.has.mockImplementation(key => key === ABORT_KEY.agent('a'));
 
     const result = h.manager.startRun('a', 'p', 'hi');
     expect(result.ok).toBe(false);
@@ -754,12 +755,12 @@ describe('SessionStreamUnitManager', () => {
     expect(onForegroundEventUnsubscribe).toHaveBeenCalledTimes(2);
   });
 
-  it('stopRun: 转发 abortRegistry.abort（未注册返回 false）', () => {
+  it('stop: 转发 abortRegistry.abort（未注册返回 false）', () => {
     const h = createHarness();
-    expect(h.manager.stopRun('a')).toBe(false);
+    expect(h.manager.stop(ABORT_KEY.agent('a'))).toBe(false);
     h.abortRegistry.has.mockReturnValue(true);
-    expect(h.manager.stopRun('a')).toBe(true);
-    expect(h.abortRegistry.abort).toHaveBeenCalledWith('a');
+    expect(h.manager.stop(ABORT_KEY.agent('a'))).toBe(true);
+    expect(h.abortRegistry.abort).toHaveBeenCalledWith(ABORT_KEY.agent('a'));
   });
 
   it('T-X1: interruptedSessionIds 数据源——interrupted 单元入集；替换/删除出集；迁移经 subscribe 通知', () => {

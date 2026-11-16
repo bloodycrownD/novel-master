@@ -19,6 +19,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 import type {ReactTestInstance} from 'react-test-renderer';
 import {Text} from 'react-native';
 import type {ChatSession} from '@novel-master/core/chat';
+import {ABORT_KEY} from '@novel-master/core/abort';
 
 import type {ThemeTokens} from '@/theme/tokens';
 import {ChatSessionListPanel} from '@/screens/tabs/chat-tab/ChatSessionListPanel';
@@ -32,7 +33,7 @@ const mockManager = {
     mockListeners.push(listener);
     return () => undefined;
   }),
-  stopRun: jest.fn(() => true),
+  stop: jest.fn(() => true),
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
@@ -460,7 +461,7 @@ describe('ChatSessionListPanel 会话列表本体 · 行渲染 / 批量 / 菜单
     await unmountPanel(renderer);
   });
 
-  it('⋮ 菜单：活跃会话多一项「停止生成」并走 manager.stopRun；重命名/复制/删除回调正确接线', async () => {
+  it('⋮ 菜单：活跃会话多一项「停止生成」并走 manager.stop(agent key)；重命名/复制/删除回调正确接线', async () => {
     const onOpenSessionRename = jest.fn();
     const onCopySession = jest.fn();
     const onConfirmDeleteSession = jest.fn();
@@ -482,7 +483,7 @@ describe('ChatSessionListPanel 会话列表本体 · 行渲染 / 批量 / 菜单
     await act(async () => {
       menu.select('stop-generating');
     });
-    expect(mockManager.stopRun).toHaveBeenCalledWith('a');
+    expect(mockManager.stop).toHaveBeenCalledWith(ABORT_KEY.agent('a'));
     expect(onMenuSessionIdChange).toHaveBeenCalledWith(undefined);
 
     await act(async () => {

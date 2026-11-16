@@ -1,44 +1,74 @@
 /**
  * Database backup IPC — export/import with rebootstrap on import.
+ *
+ * 取消（signal-abort-scope §五）：`doWork` 返回 `Outcome`，handler 边界按
+ * `runAbortable` 的三分派收口。两组策略：
+ * - export：timeout 300s，无不可中断窗口标注；入口检查点（copyFile 前的检查点
+ *   在 `db-backup.service` 的「对话框 → 拷贝」原子段内，本层不拆服务边界）。
+ * - import：不设 timeout；仅入口检查点，`close → 覆盖库文件 → restore` 整段
+ *   不可中断，**禁止 race 早 settle**（补偿链必须与底层流程同生命周期）。
+ *   库已换代时 rebootstrap 无条件执行，成功即按自然终态返回。
  */
+import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
+import type { Outcome } from "@novel-master/core/errors";
 import { BrowserWindow } from "electron";
 import type { BackupExportResult, BackupImportResult, IpcResult } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { rebootstrapDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { exportDatabaseBackup, importDatabaseBackup } from "../../services/db-backup.service.js";
 import { acquireDesktopDbMaintenanceBusy, releaseDesktopDbMaintenanceBusy } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
+import { ipcErr } from "../ipc-result.js";
+import { outcomeIfAborted, runAbortable, runKey } from "../run-scope.js";
 
-export async function handleBackupExport(): Promise<IpcResult<BackupExportResult>> {
-  try {
-    const built = await getDesktopRuntime();
-    // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
-    const rt = built.value;
-    const result = await exportDatabaseBackup(rt, BrowserWindow.getFocusedWindow());
-    if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
-    return { ok: true, data: result.value };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
+/** 可选请求体：runId 只在会展示取消按钮的调用方生成。 */
+export type BackupRunRequest = { readonly runId?: string };
+
+export async function handleBackupExport(req?: BackupRunRequest): Promise<IpcResult<BackupExportResult>> {
+  const built = await getDesktopRuntime();
+  // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
+  if (!built.ok) return ipcErr(formatIpcError(built.error));
+  const rt = built.value;
+  return runAbortable({ registry: rt.abortRegistry, key: runKey(ABORT_KEY.backup, req?.runId), timeoutMs: 300_000 }, (scope) => doBackupExport(rt, scope));
 }
 
-export async function handleBackupImport(): Promise<IpcResult<BackupImportResult>> {
+/** 可被中断的备份导出段；检查点命中返回 `Outcome.cancelled`。 */
+export async function doBackupExport(rt: DesktopNovelMasterRuntime, scope: AbortScope): Promise<Outcome<BackupExportResult>> {
+  const stopped = outcomeIfAborted(scope);
+  if (stopped != null) return stopped;
+  const result = await exportDatabaseBackup(rt, BrowserWindow.getFocusedWindow());
+  return result.ok ? { kind: "completed", value: result.value } : { kind: "failed", error: result.error };
+}
+
+export async function handleBackupImport(req?: BackupRunRequest): Promise<IpcResult<BackupImportResult>> {
   // ic-20 外层令牌：busy 为计数/令牌配对——底层 importDatabaseBackupFromBytes
   // 已 acquire/release 自平衡；这里再持一枚，覆盖「库文件已替换、
   // rebootstrap 尚未完成」的重建窗口，release 严格在 rebootstrap 完成之后
   // （finally 兜底失败路径）。计数语义下与底层令牌互不提前清位。
   acquireDesktopDbMaintenanceBusy();
   try {
-    const result = await importDatabaseBackup(BrowserWindow.getFocusedWindow());
-    if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
-    if (result.value === "imported") {
-      await rebootstrapDesktopRuntime();
-    }
-    return { ok: true, data: result.value };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
+    const built = await getDesktopRuntime();
+    if (!built.ok) return ipcErr(formatIpcError(built.error));
+    const rt = built.value;
+    return await runAbortable({ registry: rt.abortRegistry, key: runKey(ABORT_KEY.backup, req?.runId) }, (scope) => doBackupImport(scope));
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
+}
+
+/**
+ * 备份导入段：`close → 覆盖 → restore` 不可中断，因此**只有入口检查点**，
+ * 完成之后不再判取消——库已换代却回 `IPC_ABORTED` 会让用户以为没导入。
+ */
+export async function doBackupImport(scope: AbortScope): Promise<Outcome<BackupImportResult>> {
+  const stopped = outcomeIfAborted(scope);
+  if (stopped != null) return stopped;
+  const result = await importDatabaseBackup(BrowserWindow.getFocusedWindow());
+  if (!result.ok) return { kind: "failed", error: result.error };
+  if (result.value === "imported") {
+    const rebuilt = await rebootstrapDesktopRuntime();
+    if (!rebuilt.ok) return { kind: "failed", error: rebuilt.error };
+  }
+  return { kind: "completed", value: result.value };
 }
