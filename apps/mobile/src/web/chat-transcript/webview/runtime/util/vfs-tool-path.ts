@@ -2,10 +2,12 @@ import {VFS_FILE_TOOLS} from '../state/state';
 
 export function normalizePathForToolCard(path: string): string {
   if (typeof path !== 'string' || path.length === 0) {
+    // nm-throw: keep — webview 沙箱内的路径校验，由调用的 tool 层 catch 成工具失败
     throw new Error('invalid path');
   }
   const normalized = path.replace(/\\/g, '/');
   if (normalized.charAt(0) !== '/') {
+    // nm-throw: keep — webview 沙箱内的路径校验，由调用的 tool 层 catch 成工具失败
     throw new Error('invalid path');
   }
   const segments = normalized.split('/');
@@ -17,6 +19,7 @@ export function normalizePathForToolCard(path: string): string {
     }
     if (segment === '..') {
       if (stack.length === 0) {
+        // nm-throw: keep — 越根校验，沙箱内安全护栏
         throw new Error('path escapes above root');
       }
       stack.pop();
@@ -33,6 +36,7 @@ export function normalizePathForToolCard(path: string): string {
 export function resolveLogicalPathForToolCard(input: unknown): string {
   const trimmed = String(input).replace(/^\s+|\s+$/g, '');
   if (trimmed.length === 0) {
+    // nm-throw: keep — webview 沙箱内的路径校验，由调用的 tool 层 catch 成工具失败
     throw new Error('invalid path');
   }
   if (trimmed.charAt(0) === '/') {

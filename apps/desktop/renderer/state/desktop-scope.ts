@@ -14,6 +14,7 @@ type DesktopScopeSnapshot = ScopeSnapshotDto;
 
 function unwrap<T>(result: { ok: boolean; data?: T; error?: { message: string } }): T {
   if (!result.ok) {
+    // nm-throw: keep — unwrap 是 renderer 侧 IpcResult 解包边界，与 toIpcResult 互为反向
     throw new Error(result.error?.message ?? "IPC request failed");
   }
   return result.data as T;

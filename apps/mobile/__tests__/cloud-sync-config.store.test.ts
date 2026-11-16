@@ -284,9 +284,11 @@ describe('cloud-sync-config.store 容错', () => {
       {accessKeyId: ' '},
       {secretAccessKey: ' '},
     ]) {
-      await expect(
-        setCloudSyncConfig(runtime, {...validInput(), ...patch}),
-      ).rejects.toThrow(/请填写/);
+      // 九期把四处非空校验从 throw new Error 改成 Result.err（INFRA_VALIDATION_FAILED），
+      // 断言随之从 rejects.toThrow 改为判 Result.err 的 detail。
+      const r = await setCloudSyncConfig(runtime, {...validInput(), ...patch});
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect((r.error.details as {detail?: string}).detail).toMatch(/请填写/);
     }
     expect(await kkv.listKeys(CLOUD_SYNC_KKV_MODULE)).toEqual([]);
     expect(await secretStore.has(CLOUD_SYNC_SECRET_REF)).toBe(false);

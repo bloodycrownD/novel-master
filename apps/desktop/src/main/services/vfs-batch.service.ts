@@ -310,6 +310,7 @@ export async function clearVfsBatchExportStaging(stagingRoot: string): Promise<v
   const resolved = resolve(stagingRoot);
   const base = resolve(vfsBatchStagingBase());
   if (resolved !== base && !resolved.startsWith(base + sep)) {
+    // nm-throw: keep — 安全护栏，参数越界说明调用方写错，不能让清理继续
     throw new Error(`拒绝清理非 staging 路径: ${stagingRoot}`);
   }
   const timer = stagingTtlTimers.get(stagingRoot);

@@ -250,6 +250,7 @@ export const Result = {
       revived.name = name;
       return new Err<T, E>(revived as E);
     }
+    // nm-throw: keep — 不变形破坏（线上载荷形状断言不成立），必须开发期炸出来
     throw new Error("Result.revive 收到非 Result 线上形态：调用方对载荷的形状断言不成立");
   },
 

@@ -262,6 +262,7 @@ export async function startSingleFileImport(
 > {
   const picked = await ipcVfsFilePick();
   if (!picked.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界（线格式无 Result 通道），抛给上层 try/catch
     throw new Error(picked.error.message || "选择文件失败");
   }
   const hostPath = picked.data;
@@ -276,6 +277,7 @@ export async function startSingleFileImport(
     overwriteConfirmed: false,
   });
   if (!result.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(result.error.message || "导入失败");
   }
   if (result.data.status === "needs_confirm") {
@@ -305,6 +307,7 @@ export async function confirmSingleFileImport(
     overwriteConfirmed: true,
   });
   if (!result.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(result.error.message || "导入失败");
   }
   if (result.data.status !== "applied") {
@@ -340,6 +343,7 @@ export async function exportWorkspaceTarget(
       logicalPath,
     });
     if (!single.ok) {
+      // nm-throw: keep — renderer 侧 IpcResult 解包边界
       throw new Error(single.error.message || "导出失败");
     }
     return single.data;
@@ -348,6 +352,7 @@ export async function exportWorkspaceTarget(
   const directoryPath = zipDirectoryPathForTarget(target) ?? "/";
   const zip = await ipcVfsZipExport({ ...scope, directoryPath });
   if (!zip.ok) {
+    // nm-throw: keep — renderer 侧 IpcResult 解包边界
     throw new Error(zip.error.message || "导出失败");
   }
   return zip.data;

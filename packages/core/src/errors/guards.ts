@@ -45,6 +45,7 @@ export type VfsReplaceNotFoundDetails = {
 export function domainOf(code: number): ErrorDomain {
   const matched = (Object.entries(DOMAIN_RANGES) as readonly [ErrorDomain, readonly [number, number]][]).find(([, [lo, hi]]) => code >= lo && code <= hi);
   if (matched == null) {
+    // nm-throw: keep — 码表外 code 属不变量破坏，返回 undefined 会让错误格式化静默走兜底
     throw new Error(`domainOf: 未登记的错误码 ${code}（码表外的 code 是不变量破坏）`);
   }
   return matched[0];
