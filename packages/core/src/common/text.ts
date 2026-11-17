@@ -6,12 +6,6 @@
 
 import {Encoding} from "./encoding.js";
 
-/** 单个码点的 UTF-8 字节数（与 {@link Encoding.utf8ByteLength} 的回落口径一致）。 */
-function utf8SizeOf(char: string): number {
-    const code = char.codePointAt(0)!;
-    return code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-}
-
 export const Text = {
     /**
      * 超过 `maxChars` 时保留前 `maxChars` 个字符并追加省略号；未超长原样返回。
@@ -39,7 +33,9 @@ export const Text = {
         let used = 0;
         let out = "";
         for (const char of text) {
-            const size = utf8SizeOf(char);
+            // 单码点 UTF-8 字节数（与 Encoding.utf8ByteLength 的回落口径一致）
+            const code = char.codePointAt(0)!;
+            const size = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
             if (used + size > maxBytes) {
                 break;
             }
