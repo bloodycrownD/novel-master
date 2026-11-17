@@ -177,7 +177,39 @@
       "category": "public-api",
       "reason": "InternalVfsService 端口方法（internal-vfs.port.ts:51），keep-public 已写在 :185；内部委托 delete 是端口语义（无 revision 层时等价），内联等于删端口实现。",
       "basis": "vfs.service.ts:185-189；internal-vfs.port.ts:51；check-methods.mjs:156-160。"
+    },
+    {
+      "segment": "inline",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "computeLlmExportZonesFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "inline",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptLlmInputFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "inline",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptPreviewSegmentsFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "inline",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "formatPromptLlmInputForCliFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "inline",
+      "file": "packages/core/src/service/prompt/render-prompt.ts",
+      "symbol": "buildPromptPreviewTurnsFromLayout",
+      "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
     }
   ],
-  "suppressPrefixes": ["apps/cli/"]
+  "suppressPrefixes": [
+    "apps/cli/"
+  ]
 }
