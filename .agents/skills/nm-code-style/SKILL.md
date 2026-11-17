@@ -91,6 +91,95 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/sr
 - 文件名按**类别**起（`guards.ts`、`json.ts`），不要按单个函数起（`is-record.ts`）。下一个小工具应该能并进已有类别文件。
 - 模块名要能看出职责；`is-record.ts` 这种抽象名会让下一个守卫又新开一个文件。
 
+### 5.1 语义族收敛（发现「第二份」的可执行手段）
+
+「发现第二份就地实现时就收敛」这条不能靠通读代码——语义相同的函数往往**名字不同**，肉眼扫不出来。固定流程：
+
+1. **跑签名盘点**：
+   ```bash
+   node scripts/list-dup-signatures.mjs <repo-root> --all --json > /tmp/sig.json
+   ```
+   三种视图各有用途：`dupByName`（同名不同文件）、`dupByShape`（名字不同但参数形态相同）、`dupBySignature`（完整签名相同）。
+
+2. **按语义族归类，不按文件名归类**。已确认的高频族：
+
+   | 族 | 典型成员 | 归属 |
+   |---|---|---|
+   | 类型窄化 / 取值 | `asString` / `asNumber` / `nonEmptyString` / `num` / `nonNegativeNum` / `nullableText` / `pickStringField` / `safeParseRecord` | `common/coerce.ts` 的 `Coerce` |
+   | 类型谓词 | `isRecord` / `isNonEmptyString` / `isBinaryFilePath` / `isImageFilePath` | `common/guards.ts` 的 `Guards` |
+   | JSON | `parseJson` / `parseJsonObject` / `parseJsonText` / `safeParseRecord` | `common/json.ts` 的 `Json` |
+   | 截断 / 转义 | `truncate` / `truncateText` / `truncateToByteBudget` / `escapeRegExp` / `escapeHtml` | `common/text.ts` 的 `Text` |
+   | 数值格式化 | `pad` / `pad2` / `labelCount` / `trimTrailingZeros` / `formatByteSize` / `trimFraction` | `common/number.ts` 的 `Number` |
+   | row mapper | `rowToMessage` / `rowToProject` / `rowToSession` / … | **不收敛**：字段集合不同，同名不同责 |
+   | 错误构造 wrapper | `invalid` / `fail` / `alreadyExists` / `engineNotFound` / `segmentError` | **删**：一句 `Result.err(new AppError(...))` 的包装，直接写构造 |
+   | UI 组件回调 | `handleSave` / `sync` / `handleConfirm` / `onSubmit` | **不收敛**：同名不同责，每个组件提交的实体不同 |
+
+3. **判据不是「名字像不像」，是「同一输入是否产出同一输出」**。`asString(v, fallback)` 与 `nullableText(v)` 名字不同、参数不同，但「把 unknown 变成 string」这件事是同一件 → 收敛到 `Coerce`，`fallback` 留给调用侧。
+
+4. **`rowTo*` / `handleSave` 这类明确不收敛的，不要浪费轮次去判**——它们的共同点是「输入输出类型完全不同」。
+
+### 5.2 工具与业务的边界（下游适应工具，不是工具适配下游）
+
+**判据：函数签名里出现业务名词（`label` / `fallback` / `field` / 具体实体名）即为耦合，必须改到调用侧。**
+
+```ts
+// 错：fallback 是业务默认值，工具不该知道
+function asString(value: unknown, fallback: string): string
+
+// 对：工具只做形态判定
+Coerce.string(value): string
+// 业务侧自己补
+const name = Coerce.string(raw.name) || "（未命名）";
+```
+
+```ts
+// 错：label 是为了拼错误文案，工具不该知道「label」这个概念
+function requireString(obj: Record<string, unknown>, key: string, label: string): Result<string, ContentError>
+
+// 对：工具只取值
+Coerce.pickText(obj, key): string | null
+// 业务侧自己转成带 label 的错误
+const v = Coerce.pickText(obj, key);
+if (v === null) return Result.err(new AppError("CHAT_INVALID_ARGUMENT", {detail: `${label} 缺失`}));
+```
+
+例外：`requireXxx(...): Result<T, E>` 这类**校验函数**本身可以保留，因为「校验失败要带错误码上报」是它的职责——但它的失败值必须是通用错误类型，不能是某个业务实体的错误。
+
+### 5.3 工具模块用 object namespace，不建无状态 class
+
+`common/` 的纯函数按类别收进 **object namespace**（`export const Xxx = {...} as const`），不建 `class Xxx { static f() {} }`（无状态 class 见 §9.3 明确禁止）。
+
+```ts
+// common/coerce.ts
+export const Coerce = {
+    /** 非字符串（含 null / undefined / 数字 / 对象）→ 空串；空串原样保留 */
+    string: (value: unknown): string => (typeof value === "string" ? value : ""),
+    /** null / undefined → null；其余 String(value) */
+    nullableText: (value: unknown): string | null => (value == null ? null : String(value)),
+    /** 整数或整数数字串且 >= min；其余 → undefined */
+    integerAtLeast: (value: unknown, min: number): number | undefined => {...},
+} as const;
+```
+
+调用点：`import {Coerce} from "@novel-master/core/common"` → `Coerce.nullableText(x)`。
+
+**理由**：`common/index.ts` 曾平铺 25 个裸导出（`isRecord` 与 `truncateText` 并列），同类不同源看不出；object namespace 让「这是哪一类工具」在调用点可见，同时规避 `check-oop.mjs` 的 `MANY_EXPORTS`。
+
+**两个例外**：
+
+- `assert` / `assertNever` / `AssertionError` 保持裸函数——断言是运行时中断原语，包成 `Assert.assert()` 只是加壳（§4「不要给错误工厂再包一层」同理）。
+- `createTranslator` + i18n 的 `MessageLike` / `MessageParams` / `MessageCatalog` 保持裸导出——工厂 + 类型族不是一类工具函数。
+
+### 5.4 私有 helper 不得重写已导出函数
+
+出现「私有 helper 与某个已 export 的函数签名完全相同」时，**删私有、改 import**。判据可用：
+
+```bash
+node scripts/list-dup-signatures.mjs <repo> --all --json  # dupBySignature 里跨文件且一方是 export 的条目
+```
+
+先例（2026-11-17 实测 2 处）：`vfs-tree-copy.ts` 的私有 `normalizePrefix` 与 `sqlite-workplace.repository.ts` 的私有 `escapeLike`，各自重写了 `scope-prefix-helpers.ts` 里已 export 的同名同签名函数。
+
 ## 6. 类型与不可达守卫
 
 - 校验不可信输入（LLM JSON、YAML、IPC）时，先把字段读进 `const x: unknown = ...` 再判断；直接对已声明类型判断，TS 收窄后会把运行时守卫判成 unreachable。
@@ -128,6 +217,7 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 | `check-methods.mjs` | `DEAD_METHOD` 零生产引用、`INLINE_METHOD` 单点生产引用、`PASS_THROUGH_METHOD` 薄包装、`DEPRECATED_DEAD` / `DEPRECATED_METHOD`、`AMBIGUOUS_METHOD` | 类方法同样删除 / 内联 / 删 wrapper；public 方法单点先判断是否撤 public；private 阶段只有承载对象共享状态时才保留，不能因为行数保留；同名跨类的方法需人工看，不直接判死 |
 | `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`INLINE_CANDIDATE` 默认内联（public=yes 也一样），确认不能内联才写 `nm-style: keep-public` 理由；`--strict` 问题类退出码 1 |
 | `check-oop.mjs` | `OOP_CANDIDATE`（共享状态 + 多导出函数）、`MANY_EXPORTS`（导出函数 ≥6，人工 review） | 有状态才对象化；纯函数命名空间不建类；`OOP_CANDIDATE` 必须处理或报告理由 |
+| `list-dup-signatures.mjs`（主仓 `scripts/`） | `dupByName` / `dupByShape` / `dupBySignature` 三种签名重复视图 | 按 §5.1 的语义族归类；同名但输入输出类型完全不同的（`rowTo*` / `handleSave`）判不收敛并给理由；判「该合」的收敛到 `common/` 的 object namespace；`--gate` 用增量判据（新增重复组才红），基线在 `scripts/dup-signatures-baseline.json` |
 
 - `check-style.mjs --changed` / `--all` / `--strict` 现在把导出审计也计入退出码；默认全 core 扫描仍只输出线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在声明上方写 `nm-style: keep-public — 理由`。
 - 单点私有函数默认内联；`keep-local` 只允许在“先内联、简化、观察重复”之后仍成立的共享状态阶段，必须写 `nm-style: keep-local — 具体状态/不变量`，并在“未处理项报告”里说明。行数不是理由；小的外壳、转手 wrapper、零引用函数不允许用 keep-local。
@@ -182,6 +272,7 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 不要 OOP 的情况：
 
 - 纯函数工具（`composer-at-path`、`build-attachment-action-xml` 这类）——导出再多也只是命名空间，建类只增加壳；
+- **无状态 `class Xxx { static f() {} }` 一律不用**；纯函数要分组时用 object namespace（`export const Xxx = {...} as const`），见 §5.3；
 - DTO / schema / factory（`MessageContent` 这类持久化数据）；
 - 单个函数、React hook（hook 本身就是状态边界）；
 - 只是为了“看起来面向对象”。

@@ -133,3 +133,32 @@ user:
 3. **目录枚举漏项第三次翻车**：六期 15 片清单漏了 `core/src/bootstrap`(58) / `core/src/errors`(17) / `core/src/i18n`(1)，占总残留一半。**清单必须按 `ls` 枚举，不能凭记忆列。**
 4. **`prettier --print-width 200` 与 check-signatures 直接冲突**：全仓跑让 signatures 从 0 反弹到 148。已建 `prettier-guard.mjs` 拦截。
 5. **工具改动必须两边同步**：十期把清单机制改在 worktree 的 `.agents/`，主仓那份没变，导致我在主仓跑检查时误判「十期没做」。已同步并提交 `cd4067c07`。
+
+## 七期～p12-common-ns-tool-decouple 收官（2026-11-17）
+
+**七期 `p7-error-debt`**（`3df20fb4c`）：`common/assert.ts` 建立，**9 处** `*_INVARIANT_VIOLATION`（core 8 + mobile `rn-file-io.ts:44`）改 assert，四个码退役；工具取消 11 处构造点里 4 处 `throw` 改 `return Result.err(TOOL_CANCELLED)`、`curl-tool` 的 `phaseError` 两调用点同批改、**`TOOL_CANCELLED` 码保留作展示标签**（有 messageKey + i18n + LLM 可见文案 + CLI exit 130 的完整展示契约）；30 处业务失败改 `Result.err`；`errors/vfs-errors.ts` + `session-fs-errors.ts` 合并进 `guards.ts`，`errors/` 8→6 文件。
+
+**八期 `abort-scope`**（`a97fafdc4`）：`domain/abort` 六个文件从零建 + `public/abort.ts` barrel；`checkpoint(): Interrupt | null`；core 四个 port 换 `scope`；`tool-runner` 竞速走 `signalView(...).race(...)`；repository 六个 mapRows 读口 + batchInsert 返回 `Outcome`；桌面 6 类 handler 走 `createAbortScope + matchOutcome` 三分派；移动 4 类 service + CloudSyncCoordinator 阶段边界；native request 加 `requestId` 走 OkHttp `Call.cancel()`。
+
+**九期 `p9-bare-throw`**（`f3cf8eeb7`）：**裸 `throw new Error` 是前三轮审查的盲区**——三期/五期/七期只扫 `throw new AppError` 和 `throw x.error`。A 类（用法/参数校验）转通道，B 类（不变量 / webview bridge / native bridge / OS 加密 / S3 / tdbc / tiktoken / update-check）加 `// nm-throw: keep — <理由>`。终态：**无 keep 注释的裸 Error 归零（排 cli/test）**。
+
+**十期 `p10-clean-noise`**（`7e6076be3`）：签名重复门禁 5 组新增全判为刻意重复；`known-false-positives.json` 22 条覆盖 33 行阻断，只改 `check-style.mjs` **汇总层**（子脚本判据一行未改）；`scripts/prettier-guard.mjs` 拒绝无 `--print-width` 的 write 与全仓通配。**清单移除后仍能复现原始 37/21，证明降级是清单驱动而非判据放松。**
+
+**B 轮 spec 合规审查 `abort-scope-audited`**（`67bf45d11`）：4 片只读审计，**P0 5 / P1 17 / P2 14**。5 个 P0：① desktop cloud-sync 的 coordinator 阶段边界 `checkpoint` 一处未传 → 分钟级 S3 传输期间取消静默无效；② desktop backup export 的 scope 在对话框**之前**创建，300s deadline 覆盖的是用户盯对话框的时间；③④ mobile `db-backup.service.ts` 与 `db-maintenance.service.ts` **完全没有取消面**；⑤ spec 自身两处 `hit !== null` 与同文件强制口径冲突（代码全对，是文档地雷）。
+
+**C 轮 `abort-scope-ui`**（`26f3c30aa`）：Step 14 三端 UI 取消入口补全（renderer `ipcRunAbort` + 四类长任务 runId + `IPC_ABORTED` 静默处理；db-maintenance 禁用态按钮；移动两屏取消 + 压缩入口 action toast + 补 `.catch` 消除 unhandled rejection）。
+
+**D 轮 `p11-dup-merge`**（`ddd0d2880`）：合 3 组（`pad`→`common/format-number`、`escapeHtml`→mobile `components/common/html.ts`（**因 composer-input 产物门禁要求零 core 模块，没放 core**）、`onAbort`→`watchAbort`）。判不该合 5 组且理由具体（`flushText` 闭包状态不同、`requireString` `Result<AppError>` vs `string|null` 且空串语义不同、`clearTimer` 额外复位 `scheduledMs`、`walkDir` fs 条目 vs VFS 规则树、`themeFromTokens` 多 `primaryMuted` 派生字段）。
+
+**十二期 `p12-common-ns`**（`9f3451562`）：`common/` 从 25 个平铺裸导出改成 **11 个 object namespace**（`Coerce` 8 方法 / `Guards` 4 / `Json` 2 / `Text` 3 / `Number` 3 / `Encoding` 3 / `Xml` 3 / `Hash` 1 / `Errors` 3 / `Release` 2 / `TokenFormat` 6）；`assert` / `assertNever` / `AssertionError` / `createTranslator` + i18n 类型族保持裸函数（用户拍板）。7 片并行（C1 common 本体 + C2~C7 调用点）+ 补完轮（测试目录 53 处）一次性改完，**不留 re-export 过渡层**。三端 3525 / 773 / 2385 全绿。
+
+**`p12-common-ns-tool-decouple`**（`8e5e4dbdd`）：删 `asString(value, fallback = "")` 别名改 `Coerce.string`（9 处调用，fallback 从未被传过）。其余 4 个带 `label` 的域内函数判**不该改**——`requireString` 是「非空字符串不 trim」而 `Coerce.nonEmptyText` 是「trim 后非空」，语义不等价；`parseDayLocalDate` 是正则+日期溢出检查；`assertSpanWithin` / `decodeCompressedBytes` 的 `label` 是域内诊断标识。**结论：`common/` 那 25 个函数本身就没有业务名词，改完 namespace 后 §5.2 已满足；`label`/`fallback` 只出现在域内私有函数上，那是域的职责不是耦合。**
+
+**新增/更新的规则**：nm-code-style 从 250 行补到 341 行，新增 §5.1 语义族收敛（含 8 族分类表：类型窄化 / 类型谓词 / JSON / 截断转义 / 数值格式化 → 收敛；row mapper / UI 回调 → 不收敛；错误构造 wrapper → 删）、§5.2 工具与业务边界、§5.3 object namespace 形态、§5.4 私有 helper 不得重写已导出函数；§8 加 `list-dup-signatures.mjs`；§9.3 补「无状态 class 一律不用」。
+
+**这轮最贵的四个教训**：
+
+1. **`\bname\b` 是计数假象**。`Coerce.nullableText` 里的 `nullableText` 会被 `\bnullableText\b` 匹配。判「旧名是否清零」必须用 `(^|[^.A-Za-z_])name\(` 排除前缀。**我两次被这个假象误导**：先生成 350 条迁移清单（含假阳性），后判「残留 79 处」实为 0。
+2. **探针 grep 有三个盲区**：不抓 `export { x } from "..."` 这类转发行（C6 自己发现 `shared/logic/common.ts` 漏了，不改会断 X11 bridge）、不抓同名遮蔽、不抓动态引用。下次要同时 grep `from "@novel-master/core/common"` 的导出行。
+3. **「同名 = 重复」是错的**。55 组同名里真正该合的只有约 10 组：11 组是 UI 组件回调（`handleSave` 9 处，各提交不同实体）、6 组是 tdbc 接口实现、约 15 组是局部闭包同名、2 组是 tokenizer 双驱动同构。跨域同名才是真信号。
+4. **测试目录要单独排一轮**。十二期 C6/C7 我写了「排除 test」，但波 4 没安排改测试，导致 desktop 3 红 + mobile 9 用例红，又开了一轮补完。
