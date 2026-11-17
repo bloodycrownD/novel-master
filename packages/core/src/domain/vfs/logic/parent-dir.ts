@@ -30,7 +30,8 @@ export function parentDir(path: string): Result<string, AppError> {
  * Strict（Result）之外的 lenient 态：宽松父目录（裸返回值，无错误通道）。
  *
  * root → `null`（无父目录）；非法路径（空串 / 非绝对 / 越根）→ `null`。
- * 给 UI 导航这类「解析不出就当没有」的消费方用；要保留错误原因走 {@link parentDir}。
+ * 给 UI 导航这类「解析不出就当没有」的消费方用，也是「已 normalize 输入取
+ * root→null」的通道（workplace 目录链）；要保留错误原因走 {@link parentDir}。
  */
 export function parentDirOrNull(path: string): string | null {
   const resolved = normalizePath(path);

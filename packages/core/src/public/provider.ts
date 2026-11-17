@@ -71,10 +71,7 @@ export type {
   GeminiThinkingConfig,
 } from "../domain/provider/model/model-thinking-params.js";
 export { thinkingProtocol } from "../domain/provider/model/model-thinking-params.js";
-export {
-  resolveEffectiveMaxTokens,
-  resolveThinkingParamsForLevel,
-} from "../domain/provider/logic/resolve-thinking-wire.js";
+export { resolveEffectiveMaxTokens } from "../domain/provider/logic/resolve-thinking-wire.js";
 export { thinkingLevelToModelThinkingParams } from "../domain/provider/logic/thinking-level-presets.js";
 export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
 export {

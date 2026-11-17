@@ -127,7 +127,7 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
 // BottomSheetMenu 的骨架（ModalShell）内部用 useTheme，mock 掉避免拉起 runtime 链。
-// tokens 带 9 键：原生 composer 的 theme props 断言面（conversation-theme 映射）。
+// tokens 带 9 键：原生 composer 的 theme props 断言面（hostThemeFromTokens 映射）。
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -787,7 +787,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // insets mock bottom=0 → safeAreaBottom 0；TestHost 未注入 ⛶ 回调 → 不可用
     expect(props.safeAreaBottom).toBe(0);
     expect(props.fullscreenEnabled).toBe(false);
-    // theme 9 键与转录文档同源（conversation-themeFromTokens 映射）
+    // theme 9 键与转录文档同源（hostThemeFromTokens 映射）
     expect(props.theme).toEqual({
       background: '#000',
       text: '#fff',

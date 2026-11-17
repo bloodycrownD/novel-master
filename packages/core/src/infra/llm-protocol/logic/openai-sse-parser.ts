@@ -12,6 +12,7 @@ import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { openAiStreamAccumulatorsToBlocks, openAiStreamAccumulatorsToPartialBlocks, openAiStreamDeltaToEvents } from "./openai-content-mapper.js";
 import { feedSseJsonEvents } from "./sse-json-events.js";
+import { drainSseLines } from "./sse-line-buffer.js";
 import { assertSseParseSucceededOrThrow, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 
 type ToolCallAccumulator = {
@@ -76,9 +77,7 @@ export function createOpenAiSseParser(options: OpenAiSseParserOptions = {}): Ope
   };
 
   const finish = (): SseFinishResult => {
-    if (state.buffer !== "") {
-      feed("\n");
-    }
+    drainSseLines(state, feed);
     const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(state, onStream);
     // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
     const asserted = assertSseParseSucceededOrThrow(state, blocks, "openai");
@@ -90,8 +89,9 @@ export function createOpenAiSseParser(options: OpenAiSseParserOptions = {}): Ope
     };
   };
 
-  /** Abort 快照：宽松解析已累积参数、不 assert、也不 drain 缓冲（与既有 adapter 行为一致）。 */
+  /** Abort 快照：宽松解析已累积参数、不 assert；先冲刷尾部残行，与 anthropic/gemini 的中断收尾一致。 */
   const finishPartial = (): SseFinishResult => {
+    drainSseLines(state, feed);
     const blocks = openAiStreamAccumulatorsToPartialBlocks(state, onStream);
     return {
       blocks,

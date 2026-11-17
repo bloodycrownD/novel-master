@@ -26,7 +26,8 @@ describe('workplace-block.service', () => {
       sessionId: 's',
     });
     expect(clearSession).toHaveBeenCalledWith('s');
-    expect(mockRefresh).toHaveBeenCalledWith(runtime, {
+    // 十七期第2轮签名审计：refresh 的 runtime 首参是死参已删，scope 形状不变。
+    expect(mockRefresh).toHaveBeenCalledWith({
       projectId: 'p',
       sessionId: 's',
     });

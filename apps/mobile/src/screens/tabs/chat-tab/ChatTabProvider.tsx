@@ -58,10 +58,7 @@ import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
-import {
-  isMobileAgentActive,
-  subscribeMobileAgentActivity,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import type {RootStackParamList} from '@/navigation/types';
 import {readChatTranscriptEngine} from '@/storage/chat-transcript-engine';
 import {readBoolPref} from '@/storage/app-ui-pref-io';
@@ -379,8 +376,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     [manager, sessionId, projectId, refreshChatTokenLabel],
   );
 
-  const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
-  useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
+  const [agentActive, setAgentActive] = useState(() => agentActivity.isActive());
+  useEffect(() => agentActivity.subscribe(setAgentActive), []);
 
   const {
     setProjectDrawerOpen,

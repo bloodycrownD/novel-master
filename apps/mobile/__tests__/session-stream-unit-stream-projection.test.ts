@@ -20,10 +20,7 @@ import {
   EVENT_AGENT_STREAM_TOOL_USE,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {addLogSink} from '@novel-master/core/log';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
@@ -208,7 +205,7 @@ function recordingHandle(handleId: string): {
 
 describe('SessionStreamUnit 流式 step 记录（T-SP15）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -217,7 +214,7 @@ describe('SessionStreamUnit 流式 step 记录（T-SP15）', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -281,7 +278,7 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -292,7 +289,7 @@ describe('tool-use 订阅与 tools-only stream-batch（T-SP16）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -343,7 +340,7 @@ describe('DB 接管映射（T-SP17）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -354,7 +351,7 @@ describe('DB 接管映射（T-SP17）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -706,7 +703,7 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
   let h: ReturnType<typeof createHarness>;
 
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -717,7 +714,7 @@ describe('streamRowIds 生命周期（P1-3 / P2-18f）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 

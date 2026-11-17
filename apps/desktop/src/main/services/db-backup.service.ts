@@ -11,24 +11,22 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { assertSqliteBackupHeader, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot } from "@novel-master/core";
+import { assertSqliteBackupHeader, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
-import { createAbortError } from "@novel-master/core/abort";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { checkpointDesktopDatabase, closeDesktopConnection, getDesktopConnection } from "../runtime/connection.js";
 import { clearDesktopRuntimeHandle } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
-import { isDesktopAgentActive } from "../runtime/agent-activity.js";
-import { acquireDesktopDbMaintenanceBusy, releaseDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
+import { agentActivity } from "../runtime/agent-activity.js";
+import { maintenanceBusy } from "./db-maintenance-busy.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.db-backup");
 
 const SQLITE_HEADER_BYTES = 16;
-const EXPORT_ATTACH_ALIAS = "export_db";
 
 /**
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
@@ -84,7 +82,8 @@ export function __setDbBackupFsOpsForTest(ops: Partial<typeof fsOps> | null): vo
 
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
- * 调用方负责 Agent 守卫与目标路径管理。
+ * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link exportDatabaseBackupToPathCore}），
+ * 本壳只保留 desktop 的 busy 计数与平台注入点。
  *
  * ic-20：busy 为计数/令牌配对——底层入口 acquire、出口 finally release
  * 自平衡（云同步等直接调底层的路径「期间 true、结束后 false」天然成立）；
@@ -92,20 +91,11 @@ export function __setDbBackupFsOpsForTest(ops: Partial<typeof fsOps> | null): vo
  * 之后 release，含重建窗口的完整互斥。计数语义下嵌套调用互不提前清位。
  */
 export async function exportDatabaseBackupToPath(runtime: DesktopNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
-  acquireDesktopDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
-    await checkpointDesktopDatabase(runtime.conn);
-    const dbPath = resolveDbPath();
-    // 策略表：copyFile 前 checkpoint（scope 由调用方在保存对话框 resolve 后创建）。
-    // 命中走 AbortError（平台协议例外：Promise 无 Result 通道），由 doWork 边界转
-    // Outcome.cancelled / runAbortable 映射 IPC_ABORTED。
-    if (checkpoint?.() != null) {
-      throw createAbortError();
-    }
-    await copyFile(dbPath, destPath);
-    await scrubProviderTablesInDatabase(runtime.conn, destPath, EXPORT_ATTACH_ALIAS);
+    await exportDatabaseBackupToPathCore(runtime.conn, destPath, { checkpointDatabase: checkpointDesktopDatabase, resolveDbPath, copyFile }, checkpoint);
   } finally {
-    releaseDesktopDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
 }
 
@@ -209,7 +199,7 @@ async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, p
  * backup.ts / cloud-sync.ts 调用路径），含重建窗口的完整互斥。
  */
 export async function importDatabaseBackupFromPath(srcPath: string): Promise<Result<DbImportOutcome, AppError>> {
-  acquireDesktopDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
     // 路径级校验：只读前 16 字节确认 SQLite 魔数，不整包读入。禁止 `readFile(path, enc, 16)`
     // （第三参会被忽略，整包读入 ⇒ 大备份撑爆 Node 堆），也禁止裸 `readFile` 整包进内存。
@@ -231,7 +221,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
 
     await replaceLiveDatabase((dbPath) => fsOps.copyFile(srcPath, dbPath), providerSnapshot);
   } finally {
-    releaseDesktopDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
   return Result.ok({ databaseReplaced: true, providerTablesRestored: true });
 }
@@ -243,7 +233,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
  * ic-20：busy 为计数/令牌配对——同 {@link importDatabaseBackupFromPath}。
  */
 export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<Result<DbImportOutcome, AppError>> {
-  acquireDesktopDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
     // 内存态校验：bytes 已在堆上，不涉及整包读盘。失败沿 Result.err（同 FromPath 口径）。
     const checked = assertSqliteBackupHeader(bytes);
@@ -254,7 +244,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
 
     await replaceLiveDatabase((dbPath) => writeFile(dbPath, bytes), providerSnapshot);
   } finally {
-    releaseDesktopDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
   return Result.ok({ databaseReplaced: true, providerTablesRestored: true });
 }
@@ -266,7 +256,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
  * 之后才创建**（对话框期间的 abort 不承诺生效），300s deadline 也只覆盖 copy 段。
  */
 export async function pickDatabaseExportPath(parentWindow?: BrowserWindow | null): Promise<Result<string | null, AppError>> {
-  if (isDesktopAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError("AGENT_BUSY", { detail: "Agent 运行中，请稍后再导出数据库" }));
   }
 
@@ -291,7 +281,7 @@ export async function exportDatabaseBackup(runtime: DesktopNovelMasterRuntime, p
 }
 
 export async function importDatabaseBackup(parentWindow?: BrowserWindow | null): Promise<Result<"imported" | "cancelled", AppError>> {
-  if (isDesktopAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError("AGENT_BUSY", { detail: "Agent 运行中，请稍后再导入数据库" }));
   }
 

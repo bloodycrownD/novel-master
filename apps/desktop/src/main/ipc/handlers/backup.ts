@@ -18,7 +18,7 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { rebootstrapDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { exportDatabaseBackupToPath, importDatabaseBackup, pickDatabaseExportPath } from "../../services/db-backup.service.js";
-import { acquireDesktopDbMaintenanceBusy, releaseDesktopDbMaintenanceBusy } from "../../services/db-maintenance-busy.js";
+import { maintenanceBusy } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr, ipcOk } from "../ipc-result.js";
 import { outcomeIfAborted, runAbortable, runKey } from "../run-scope.js";
@@ -59,14 +59,14 @@ export async function handleBackupImport(req?: BackupRunRequest): Promise<IpcRes
   // 已 acquire/release 自平衡；这里再持一枚，覆盖「库文件已替换、
   // rebootstrap 尚未完成」的重建窗口，release 严格在 rebootstrap 完成之后
   // （finally 兜底失败路径）。计数语义下与底层令牌互不提前清位。
-  acquireDesktopDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
     const built = await getDesktopRuntime();
     if (!built.ok) return ipcErr(formatIpcError(built.error));
     const rt = built.value;
     return await runAbortable({ registry: rt.abortRegistry, key: runKey(ABORT_KEY.backup, req?.runId) }, (scope) => doBackupImport(scope));
   } finally {
-    releaseDesktopDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
 }
 

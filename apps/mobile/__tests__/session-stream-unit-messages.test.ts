@@ -37,10 +37,7 @@ import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {SESSION_STREAM_MESSAGES_PAGE_SIZE} from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
@@ -273,7 +270,7 @@ function createControlRecordingHandle(handleId: string): {
 }
 
 beforeEach(() => {
-  setMobileAgentActive(false);
+  agentActivity.setActive(false);
   jest.clearAllMocks();
   resetKeepAliveStateForTests();
   clearAllSessionViewCaches();
@@ -283,7 +280,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
-  setMobileAgentActive(false);
+  agentActivity.setActive(false);
   resetKeepAliveStateForTests();
   clearAllSessionViewCaches();
 });
@@ -419,7 +416,7 @@ describe('T-U5: 后台收尾缓存刷新（消息丢失回归）', () => {
     expect(h.messages.listBySessionTail.mock.calls.length).toBe(
       tailCallsBefore,
     );
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 });
 

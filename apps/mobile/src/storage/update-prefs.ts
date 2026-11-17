@@ -11,7 +11,7 @@ import {
 import type {Result} from '@novel-master/core/errors';
 import type {AppError} from '@novel-master/core/errors';
 import type {AppUiPreferences} from './app-ui-prefs';
-import type {UpdateCheckData} from '../update-check/types';
+import type {UpdateCheckData} from '@novel-master/core/common';
 
 export async function readDismissedVersion(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_DISMISSED_VERSION);

@@ -103,8 +103,8 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
     expect(main).toMatch(
       /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
     );
-    // 全屏挂接在 registerSetDocumentView 回调之外（模块刈处一行调用）。
-    // 断言意图 = 「`registerSetDocumentView(...)` 的闭合大括号之后才是
+    // 全屏挂接在 documentViewSlot.register 回调之外（模块刈处一行调用）。
+    // 断言意图 = 「`documentViewSlot.register(...)` 的闭合大括号之后才是
     // bindAnnotateUi / mountMermaidViewerPortal」——即挂接不在回调体内。
     // 换行用 `[\s\S]+` 而不是字面 `\n\n`：仓库里两种换行都有（git 检出在
     // Windows 上是 CRLF，Linux CI 上是 LF），字面量断言会随平台红。
@@ -135,8 +135,8 @@ describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 �
   it('工厂体内装配动作齐全，mermaid 两挂接真被调用', () => {
     const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
     for (const symbol of [
-      'registerRenderContextMenu',
-      'registerRenderRows',
+      'contextMenuViewSlot.register(',
+      'rowsViewSlot.register(',
       'measureRowWindow',
       'mountMermaidViewerPortal(',
       'attachMermaidViewerDelegation(',

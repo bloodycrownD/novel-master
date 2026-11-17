@@ -19,10 +19,7 @@ import {
 import {
   SessionStreamUnitManager,
 } from '@/services/session-stream-unit-manager.service';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 
 function flushTimers(ms: number): Promise<void> {
   return new Promise<void>(resolve => {
@@ -153,7 +150,7 @@ describe('run-finish-calibration-probe — manager 级集成', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     appStateListener = () => undefined;
     appStateSpy = jest.spyOn(AppState, 'addEventListener');
     appStateSpy.mockImplementation(
@@ -167,7 +164,7 @@ describe('run-finish-calibration-probe — manager 级集成', () => {
     for (const manager of liveManagers.splice(0)) {
       manager.dispose();
     }
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     appStateSpy.mockRestore();
     jest.useRealTimers();
   });
@@ -214,14 +211,14 @@ describe('run-finish-calibration-probe — manager 级集成', () => {
       runId: 'r1',
     });
     expect(h.manager.snapshot('a')?.status).toBe('running');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // 推进轮询周期 + 复询防抖：校准收尾生效
     await flushTimers(RUN_FINISH_CALIBRATION_INTERVAL_MS + 1);
     await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
 
     expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('前台回焦触发校准（AppState → active 走 calibrate 路径）', async () => {
@@ -237,7 +234,7 @@ describe('run-finish-calibration-probe — manager 级集成', () => {
     appStateListener('active');
     await flushTimers(RUN_FINISH_CALIBRATION_RECONFIRM_DELAY_MS + 50);
     expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('starting 单元（RUN_STARTED 未达、runId 未回填）不参与校准——受理空窗防误杀', async () => {

@@ -1,12 +1,6 @@
 import {readFileSync} from 'fs';
 import {join} from 'path';
-import {
-  decrementMobileAgentActive,
-  incrementMobileAgentActive,
-  isMobileAgentActive,
-  setMobileAgentActive,
-  subscribeMobileAgentActivity,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -17,48 +11,48 @@ import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.s
 
 describe('agent-activity', () => {
   afterEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   describe('refcount', () => {
-    it('increment 后 isMobileAgentActive 为 true', () => {
-      expect(isMobileAgentActive()).toBe(false);
-      incrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(true);
+    it('increment 后 agentActivity.isActive 为 true', () => {
+      expect(agentActivity.isActive()).toBe(false);
+      agentActivity.increment();
+      expect(agentActivity.isActive()).toBe(true);
     });
 
-    it('decrement 至 0 后 isMobileAgentActive 为 false', () => {
-      incrementMobileAgentActive();
-      decrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(false);
+    it('decrement 至 0 后 agentActivity.isActive 为 false', () => {
+      agentActivity.increment();
+      agentActivity.decrement();
+      expect(agentActivity.isActive()).toBe(false);
     });
 
     it('多次 increment 需等量 decrement 才回落', () => {
-      incrementMobileAgentActive();
-      incrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(true);
+      agentActivity.increment();
+      agentActivity.increment();
+      expect(agentActivity.isActive()).toBe(true);
 
-      decrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(true);
+      agentActivity.decrement();
+      expect(agentActivity.isActive()).toBe(true);
 
-      decrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(false);
+      agentActivity.decrement();
+      expect(agentActivity.isActive()).toBe(false);
     });
 
     it('decrement 在计数为 0 时幂等', () => {
-      decrementMobileAgentActive();
-      decrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(false);
+      agentActivity.decrement();
+      agentActivity.decrement();
+      expect(agentActivity.isActive()).toBe(false);
     });
 
     it('refcount 变化会通知订阅者', () => {
       const listener = jest.fn();
-      const unsubscribe = subscribeMobileAgentActivity(listener);
+      const unsubscribe = agentActivity.subscribe(listener);
 
-      incrementMobileAgentActive();
+      agentActivity.increment();
       expect(listener).toHaveBeenCalledWith(true);
 
-      decrementMobileAgentActive();
+      agentActivity.decrement();
       expect(listener).toHaveBeenCalledWith(false);
 
       unsubscribe();
@@ -66,49 +60,49 @@ describe('agent-activity', () => {
 
     it('嵌套 increment 仅在首次与末次 decrement 时通知', () => {
       const listener = jest.fn();
-      subscribeMobileAgentActivity(listener);
+      agentActivity.subscribe(listener);
 
-      incrementMobileAgentActive();
-      incrementMobileAgentActive();
+      agentActivity.increment();
+      agentActivity.increment();
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener).toHaveBeenLastCalledWith(true);
 
-      decrementMobileAgentActive();
+      agentActivity.decrement();
       expect(listener).toHaveBeenCalledTimes(1);
 
-      decrementMobileAgentActive();
+      agentActivity.decrement();
       expect(listener).toHaveBeenCalledTimes(2);
       expect(listener).toHaveBeenLastCalledWith(false);
     });
   });
 
-  describe('setMobileAgentActive（废弃兼容）', () => {
+  describe('agentActivity.setActive（废弃兼容）', () => {
     it('会通知订阅者', () => {
       const listener = jest.fn();
-      const unsubscribe = subscribeMobileAgentActivity(listener);
+      const unsubscribe = agentActivity.subscribe(listener);
 
-      setMobileAgentActive(true);
-      expect(isMobileAgentActive()).toBe(true);
+      agentActivity.setActive(true);
+      expect(agentActivity.isActive()).toBe(true);
       expect(listener).toHaveBeenCalledWith(true);
 
-      setMobileAgentActive(false);
+      agentActivity.setActive(false);
       expect(listener).toHaveBeenCalledWith(false);
 
       unsubscribe();
       listener.mockClear();
-      setMobileAgentActive(true);
+      agentActivity.setActive(true);
       expect(listener).not.toHaveBeenCalled();
     });
 
     it('覆盖 refcount 状态', () => {
-      incrementMobileAgentActive();
-      incrementMobileAgentActive();
-      setMobileAgentActive(false);
-      expect(isMobileAgentActive()).toBe(false);
+      agentActivity.increment();
+      agentActivity.increment();
+      agentActivity.setActive(false);
+      expect(agentActivity.isActive()).toBe(false);
 
-      setMobileAgentActive(true);
-      decrementMobileAgentActive();
-      expect(isMobileAgentActive()).toBe(false);
+      agentActivity.setActive(true);
+      agentActivity.decrement();
+      expect(agentActivity.isActive()).toBe(false);
     });
   });
 
@@ -153,7 +147,7 @@ describe('agent-activity', () => {
     }
 
     afterEach(() => {
-      setMobileAgentActive(false);
+      agentActivity.setActive(false);
     });
 
     it('受理即活跃；FINISHED 事件收尾后归零', () => {
@@ -161,14 +155,14 @@ describe('agent-activity', () => {
       try {
         expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
         // 受理路径同步 increment——RUN_STARTED 之前守卫就必须生效
-        expect(isMobileAgentActive()).toBe(true);
+        expect(agentActivity.isActive()).toBe(true);
 
         h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
           sessionId: 'a',
           projectId: 'p',
           runId: 'r1',
         });
-        expect(isMobileAgentActive()).toBe(true); // STARTED 不碰 refcount
+        expect(agentActivity.isActive()).toBe(true); // STARTED 不碰 refcount
 
         h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
           sessionId: 'a',
@@ -176,7 +170,7 @@ describe('agent-activity', () => {
           runId: 'r1',
           stopReason: 'done',
         });
-        expect(isMobileAgentActive()).toBe(false);
+        expect(agentActivity.isActive()).toBe(false);
       } finally {
         h.manager.dispose();
       }
@@ -197,7 +191,7 @@ describe('agent-activity', () => {
           runId: 'r1',
           error: 'boom',
         });
-        expect(isMobileAgentActive()).toBe(false);
+        expect(agentActivity.isActive()).toBe(false);
       } finally {
         h.manager.dispose();
       }
@@ -208,10 +202,10 @@ describe('agent-activity', () => {
       h.runAgentTurn.mockRejectedValue(new Error('early boom'));
       try {
         h.manager.startRun('a', 'p', 'hi');
-        expect(isMobileAgentActive()).toBe(true);
+        expect(agentActivity.isActive()).toBe(true);
 
         await flushAsync();
-        expect(isMobileAgentActive()).toBe(false);
+        expect(agentActivity.isActive()).toBe(false);
         // finally 兜底直接销毁单元出表（snapshot 归 null）
         expect(h.manager.snapshot('a')).toBe(null);
       } finally {
@@ -224,7 +218,7 @@ describe('agent-activity', () => {
       try {
         h.manager.startRun('a', 'p', '1');
         h.manager.startRun('b', 'p', '2');
-        expect(isMobileAgentActive()).toBe(true);
+        expect(agentActivity.isActive()).toBe(true);
 
         h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
           sessionId: 'a',
@@ -244,7 +238,7 @@ describe('agent-activity', () => {
           stopReason: 'done',
         });
         // A 结束但 B 仍在跑：备份/云同步仍须被拦
-        expect(isMobileAgentActive()).toBe(true);
+        expect(agentActivity.isActive()).toBe(true);
 
         h.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
           sessionId: 'b',
@@ -252,15 +246,15 @@ describe('agent-activity', () => {
           runId: 'r2',
           error: 'boom',
         });
-        expect(isMobileAgentActive()).toBe(false);
+        expect(agentActivity.isActive()).toBe(false);
       } finally {
         h.manager.dispose();
       }
     });
 
     it('渲染层/单元不碰 refcount（静态约束：源码不含计数 API）', () => {
-      // 单一归属的可执行锁定：屏幕组合层与消息 hook、单元本体都不得引入
-      // increment/decrement/setMobileAgentActive——计数只能由 Manager 的
+      // 单一归属的可执行锁定：屏幕组合层与消息 hook、单元本体都不得调用
+      // increment/decrement/setActive——计数只能由 Manager 的
       // 受理/事件/finally 三条路径改动（Step 7 起旧 hook 已删，清单换成
       // 现存的等价消费面）。
       const lifecycleSources = [
@@ -270,11 +264,9 @@ describe('agent-activity', () => {
       ];
       for (const sourcePath of lifecycleSources) {
         const source = readFileSync(sourcePath, 'utf8');
-        // 匹配「调用或具名导入」形状；只读视图（isMobileAgentActive /
-        // subscribeMobileAgentActivity）与注释里的提及不算碰计数。
-        expect(source).not.toMatch(
-          /\b(?:incrementMobileAgentActive|decrementMobileAgentActive|setMobileAgentActive)\s*\(|import\s*\{[^}]*\b(?:incrementMobileAgentActive|decrementMobileAgentActive|setMobileAgentActive)\b/,
-        );
+        // 匹配调用形状；只读视图（agentActivity.isActive / agentActivity.subscribe）
+        // 与注释里的提及不算碰计数。导入面共用一个 `agentActivity`，故只认调用。
+        expect(source).not.toMatch(/\bagentActivity\.(?:increment|decrement|setActive)\s*\(/);
       }
     });
   });

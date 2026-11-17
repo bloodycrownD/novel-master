@@ -90,6 +90,14 @@ async function resolveLatest(fetchFn: FetchFn = fetch): Promise<LatestRelease> {
             // nm-throw: keep — 第三方响应字段缺失属 API 契约破缺（infra 适配层），不是本地参数校验。
             throw new Error("GitHub API 响应缺少 html_url");
         }
+        // 发行版链接域名白名单（mobile 侧安全小项 f2f15d0f5 的防线，并入共享实现后对
+        // desktop 也是加固）：release 页必须落在本仓 GitHub 路径下，防止恶意/被篡改的
+        // 响应把用户引到第三方域名。
+        const expectedPrefix = `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.name}/`;
+        if (!htmlUrl.startsWith(expectedPrefix)) {
+            // nm-throw: keep — 发行版链接域名校验属 GitHub API 边界（infra 适配层），调用方无参数可纠正。
+            throw new Error(`发行版链接域名校验失败（预期 ${expectedPrefix}，实际 ${htmlUrl}）`);
+        }
         return {
             tagName,
             version: parseTag(tagName),

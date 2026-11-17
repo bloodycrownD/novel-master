@@ -31,8 +31,7 @@ jest.mock('react-native-webview', () => {
 });
 
 jest.mock('@/webview-host/rich-document/uri', () => ({
-  getRichDocumentUri: () => 'file:///rich-document/index.html',
-  getRichDocumentPackageDirUri: () => 'file:///rich-document/',
+  RICH_DOCUMENT_WEBVIEW_PACKAGE_ID: 'rich-document',
 }));
 
 // mermaid 全屏返回键自注册用（组件不在 NavigationContainer 内渲染；聚焦恒真即可）

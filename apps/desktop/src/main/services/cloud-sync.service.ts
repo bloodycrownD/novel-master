@@ -16,8 +16,8 @@ import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { createBusyFlag } from "@novel-master/core/common";
-import { isDesktopAgentActive } from "../runtime/agent-activity.js";
-import { isDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
+import { agentActivity } from "../runtime/agent-activity.js";
+import { maintenanceBusy } from "./db-maintenance-busy.js";
 import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
 
 export type CloudSyncLocalStatusDto = {
@@ -41,10 +41,8 @@ export type CloudSyncLocalStatusDto = {
  * 云同步执行窗口（pull/push 互斥；计数实现与 db-maintenance-busy 同源）。
  * 单实例计数与旧布尔等价：`if (syncBusy.isBusy())` 守卫保证不会嵌套 acquire。
  */
-const syncBusy = createBusyFlag();
-
 /** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
-export const isDesktopCloudSyncBusy = syncBusy.isBusy;
+export const syncBusy = createBusyFlag();
 
 class DesktopCloudSyncService {
   /**
@@ -144,7 +142,7 @@ class DesktopCloudSyncService {
     const cfg = config.value;
     const hasSecret = secret != null && secret.length > 0;
     const configured = cfg.enabled && cfg.endpoint.trim().length > 0 && cfg.bucket.trim().length > 0 && cfg.accessKeyId.trim().length > 0 && cfg.deviceId.trim().length > 0 && hasSecret;
-    const agentActive = isDesktopAgentActive();
+    const agentActive = agentActivity.isActive();
 
     let remoteRev: number | undefined;
     if (configured) {
@@ -197,7 +195,7 @@ class DesktopCloudSyncService {
       suggestsPull,
       syncBusy: syncBusy.isBusy(),
       agentActive,
-      maintenanceBusy: isDesktopDbMaintenanceBusy(),
+      maintenanceBusy: maintenanceBusy.isBusy(),
     });
   }
 
@@ -415,7 +413,7 @@ class DesktopCloudSyncService {
     const importTempPath = join(tmpdir(), `nm-cloud-sync-import-${stamp}.nmbackup`);
 
     const dbSync = {
-      isAgentActive: () => isDesktopAgentActive(),
+      isAgentActive: () => agentActivity.isActive(),
       exportSnapshotToPath: async (destPath: string) => {
         const { exportDatabaseBackupToPath } = await import("./db-backup.service.js");
         await exportDatabaseBackupToPath(runtime, destPath);
@@ -504,6 +502,3 @@ export function resetDesktopCloudSyncServiceForTest(): void {
   syncBusy.resetForTest();
   storageOverrideForTest = undefined;
 }
-
-/** 测试用：直接置位云同步忙碌状态（模拟 pull/push 执行窗口）。 */
-export const setDesktopCloudSyncBusyForTest = syncBusy.set;

@@ -102,10 +102,4 @@ type RichDocumentToHostMessage =
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>;
 
-const richDocumentBridge = createMessageBridge<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');
-
-// nm-style: keep-public — rich-document 桥四函数（webview 契约，消费方 RichDocumentWebView / 测试）
-export const encodeHostToRichDocument = richDocumentBridge.encodeToClient;
-export const encodeRichDocumentToHost = richDocumentBridge.encodeToHost;
-export const decodeRichDocumentToHost = richDocumentBridge.decodeToHost;
-export const decodeHostToRichDocument = richDocumentBridge.decodeToClient;
+export const richDocumentBridge = createMessageBridge<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');

@@ -15,7 +15,7 @@ import {View} from 'react-native';
 import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import {RealPromptScreen} from '@/screens/stack/RealPromptScreen';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
-import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 const mockBuildTurns = jest.fn(async () => [] as unknown[]);
@@ -241,7 +241,7 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
     mockFocus.handler = undefined;
     mockBuildTurns.mockResolvedValue({ok: true, value: [TURN]});
     // 模块级单例复位：残留正文会让下一条用例读到上一轮的数据。
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-MP3-1 toggle 改屏级 openTurnIds：展开区随之挂载/卸载', async () => {
@@ -299,7 +299,7 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
       title: 'assistant',
       turnId: TURN.id,
     });
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'assistant',
       body: '好的，我来看看。',
       leafId: 'card-12-0',

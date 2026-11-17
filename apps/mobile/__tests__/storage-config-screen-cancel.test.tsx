@@ -65,8 +65,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  isMobileAgentActive: () => false,
-  subscribeMobileAgentActivity: () => () => undefined,
+  agentActivity: {isActive: () => false, subscribe: () => () => undefined},
 }));
 
 jest.mock('@/services/db-backup.service', () => ({

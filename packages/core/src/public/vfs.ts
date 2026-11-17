@@ -32,7 +32,7 @@ export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { zipBaseNameFromPath } from "../domain/vfs/logic/vfs-zip-path.js";
 export { resolveZipDirectoryPath } from "../domain/vfs/logic/vfs-zip-path.js";
-export { assertZipArchiveMagic, assertZipArchiveComplete } from "../domain/vfs/logic/vfs-zip-archive.js";
+export { assertZipArchive } from "../domain/vfs/logic/vfs-zip-archive.js";
 export type {
   VfsZipIoService,
   VfsZipImportOptions,

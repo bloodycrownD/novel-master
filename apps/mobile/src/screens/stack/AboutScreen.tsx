@@ -20,7 +20,7 @@ import {readBoolPref, writeBoolPref} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '@/storage/app-ui-keys';
 import {APP_LINKS, APP_VERSION} from '@/update-check/app-meta';
 import {checkForUpdates} from '@/update-check/check-for-updates';
-import type {UpdateCheckData} from '@/update-check/types';
+import type {UpdateCheckData} from '@novel-master/core/common';
 import {useTheme} from '@/theme/ThemeProvider';
 
 function showUpdateAlert(data: UpdateCheckData, onLater: () => void): void {

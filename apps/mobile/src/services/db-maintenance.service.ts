@@ -17,10 +17,10 @@ import {AppError} from '@novel-master/core/agent';
 import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
-import {isMobileAgentActive} from '../runtime/agent-activity';
+import {agentActivity} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {blobFs} from './rn-file-io';
-import {acquireMobileDbMaintenanceBusy, isMobileDbMaintenanceBusy, releaseMobileDbMaintenanceBusy} from './db-maintenance-busy';
+import {maintenanceBusy} from './db-maintenance-busy';
 
 /** 数据库文件体积采样（blob-util stat 的 size 为字符串，统一转 number）。 */
 async function statDatabaseFileBytes(): Promise<number> {
@@ -35,7 +35,7 @@ async function statDatabaseFileBytes(): Promise<number> {
  * 仅用于展示，Agent 运行中抛中文 Error，由调用方决定静默或提示。
  */
 export async function getDbMaintenanceStats(runtime: MobileNovelMasterRuntime): Promise<Result<{fileBytes: number; reclaimableBytes: number}, AppError>> {
-  if (isMobileAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
   const [fileBytes, stats] = await Promise.all([statDatabaseFileBytes(), createDbMaintenanceService(runtime.conn).getStorageStats()]);
@@ -51,7 +51,7 @@ export async function getDbMaintenanceStats(runtime: MobileNovelMasterRuntime): 
  * 循环据此让路（与数据清理互斥）。
  */
 export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promise<Result<{beforeBytes: number; afterBytes: number}, AppError>> {
-  if (isMobileAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
   // 任务级取消 scope（spec §五移动表：dbMaintenance("local")，**仅入口**；
@@ -62,20 +62,17 @@ export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promi
     if (abortScope.checkpoint() != null) {
       throw createAbortError();
     }
-    acquireMobileDbMaintenanceBusy();
+    maintenanceBusy.acquire();
     try {
       const beforeBytes = await statDatabaseFileBytes();
       await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
       const afterBytes = await statDatabaseFileBytes();
       return Result.ok({beforeBytes, afterBytes});
     } finally {
-      releaseMobileDbMaintenanceBusy();
+      maintenanceBusy.release();
     }
   } finally {
     runtime.abortRegistry.unregister(ABORT_KEY.dbMaintenance('local'), abortScope);
     abortScope.dispose();
   }
 }
-
-/** db 维护后台循环的让路守卫再导出（备份服务共用同一互斥口径）。 */
-export {isMobileDbMaintenanceBusy};

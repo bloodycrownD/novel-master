@@ -13,6 +13,7 @@ import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
 import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseJsonEvents } from "./sse-json-events.js";
+import { drainSseLines } from "./sse-line-buffer.js";
 import { assertSseParseSucceededOrThrow, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 import { parseUsage } from "./usage-parser.js";
@@ -204,14 +205,8 @@ export function createGeminiSseParser(options: GeminiSseParserOptions = {}): Gem
     });
   };
 
-  const drain = (): void => {
-    if (state.buffer !== "") {
-      feed("\n");
-    }
-  };
-
   const finish = (): SseFinishResult => {
-    drain();
+    drainSseLines(state, feed);
 
     const text = state.textParts.join("");
     const thinking = state.thinkingParts.join("");
@@ -270,7 +265,7 @@ export function createGeminiSseParser(options: GeminiSseParserOptions = {}): Gem
   };
 
   const finishPartial = (): SseFinishResult => {
-    drain();
+    drainSseLines(state, feed);
 
     const { toolUses } = functionCallsToToolUses(state);
     const partialInput = {

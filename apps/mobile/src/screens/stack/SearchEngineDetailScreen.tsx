@@ -35,7 +35,7 @@ import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
-import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 import {toastMessage} from '@/errors/toast-message';
 import {coreT} from '@/i18n/core';
 import {settingsTranslator} from '@/i18n/settings';
@@ -137,7 +137,7 @@ export function SearchEngineDetailScreen() {
   // 参数说明全屏编辑（照智能体配置的 PromptEditor 机制：保存才回填，取消不动）。
   // 必须与其他 hook 同层（在 loading 早退之前），否则 hook 数量变化会报错。
   const openParamHintEditor = useCallback(() => {
-    setPromptEditorOnSaved((text: string) => setDraft(current => ({...current, paramHint: text})));
+    promptEditorOnSavedSlot.set((text: string) => setDraft(current => ({...current, paramHint: text})));
     navigation.push('PromptEditor', {
       title: settingsTranslator({key: 'settings.search.params.title.mobile'}),
       initialText: draft.paramHint,

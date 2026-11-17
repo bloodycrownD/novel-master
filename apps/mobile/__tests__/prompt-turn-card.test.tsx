@@ -10,10 +10,7 @@ import type {MessageLike} from '@novel-master/core/i18n';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
-import {
-  setPromptTurnDetail,
-  takePromptTurnDetail,
-} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 
@@ -131,7 +128,7 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // 模块级单例复位：残留正文会让下一条用例读到上一轮的数据。
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-MP1-1 三类 role 徽标渲染（user/assistant/system，无「轮」字后缀）', () => {
@@ -240,8 +237,8 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
   });
 
   it('T-MP4-2 callback take 读后即清（防串台）', () => {
-    setPromptTurnDetail({title: 'A', body: '轮 A'});
-    expect(takePromptTurnDetail()).toEqual({title: 'A', body: '轮 A'});
-    expect(takePromptTurnDetail()).toBeNull();
+    promptTurnDetailSlot.set({title: 'A', body: '轮 A'});
+    expect(promptTurnDetailSlot.take()).toEqual({title: 'A', body: '轮 A'});
+    expect(promptTurnDetailSlot.take()).toBeNull();
   });
 });

@@ -1,17 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import {
-  decrementDesktopAgentActive,
-  incrementDesktopAgentActive,
-  isDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 import { AgentActivityForwarder } from "../src/main/ipc/forward-agent-activity.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
 describe("forward-agent-activity", () => {
   afterEach(() => {
-    while (isDesktopAgentActive()) {
-      decrementDesktopAgentActive();
+    while (agentActivity.isActive()) {
+      agentActivity.decrement();
     }
   });
 
@@ -25,8 +21,8 @@ describe("forward-agent-activity", () => {
     }));
     const detach = AgentActivityForwarder.attach();
 
-    incrementDesktopAgentActive();
-    decrementDesktopAgentActive();
+    agentActivity.increment();
+    agentActivity.decrement();
     detach();
 
     assert.deepEqual(payloads, [{ active: true }, { active: false }]);

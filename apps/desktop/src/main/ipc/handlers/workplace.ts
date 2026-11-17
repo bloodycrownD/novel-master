@@ -22,6 +22,10 @@ import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 /**
  * 规则保存后：evaluate→写 rule_snapshot canon→clear file_cache。
  * workplace 差集 suggest 已废止。
+ *
+ * 镜像注：mobile 同名入口在 apps/mobile/src/services/workplace-rule-delta-draft.service.ts。
+ * 两端形态不同（本端先从 IPC 请求解析 scope 并带空参守卫，mobile 由调用方传入已解析的
+ * workplace/sessionId），共同语义只有 core 的 refreshRuleSnapshot 调用，故不收敛。
  */
 async function refreshRuleSnapshotAfterRuleChange(rt: DesktopNovelMasterRuntime, req: { projectId?: string; sessionId?: string }): Promise<void> {
   if (req.sessionId == null || req.sessionId === "" || req.projectId == null || req.projectId === "") {

@@ -12,16 +12,8 @@
 
 import {createCallbackSlot} from '../../runtime/callback-slot';
 
-const slot = createCallbackSlot<() => void>();
-
-/** push 前写入当次回调（每次打开都覆盖新回调）。 */
-// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
-export function setFileEditorOnSessionVfsSaved(cb: () => void) {
-  slot.set(cb);
-}
-
-/** 挂载时读取并清空：take 语义避免上一次打开的回调泄漏到下一次。 */
-// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
-export function takeFileEditorOnSessionVfsSaved(): (() => void) | null {
-  return slot.take();
-}
+/**
+ * 模块级单槽：push 前 `set`（每次打开都覆盖新回调）、挂载时 `take`
+ * （读后即清，避免上一次打开的回调泄漏到下一次）。
+ */
+export const fileEditorOnSessionVfsSavedSlot = createCallbackSlot<() => void>();

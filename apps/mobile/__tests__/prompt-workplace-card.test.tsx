@@ -11,7 +11,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {PromptWorkplaceCardData} from '@novel-master/core/prompt';
 import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
-import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 const mockOnToggleFile = jest.fn();
@@ -92,7 +92,7 @@ function renderCard(
 describe('PromptWorkplaceCard（T-WP1）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-WP1-1 无组头直出文件列表行（路径 + 展示档，单行无正文预览）', () => {
@@ -165,7 +165,7 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
       title: 'outline/大纲.md',
       turnId: 'turn-wt',
     });
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'outline/大纲.md',
       body: '1|第一行\n2|第二行',
       leafId: 'prompt-workplace:outline/大纲.md',

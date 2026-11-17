@@ -13,6 +13,7 @@ import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js"
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseJsonEvents } from "./sse-json-events.js";
+import { drainSseLines } from "./sse-line-buffer.js";
 import { assertSseParseSucceededOrThrow, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 import { ANTHROPIC_USAGE_FIELDS, parseUsage } from "./usage-parser.js";
@@ -267,14 +268,8 @@ export function createAnthropicSseParser(options: AnthropicSseParserOptions = {}
     });
   };
 
-  const drain = (): void => {
-    if (state.buffer !== "") {
-      feed("\n");
-    }
-  };
-
   const finish = (): SseFinishResult => {
-    drain();
+    drainSseLines(state, feed);
     flushActiveBlock(state, onStream, toolNames);
     // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
     const asserted = assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
@@ -287,7 +282,7 @@ export function createAnthropicSseParser(options: AnthropicSseParserOptions = {}
   };
 
   const finishPartial = (): SseFinishResult => {
-    drain();
+    drainSseLines(state, feed);
     flushActiveBlock(state, onStream, toolNames);
 
     const stateTextBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text");

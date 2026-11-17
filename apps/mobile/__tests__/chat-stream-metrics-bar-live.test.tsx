@@ -19,7 +19,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_USAGE,
 } from '@novel-master/core/events';
-import {setMobileAgentActive} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 const mockRunAgentTurn = jest.fn(
@@ -116,7 +116,7 @@ function renderMetricsLine(
 describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     mockRunAgentTurn.mockClear();
   });
 
@@ -125,7 +125,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     mockManager = undefined;
     mockGetSessionUsageDetail.mockClear();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('水合 interrupted 单元：显示恢复的冻结历时与字数（无 settled 投影可退）', () => {

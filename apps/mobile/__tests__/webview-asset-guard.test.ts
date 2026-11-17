@@ -134,7 +134,7 @@ function readIosCopyScript(): string {
 
 /**
  * 抠出 webview-asset-uri.ts 里 WebViewAssetPackageId 联合类型的成员（消费侧类型镜像）。
- * `export` 前缀可有可无：nm style 假公开审计后该类型已内聚（无外部消费者），
+ * 该类型现由四个包 id 常量的 `satisfies` 消费（uri.ts 壳改常量后导出），
  * 导出与否不改变「联合类型成员 == PACKAGES」的镜像契约。
  */
 function parseAssetUriUnionIds(): string[] {

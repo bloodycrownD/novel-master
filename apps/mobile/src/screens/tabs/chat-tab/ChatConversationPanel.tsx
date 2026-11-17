@@ -34,7 +34,7 @@ import {type VfsScope} from '@novel-master/core/vfs';
 import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
-import {conversationThemeFromTokens} from '@/components/chat/conversation-theme';
+import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
 import {
   NativeChatComposer,
   type NativeChatComposerInstance,
@@ -183,7 +183,7 @@ function ChatConversationWebSurface(props: {
    */
   const {tokens: themeTokens} = useTheme();
   const composerTheme = useMemo(
-    () => conversationThemeFromTokens(themeTokens),
+    () => hostThemeFromTokens(themeTokens),
     [themeTokens],
   );
 

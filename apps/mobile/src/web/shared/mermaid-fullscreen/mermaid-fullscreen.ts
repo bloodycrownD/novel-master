@@ -12,7 +12,7 @@
  *   RN 拦截 BackHandler 后下发 closeMermaidViewer（各管线 bridge 分支）→
  *   closeMermaidViewer() → post('mermaidViewerClosed')。
  * - 覆盖层视图由 mountMermaidViewerPortal(portalId) 统一注册（各管线 main.ts
- *   一行调用，照 registerRenderContextMenu 先例）；post 函数由管线注入（两桥 post 实现不同）。
+ *   一行调用，照 contextMenuViewSlot 先例）；post 函数由管线注入（两桥 post 实现不同）。
  */
 
 import {h, render} from 'preact';

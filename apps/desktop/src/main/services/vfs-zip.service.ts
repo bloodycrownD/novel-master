@@ -6,7 +6,7 @@
  *
  * @module services/vfs-zip
  */
-import { AppError, assertZipArchiveMagic, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
+import { AppError, assertZipArchive, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
 import { Result } from "@novel-master/core/errors";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
@@ -31,7 +31,7 @@ export async function exportVfsZipWithDialog(runtime: DesktopNovelMasterRuntime,
   // 失败沿 Result 返回，由唯一调用方 handleVfsZipExport 转码。
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  const archiveCheck = assertZipArchiveMagic(bytes);
+  const archiveCheck = assertZipArchive(bytes, "magic");
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
   const base = zipBaseNameFromPath(directoryPath);
@@ -66,7 +66,7 @@ export async function pickVfsZipBytesWithDialog(parentWindow?: BrowserWindow | n
     return Result.ok(null);
   }
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
-  const archiveCheck = assertZipArchiveMagic(bytes);
+  const archiveCheck = assertZipArchive(bytes, "magic");
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
   return Result.ok(bytes);
 }
@@ -75,7 +75,7 @@ export async function pickVfsZipBytesWithDialog(parentWindow?: BrowserWindow | n
 type ImportVfsZipBytesOptions = { readonly bytes: Uint8Array; readonly confirmed: boolean; readonly directoryPath?: string };
 
 export async function importVfsZipBytes(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ImportVfsZipBytesOptions): Promise<Result<void, AppError>> {
-  const archiveCheck = assertZipArchiveMagic(options.bytes);
+  const archiveCheck = assertZipArchive(options.bytes, "magic");
   if (!archiveCheck.ok) return archiveCheck;
   const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
   if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);

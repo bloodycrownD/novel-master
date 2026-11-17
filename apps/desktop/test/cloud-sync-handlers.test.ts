@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import {
-  getDesktopCloudSyncService,
-  isDesktopCloudSyncBusy,
-  resetDesktopCloudSyncServiceForTest,
-} from "../src/main/services/cloud-sync.service.js";
+import {getDesktopCloudSyncService, syncBusy, resetDesktopCloudSyncServiceForTest} from "../src/main/services/cloud-sync.service.js";
 import type { CloudSyncConfigStore } from "../src/main/services/cloud-sync-config.store.js";
 import {
   handleCloudSyncGetConfig,
@@ -120,6 +116,6 @@ describe("cloud-sync ipc handlers", () => {
     } finally {
       configStore.getLocalMeta = originalGetLocalMeta;
     }
-    assert.equal(isDesktopCloudSyncBusy(), false);
+    assert.equal(syncBusy.isBusy(), false);
   });
 });

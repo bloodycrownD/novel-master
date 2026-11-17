@@ -36,7 +36,7 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {CodeEditorWebView, type CodeEditorWebViewHandle} from '../../components/vfs/CodeEditorWebView';
 import {FileMarkdownPreview, type PreviewRenderKind} from '../../components/vfs/FileMarkdownPreview';
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
-import {takePromptEditorOnSaved, type PromptEditorOnSaved} from '../../components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot, type PromptEditorOnSaved} from '../../components/agent/prompt-editor-callback';
 import {composerAtPath} from '../../components/chat/composer-at-path';
 import {buildTokenInsertion, queryWithinConfirmedRange, type ComposerTokenInsertion} from '../../components/chat/composer-token-insert';
 import {remapTokenRanges} from '../../components/chat/native-composer/token-ranges';
@@ -74,7 +74,7 @@ export function PromptEditorScreen() {
   const setStackOverride = useStackOverrideSetter();
   // 回调走模块级存取（路由参数必须可序列化）：挂载时读走并清空，
   // 未消费即离开时不残留旧回调。composer 变体在卸载时消费（退出即回填）。
-  const onSavedRef = useRef<PromptEditorOnSaved | null>(takePromptEditorOnSaved());
+  const onSavedRef = useRef<PromptEditorOnSaved | null>(promptEditorOnSavedSlot.take());
   // 屏内草稿 + 已保存基线（照 FileEditorScreen 的 content/savedContent 对）：
   // form 保存只回填调用方并推进基线，不离开页面；composer 无基线消费方。
   const [draft, setDraft] = useState(initialText);

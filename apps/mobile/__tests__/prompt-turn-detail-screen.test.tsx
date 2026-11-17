@@ -10,10 +10,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {PromptTurnDetailScreen} from '@/screens/stack/PromptTurnDetailScreen';
-import {
-  setPromptTurnDetail,
-  takePromptTurnDetail,
-} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockSetStackOverride = jest.fn();
 const mockPreviewProps: {
@@ -107,11 +104,11 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
     mockRouteParams.title = '好的，我来看看。';
     mockRouteParams.turnId = 'turn-12';
     // 模块级单例复位。
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-R7-5 经 callback 取数渲染 body（纯预览态 / 固定原文档 / 铺满）', () => {
-    setPromptTurnDetail({title: '好的，我来看看。', body: BODY});
+    promptTurnDetailSlot.set({title: '好的，我来看看。', body: BODY});
     const tree = renderScreen();
     expect(mockPreviewProps[0]).toMatchObject({
       path: 'turn-turn-12',
@@ -132,7 +129,7 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
   });
 
   it('T-MP5 叶子级全屏：path 带 leafId 后缀（稳定伪 key）', () => {
-    setPromptTurnDetail({title: 'assistant', body: BODY, leafId: 'card-m2-0'});
+    promptTurnDetailSlot.set({title: 'assistant', body: BODY, leafId: 'card-m2-0'});
     renderScreen();
     expect(mockPreviewProps[0]).toMatchObject({
       path: 'turn-turn-12-leaf-card-m2-0',
@@ -142,15 +139,15 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
 
   it('T-MP5 轮 id 缺失时回落占位 key（不抛）', () => {
     mockRouteParams.turnId = undefined;
-    setPromptTurnDetail({title: 'A', body: BODY});
+    promptTurnDetailSlot.set({title: 'A', body: BODY});
     renderScreen();
     expect(mockPreviewProps[0]?.path).toBe('turn-unknown');
   });
 
   it('T-R7-6 挂载即消费（读后即清，不残留给下一次进屏）', () => {
-    setPromptTurnDetail({title: 'A', body: BODY});
+    promptTurnDetailSlot.set({title: 'A', body: BODY});
     renderScreen();
-    expect(takePromptTurnDetail()).toBeNull();
+    expect(promptTurnDetailSlot.take()).toBeNull();
   });
 
   it('T-R7-7 未写入 callback 时静默渲染空正文（不抛）', () => {

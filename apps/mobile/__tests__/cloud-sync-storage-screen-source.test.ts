@@ -54,7 +54,7 @@ describe('CloudSyncStorageScreen 云端存储设置页', () => {
   });
 
   it('Agent 运行中守卫：同步操作在 agentActive 时禁用', () => {
-    expect(source).toMatch(/isMobileAgentActive/);
+    expect(source).toMatch(/agentActivity\.isActive/);
     expect(source).toMatch(/syncControlsDisabled = agentActive/);
     expect(source).toMatch(/Agent 运行中，同步操作已禁用。/);
   });

@@ -5,41 +5,34 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { parentDirOfNormalized } from "@/domain/vfs/logic/parent-dir.js";
+import { parentDirOrNull } from "@/domain/vfs/logic/parent-dir.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceScope } from "../model/workplace-types.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
 
-/** 逻辑路径的父目录；根目录文件返回 `/`。
- * 解包接力（错误通道迁移四期门⑦）：normalizePath 失败沿返回值通道原样上交（buildWorkplaceDirSet / directChildDirs 同款），决定权交给调用方。
+/**
+ * 沿 parentDirOrNull 把 `logicalPath` 的祖先目录逐级加入 `dirs`，止于 `root`。
+ *
+ * 父目录公式单源在 `domain/vfs/logic/parent-dir.ts`（root 在那一层收敛为 null）。
+ * 入参在 {@link buildWorkplaceDirSet} 内已过 normalizePath，而 parentDirOrNull
+ * 对已规范化路径只在 root 处返回 null——与旧 `parentDirOf(logicalPath)` 的
+ * `Ok(null)` 分支逐字等价，故不再有错误通道。
  */
-export function parentDirOf(logicalPath: string): Result<string | null, AppError> {
-  const resolved = normalizePath(logicalPath);
-  if (!resolved.ok) return Result.err(resolved.error);
-  // 公式单源：domain/vfs/logic/parent-dir.ts（root 在本层收敛为 null，无父目录）。
-  return Result.ok(resolved.value === "/" ? null : parentDirOfNormalized(resolved.value));
-}
-
-function addParentChain(dirs: Set<string>, logicalPath: string, root: string): Result<void, AppError> {
-  let stepped = parentDirOf(logicalPath);
-  if (!stepped.ok) return Result.err(stepped.error);
-  let current = stepped.value;
+function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
+  let current = parentDirOrNull(logicalPath);
   while (current != null && current !== root) {
     dirs.add(current);
-    stepped = parentDirOf(current);
-    if (!stepped.ok) return Result.err(stepped.error);
-    current = stepped.value;
+    current = parentDirOrNull(current);
   }
   dirs.add(root);
-  return Result.ok(undefined);
 }
 
 /**
  * Builds the set of directory logical paths for list/display traversal.
  *
  * nm-style: keep-public — workplace 树构造的唯一 domain 入口，由 workplace.service
- * 跨层单点调用；内联需把 addParentChain/parentDirOf 的目录链逻辑一并搬进 service。
+ * 跨层单点调用；内联需把 addParentChain/parentDirOrNull 的目录链逻辑一并搬进 service。
  */
 export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Result<Set<string>, AppError> {
   const root = workplaceRootLogicalPath(params.scope);
@@ -47,8 +40,7 @@ export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; r
   for (const p of params.filePaths) {
     const resolved = normalizePath(p);
     if (!resolved.ok) return Result.err(resolved.error);
-    const stepped = addParentChain(dirs, resolved.value, root);
-    if (!stepped.ok) return Result.err(stepped.error);
+    addParentChain(dirs, resolved.value, root);
   }
   for (const p of params.configuredPaths) {
     const resolved = normalizePath(p);
@@ -58,12 +50,10 @@ export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; r
       dirs.add(root);
       continue;
     }
-    const stepped = addParentChain(dirs, n, root);
-    if (!stepped.ok) return Result.err(stepped.error);
-    const parent = parentDirOf(n);
-    if (!parent.ok) return Result.err(parent.error);
-    if (parent.value != null) {
-      dirs.add(parent.value);
+    addParentChain(dirs, n, root);
+    const parent = parentDirOrNull(n);
+    if (parent != null) {
+      dirs.add(parent);
     }
   }
   return Result.ok(dirs);
@@ -79,9 +69,7 @@ export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): Resu
     if (d === normalized) {
       continue;
     }
-    const parent = parentDirOf(d);
-    if (!parent.ok) return Result.err(parent.error);
-    if (parent.value === normalized) {
+    if (parentDirOrNull(d) === normalized) {
       children.push(d);
     }
   }

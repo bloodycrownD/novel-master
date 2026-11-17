@@ -200,7 +200,7 @@ export function handleMessagesSetFloor(req: MessagesSetFloorPayload): Promise<Ip
     const result = await rt.messageTranscriptEffects.setMessageFloorAtMessage(req.projectId, req.sessionId, req.messageId);
     // 置位：project∪annotate；禁止终态强制 []
     if (!result.ok) return Result.err(result.error);
-    await refreshComposerStatusAfterFloorOrCompaction(rt, { projectId: req.projectId, sessionId: req.sessionId });
+    await refreshComposerStatusAfterFloorOrCompaction({ projectId: req.projectId, sessionId: req.sessionId });
     return Result.ok(result.value);
   });
 }
@@ -242,7 +242,7 @@ export function handleMessagesRollback(req: SessionFsRollbackRequest): Promise<I
     // main 进程拿不到 mode（mode 由 renderer 算）——renderer 侧的清空 / 反投影
     // 由 renderer 的 applyUndoAnnotateRestore 按锚点角色区分处理（CR-5）。
     chatAnnotateDraftStore.clear(req.sessionId);
-    await refreshComposerStatusAfterSessionKkvCleared(rt, { projectId: req.projectId, sessionId: req.sessionId });
+    await refreshComposerStatusAfterSessionKkvCleared({ projectId: req.projectId, sessionId: req.sessionId });
     return Result.ok(undefined);
   });
 }

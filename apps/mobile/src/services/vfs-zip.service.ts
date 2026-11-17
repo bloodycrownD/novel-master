@@ -9,7 +9,7 @@
 import {types} from '@react-native-documents/picker';
 import {
   AppError,
-  assertZipArchiveComplete,
+  assertZipArchive,
   createVfsZipIoService,
   resolveZipDirectoryPath,
   zipBaseNameFromPath,
@@ -61,7 +61,7 @@ export async function exportVfsZip(runtime: MobileNovelMasterRuntime, scope: Vfs
   const exported = await zipSvc.export(scope, {directoryPath});
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  const archiveCheck = assertZipArchiveComplete(bytes);
+  const archiveCheck = assertZipArchive(bytes, 'complete');
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
   const base = zipBaseNameFromPath(directoryPath);
@@ -87,7 +87,7 @@ export async function pickZipFileBytes(): Promise<Result<Uint8Array | null, AppE
   if (bytes == null) {
     return Result.ok(null);
   }
-  const archiveCheck = assertZipArchiveComplete(bytes);
+  const archiveCheck = assertZipArchive(bytes, 'complete');
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
   return Result.ok(bytes);
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {FileEditorScreen} from '@/screens/stack/FileEditorScreen';
-import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 
 const mockDismiss = jest.fn();
 const mockShowToast = jest.fn();
@@ -510,7 +510,7 @@ describe('FileEditorScreen', () => {
 
     // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
     const spy = jest.fn();
-    setFileEditorOnSessionVfsSaved(spy);
+    fileEditorOnSessionVfsSavedSlot.set(spy);
 
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);

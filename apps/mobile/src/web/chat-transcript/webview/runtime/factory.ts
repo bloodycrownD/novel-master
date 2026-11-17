@@ -16,8 +16,8 @@
  * 内部任何东西。
  */
 import {h, render} from 'preact';
-import {registerRenderContextMenu} from './menu/menu';
-import {registerRenderRows} from './render/row-logic';
+import {contextMenuViewSlot} from './menu/menu';
+import {rowsViewSlot} from './render/row-logic';
 import {measureRowWindow} from './render/row-windowing';
 import {startTranscriptBoot} from './boot/boot-transcript';
 import {post} from './bridge';
@@ -42,7 +42,7 @@ export function createTranscriptRuntime(options: TranscriptRuntimeOptions = {}):
   const menuPortal = document.getElementById('menu-portal');
 
   // P0-3 / ISD：注册完整菜单 overlay；关闭时 render(null) 卸载
-  registerRenderContextMenu(props => {
+  contextMenuViewSlot.register(props => {
     if (!menuPortal) return;
     if (!props) {
       render(null, menuPortal);
@@ -52,7 +52,7 @@ export function createTranscriptRuntime(options: TranscriptRuntimeOptions = {}):
   });
 
   // P0-3：注册行列表 Preact 实现（消毒 HTML 经 TrustedHtml，见 ui/render）
-  registerRenderRows(() => {
+  rowsViewSlot.register(() => {
     const list = document.getElementById('rows');
     if (!list) return;
     render(h(RowList, null), list);

@@ -23,10 +23,7 @@ import {
 } from '@novel-master/core/events';
 import type {MessageAttachment} from '@novel-master/core/chat';
 import {ABORT_KEY} from '@novel-master/core/abort';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {Platform} from 'react-native';
@@ -127,13 +124,13 @@ function publishFailed(
 
 describe('SessionStreamUnitManager', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
   });
 
   afterEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
     // 未在用例内 dispose 的 manager 统一收口：清校准轮询 interval 与
     // 复询定时器，防 jest 环境拆除后异步路径再触碰 RN 模块。
@@ -370,7 +367,7 @@ describe('SessionStreamUnitManager', () => {
       ok: true,
     });
     publishStarted(h.eventBus, 'b', 'r2');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // A 结束不影响 B
     publishFinished(h.eventBus, 'a', 'r1');
@@ -380,11 +377,11 @@ describe('SessionStreamUnitManager', () => {
     expect(h.manager.hasActiveRun('b')).toBe(true);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
     expect(h.manager.snapshot('b')?.status).toBe('running');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     publishFinished(h.eventBus, 'b', 'r2');
     expect(settledB).toHaveBeenCalledWith('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P2: abortRegistry.has 为 true 时 startRun 被拒并返回明确错误', () => {
@@ -397,7 +394,7 @@ describe('SessionStreamUnitManager', () => {
       expect(result.error.length).toBeGreaterThan(0);
     }
     expect(h.runAgentTurn).not.toHaveBeenCalled();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P2: 单元处 starting（RUN_STARTED 未达、registry 未注册）时二次 startRun 同样被拒', () => {
@@ -416,7 +413,7 @@ describe('SessionStreamUnitManager', () => {
       expect(second.error.length).toBeGreaterThan(0);
     }
     expect(h.runAgentTurn).toHaveBeenCalledTimes(1);
-    expect(isMobileAgentActive()).toBe(true); // 单个受理计数
+    expect(agentActivity.isActive()).toBe(true); // 单个受理计数
   });
 
   it('T-P3: 切走会话后（无 UI 面板消费）FINISHED 仍正确 decrement，全局不卡死', () => {
@@ -426,11 +423,11 @@ describe('SessionStreamUnitManager', () => {
     );
     expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
     publishStarted(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // 无任何 UI 面板订阅过滤——manager 全量事件直接收尾
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.hasActiveRun('a')).toBe(false);
     // 终态投影在宽限期内保留（新架构语义：服务「上次生成」过渡展示）
     expect(h.manager.snapshot('a')?.status).toBe('finished');
@@ -445,12 +442,12 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('a', 'p', 'hi', {onSettled: settled});
 
     publishStarted(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true); // increment 只在受理路径
+    expect(agentActivity.isActive()).toBe(true); // increment 只在受理路径
 
     publishFailed(h.eventBus, 'a', 'r1');
     expect(settled).toHaveBeenCalledWith('failed');
     expect(h.manager.snapshot('a')?.status).toBe('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-P9: startRun 后未收到 RUN_STARTED 即抛错 → finally 清单元并 decrement，refcount 回落', async () => {
@@ -458,10 +455,10 @@ describe('SessionStreamUnitManager', () => {
     h.runAgentTurn.mockRejectedValue(new Error('early boom'));
 
     expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
-    expect(isMobileAgentActive()).toBe(true); // 受理路径已同步 increment
+    expect(agentActivity.isActive()).toBe(true); // 受理路径已同步 increment
 
     await flushAsync();
-    expect(isMobileAgentActive()).toBe(false); // finally 兜底回落
+    expect(agentActivity.isActive()).toBe(false); // finally 兜底回落
     expect(h.manager.hasActiveRun('a')).toBe(false);
     expect(h.manager.snapshot('a')).toBe(null); // 非正常终态：直接销毁出表
 
@@ -478,11 +475,11 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('a', 'p', 'hi');
     publishStarted(h.eventBus, 'a', 'r1');
     publishFinished(h.eventBus, 'a', 'r1'); // 事件路径已 decrement + settle
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
 
     await flushAsync();
-    expect(isMobileAgentActive()).toBe(false); // finally 未把计数减成负
+    expect(agentActivity.isActive()).toBe(false); // finally 未把计数减成负
     expect(h.manager.snapshot('a')?.status).toBe('finished'); // 宽限单元未被 finally 提前销毁
   });
 
@@ -499,7 +496,7 @@ describe('SessionStreamUnitManager', () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith('model error');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('MF-1: 无单元的 FAILED 事件不弹 toast（subagent 子 run / 旧连接残留不误报）', () => {
@@ -527,7 +524,7 @@ describe('SessionStreamUnitManager', () => {
 
     publishFinished(h.eventBus, 'a', 'r1'); // 真正的终态仍正常收尾
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('r3-run-1: 前奏 FAILED(空串) 事件收口后 throw 路径不双弹 toast', async () => {
@@ -548,7 +545,7 @@ describe('SessionStreamUnitManager', () => {
       error: '前奏炸了',
     });
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     await flushAsync(); // throw 路径随后到达
     // 前奏 FAILED(空串) 已弹过一次，throw 路径不得再弹
@@ -573,13 +570,13 @@ describe('SessionStreamUnitManager', () => {
       vfsMutated: false,
     });
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     await flushAsync();
     // 事件路径已收口，.then 的兜底 finishRun 必须是 no-op：宽限单元不被销毁、
     // 终态投影不被二次改写、refcount 不被减成负。
     expect(h.manager.snapshot('a')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('r3-run-1 步骤 6: 事件+.then 双失时 .finally 仍 invokeOnSettled(failed)', async () => {
@@ -605,7 +602,7 @@ describe('SessionStreamUnitManager', () => {
     await flushAsync();
     // .finally 必须补一个终态出口，否则草稿 / token chip 永久悬着。
     expect(onSettled).toHaveBeenCalledWith('failed');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.hasActiveRun('a')).toBe(false);
   });
 
@@ -663,7 +660,7 @@ describe('SessionStreamUnitManager', () => {
     );
     publishFinished(h.eventBus, 'a', 'r1');
     expect(settled).toHaveBeenCalledWith('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.snapshot('a')?.status).toBe('finished');
   });
 
@@ -725,16 +722,16 @@ describe('SessionStreamUnitManager', () => {
     h.manager.startRun('c', 'p', '3');
     publishStarted(h.eventBus, 'c', 'r3');
     publishFinished(h.eventBus, 'c', 'r3');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     h.manager.dispose();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     expect(h.manager.unitCount()).toBe(0);
     expect(h.manager.hasActiveRun('a')).toBe(false);
 
     // 旧总线上的后续终态事件不再触发旧 manager 的 decrement（防负）
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     // dispose 后拒绝新 run
     const rejected = h.manager.startRun('d', 'p', '4');
@@ -742,7 +739,7 @@ describe('SessionStreamUnitManager', () => {
     expect(h2.manager.startRun('d', 'p', '4').ok).toBe(true);
     publishStarted(h2.eventBus, 'd', 'r9');
     publishFinished(h2.eventBus, 'd', 'r9');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('MF-5: 构造→dispose→再构造→再 dispose：onForegroundEvent 注册与退订对齐，不随重建累积', () => {
@@ -954,7 +951,7 @@ describe('SessionStreamUnitManager', () => {
       // 受理第一段（无标签 start）常驻下 no-op——窗口内零新增刷新
       // （原「通知出现先于标签查询完成」锚随常驻化失效，改锚为不阻塞
       // + 查回后立即刷新）
-      expect(isMobileAgentActive()).toBe(true);
+      expect(agentActivity.isActive()).toBe(true);
       expect(h.manager.snapshot('a')).toEqual(
         expect.objectContaining({status: 'starting', runId: null}),
       );

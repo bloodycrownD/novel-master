@@ -10,6 +10,10 @@
  *   shim**（`createLoggingFetch(shim)`——dev 日志覆盖全部非流式流量，包括
  *   走 native 底座的请求；shim 内部零组合逻辑）。生产构建 logging 不参与。
  *
+ * 镜像注：desktop 同名入口在 apps/desktop/src/main/runtime/setup-llm-fetch.ts。
+ * 两端**不**逐字镜像——desktop 只在调试开关下安装 logging fetch；本端固定注册
+ * native SSE transport + mobile fetch shim。平台底座不同，故保留双端、不收敛到 core。
+ *
  * @module runtime/setup-llm-fetch
  */
 

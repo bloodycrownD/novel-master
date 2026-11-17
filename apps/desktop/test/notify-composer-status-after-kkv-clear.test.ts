@@ -26,7 +26,7 @@ describe("refresh-composer-status-after-kkv-clear (T-CR5)", () => {
       } as never;
     });
 
-    await refreshComposerStatusAfterSessionKkvCleared({} as never, { projectId: "p1", sessionId: "s1" });
+    await refreshComposerStatusAfterSessionKkvCleared({ projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, { sessionId: "s1", attachments: [] });
@@ -63,7 +63,7 @@ describe("refresh-composer-status-after-kkv-clear (T-CR5)", () => {
       userAnnotation: "note3",
     });
 
-    await refreshComposerStatusAfterFloorOrCompaction({} as never, { projectId: "p1", sessionId: "s1" });
+    await refreshComposerStatusAfterFloorOrCompaction({ projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, {
@@ -90,7 +90,7 @@ describe("refresh-composer-status-after-kkv-clear (T-CR5)", () => {
 
     // 清空 store 后再推 → 空 attachments（D7 收窄口径）
     chatAnnotateDraftStore.resetForTests();
-    await refreshComposerStatusAfterFloorOrCompaction({} as never, { projectId: "p1", sessionId: "s1" });
+    await refreshComposerStatusAfterFloorOrCompaction({ projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 2);
     assert.deepEqual(sent[1]?.payload, {
       sessionId: "s1",

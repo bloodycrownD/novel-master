@@ -27,32 +27,17 @@ type MenuOverlayViewProps = {
   anchor: MenuAnchor;
 };
 
-/** null = 卸载（render(null, portal)）；非 null = 刷新完整 overlay。 */
-type RenderContextMenuView = (
-  props: MenuOverlayViewProps | null,
-) => void;
-
 /** 菜单触发元素（⋯ 按钮等）：只用于命中的工具卡判定。 */
 type HitEl = EventTarget | null;
 
 /** 调用参数：null = 卸载 overlay，非 null = 刷新 props。 */
 type MenuProps = MenuOverlayViewProps | null;
 
-const contextMenuView = createViewSlot<MenuProps>();
-
-/** 由 main 注册 Preact MenuOverlay 刷新/卸载实现。 */
-// nm-style: keep-public — 槽实例保持模块私有；bundle 契约测（factory 装配链 / boot 产物）按名锁定
-export function registerRenderContextMenu(fn: RenderContextMenuView): void {
-  contextMenuView.register(fn);
-}
-
 /**
- * 调用已注册实现；未注册时返回 false。
+ * 菜单视图槽：由 main 注册 Preact MenuOverlay 刷新/卸载实现，
+ * runtime 门面只 `invoke`（未注册返回 false，调用方据此跳过后续副作用）。
  */
-// nm-style: keep-public — 槽实例保持模块私有；runtime 门面与契约测按名引用
-export function invokeRegisteredRenderContextMenu(props: MenuProps): boolean {
-  return contextMenuView.invoke(props);
-}
+export const contextMenuViewSlot = createViewSlot<MenuProps>();
 
 /**
  * 消息菜单：布局、打开/关闭与 overlay 手势。
@@ -148,7 +133,7 @@ export function closeContextMenu(notifyHost?: boolean): void {
     state.menuOverlayHandler = null;
   }
   // 经注册卸载（render(null, #menu-portal)）；禁止裸 .remove() 甩掉 Preact 根
-  invokeRegisteredRenderContextMenu(null);
+  contextMenuViewSlot.invoke(null);
   if (notifyHost !== false) post('menuClosed', {});
 }
 
@@ -189,13 +174,13 @@ function handleMenuOverlayEvent(event: Event): void {
 /**
  * 上下文菜单门面：已注册 MenuOverlay 刷新 + overlay 监听。
  * 壳 DOM 由 main → #menu-portal；P1-4 measure/layout 在 MenuOverlay useLayoutEffect。
- * 本函数不含 JSX / 不 createElement 挂 body；开/关与 row-logic 对称走 invokeRegistered*。
+ * 本函数不含 JSX / 不 createElement 挂 body；开/关与 row-logic 对称走视图槽 `invoke`。
  */
 export function renderContextMenu(): void {
   if (!state.menu) return;
   const menu = state.menu;
   if (
-    !invokeRegisteredRenderContextMenu({
+    !contextMenuViewSlot.invoke({
       messageId: menu.messageId,
       items: menu.items,
       anchor: menu.anchor,

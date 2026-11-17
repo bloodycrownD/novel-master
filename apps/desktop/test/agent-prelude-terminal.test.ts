@@ -5,7 +5,7 @@
  *
  * 1. **前奏终态 FINISHED('')**：core 在前奏检查点命中，RUN_STARTED 还没发，
  *    entry.runId 仍是 null。修前 `trackedRunId !== ''` 直接 return →
- *    refcount 永久泄漏 → isDesktopAgentActive() 永远 true → 后续全部 AGENT_BUSY。
+ *    refcount 永久泄漏 → agentActivity.isActive() 永远 true → 后续全部 AGENT_BUSY。
  * 2. **STARTED 无终态**（r3-run-2）：RUN_STARTED 到了但终态一个没来。
  *    .finally 必须兜住，且**不能**因为 runId 已回填就早退。
  * 3. **正常路径双发防线**：STARTED + 匹配 FINISHED 走 finishTrackedRun 收敛，
@@ -14,10 +14,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { afterEach, describe, it } from "node:test";
-import {
-  decrementDesktopAgentActive,
-  isDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 
 // 必须在动态 import agent.ts 之前注册 hook，否则真实模块已加载、mock 不生效。
 register(
@@ -46,8 +43,8 @@ async function waitForBackgroundFinally(): Promise<void> {
 
 describe("r3-run-1/2 desktop main run 登记收口", () => {
   afterEach(() => {
-    while (isDesktopAgentActive()) {
-      decrementDesktopAgentActive();
+    while (agentActivity.isActive()) {
+      agentActivity.decrement();
     }
   });
 
@@ -60,7 +57,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       userContent: "hi",
     });
     assert.equal(res.ok, true);
-    assert.equal(isDesktopAgentActive(), true, "受理后 refcount 应为 1");
+    assert.equal(agentActivity.isActive(), true, "受理后 refcount 应为 1");
 
     // core 前奏检查点命中：RUN_STARTED 从未发出，终态 runId 是空串。
     onCoreRunFinished({
@@ -72,7 +69,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     });
 
     assert.equal(
-      isDesktopAgentActive(),
+      agentActivity.isActive(),
       false,
       "前奏终态必须递减 refcount（修前永久 AGENT_BUSY）",
     );
@@ -81,7 +78,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
     // run 随后才 resolve，.finally 拿到 undefined entry 直接早退 → 不双递减。
     __settleRun();
     await waitForBackgroundFinally();
-    assert.equal(isDesktopAgentActive(), false, ".finally 不得把已收敛的 run 再减一次");
+    assert.equal(agentActivity.isActive(), false, ".finally 不得把已收敛的 run 再减一次");
   });
 
   it("T-MAIN-PRELUDE-FAILED: 前奏 FAILED('') → 同款收敛，且 reject 后不双递减", async () => {
@@ -100,11 +97,11 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       runId: "",
       error: "前奏炸了",
     });
-    assert.equal(isDesktopAgentActive(), false, "前奏 FAILED 同样要递减 refcount");
+    assert.equal(agentActivity.isActive(), false, "前奏 FAILED 同样要递减 refcount");
 
     __failRun(new Error("前奏炸了"));
     await waitForBackgroundFinally();
-    assert.equal(isDesktopAgentActive(), false, "reject 后 .finally 不得双递减");
+    assert.equal(agentActivity.isActive(), false, "reject 后 .finally 不得双递减");
     assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
     assert.equal(
       __testRunTrackingState().sessionRunIdsCount,
@@ -135,7 +132,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
 
     // 修前判据是 `entry.runId != null → return`，这里会泄漏 refcount → 后续全部 AGENT_BUSY。
     assert.equal(
-      isDesktopAgentActive(),
+      agentActivity.isActive(),
       false,
       "无终态事件时 .finally 必须兜底清理（terminalSeen 判据）",
     );
@@ -171,7 +168,7 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       stopReason: "completed",
     });
     assert.equal(
-      isDesktopAgentActive(),
+      agentActivity.isActive(),
       true,
       "stale 终态不得收敛本轮 run 的 refcount",
     );
@@ -183,11 +180,11 @@ describe("r3-run-1/2 desktop main run 登记收口", () => {
       runId: "run-current",
       stopReason: "completed",
     });
-    assert.equal(isDesktopAgentActive(), false);
+    assert.equal(agentActivity.isActive(), false);
 
     __settleRun();
     await waitForBackgroundFinally();
-    assert.equal(isDesktopAgentActive(), false, "不得双递减");
+    assert.equal(agentActivity.isActive(), false, "不得双递减");
     assert.equal(__testRunTrackingState().activeRunsCount, before.activeRunsCount);
   });
 

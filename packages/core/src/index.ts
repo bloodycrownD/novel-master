@@ -49,6 +49,7 @@ export {
   ProviderTableSnapshotError,
   validateProviderTableSnapshot,
   assertSqliteBackupHeader,
+  exportDatabaseBackupToPath,
 } from "./infra/db-backup/index.js";
 export type { ProviderBackupTableName, ProviderTableSnapshot, ProviderTableSnapshotErrorCode } from "./infra/db-backup/index.js";
 

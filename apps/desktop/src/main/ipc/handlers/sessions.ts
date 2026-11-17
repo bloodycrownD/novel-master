@@ -142,8 +142,9 @@ export function handleSessionsProjectComposerStatus(req: SessionProjectComposerS
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
-    const rt = built.value;
-    return Result.ok(await projectComposerStatusForSession(rt, req.sessionId));
+    // runtime 装配闸保留（与同文件其它 handler 同口径）；投影本身只读 core 的
+    // annotate store，不再需要 runtime（十七期第2轮签名审计）。
+    return Result.ok(await projectComposerStatusForSession(req.sessionId));
   });
 }
 

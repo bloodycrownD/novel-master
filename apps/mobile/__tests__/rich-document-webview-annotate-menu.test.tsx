@@ -27,9 +27,9 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('@/webview-host/rich-document/uri', () => ({
-  getRichDocumentUri: () => 'file:///rich-document/index.html',
-  getRichDocumentPackageDirUri: () => 'file:///rich-document/',
+jest.mock('@/webview-host/webview-asset-uri', () => ({
+  getWebViewPackageIndexUri: () => 'file:///rich-document/index.html',
+  getWebViewPackageDirUri: () => 'file:///rich-document/',
 }));
 
 // mermaid 全屏返回键自注册用（组件不在 NavigationContainer 内渲染；聚焦恒真即可）

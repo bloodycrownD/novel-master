@@ -410,7 +410,7 @@ export function useChatComposerController({
         return;
       }
       try {
-        const status = await projectComposerStatusForSession(rt, sessionId);
+        const status = await projectComposerStatusForSession(sessionId);
         if (cancelled) {
           return;
         }
@@ -562,7 +562,7 @@ export function useChatComposerController({
               clearComposerNow();
             }
             // 以投影为准刷新 chip（仅 annotate）
-            void projectComposerStatusForSession(runtime, sessionId)
+            void projectComposerStatusForSession(sessionId)
               .then(status => {
                 applyComposerStatusAttachmentsReplace({
                   sessionId,

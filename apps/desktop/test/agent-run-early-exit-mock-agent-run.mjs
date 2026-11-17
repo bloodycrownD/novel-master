@@ -4,14 +4,14 @@
  * 让 handleAgentRun 走到 finally 的早退兜底分支。
  */
 
-export async function resolveCurrentAgentDefinitionAdapter() {
+export async function resolveCurrentAgentDefinitionOrThrow() {
   return {
     agentId: "agent-test",
     definition: { name: "测试 Agent", mode: "primary" },
   };
 }
 
-export async function resolveDesktopSavedModelId() {
+export async function resolveDesktopSavedModelIdOrThrow() {
   return { savedModelId: "model-test", workspaceModelId: "" };
 }
 

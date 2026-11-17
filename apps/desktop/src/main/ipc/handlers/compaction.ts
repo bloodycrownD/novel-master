@@ -101,7 +101,7 @@ export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: Com
   }
   if (result.ok) {
     // 置位/压缩：project∪annotate；禁止终态强制 []
-    await refreshComposerStatusAfterFloorOrCompaction(rt, { projectId: req.projectId, sessionId: req.sessionId });
+    await refreshComposerStatusAfterFloorOrCompaction({ projectId: req.projectId, sessionId: req.sessionId });
   }
   return { kind: "completed", value: { ok: result.ok } };
 }

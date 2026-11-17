@@ -81,7 +81,7 @@ import {
   type ConversationHostMessage,
 } from './ChatConversationBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
-import {conversationThemeFromTokens} from './conversation-theme';
+import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
 import {createQuantumYield} from '@/services/yield-quantum';
 import {
   buildTranscriptRows,
@@ -103,10 +103,8 @@ import {
   applyStreamRowIds,
   buildStreamingTranscriptRow,
 } from './transcript-stream-projection';
-import {
-  getChatTranscriptPackageDirUri,
-  getChatTranscriptUri,
-} from '@/webview-host/chat-transcript/uri';
+import {CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID} from '@/webview-host/chat-transcript/uri';
+import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
 import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
@@ -280,8 +278,8 @@ function propsEqual(prev: Props, next: Props): boolean {
 }
 
 /**
- * init / themeUpdate 的主题载荷即 `conversationThemeFromTokens(tokens)` 的产物
- * （映射本体在 `conversation-theme.ts`，与原生 composer 共用一份）。
+ * init / themeUpdate 的主题载荷即 `hostThemeFromTokens(tokens)` 的全量 9 键产物
+ * （映射本体在 `webview-host/host-theme-from-tokens.ts`，与原生 composer 共用一份）。
  */
 
 /** 上一拍最后一条流式行的身份（text 每拍变，不进依赖，只按 id/status/messageId 差分）。 */
@@ -950,11 +948,11 @@ const ConversationHost = forwardRef<Handle, Props>(
      * splitInitPayload 对缺失段有兜底，合成包过渡期不崩）。
      */
     const initSnapshotRef = useRef({
-      theme: conversationThemeFromTokens(tokens),
+      theme: hostThemeFromTokens(tokens),
       flags: resolvedFlags,
     });
     initSnapshotRef.current = {
-      theme: conversationThemeFromTokens(tokens),
+      theme: hostThemeFromTokens(tokens),
       flags: resolvedFlags,
     };
 
@@ -1578,7 +1576,7 @@ const ConversationHost = forwardRef<Handle, Props>(
       postToWeb({
         v: CONVERSATION_BRIDGE_V,
         type: 'themeUpdate',
-        payload: {theme: conversationThemeFromTokens(tokens)},
+        payload: {theme: hostThemeFromTokens(tokens)},
       });
     }, [webReady, tokens, postToWeb]);
 
@@ -1862,7 +1860,7 @@ const ConversationHost = forwardRef<Handle, Props>(
      */
     const shouldStartLoadWithRequest = useCallback(
       (req: {url: string}): boolean => {
-        if (req.url.startsWith(getChatTranscriptPackageDirUri())) {
+        if (req.url.startsWith(getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID))) {
           return true;
         }
         if (/^https?:\/\//i.test(req.url)) {
@@ -1991,13 +1989,13 @@ const ConversationHost = forwardRef<Handle, Props>(
              `var(--bg,#fff)` 的首绘帧。 */
           source={{
             uri:
-              getChatTranscriptUri() +
+              getWebViewPackageIndexUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID) +
               '#bg=' +
               encodeURIComponent(tokens.background),
           }}
           allowFileAccess
           allowFileAccessFromFileURLs
-          allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
+          allowingReadAccessToURL={getWebViewPackageDirUri(CHAT_TRANSCRIPT_WEBVIEW_PACKAGE_ID)}
           onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
           onOpenWindow={handleOpenWindow}
           onMessage={handleUpstream}

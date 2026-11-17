@@ -17,6 +17,6 @@ interface SessionWorkplaceBlockScope {
  */
 export async function clearSessionWorkplaceKkv(runtime: MobileNovelMasterRuntime, scope: SessionWorkplaceBlockScope) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
-  await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
+  await refreshComposerStatusAfterSessionKkvCleared(scope);
   return {workplaceDisplay: '', capturedAtMs: Date.now()};
 }

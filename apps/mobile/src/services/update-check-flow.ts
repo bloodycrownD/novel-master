@@ -16,7 +16,7 @@ import {
 import {readBoolPref} from '../storage/app-ui-pref-io';
 import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '../storage/app-ui-keys';
 import {checkForUpdates} from '../update-check/check-for-updates';
-import type {UpdateCheckData} from '../update-check/types';
+import type {UpdateCheckData} from '@novel-master/core/common';
 
 export type UpdateCheckResultKind = 'up-to-date' | 'error';
 

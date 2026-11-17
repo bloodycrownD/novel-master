@@ -8,7 +8,7 @@ import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { inDomain } from "@/errors/guards.js";
 import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
+import { thinkingLevelToModelThinkingParams } from "@/domain/provider/logic/thinking-level-presets.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -155,7 +155,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     if (thinking === undefined) {
       const thinkingLevel = saved.settings.generation.thinkingLevel;
       if (thinkingLevel !== "off") {
-        thinking = resolveThinkingParamsForLevel(thinkingLevel, row.protocol, saved.settings.generation.sampling, vendorModelId);
+        thinking = thinkingLevelToModelThinkingParams(thinkingLevel, row.protocol, vendorModelId, saved.settings.generation.sampling);
       }
     }
 

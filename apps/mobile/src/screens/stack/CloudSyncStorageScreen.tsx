@@ -10,7 +10,7 @@ import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useRuntime} from '../../hooks/useRuntime';
 import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
-import {isMobileAgentActive, subscribeMobileAgentActivity} from '../../runtime/agent-activity';
+import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -163,8 +163,8 @@ export function CloudSyncStorageScreen() {
   }, [syncControlsDisabled, navigation]);
 
   useEffect(() => {
-    setAgentActive(isMobileAgentActive());
-    return subscribeMobileAgentActivity(setAgentActive);
+    setAgentActive(agentActivity.isActive());
+    return agentActivity.subscribe(setAgentActive);
   }, []);
 
   const onScreenFocus = useCallback(() => {

@@ -14,7 +14,7 @@ import {
   handleModelSetCurrent,
 } from "./handlers/agent.js";
 import { handleAgentAbortAlias, handleRunAbort } from "./handlers/run-abort.js";
-import { isDesktopAgentActive } from "../runtime/agent-activity.js";
+import { agentActivity } from "../runtime/agent-activity.js";
 import { handleBootstrapRebootstrap, handleBootstrapStatus } from "./handlers/bootstrap.js";
 import { handleCompactionManual } from "./handlers/compaction.js";
 import { handleCompactionConditionsGet, handleCompactionConditionsSet } from "./handlers/compaction-conditions.js";
@@ -246,7 +246,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.NM_RUN_ABORT, handleRunAbort);
   bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, handleAgentRunIsActive);
   bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
-    active: isDesktopAgentActive(),
+    active: agentActivity.isActive(),
   }));
   bindNoArg(IPC_CHANNELS.AGENT_RESOLVE_CURRENT, handleAgentResolveCurrent);
   bindNoArg(IPC_CHANNELS.AGENT_LIST_PICKER, handleAgentListPicker);

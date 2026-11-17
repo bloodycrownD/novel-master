@@ -6,10 +6,7 @@ import {
   sha256Hex,
   testCloudSyncConnection,
 } from '@/services/cloud-sync.service';
-import {
-  isMobileDbMaintenanceBusy,
-  releaseMobileDbMaintenanceBusy,
-} from '@/services/db-maintenance-busy';
+import {maintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockGetConfig = jest.fn();
 const mockGetLocalStatus = jest.fn();
@@ -93,7 +90,7 @@ jest.mock('@/services/db-backup.service', () => ({
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  isMobileAgentActive: () => mockAgentActive(),
+  agentActivity: {isActive: () => mockAgentActive()},
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -213,8 +210,8 @@ describe('pullCloudSync', () => {
   afterEach(() => {
     // 兜底清位：maintenanceBusyCount 是进程级模块变量，任何用例泄漏都会
     // 连带把同文件后续用例（乃至同进程其它套件）全判红。
-    while (isMobileDbMaintenanceBusy()) {
-      releaseMobileDbMaintenanceBusy();
+    while (maintenanceBusy.isBusy()) {
+      maintenanceBusy.release();
     }
   });
 
@@ -333,14 +330,14 @@ describe('pullCloudSync', () => {
     }
   });
 
-  it('createCoordinator 抛错时 reject 且 isMobileDbMaintenanceBusy() 回到 false', async () => {
+  it('createCoordinator 抛错时 reject 且 maintenanceBusy.isBusy() 回到 false', async () => {
     // S-CS-04 主断言（必红→必绿）：acquire 令牌之后到 try 之间原本有一段
     // 可抛代码（createCoordinator），它一抛 finally 就不执行 ⇒
     // maintenanceBusyCount 永久 +1 ⇒ 消息解压 / blob 归一两个后台循环在本进程
     // 剩余生命周期内全部停摆，而用户侧零报错。
     // 反向断言：调用前先确认计数是干净的——否则本条的 `=== false` 会恒红，
     // 而上一条若把它配平了，本条的「泄漏」就观测不到。
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     mockBuildS3Config.mockResolvedValue({
       ok: false,
       error: new Error('请先完成云存储配置'),
@@ -352,7 +349,7 @@ describe('pullCloudSync', () => {
     );
     expect(deniedCoordinator.ok).toBe(false);
 
-    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    expect(maintenanceBusy.isBusy()).toBe(false);
     // `!= null` 守卫的唯一钉点：createCoordinator 失败时两个临时路径都还是
     // undefined，unlink 绝不能以 undefined 被调用（同步抛 TypeError 会用
     // 一个新错盖掉原始错，把「配置不全」报成「临时文件清理失败」）。

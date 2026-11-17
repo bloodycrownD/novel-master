@@ -25,7 +25,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
-import {setMobileAgentActive} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {ChatMessageData} from '@novel-master/core/chat';
 import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
@@ -126,7 +126,7 @@ jest.mock('../src/components/chat/ChatConversationWebView', () => {
 });
 
 import {SubagentSessionScreen} from '../src/screens/stack/SubagentSessionScreen';
-import {takePromptTurnDetail} from '../src/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '../src/components/prompt/prompt-turn-callback';
 
 function buildHarness(): {
   manager: SessionStreamUnitManager;
@@ -212,7 +212,7 @@ function finishRun(eventBus: SimpleEventBus): void {
 describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
@@ -223,7 +223,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     mockChatWebViewProps.length = 0;
     mockNavigate.mockClear();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('transcript-converge: 子会话屏以统一宿主的 transcriptOnly 变体装配', async () => {
@@ -437,7 +437,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
 describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片进预览）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
@@ -448,7 +448,7 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
     mockChatWebViewProps.length = 0;
     mockNavigate.mockClear();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   /** 挂一次屏并返回最后一次 webview 收到的 props + 事件总线（驱动重渲染）。 */
@@ -527,7 +527,7 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
       turnId: 'tool-result-curl',
     });
     // 正文走模块级单例（不进路由参数），读走即清。
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'curl',
       body: '【输入】\n{\n  "url": "https://example.com"\n}\n\n【输出】\nHTTP 200',
     });
@@ -544,7 +544,7 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
     act(() => {
       handler({title: 'search', content: '结果正文'});
     });
-    expect(takePromptTurnDetail()).toEqual({title: 'search', body: '结果正文'});
+    expect(promptTurnDetailSlot.take()).toEqual({title: 'search', body: '结果正文'});
     unmount();
   });
 
@@ -593,7 +593,7 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
 describe('F-B4 子会话屏兜底：force 回源 + 孙任务 pending 映射注入', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
@@ -691,7 +691,7 @@ function makeAssistantMessage(id: string): ChatMessageData {
 describe('SubagentSessionScreen 消费侧投影接线（P1-3/P2-5/P2-18c）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
@@ -702,7 +702,7 @@ describe('SubagentSessionScreen 消费侧投影接线（P1-3/P2-5/P2-18c）', ()
     mockChatWebViewProps.length = 0;
     mockNavigate.mockClear();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   function installManager(manager: SessionStreamUnitManager): void {

@@ -12,7 +12,7 @@ import {beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '@/screens/tabs/chat-tab/useChatTabScope';
-import {takeFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 
 jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
@@ -55,14 +55,14 @@ const mockRuntime: any = {
 describe('openFileEditor 保存回调接线（N-P1-03）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    takeFileEditorOnSessionVfsSaved();
+    fileEditorOnSessionVfsSavedSlot.take();
   });
 
   it('T-FEPar-4 session scope：navigate 被调用前回调已写入', async () => {
     let cbAtNavigateTime: unknown = 'navigate-not-called';
     const navigation = {
       navigate: jest.fn(() => {
-        cbAtNavigateTime = takeFileEditorOnSessionVfsSaved();
+        cbAtNavigateTime = fileEditorOnSessionVfsSavedSlot.take();
       }),
     } as never;
 
@@ -127,6 +127,6 @@ describe('openFileEditor 保存回调接线（N-P1-03）', () => {
       projectId: 'p1',
     });
     // project 域不写回调：避免上一次 session 打开的回调被误消费
-    expect(takeFileEditorOnSessionVfsSaved()).toBeNull();
+    expect(fileEditorOnSessionVfsSavedSlot.take()).toBeNull();
   });
 });

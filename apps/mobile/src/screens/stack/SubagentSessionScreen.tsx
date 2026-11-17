@@ -37,7 +37,7 @@ import {ChatConversationWebView} from '../../components/chat/ChatConversationWeb
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
-import {setPromptTurnDetail} from '../../components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -45,7 +45,7 @@ import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readBoolPref} from '@/storage/app-ui-pref-io';
 import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
-import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
@@ -190,7 +190,7 @@ export function SubagentSessionScreen() {
       // 子会话屏没有工作区列表（state 只有 messages / unitView 等），
       // 显式写 no-op：保存后的刷新对象是主会话的工作区，由主会话侧重进时补齐。
       // 刻意不为该屏新建列表 state（那是产品级口径，不在本条范围）。
-      setFileEditorOnSessionVfsSaved(() => {});
+      fileEditorOnSessionVfsSavedSlot.set(() => {});
       navigation.navigate('FileEditor', {
         path,
         scopeKind: 'session',
@@ -222,7 +222,7 @@ export function SubagentSessionScreen() {
           if (intent.kind === 'file') {
             if (intent.scope === 'session') {
               // 同 onOpenToolFile：子会话屏无工作区列表，回调写 no-op。
-              setFileEditorOnSessionVfsSaved(() => {});
+              fileEditorOnSessionVfsSavedSlot.set(() => {});
               navigation.navigate('FileEditor', {
                 path: intent.path,
                 scopeKind: 'session',
@@ -273,7 +273,7 @@ export function SubagentSessionScreen() {
       const {title, content, inputJson} = payload;
       const bodyWithInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
       const body = inputJson ? bodyWithInput : content;
-      setPromptTurnDetail({title, body});
+      promptTurnDetailSlot.set({title, body});
       navigation.navigate('PromptTurnDetail', {
         title,
         turnId: `tool-result-${title}`,

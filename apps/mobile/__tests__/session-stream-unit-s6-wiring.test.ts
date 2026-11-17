@@ -16,10 +16,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 
@@ -89,7 +86,7 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     mockRunAgentTurn.mockClear();
     h = buildHarness();
   });
@@ -97,7 +94,7 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   function startMainRun(): void {
@@ -211,7 +208,7 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
     ).toEqual([{kind: 'text', delta: '子会话正文'}]);
 
     // 消费型单元不占 refcount：并行期间 refcount 只计发起方 run（=1）。
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
   });
 
   it('多会话并行逐个停止互不影响；全部停止后无残留（stop→abortRegistry.abort）', () => {
@@ -264,7 +261,7 @@ describe('T-U9: 双屏 webview 句柄分发 + 停止入口（Step 6）', () => {
       stopReason: 'end_turn',
     } as never);
     expect(h.manager.activeSessionIds()).toEqual([]);
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     // 无在途 controller 的会话 stop 返回 false（不误触）。
     expect(h.manager.stop(ABORT_KEY.agent('s1'))).toBe(false);
@@ -284,14 +281,14 @@ describe('T-SP19: 中断 partial 投影与 requestStreamReset', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     h = buildHarness();
   });
 
   afterEach(() => {
     h.manager.dispose();
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('interrupted partial → 唯一 finished 流式行；reset 后清空并补发 force-snapshot', () => {

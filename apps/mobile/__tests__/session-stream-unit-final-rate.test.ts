@@ -31,10 +31,7 @@ import type {
   SessionRunStateSettleInput,
   SessionRunStatus,
 } from '@novel-master/core/session-run-state';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
@@ -218,12 +215,12 @@ function buildLineFrom(
 describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
   });
 
   it('活跃期实时速率可读，暂停期随时刻衰减', () => {
@@ -581,7 +578,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
 
     // 宽限窗口内：单元仍在表（终态投影平滑落点）。
     expect(h.manager.snapshot(childId)).not.toBeNull();
-    expect(isMobileAgentActive()).toBe(false); // 消费型 run 不占 refcount
+    expect(agentActivity.isActive()).toBe(false); // 消费型 run 不占 refcount
 
     // 宽限到期：单元按 onGraceExpired 出表（此前无回调会永久残留）。
     jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1);
@@ -592,7 +589,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     expect(h.manager.rateTokensPerSecond(childId, Date.now())).toBe(
       projection!.rateTokensPerSecond,
     );
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
 
     h.manager.dispose();
   });

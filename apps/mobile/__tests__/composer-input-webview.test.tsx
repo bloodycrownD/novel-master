@@ -18,22 +18,14 @@ import {
 } from '@jest/globals';
 import {Linking, Platform, StyleSheet} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeHostToComposerInput,
-  type ComposerInputMetrics,
-  type ComposerInputSelection,
-  type HostToComposerInputMessage,
-} from '@/components/chat/ComposerInputBridge';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputMetrics, type ComposerInputSelection, type HostToComposerInputMessage} from '@/components/chat/ComposerInputBridge';
 import {
   ComposerInputWebView,
   toNativeSelectionEvent,
   type ComposerInputWebViewHandle,
 } from '@/components/chat/ComposerInputWebView';
-import {
-  getComposerInputPackageDirUri,
-  getComposerInputUri,
-} from '@/webview-host/composer-input/uri';
+import {COMPOSER_INPUT_WEBVIEW_PACKAGE_ID} from '@/webview-host/composer-input/uri';
+import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -115,7 +107,7 @@ async function flush(): Promise<void> {
 function messagesSince(clearAfterIndex: number): HostToComposerInputMessage[] {
   return mockWebViewPostMessages
     .slice(clearAfterIndex)
-    .map(raw => decodeHostToComposerInput(raw));
+    .map(raw => composerInputBridge.decodeToClient(raw));
 }
 
 function typesSince(clearAfterIndex: number): string[] {
@@ -586,8 +578,8 @@ describe('ComposerInputWebView 通用宿主契约（T-HOST1..13）', () => {
     expect(typeof guard).toBe('function');
 
     // ① 包目录内的 index.html（同包相对资源同理）→ 放行
-    expect(guard({url: getComposerInputUri()})).toBe(true);
-    expect(guard({url: `${getComposerInputPackageDirUri()}app.js`})).toBe(true);
+    expect(guard({url: getWebViewPackageIndexUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)})).toBe(true);
+    expect(guard({url: `${getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}app.js`})).toBe(true);
     expect(openUrl).not.toHaveBeenCalled();
 
     // ② http/https 外跳系统浏览器、拒绝页内导航

@@ -560,7 +560,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
         }
       }
       if (useUserVfsTurn && moved > 0 && sessionId != null) {
-        await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
+        await refreshComposerStatusAfterUserVfsOps(sessionId);
       }
       vfsBatch.exit();
       await reloadVfsListOnly();

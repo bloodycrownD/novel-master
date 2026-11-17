@@ -7,21 +7,8 @@ import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentati
 import {createViewSlot} from '@web/shared/view-slot';
 import type {TranscriptFlags} from '../state/state';
 
-type RenderRowsView = () => void;
-
-const rowsView = createViewSlot<void>();
-
-/** 由 main 注册 Preact（或其它）行列表刷新实现。 */
-// nm-style: keep-public — 槽实例保持模块私有；bundle 契约测（factory 装配链）按名锁定
-export function registerRenderRows(fn: RenderRowsView): void {
-  rowsView.register(fn);
-}
-
-/** 调用已注册实现；未注册时返回 false。 */
-// nm-style: keep-public — 槽实例保持模块私有；runtime 门面与契约测按名引用
-export function invokeRegisteredRenderRows(): boolean {
-  return rowsView.invoke();
-}
+/** 行列表视图槽：由 main 注册 Preact（或其它）行列表刷新实现。 */
+export const rowsViewSlot = createViewSlot<void>();
 
 export function flagsEqual(a: TranscriptFlags, b: TranscriptFlags): boolean {
   return a.richText === b.richText && a.menuDisabled === b.menuDisabled;
@@ -31,7 +18,7 @@ export function flagsEqual(a: TranscriptFlags, b: TranscriptFlags): boolean {
  * 行列表全量刷新门面：只转发已注册实现（禁止在此拼串 / preact.render）。
  */
 export function renderRows(): void {
-  invokeRegisteredRenderRows();
+  rowsViewSlot.invoke();
 }
 
 /**

@@ -32,10 +32,7 @@ import type {
   SessionRunStateSettleInput,
   SessionRunStatus,
 } from '@novel-master/core/session-run-state';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {
   createRunStateWritethrough,
@@ -418,7 +415,7 @@ describe('run-state-writethrough（coalescer 三态）', () => {
 
 describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -427,7 +424,7 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -779,7 +776,7 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     expect(() => h.manager.dispose()).not.toThrow();
     // 冲微任务确认 catch 收敛（无 unhandled rejection 即通过）
     await Promise.resolve();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('forgetSession: 销毁单元 + 清 settled 投影（供会话删除链路调用）', async () => {
@@ -804,13 +801,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     const h = createHarness({runStateStore: fake.store});
     await h.manager.hydrate();
     startRunningRun(h, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     h.manager.forgetSession('a');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
     // 后续 FINISHED（run 实际由 core 侧终止）无单元不 decrement，防负
     publishFinished(h.eventBus, 'a', 'r1');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('settled 投影被同会话新 run 收尾覆盖（不累积旧值）', async () => {

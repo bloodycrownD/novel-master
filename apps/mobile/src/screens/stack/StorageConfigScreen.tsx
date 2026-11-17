@@ -22,7 +22,7 @@ import {exportDatabaseBackup, importDatabaseBackup} from '../../services/db-back
 import {getDbMaintenanceStats, runDbMaintenance} from '../../services/db-maintenance.service';
 import {exportMobileLogs} from '../../services/log-export';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
-import {isMobileAgentActive, subscribeMobileAgentActivity} from '../../runtime/agent-activity';
+import {agentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -81,8 +81,8 @@ export function StorageConfigScreen() {
   const formatStorageBytes = (bytes: number | null): string => (bytes == null ? '—' : Number.formatBytes(Math.max(0, bytes), STORAGE_BYTES));
 
   useEffect(() => {
-    setAgentActive(isMobileAgentActive());
-    return subscribeMobileAgentActivity(setAgentActive);
+    setAgentActive(agentActivity.isActive());
+    return agentActivity.subscribe(setAgentActive);
   }, []);
 
   const refreshStorageOnFocus = useCallback(() => {

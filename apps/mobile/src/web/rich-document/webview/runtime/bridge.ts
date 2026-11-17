@@ -12,26 +12,9 @@ import type {HostTheme} from '@web/shared/host-theme';
 import {createViewSlot} from '@web/shared/view-slot';
 
 /**
- * P0-3：setDocument 视图刷新注册门面。
- * Preact DocumentApp 由 main 注册；本文件只持有实现引用。
+ * P0-3：setDocument 视图槽。Preact DocumentApp 由 main 注册；本文件只持有实现引用。
  */
-type SetDocumentView = (payload: DocumentPayload) => void;
-
-const documentView = createViewSlot<DocumentPayload>();
-
-/** 由 main 注册 Preact（或其它）文档视图刷新实现。 */
-// nm-style: keep-public — 槽实例保持模块私有；main.ts 装配点与 bundle 契约测按名引用
-export function registerSetDocumentView(fn: SetDocumentView): void {
-  documentView.register(fn);
-}
-
-/**
- * 调用已注册实现；未注册时返回 false。
- */
-// nm-style: keep-public — 槽实例保持模块私有；setDocument 门面与契约测按名引用
-export function invokeRegisteredSetDocumentView(payload: DocumentPayload): boolean {
-  return documentView.invoke(payload);
-}
+export const documentViewSlot = createViewSlot<DocumentPayload>();
 
 export {post};
 
@@ -40,7 +23,7 @@ export type {HostTheme};
 
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
-  invokeRegisteredSetDocumentView(payload ?? {});
+  documentViewSlot.invoke(payload ?? {});
 }
 
 export function handleHostMessage(raw: unknown): void {

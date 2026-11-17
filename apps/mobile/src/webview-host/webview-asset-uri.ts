@@ -12,7 +12,7 @@ import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {toFileUri} from '@/services/rn-file-io';
 
-type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
+export type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
 
 /** 解析 iOS 主 Bundle 绝对路径；空/异常时同步 throw。 */
 function iosMainBundleDir(): string {

@@ -11,11 +11,11 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatProject} from '@novel-master/core/chat';
-import {previewSkillZip, validateSkillName, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
+import {buildNewSkillDoc, previewSkillZip, validateSkillName, type SkillDomain, type SkillZipPreview} from '@novel-master/core/skills';
 import {createVfsZipIoService, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {buildNewSkillDoc, withSkillFrontMatterValues} from './skill-ui';
+import {withSkillFrontMatterValues} from './skill-ui';
 import {pickZipFileBytes} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -182,7 +182,7 @@ export function NewSkillModal({visible, domain, defaultProjectId, onClose, onCre
           await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', skillDoc, domain === 'project' ? projectId : undefined);
         }
       } else {
-        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', buildNewSkillDoc(name, description), domain === 'project' ? projectId : undefined);
+        await runtime.skills().writeSkillFile(domain, name, 'SKILL.md', buildNewSkillDoc(name, description, 'mobile'), domain === 'project' ? projectId : undefined);
       }
       onCreated({
         domain,

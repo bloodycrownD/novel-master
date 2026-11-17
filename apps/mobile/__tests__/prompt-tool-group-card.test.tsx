@@ -15,7 +15,7 @@ import type {
 } from '@novel-master/core/prompt';
 import {PromptToolGroupCard} from '@/components/prompt/PromptToolGroupCard';
 import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
-import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 const mockOnToggle = jest.fn();
@@ -124,7 +124,7 @@ function flattenStyle(style: unknown): Record<string, unknown> {
 describe('PromptToolGroupCard（T-MP2）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-MP2-1 默认收起：不挂载 use/result 两格', () => {
@@ -200,14 +200,14 @@ describe('PromptToolGroupCard（T-MP2）', () => {
       title: 'tool use · read',
       turnId: 'turn-12',
     });
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'tool use · read',
       body: OK_CARD.inputJson,
       leafId: 'group-tu-1-use',
     });
 
     press(renderGroup(OK_CARD, true), 'prompt-tool-group-result');
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'tool result · read',
       body: '文件内容',
       leafId: 'group-tu-1-result',
@@ -321,7 +321,7 @@ describe('PromptToolGroupCard（T-MP2）', () => {
         .numberOfLines,
     ).toBe(24);
     press(tree, 'prompt-tool-group-use');
-    expect(takePromptTurnDetail()?.body).toBe(OK_CARD.inputJson);
+    expect(promptTurnDetailSlot.take()?.body).toBe(OK_CARD.inputJson);
   });
 
   it('T-J2-2 智能体配置卡片体系：子卡灰底+左 3px primary 粗条、格子白底浮起', () => {
@@ -363,7 +363,7 @@ const LEAF_CARD: PromptTextCardData = {
 describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    takePromptTurnDetail();
+    promptTurnDetailSlot.take();
   });
 
   it('T-MP2-6 限 6 行预览、无 kind 小标题（用户拍板：轮层徽标已标 role）', () => {
@@ -403,7 +403,7 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
       title: 'assistant',
       turnId: 'turn-12',
     });
-    expect(takePromptTurnDetail()).toEqual({
+    expect(promptTurnDetailSlot.take()).toEqual({
       title: 'assistant',
       body: LEAF_CARD.body,
       leafId: 'card-m2-0',

@@ -1,26 +1,14 @@
 /**
- * Orchestrates local vs remote version comparison for mobile update checks.
+ * 移动端更新检查平台壳：本地版本默认取 APP_VERSION，release notes 回落 mobile 文案。
+ *
+ * 拉取 / tag 解析 / 域名白名单 / 版本比较全部走 core 的 `UpdateCheck`（与 desktop
+ * 同源）；本文件只保留平台默认值与 jest mock 缝。
  */
 
-import {APP_VERSION} from './app-meta';
-import {Release} from '@novel-master/core/common';
+import {UpdateCheck, type FetchFn, type UpdateCheckData} from '@novel-master/core/common';
 import {type AppError, Result} from '@novel-master/core/errors';
-import {resolveLatestRelease, type FetchFn} from './resolve-latest-release';
-import type {UpdateCheckData} from './types';
+import {APP_VERSION} from './app-meta';
 
-export async function checkForUpdates(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
-  const release = await resolveLatestRelease(fetchFn);
-  const cmp = Release.compareVersions(localVersion, release.version);
-  // 已知失败（版本号非法）沿 Result.err 上行（错误通道迁移六期）；
-  // 网络等未知异常仍走 reject，由调用方 catch 收口。
-  if (!cmp.ok) return Result.err(cmp.error);
-  const status = cmp.value < 0 ? 'update-available' : 'up-to-date';
-  return Result.ok({
-    localVersion,
-    remoteVersion: release.version,
-    tagName: release.tagName,
-    releaseUrl: release.htmlUrl,
-    releaseNotesExcerpt: Release.excerptNotes(release.body, 'mobile'),
-    status,
-  });
+export function checkForUpdates(localVersion: string = APP_VERSION, fetchFn?: FetchFn): Promise<Result<UpdateCheckData, AppError>> {
+  return UpdateCheck.check(localVersion, fetchFn, 'mobile');
 }

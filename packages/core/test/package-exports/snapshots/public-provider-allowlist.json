@@ -52,7 +52,6 @@
   "resolveCurrentPromptTokens",
   "resolveEffectiveMaxTokens",
   "resolvePromptTokensWithBackfill",
-  "resolveThinkingParamsForLevel",
   "resolveTokenCounterModeForModel",
   "resolveTokenizerFamily",
   "samplingProtocol",

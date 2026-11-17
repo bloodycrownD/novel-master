@@ -61,7 +61,7 @@ export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
 
 /**
  * setDocument 渲染后：重建 Recogito（DOM 已换）。
- * 由 main.registerSetDocumentView 在 Preact render 之后调用。
+ * 由 main 的 documentViewSlot.register 回调在 Preact render 之后调用。
  */
 export function refreshAnnotateAfterDocument(): void {
   destroyAnnotator();

@@ -16,7 +16,7 @@ import {useMobileScope} from '@/hooks/useMobileScope';
 import {useTheme} from '@/theme/ThemeProvider';
 import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
-import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 import {remapTokenRanges} from '@/components/chat/native-composer/token-ranges';
 import {isValidTokenRangeText} from '@/components/chat/composer-highlight';
 import {readChatComposerDraftState, writeChatComposerDraft} from '@/storage/chat-composer-draft';
@@ -151,7 +151,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       // 区间做一次 remap（全屏内的新 `$x` 不升格，与目标 5 一致）。旧草稿
       // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
       // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
-      setPromptEditorOnSaved(text => {
+      promptEditorOnSavedSlot.set(text => {
         const previous = readChatComposerDraftState(targetSessionId);
         writeChatComposerDraft(targetSessionId, text, runtime.sessions, previous.tokenRanges !== undefined ? remapTokenRanges(previous.text, text, previous.tokenRanges) : undefined);
         setDraftRestoreToken(token => token + 1);

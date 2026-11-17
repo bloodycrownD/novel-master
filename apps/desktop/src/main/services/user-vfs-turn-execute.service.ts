@@ -25,7 +25,7 @@ export { isSessionVfsScope };
 export async function executeSessionUserVfsOp(rt: DesktopNovelMasterRuntime, sessionId: string, op: UserVfsTurnOp): Promise<Result<void, unknown>> {
   const result = await rt.userVfsTurn.executeOp(sessionId, op);
   if (!result.ok) return Result.err(result.error);
-  const attachments = await projectComposerStatusForSession(rt, sessionId);
+  const attachments = await projectComposerStatusForSession(sessionId);
   ComposerAttachmentsSuggestForwarder.notify({
     sessionId,
     attachments,

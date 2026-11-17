@@ -19,8 +19,8 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {clearSessionViewCache, clearSessionViewCachesByProject, sessionViewCacheKey} from '@/services/chat-session-view-cache';
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
-import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
-import {setPromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '@/components/agent/file-editor-saved-callback';
+import {promptTurnDetailSlot} from '@/components/prompt/prompt-turn-callback';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 import {resolveChatLinkIntent} from './chat-link-nav';
 import {chatLinkResolver} from '@novel-master/core/chat';
@@ -728,7 +728,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
         }
         // 「保存成功后刷新工作区列表」的回调必须在 navigate **之前**写入：
         // 回调不可序列化，不能进路由 params（见 file-editor-saved-callback）。
-        setFileEditorOnSessionVfsSaved(bumpWorktreeUiToken);
+        fileEditorOnSessionVfsSavedSlot.set(bumpWorktreeUiToken);
         navigation.navigate('FileEditor', {
           path,
           scopeKind: 'session',
@@ -803,7 +803,7 @@ export function useChatTabScope({runtime, projectId, sessionId, setCurrentProjec
       const {title, content, inputJson} = payload;
       const withInput = `【输入】\n${inputJson}\n\n【输出】\n${content}`;
       const body = inputJson != null && inputJson !== '' ? withInput : content;
-      setPromptTurnDetail({title, body});
+      promptTurnDetailSlot.set({title, body});
       navigation.navigate('PromptTurnDetail', {
         title,
         turnId: `tool-result-${title}`,

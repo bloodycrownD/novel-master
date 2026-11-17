@@ -25,16 +25,8 @@ export type PromptTurnDetail = {
   readonly leafId?: string;
 };
 
-const slot = createCallbackSlot<PromptTurnDetail>();
-
-/** navigate 前写入当次载荷（每次打开详情都覆盖新载荷）。 */
-// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
-export function setPromptTurnDetail(next: PromptTurnDetail) {
-  slot.set(next);
-}
-
-/** 挂载时读取并清空：take 语义避免残留旧正文（未消费即离开则丢弃）。 */
-// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
-export function takePromptTurnDetail(): PromptTurnDetail | null {
-  return slot.take();
-}
+/**
+ * 模块级单槽：navigate 前 `set`（每次打开详情都覆盖新载荷）、挂载时 `take`
+ * （读后即清，未消费即离开则丢弃，避免残留旧正文）。
+ */
+export const promptTurnDetailSlot = createCallbackSlot<PromptTurnDetail>();

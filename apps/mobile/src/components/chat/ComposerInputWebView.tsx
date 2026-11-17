@@ -19,17 +19,10 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import Animated, {Easing, useAnimatedStyle, useSharedValue, withTiming} from 'react-native-reanimated';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useTheme} from '@/theme/ThemeProvider';
-import {getComposerInputPackageDirUri, getComposerInputUri} from '@/webview-host/composer-input/uri';
-import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeComposerInputToHost,
-  encodeHostToComposerInput,
-  type ComposerInputMetrics,
-  type ComposerInputMode,
-  type ComposerInputSelection,
-  type ComposerInputTheme,
-  type HostToComposerInputMessage,
-} from './ComposerInputBridge';
+import {COMPOSER_INPUT_WEBVIEW_PACKAGE_ID} from '@/webview-host/composer-input/uri';
+import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
+import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputMetrics, type ComposerInputMode, type ComposerInputSelection, type ComposerInputTheme, type HostToComposerInputMessage} from './ComposerInputBridge';
 
 /**
  * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），80ms 的出缓动足够把「弹一下」
@@ -77,16 +70,10 @@ export type ComposerInputWebViewHandle = {
   blur: () => void;
 };
 
-/** 主题组装：tokens → 桥主题（胶囊 = primary 字 + primaryMuted 底）。 */
+/** 主题组装：全量宿主主题（`hostThemeFromTokens`）取 composer 子集（胶囊 = primary 字 + primaryMuted 底）。 */
 export function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    primaryMuted: `${tokens.primary}22`,
-    selection: tokens.selection,
-  };
+  const {background, text, textSecondary, primary, primaryMuted, selection} = hostThemeFromTokens(tokens);
+  return {background, text, textSecondary, primary, primaryMuted, selection};
 }
 
 /**
@@ -166,7 +153,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
   };
 
   const postToWeb = useCallback((message: HostToComposerInputMessage) => {
-    webRef.current?.postMessage(encodeHostToComposerInput(message));
+    webRef.current?.postMessage(composerInputBridge.encodeToClient(message));
   }, []);
 
   /** 高度落位：目标值进 state（测试/无障碍可见），视觉高度走缓动过渡。 */
@@ -188,9 +175,9 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
-      let message: ReturnType<typeof decodeComposerInputToHost>;
+      let message: ReturnType<typeof composerInputBridge.decodeToHost>;
       try {
-        message = decodeComposerInputToHost(event.nativeEvent.data);
+        message = composerInputBridge.decodeToHost(event.nativeEvent.data);
       } catch {
         // 坏信封（JSON 坏 / v 不符 / type 缺失）静默丢弃，对齐三域先例。
         return;
@@ -367,7 +354,7 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
    * 其余 scheme 一律拒绝。外部页面无法在 WebView 内落地，其伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getComposerInputPackageDirUri())) {
+    if (req.url.startsWith(getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -387,10 +374,10 @@ export const ComposerInputWebView = forwardRef<ComposerInputWebViewHandle, Compo
         /* 背景透明：底色由 RN 容器给（web 侧 html/body 亦不上色）。 */
         style={styles.webview}
         originWhitelist={['file://']}
-        source={{uri: getComposerInputUri()}}
+        source={{uri: getWebViewPackageIndexUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getComposerInputPackageDirUri()}
+        allowingReadAccessToURL={getWebViewPackageDirUri(COMPOSER_INPUT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onMessage={handleMessage}
         javaScriptEnabled

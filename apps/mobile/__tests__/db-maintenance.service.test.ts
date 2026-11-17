@@ -37,7 +37,7 @@ jest.mock('@/db/db-file-path', () => ({
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  isMobileAgentActive: () => mockAgentActive(),
+  agentActivity: {isActive: () => mockAgentActive()},
 }));
 
 jest.mock('react-native-blob-util', () => ({

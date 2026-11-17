@@ -1,23 +1,13 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import {
-  resetDesktopCloudSyncServiceForTest,
-  setDesktopCloudSyncBusyForTest,
-} from "../src/main/services/cloud-sync.service.js";
+import {resetDesktopCloudSyncServiceForTest, syncBusy} from "../src/main/services/cloud-sync.service.js";
 import { runDbMaintenance } from "../src/main/services/db-maintenance.service.js";
-import {
-  isDesktopDbMaintenanceBusy,
-  resetDesktopDbMaintenanceBusyForTest,
-  setDesktopDbMaintenanceBusy,
-} from "../src/main/services/db-maintenance-busy.js";
+import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
 import {
   handleDbMaintenance,
   handleDbStats,
 } from "../src/main/ipc/handlers/db-maintenance.js";
-import {
-  decrementDesktopAgentActive,
-  incrementDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   setupDesktopDbTestEnv,
@@ -30,17 +20,17 @@ describe("db-maintenance ipc handlers", () => {
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-db-maintenance-"));
     resetDesktopCloudSyncServiceForTest();
-    resetDesktopDbMaintenanceBusyForTest();
+    maintenanceBusy.resetForTest();
   });
 
   after(async () => {
     resetDesktopCloudSyncServiceForTest();
-    resetDesktopDbMaintenanceBusyForTest();
+    maintenanceBusy.resetForTest();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("T-DMD1：Agent 运行中或云同步进行中时返回中文错误", async () => {
-    incrementDesktopAgentActive();
+    agentActivity.increment();
     try {
       const res = await handleDbMaintenance();
       assert.equal(res.ok, false);
@@ -48,10 +38,10 @@ describe("db-maintenance ipc handlers", () => {
         assert.equal(res.error.message, "Agent 运行中，请稍后再操作");
       }
     } finally {
-      decrementDesktopAgentActive();
+      agentActivity.decrement();
     }
 
-    setDesktopCloudSyncBusyForTest(true);
+    syncBusy.set(true);
     try {
       const res = await handleDbMaintenance();
       assert.equal(res.ok, false);
@@ -59,11 +49,11 @@ describe("db-maintenance ipc handlers", () => {
         assert.equal(res.error.message, "云同步进行中，请稍后再操作");
       }
     } finally {
-      setDesktopCloudSyncBusyForTest(false);
+      syncBusy.set(false);
     }
 
     // 第三分支：自身数据清理 busy 时拒绝并发（spec 风险表承诺的口径）
-    setDesktopDbMaintenanceBusy(true);
+    maintenanceBusy.set(true);
     try {
       const res = await handleDbMaintenance();
       assert.equal(res.ok, false);
@@ -71,10 +61,10 @@ describe("db-maintenance ipc handlers", () => {
         assert.equal(res.error.message, "数据清理进行中，请稍后再操作");
       }
     } finally {
-      setDesktopDbMaintenanceBusy(false);
+      maintenanceBusy.set(false);
     }
 
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
   });
 
   it("T-DMD2：正常路径返回前后体积且执行窗口内 maintenanceBusy 为真", async () => {
@@ -99,7 +89,7 @@ describe("db-maintenance ipc handlers", () => {
     let busyAtVacuum: boolean | undefined;
     conn.execute = async (sql: string) => {
       if (sql.includes("VACUUM")) {
-        busyAtVacuum = isDesktopDbMaintenanceBusy();
+        busyAtVacuum = maintenanceBusy.isBusy();
       }
       return originalExecute(sql);
     };
@@ -116,7 +106,7 @@ describe("db-maintenance ipc handlers", () => {
       conn.execute = originalExecute;
     }
     assert.equal(busyAtVacuum, true);
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
   });
 
   it("T-DMD3：维护链路抛错时消息透传且 maintenanceBusy 复位", async () => {
@@ -129,12 +119,12 @@ describe("db-maintenance ipc handlers", () => {
 
     const pending = handleDbMaintenance();
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(isDesktopDbMaintenanceBusy(), true);
+    assert.equal(maintenanceBusy.isBusy(), true);
     const res = await pending;
     await runtime.conn.execute("ROLLBACK");
 
     assert.equal(res.ok, false);
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(maintenanceBusy.isBusy(), false);
     if (!res.ok) {
       assert.ok(res.error.message.length > 0);
     }

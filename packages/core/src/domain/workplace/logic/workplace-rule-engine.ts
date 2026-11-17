@@ -10,8 +10,9 @@
  */
 
 import { evaluateFileDisplay, sortDirPaths, sortFilesForDir, type WorkplaceFileSortMeta } from "./workplace-eval.js";
-import { directChildDirs, parentDirOf } from "./workplace-tree.js";
+import { directChildDirs } from "./workplace-tree.js";
 import { isWorkplaceRootPath, workplaceRootLogicalPath } from "./workplace-scope.js";
+import { parentDirOrNull } from "@/domain/vfs/logic/parent-dir.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { DisplayState, InclusionMode, RuleState, WorkplaceRuleRow, WorkplaceScope } from "../model/workplace-types.js";
@@ -37,16 +38,16 @@ interface DirSortPlan {
 export function evaluateWorkplaceRuleView(scope: WorkplaceScope, ctx: WorkplaceRuleContext): Result<WorkplaceRuleView, AppError> {
   const filesByDir = new Map<string, string[]>();
   for (const filePath of ctx.fileSet) {
-    const parent = parentDirOf(filePath);
-    if (!parent.ok) return Result.err(parent.error);
-    if (parent.value == null) {
+    // ctx.fileSet 已由 workplace.service 归一化；root 处返回 null（无父目录）。
+    const parent = parentDirOrNull(filePath);
+    if (parent == null) {
       continue;
     }
-    const bucket = filesByDir.get(parent.value);
+    const bucket = filesByDir.get(parent);
     if (bucket != null) {
       bucket.push(filePath);
     } else {
-      filesByDir.set(parent.value, [filePath]);
+      filesByDir.set(parent, [filePath]);
     }
   }
 
@@ -83,15 +84,15 @@ export function evaluateWorkplaceRuleView(scope: WorkplaceScope, ctx: WorkplaceR
   // 各文件 path → 展示档位（宏树后缀与列表 file 行共用）。
   const displayByPath = new Map<string, DisplayState>();
   for (const filePath of ctx.fileSet) {
-    const parent = parentDirOf(filePath);
-    if (!parent.ok) return Result.err(parent.error);
-    if (parent.value == null) {
+    // ctx.fileSet 已由 workplace.service 归一化；root 处返回 null（无父目录）。
+    const parent = parentDirOrNull(filePath);
+    if (parent == null) {
       continue;
     }
     const inclusion = resolveInclusion(filePath, ctx);
-    const parentRuleOn = resolveRuleState(scope, parent.value, ctx) === "rule_on";
-    const dirRule = ctx.dirRuleMap.get(parent.value) ?? null;
-    const plan = planByDir.get(parent.value);
+    const parentRuleOn = resolveRuleState(scope, parent, ctx) === "rule_on";
+    const dirRule = ctx.dirRuleMap.get(parent) ?? null;
+    const plan = planByDir.get(parent);
     // 非 auto 文件不在 auto 名次表中 → 与旧实现 findIndex<0 → 0 的兜底一致
     const rawIndex = plan?.autoIndexByFile.get(filePath) ?? -1;
     displayByPath.set(filePath, evaluateFileDisplay({ inclusion, parentRuleOn, dirRule, indexInSortedAutoFiles: rawIndex < 0 ? 0 : rawIndex, autoFileCount: plan?.autoCount ?? 0, logicalPath: filePath }));

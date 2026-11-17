@@ -83,10 +83,4 @@ export type ComposerInputToHostMessage =
   | BridgeEnvelope<'blur', Record<string, never>>
   | BridgeEnvelope<'heightChange', {height: number}>;
 
-const composerInputBridge = createMessageBridge<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');
-
-// nm-style: keep-public — ComposerInput 桥四函数（webview 契约，调用方 ComposerInputWebView / 测试）
-export const encodeHostToComposerInput = composerInputBridge.encodeToClient;
-export const encodeComposerInputToHost = composerInputBridge.encodeToHost;
-export const decodeComposerInputToHost = composerInputBridge.decodeToHost;
-export const decodeHostToComposerInput = composerInputBridge.decodeToClient;
+export const composerInputBridge = createMessageBridge<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');

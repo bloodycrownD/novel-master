@@ -127,7 +127,7 @@ export function useChatTabMessageActions({
             onSucceeded: async () => {
               await reloadMessages(true);
               void refreshChatTokenLabel();
-              await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+              await refreshComposerStatusAfterFloorOrCompaction({
                 projectId,
                 sessionId,
               });
@@ -233,7 +233,7 @@ export function useChatTabMessageActions({
             chatAnnotateDraftStore.add(sessionId, draft);
           }
         }
-        const status = await projectComposerStatusForSession(runtime, sessionId);
+        const status = await projectComposerStatusForSession(sessionId);
         applyComposerStatusAttachmentsReplace({
           sessionId,
           attachments: status,
@@ -310,7 +310,7 @@ export function useChatTabMessageActions({
           // reload、composer 恢复、toast）不允许被 composer 状态刷新
           // 失败阻断——失败只记日志，列表照常刷新。
           try {
-            await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            await refreshComposerStatusAfterSessionKkvCleared({
               projectId,
               sessionId,
             });
@@ -379,7 +379,7 @@ export function useChatTabMessageActions({
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
-          await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+          await refreshComposerStatusAfterFloorOrCompaction({
             projectId,
             sessionId,
           });

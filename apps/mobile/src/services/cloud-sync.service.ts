@@ -17,9 +17,9 @@ import ReactNativeBlobUtil from 'react-native-blob-util';
 import {Buffer} from 'buffer';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {isMobileAgentActive} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {DatabaseReplacedError, exportDatabaseBackupToPath, importDatabaseBackupFromBytes, importDatabaseBackupFromPath} from './db-backup.service';
-import {acquireMobileDbMaintenanceBusy, releaseMobileDbMaintenanceBusy} from './db-maintenance-busy';
+import {maintenanceBusy} from './db-maintenance-busy';
 import {hashSnapshotFile, sha256Hex} from './snapshot-file-hash';
 import {
   buildS3StorageConfig,
@@ -170,7 +170,7 @@ async function createCoordinator(runtime: MobileNovelMasterRuntime, s3Config?: S
     // 覆盖库文件」窗口期间归一/压缩后台循环让路；pull 侧 rebootstrap
     // 之后的重建窗口由 pullCloudSync 的外层 acquire/release 兜住。
     dbSync: {
-      isAgentActive: () => isMobileAgentActive(),
+      isAgentActive: () => agentActivity.isActive(),
       exportSnapshotToPath: async dest => {
         progress?.step('db_export_start', {});
         const exportStart = Date.now();
@@ -271,7 +271,7 @@ export async function testCloudSyncConnection(runtime: MobileNovelMasterRuntime,
  * 被推到更高值，之后再也不会重新拉。
  *
  * desktop 侧的 `syncBusy` 是「检查与置位之间无 await、单线程下原子」的自愈形态，
- * mobile 对齐同一口径。检查与置位必须落在 `acquireMobileDbMaintenanceBusy()`
+ * mobile 对齐同一口径。检查与置位必须落在 `maintenanceBusy.acquire()`
  * 之前或已建立的 `try` 内——落在两者之间（try 之外）会原样复现令牌泄漏形态。
  */
 let syncBusy = false;
@@ -309,12 +309,12 @@ export async function pullCloudSync(runtime: MobileNovelMasterRuntime, onReboots
   // 兜住——release 必须发生在重建 + 记账完成之后（含重建窗口的
   // 完整互斥），其余出口（错误 / already-up-to-date）由 finally 兜底，
   // 令牌标记保证幂等不重复 release。
-  acquireMobileDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   let pullBusyHeld = true;
   const releasePullBusy = (): void => {
     if (pullBusyHeld) {
       pullBusyHeld = false;
-      releaseMobileDbMaintenanceBusy();
+      maintenanceBusy.release();
     }
   };
 

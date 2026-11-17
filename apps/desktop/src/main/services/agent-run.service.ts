@@ -35,12 +35,21 @@ export { AgentTurnError as AgentRunError };
  *
  * `resolveCurrentAgentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
  * 不会产 resolve key），属薄壳，已删；调用点直接用 core 的 `Result` 通道。
+ *
+ * 本文件这两个 resolve 壳**不是**历史残留（十七期第2轮签名审计 R2 组6 反证）：
+ * desktop 有两个 core 之外的消费点（`ipc/handlers/agent.ts` 的 resolveCurrent
+ * 回包与 run 前置闸），两处都消费 throw 契约——前置闸连返回值都不接，唯一可观测
+ * 行为就是抛错；单测也钉死了 `rejects`（`test/agent-run-saved-model-session.test.ts`）。
+ * mobile 没有这两个壳是因为它的同名读口直调 core 并就地处理 `Result`，没有这层
+ * throw 边界。名字里的 `OrThrow` 就是这层语义（与 `getDesktopRuntimeOrThrow` 同款），
+ * 防止后来者把它当裸值 getter 用。
  */
-export async function resolveCurrentAgentDefinitionAdapter(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
+export async function resolveCurrentAgentDefinitionOrThrow(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-export async function resolveDesktopSavedModelId(runtime: DesktopNovelMasterRuntime, definition: AgentDefinition, sessionId: string): Promise<{ savedModelId: string; workspaceModelId: string }> {
+/** {@link resolveCurrentAgentDefinitionOrThrow} 的模型侧同款：resolve key 转 `AgentTurnError` 抛出，其余原样抛。 */
+export async function resolveDesktopSavedModelIdOrThrow(runtime: DesktopNovelMasterRuntime, definition: AgentDefinition, sessionId: string): Promise<{ savedModelId: string; workspaceModelId: string }> {
   return mapResolveError(() => resolveApplicationModelIdForRun(runtime, definition, sessionId));
 }
 

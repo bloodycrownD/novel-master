@@ -12,21 +12,20 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {assertSqliteBackupHeader, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase} from '@novel-master/core';
+import {assertSqliteBackupHeader, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
 import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
 import {checkpointMobileDatabase, closeMobileConnection, getMobileConnection, registerMobileOpSqliteDriver} from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
-import {isMobileAgentActive} from '../runtime/agent-activity';
+import {agentActivity} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
-import {acquireMobileDbMaintenanceBusy, releaseMobileDbMaintenanceBusy} from './db-maintenance-busy';
+import {maintenanceBusy} from './db-maintenance-busy';
 import {exportBytesViaDocumentPicker, pickToLocalPath, type ExportViaPickerOptions} from './document-io';
 import {blobFs, bytesToAsciiString} from './rn-file-io';
 
 const BACKUP_EXT = '.nmbackup';
-const EXPORT_ATTACH_ALIAS = 'export_db';
 /** 分块落盘，避免 100MB+ Uint8Array → 单次 base64 撑爆 Hermes 堆。 */
 const WRITE_CHUNK_BYTES = 256 * 1024;
 
@@ -64,24 +63,18 @@ function errorDetail(error: unknown): string {
 
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商表），无分享对话框。
- * 调用方负责 Agent 守卫与目标路径管理。
+ * 调用方负责 Agent 守卫与目标路径管理；共享链路在 core（{@link exportDatabaseBackupToPathCore}），
+ * 本壳只保留 mobile 的 busy 计数与平台注入点（异步路径解析 / blobFs.cp）。
  *
  * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
  * 也能被覆盖，期间归一/压缩后台循环让路。
  */
 export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRuntime, destPath: string, checkpoint?: () => Interrupt | null): Promise<void> {
-  acquireMobileDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
-    await checkpointMobileDatabase(runtime.conn);
-    const dbPath = await resolveMobileDatabaseFilePath();
-    // 策略表：copyFile 前 checkpoint（云同步直调底层不传，行为不变）。
-    if (checkpoint?.() != null) {
-      throw createAbortError();
-    }
-    await blobFs().cp(dbPath, destPath);
-    await scrubProviderTablesInDatabase(runtime.conn, destPath, EXPORT_ATTACH_ALIAS);
+    await exportDatabaseBackupToPathCore(runtime.conn, destPath, {checkpointDatabase: checkpointMobileDatabase, resolveDbPath: resolveMobileDatabaseFilePath, copyFile: async (from, to) => { await blobFs().cp(from, to); }}, checkpoint);
   } finally {
-    releaseMobileDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
 }
 
@@ -101,7 +94,7 @@ export async function exportDatabaseBackupToPath(runtime: MobileNovelMasterRunti
  *   （mobile 从不删 bak，用户还能手工救回）。
  */
 export async function importDatabaseBackupFromPath(srcPath: string): Promise<Result<DbImportOutcome, AppError>> {
-  acquireMobileDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
     // 仅校验路径存在且体积足够；魔数交给替换后 open（失败则 bak 回滚）。
     // 注意：`fs.readFile(path, enc, 16)` 的第三参会被忽略，会整包读入，大备份必 OOM。
@@ -163,7 +156,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
       throw error;
     }
   } finally {
-    releaseMobileDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
   return Result.ok({databaseReplaced: true, providerTablesRestored: true});
 }
@@ -207,7 +200,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
  * @returns `'saved'` 用户完成分享；`'cancelled'` 用户取消选择器。
  */
 export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): Promise<Result<'saved' | 'cancelled', AppError>> {
-  if (isMobileAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导出数据库'}));
   }
 
@@ -222,7 +215,7 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
     // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
     // 互斥——底层 exportDatabaseBackupToPath 内部另有一层自平衡的
     // acquire/release，嵌套计数不会互相提前清位。
-    acquireMobileDbMaintenanceBusy();
+    maintenanceBusy.acquire();
     try {
       const exportOptions: ExportViaPickerOptions = {
         fileName: 'nmbackup.db',
@@ -233,7 +226,7 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
       const saved = await exportBytesViaDocumentPicker(exportOptions);
       return Result.ok(saved);
     } finally {
-      releaseMobileDbMaintenanceBusy();
+      maintenanceBusy.release();
     }
   } finally {
     runtime.abortRegistry.unregister(ABORT_KEY.backup('local'), abortScope);
@@ -247,7 +240,7 @@ export async function exportDatabaseBackup(runtime: MobileNovelMasterRuntime): P
  * 调用方须在成功后执行 `onRebootstrap`（例如 NovelMasterProvider.retry）。
  */
 export async function importDatabaseBackup(runtime: MobileNovelMasterRuntime, onRebootstrap: () => void): Promise<Result<void, AppError>> {
-  if (isMobileAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再导入数据库'}));
   }
 
@@ -264,7 +257,7 @@ export async function importDatabaseBackup(runtime: MobileNovelMasterRuntime, on
     // acquire/release 只覆盖到它自己返回，库文件已替换、连接仍处重建窗口
     // 的尾段由这层兜住。release 放 finally 且 onRebootstrap 在 try 内最后
     // 一步执行，故清位必然发生在 rebootstrap 完成之后。
-    acquireMobileDbMaintenanceBusy();
+    maintenanceBusy.acquire();
     try {
       const picked = await pickToLocalPath({mimeTypes: [types.allFiles], localFileName: 'import.nmbackup'});
       if (picked == null) {
@@ -276,7 +269,7 @@ export async function importDatabaseBackup(runtime: MobileNovelMasterRuntime, on
       onRebootstrap();
       return Result.ok(undefined);
     } finally {
-      releaseMobileDbMaintenanceBusy();
+      maintenanceBusy.release();
     }
   } finally {
     runtime.abortRegistry.unregister(ABORT_KEY.backup('local'), abortScope);

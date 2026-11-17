@@ -12,21 +12,9 @@
  * `> 0` 即 busy。
  *
  * 计数实现收在 `@novel-master/core/common` 的 createBusyFlag（desktop 同名
- * 模块共用同一份）；本模块只负责移动端实例化与既有函数名再导出。
+ * 模块共用同一份）；本模块只负责移动端实例化。
  */
 
 import {createBusyFlag} from '@novel-master/core/common';
 
-const maintenanceBusy = createBusyFlag();
-
-/** 数据清理/导入/导出/云同步是否进行中（后台搬运循环的让路守卫）。 */
-export const isMobileDbMaintenanceBusy = maintenanceBusy.isBusy;
-
-/** 进入一段互斥窗口时计数 +1（底层导出/导入函数与外层流程各自配对调用）。 */
-export const acquireMobileDbMaintenanceBusy = maintenanceBusy.acquire;
-
-/**
- * 离开互斥窗口时计数 -1（与 acquire 严格配对；兜底不降到负数，
- * 防御性钳制不影响正常配对路径）。
- */
-export const releaseMobileDbMaintenanceBusy = maintenanceBusy.release;
+export const maintenanceBusy = createBusyFlag();

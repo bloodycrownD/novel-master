@@ -8,7 +8,7 @@ import {Alert, Linking} from 'react-native';
 import {useToast} from '../chrome/ToastHost';
 import {useAutoUpdateCheck} from '../../hooks/useAutoUpdateCheck';
 import {toastMessage} from '../../errors/toast-message';
-import type {UpdateCheckData} from '../../update-check/types';
+import type {UpdateCheckData} from '@novel-master/core/common';
 import {UpdateCheckResultModal} from './UpdateCheckResultModal';
 
 function showUpdateDetailAlert(data: UpdateCheckData, onLater: () => void, showToast: (message: string) => void): void {

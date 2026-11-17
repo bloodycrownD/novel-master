@@ -31,12 +31,8 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
-import { resolveCurrentAgentDefinitionAdapter, resolveDesktopSavedModelId, runAgentTurnAdapter } from "../../services/agent-run.service.js";
-import {
-  decrementDesktopAgentActive,
-  incrementDesktopAgentActive,
-  isDesktopAgentActive,
-} from "../../runtime/agent-activity.js";
+import { resolveCurrentAgentDefinitionOrThrow, resolveDesktopSavedModelIdOrThrow, runAgentTurnAdapter } from "../../services/agent-run.service.js";
+import { agentActivity } from "../../runtime/agent-activity.js";
 import { createLogger } from "@novel-master/core/log";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { formatIpcError } from "../format-ipc-error.js";
@@ -69,7 +65,9 @@ export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurre
     if (agentId == null) {
       return Result.ok({ agentId: undefined, agentName: "未配置 Agent", modelLabel: "—", hasDedicatedModel: false });
     }
-    const { definition } = await resolveCurrentAgentDefinitionAdapter(rt);
+    // resolve key 走 `AgentTurnError` 抛出通道（`toIpcResult` 的 rejection 分支收口成
+    // AGENT_RUN_FAILED）；本 handler 自己的 Result 通道只承载 id 解析的已知失败。
+    const { definition } = await resolveCurrentAgentDefinitionOrThrow(rt);
     const hasDedicatedModel = definition.model != null && definition.model !== "";
     // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
     const savedModelId = definition.model;
@@ -208,7 +206,7 @@ function finishTrackedRun(sessionId: string, runId: string): void {
   }
   activeRuns.delete(sessionId);
   sessionRunIds.delete(sessionId);
-  decrementDesktopAgentActive();
+  agentActivity.decrement();
 }
 
 /** RUN_FINISHED 时清理 run 登记。 */
@@ -364,11 +362,11 @@ export async function handleAgentRunIsActive(req: AgentRunIsActiveRequest): Prom
 export function registerTrackedRunForTests(sessionId: string, runId: string): void {
   activeRuns.set(sessionId, { runId, terminalSeen: false });
   sessionRunIds.set(sessionId, runId);
-  incrementDesktopAgentActive();
+  agentActivity.increment();
 }
 
 export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ started: boolean }>> {
-  if (isDesktopAgentActive()) {
+  if (agentActivity.isActive()) {
     return { ok: false, error: { code: "AGENT_BUSY", message: "Agent 正在运行" } };
   }
 
@@ -377,15 +375,18 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    await resolveDesktopSavedModelId(rt, (await resolveCurrentAgentDefinitionAdapter(rt)).definition, req.sessionId);
+    // 起跑前置闸：两跳 resolve 的返回值都不接，唯一可观测行为是 resolve 失败时抛
+    // `AgentTurnError`（下面 catch → formatIpcError → AGENT_RUN_FAILED），把「本轮
+    // 必然起跑失败」在登记 activeRuns / increment 之前同步退回 renderer。
+    await resolveDesktopSavedModelIdOrThrow(rt, (await resolveCurrentAgentDefinitionOrThrow(rt)).definition, req.sessionId);
     const { sessionId } = req;
     // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
     // core runAgentTurn 内部自建 internalController 注册到 rt.agentAbortRegistry，
     // 停止按钮经 ipcAgentAbort → rt.agentAbortRegistry.abort(sessionId) 中断。
     // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
-    // runId 比对 + finishTrackedRun 的 decrementDesktopAgentActive()。
+    // runId 比对 + finishTrackedRun 的 agentActivity.decrement()。
     activeRuns.set(sessionId, { runId: null, terminalSeen: false });
-    incrementDesktopAgentActive();
+    agentActivity.increment();
 
     const runOptions = {
       stream: req.stream !== false,
@@ -433,19 +434,19 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
         }
         // 无匹配终态事件的早退（T23 / r3-run-1 前奏收口）：finishTrackedRun
         // 不会触发，手动清 map。
-        // C-orch-1：早退分支必须同步递减 refcount，否则 incrementDesktopAgentActive()
-        // 的增量永不回落，isDesktopAgentActive() 永久 true，后续 run 全部 AGENT_BUSY。
+        // C-orch-1：早退分支必须同步递减 refcount，否则 agentActivity.increment()
+        // 的增量永不回落，agentActivity.isActive() 永久 true，后续 run 全部 AGENT_BUSY。
         // 不会双递减：正常路径 entry 已 deleted（见不变式①），或 terminalSeen 已置位。
         activeRuns.delete(sessionId);
         sessionRunIds.delete(sessionId);
-        decrementDesktopAgentActive();
+        agentActivity.decrement();
       });
 
     return { ok: true, data: { started: true } };
   } catch (err) {
     activeRuns.delete(req.sessionId);
     sessionRunIds.delete(req.sessionId);
-    decrementDesktopAgentActive();
+    agentActivity.decrement();
     return { ok: false, error: formatIpcError(err) };
   }
 }

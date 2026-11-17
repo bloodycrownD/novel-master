@@ -29,10 +29,7 @@ import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {
-  isMobileAgentActive,
-  setMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {agentActivity} from '@/runtime/agent-activity';
 import {HeuristicTokenCounter} from '@novel-master/core/provider';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
@@ -219,7 +216,7 @@ function createRecordingHandle(handleId: string): {
 
 describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -228,7 +225,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -277,7 +274,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
     const settled = h.manager.snapshot('a');
     expect(settled?.status).toBe('finished');
     expect(settled?.elapsedMs).not.toBeNull();
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('T-U2: 指标在事件到达即归账（不经缓冲节拍），partial 走 apply 节拍', () => {
@@ -360,7 +357,7 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
 
 describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -369,7 +366,7 @@ describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', (
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -556,7 +553,7 @@ describe('重进由快照投影接管（Step 2：注入链已删，T-SP26）', (
 
 describe('指标语义（T-U4 五条 + T-M 平移）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -565,7 +562,7 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -715,7 +712,7 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
 
 describe('子会话链接 pendingChildren（T-SUB）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -724,7 +721,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -841,7 +838,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
 
 describe('T-U13: 跨项目并行等价', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -850,7 +847,7 @@ describe('T-U13: 跨项目并行等价', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 
@@ -858,7 +855,7 @@ describe('T-U13: 跨项目并行等价', () => {
     const h = createHarness();
     startRunningRun(h, 'sa', 'r1', 'p1');
     startRunningRun(h, 'sb', 'r2', 'p2');
-    expect(isMobileAgentActive()).toBe(true);
+    expect(agentActivity.isActive()).toBe(true);
 
     // 交错事件：delta/step/child 各自按 sessionId 路由
     publishTextDelta(h.eventBus, 'sa', 'r1', 'alpha');
@@ -909,7 +906,7 @@ describe('T-U13: 跨项目并行等价', () => {
     expect(h.manager.snapshot('sa')?.pendingChildren).toEqual([]);
     expect(h.manager.snapshot('sb')?.status).toBe('running');
     expect(h.manager.snapshot('sb')?.pendingChildren).toEqual(['cb']);
-    expect(isMobileAgentActive()).toBe(true); // sb 仍在跑
+    expect(agentActivity.isActive()).toBe(true); // sb 仍在跑
 
     // sb 后续 delta 照常进自己单元
     publishTextDelta(h.eventBus, 'sb', 'r2', '!');
@@ -918,7 +915,7 @@ describe('T-U13: 跨项目并行等价', () => {
 
     publishFinished(h.eventBus, 'sb', 'r2');
     expect(h.manager.snapshot('sb')?.status).toBe('finished');
-    expect(isMobileAgentActive()).toBe(false);
+    expect(agentActivity.isActive()).toBe(false);
   });
 
   it('并行期间 per-session 门禁只拦自己的会话', () => {
@@ -1038,7 +1035,7 @@ function publishUsage(
 
 describe('token 化指标（T-M5/T-M7）', () => {
   beforeEach(() => {
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     jest.clearAllMocks();
     resetKeepAliveStateForTests();
     jest.useFakeTimers();
@@ -1047,7 +1044,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
 
   afterEach(() => {
     jest.useRealTimers();
-    setMobileAgentActive(false);
+    agentActivity.setActive(false);
     resetKeepAliveStateForTests();
   });
 

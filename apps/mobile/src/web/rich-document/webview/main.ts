@@ -3,11 +3,7 @@
  * P0-3：本文件为唯一可同时触及 ui 与 runtime、并完成视图刷新注册的装配点。
  */
 import {h, render} from 'preact';
-import {
-  post,
-  handleHostMessage,
-  registerSetDocumentView,
-} from './runtime/bridge';
+import {post, handleHostMessage, documentViewSlot} from './runtime/bridge';
 import {
   bindAnnotateUi,
   destroyAnnotator,
@@ -27,7 +23,7 @@ const docRoot = document.getElementById('doc');
 /** 连续刷新防护：每轮 setDocument 自增，异步链回来时序号已过期则放弃刷新。 */
 let setDocumentSeq = 0;
 
-registerSetDocumentView(payload => {
+documentViewSlot.register(payload => {
   const seq = ++setDocumentSeq;
   // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
   destroyAnnotator();

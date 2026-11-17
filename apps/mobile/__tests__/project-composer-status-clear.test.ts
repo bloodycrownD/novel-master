@@ -23,7 +23,7 @@ describe('composer status after kkv clear (T-CR5)', () => {
   });
 
   it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
-    await refreshComposerStatusAfterSessionKkvCleared({} as any, {
+    await refreshComposerStatusAfterSessionKkvCleared({
       projectId: 'p',
       sessionId: 's1',
     });
@@ -40,7 +40,7 @@ describe('composer status after kkv clear (T-CR5)', () => {
       originalText: 'k',
       userAnnotation: '批注',
     });
-    await refreshComposerStatusAfterFloorOrCompaction({} as any, {
+    await refreshComposerStatusAfterFloorOrCompaction({
       projectId: 'p',
       sessionId: 's1',
     });

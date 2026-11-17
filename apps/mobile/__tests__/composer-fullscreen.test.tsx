@@ -300,7 +300,7 @@ import {
   writeChatComposerDraftState,
   clearChatComposerDraft,
 } from '@/storage/chat-composer-draft';
-import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 
 /**
  * 树里的原生 dock 组件实例（props 即面板 → composer 的全量接线面）。
@@ -416,7 +416,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     clearChatComposerDraft('s1');
     resetMockCalls();
     // 模块级回调不留残留（各用例自行 set）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
     mockHarnessManager = buildHarnessManager();
@@ -454,7 +454,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
       tokenRanges: [],
     });
     // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
-    expect(typeof takePromptEditorOnSaved()).toBe('function');
+    expect(typeof promptEditorOnSavedSlot.take()).toBe('function');
   });
 
   /**
@@ -508,7 +508,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 只看进全屏之后输入组件收到的写入（打字路径不产生 setValue，M6）。
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // 全屏屏卸载（返回/手势）时把当拍草稿交回：草稿 store 更新 + 令牌 bump。
@@ -568,7 +568,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
 
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // 全屏里在胶囊前插入两个字符：remap 语义=整体右移，区间保真（不丢、不扩）。
@@ -607,7 +607,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
 
     resetMockCalls();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     // `$技能$尾追`：尾追落在区间右缘之外，remap 必须保持 [{0,4}]
@@ -634,7 +634,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // 空草稿（无缓存、无 DB 行）→ 旧语义的「无 ranges」。
     const tree = await mountConversation();
     pressFullscreen(tree.root);
-    const onExit = takePromptEditorOnSaved();
+    const onExit = promptEditorOnSavedSlot.take();
     expect(onExit).not.toBeNull();
 
     await act(async () => {

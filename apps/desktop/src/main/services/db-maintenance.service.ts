@@ -10,12 +10,9 @@ import { createAbortError } from "@novel-master/core/abort";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
-import { isDesktopAgentActive } from "../runtime/agent-activity.js";
-import { isDesktopCloudSyncBusy } from "./cloud-sync.service.js";
-import {
-  isDesktopDbMaintenanceBusy,
-  setDesktopDbMaintenanceBusy,
-} from "./db-maintenance-busy.js";
+import { agentActivity } from "../runtime/agent-activity.js";
+import { syncBusy } from "./cloud-sync.service.js";
+import { maintenanceBusy } from "./db-maintenance-busy.js";
 
 /** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）。 */
 export async function getDbMaintenanceStats(): Promise<
@@ -46,13 +43,13 @@ export async function getDbMaintenanceStats(): Promise<
 export async function runDbMaintenance(options?: { readonly checkpoint?: () => Interrupt | null }): Promise<
   Result<{ beforeBytes: number; afterBytes: number }, AppError>
 > {
-  if (isDesktopAgentActive()) {
+  if (agentActivity.isActive()) {
     return Result.err(new AppError("AGENT_BUSY", {detail: "Agent 运行中，请稍后再操作"}));
   }
-  if (isDesktopCloudSyncBusy()) {
+  if (syncBusy.isBusy()) {
     return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再操作" }));
   }
-  if (isDesktopDbMaintenanceBusy()) {
+  if (maintenanceBusy.isBusy()) {
     return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "数据清理进行中，请稍后再操作" }));
   }
   // 策略表：入口检查点放在三重互斥守卫**之后**——并发冲突必须先报既有
@@ -61,7 +58,7 @@ export async function runDbMaintenance(options?: { readonly checkpoint?: () => I
   if (options?.checkpoint?.() != null) {
     throw createAbortError();
   }
-  setDesktopDbMaintenanceBusy(true);
+  maintenanceBusy.set(true);
   try {
     // 与 getDbMaintenanceStats 同口径：先确保 runtime/库文件就绪再 stat，
     // 冷启动（库尚未 bootstrap 落盘）时避免 ENOENT。装配的已知失败沿 Result
@@ -78,6 +75,6 @@ export async function runDbMaintenance(options?: { readonly checkpoint?: () => I
       afterBytes: afterInfo.size,
     });
   } finally {
-    setDesktopDbMaintenanceBusy(false);
+    maintenanceBusy.set(false);
   }
 }

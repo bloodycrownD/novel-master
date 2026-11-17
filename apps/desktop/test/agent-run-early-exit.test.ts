@@ -1,6 +1,6 @@
 /**
  * C-orch-1 (T-CF2)：handleAgentRun 在 RUN_STARTED 之前 reject / 早退时，
- * finally 兜底分支必须递减 refcount，否则 isDesktopAgentActive() 永久 true，
+ * finally 兜底分支必须递减 refcount，否则 agentActivity.isActive() 永久 true，
  * 后续 run 全部被 AGENT_BUSY 门禁挡掉。
  *
  * 用 node:module 的 register() 挂一个 loader hook，把 agent.ts 引用的
@@ -10,10 +10,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { afterEach, describe, it } from "node:test";
-import {
-  decrementDesktopAgentActive,
-  isDesktopAgentActive,
-} from "../src/main/runtime/agent-activity.js";
+import { agentActivity } from "../src/main/runtime/agent-activity.js";
 
 // 必须在动态 import agent.ts 之前注册 hook，否则真实模块已加载、mock 不生效。
 register(
@@ -34,8 +31,8 @@ async function waitForBackgroundFinally(): Promise<void> {
 
 describe("C-orch-1 handleAgentRun 早退兜底", () => {
   afterEach(() => {
-    while (isDesktopAgentActive()) {
-      decrementDesktopAgentActive();
+    while (agentActivity.isActive()) {
+      agentActivity.decrement();
     }
   });
 
@@ -52,7 +49,7 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
 
     // ① refcount 必须 0；修复前这里永久为 true（C-orch-1 P0 bug）。
     assert.equal(
-      isDesktopAgentActive(),
+      agentActivity.isActive(),
       false,
       "早退兜底必须递减 refcount（C-orch-1）",
     );
@@ -81,6 +78,6 @@ describe("C-orch-1 handleAgentRun 早退兜底", () => {
       before.sessionRunIdsCount,
       "sessionRunIds 不应残留",
     );
-    assert.equal(isDesktopAgentActive(), false, "两次早退后 refcount 仍归零");
+    assert.equal(agentActivity.isActive(), false, "两次早退后 refcount 仍归零");
   });
 });

@@ -8,8 +8,10 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import type {ThemeTokens} from '@/theme/tokens';
-import {encodeHostToCodeEditor, decodeCodeEditorToHost, type CodeEditorSelection, type CodeEditorTheme, type HostToCodeEditorMessage} from './CodeEditorBridge';
-import {getCodeEditorPackageDirUri, getCodeEditorUri} from '@/webview-host/code-editor/uri';
+import {codeEditorBridge, type CodeEditorSelection, type CodeEditorTheme, type HostToCodeEditorMessage} from './CodeEditorBridge';
+import {CODE_EDITOR_WEBVIEW_PACKAGE_ID} from '@/webview-host/code-editor/uri';
+import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
+import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
 import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -33,18 +35,10 @@ export type CodeEditorWebViewHandle = {
   setText: (text: string, selection?: CodeEditorSelection) => void;
 };
 
+/** 主题组装：全量宿主主题取 code-editor 子集（primaryMuted 由宿主派生，web 条件式写入 --primary-muted）。 */
 function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    // 胶囊底色由宿主派生下发（capsule/C-orch-1）：与 composer-input 同口径的
-    // primary + 0x22 alpha，web 侧 applyHostTheme 条件式写入 --primary-muted。
-    primaryMuted: `${tokens.primary}22`,
-    surface: tokens.surface,
-    borderLight: tokens.borderLight,
-  };
+  const {background, text, textSecondary, primary, primaryMuted, surface, borderLight} = hostThemeFromTokens(tokens);
+  return {background, text, textSecondary, primary, primaryMuted, surface, borderLight};
 }
 
 export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorWebViewProps>(function CodeEditorWebView({value, path, onChange, onSelectionChange, style, testID, onFocusChange}, ref) {
@@ -74,7 +68,7 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
   onFocusChangeRef.current = onFocusChange;
 
   const postToWeb = useCallback((message: HostToCodeEditorMessage) => {
-    webRef.current?.postMessage(encodeHostToCodeEditor(message));
+    webRef.current?.postMessage(codeEditorBridge.encodeToClient(message));
   }, []);
 
   const sendInit = useCallback(() => {
@@ -109,7 +103,7 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
-      const message = decodeCodeEditorToHost(event.nativeEvent.data);
+      const message = codeEditorBridge.decodeToHost(event.nativeEvent.data);
       if (message.type === 'ready') {
         setWebReady(true);
         return;
@@ -188,7 +182,7 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getCodeEditorPackageDirUri())) {
+    if (req.url.startsWith(getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -229,11 +223,11 @@ export const CodeEditorWebView = forwardRef<CodeEditorWebViewHandle, CodeEditorW
            `var(--editor-bg, var(--bg, #fff))`，映射真源 host-theme.ts THEME_VARS：
            background→--bg，--editor-* 为其 extraVars 派生）。B 仍在作兜底。 */
         source={{
-          uri: getCodeEditorUri() + '#bg=' + encodeURIComponent(tokens.background),
+          uri: getWebViewPackageIndexUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getCodeEditorPackageDirUri()}
+        allowingReadAccessToURL={getWebViewPackageDirUri(CODE_EDITOR_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onOpenWindow={handleOpenWindow}
         onMessage={handleMessage}

@@ -30,7 +30,7 @@ import {AGENT_LOCK_TOAST_STATEMENT, AGENT_RESELECT_HINT, isAgentDeleted, isAgent
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
-import {isMobileAgentActive} from '../../runtime/agent-activity';
+import {agentActivity} from '../../runtime/agent-activity';
 import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/project-composer-status.service';
 import type {RootStackParamList} from '../../navigation/types';
 
@@ -135,7 +135,7 @@ export function SessionDetailScreen() {
   }, [modelLocked, showToast]);
 
   // 压缩上下文：与聊天页 useChatTabMessages.handleCompactSession 对齐。
-  // 1) Agent 运行中拒压缩（进程级标记 isMobileAgentActive，详情页没有聊天页的 uiRunning，
+  // 1) Agent 运行中拒压缩（进程级标记 agentActivity.isActive，详情页没有聊天页的 uiRunning，
   //    所以直接读进程级标记，StorageConfigScreen 也是这么判同步禁用的）；
   // 2) Alert 文案保持一致；
   // 3) 成功后同样调 refreshComposerStatusAfterFloorOrCompaction 刷新 composer 状态。
@@ -144,7 +144,7 @@ export function SessionDetailScreen() {
       // 在途时压缩卡片已就地变成取消入口（handleCancelCompaction），走不到这里。
       return;
     }
-    if (isMobileAgentActive()) {
+    if (agentActivity.isActive()) {
       showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
       return;
     }
@@ -163,7 +163,7 @@ export function SessionDetailScreen() {
               showToast(error === undefined ? toastMessage('压缩失败') : toastMessage('压缩失败', error));
             },
             onSucceeded: async () => {
-              await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+              await refreshComposerStatusAfterFloorOrCompaction({
                 projectId,
                 sessionId,
               });

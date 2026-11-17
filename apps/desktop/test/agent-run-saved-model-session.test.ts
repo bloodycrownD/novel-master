@@ -4,7 +4,7 @@ import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from "../shared/config-forms/agent.js";
-import { resolveDesktopSavedModelId } from "../src/main/services/agent-run.service.js";
+import { resolveDesktopSavedModelIdOrThrow } from "../src/main/services/agent-run.service.js";
 import { createDesktopNovelMasterRuntime } from "../src/main/runtime/create-desktop-runtime.js";
 import {
   setupDesktopDbTestEnv,
@@ -12,10 +12,11 @@ import {
 } from "./desktop-db-test-env.js";
 
 /**
- * T-M1 desktop runtime 侧：resolveDesktopSavedModelId 透传 sessionId，
- * session 的 modelId 在 agent pin 缺失时作为模型来源生效。
+ * T-M1 desktop runtime 侧：resolveDesktopSavedModelIdOrThrow 透传 sessionId，
+ * session 的 modelId 在 agent pin 缺失时作为模型来源生效；resolve 失败沿
+ * `mapResolveError` 转 `AgentTurnError` 抛出（`OrThrow` 名字钉死的契约）。
  */
-describe("resolveDesktopSavedModelId session passthrough", () => {
+describe("resolveDesktopSavedModelIdOrThrow session passthrough", () => {
   let tempDir: string;
 
   before(async () => {
@@ -60,7 +61,7 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
     // resolveApplicationModelIdForRun 收 AGENT_MODEL_NOT_SET，经 mapResolveError
     // 转 AgentTurnError 抛出（抛出契约保留）。
     await assert.rejects(
-      () => resolveDesktopSavedModelId(rt, definition, session.id),
+      () => resolveDesktopSavedModelIdOrThrow(rt, definition, session.id),
       (err: unknown) => err instanceof Error
     );
 
@@ -70,7 +71,7 @@ describe("resolveDesktopSavedModelId session passthrough", () => {
       modelId: "session-saved-model",
     });
     if (!bound.ok) throw bound.error;
-    const resolved = await resolveDesktopSavedModelId(
+    const resolved = await resolveDesktopSavedModelIdOrThrow(
       rt,
       definition,
       session.id

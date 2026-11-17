@@ -17,12 +17,7 @@ import {
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
 } from "../src/main/services/db-backup.service.js";
-import {
-  acquireDesktopDbMaintenanceBusy,
-  isDesktopDbMaintenanceBusy,
-  releaseDesktopDbMaintenanceBusy,
-  resetDesktopDbMaintenanceBusyForTest,
-} from "../src/main/services/db-maintenance-busy.js";
+import { maintenanceBusy } from "../src/main/services/db-maintenance-busy.js";
 import {
   getDesktopRuntime,
   rebootstrapDesktopRuntime,
@@ -37,11 +32,11 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-backup-busy-"));
-    resetDesktopDbMaintenanceBusyForTest();
+    maintenanceBusy.resetForTest();
   });
 
   after(async () => {
-    resetDesktopDbMaintenanceBusyForTest();
+    maintenanceBusy.resetForTest();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
@@ -57,7 +52,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
     conn.execute = (sql: string, params?: unknown) => {
       // checkpoint 是导出链路的第一步，执行瞬间必然已过底层 acquire。
       if (typeof sql === "string" && sql.includes("wal_checkpoint")) {
-        busyAtCheckpoint = isDesktopDbMaintenanceBusy();
+        busyAtCheckpoint = maintenanceBusy.isBusy();
       }
       return originalExecute(sql, params);
     };
@@ -67,7 +62,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
       conn.execute = originalExecute;
     }
     assert.equal(busyAtCheckpoint, true, "导出（checkpoint）瞬间 busy 必须为 true");
-    assert.equal(isDesktopDbMaintenanceBusy(), false, "结束后必须复位");
+    assert.equal(maintenanceBusy.isBusy(), false, "结束后必须复位");
   });
 
   it("直接调 importDatabaseBackupFromBytes 期间 busy=true、结束后 false", async () => {
@@ -89,7 +84,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
         typeof sql === "string" &&
         sql.startsWith("SELECT * FROM ")
       ) {
-        busyAtDump = isDesktopDbMaintenanceBusy();
+        busyAtDump = maintenanceBusy.isBusy();
       }
       return originalQuery(sql, params);
     };
@@ -99,7 +94,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
       conn.query = originalQuery;
     }
     assert.equal(busyAtDump, true, "导入（dump 快照）瞬间 busy 必须为 true");
-    assert.equal(isDesktopDbMaintenanceBusy(), false, "结束后必须复位");
+    assert.equal(maintenanceBusy.isBusy(), false, "结束后必须复位");
   });
 
   it("最外层流程令牌：rebootstrap 完成之前 busy=true、外层 release 后 false（含重建窗口完整互斥）", async () => {
@@ -111,22 +106,22 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
     const runtime = runtimeR.value;
     await exportDatabaseBackupToPath(runtime, join(tempDir, "ic20-roundtrip.db"));
 
-    acquireDesktopDbMaintenanceBusy();
+    maintenanceBusy.acquire();
     try {
       await importDatabaseBackupFromPath(join(tempDir, "ic20-roundtrip.db"));
       // 底层已 release 自身令牌，但外层仍持有：rebootstrap 完成之前必须
       // 保持 busy（「库文件已替换、连接仍处重建窗口」是最危险段）。
       assert.equal(
-        isDesktopDbMaintenanceBusy(),
+        maintenanceBusy.isBusy(),
         true,
         "rebootstrap 完成之前 busy 必须为 true（重建窗口互斥）",
       );
       await rebootstrapDesktopRuntime();
     } finally {
-      releaseDesktopDbMaintenanceBusy();
+      maintenanceBusy.release();
     }
     assert.equal(
-      isDesktopDbMaintenanceBusy(),
+      maintenanceBusy.isBusy(),
       false,
       "外层 release 后必须复位（计数/令牌配对，无提前清位）",
     );

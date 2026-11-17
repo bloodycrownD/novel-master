@@ -16,10 +16,7 @@ import { rebootstrapDesktopRuntime } from "../../runtime/desktop-runtime-singlet
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getDesktopCloudSyncService } from "../../services/cloud-sync.service.js";
 import { DatabaseReplacedError } from "../../services/db-backup.service.js";
-import {
-  acquireDesktopDbMaintenanceBusy,
-  releaseDesktopDbMaintenanceBusy,
-} from "../../services/db-maintenance-busy.js";
+import { maintenanceBusy } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { outcomeIfAborted, runAbortable } from "../run-scope.js";
@@ -115,7 +112,7 @@ export async function handleCloudSyncPull(): Promise<
   // 判定口径是「库文件真的换了吗」（databaseReplaced，来自 import 函数的
   // 返回值／异常这一物理事实），**不是**「pull 抛错了吗」——后者会被
   // ALREADY_UP_TO_DATE 早返回路径污染，且会让「已是最新」白付一次全量重建。
-  acquireDesktopDbMaintenanceBusy();
+  maintenanceBusy.acquire();
   try {
     const built = await getDesktopRuntime();
     if (!built.ok) return ipcErr(formatIpcError(built.error));
@@ -127,7 +124,7 @@ export async function handleCloudSyncPull(): Promise<
       (scope) => doCloudSyncPull(scope)
     );
   } finally {
-    releaseDesktopDbMaintenanceBusy();
+    maintenanceBusy.release();
   }
 }
 

@@ -22,7 +22,7 @@ import {FormSectionCard} from '../form/FormSectionCard';
 import {FormTextInput} from '../form/FormTextInput';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
-import {setPromptEditorOnSaved} from './prompt-editor-callback';
+import {promptEditorOnSavedSlot} from './prompt-editor-callback';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
@@ -238,7 +238,7 @@ export function AgentEditorForm(props: Props) {
   // nm-style: keep-local — React hook：多行回调 + deps 无法单行（prettier@80 必折行）
   const openPromptEditor = useCallback(
     (title: string, text: string, onSaved: (text: string) => void) => {
-      setPromptEditorOnSaved(onSaved);
+      promptEditorOnSavedSlot.set(onSaved);
       navigation.push('PromptEditor', {title, initialText: text});
     },
     [navigation],

@@ -11,15 +11,10 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '@/theme/tokens';
-import {
-  encodeHostToRichDocument,
-  decodeRichDocumentToHost,
-  type HostToRichDocumentMessage,
-  type RichDocumentAnnotationMark,
-  type RichDocumentRecogitoCreatePayload,
-  type RichDocumentTheme,
-} from './RichDocumentBridge';
-import {getRichDocumentPackageDirUri, getRichDocumentUri} from '@/webview-host/rich-document/uri';
+import {richDocumentBridge, type HostToRichDocumentMessage, type RichDocumentAnnotationMark, type RichDocumentRecogitoCreatePayload, type RichDocumentTheme} from './RichDocumentBridge';
+import {RICH_DOCUMENT_WEBVIEW_PACKAGE_ID} from '@/webview-host/rich-document/uri';
+import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';
+import {getWebViewPackageDirUri, getWebViewPackageIndexUri} from '@/webview-host/webview-asset-uri';
 import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -60,15 +55,10 @@ type RichDocumentWebViewProps = {
   readonly clearAnnotateSelectionSignal?: number;
 };
 
+/** 主题组装：全量宿主主题取 rich-document 子集。 */
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
-  return {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    surface: tokens.surface,
-    borderLight: tokens.borderLight,
-  };
+  const {background, text, textSecondary, primary, surface, borderLight} = hostThemeFromTokens(tokens);
+  return {background, text, textSecondary, primary, surface, borderLight};
 }
 
 function buildSetDocumentPayload(html: string | undefined, plain: string | undefined, overLimit: boolean, frontMatterHtml?: string, layout?: 'plain' | 'rich'): HostToRichDocumentMessage {
@@ -123,7 +113,7 @@ export function RichDocumentWebView({
   onAnnotateOpenRef.current = onAnnotateOpen;
 
   const postToWeb = useCallback((message: HostToRichDocumentMessage) => {
-    webRef.current?.postMessage(encodeHostToRichDocument(message));
+    webRef.current?.postMessage(richDocumentBridge.encodeToClient(message));
   }, []);
 
   const handleCustomMenuSelection = useCallback(
@@ -160,7 +150,7 @@ export function RichDocumentWebView({
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
-      const message = decodeRichDocumentToHost(event.nativeEvent.data);
+      const message = richDocumentBridge.decodeToHost(event.nativeEvent.data);
       if (message.type === 'copyCode') {
         // 代码块复制按钮：webview 收集源码文本，RN 侧原生剪贴板落盘
         const code = String(message.payload.code ?? '');
@@ -310,7 +300,7 @@ export function RichDocumentWebView({
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
   const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getRichDocumentPackageDirUri())) {
+    if (req.url.startsWith(getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID))) {
       return true;
     }
     if (/^https?:\/\//i.test(req.url)) {
@@ -354,11 +344,11 @@ export function RichDocumentWebView({
            `shouldStartLoadWithRequest` 前缀判定与 originWhitelist=['file://']
            对带 hash 的 URI 均放行（prefix 命中 + scheme 不变）。 */
         source={{
-          uri: getRichDocumentUri() + '#bg=' + encodeURIComponent(tokens.background),
+          uri: getWebViewPackageIndexUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID) + '#bg=' + encodeURIComponent(tokens.background),
         }}
         allowFileAccess
         allowFileAccessFromFileURLs
-        allowingReadAccessToURL={getRichDocumentPackageDirUri()}
+        allowingReadAccessToURL={getWebViewPackageDirUri(RICH_DOCUMENT_WEBVIEW_PACKAGE_ID)}
         onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
         onOpenWindow={handleOpenWindow}
         onMessage={handleMessage}

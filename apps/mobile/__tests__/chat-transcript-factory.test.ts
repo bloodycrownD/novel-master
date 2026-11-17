@@ -129,8 +129,8 @@ type Loaded = {
   mountMermaidViewerPortal: jest.Mock;
   attachMermaidViewerDelegation: jest.Mock;
   post: (type: string, payload?: Record<string, unknown>) => void;
-  invokeRegisteredRenderContextMenu: () => boolean;
-  invokeRegisteredRenderRows: () => boolean;
+  invokeContextMenu(): boolean;
+  invokeRows(): boolean;
   onRowsClick: (event: unknown) => void;
 };
 
@@ -150,8 +150,8 @@ function loadRuntime(): Loaded {
     out.mountMermaidViewerPortal = mermaid.mountMermaidViewerPortal;
     out.attachMermaidViewerDelegation = mermaid.attachMermaidViewerDelegation;
     out.post = bridge.post;
-    out.invokeRegisteredRenderContextMenu = menu.invokeRegisteredRenderContextMenu;
-    out.invokeRegisteredRenderRows = rowLogic.invokeRegisteredRenderRows;
+    out.invokeContextMenu = () => menu.contextMenuViewSlot.invoke(null);
+    out.invokeRows = () => rowLogic.rowsViewSlot.invoke();
     out.onRowsClick = rowsClick.onRowsClick;
   });
   return out;
@@ -248,8 +248,8 @@ describe('createTranscriptRuntime 工厂参数 (T-CF1)', () => {
 
     expect(readyEnvelopes()).toEqual([]);
     // 装配四件仍发生（视图注册 / mermaid 挂接）
-    expect(rt.invokeRegisteredRenderContextMenu()).toBe(true);
-    expect(rt.invokeRegisteredRenderRows()).toBe(true);
+    expect(rt.invokeContextMenu()).toBe(true);
+    expect(rt.invokeRows()).toBe(true);
     expect(rt.mountMermaidViewerPortal).toHaveBeenCalledWith(
       'mermaid-viewer-portal',
     );

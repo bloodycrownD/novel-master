@@ -4,7 +4,7 @@
 
 import mobilePackage from '../../package.json';
 
-export const GITHUB_REPO = {
+const GITHUB_REPO = {
   owner: 'bloodycrownD',
   name: 'novel-master',
 } as const;
@@ -19,10 +19,6 @@ export function githubRepoUrl(): string {
 
 export function githubReleasesUrl(): string {
   return `${githubRepoUrl()}/releases`;
-}
-
-export function githubLatestReleaseApiUrl(): string {
-  return `https://api.github.com/repos/${owner}/${name}/releases/latest`;
 }
 
 export function licenseUrl(): string {

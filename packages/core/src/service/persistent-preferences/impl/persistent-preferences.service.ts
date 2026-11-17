@@ -67,7 +67,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return this.getBooleanPref("userVfsUnifiedToolTurn");
   }
 
-  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 写入单点消费。 */
+  /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 与桌面 IPC preferences 表两处写入消费。 */
   async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
     await this.setBooleanPref("userVfsUnifiedToolTurn", enabled);
   }

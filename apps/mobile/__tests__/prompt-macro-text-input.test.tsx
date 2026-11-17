@@ -12,12 +12,7 @@ import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import {Platform, StyleSheet} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeHostToComposerInput,
-  type ComposerInputInitPayload,
-  type HostToComposerInputMessage,
-} from '@/components/chat/ComposerInputBridge';
+import {COMPOSER_INPUT_BRIDGE_VERSION, composerInputBridge, type ComposerInputInitPayload, type HostToComposerInputMessage} from '@/components/chat/ComposerInputBridge';
 import {PromptMacroTextInput} from '@/components/agent/PromptMacroTextInput';
 import {PROMPT_INSERTABLE_MACROS} from '@/components/agent/prompt-macro-input';
 import {lightTheme} from '@/theme/tokens';
@@ -93,7 +88,7 @@ async function flush(): Promise<void> {
 function messagesSince(clearAfterIndex: number): HostToComposerInputMessage[] {
   return mockWebViewPostMessages
     .slice(clearAfterIndex)
-    .map(raw => decodeHostToComposerInput(raw));
+    .map(raw => composerInputBridge.decodeToClient(raw));
 }
 
 function typesSince(clearAfterIndex: number): string[] {

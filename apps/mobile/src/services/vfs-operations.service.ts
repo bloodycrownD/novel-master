@@ -43,16 +43,11 @@ export async function sessionCreateVfsDirectory(runtime: MobileRuntime, sessionI
   return executeSessionUserVfsOp(runtime, sessionId, buildUserVfsMkdirOp(normalized));
 }
 
-/** 会话 scope：删除经 userVfsTurn。 */
-export async function sessionDeleteVfsEntry(runtime: MobileRuntime, sessionId: string, path: string, options?: {recursive?: boolean}): Promise<Result<void, unknown>> {
-  return executeSessionUserVfsOp(runtime, sessionId, buildUserVfsDeleteOp(path, options?.recursive ?? true));
-}
-
 /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
 export async function deleteScopedVfsEntry(runtime: MobileRuntime, scope: VfsScope, vfs: VfsService, path: string, options: DeleteScopedOptions): Promise<Result<void, unknown>> {
   const recursive = options.recursive ?? true;
   if (options.useUserVfsTurn && options.sessionId != null) {
-    const deleted = await sessionDeleteVfsEntry(runtime, options.sessionId, path, {recursive});
+    const deleted = await executeSessionUserVfsOp(runtime, options.sessionId, buildUserVfsDeleteOp(path, recursive));
     if (!deleted.ok) return deleted;
   } else {
     // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉

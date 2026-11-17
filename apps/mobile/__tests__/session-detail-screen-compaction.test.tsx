@@ -103,7 +103,7 @@ jest.mock('@/services/chat-agent-meta', () => ({
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
-  isMobileAgentActive: () => false,
+  agentActivity: {isActive: () => false},
 }));
 
 jest.mock('@/services/project-composer-status.service', () => ({

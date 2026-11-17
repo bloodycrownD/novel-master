@@ -33,7 +33,7 @@
       chat-transcript 独立入口壳（composer-native-2026-10 Step 2）：纯转录文档，
       无 dock / composer 子树——输入框由 RN 原生组件承接，转录侧只管渲染行列表。
       纵向排布：#app（flex 列容器，样式见 transcript.css 基底）→ #scroller(flex:1)
-      → #rows（行列表挂载点，createTranscriptRuntime 经 registerRenderRows 渲染）。
+      → #rows（行列表挂载点，createTranscriptRuntime 经 rowsViewSlot.register 渲染）。
       双 portal 刻意留在 body 直接子级——fixed 定位包含块语境与 chat-conversation
       一致（menu/mermaid 全屏不能被 #app 的布局语境裹挟）。
     -->

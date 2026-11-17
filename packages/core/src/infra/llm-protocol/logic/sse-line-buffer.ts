@@ -19,3 +19,15 @@ export function feedSseLines(state: SseLineBufferState, chunk: string, onLine: (
   }
   (state as { buffer: string }).buffer = trailing;
 }
+
+/**
+ * Flush a trailing fragment (stream end / abort) by feeding one terminating newline.
+ *
+ * The fragment may be a complete `data:` line that arrived without its `\n`
+ * because a chunk boundary or an abort fell between payload and terminator.
+ */
+export function drainSseLines(state: SseLineBufferState, feed: (chunk: string) => void): void {
+  if (state.buffer !== "") {
+    feed("\n");
+  }
+}

@@ -58,10 +58,4 @@ export type CodeEditorSelection = {
   readonly end: number;
 };
 
-const codeEditorBridge = createMessageBridge<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');
-
-// nm-style: keep-public — code-editor 桥四函数（webview 契约，消费方 CodeEditorWebView / 测试）
-export const encodeHostToCodeEditor = codeEditorBridge.encodeToClient;
-export const encodeCodeEditorToHost = codeEditorBridge.encodeToHost;
-export const decodeCodeEditorToHost = codeEditorBridge.decodeToHost;
-export const decodeHostToCodeEditor = codeEditorBridge.decodeToClient;
+export const codeEditorBridge = createMessageBridge<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');

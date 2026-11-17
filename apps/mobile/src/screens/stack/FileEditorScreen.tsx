@@ -12,7 +12,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
-import {takeFileEditorOnSessionVfsSaved} from '../../components/agent/file-editor-saved-callback';
+import {fileEditorOnSessionVfsSavedSlot} from '../../components/agent/file-editor-saved-callback';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 import {FileMarkdownPreview, isMarkdownPreviewPath} from '../../components/vfs/FileMarkdownPreview';
 import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
@@ -45,7 +45,7 @@ export function FileEditorScreen() {
   // 渲染体里——本屏挂载后加载完成必然触发一次 setContent，那之后的任何一次
   // 重渲染都会再 take 一次、拿到 null 覆盖局部变量 ⇒ 回调事实上永不生效，
   // 正好复现原病灶。范式见 PromptEditorScreen。
-  const onSessionVfsSavedRef = useRef<(() => void) | null>(takeFileEditorOnSessionVfsSaved());
+  const onSessionVfsSavedRef = useRef<(() => void) | null>(fileEditorOnSessionVfsSavedSlot.take());
 
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');

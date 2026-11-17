@@ -196,7 +196,7 @@ jest.mock('@/navigation/HeaderContext', () => ({
 import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
 import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
-import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {promptEditorOnSavedSlot} from '@/components/agent/prompt-editor-callback';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 
@@ -238,7 +238,7 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     mockRouteParams.title = undefined;
     mockRouteParams.initialText = undefined;
     // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   it('初始无标记；全屏保存回填后标记出现；表单保存后标记消失', async () => {
@@ -353,7 +353,7 @@ describe('AgentEditor general sentinel 只读表单（内置智能体详情）',
     jest.clearAllMocks();
     mockRouteParams.agentId = 'general';
     // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
-    takePromptEditorOnSaved();
+    promptEditorOnSavedSlot.take();
   });
 
   it('以出厂定义直填全禁用编辑器：只读横幅在、无保存栏、不拉 registry、不误报未保存', async () => {

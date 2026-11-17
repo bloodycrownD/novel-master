@@ -32,12 +32,12 @@ export async function executeSessionUserVfsOp(runtime: MobileNovelMasterRuntime,
   if (options.skipComposerStatusRefresh) {
     return Result.ok(undefined);
   }
-  await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
+  await refreshComposerStatusAfterUserVfsOps(sessionId);
   return Result.ok(undefined);
 }
 
 /** 批次结束后补一次状态条投影（仅 annotate，无净 diff）。 */
-export async function refreshComposerStatusAfterUserVfsOps(runtime: MobileNovelMasterRuntime, sessionId: string): Promise<void> {
-  const attachments = await projectComposerStatusForSession(runtime, sessionId);
+export async function refreshComposerStatusAfterUserVfsOps(sessionId: string): Promise<void> {
+  const attachments = await projectComposerStatusForSession(sessionId);
   applyComposerStatusAttachmentsReplace({sessionId, attachments});
 }
