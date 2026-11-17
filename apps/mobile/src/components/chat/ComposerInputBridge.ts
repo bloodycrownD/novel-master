@@ -5,7 +5,7 @@
  * 两侧 BRIDGE_V 必须同为 1（`__tests__/composer-input-bridge.test.ts` 有一致性断言）。
  * decode 走抛错口径（坏信封 = JSON 坏 / v 不符 / type 缺失），由宿主 try/catch 静默丢弃。
  */
-import {isRecord} from '@novel-master/core/common';
+import {Guards} from '@novel-master/core/common';
 
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
@@ -94,11 +94,11 @@ export function encodeComposerInputToHost(message: ComposerInputToHostMessage): 
 
 export function decodeComposerInputToHost(raw: string): ComposerInputToHostMessage {
   const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
+  if (!Guards.isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
     // nm-throw: keep — webview bridge 边界：from-web 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid composer-input bridge envelope version');
   }
-  if (typeof parsed.type !== 'string' || !isRecord(parsed.payload)) {
+  if (typeof parsed.type !== 'string' || !Guards.isRecord(parsed.payload)) {
     // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid composer-input bridge envelope shape');
   }
@@ -107,7 +107,7 @@ export function decodeComposerInputToHost(raw: string): ComposerInputToHostMessa
 
 export function decodeHostToComposerInput(raw: string): HostToComposerInputMessage {
   const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
+  if (!Guards.isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
     // nm-throw: keep — webview bridge 边界：to-host 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid composer-input bridge envelope version');
   }

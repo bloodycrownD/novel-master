@@ -4,7 +4,7 @@
  * @module presentation/chat/attachment-chip
  */
 
-import {truncateText} from "@/common/text.js";
+import {Text} from "@/common/text.js";
 import type {MessageAttachment, MessageAttachmentAction} from "@/domain/chat/model/message-attachment.schema.js";
 import {attachmentPath} from "@/domain/chat/logic/message/attachment-path.js";
 
@@ -66,7 +66,7 @@ export function formatStatusChipLabelFromAttachment(a: Pick<MessageAttachment, "
             // 批注：chip 显示「用户批注内容」而非划词原文——优先 userAnnotation，回落 originalText（向后兼容老附件）。
             const parsed = parseChipContent(a.content);
             const chipText = parsed?.annotateText;
-            path = chipText != null && chipText !== "" ? truncateText(chipText.replace(/[\r\n]+/g, " ").trim(), ANNOTATE_CHIP_MAX_CHARS) : resolvePathOrName(a);
+            path = chipText != null && chipText !== "" ? Text.truncate(chipText.replace(/[\r\n]+/g, " ").trim(), ANNOTATE_CHIP_MAX_CHARS) : resolvePathOrName(a);
         } else if (a.action === "rename" || a.action === "move") {
             // 优先 path（落库已取 to）；否则从 content JSON / name 解析。
             if (a.path != null && a.path !== "") {

@@ -99,6 +99,6 @@ export async function countPromptLlmInputHeuristicOnly(params: CountPromptLlmInp
   });
 }
 
-// usage label 拼装已随 token-source-label 收敛进 common/format-token-count.ts
-// （formatContextUsageLabel，badge 单源）；本文件此前的第二份
+// usage label 拼装已随 token-source-label 收敛进 common/token-format.ts
+// （TokenFormat.contextUsageLabel，badge 单源）；本文件此前的第二份
 // formatPromptTokenUsageLabel/formatCompact 系零生产调用方的重复实现，已删除。

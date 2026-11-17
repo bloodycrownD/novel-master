@@ -5,7 +5,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import { runTemplateEngine } from "../../src/domain/tool/builtin/search/engines/template-engine.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
-import { utf8ByteLength } from "../../src/common/encoding.js";
+import { Encoding } from "../../src/common/encoding.js";
 import type { ResolvedEngineConfig, SearchEngineTemplate } from "../../src/domain/tool/builtin/search/types.js";
 
 /** 构造记录调用参数的 mock fetchFn：按序回放预设 Response（照 search-engines 旧测试先例）。 */
@@ -272,11 +272,11 @@ describe("模板执行器：错误通道与脱敏（T-E5）", () => {
     // 18 条 × ~3KB ≈ 54KB > 50KB 预算。
     const bigItems = Array.from({ length: 18 }, (_value, index) => ({ url: `https://item.example.com/${index}`, content: "s".repeat(3000) }));
     const fullText = JSON.stringify(bigItems);
-    assert.ok(utf8ByteLength(fullText) > TOOL_OUTPUT_MAX_BYTES, "测试数据本身应超预算");
+    assert.ok(Encoding.utf8ByteLength(fullText) > TOOL_OUTPUT_MAX_BYTES, "测试数据本身应超预算");
 
     const truncated = unwrap(await runTemplateEngine(template({ url: "https://api.example.com/search" }), resolved("test"), "q", {}, {}, makeFetch([jsonOk(bigItems)])));
     assert.equal(typeof truncated.results, "string");
-    assert.ok(utf8ByteLength(fullText) > (truncated.results as string).length, "回流文本应短于全文");
+    assert.ok(Encoding.utf8ByteLength(fullText) > (truncated.results as string).length, "回流文本应短于全文");
     assert.ok((truncated.results as string).endsWith("已截断]"), `截断标注：${(truncated.results as string).slice(-50)}`);
     assert.ok((truncated.results as string).startsWith(`[${JSON.stringify(bigItems[0]).slice(0, 30)}`), "截断保留数组头部原样字节");
 

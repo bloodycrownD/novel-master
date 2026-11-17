@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/usage-parser
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { LlmTokenUsage } from "../ports/adapter.port.js";
 
 function num(value: unknown): number | undefined {
@@ -27,11 +27,11 @@ function cacheFields(cacheReadTokens?: number, cacheCreationTokens?: number): Pi
 
 /** Parses OpenAI chat completion `usage` object. */
 export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!isRecord(raw)) {
+  if (!Guards.isRecord(raw)) {
     return undefined;
   }
   const usage = raw.usage;
-  if (!isRecord(usage)) {
+  if (!Guards.isRecord(usage)) {
     return undefined;
   }
   const promptTokens = num(usage.prompt_tokens);
@@ -41,7 +41,7 @@ export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
     return undefined;
   }
   // OpenAI 无 cache write 概念，只读命中侧 cached_tokens。
-  const details = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
+  const details = Guards.isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
   const cacheReadTokens = nonNegativeNum(details?.cached_tokens);
   return {
     promptTokens,
@@ -53,14 +53,14 @@ export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
 
 /** Parses Anthropic messages API `usage` object (non-stream or stream events). */
 export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!isRecord(raw)) {
+  if (!Guards.isRecord(raw)) {
     return undefined;
   }
   let usage = raw.usage;
-  if (!isRecord(usage) && isRecord(raw.message) && isRecord(raw.message.usage)) {
+  if (!Guards.isRecord(usage) && Guards.isRecord(raw.message) && Guards.isRecord(raw.message.usage)) {
     usage = raw.message.usage;
   }
-  if (!isRecord(usage)) {
+  if (!Guards.isRecord(usage)) {
     return undefined;
   }
   const promptTokens = num(usage.input_tokens);
@@ -71,7 +71,7 @@ export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
   const totalTokens = promptTokens != null && completionTokens != null ? promptTokens + completionTokens : undefined;
   const cacheReadTokens = nonNegativeNum(usage.cache_read_input_tokens);
   // cache_creation 有两种 wire 形态：新版嵌套 cache_creation.input_tokens，旧版扁平 cache_creation_input_tokens。
-  const cacheCreation = isRecord(usage.cache_creation) ? nonNegativeNum(usage.cache_creation.input_tokens) : nonNegativeNum(usage.cache_creation_input_tokens);
+  const cacheCreation = Guards.isRecord(usage.cache_creation) ? nonNegativeNum(usage.cache_creation.input_tokens) : nonNegativeNum(usage.cache_creation_input_tokens);
   return {
     promptTokens,
     completionTokens,
@@ -82,11 +82,11 @@ export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
 
 /** Parses Gemini generateContent `usageMetadata` object. */
 export function parseGeminiUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!isRecord(raw)) {
+  if (!Guards.isRecord(raw)) {
     return undefined;
   }
   const meta = raw.usageMetadata;
-  if (!isRecord(meta)) {
+  if (!Guards.isRecord(meta)) {
     return undefined;
   }
   const promptTokens = num(meta.promptTokenCount);

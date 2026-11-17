@@ -7,7 +7,7 @@
  */
 
 import {buildUserVfsActionXml} from "@/domain/vfs/logic/user-vfs-save-mapping.js";
-import {integerAtLeast, stringOrEmpty} from "@/common/coerce.js";
+import {Coerce} from "@/common/coerce.js";
 import {type AnnotateDraft, isMessageAnnotatePath} from "../../model/annotate-draft.schema.js";
 import {attachmentStorageName, type MessageAttachment} from "../../model/message-attachment.schema.js";
 import {userVfsTurns} from "../vfs-turn/user-vfs-turn-view.js";
@@ -96,18 +96,18 @@ class AttachmentXmlCodec {
                 const annotate = actions.find((a) => a.name === "annotate");
                 if (annotate != null) {
                     if (!path) {
-                        path = stringOrEmpty(annotate.params.path) || annotate.path;
+                        path = Coerce.string(annotate.params.path) || annotate.path;
                     }
-                    originalText = stringOrEmpty(annotate.params.originalText);
-                    userAnnotation = stringOrEmpty(annotate.params.userAnnotation);
-                    renderStart = integerAtLeast(annotate.params.renderStart, 0);
-                    renderEnd = integerAtLeast(annotate.params.renderEnd, 0);
-                    startOffset = integerAtLeast(annotate.params.startOffset, 0);
-                    endOffset = integerAtLeast(annotate.params.endOffset, 0);
-                    startLine = integerAtLeast(annotate.params.startLine, 1);
-                    endLine = integerAtLeast(annotate.params.endLine, 1);
-                    startCol = integerAtLeast(annotate.params.startCol, 1);
-                    endCol = integerAtLeast(annotate.params.endCol, 1);
+                    originalText = Coerce.string(annotate.params.originalText);
+                    userAnnotation = Coerce.string(annotate.params.userAnnotation);
+                    renderStart = Coerce.integerAtLeast(annotate.params.renderStart, 0);
+                    renderEnd = Coerce.integerAtLeast(annotate.params.renderEnd, 0);
+                    startOffset = Coerce.integerAtLeast(annotate.params.startOffset, 0);
+                    endOffset = Coerce.integerAtLeast(annotate.params.endOffset, 0);
+                    startLine = Coerce.integerAtLeast(annotate.params.startLine, 1);
+                    endLine = Coerce.integerAtLeast(annotate.params.endLine, 1);
+                    startCol = Coerce.integerAtLeast(annotate.params.startCol, 1);
+                    endCol = Coerce.integerAtLeast(annotate.params.endCol, 1);
                 }
             }
             if (!path || isMessageAnnotatePath(path)) {

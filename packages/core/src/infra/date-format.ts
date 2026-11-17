@@ -4,12 +4,12 @@
  * @module infra/date-format
  */
 
-import { pad2 } from "@/common/format-number.js";
+import { Number } from "@/common/number.js";
 
 /**
  * Formats a date as local `yyyy-MM-dd HH:mm:ss`.
  */
 export function formatLocalDateTime(value: Date | number): string {
   const d = value instanceof Date ? value : new Date(value);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  return `${d.getFullYear()}-${Number.pad2(d.getMonth() + 1)}-${Number.pad2(d.getDate())} ${Number.pad2(d.getHours())}:${Number.pad2(d.getMinutes())}:${Number.pad2(d.getSeconds())}`;
 }

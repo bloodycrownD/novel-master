@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { base64ToBytes, bytesToBase64, utf8ByteLength } from "../../src/common/encoding.js";
+import { Encoding } from "../../src/common/encoding.js";
 
-describe("common/encoding · base64", () => {
+describe("common/encoding · Encoding.base64", () => {
   it("bytesToBase64 / base64ToBytes 往返", () => {
     const bytes = Uint8Array.from([0, 1, 2, 254, 255]);
-    assert.deepEqual(base64ToBytes(bytesToBase64(bytes)), bytes);
+    assert.deepEqual(Encoding.base64ToBytes(Encoding.bytesToBase64(bytes)), bytes);
   });
 
   it("跨 0x8000 分片仍保持字节序", () => {
     const bytes = Uint8Array.from({ length: 0x8000 * 2 + 3 }, (_, index) => index % 256);
-    assert.deepEqual(base64ToBytes(bytesToBase64(bytes)), bytes);
+    assert.deepEqual(Encoding.base64ToBytes(Encoding.bytesToBase64(bytes)), bytes);
   });
 });
 
-describe("common/encoding · utf8ByteLength", () => {
+describe("common/encoding · Encoding.utf8ByteLength", () => {
   it("与 TextEncoder 基准一致：ASCII / 中文 / emoji / 落单代理", () => {
     const reference = new TextEncoder();
     const samples = [
@@ -30,7 +30,7 @@ describe("common/encoding · utf8ByteLength", () => {
     ];
     for (const sample of samples) {
       assert.equal(
-        utf8ByteLength(sample),
+        Encoding.utf8ByteLength(sample),
         reference.encode(sample).byteLength,
         `样本 ${JSON.stringify(sample)} 应与 TextEncoder 一致`
       );
@@ -38,7 +38,7 @@ describe("common/encoding · utf8ByteLength", () => {
   });
 
   it("中文按每字符 3 字节计量", () => {
-    assert.equal(utf8ByteLength("中"), 3);
-    assert.equal(utf8ByteLength("中".repeat(10)), 30);
+    assert.equal(Encoding.utf8ByteLength("中"), 3);
+    assert.equal(Encoding.utf8ByteLength("中".repeat(10)), 30);
   });
 });

@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/anthropic-content-mapper
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
@@ -67,7 +67,7 @@ export function blocksToAnthropicContent(blocks: readonly ContentBlock[], toolNa
 export function anthropicContentToBlocks(content: readonly unknown[], toolNames?: AnthropicToolNameWire): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const item of content) {
-    if (!isRecord(item) || typeof item.type !== "string") {
+    if (!Guards.isRecord(item) || typeof item.type !== "string") {
       continue;
     }
     switch (item.type) {
@@ -80,7 +80,7 @@ export function anthropicContentToBlocks(content: readonly unknown[], toolNames?
       }
       case "image": {
         const source = item.source;
-        if (!isRecord(source)) {
+        if (!Guards.isRecord(source)) {
           break;
         }
         if (source.type === "url" && typeof source.url === "string") {
@@ -101,7 +101,7 @@ export function anthropicContentToBlocks(content: readonly unknown[], toolNames?
         break;
       }
       case "tool_use":
-        if (typeof item.id === "string" && typeof item.name === "string" && isRecord(item.input)) {
+        if (typeof item.id === "string" && typeof item.name === "string" && Guards.isRecord(item.input)) {
           blocks.push({
             type: "tool_use",
             id: item.id,

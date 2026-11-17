@@ -7,7 +7,7 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
-import {truncateText} from '@novel-master/core/common';
+import {Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -290,7 +290,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       <MessageEditModal
         visible={addVisible}
         title="批注"
-        label={truncateText(pendingOriginalText, 80)}
+        label={CommonText.truncate(pendingOriginalText, 80)}
         placeholder="批注说明"
         confirmLabel="添加"
         onClose={() => {
@@ -318,7 +318,7 @@ export function FileMarkdownPreview({path, content, tokens, previewFill = false,
       <MessageEditModal
         visible={editVisible}
         title="编辑批注"
-        label={editingDraft ? truncateText(editingDraft.originalText, 80) : undefined}
+        label={editingDraft ? CommonText.truncate(editingDraft.originalText, 80) : undefined}
         placeholder="批注说明"
         initialValue={editingDraft?.userAnnotation ?? ''}
         confirmLabel="保存"

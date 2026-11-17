@@ -30,11 +30,10 @@ import type { ChatMessageData } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import { type AppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
+import { TokenFormat } from "@novel-master/core/common";
 
 import {
   countPromptLlmInputHeuristicOnly,
-  formatContextUsageLabel,
-  formatTokenSourceBadge,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
@@ -130,13 +129,13 @@ export function withRealFallbackCounter(runtime: DesktopNovelMasterRuntime): Tok
 
 /**
  * 统计响应装配：main 在产出时把完整 label 拼好（core 的
- * {@link formatTokenSourceBadge} + {@link formatContextUsageLabel} 单源），
+ * {@link TokenFormat.sourceBadge} + {@link TokenFormat.contextUsageLabel} 单源），
  * renderer 纯渲染 `stats.label`，不再本地拼装（X1：renderer 不能 import core）。
  */
 function buildTokenStats(tokenCount: number, estimated: boolean, counterKind: string, contextWindow: number | undefined, source: "api" | "local"): PromptChatTokenStatsResponse {
   const pct = contextWindow != null && contextWindow > 0 ? Math.min(999, Math.round((tokenCount / contextWindow) * 100)) : undefined;
-  const badge = formatTokenSourceBadge(source, counterKind, estimated);
-  const label = formatContextUsageLabel(tokenCount, contextWindow, badge);
+  const badge = TokenFormat.sourceBadge(source, counterKind, estimated);
+  const label = TokenFormat.contextUsageLabel(tokenCount, contextWindow, badge);
   return {
     tokenCount,
     contextWindow,

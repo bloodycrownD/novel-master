@@ -12,7 +12,7 @@
  * 定义），本适配器用显式类型判定收窄——不用 `as` 双重断言。
  */
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
-import {isRecord} from '@novel-master/core/common';
+import {Guards} from '@novel-master/core/common';
 import type {StreamWireChunk} from './stream-wire-queue';
 import type {
   SessionStreamUnitStreamPayload,
@@ -27,7 +27,7 @@ export function createTranscriptStreamHandle(handleId: string, web: ChatTranscri
   return {
     handleId,
     onStreamPayload: payload => {
-      if (!isRecord(payload) || payload.type !== 'stream-batch') {
+      if (!Guards.isRecord(payload) || payload.type !== 'stream-batch') {
         return;
       }
       const {streamId, segments, tools} = payload;
@@ -36,7 +36,7 @@ export function createTranscriptStreamHandle(handleId: string, web: ChatTranscri
       }
       const chunks: StreamWireChunk[] = [];
       for (const entry of segments) {
-        if (!isRecord(entry)) {
+        if (!Guards.isRecord(entry)) {
           return;
         }
         const kind = entry.kind;
@@ -56,14 +56,14 @@ export function createTranscriptStreamHandle(handleId: string, web: ChatTranscri
         }
         toolViews = [];
         for (const entry of tools) {
-          if (!isRecord(entry)) {
+          if (!Guards.isRecord(entry)) {
             return;
           }
           const {toolUseId, name, status, input} = entry;
           if (typeof toolUseId !== 'string' || typeof name !== 'string') {
             return;
           }
-          if (typeof status !== 'string' || !isRecord(input)) {
+          if (typeof status !== 'string' || !Guards.isRecord(input)) {
             return;
           }
           toolViews.push({toolUseId, name, status, input});
@@ -72,7 +72,7 @@ export function createTranscriptStreamHandle(handleId: string, web: ChatTranscri
       web.pushStream({streamId, segments: chunks, tools: toolViews});
     },
     onControlMessage: message => {
-      if (!isRecord(message)) {
+      if (!Guards.isRecord(message)) {
         return;
       }
       if (message.type === 'reset-stream') {

@@ -7,7 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import type { ChatProject } from "../../model/project.js";
 import type { ProjectRepository } from "../project.port.js";
 import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
@@ -56,7 +56,7 @@ export class SqliteProjectRepository extends BaseSqliteChatRepository<ChatProjec
     if (rows.length === 0) {
       return null;
     }
-    return nullableText(rows[0]!.agent_config_json);
+    return Coerce.nullableText(rows[0]!.agent_config_json);
   }
 
   async updateAgentConfig(id: string, configJson: string | null, updatedAtMs: number): Promise<boolean> {

@@ -12,7 +12,7 @@ import {
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
-import { applyMergePatch } from "../../src/common/json.js";
+import { Json } from "../../src/common/json.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { Result } from "../../src/errors/either.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
@@ -85,7 +85,7 @@ function fakeAgentRegistry(options?: {
     update: record("update", async (id: string, patch: AgentDefinitionPatch) => {
       const current = persisted.get(id);
       if (current == null) return Result.err(new AppError("AGENT_NOT_FOUND", {agentId: id}));
-      const merged = applyMergePatch(current, patch);
+      const merged = Json.mergePatch(current, patch);
       await recordedUpsert(id, merged);
       return Result.ok(merged);
     }),

@@ -30,7 +30,7 @@
 
 import { z } from "zod";
 
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
@@ -213,7 +213,7 @@ const CURL_INPUT_SCHEMA = z.object({
         });
         continue;
       }
-      if (utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
+      if (Encoding.utf8ByteLength(headerValue) > CURL_MAX_HEADER_VALUE_BYTES) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `请求头 ${name} 的值超过 ${CURL_MAX_HEADER_VALUE_BYTES} 字节上限`,
@@ -222,7 +222,7 @@ const CURL_INPUT_SCHEMA = z.object({
     }
   }).optional(),
   body: CURL_BODY_SCHEMA.superRefine((value, ctx) => {
-    if (utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
+    if (Encoding.utf8ByteLength(value) > CURL_MAX_REQUEST_BODY_BYTES) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `请求体超过 ${CURL_MAX_REQUEST_BODY_BYTES} 字节上限`,
@@ -380,7 +380,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         return phaseError(e);
       }
 
-      const originalBytes = utf8ByteLength(text);
+      const originalBytes = Encoding.utf8ByteLength(text);
 
       // 超 50KB 预算（与 read/grep 等四工具同口径）：截断前的全文落盘
       // 会话工作区 /tmp/，body 置空串占位（schema 必填不变，meta 全保留），

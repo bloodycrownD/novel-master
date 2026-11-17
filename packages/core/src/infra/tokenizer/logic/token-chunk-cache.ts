@@ -40,7 +40,7 @@
  * @module infra/tokenizer/logic/token-chunk-cache
  */
 
-import { fnv1aHex16 } from "@/common/hash.js";
+import { Hash } from "@/common/hash.js";
 import { SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -87,7 +87,7 @@ export function buildCounterScope(input: CounterScopeInput): string {
 }
 
 /**
- * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link fnv1aHex16}）。
+ * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link Hash.fnv1aHex16}）。
  *
  * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
  * 且即便碰撞也只是读错一个块的计数（误差个位数 token），属可接受的缓存
@@ -96,7 +96,7 @@ export function buildCounterScope(input: CounterScopeInput): string {
  */
 // nm-style: keep-local — chunkHash16 是 16-hex 键形态的公开契约入口（public/provider 与双 driver 消费），哈希实现在 common/hash，直接暴露通用实现会让调用方耦合实现细节。
 export function chunkHash16(chunk: string): string {
-  return fnv1aHex16(chunk);
+  return Hash.fnv1aHex16(chunk);
 }
 
 /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */

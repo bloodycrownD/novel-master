@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { messageAttachmentObjectSchema, messageAttachmentSchema, type MessageAttachment } from "./message-attachment.schema.js";
 
 /** Composer 草稿中允许持久的附件（仅 attach）。 */
@@ -88,7 +88,7 @@ export function parseComposerDraftJson(raw: string | null | undefined): Composer
     return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
   }
   // 守卫：parsed 可能是 number / string / array / null，形状不对时无粒度可 salv。
-  if (!isRecord(parsed)) {
+  if (!Guards.isRecord(parsed)) {
     return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
   }
   // text 单独取，让「正文不因附件而丢」成为结构性保证，而不是靠运气。

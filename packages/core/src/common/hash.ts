@@ -13,21 +13,23 @@ const FNV_OFFSET_A = 0x811c9dc5;
 const FNV_OFFSET_B = 0x9dc5811c;
 const FNV_PRIME = 0x01000193;
 
-/**
- * 双 FNV-1a（前向 + 反向、不同 offset）拼 64 bit，恒 16 位小写 hex。
- *
- * ⚠ 输出形态是 public 契约（L1/L2 键拼接、KKV payload 校验、日志指纹都硬
- * 依赖 16 hex 定长）：换实现必须保持形态；键值域变化须 bump 消费方的
- * payload 版本号。
- */
-export function fnv1aHex16(text: string): string {
-  let h1 = FNV_OFFSET_A;
-  for (let i = 0; i < text.length; i++) {
-    h1 = Math.imul(h1 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
-  }
-  let h2 = FNV_OFFSET_B;
-  for (let i = text.length - 1; i >= 0; i--) {
-    h2 = Math.imul(h2 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
-  }
-  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
-}
+export const Hash = {
+    /**
+     * 双 FNV-1a（前向 + 反向、不同 offset）拼 64 bit，恒 16 位小写 hex。
+     *
+     * ⚠ 输出形态是 public 契约（L1/L2 键拼接、KKV payload 校验、日志指纹都硬
+     * 依赖 16 hex 定长）：换实现必须保持形态；键值域变化须 bump 消费方的
+     * payload 版本号。
+     */
+    fnv1aHex16: (text: string): string => {
+        let h1 = FNV_OFFSET_A;
+        for (let i = 0; i < text.length; i++) {
+            h1 = Math.imul(h1 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
+        }
+        let h2 = FNV_OFFSET_B;
+        for (let i = text.length - 1; i >= 0; i--) {
+            h2 = Math.imul(h2 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
+        }
+        return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+    },
+} as const;

@@ -4,7 +4,7 @@
  * @module domain/workplace/workplace-display
  */
 
-import { escapeXmlAttr } from "@/common/xml.js";
+import { Xml } from "@/common/xml.js";
 import { formatLocalDateTime } from "@/infra/date-format.js";
 import type { DisplayState } from "../model/workplace-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
@@ -51,7 +51,7 @@ export function renderFileBlock(params: { readonly logicalPath: string; readonly
     content: params.content,
   });
   const mtimeLocal = formatLocalMtime(params.mtimeMs);
-  const attrs = [`path="${escapeXmlAttr(params.logicalPath)}"`, `createdAt="${escapeXmlAttr(mtimeLocal)}"`, `updatedAt="${escapeXmlAttr(mtimeLocal)}"`, `updatedBy="user"`].join(" ");
+  const attrs = [`path="${Xml.escapeAttr(params.logicalPath)}"`, `createdAt="${Xml.escapeAttr(mtimeLocal)}"`, `updatedAt="${Xml.escapeAttr(mtimeLocal)}"`, `updatedBy="user"`].join(" ");
   return `<file ${attrs}>\n${body}\n</file>`;
 }
 

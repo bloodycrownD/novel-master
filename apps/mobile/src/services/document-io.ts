@@ -8,8 +8,9 @@
  * build*Error 回调注入，避免这层反向依赖具体业务。
  */
 import {isKnownType, keepLocalCopy, saveDocuments} from '@react-native-documents/picker';
+import {Encoding} from '@novel-master/core/common';
 import {isUserCancelledPick, pickSingleDocument} from './document-pick';
-import {base64ToBytes, blobFs, localUriToFsPath, toFileUri} from './rn-file-io';
+import {blobFs, localUriToFsPath, toFileUri} from './rn-file-io';
 
 /**
  * 所选项既无自带名、又无兜底名时的最终占位名。
@@ -194,5 +195,5 @@ async function readLocalFileBytes(fsPath: string, buildMissingError?: (fsPath: s
     throw buildMissingError?.(fsPath) ?? new Error(`文件不存在: ${fsPath}`);
   }
   const base64 = await fs.readFile(fsPath, 'base64');
-  return base64ToBytes(base64);
+  return Encoding.base64ToBytes(base64);
 }

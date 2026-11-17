@@ -5,7 +5,7 @@
  * 每个文件前加 `===== <文件名> (<字节>) =====` 分隔头；总量超过 8MB 时
  * 从最旧的文件开始丢弃，并在头部写明丢了几个。
  */
-import {pad2, utf8ByteLength} from '@novel-master/core/common';
+import {Encoding, Number} from '@novel-master/core/common';
 import {exportBytesViaDocumentPicker} from './document-io';
 import {blobFs} from './rn-file-io';
 
@@ -29,7 +29,7 @@ export async function exportMobileLogs(): Promise<'saved' | 'cancelled'> {
     }
     const text = String(raw);
     const stat = await fs.stat(path).catch(() => null);
-    files.push({name, text, bytes: stat?.size ?? utf8ByteLength(text), mtimeMs: stat?.lastModified ?? 0});
+    files.push({name, text, bytes: stat?.size ?? Encoding.utf8ByteLength(text), mtimeMs: stat?.lastModified ?? 0});
   }
   // 新→旧：超限时截断的总是更旧的那批；拼接时再翻回旧→新，读起来按时间顺序。
   files.sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name));
@@ -47,7 +47,7 @@ export async function exportMobileLogs(): Promise<'saved' | 'cancelled'> {
   const sections = [...kept].reverse().map(file => `===== ${file.name} (${file.bytes}) =====\n${file.text}${file.text.endsWith('\n') ? '' : '\n'}`);
   const body = header + sections.join('');
   const now = new Date();
-  const fileName = `nm-logs-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.txt`;
+  const fileName = `nm-logs-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}-${Number.pad2(now.getHours())}${Number.pad2(now.getMinutes())}${Number.pad2(now.getSeconds())}.txt`;
   return exportBytesViaDocumentPicker({
     fileName,
     mimeType: 'text/plain',

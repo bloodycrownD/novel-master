@@ -27,8 +27,8 @@
  * @module domain/tool/builtin/search/engines/template-engine
  */
 
-import { utf8ByteLength } from "@/common/encoding.js";
-import { isRecord } from "@/common/guards.js";
+import { Encoding } from "@/common/encoding.js";
+import { Guards } from "@/common/guards.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -148,7 +148,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
       } catch {
         return Result.err(engineFailed(`${template.name} template defaultBody is not valid JSON`));
       }
-      if (!isRecord(parsedBody)) return Result.err(engineFailed(`${template.name} template defaultBody must be a JSON object`));
+      if (!Guards.isRecord(parsedBody)) return Result.err(engineFailed(`${template.name} template defaultBody must be a JSON object`));
       const pending: unknown[] = [parsedBody];
       while (pending.length > 0) {
         const node = pending.pop();
@@ -163,7 +163,7 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
           }
           continue;
         }
-        if (!isRecord(node)) continue;
+        if (!Guards.isRecord(node)) continue;
         for (const [key, value] of Object.entries(node)) {
           if (typeof value === "string") {
             const substituted = bodyValue(value);
@@ -227,11 +227,11 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
     while (pending.length > 0) {
       const node: unknown = pending.pop();
       if (Array.isArray(node)) {
-        if (node.every((item) => isRecord(item)) && (items == null || node.length > items.length)) items = node;
+        if (node.every((item) => Guards.isRecord(item)) && (items == null || node.length > items.length)) items = node;
         for (let index = node.length - 1; index >= 0; index -= 1) pending.push(node[index]);
         continue;
       }
-      if (isRecord(node)) {
+      if (Guards.isRecord(node)) {
         const children = Object.values(node);
         for (let index = children.length - 1; index >= 0; index -= 1) pending.push(children[index]);
       }
@@ -242,11 +242,11 @@ export async function runTemplateEngine(template: SearchEngineTemplate, resolved
     // 提取文本按工具输出既有 50KB 字节预算截断：预算内原样透传；超预算逐码点累计
     //（不劈开多字节字符）切片，尾部追加截断标注（文本不再保证是合法 JSON，标注让 agent 知情）。
     const fullText = JSON.stringify(items);
-    if (utf8ByteLength(fullText) <= TOOL_OUTPUT_MAX_BYTES) return Result.ok({ engine, results: fullText });
+    if (Encoding.utf8ByteLength(fullText) <= TOOL_OUTPUT_MAX_BYTES) return Result.ok({ engine, results: fullText });
     let used = 0;
     let end = 0;
     for (const char of fullText) {
-      const size = utf8ByteLength(char);
+      const size = Encoding.utf8ByteLength(char);
       if (used + size > TOOL_OUTPUT_MAX_BYTES) break;
       used += size;
       end += char.length;

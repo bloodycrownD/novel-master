@@ -17,7 +17,7 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
 import Svg, {Circle, G, Path, Text as SvgText} from 'react-native-svg';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
 import {styles} from '@/screens/stack/token-usage/styles';
 
@@ -186,7 +186,7 @@ export function PieChart({
               <Text style={[styles.pieSideDetailLabel, {color: tokens.primary}]} numberOfLines={2}>
                 {selected.label}
               </Text>
-              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>用量 {formatTokenCount(selected.totalTokens)}</Text>
+              <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>用量 {TokenFormat.count(selected.totalTokens)}</Text>
               <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>调用 {selected.calls} 次</Text>
               <Text style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>占比 {selectedShare == null ? '—' : `${Math.round(selectedShare * 100)}%`}</Text>
             </View>

@@ -1,14 +1,15 @@
 import {decode, encode, parseText, stringifyText} from '@novel-master/core';
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 import {agentDefinitionSchema, validateAgentDefinition, type AgentDefinition} from '@novel-master/core/agent';
+import {Errors} from '@novel-master/core/common';
 import {Result, type AppError} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {exportYamlFile, importYamlFile, normalizeYamlError} from './yaml-shared';
+import {exportYamlFile, importYamlFile} from './yaml-shared';
 
 export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
   // 错误通道迁移四期：parseText / decode 的已知失败沿 Result 接力；导入侧
-  // 由唯一调用方 importAgentYaml 统一走 normalizeYamlError 贴标签。
+  // 由唯一调用方 importAgentYaml 统一走 Errors.normalizeYaml 贴标签。
   const parsed = parseText(yaml, 'yaml');
   if (!parsed.ok) return Result.err(parsed.error);
   const decoded = decode(parsed.value, agentDefinitionSchema);
@@ -38,22 +39,22 @@ export async function importAgentYaml(runtime: MobileNovelMasterRuntime, agentId
     try {
       const decoded = decodeAgentYamlText(yaml);
       if (!decoded.ok) {
-        return Result.err(normalizeYamlError(decoded.error, 'Agent YAML 无效'));
+        return Result.err(Errors.normalizeYaml(decoded.error, 'Agent YAML 无效'));
       }
       const def = decoded.value;
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
       const validation = await validateAgentDefinition(def, {registeredToolNames: probe.list()});
       if (!validation.ok) {
-        return Result.err(normalizeYamlError(validation.error, 'Agent YAML 无效'));
+        return Result.err(Errors.normalizeYaml(validation.error, 'Agent YAML 无效'));
       }
       const saved = await runtime.agentRegistry.upsert(agentId, def, {registeredToolNames: probe.list()});
       if (!saved.ok) {
-        return Result.err(normalizeYamlError(saved.error, 'Agent YAML 无效'));
+        return Result.err(Errors.normalizeYaml(saved.error, 'Agent YAML 无效'));
       }
       return Result.ok(undefined);
     } catch (error) {
-      throw normalizeYamlError(error, 'Agent YAML 无效');
+      throw Errors.normalizeYaml(error, 'Agent YAML 无效');
     }
   });
 }

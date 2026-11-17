@@ -6,15 +6,16 @@
 import { decode, encode, parseText, registerBuiltinTools, stringifyText, ToolRegistry } from "@novel-master/core";
 
 import { agentDefinitionSchema, validateAgentDefinition, type AgentDefinition, type AppError } from "@novel-master/core/agent";
+import { Errors } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { exportYamlWithDialog, importYamlWithDialog, normalizeYamlError } from "./yaml-shared.js";
+import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
 
 export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
   // 错误通道迁移七期：parseText / decode 沿 Result 原样接力，不再解包抛错；
   // 对话框 consume 回调（yaml-shared，Promise<void>，只有 throw 通道）在唯一
-  // 调用处经 normalizeYamlError 贴标签还原抛错契约。
+  // 调用处经 Errors.normalizeYaml 贴标签还原抛错契约。
   const parsed = parseText(yaml, "yaml");
   if (!parsed.ok) return Result.err(parsed.error);
   const decoded = decode(parsed.value, agentDefinitionSchema);
@@ -43,30 +44,30 @@ export async function importAgentYamlWithDialog(runtime: DesktopNovelMasterRunti
     try {
       const defR = decodeAgentYamlText(yaml);
       // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-      // 过 normalizeYamlError 贴标签后抛出（错误通道迁移七期边界保留点）；
+      // 过 Errors.normalizeYaml 贴标签后抛出（错误通道迁移七期边界保留点）；
       // 外层 catch 见到已带前缀的产物原样放行，避免二次套前缀。
-      if (!defR.ok) throw normalizeYamlError(defR.error, "Agent YAML 无效");
+      if (!defR.ok) throw Errors.normalizeYaml(defR.error, "Agent YAML 无效");
       const def = defR.value;
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
       const validation = await validateAgentDefinition(def, { registeredToolNames: probe.list() });
       if (!validation.ok) {
         // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-        // 在此直接过 normalizeYamlError 转码后抛出（错误通道迁移四期，边界保留点）；
+        // 在此直接过 Errors.normalizeYaml 转码后抛出（错误通道迁移四期，边界保留点）；
         // 外层 catch 见到已带「Agent YAML 无效」前缀的产物原样放行，避免二次套前缀。
-        throw normalizeYamlError(validation.error, "Agent YAML 无效");
+        throw Errors.normalizeYaml(validation.error, "Agent YAML 无效");
       }
       const saved = await runtime.agentRegistry.upsert(agentId, def, { registeredToolNames: probe.list() });
       if (!saved.ok) {
         // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-        // 在此过 normalizeYamlError 转码后抛出（错误通道迁移四期，边界保留点）。
-        throw normalizeYamlError(saved.error, "Agent YAML 无效");
+        // 在此过 Errors.normalizeYaml 转码后抛出（错误通道迁移四期，边界保留点）。
+        throw Errors.normalizeYaml(saved.error, "Agent YAML 无效");
       }
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("Agent YAML 无效")) {
         throw error;
       }
-      throw normalizeYamlError(error, "Agent YAML 无效");
+      throw Errors.normalizeYaml(error, "Agent YAML 无效");
     }
   }, parentWindow);
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { truncateText } from "@shared/logic/common";
+import { Text } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
 
 export { ModelSamplingView } from "./ModelSamplingView";
@@ -1017,7 +1017,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     className="settings-list-item__meta-error"
                     title={row.invalid.message}
                   >
-                    {truncateText(invalidReason(row.invalid.code), 80)}
+                    {Text.truncate(invalidReason(row.invalid.code), 80)}
                   </span>
                 </span>
               ) : row.mode == null || row.mode === "all" ? (

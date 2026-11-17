@@ -31,9 +31,8 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
 // 对拍 core 真实现而非 mock 行为）。
-import {formatContextUsageLabel} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import {createLogger} from '@novel-master/core/log';
-import {formatTokenSourceBadge} from '@novel-master/core/common';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 import {ChatPromptBuildBailedError} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
@@ -62,7 +61,7 @@ function countFallback(rt: MobileNovelMasterRuntime, text: string): number {
 
 /**
  * 占用标签（源记号 + =/≈ 连接符 + pct + 占比）由 core 的
- * `formatTokenSourceBadge` + `formatContextUsageLabel` 统一给出，
+ * `TokenFormat.sourceBadge` + `TokenFormat.contextUsageLabel` 统一给出，
  * 本文件不再自备一份映射（与 desktop main 的 buildTokenStats 同源同形）。
  */
 type TokenLabelResult = {
@@ -81,8 +80,8 @@ type TokenLabelFrame = {
 };
 
 function formatLabel(r: TokenLabelResult): string {
-  const badge = formatTokenSourceBadge(r.source, r.counterKind, r.estimated);
-  return formatContextUsageLabel(r.tokenCount, r.contextWindow, badge);
+  const badge = TokenFormat.sourceBadge(r.source, r.counterKind, r.estimated);
+  return TokenFormat.contextUsageLabel(r.tokenCount, r.contextWindow, badge);
 }
 
 /**

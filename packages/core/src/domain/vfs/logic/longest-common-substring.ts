@@ -4,7 +4,7 @@
  * @module domain/vfs/logic/longest-common-substring
  */
 
-import { truncateText } from "@/common/text.js";
+import { Text } from "@/common/text.js";
 
 /** 低于此长度的公共子串视为「几乎无匹配」。 */
 export const MIN_LCS_LENGTH = 4;
@@ -119,5 +119,5 @@ export function longestCommonSubstring(a: string, b: string): LongestCommonSubst
 
 /** 截断展示用 snippet。 */
 export function truncateLcsSnippet(snippet: string): string {
-  return truncateText(snippet, MAX_LCS_SNIPPET_CHARS);
+  return Text.truncate(snippet, MAX_LCS_SNIPPET_CHARS);
 }

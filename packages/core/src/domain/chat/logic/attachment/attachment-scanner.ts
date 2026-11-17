@@ -6,7 +6,7 @@
  * @module domain/chat/logic/attachment/attachment-scanner
  */
 
-import { isBinaryFilePath, isImageFilePath } from "@/common/file.js";
+import { Guards } from "@/common/guards.js";
 import { SKILL_NAME_PATTERN } from "@/domain/skills/model/skill-name.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
@@ -148,13 +148,13 @@ function attachFromPath(rawPath: string, seenKey: string): MessageAttachment {
   const isDir = promptPathSeen.isDirToken(rawPath);
   const storePath = isDir && seenKey !== "/" ? `${seenKey}/` : seenKey;
   const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
-  if (isImageFilePath(seenKey) || isImageFilePath(rawPath)) {
+  if (Guards.isImageFilePath(seenKey) || Guards.isImageFilePath(rawPath)) {
     return { name: basename, source: "attach", type: "image", content: null, path: storePath };
   }
   if (isDir) {
     return { name: basename || storePath, source: "attach", type: "dir", content: null, path: storePath };
   }
-  if (isBinaryFilePath(seenKey) || isBinaryFilePath(rawPath)) {
+  if (Guards.isBinaryFilePath(seenKey) || Guards.isBinaryFilePath(rawPath)) {
     return { name: basename, source: "attach", type: "text", content: null, path: storePath };
   }
   return { name: basename, source: "attach", type: "text", content: null, path: storePath };

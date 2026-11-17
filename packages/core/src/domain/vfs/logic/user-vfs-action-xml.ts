@@ -7,7 +7,7 @@
  */
 
 import { XMLParser } from "fast-xml-parser";
-import { escapeXmlAttr, escapeXmlText, unescapeXmlText } from "@/common/xml.js";
+import { Xml } from "@/common/xml.js";
 
 type ParsedUserVfsActionElement = {
   readonly name: string;
@@ -28,8 +28,8 @@ const actionParser = new XMLParser({
 
 /** 通用 action XML：`<action name="…">{json}</action>`。 */
 export function buildUserVfsActionXml(name: string, params: Record<string, unknown>): string {
-  const body = escapeXmlText(JSON.stringify(params, null, 2));
-  return `<action name="${escapeXmlAttr(name)}">\n${body}\n</action>`;
+  const body = Xml.escapeText(JSON.stringify(params, null, 2));
+  return `<action name="${Xml.escapeAttr(name)}">\n${body}\n</action>`;
 }
 
 /** 解析文本中全部 action；非法 XML 或非法 JSON 按空参数处理。 */
@@ -65,7 +65,7 @@ function walkActions(nodes: unknown, parsed: ParsedUserVfsActionElement[]): void
       if (rawAttrs != null && typeof rawAttrs === "object" && !Array.isArray(rawAttrs)) {
         for (const [key, value] of Object.entries(rawAttrs)) {
           if (typeof value === "string") {
-            attrs[key] = unescapeXmlText(value);
+            attrs[key] = Xml.unescapeText(value);
           }
         }
       }
@@ -73,7 +73,7 @@ function walkActions(nodes: unknown, parsed: ParsedUserVfsActionElement[]): void
       if (name !== "") {
         const body = children.find((child) => child != null && typeof child === "object" && typeof (child as Record<string, unknown>)["#text"] === "string");
         const rawBody = body == null ? "" : String((body as Record<string, unknown>)["#text"]);
-        const raw = unescapeXmlText(rawBody).trim();
+        const raw = Xml.unescapeText(rawBody).trim();
         let params: Record<string, unknown> = {};
         if (raw !== "") {
           try {

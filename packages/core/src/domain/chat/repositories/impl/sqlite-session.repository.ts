@@ -7,7 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import type { ChatSession } from "../../model/session.js";
 import type { SessionRepository } from "../session.port.js";
 import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
@@ -20,8 +20,8 @@ function rowToSession(row: Row): ChatSession {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
-    title: nullableText(row.title),
-    parentSessionId: nullableText(row.parent_session_id),
+    title: Coerce.nullableText(row.title),
+    parentSessionId: Coerce.nullableText(row.parent_session_id),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
@@ -69,7 +69,7 @@ export class SqliteSessionRepository extends BaseSqliteChatRepository<ChatSessio
     if (rows.length === 0) {
       return null;
     }
-    return nullableText(rows[0]!.composer_draft_json);
+    return Coerce.nullableText(rows[0]!.composer_draft_json);
   }
 
   async setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean> {
@@ -84,7 +84,7 @@ export class SqliteSessionRepository extends BaseSqliteChatRepository<ChatSessio
     if (rows.length === 0) {
       return null;
     }
-    return nullableText(rows[0]!.agent_config_json);
+    return Coerce.nullableText(rows[0]!.agent_config_json);
   }
 
   async setSessionAgentConfig(id: string, agentConfigJson: string | null, updatedAtMs: number): Promise<boolean> {

@@ -8,7 +8,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError } from "@/errors/app-error.js";
@@ -83,7 +83,7 @@ function rowToMessage(row: Row): ChatMessage {
   if (!content.ok) {
     throw corruptMessageRow(row, "content_json", content.error);
   }
-  const attachments = parseAttachmentsJson(nullableText(row.attachments_json));
+  const attachments = parseAttachmentsJson(Coerce.nullableText(row.attachments_json));
   // usage 列全空时保持「无 usage 属性」形状（条件 spread 保证空对象没有 key）。
   const usageFields: MessageUsage = {
     ...(row.prompt_tokens != null ? { promptTokens: Number(row.prompt_tokens) } : {}),
@@ -109,9 +109,9 @@ function rowToMessage(row: Row): ChatMessage {
     seq: Number(row.seq),
     role: String(row.role),
     content: content.value,
-    provider: nullableText(row.provider),
-    providerId: nullableText(row.provider_id),
-    modelName: nullableText(row.model_name),
+    provider: Coerce.nullableText(row.provider),
+    providerId: Coerce.nullableText(row.provider_id),
+    modelName: Coerce.nullableText(row.model_name),
     raw,
     createdAtMs: Number(row.created_at_ms),
     hidden: Number(row.hidden) === 1,

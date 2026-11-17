@@ -10,7 +10,7 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {SessionUsageDetail} from '@novel-master/core/chat';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import {ModalShell} from '../ui/ModalShell';
 import {hitRate, formatHitRate} from '@/screens/stack/token-usage/format';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -94,10 +94,10 @@ export function MetricDetailSheet({visible, sessionId, contextTokenLabel, onClos
           ) : (
             <>
               <Row label="模型" value={last.modelName ?? '—'} tokens={tokens} />
-              <Row label="输入" value={formatTokenCount(last.promptTokens)} tokens={tokens} />
-              <Row label="输出" value={formatTokenCount(last.completionTokens)} tokens={tokens} />
-              <Row label="缓存读取" value={last.cacheReadTokens == null ? '—' : formatTokenCount(last.cacheReadTokens)} tokens={tokens} />
-              <Row label="缓存写入" value={last.cacheCreationTokens == null ? '—' : formatTokenCount(last.cacheCreationTokens)} tokens={tokens} />
+              <Row label="输入" value={TokenFormat.count(last.promptTokens)} tokens={tokens} />
+              <Row label="输出" value={TokenFormat.count(last.completionTokens)} tokens={tokens} />
+              <Row label="缓存读取" value={last.cacheReadTokens == null ? '—' : TokenFormat.count(last.cacheReadTokens)} tokens={tokens} />
+              <Row label="缓存写入" value={last.cacheCreationTokens == null ? '—' : TokenFormat.count(last.cacheCreationTokens)} tokens={tokens} />
               <Row label="缓存命中率" value={last.cacheReadTokens == null ? '—' : formatHitRate(hitRate(last.cacheReadTokens, lastBilledInput))} tokens={tokens} />
             </>
           )}

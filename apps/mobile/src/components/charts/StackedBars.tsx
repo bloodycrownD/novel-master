@@ -11,7 +11,7 @@
  */
 import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
 
 interface StackedBarsDatum {
@@ -60,7 +60,7 @@ export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, f
 
   // 三档刻度（T-MC1）：max 顶 / max÷2 中 / 0 基线；top 百分比相对
   // CHART_HEIGHT 绘图区定位，线层（内容层）与刻度值列（外层）共用同一定义。
-  // maxTotal === 0 时三档全显 0（除零安全），刻度值复用 formatTokenCount。
+  // maxTotal === 0 时三档全显 0（除零安全），刻度值复用 TokenFormat.count。
   // top 用模板字面量类型：RN 样式的 DimensionValue 不收宽 string。
   const gridTiers: readonly {
     tier: 'max' | 'mid' | 'zero';
@@ -73,14 +73,14 @@ export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, f
       top: '0%',
       // 文字整体抬到顶线上方，不压 max 线。
       translateY: -13,
-      text: maxTotal > 0 ? formatTokenCount(maxTotal) : '0',
+      text: maxTotal > 0 ? TokenFormat.count(maxTotal) : '0',
     },
     {
       tier: 'mid' as const,
       top: '50%',
       // 半行高下沉，文字中线贴 50% 线。
       translateY: -6,
-      text: maxTotal > 0 ? formatTokenCount(Math.round(maxTotal / 2)) : '0',
+      text: maxTotal > 0 ? TokenFormat.count(Math.round(maxTotal / 2)) : '0',
     },
     {
       tier: 'zero' as const,
@@ -133,7 +133,7 @@ export function StackedBars({data, selectedKey, onSelect, onLongPress, tokens, f
               const primaryHeight = height > 0 && total > 0 ? Math.max(1, Math.round((datum.primary / total) * height)) : 0;
               const secondaryHeight = height - primaryHeight;
               // 读屏文案与 desktop 侧 bucketTooltip 同口径：日期 · 输入 · 输出 · 调用次数。
-              const labelParts = [label, `输入 ${formatTokenCount(datum.primary)}`, `输出 ${formatTokenCount(datum.secondary ?? 0)}`, ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : [])];
+              const labelParts = [label, `输入 ${TokenFormat.count(datum.primary)}`, `输出 ${TokenFormat.count(datum.secondary ?? 0)}`, ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : [])];
               const barA11yLabel = labelParts.join(' · ');
               return (
                 <Pressable

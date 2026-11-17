@@ -25,7 +25,7 @@
  * @module domain/tool/builtin/search/types
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { findPlaintextSecrets } from "./curl-import.js";
@@ -237,7 +237,7 @@ function unknownPlaceholderIn(text: string): string | null {
  */
 export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineTemplate, SearchTemplateValidationError> {
   const invalid = (reason: string) => Result.err(new AppError("TOOL_SEARCH_TEMPLATE_INVALID", { descriptor: { key: "error.tool.search_template_invalid", params: { reason } } }));
-  if (!isRecord(raw)) return invalid("expected an object");
+  if (!Guards.isRecord(raw)) return invalid("expected an object");
 
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
   if (name.length === 0) return invalid("name is required");
@@ -256,7 +256,7 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
     return invalid("url must be a valid http(s) URL");
   }
 
-  if (!isRecord(raw.headers)) return invalid("headers must be an object of string values");
+  if (!Guards.isRecord(raw.headers)) return invalid("headers must be an object of string values");
   const headers: Record<string, string> = {};
   for (const [headerName, headerValue] of Object.entries(raw.headers)) {
     if (headerName.length === 0) return invalid("header name must not be empty");
@@ -280,7 +280,7 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
       } catch {
         return invalid("defaultBody must be valid JSON");
       }
-      if (!isRecord(parsedBody)) return invalid("defaultBody must be a JSON object");
+      if (!Guards.isRecord(parsedBody)) return invalid("defaultBody must be a JSON object");
       const pending: unknown[] = [parsedBody];
       while (pending.length > 0) {
         const node = pending.pop();
@@ -292,7 +292,7 @@ export function validateSearchEngineTemplate(raw: unknown): Result<SearchEngineT
           if (node.includes("{{count}}") && node !== "{{count}}") return invalid("{{count}} must be a whole-string value in defaultBody");
           continue;
         }
-        if (isRecord(node)) {
+        if (Guards.isRecord(node)) {
           for (const key of Object.keys(node)) {
             if (TEMPLATE_PLACEHOLDER_PROBE.test(key)) return invalid(`defaultBody key ${key} must not contain a placeholder`);
           }

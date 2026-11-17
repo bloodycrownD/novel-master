@@ -2,12 +2,10 @@
  * Mobile YAML 导入导出的公共编排。
  *
  * 选择器的 save/pick/keepLocalCopy 编排统一走 `document-io`；
- * 错误归一已经抽到 core 的 `normalizeYamlError`，这里直接复用；具体
- * 每个 schema 的 decode/encode 和落库逻辑交给调用方以回调注入，避免
- * 把业务知识塞进这层。
+ * 具体每个 schema 的 decode/encode 和落库逻辑交给调用方以回调注入，避免
+ * 把业务知识塞进这层。错误归一由 core 的 `Errors.normalizeYaml` 提供，
+ * 调用方直接从 `@novel-master/core/common` 取。
  */
-export {normalizeYamlError} from '@novel-master/core/common';
-
 import {Result, AppError} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, pickAndReadText, type PickLocalFileOptions} from './document-io';
 import {blobFs} from './rn-file-io';
@@ -36,7 +34,7 @@ export async function exportYamlFile(yaml: string, fileName: string): Promise<'s
  *
  * 失败通道（错误通道迁移四期）：consume 的已知失败沿 `Result.err` 接力给
  * 调用方；pick/读文件的平台异常仍走 reject（调用方 catch 收口）。
- * 错误类型是 `Error`：core normalizeYamlError 的归一产物含普通 Error
+ * 错误类型是 `Error`：core `Errors.normalizeYaml` 的归一产物含普通 Error
  * （字符串前缀分支），不强升 AppError。
  */
 export async function importYamlFile(consume: (yamlText: string) => Promise<Result<void, Error>>): Promise<Result<void, Error>> {

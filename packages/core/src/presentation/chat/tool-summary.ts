@@ -14,7 +14,7 @@
  * 差异由 `test/chat/tool-summary.test.ts` 的「空串 path 回落语义」用例钉住。
  */
 
-import { truncateText } from "@/common/text.js";
+import { Text } from "@/common/text.js";
 
 /** 摘要入参（取三份旧签名的并集：WebView 侧允许 null/undefined）。 */
 type ToolInput = Record<string, unknown> | null | undefined;
@@ -135,11 +135,11 @@ export function summarizeToolInput(name: string, input: ToolInput): string {
 }
 
 /**
- * 摘要长度收敛：复用 `truncateText(raw, 117)`，总长上限 118。
+ * 摘要长度收敛：复用 `Text.truncate(raw, 117)`，总长上限 118。
  *
  * 公共尾巴的 JSON 兜底与 curl/search 分支共用；此前这里手写
  * `raw.slice(0, 117)`，与 common/text 的截断口径重复。
  */
 function clampSummary(raw: string): string {
-  return truncateText(raw, 117);
+  return Text.truncate(raw, 117);
 }

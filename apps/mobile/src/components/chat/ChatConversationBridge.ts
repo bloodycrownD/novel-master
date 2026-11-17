@@ -30,7 +30,7 @@
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
  * try/catch 静默吞掉 → `webReady` 永假 → 全部下行丢弃 → 落进 8s 兜底白屏。
  */
-import {isRecord} from '@novel-master/core/common';
+import {Guards} from '@novel-master/core/common';
 import type {
   ChatTranscriptScrollSnapshot,
   TranscriptFlags,
@@ -228,7 +228,7 @@ export function decodeConversationUpstream(raw: unknown): ConversationDecodeResu
       return {ok: false, reason: 'malformed'};
     }
   }
-  if (!isRecord(parsed)) {
+  if (!Guards.isRecord(parsed)) {
     return {ok: false, reason: 'malformed'};
   }
   const type = parsed.type;
@@ -243,7 +243,7 @@ export function decodeConversationUpstream(raw: unknown): ConversationDecodeResu
     message: {
       v: typeof parsed.v === 'number' ? parsed.v : undefined,
       type,
-      payload: isRecord(parsed.payload) ? parsed.payload : {},
+      payload: Guards.isRecord(parsed.payload) ? parsed.payload : {},
     },
   };
 }

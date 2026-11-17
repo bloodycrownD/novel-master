@@ -5,7 +5,7 @@
  */
 
 import {messageBodyTextFromBlocks} from "../../content/message-body-text.js";
-import {stringOrEmpty} from "@/common/coerce.js";
+import {Coerce} from "@/common/coerce.js";
 import type {ToolResultBlock, ToolUseBlock} from "../../model/content-block.js";
 import type {ChatMessageData} from "../../model/message.js";
 import {readMessageMetadata} from "../../model/message-metadata.js";
@@ -54,14 +54,14 @@ class UserVfsTurns {
         return parseUserVfsActionsFromText(text).map(({name, params}) => {
             let resolvedName = name;
             if (name === "rename" || name === "move") {
-                const from = stringOrEmpty(params.from);
-                const to = stringOrEmpty(params.to);
+                const from = Coerce.string(params.from);
+                const to = Coerce.string(params.to);
                 if (from !== "" && to !== "") {
                     resolvedName = attachmentPath.actionBetween(from, to);
                 }
             }
-            const path = resolvedName === "rename" || resolvedName === "move" ? `${stringOrEmpty(params.from)}→${stringOrEmpty(params.to)}` : stringOrEmpty(params.path);
-            const hunks: ParsedUserVfsEditHunk[] = resolvedName === "edit" ? [{index: "1", old: stringOrEmpty(params.oldString), new: stringOrEmpty(params.newString)}] : [];
+            const path = resolvedName === "rename" || resolvedName === "move" ? `${Coerce.string(params.from)}→${Coerce.string(params.to)}` : Coerce.string(params.path);
+            const hunks: ParsedUserVfsEditHunk[] = resolvedName === "edit" ? [{index: "1", old: Coerce.string(params.oldString), new: Coerce.string(params.newString)}] : [];
             return {
                 name: resolvedName,
                 path,

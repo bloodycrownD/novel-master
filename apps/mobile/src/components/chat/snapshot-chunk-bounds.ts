@@ -7,7 +7,7 @@
  * 组件，两个宿主任意 import；旧组件保留 re-export 保兼容。
  */
 import {type ChatMessageData} from '@novel-master/core/chat';
-import {utf8ByteLength} from '@novel-master/core/common';
+import {Encoding} from '@novel-master/core/common';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 
 /**
@@ -41,7 +41,7 @@ type Messages = readonly ChatMessageData[];
  */
 export function planSnapshotChunkBounds(messages: Messages): Bounds {
   return planChunkBounds(messages.length, index =>
-    utf8ByteLength(JSON.stringify(messages[index]!.content)),
+    Encoding.utf8ByteLength(JSON.stringify(messages[index]!.content)),
   );
 }
 
@@ -55,7 +55,7 @@ export function planRowChunkBounds(rows: readonly TranscriptRow[]): Bounds {
     return [];
   }
   return planChunkBounds(rows.length, index =>
-    utf8ByteLength(JSON.stringify(rows[index])),
+    Encoding.utf8ByteLength(JSON.stringify(rows[index])),
   );
 }
 

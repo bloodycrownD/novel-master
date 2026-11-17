@@ -8,7 +8,7 @@
  * @module services/smart-sort-rule-yaml
  */
 import { parseText, stringifyText } from "@novel-master/core";
-import { normalizeSmartSortImportError } from "@novel-master/core/common";
+import { Errors } from "@novel-master/core/common";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
@@ -28,9 +28,9 @@ export async function importSmartSortRuleYamlWithDialog(runtime: DesktopNovelMas
       await runtime.smartSortRule.importRules(parseText(yaml, "yaml"));
     } catch (error) {
       // 存储/事务类故障原样上抛、其余套「YAML 无效」前缀——判据与前缀都在
-      // core 的 normalizeSmartSortImportError 里（mobile 侧调同一个函数）。
+      // core 的 Errors.normalizeSmartSortImport 里（mobile 侧调同一个函数）。
       // 别在这里把三元抄回本地：两份字面量必然漂一份，而旧测试只重演不断接线。
-      throw normalizeSmartSortImportError(error);
+      throw Errors.normalizeSmartSortImport(error);
     }
   }, parentWindow);
 }

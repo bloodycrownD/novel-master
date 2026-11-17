@@ -14,7 +14,7 @@
  */
 
 import { createLogger } from "@/infra/log/logger.js";
-import { errorText } from "../../../../common/error.js";
+import { Errors } from "../../../../common/errors.js";
 
 const log = createLogger("vfs.zlib-accelerator");
 
@@ -87,7 +87,7 @@ export function tryZlibDeflate(data: Uint8Array, level?: number): Uint8Array | n
   } catch (error) {
     if (!warned.deflate) {
       warned.deflate = true;
-      log.warn(`deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
+      log.warn(`deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
     }
     return null;
   }
@@ -107,7 +107,7 @@ export function tryZlibInflate(data: Uint8Array): Uint8Array | null {
   } catch (error) {
     if (!warned.inflate) {
       warned.inflate = true;
-      log.warn(`inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
+      log.warn(`inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${Errors.text(error)}`);
     }
     return null;
   }

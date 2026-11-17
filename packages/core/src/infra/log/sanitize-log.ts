@@ -10,8 +10,8 @@
  * @module infra/log/sanitize-log
  */
 
-import { utf8ByteLength } from "@/common/encoding.js";
-import { fnv1aHex16 } from "@/common/hash.js";
+import { Encoding } from "@/common/encoding.js";
+import { Hash } from "@/common/hash.js";
 import type { LogDetail, LogLevel, LogRecord } from "./log-record.js";
 
 /** message 上限（不做内容扫描——call site 不得把正文插值进 message）。 */
@@ -48,11 +48,11 @@ function truncate(text: string, maxChars: number): string {
 /**
  * 公开 API：把一段正文压成「长度 + 指纹」。
  *
- * `hash` 复用 {@link fnv1aHex16}（16 位小写 hex）；`chars` 是 UTF-16 长度，
+ * `hash` 复用 {@link Hash.fnv1aHex16}（16 位小写 hex）；`chars` 是 UTF-16 长度，
  * 与调用方原本 `text.length` 口径一致。
  */
 export function describeText(text: string): { readonly chars: number; readonly hash: string } {
-  return { chars: text.length, hash: fnv1aHex16(text) };
+  return { chars: text.length, hash: Hash.fnv1aHex16(text) };
 }
 
 /**
@@ -166,7 +166,7 @@ function sanitizeValue(value: unknown, depth: number, seen: Set<object>): unknow
  * emit 入口：message 截断 + detail 脱敏 + 8KB 总量熔断，产出可直接交给
  * 任何 sink 的记录。
  */
-// nm-style: keep-local — 内联会把 truncate/sanitizeValue/utf8ByteLength 与三个上限常量一并搬进
+// nm-style: keep-local — 内联会把 truncate/sanitizeValue/Encoding.utf8ByteLength 与三个上限常量一并搬进
 // logger.ts，等于把「脱敏策略」和「日志运行时」耦合回一处；这里是脱敏模块的产出边界，保留独立。
 export function toLogRecord(level: LogLevel, scope: string, message: string, detail: LogDetail | undefined): LogRecord {
   const safeMessage = truncate(message, MESSAGE_MAX_CHARS);
@@ -174,6 +174,6 @@ export function toLogRecord(level: LogLevel, scope: string, message: string, det
     return { ts: Date.now(), level, scope, message: safeMessage };
   }
   const sanitized = sanitizeValue(detail, 0, new Set<object>()) as Record<string, unknown>;
-  const bytes = utf8ByteLength(JSON.stringify(sanitized) ?? "");
+  const bytes = Encoding.utf8ByteLength(JSON.stringify(sanitized) ?? "");
   return { ts: Date.now(), level, scope, message: safeMessage, detail: bytes > DETAIL_MAX_BYTES ? { __truncated: true, bytes } : sanitized };
 }

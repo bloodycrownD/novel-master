@@ -5,7 +5,7 @@
  * @module domain/chat/logic/attachment/dir-attach-tree-renderer
  */
 
-import {utf8ByteLength} from "@/common/encoding.js";
+import {Encoding} from "@/common/encoding.js";
 import type {VfsService} from "@/domain/vfs/ports/vfs-service.port.js";
 import type {SessionKkvService} from "@/service/session-kkv/session-kkv.port.js";
 
@@ -84,7 +84,7 @@ class DirAttachTreeRenderer {
             const branch = isLast ? "└── " : "├── ";
             const chunk = `${branch}${children[i]!.name}\n`;
             const next = parts.join("") + chunk;
-            if (utf8ByteLength(next) > maxBytes) {
+            if (Encoding.utf8ByteLength(next) > maxBytes) {
                 truncated = true;
                 break;
             }

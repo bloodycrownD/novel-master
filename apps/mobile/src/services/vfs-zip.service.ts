@@ -5,9 +5,10 @@
  */
 import {types} from '@react-native-documents/picker';
 import {AppError, createVfsZipIoService, type VfsScope, type VfsZipImportOptions} from '@novel-master/core/vfs';
+import {Encoding} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, pickAndReadBytes, type PickAndReadOptions} from './document-io';
-import {blobFs, bytesToBase64} from './rn-file-io';
+import {blobFs} from './rn-file-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /**
@@ -92,7 +93,11 @@ export async function exportVfsZip(runtime: MobileNovelMasterRuntime, scope: Vfs
   const base = zipBaseNameFromPath(directoryPath);
   const zipName = options.fileName ?? (base != null ? `${base}.zip` : await resolveWorkspaceZipName(runtime, scope));
 
-  const exportResult = await exportBytesViaDocumentPicker({fileName: zipName, mimeType: 'application/zip', write: tmpPath => blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64')});
+  const exportResult = await exportBytesViaDocumentPicker({
+    fileName: zipName,
+    mimeType: 'application/zip',
+    write: tmpPath => blobFs().writeFile(tmpPath, Encoding.bytesToBase64(bytes), 'base64'),
+  });
   return Result.ok(exportResult);
 }
 

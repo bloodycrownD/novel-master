@@ -2,13 +2,12 @@
  * RN 文件 URI / 字节转换工具的单一实现（services/C-3 收编）。
  *
  * 之前 db-backup / vfs-zip / vfs-character-card / yaml-shared 各持有一份
- * 逐字相同（或同族）的副本，改一处漏三处；现在统一从这里导入。
+ * 逐字相同（或同族）的副本，改一处漏三处；现在统一从这里导入。base64
+ * 编解码已收进 core common 的 `Encoding`，本文件不再转出。
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
 import {AppError} from '@novel-master/core/agent';
-
-export {base64ToBytes, bytesToBase64} from '@novel-master/core/common';
 
 /** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
 export function localUriToFsPath(localUri: string): string {

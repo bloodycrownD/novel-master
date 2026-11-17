@@ -10,7 +10,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
 import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-stored-content.js";
@@ -94,7 +94,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const row = rows[0]!;
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
-    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: nullableText(row.content_hash) });
+    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: Coerce.nullableText(row.content_hash) });
     if (!resolved.ok) return Result.err(resolved.error);
     return Result.ok({
       entryId: Number(row.entry_id),
@@ -121,7 +121,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
     return {
       status: row.status as VfsRevisionStatus,
-      contentHash: nullableText(row.content_hash),
+      contentHash: Coerce.nullableText(row.content_hash),
     };
   }
 
@@ -146,7 +146,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const row of rows) {
         result.set(revisionPairKey(Number(row.entry_id), Number(row.version)), {
           status: row.status as VfsRevisionStatus,
-          contentHash: nullableText(row.content_hash),
+          contentHash: Coerce.nullableText(row.content_hash),
         });
       }
     }

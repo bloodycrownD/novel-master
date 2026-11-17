@@ -21,7 +21,7 @@ import {
 import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
@@ -162,7 +162,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}` }));
       }
 
-      const sizeBytes = utf8ByteLength(content);
+      const sizeBytes = Encoding.utf8ByteLength(content);
       if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
         const singleFile = {
           descriptor: { key: "error.vfs.character_card_too_large.single_file" as const, params: { logical, size_bytes: sizeBytes, limit_bytes: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } },

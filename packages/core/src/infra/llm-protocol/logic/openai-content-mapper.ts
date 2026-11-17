@@ -6,7 +6,7 @@
  * @module infra/llm-protocol/logic/openai-content-mapper
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
@@ -143,7 +143,7 @@ export function chatMessagesToOpenAi(messages: readonly ChatMessageData[]): Resu
  * OpenAI `choices[0].message` (or equivalent) → NM {@link ContentBlock} array.
  */
 export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
-  if (!isRecord(message)) {
+  if (!Guards.isRecord(message)) {
     return [];
   }
 
@@ -162,12 +162,12 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
     textParts.push(content);
   } else if (Array.isArray(content)) {
     for (const part of content) {
-      if (!isRecord(part)) {
+      if (!Guards.isRecord(part)) {
         continue;
       }
       if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
         textParts.push(part.text);
-      } else if (part.type === "image_url" && isRecord(part.image_url)) {
+      } else if (part.type === "image_url" && Guards.isRecord(part.image_url)) {
         const url = part.image_url.url;
         if (typeof url === "string" && url !== "") {
           if (url.startsWith("data:")) {
@@ -198,11 +198,11 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   const toolCalls = message.tool_calls;
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
-      if (!isRecord(tc) || tc.type !== "function") {
+      if (!Guards.isRecord(tc) || tc.type !== "function") {
         continue;
       }
       const fn = tc.function;
-      if (!isRecord(fn) || typeof fn.name !== "string") {
+      if (!Guards.isRecord(fn) || typeof fn.name !== "string") {
         continue;
       }
       const id = typeof tc.id === "string" ? tc.id : "";
@@ -247,7 +247,7 @@ type OpenAiStreamBlocks = { blocks: ContentBlock[]; degradedToolCalls: DegradedT
  * @internal
  */
 export function openAiStreamDeltaToEvents(delta: unknown, state: OpenAiStreamAccumulatorState, onStream?: (event: LlmStreamEvent) => void): void {
-  if (!isRecord(delta)) {
+  if (!Guards.isRecord(delta)) {
     return;
   }
 
@@ -256,7 +256,7 @@ export function openAiStreamDeltaToEvents(delta: unknown, state: OpenAiStreamAcc
     emitDirectTextDelta(state, content, onStream);
   } else if (Array.isArray(content)) {
     for (const part of content) {
-      if (!isRecord(part)) {
+      if (!Guards.isRecord(part)) {
         continue;
       }
       if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
@@ -277,7 +277,7 @@ export function openAiStreamDeltaToEvents(delta: unknown, state: OpenAiStreamAcc
   }
 
   for (const tc of toolCallDeltas) {
-    if (!isRecord(tc)) {
+    if (!Guards.isRecord(tc)) {
       continue;
     }
     const index = typeof tc.index === "number" ? tc.index : 0;
@@ -290,7 +290,7 @@ export function openAiStreamDeltaToEvents(delta: unknown, state: OpenAiStreamAcc
       acc.id = tc.id;
     }
     const fn = tc.function;
-    if (isRecord(fn)) {
+    if (Guards.isRecord(fn)) {
       if (typeof fn.name === "string" && fn.name !== "") {
         acc.name = fn.name;
       }

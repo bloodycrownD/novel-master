@@ -7,7 +7,7 @@
  * @module infra/llm-protocol/logic/debug-fetch
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { describeText } from "@/infra/log/index.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
@@ -83,18 +83,18 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
           }
           if (Array.isArray(parsed.contents)) {
             summary.contents = parsed.contents.slice(0, 4).map((content, index) => {
-              if (!isRecord(content) || !Array.isArray(content.parts)) {
+              if (!Guards.isRecord(content) || !Array.isArray(content.parts)) {
                 return { index, role: "?", parts: 0 };
               }
               const first = content.parts[0];
-              const fr = isRecord(first) ? first.functionResponse : undefined;
-              const fc = isRecord(first) ? first.functionCall : undefined;
+              const fr = Guards.isRecord(first) ? first.functionResponse : undefined;
+              const fc = Guards.isRecord(first) ? first.functionCall : undefined;
               return {
                 index,
                 role: content.role,
-                partKinds: content.parts.map((part) => (isRecord(part) ? Object.keys(part)[0] ?? "?" : "?")),
-                functionResponseName: isRecord(fr) && typeof fr.name === "string" ? fr.name : undefined,
-                functionCallName: isRecord(fc) && typeof fc.name === "string" ? fc.name : undefined,
+                partKinds: content.parts.map((part) => (Guards.isRecord(part) ? Object.keys(part)[0] ?? "?" : "?")),
+                functionResponseName: Guards.isRecord(fr) && typeof fr.name === "string" ? fr.name : undefined,
+                functionCallName: Guards.isRecord(fc) && typeof fc.name === "string" ? fc.name : undefined,
               };
             });
           }
@@ -117,7 +117,7 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
     if (typeof body === "string") {
       try {
         const parsed: unknown = JSON.parse(body);
-        if (isRecord(parsed) && parsed.stream === true) {
+        if (Guards.isRecord(parsed) && parsed.stream === true) {
           requestIsStreaming = true;
         }
       } catch {

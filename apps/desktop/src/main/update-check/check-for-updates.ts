@@ -2,10 +2,7 @@
  * Orchestrates local vs remote version comparison for desktop update checks.
  */
 
-import {
-  compareAppVersions,
-  excerptReleaseNotes,
-} from "@novel-master/core/common";
+import { Release } from "@novel-master/core/common";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { resolveLatestRelease, type FetchFn } from "./resolve-latest-release.js";
 import type { UpdateCheckData } from "./types.js";
@@ -20,7 +17,7 @@ export async function checkForUpdates(localVersion: string, fetchFn?: FetchFn): 
     throw new Error("更新检查已禁用（测试环境）");
   }
   const release = await resolveLatestRelease(fetchFn);
-  const cmp = compareAppVersions(localVersion, release.version);
+  const cmp = Release.compareVersions(localVersion, release.version);
   // 已知失败（版本号非法）沿 Result.err 上行，IPC 边界经 formatIpcError
   // 收口（错误通道迁移六期）；网络等未知异常仍走 reject。
   if (!cmp.ok) return Result.err(cmp.error);
@@ -30,7 +27,7 @@ export async function checkForUpdates(localVersion: string, fetchFn?: FetchFn): 
     remoteVersion: release.version,
     tagName: release.tagName,
     releaseUrl: release.htmlUrl,
-    releaseNotesExcerpt: excerptReleaseNotes(release.body, "desktop"),
+    releaseNotesExcerpt: Release.excerptNotes(release.body, "desktop"),
     status,
   });
 }

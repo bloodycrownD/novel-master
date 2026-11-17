@@ -8,9 +8,9 @@
  * @module domain/character-card/logic/character-card-to-md-tree
  */
 
-import { base64ToBytes } from "@/common/encoding.js";
-import { isRecord } from "@/common/guards.js";
-import { parseJsonText } from "@/common/json.js";
+import { Encoding } from "@/common/encoding.js";
+import { Guards } from "@/common/guards.js";
+import { Json } from "@/common/json.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { stringifyText } from "@/infra/serialization/stringify-text.js";
@@ -38,13 +38,13 @@ function decodeLatin1(bytes: Uint8Array): string {
 }
 
 function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardError> {
-  if (!isRecord(card)) {
+  if (!Guards.isRecord(card)) {
     return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
   }
   const spec = card["spec"];
   const dataRaw = card["data"];
-  const data = isRecord(dataRaw) ? dataRaw : undefined;
-  const recognizable = spec === SPEC_V2 || data != null || typeof card["description"] === "string" || typeof card["first_mes"] === "string" || isRecord(card["character_book"]);
+  const data = Guards.isRecord(dataRaw) ? dataRaw : undefined;
+  const recognizable = spec === SPEC_V2 || data != null || typeof card["description"] === "string" || typeof card["first_mes"] === "string" || Guards.isRecord(card["character_book"]);
   if (!recognizable) {
     if (typeof spec === "string" && spec.length > 0) {
       return Result.err(new AppError("VFS_CHARACTER_CARD_UNSUPPORTED_SPEC", { descriptor: { key: "error.vfs.character_card_unsupported_spec", params: { spec } } }));
@@ -59,7 +59,7 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardE
   const greetingsRaw = data?.["alternate_greetings"] ?? card["alternate_greetings"];
   const alternateGreetings = Array.isArray(greetingsRaw) ? greetingsRaw.filter((item): item is string => typeof item === "string") : [];
   const bookRaw = data?.["character_book"] ?? card["character_book"];
-  const book = isRecord(bookRaw) ? bookRaw : undefined;
+  const book = Guards.isRecord(bookRaw) ? bookRaw : undefined;
   const entriesRaw = book?.["entries"];
   const entries = Array.isArray(entriesRaw) ? entriesRaw : [];
 
@@ -74,7 +74,7 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardE
   const usedNames = new Set<string>();
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    if (!isRecord(entry)) {
+    if (!Guards.isRecord(entry)) {
       continue;
     }
     const rawKeys = entry["keys"];
@@ -104,7 +104,7 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardE
  */
 export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<MdTree, CharacterCardError> {
   if (typeof input === "string") {
-    const parsed = parseJsonText(input);
+    const parsed = Json.parseText(input);
     if (!parsed.ok) {
       return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
     }
@@ -142,11 +142,11 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
     }
     let jsonText: string;
     try {
-      jsonText = new TextDecoder("utf-8").decode(base64ToBytes(charaText));
+      jsonText = new TextDecoder("utf-8").decode(Encoding.base64ToBytes(charaText));
     } catch {
       return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
     }
-    const parsed = parseJsonText(jsonText);
+    const parsed = Json.parseText(jsonText);
     if (!parsed.ok) {
       return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
     }
@@ -159,7 +159,7 @@ export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<M
   } catch {
     return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
   }
-  const parsed = parseJsonText(text);
+  const parsed = Json.parseText(text);
   if (!parsed.ok) {
     return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", { descriptor: { key: "error.vfs.character_card_unrecognized" } }));
   }

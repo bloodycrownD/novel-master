@@ -4,7 +4,7 @@
  * @module domain/chat/content/format-message-cli
  */
 
-import { truncateText } from "@/common/text.js";
+import { Text } from "@/common/text.js";
 import type { MessageContent } from "../model/content-block.js";
 
 /**
@@ -22,9 +22,9 @@ export function formatMessageForCli(content: MessageContent): string {
       case "tool_use":
         return `[tool_use] ${block.name} (${block.id})`;
       case "tool_result":
-        return `[tool_result] ${block.toolUseId}: ${truncateText(block.content, 120)}`;
+        return `[tool_result] ${block.toolUseId}: ${Text.truncate(block.content, 120)}`;
       case "thinking":
-        return `[thinking] ${truncateText(block.text, 80)}`;
+        return `[thinking] ${Text.truncate(block.text, 80)}`;
       case "redacted_thinking":
         return "[thinking redacted]";
     }

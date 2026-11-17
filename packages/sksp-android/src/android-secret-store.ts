@@ -9,7 +9,7 @@
  * @module android-secret-store
  */
 
-import { base64ToBytes, bytesToBase64 } from "@novel-master/core/common";
+import { Encoding } from "@novel-master/core/common";
 import type { TdbcConnection, Row } from "@novel-master/core/tdbc";
 import {
   BaseSqliteSecretStore,
@@ -26,7 +26,7 @@ function decodeBlob(value: unknown): Uint8Array {
     return value;
   }
   if (typeof value === "string") {
-    return base64ToBytes(value);
+    return Encoding.base64ToBytes(value);
   }
   throw new SkspError("DB_ERROR", "Invalid blob column");
 }
@@ -57,8 +57,8 @@ const androidStrategy: SkspCryptoStrategy = {
     try {
       return await native.decrypt(
         ref,
-        bytesToBase64(decodeBlob(row.ciphertext)),
-        bytesToBase64(decodeBlob(iv)),
+        Encoding.bytesToBase64(decodeBlob(row.ciphertext)),
+        Encoding.bytesToBase64(decodeBlob(iv)),
       );
     } catch (cause) {
       throw new SkspError(

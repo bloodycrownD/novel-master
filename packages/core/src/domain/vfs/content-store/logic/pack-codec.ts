@@ -23,7 +23,7 @@
 import { applyDelta, createDelta, getDeltaTargetSize } from "fossil-delta";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { errorText } from "../../../../common/error.js";
+import { Errors } from "../../../../common/errors.js";
 import { compressZlib, decompressZlib } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */
@@ -372,12 +372,12 @@ function inflateFossilSegment(packBytes: Uint8Array, segment: VfsPackSpan, index
  * @param phase 出错阶段：`inflate` = 该段 zlib 解不开；`targetSize` = delta 头损坏
  *   读不出输出规模；`applyDelta` = 该段解开了但沿链 apply 到它时炸（delta 自身损坏 /
  *   校验和不符）
- * @param error 底层抛出的值（任意类型，文案统一走 `errorText` 兜底）
+ * @param error 底层抛出的值（任意类型，文案统一走 `Errors.text` 兜底）
  * @returns 带段号/区间/阶段/原因的 AppError，并以 `{ cause }` 挂住原始错误供上层
  *   取详情（`cause` 保底，不依赖它一定被消费）
  */
 function segmentError(index: number, segment: VfsPackSpan, phase: "inflate" | "targetSize" | "applyDelta", error: unknown): AppError<"VFS_CONTENT_CORRUPT"> {
-  return new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${errorText(error)}`, segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
+  return new AppError("VFS_CONTENT_CORRUPT", { detail: `fossil-chain-v1 段 ${index} ${phase} 失败: offset=${segment.offset} length=${segment.length} 原因=${Errors.text(error)}`, segmentIndex: index, offset: segment.offset, length: segment.length, phase }, { cause: error });
 }
 
 function assertSpanWithin(span: VfsPackSpan, limit: number, label: string): Result<void, VfsContentError> {

@@ -41,7 +41,7 @@
  * @module infra/llm-protocol/logic/llm-sse-transport
  */
 
-import { truncateText } from "@/common/text.js";
+import { Text } from "@/common/text.js";
 import { AppError } from "@/errors/app-error.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { FetchFn } from "../ports/adapter.port.js";
@@ -434,7 +434,7 @@ export function postSse(url: string, init: RequestInit, onChunk: SseByteHandler,
 
         if (status < 200 || status >= 300) {
           const body = xhr.responseText;
-          const snippet = truncateText(body, 500);
+          const snippet = Text.truncate(body, 500);
           rejectOnce(new AppError("PROVIDER_HTTP_ERROR", { detail: `HTTP ${status}: ${snippet}`, providerId }));
           return;
         }

@@ -8,7 +8,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import type { SessionRunState, SessionRunStatus } from "../../model/session-run-state.js";
 import type { SessionRunStateRepository } from "../session-run-state.port.js";
 
@@ -24,9 +24,9 @@ function rowToState(row: Row): SessionRunState {
     completionTokens: Number(row.completion_tokens ?? 0),
     // token_source 列收窄：仅认 usage/heuristic，脏值/缺省回退 heuristic。
     tokenSource: row.token_source === "usage" ? "usage" : "heuristic",
-    partialText: nullableText(row.partial_text),
-    partialThinking: nullableText(row.partial_thinking),
-    pendingChildrenJson: nullableText(row.pending_children_json),
+    partialText: Coerce.nullableText(row.partial_text),
+    partialThinking: Coerce.nullableText(row.partial_thinking),
+    pendingChildrenJson: Coerce.nullableText(row.pending_children_json),
     updatedAtMs: Number(row.updated_at_ms),
   };
 }

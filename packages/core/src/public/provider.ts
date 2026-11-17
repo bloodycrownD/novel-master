@@ -175,11 +175,8 @@ export {
 // 控制流结果类型（错误通道迁移二期）：resolve 读口的弃权改沿
 // Outcome.cancelled/replaced 返回，apps 读口按 kind 判定，不再 catch 哨兵类。
 export type { Interrupt, Outcome } from "../infra/tokenizer/index.js";
-// token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
-// 这里直接转出（不经 infra 中转）。
-export {
-  formatTokenSourceBadge,
-  formatContextUsageLabel,
-  type TokenSourceBadge,
-} from "../common/format-token-count.js";
+// token-source-label：badge 与完整占用标签的单源在 common 的 TokenFormat
+// namespace（common/token-format.ts），这里直接转出 namespace（不经 infra 中转）。
+export { TokenFormat } from "../common/index.js";
+export type { TokenSourceBadge } from "../common/index.js";
 export { isValidTokenCounterModePref } from "../infra/tokenizer/index.js";

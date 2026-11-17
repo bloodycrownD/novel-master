@@ -14,7 +14,7 @@ import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "no
 import path from "node:path";
 import { app } from "electron";
 import { addLogSink, planLogFileWrite, type LogFileEntry, type LogLevel, type LogRecord } from "@novel-master/core/log";
-import { pad2 } from "@novel-master/core/common";
+import { Number } from "@novel-master/core/common";
 import { isDesktopLlmDebug } from "./llm-debug-flag.js";
 
 /** 日志级别从低到高；`minLevel` 以下的记录在写盘前丢弃。 */
@@ -53,7 +53,7 @@ export function installDesktopLogSink(options: { readonly logsDir?: string } = {
       if (LEVEL_ORDER.indexOf(record.level) < LEVEL_ORDER.indexOf(minLevel)) return;
       try {
         const now = new Date(record.ts);
-        const baseName = `nm-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}`;
+        const baseName = `nm-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}`;
         const line = `${now.toISOString()}\t${record.level}\t${record.scope}\t${record.message}\t${JSON.stringify(record.detail) ?? ""}\n`;
         const appendBytes = Buffer.byteLength(line);
         const plan = planLogFileWrite({

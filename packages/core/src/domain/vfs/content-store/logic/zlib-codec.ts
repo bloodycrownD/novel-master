@@ -15,10 +15,10 @@
 
 import { unzlibSync, zlibSync } from "fflate";
 import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
-import { base64ToBytes } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { errorText } from "../../../../common/error.js";
+import { Errors } from "../../../../common/errors.js";
 import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "./blob-bytes-codec.js";
 
 /** 本模块的领域失败：blob 字节损坏或 encoding 不识别。 */
@@ -55,7 +55,7 @@ export function decompressZlib(compressed: Uint8Array): Result<Uint8Array, VfsCo
   try {
     return Result.ok(tryZlibInflate(compressed) ?? unzlibSync(compressed));
   } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `zlib 解压失败: ${errorText(error)}` }, { cause: error }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `zlib 解压失败: ${Errors.text(error)}` }, { cause: error }));
   }
 }
 
@@ -92,9 +92,9 @@ export function asUint8Array(value: unknown, label: string): Result<Uint8Array, 
 /** base64 文本 → 字节；非法文本返回 `VFS_CONTENT_CORRUPT`（保留底层原因）。 */
 function decodeBase64Text(text: string): Result<Uint8Array, VfsContentError> {
   try {
-    return Result.ok(base64ToBytes(text));
+    return Result.ok(Encoding.base64ToBytes(text));
   } catch (error) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `base64 解码失败: ${errorText(error)}` }, { cause: error }));
+    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `base64 解码失败: ${Errors.text(error)}` }, { cause: error }));
   }
 }
 

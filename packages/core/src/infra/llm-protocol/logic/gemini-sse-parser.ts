@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/gemini-sse-parser
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
@@ -96,18 +96,18 @@ export function feedGeminiSseChunk(state: GeminiSseParserState, chunk: string, o
       return;
     }
     const first = candidates[0];
-    if (!isRecord(first)) {
+    if (!Guards.isRecord(first)) {
       return;
     }
     const content = first.content;
-    if (!isRecord(content) || !Array.isArray(content.parts)) {
+    if (!Guards.isRecord(content) || !Array.isArray(content.parts)) {
       return;
     }
 
     // 同名 functionCall 的 0 基出现序号（**逐 chunk 重置**，见函数顶部注释）。
     const perChunkNameSeq = new Map<string, number>();
     for (const part of content.parts) {
-      if (!isRecord(part)) {
+      if (!Guards.isRecord(part)) {
         continue;
       }
       const rawSignature = part.thought_signature ?? part.thoughtSignature;
@@ -130,19 +130,19 @@ export function feedGeminiSseChunk(state: GeminiSseParserState, chunk: string, o
         }
       }
       if (part.functionCall != null) {
-        const fcName = isRecord(part.functionCall) && typeof part.functionCall.name === "string" ? part.functionCall.name : "";
+        const fcName = Guards.isRecord(part.functionCall) && typeof part.functionCall.name === "string" ? part.functionCall.name : "";
         const ordinal = perChunkNameSeq.get(fcName) ?? 0;
         perChunkNameSeq.set(fcName, ordinal + 1);
 
         const fc = part.functionCall;
-        if (isRecord(fc) && typeof fc.name === "string") {
+        if (Guards.isRecord(fc) && typeof fc.name === "string") {
           const key = typeof fc.id === "string" && fc.id !== "" ? fc.id : `${fc.name}#${ordinal}`;
           let acc = state.functionCalls.get(key);
           if (acc == null) {
             acc = { name: fc.name, argsJson: "", id: key };
             state.functionCalls.set(key, acc);
           }
-          if (isRecord(fc.args)) {
+          if (Guards.isRecord(fc.args)) {
             const newJson = JSON.stringify(fc.args);
             if (newJson !== acc.argsJson) {
               acc.argsJson = newJson;

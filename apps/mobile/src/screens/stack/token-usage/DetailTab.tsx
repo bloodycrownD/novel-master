@@ -1,7 +1,7 @@
 import React, {useMemo} from 'react';
 import {Text, View} from 'react-native';
 import type {UsageStatsBucket} from '@novel-master/core/chat';
-import {formatTokenCount} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import {StackedBars} from '../../../components/charts/StackedBars';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
@@ -87,7 +87,7 @@ export function DetailTab({
           {dailyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {dailyInspected.key.slice(8)} 日 · 输入 {formatTokenCount(dailyInspected.primary)} · 输出 {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用 {dailyInspected.calls ?? 0} 次
+                {dailyInspected.key.slice(8)} 日 · 输入 {TokenFormat.count(dailyInspected.primary)} · 输出 {TokenFormat.count(dailyInspected.secondary ?? 0)} · 调用 {dailyInspected.calls ?? 0} 次
               </Text>
             </View>
           ) : null}
@@ -97,7 +97,7 @@ export function DetailTab({
         <View style={styles.dayDetail}>
           <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>{selectedDay} · 按小时分布</Text>
           <Text style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}>
-            输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出 {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{' '}
+            输入 {TokenFormat.count(selectedDayBucket.promptTokens)} · 输出 {TokenFormat.count(selectedDayBucket.completionTokens)} · 命中率{' '}
             {formatHitRate(hitRate(selectedDayBucket.cacheReadTokens, selectedDayBucket.billedInputTokens))} · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
             {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} · 平均首字延迟 {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
           </Text>
@@ -107,7 +107,7 @@ export function DetailTab({
           {hourlyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-                {Number(hourlyInspected.key)}时 · 输入 {formatTokenCount(hourlyInspected.primary)} · 输出 {formatTokenCount(hourlyInspected.secondary ?? 0)} · 调用 {hourlyInspected.calls ?? 0} 次
+                {Number(hourlyInspected.key)}时 · 输入 {TokenFormat.count(hourlyInspected.primary)} · 输出 {TokenFormat.count(hourlyInspected.secondary ?? 0)} · 调用 {hourlyInspected.calls ?? 0} 次
               </Text>
             </View>
           ) : null}

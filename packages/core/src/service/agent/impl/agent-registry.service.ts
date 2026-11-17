@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
-import { applyMergePatch } from "@/common/json.js";
+import { Json } from "@/common/json.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
@@ -129,7 +129,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<Result<AgentDefinition, AppError>> {
     const current = await this.get(agentId);
     if (!current.ok) return Result.err(current.error);
-    const merged = applyMergePatch(current.value, patch);
+    const merged = Json.mergePatch(current.value, patch);
     const saved = await this.upsert(agentId, merged, options);
     if (!saved.ok) return Result.err(saved.error);
     return Result.ok(merged);

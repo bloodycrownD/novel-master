@@ -5,7 +5,7 @@
  */
 
 import { assert } from "@/common/assert.js";
-import { truncateText } from "@/common/text.js";
+import { Text } from "@/common/text.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
@@ -733,7 +733,7 @@ export class DefaultAgentRunner implements AgentRunner {
           if (degraded != null) {
             outcomes.push({
               ok: false,
-              error: new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", { detail: `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})` }),
+              error: new AppError("PROVIDER_INVALID_TOOL_ARGUMENTS", { detail: `${protocol}: invalid tool arguments JSON (${Text.truncate(degraded.rawArguments, 80)})` }),
             });
             continue;
           }

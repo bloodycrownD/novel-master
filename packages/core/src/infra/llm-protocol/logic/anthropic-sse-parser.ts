@@ -6,7 +6,7 @@
  * @module infra/llm-protocol/logic/anthropic-sse-parser
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
@@ -179,7 +179,7 @@ export function feedAnthropicSseChunk(state: AnthropicSseParserState, chunk: str
     if (type === "content_block_start") {
       flushActiveBlock(state, onStream, toolNames);
       const block = event.content_block;
-      if (!isRecord(block) || typeof block.type !== "string") {
+      if (!Guards.isRecord(block) || typeof block.type !== "string") {
         return;
       }
       if (block.type === "tool_use") {
@@ -200,7 +200,7 @@ export function feedAnthropicSseChunk(state: AnthropicSseParserState, chunk: str
       }
     } else if (type === "content_block_delta") {
       const delta = event.delta;
-      if (!isRecord(delta)) {
+      if (!Guards.isRecord(delta)) {
         return;
       }
       if (delta.type === "text_delta" && typeof delta.text === "string") {
@@ -239,21 +239,21 @@ export function feedAnthropicSseChunk(state: AnthropicSseParserState, chunk: str
 function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
   const start = state.messageStartRaw;
   const delta = state.messageDeltaRaw;
-  if (!isRecord(start)) {
+  if (!Guards.isRecord(start)) {
     return delta;
   }
-  if (!isRecord(delta)) {
+  if (!Guards.isRecord(delta)) {
     return start;
   }
   const merged: Record<string, unknown> = { ...delta };
   // message_start 的 model / usage 嵌在 message 下，非流式形态才是顶层，两种都兼容。
-  const startMessage = isRecord(start.message) ? start.message : undefined;
+  const startMessage = Guards.isRecord(start.message) ? start.message : undefined;
   if (typeof startMessage?.model === "string") {
     merged.model = startMessage.model;
   } else if (typeof start.model === "string") {
     merged.model = start.model;
   }
-  const startUsage = isRecord(startMessage?.usage) ? startMessage!.usage : isRecord(start.usage) ? start.usage : undefined;
+  const startUsage = Guards.isRecord(startMessage?.usage) ? startMessage!.usage : Guards.isRecord(start.usage) ? start.usage : undefined;
   const usage: Record<string, unknown> = {};
   if (startUsage != null) {
     const inputSideKeys = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "cache_creation"];
@@ -263,7 +263,7 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
       }
     }
   }
-  if (isRecord(delta.usage) && delta.usage.output_tokens != null) {
+  if (Guards.isRecord(delta.usage) && delta.usage.output_tokens != null) {
     usage.output_tokens = delta.usage.output_tokens;
   }
   if (Object.keys(usage).length > 0) {

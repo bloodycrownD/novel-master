@@ -6,7 +6,7 @@
  * @module infra/llm-protocol/logic/openai-sse-parser
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { openAiStreamAccumulatorsToBlocks, openAiStreamDeltaToEvents } from "./openai-content-mapper.js";
@@ -66,7 +66,7 @@ export function feedOpenAiSseChunk(state: OpenAiSseParserState, chunk: string, o
       return;
     }
     state.lastEvent = event;
-    if (isRecord(event.usage)) {
+    if (Guards.isRecord(event.usage)) {
       state.lastUsageEvent = event;
     }
     const choices = event.choices;
@@ -74,7 +74,7 @@ export function feedOpenAiSseChunk(state: OpenAiSseParserState, chunk: string, o
       return;
     }
     const first = choices[0];
-    if (!isRecord(first)) {
+    if (!Guards.isRecord(first)) {
       return;
     }
     openAiStreamDeltaToEvents(first.delta, state, onStream);

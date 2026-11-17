@@ -10,7 +10,7 @@
  * @module infra/log/log-file-policy
  */
 
-import {pad2} from "@/common/format-number.js";
+import {Number} from "@/common/number.js";
 
 /** 目录里的一份同名家族日志文件（`name` 不含目录）。 */
 // nm-style: keep-public — 三端文件 sink 构造 `existing` 的入参类型，core 内部无消费者。
@@ -55,7 +55,7 @@ export function planLogFileWrite(input: {
   readonly keep?: number;
 }): LogFilePlan {
   // 默认 baseName 取本地时间日期键：用户自己翻日志时要能对上手机时间（不用 UTC）。
-  const baseName = input.baseName ?? `nm-${input.now.getFullYear()}${pad2(input.now.getMonth() + 1)}${pad2(input.now.getDate())}`;
+  const baseName = input.baseName ?? `nm-${input.now.getFullYear()}${Number.pad2(input.now.getMonth() + 1)}${Number.pad2(input.now.getDate())}`;
   const maxBytes = input.maxBytes ?? DEFAULT_MAX_BYTES;
   const keep = Math.max(1, input.keep ?? DEFAULT_KEEP);
   const byName = new Map(input.existing.map((entry) => [entry.name, entry]));
@@ -70,7 +70,7 @@ export function planLogFileWrite(input: {
     }
   }
   if (targetName == null) {
-    targetName = `${baseName}.${pad2(input.now.getHours())}${pad2(input.now.getMinutes())}${pad2(input.now.getSeconds())}.log`;
+    targetName = `${baseName}.${Number.pad2(input.now.getHours())}${Number.pad2(input.now.getMinutes())}${Number.pad2(input.now.getSeconds())}.log`;
   }
 
   const kept = [...input.existing].sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name)).slice(0, keep);

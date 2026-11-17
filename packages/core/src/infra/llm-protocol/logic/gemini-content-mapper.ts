@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/logic/gemini-content-mapper
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -145,7 +145,7 @@ export function blocksToGeminiParts(blocks: readonly ContentBlock[], ctx: Resolv
 export function geminiPartsToBlocks(parts: readonly unknown[], options: GeminiPartsToBlocksOptions = {}): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const part of parts) {
-    if (!isRecord(part)) {
+    if (!Guards.isRecord(part)) {
       continue;
     }
     // Gemini wire thought_signature（snake 或 camelCase）。
@@ -166,8 +166,8 @@ export function geminiPartsToBlocks(parts: readonly unknown[], options: GeminiPa
       continue;
     }
     const functionCall = part.functionCall;
-    if (isRecord(functionCall) && typeof functionCall.name === "string") {
-      const args = isRecord(functionCall.args) ? functionCall.args : {};
+    if (Guards.isRecord(functionCall) && typeof functionCall.name === "string") {
+      const args = Guards.isRecord(functionCall.args) ? functionCall.args : {};
       const id = typeof functionCall.id === "string" && functionCall.id !== "" ? functionCall.id : `${functionCall.name}-${blocks.length}`;
       blocks.push({
         type: "tool_use",
@@ -179,9 +179,9 @@ export function geminiPartsToBlocks(parts: readonly unknown[], options: GeminiPa
       continue;
     }
     const functionResponse = part.functionResponse;
-    if (isRecord(functionResponse) && typeof functionResponse.name === "string") {
+    if (Guards.isRecord(functionResponse) && typeof functionResponse.name === "string") {
       const response = functionResponse.response;
-      const content = isRecord(response) && typeof response.output === "string" ? response.output : typeof response === "string" ? response : JSON.stringify(response ?? "");
+      const content = Guards.isRecord(response) && typeof response.output === "string" ? response.output : typeof response === "string" ? response : JSON.stringify(response ?? "");
       const functionName = functionResponse.name;
       const toolUseId = typeof functionResponse.id === "string" && functionResponse.id !== "" ? functionResponse.id : options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
       blocks.push({
@@ -224,7 +224,7 @@ export function chatMessagesToGeminiContents(messages: readonly ChatMessageData[
       const last = out[out.length - 1];
       let covered = false;
       if (last != null && last.role === "model") {
-        const functionCalls = last.parts.map((p) => p.functionCall).filter(isRecord);
+        const functionCalls = last.parts.map((p) => p.functionCall).filter(Guards.isRecord);
         const calls = functionCalls.map((fc) => ({ name: typeof fc.name === "string" ? fc.name : "", id: typeof fc.id === "string" ? fc.id : "" })).filter((fc) => fc.name !== "");
         covered = resolvable.every((block) => {
           const expectedName = resolveFunctionNameOrNull(block.toolUseId, ctx);

@@ -9,7 +9,7 @@
 import { copyFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app, dialog, shell } from "electron";
-import { pad2 } from "@novel-master/core/common";
+import { Number } from "@novel-master/core/common";
 
 /** 导出诊断包需要的全部外部能力。 */
 // nm-style: keep-public — spec 4.6 要求的 seams 契约：菜单动作与测试共用同一份形状。
@@ -66,7 +66,7 @@ export async function exportDiagnostics(seams: DiagnosticsSeams): Promise<string
     return undefined;
   }
   const now = seams.now();
-  const targetDir = path.join(parent, `nm-diagnostics-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`);
+  const targetDir = path.join(parent, `nm-diagnostics-${now.getFullYear()}${Number.pad2(now.getMonth() + 1)}${Number.pad2(now.getDate())}-${Number.pad2(now.getHours())}${Number.pad2(now.getMinutes())}${Number.pad2(now.getSeconds())}`);
   await seams.mkdir(targetDir, { recursive: true });
   const names = (await seams.readdir(seams.logsDir)).filter((name) => name.endsWith(".log")).sort();
   const files = await Promise.all(names.map(async (name) => ({ name, bytes: (await seams.stat(path.join(seams.logsDir, name))).size })));

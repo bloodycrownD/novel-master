@@ -21,7 +21,7 @@
  */
 
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import { ensureDirRulesForNewPath, upsertFileCacheAfterWrite } from "./vfs-tools.js";
 import { createLogger } from "@/infra/log/logger.js";
@@ -82,7 +82,7 @@ export async function sinkOversizedOutput(ctx: BuiltinToolContext, input: SinkOv
     log.debug(`file_cache upsert 失败（${savedPath}）`, { error });
   }
   await ensureDirRulesForNewPath(ctx, OVERFLOW_SINK_DIR);
-  const contentBytes = utf8ByteLength(input.content);
+  const contentBytes = Encoding.utf8ByteLength(input.content);
   return {
     savedPath,
     message: `输出超过 ${TOOL_OUTPUT_MAX_BYTES / 1024}KB 预算（original ${contentBytes} bytes），全文已自动保存到会话工作区，可用 read 分页读取。`,

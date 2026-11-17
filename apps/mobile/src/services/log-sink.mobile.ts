@@ -14,7 +14,7 @@
  */
 import {addLogSink, createLogger, planLogFileWrite} from '@novel-master/core/log';
 import type {LogLevel} from '@novel-master/core/log';
-import {utf8ByteLength} from '@novel-master/core/common';
+import {Encoding} from '@novel-master/core/common';
 import {blobFs} from './rn-file-io';
 
 const LEVEL_RANK: Record<LogLevel, number> = {debug: 0, info: 1, warn: 2, error: 3};
@@ -55,7 +55,7 @@ export async function installMobileLogSink(): Promise<() => void> {
           const plan = planLogFileWrite({
             now,
             existing: [...files].map(([name, entry]) => ({name, ...entry})),
-            appendBytes: utf8ByteLength(line),
+            appendBytes: Encoding.utf8ByteLength(line),
             baseName: `nm-${dateKey}`,
           });
           for (const name of plan.deleteNames) {
@@ -65,7 +65,7 @@ export async function installMobileLogSink(): Promise<() => void> {
           const written = await fs.appendFile(`${dir}/${plan.targetName}`, line, 'utf8');
           files.set(plan.targetName, {
             mtimeMs: now.getTime(),
-            bytes: (files.get(plan.targetName)?.bytes ?? 0) + (typeof written === 'number' ? written : utf8ByteLength(line)),
+            bytes: (files.get(plan.targetName)?.bytes ?? 0) + (typeof written === 'number' ? written : Encoding.utf8ByteLength(line)),
           });
         })
         .catch((error: unknown) => {

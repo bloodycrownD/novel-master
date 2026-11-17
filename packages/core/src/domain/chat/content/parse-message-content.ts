@@ -8,7 +8,7 @@
  * @module domain/chat/content/parse-message-content
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type {
@@ -33,7 +33,7 @@ function requireString(obj: Record<string, unknown>, key: string, label: string)
 
 /** Runtime validation for untrusted in-memory {@link MessageContent} before append. */
 export function parseMessageContentValue(value: unknown): Result<MessageContent, ContentError> {
-  if (!isRecord(value)) {
+  if (!Guards.isRecord(value)) {
     return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "MessageContent must be an object" }));
   }
   if ("content" in value || "parts" in value) {
@@ -49,7 +49,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
 
   const blocks: ContentBlock[] = [];
   for (const [index, raw] of value.blocks.entries()) {
-    if (!isRecord(raw)) {
+    if (!Guards.isRecord(raw)) {
       return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}]: must be an object` }));
     }
 
@@ -64,7 +64,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
       }
       case "image": {
         const source = raw.source;
-        if (!isRecord(source)) {
+        if (!Guards.isRecord(source)) {
           return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: "image block: source must be an object" }));
         }
         if (source.kind === "url") {
@@ -99,7 +99,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
           return Result.err(name.error);
         }
         const input = raw.input;
-        if (!isRecord(input)) {
+        if (!Guards.isRecord(input)) {
           return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `blocks[${index}] tool_use: input must be an object` }));
         }
         const thinkingSignature = typeof raw.thinkingSignature === "string" && raw.thinkingSignature !== "" ? raw.thinkingSignature : undefined;
@@ -130,7 +130,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
         let meta: ToolResultBlock["meta"];
         const metaValue = raw.meta;
         if (metaValue !== undefined) {
-          if (!isRecord(metaValue)) {
+          if (!Guards.isRecord(metaValue)) {
             return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta must be an object` }));
           }
           if ("subagentSessionId" in metaValue && typeof metaValue.subagentSessionId !== "string") {
@@ -140,7 +140,7 @@ export function parseMessageContentValue(value: unknown): Result<MessageContent,
           let skillRef: SkillToolRef | undefined;
           const skillRefValue = metaValue.skillRef;
           if (skillRefValue !== undefined) {
-            if (!isRecord(skillRefValue)) {
+            if (!Guards.isRecord(skillRefValue)) {
               return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: `${label}: meta.skillRef must be an object` }));
             }
             const domain = skillRefValue.domain;

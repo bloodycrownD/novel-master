@@ -21,7 +21,7 @@
  * @module domain/tool/builtin/search/search-config
  */
 
-import { isRecord } from "@/common/guards.js";
+import { Guards } from "@/common/guards.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
@@ -201,7 +201,7 @@ async function readEngineState(kkv: KkvService): Promise<Result<SearchEngineStat
   const customEngines: CustomEngineDef[] = [];
   if (Array.isArray(parsedCustom)) {
     for (const item of parsedCustom) {
-      if (!isRecord(item) || typeof item.id !== "string" || !item.id.startsWith(CUSTOM_ENGINE_PREFIX)) continue;
+      if (!Guards.isRecord(item) || typeof item.id !== "string" || !item.id.startsWith(CUSTOM_ENGINE_PREFIX)) continue;
       if (customEngines.some((def) => def.id === item.id)) continue;
       const template = validateSearchEngineTemplate(item.template);
       if (!template.ok) continue;
@@ -244,17 +244,17 @@ async function readEngineState(kkv: KkvService): Promise<Result<SearchEngineStat
   // presetOverrides：只认预置 id 的对象值（写入路径已校验，读路径不做二次校验）。
   const parsedOverrides = parseJson(overridesValue);
   const presetOverrides: Record<string, Partial<SearchEngineTemplate>> = {};
-  if (isRecord(parsedOverrides)) {
+  if (Guards.isRecord(parsedOverrides)) {
     for (const engineId of PRESET_ENGINE_IDS) {
       const value = parsedOverrides[engineId];
-      if (isRecord(value)) presetOverrides[engineId] = value as Partial<SearchEngineTemplate>;
+      if (Guards.isRecord(value)) presetOverrides[engineId] = value as Partial<SearchEngineTemplate>;
     }
   }
 
   // engineBaseUrls：逐值 normalizeEngineBaseUrl，非法值丢弃（canRun 与 resolveEngineChain 同源判定，脏数据不判可跑）。
   const parsedBaseUrls = parseJson(baseUrlsValue);
   const baseUrls: Record<string, string> = {};
-  if (isRecord(parsedBaseUrls)) {
+  if (Guards.isRecord(parsedBaseUrls)) {
     for (const [engineId, value] of Object.entries(parsedBaseUrls)) {
       if (typeof value !== "string") continue;
       const normalized = normalizeEngineBaseUrl(value);

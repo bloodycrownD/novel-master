@@ -4,7 +4,7 @@
  * @module domain/tool/logic/tool-output-limits
  */
 
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Encoding } from "@/common/encoding.js";
 
 export const TOOL_OUTPUT_MAX_LINES = 2000;
 export const TOOL_OUTPUT_MAX_LINE_LENGTH = 2000;
@@ -52,7 +52,7 @@ export function capUtf8Bytes(lines: readonly string[], maxBytes: number = TOOL_O
   let truncated = false;
 
   for (const line of lines) {
-    const lineBytes = utf8ByteLength(line);
+    const lineBytes = Encoding.utf8ByteLength(line);
     const separatorBytes = result.length > 0 ? 1 : 0;
     if (bytesUsed + separatorBytes + lineBytes > maxBytes) {
       // WHY: stop before exceeding budget — partial line inclusion would mislead the model.
@@ -136,7 +136,7 @@ export function capUtf8BytesFill(lines: readonly string[], maxBytes: number = TO
   let lastLinePartial = false;
 
   for (const line of lines) {
-    const lineBytes = utf8ByteLength(line);
+    const lineBytes = Encoding.utf8ByteLength(line);
     const separatorBytes = result.length > 0 ? 1 : 0;
     if (bytesUsed + separatorBytes + lineBytes <= maxBytes) {
       bytesUsed += separatorBytes + lineBytes;
@@ -178,7 +178,7 @@ export function capMatchList<T>(items: readonly T[], maxItems: number = TOOL_OUT
   let bytesUsed = 0;
   for (const item of countCapped) {
     const formatted = formatItem(item);
-    const lineBytes = utf8ByteLength(formatted);
+    const lineBytes = Encoding.utf8ByteLength(formatted);
     const separatorBytes = kept.length > 0 ? 1 : 0;
     if (bytesUsed + separatorBytes + lineBytes > TOOL_OUTPUT_MAX_BYTES) {
       truncated = true;

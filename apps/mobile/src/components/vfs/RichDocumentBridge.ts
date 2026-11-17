@@ -2,7 +2,7 @@
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
  * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
-import {isRecord} from '@novel-master/core/common';
+import {Guards} from '@novel-master/core/common';
 
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -114,11 +114,11 @@ export function encodeRichDocumentToHost(message: RichDocumentToHostMessage): st
 
 export function decodeRichDocumentToHost(raw: string): RichDocumentToHostMessage {
   const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
+  if (!Guards.isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
     // nm-throw: keep — webview bridge 边界：from-web 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope version');
   }
-  if (typeof parsed.type !== 'string' || !isRecord(parsed.payload)) {
+  if (typeof parsed.type !== 'string' || !Guards.isRecord(parsed.payload)) {
     // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope shape');
   }
@@ -127,7 +127,7 @@ export function decodeRichDocumentToHost(raw: string): RichDocumentToHostMessage
 
 export function decodeHostToRichDocument(raw: string): HostToRichDocumentMessage {
   const parsed: unknown = JSON.parse(raw);
-  if (!isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
+  if (!Guards.isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
     // nm-throw: keep — webview bridge 边界：to-host 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
     throw new Error('Invalid rich-document bridge envelope version');
   }

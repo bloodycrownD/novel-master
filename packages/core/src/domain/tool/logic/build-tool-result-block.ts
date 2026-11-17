@@ -8,8 +8,8 @@
  * @module domain/tool/logic/build-tool-result-block
  */
 
-import { isRecord } from "@/common/guards.js";
-import { utf8ByteLength } from "@/common/encoding.js";
+import { Guards } from "@/common/guards.js";
+import { Encoding } from "@/common/encoding.js";
 import { isAppError } from "@/errors/app-error.js";
 import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
@@ -60,7 +60,7 @@ function formatByteSize(bytes: number): string {
 
 // nm-style: keep-local — summary 与 format-tool-output 抬头同词（响应文本 / 已落盘 / N 条结果），且整段必须整体先于泛化 matches/paths 兜底求值；这条跨工具一致口径是单点契约，拆进 assembler 会与持久化装配混层。
 function summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
-  if (!isRecord(output)) {
+  if (!Guards.isRecord(output)) {
     return undefined;
   }
   const name = toolName ?? "";
@@ -149,7 +149,7 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
     }
     if (output.action === "get") {
       const def = output.definition;
-      if (isRecord(def) && typeof def.name === "string") {
+      if (Guards.isRecord(def) && typeof def.name === "string") {
         return def.name;
       }
     }
@@ -161,7 +161,7 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
   // search：引擎 · N 条结果；模板引擎透传形态 results 为 JSON 文本 →
   // 「引擎 · 响应文本」（与 format-tool-output 抬头同词，不解析条数）；
   // 超预算落盘形态（Step 6 后出现）显示已落盘路径。
-  // 未配置提示是纯字符串输出（非 record），在上方 isRecord 门处已返回 undefined。
+  // 未配置提示是纯字符串输出（非 record），在上方 Guards.isRecord 门处已返回 undefined。
   if (name === "search") {
     if (typeof output.engine === "string" && Array.isArray(output.results)) {
       return `${output.engine} · ${output.results.length} 条结果`;
@@ -187,7 +187,7 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
     const originalBytes = output.originalBytes;
     if (typeof status === "number" && typeof originalBytes === "number") {
       if (output.truncated === true) {
-        const bodyBytes = typeof output.body === "string" ? utf8ByteLength(output.body) : undefined;
+        const bodyBytes = typeof output.body === "string" ? Encoding.utf8ByteLength(output.body) : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
         const kept = bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES ? bodyBytes : TOOL_OUTPUT_MAX_BYTES;
         return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
@@ -219,7 +219,7 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     const summary = summarizeToolSuccess(meta?.toolName, outcome.output);
     // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
     const subagentOutput = outcome.output;
-    const outputSubagentSessionId = isRecord(subagentOutput) && typeof subagentOutput.subagentSessionId === "string" ? subagentOutput.subagentSessionId : undefined;
+    const outputSubagentSessionId = Guards.isRecord(subagentOutput) && typeof subagentOutput.subagentSessionId === "string" ? subagentOutput.subagentSessionId : undefined;
     const subagentSessionId = outputSubagentSessionId ?? (typeof meta?.subagentSessionId === "string" && meta.subagentSessionId.length > 0 ? meta.subagentSessionId : undefined);
     // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
     // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
@@ -239,7 +239,7 @@ export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOut
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
     // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
     // meta 额外带 failureReason（UI 卡片用）。
-    if (isRecord(subagentOutput) && subagentOutput.stopped === true) {
+    if (Guards.isRecord(subagentOutput) && subagentOutput.stopped === true) {
       const rawReason = (outcome.output as { failureReason?: unknown }).failureReason;
       const failureReason = typeof rawReason === "string" ? rawReason : undefined;
       return {

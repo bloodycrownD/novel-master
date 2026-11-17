@@ -13,7 +13,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
-import { nullableText } from "@/common/coerce.js";
+import { Coerce } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
 import { resolveEntryPlainContent } from "../../content-store/logic/resolve-stored-content.js";
@@ -100,7 +100,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const row = rows[0]!;
     const kindRaw = row.entry_kind;
     const entryKind: VfsEntryKind = kindRaw === "directory" ? "directory" : "file";
-    const resolvedContent = await resolveEntryPlainContent(this.contentStore, { entryKind, content: nullableText(row.content), contentHash: nullableText(row.content_hash) });
+    const resolvedContent = await resolveEntryPlainContent(this.contentStore, { entryKind, content: Coerce.nullableText(row.content), contentHash: Coerce.nullableText(row.content_hash) });
     if (!resolvedContent.ok) return Result.err(resolvedContent.error);
     return Result.ok({
       entryId: Number(row.entry_id),
@@ -126,7 +126,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (row.entry_kind === "directory") {
       return Result.ok(null);
     }
-    return Result.ok(nullableText(row.content_hash));
+    return Result.ok(Coerce.nullableText(row.content_hash));
   }
 
   async findContentHashesByPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Result<Map<string, string | null>, AppError>> {
@@ -159,7 +159,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         if (row.entry_kind === "directory") {
           result.set(path, null);
         } else {
-          result.set(path, nullableText(row.content_hash));
+          result.set(path, Coerce.nullableText(row.content_hash));
         }
       }
     }
@@ -189,7 +189,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
     // 与 resolveActiveFilePlainContent 的解正文顺序对齐：content_hash 优先，
     // 遗留明文兜底，保证探测到的大小与真实读取路径周源一致
-    const contentHash = nullableText(row.content_hash);
+    const contentHash = Coerce.nullableText(row.content_hash);
     if (contentHash != null && contentHash.length > 0) {
       const sql15 = "SELECT byte_len FROM vfs_content_blob\n         WHERE content_hash = #{contentHash}";
       const blobRows = await queryTemplate<{ byte_len: number }>(this.conn, this.parser, sql15, { contentHash });
@@ -506,7 +506,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       return Result.ok(rows.map((r) => ({
         entryId: r.entry_id,
         path: r.path,
-        contentHash: nullableText(r.content_hash),
+        contentHash: Coerce.nullableText(r.content_hash),
         headVersion: r.head_version,
         mtimeMs: r.mtime_ms,
       })));
@@ -521,7 +521,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return Result.ok(rows.map((r) => ({
       entryId: r.entry_id,
       path: r.path,
-      contentHash: nullableText(r.content_hash),
+      contentHash: Coerce.nullableText(r.content_hash),
       headVersion: r.head_version,
       mtimeMs: r.mtime_ms,
     })));
@@ -599,7 +599,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     // 先收集所有非空 content_hash，一次 getMany 批量读取，避免逐条 get 的 N+1。
     const hashes = new Set<string>();
     for (const row of rows) {
-      const h = nullableText(row.content_hash);
+      const h = Coerce.nullableText(row.content_hash);
       if (h != null && h.length > 0) {
         hashes.add(h);
       }
@@ -613,7 +613,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
     const out: Array<{ entryId: number; path: string; content: string }> = [];
     for (const row of rows) {
-      const h = nullableText(row.content_hash);
+      const h = Coerce.nullableText(row.content_hash);
       let plain: string;
       if (h != null && h.length > 0) {
         // scanContents 这条路径只查 entry_kind='file' 的行，正文从 blob 读。
