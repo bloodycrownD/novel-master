@@ -1,5 +1,5 @@
 {
-  "note": "签名重复基线。新增重复组会让 --gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。",
+  "note": "签名重复基线。新增重复组会让 --gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。 十七期第1轮后人工判定：新增 12 组同名 + 4 组同形态全部判「有意保留」——9 组双端镜像（runtime 类型不同、core 是唯一实现、C2/C6/C9 主动统一命名）/ 3 组三协议 SSE parser namespace 成员 / 4 组 C3 配置表与既有 args 对象。判据见 judgedAfterP17。同轮消除 45 组同名 + 24 组形态重复。",
   "namedGroups": 105,
   "shapedGroups": 253,
   "named": {
@@ -450,6 +450,56 @@
     "encodeText": [
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:194",
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:290"
+    ],
+    "runAgentTurnAdapter": [
+      "apps/desktop/src/main/services/agent-run.service.ts:56",
+      "apps/mobile/src/services/agent-run.service.ts:22"
+    ],
+    "getDbMaintenanceStats": [
+      "apps/desktop/src/main/services/db-maintenance.service.ts:21",
+      "apps/mobile/src/services/db-maintenance.service.ts:37"
+    ],
+    "runDbMaintenance": [
+      "apps/desktop/src/main/services/db-maintenance.service.ts:46",
+      "apps/mobile/src/services/db-maintenance.service.ts:53"
+    ],
+    "refreshComposerStatusAfterSessionKkvCleared": [
+      "apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:23",
+      "apps/mobile/src/services/project-composer-status.service.ts:21"
+    ],
+    "refreshComposerStatusAfterFloorOrCompaction": [
+      "apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:35",
+      "apps/mobile/src/services/project-composer-status.service.ts:32"
+    ],
+    "buildRealPromptPreviewTurnsAdapter": [
+      "apps/desktop/src/main/services/prompt-preview.service.ts:34",
+      "apps/mobile/src/services/prompt-preview.service.ts:60"
+    ],
+    "buildSessionPromptInputAdapter": [
+      "apps/desktop/src/main/services/session-prompt-input.service.ts:62",
+      "apps/mobile/src/services/session-prompt-input.service.ts:63"
+    ],
+    "exportYamlWithDialog": [
+      "apps/desktop/src/main/services/yaml-shared.ts:21",
+      "apps/mobile/src/services/yaml-shared.ts:23"
+    ],
+    "importYamlWithDialog": [
+      "apps/desktop/src/main/services/yaml-shared.ts:46",
+      "apps/mobile/src/services/yaml-shared.ts:44"
+    ],
+    "feed": [
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:203",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:116",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:60"
+    ],
+    "drain": [
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:270",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:207"
+    ],
+    "finishPartial": [
+      "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts:289",
+      "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts:272",
+      "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts:94"
     ]
   },
   "shaped": {
@@ -3140,6 +3190,45 @@
     "(: RnEncodingName)": [
       "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts:260",
       "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts:64"
+    ],
+    "(: DesktopNovelMasterRuntime, : {readonly : string; readonly : string})": [
+      "refreshComposerStatusAfterSessionKkvCleared @ apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:23",
+      "refreshComposerStatusAfterFloorOrCompaction @ apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:35"
+    ],
+    "(: BackfillScanDeps)": [
+      "scanBackfillGap @ packages/core/src/domain/message-checkpoint/logic/backfill-baseline-checkpoints.ts:177",
+      "backfillBaselineCheckpoints @ packages/core/src/domain/message-checkpoint/logic/backfill-baseline-checkpoints.ts:305"
+    ],
+    "(: BooleanPrefName)": [
+      "DefaultPersistentPreferences.getBooleanPref @ packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:113",
+      "DefaultPersistentPreferences.resetBooleanPref @ packages/core/src/service/persistent-preferences/impl/persistent-preferences.service.ts:129"
+    ],
+    "(: StateKey)": [
+      "DefaultPersistentState.getPointer @ packages/core/src/service/persistent-state/impl/persistent-state.service.ts:104",
+      "DefaultPersistentState.resetPointer @ packages/core/src/service/persistent-state/impl/persistent-state.service.ts:125"
     ]
-  }
+  },
+  "judgedAfterP17": {
+    "named": {
+      "runAgentTurnAdapter": "双端镜像：desktop runtime=DesktopNovelMasterRuntime / mobile=MobileNovelMasterRuntime，core runAgentTurn 是唯一实现，适配器只注入日志钩子。C6 主动统一加 Adapter 后缀（原名 mobile 与 core 同名）。",
+      "getDbMaintenanceStats": "双端镜像：desktop 无参走单例 / mobile 穿 runtime。C9 主动统一命名（mobile 原名 getDatabaseMaintenanceStats）。",
+      "runDbMaintenance": "双端镜像：同上，C9 统一 Db 短形。",
+      "refreshComposerStatusAfterSessionKkvCleared": "双端镜像：C9 统一动词（desktop 原名 notify...）+ 统一参数形状为 scope 对象，runtime 类型仍不同。",
+      "refreshComposerStatusAfterFloorOrCompaction": "双端镜像：同上。",
+      "buildRealPromptPreviewTurnsAdapter": "双端镜像：平台适配器（runtime 类型不同、通道已对齐 core Result），C6 主动加 Adapter 后缀。",
+      "buildSessionPromptInputAdapter": "双端镜像：同上。",
+      "exportYamlWithDialog": "双端镜像 + 平台差异：desktop 用 Electron dialog / mobile 用 document picker，C2 主动统一命名（mobile 原名 exportYamlFile）。",
+      "importYamlWithDialog": "双端镜像：同上，C2 还把 mobile 的裸 Error 通道改成 AppError。",
+      "feed": "三协议 SSE parser 的 namespace 成员：anthropic/gemini/openai 状态机不同构（V1 已核实「不能硬造统一 parser」），C5 把 feedXxxSseChunk 收进各 parser 对象后成员名统一为 feed。三份是设计使然。",
+      "drain": "同上：anthropic/gemini 各有 drain（openai 无对应，因其流结构不同）。",
+      "finishPartial": "同上：三协议 finishPartial 收进 parser 对象后同名，语义各按协议。"
+    },
+    "shaped": {
+      "(: DesktopNovelMasterRuntime, : {readonly : string; readonly : string})": "C9 把 composer-status 的两个函数统一成 scope 对象参数后的双端镜像（mobile 侧对应 shape 是 MobileNovelMasterRuntime 版）。",
+      "(: BackfillScanDeps)": "message-checkpoint 的 args 对象双胞胎（scanBackfillGap / writeBackfillGap 等），V1 已判「位置版与 args 版并存」是有意分层。",
+      "(: BooleanPrefName)": "C3 配置表产物：get/set/resetBooleanPref 三个方法同签名但操作不同维度（读 / 写 / 删），不是复制粘贴。",
+      "(: StateKey)": "C3 配置表产物：get/set/resetPointer 三个方法同签名，同上。"
+    }
+  },
+  "generatedAt": "2026-11-17 (after p17-signature-audit-r1)"
 }
