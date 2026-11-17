@@ -746,7 +746,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     count: number,
   ): void {
     for (let i = 0; i < count; i++) {
-      h.manager.hydrateSessionMessages('p1', `flood-${i}`);
+      h.manager.hydrateSessionMessages(`flood-${i}`, 'p1');
     }
   }
 

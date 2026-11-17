@@ -37,7 +37,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     // backfill 前直接 undo_send 会被 Step 8 的护栏拦下（空 targetTree）。
     await rejectsErr(
-      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1),
+      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
@@ -51,7 +51,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
 
     // 现在 undo_send 不再触发护栏，且回滚到 backfill 时的快照（user1 是
     // undo_send 锚点，回滚后 user1 自身也被删除——和 R2 同语义）。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1);
 
     assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
     assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");
@@ -89,7 +89,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     // 改文件后回滚到 assistant1：必须拿到 v1，证明 backfill 没覆盖。
     await svfs.write("/keep.md", "dirty", { versionCheck: false });
     await svfs.write("/tail.md", "tail-dirty", { versionCheck: false });
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1);
 
     assert.equal(unwrap(await svfs.read("/keep.md")).content, "v1");
     // tail.md 不在 assistant1 的 checkpoint 里——回滚会删除它。
@@ -119,7 +119,7 @@ describe("MessageCheckpointService.backfillMissingBaselines (T-DS4)", () => {
     unwrap(await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id));
 
     await svfs.write("/a.md", "dirty", { versionCheck: false });
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1);
     assert.equal(unwrap(await svfs.read("/a.md")).content, "a");
   });
 

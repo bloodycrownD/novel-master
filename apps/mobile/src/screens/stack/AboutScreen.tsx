@@ -14,10 +14,10 @@ import {
   persistUpdateCheckResult,
   readLastCheckRemoteVersion,
   readLastCheckStatus,
-  readUpdatesAutoCheck,
   writeDismissedVersion,
-  writeUpdatesAutoCheck,
 } from '@/storage/update-prefs';
+import {readBoolPref, writeBoolPref} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '@/storage/app-ui-keys';
 import {APP_LINKS, APP_VERSION} from '@/update-check/app-meta';
 import {checkForUpdates} from '@/update-check/check-for-updates';
 import type {UpdateCheckData} from '@/update-check/types';
@@ -56,7 +56,7 @@ export function AboutScreen() {
     if (!appUi) return;
     // 读偏好失败按「无记录」呈现（错误通道迁移四期：reader 走 Result），
     // 与旧异常通道 `void refresh()` 丢弃 rejection 的可见结果一致。
-    const [auto, status, remote] = await Promise.all([readUpdatesAutoCheck(appUi), readLastCheckStatus(appUi), readLastCheckRemoteVersion(appUi)]);
+    const [auto, status, remote] = await Promise.all([readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true), readLastCheckStatus(appUi), readLastCheckRemoteVersion(appUi)]);
     setAutoCheck(auto);
     setLastStatus(status.ok ? status.value : undefined);
     setLastRemote(remote.ok ? remote.value : undefined);
@@ -141,7 +141,7 @@ export function AboutScreen() {
         onValueChange={next => {
           if (!appUi) return;
           setAutoCheck(next);
-          void writeUpdatesAutoCheck(appUi, next).catch(err => showToast(toastMessage('保存失败', err)));
+          void writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, next).catch(err => showToast(toastMessage('保存失败', err)));
         }}
       />
       <ProfileMenuItem

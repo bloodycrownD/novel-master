@@ -1,26 +1,21 @@
-import {
-  decodeAfterSanitize,
-  decodeForMarkdownInput,
-  decodeLiteralHtmlEntities,
-} from '@/components/rich-content/decode-literal-html-entities';
+import {Text} from '@novel-master/core/common';
+import {decodeAfterSanitize} from '@/components/rich-content/decode-literal-html-entities';
 import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
-describe('decodeLiteralHtmlEntities', () => {
+describe('Text.decodeHtmlEntities', () => {
   it('decodes &quot; and double-encoded &amp;quot;', () => {
-    expect(decodeLiteralHtmlEntities('&quot;重新做人&quot;')).toBe(
-      '"重新做人"',
-    );
-    expect(decodeLiteralHtmlEntities('&amp;quot;重新做人&amp;quot;')).toBe(
+    expect(Text.decodeHtmlEntities('&quot;重新做人&quot;')).toBe('"重新做人"');
+    expect(Text.decodeHtmlEntities('&amp;quot;重新做人&amp;quot;')).toBe(
       '"重新做人"',
     );
   });
 
   it('leaves normal Chinese quotes unchanged', () => {
-    expect(decodeLiteralHtmlEntities('「有意思」')).toBe('「有意思」');
+    expect(Text.decodeHtmlEntities('「有意思」')).toBe('「有意思」');
   });
 
-  it('decodeForMarkdownInput 还原尖括号实体', () => {
-    expect(decodeForMarkdownInput('&lt;xxx&gt;')).toBe('<xxx>');
+  it('完整解码还原尖括号实体', () => {
+    expect(Text.decodeHtmlEntities('&lt;xxx&gt;')).toBe('<xxx>');
   });
 
   it('decodeAfterSanitize 保留尖括号实体并仍解 quot', () => {

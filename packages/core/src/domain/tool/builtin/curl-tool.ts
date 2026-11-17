@@ -33,7 +33,7 @@ import { z } from "zod";
 import { Encoding } from "@/common/encoding.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
+import { sliceUtf8BytePrefix, TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { sinkOversizedOutput, type OversizedSinkResult } from "./overflow-sink.js";
@@ -114,41 +114,6 @@ interface CurlToolOutput {
 
 /** 非 `text/` 主类型里按文本处理的 subtype 关键字（与工具描述同口径）。 */
 const TEXTUAL_CONTENT_TYPE_HINTS = ["json", "xml", "javascript", "svg", "yaml", "urlencoded"];
-
-/**
- * 按字节预算返回正文前缀：TextEncoder 增量编码并累计字节数，
- * 找到预算内能容纳的最大字符切点后在该处截断。
- *
- * 不能按字符数切：含多字节字符时等量字符可膨胀到远超预算
- * （如中文 3 字节/字符）。代理对成对推进，避免切在半个字符上。
- */
-// nm-style: keep-local — 外层块扫描与块内码位扫描共享 `used` 游标，切点必须落在完整码位边界；内联到 run 会把这条推进不变量拆进 fetch 分支。
-function truncateToByteBudget(text: string, maxBytes: number): string {
-  const encoder = new TextEncoder();
-  const CHUNK = 8192;
-  let used = 0;
-  for (let i = 0; i < text.length; i += CHUNK) {
-    const chunk = text.slice(i, Math.min(i + CHUNK, text.length));
-    const chunkBytes = encoder.encode(chunk).byteLength;
-    if (used + chunkBytes <= maxBytes) {
-      used += chunkBytes;
-      continue;
-    }
-    // 该块超预算：块内逐码位（代理对成对）推进，找到恰好装满预算的切点。
-    for (let j = 0; j < chunk.length; ) {
-      const codePoint = chunk.codePointAt(j)!;
-      const charLength = codePoint > 0xffff ? 2 : 1;
-      const charBytes = encoder.encode(String.fromCodePoint(codePoint)).byteLength;
-      if (used + charBytes > maxBytes) {
-        return text.slice(0, i + j);
-      }
-      used += charBytes;
-      j += charLength;
-    }
-    return text.slice(0, i + chunk.length);
-  }
-  return text;
-}
 
 /**
  * 静态 `curl` 工具实例。
@@ -407,7 +372,9 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
             message: sink.message,
           });
         }
-        const kept = truncateToByteBudget(text, TOOL_OUTPUT_MAX_BYTES);
+        // 与 read/grep 同口径：字节预算内最大的完整码位前缀（不切半个字符），
+        // 截断后缀由本工具的 Output truncated 文案自己拼。
+        const kept = sliceUtf8BytePrefix(text, TOOL_OUTPUT_MAX_BYTES);
         return Result.ok({
           url: normalizedUrl,
           finalUrl,

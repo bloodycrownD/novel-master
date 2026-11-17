@@ -4,7 +4,7 @@
  * @module services/cloud-sync-config.store
  */
 import { randomUUID } from "node:crypto";
-import { ensureTrailingSlash } from "@novel-master/core";
+import { ensureTrailingSlash, type CloudSyncConfigInput } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
 import { Kkv } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
@@ -63,17 +63,6 @@ export type CloudSyncConfigDto = {
   enabled: boolean;
 };
 
-export type CloudSyncSetConfigInput = {
-  endpoint: string;
-  bucket: string;
-  region: string;
-  pathPrefix: string;
-  accessKeyId: string;
-  secretAccessKey?: string;
-  forcePathStyle: boolean;
-  deviceLabel?: string;
-};
-
 export type CloudSyncLocalMeta = {
   lastSyncedRev: number;
   lastPullAt: string;
@@ -91,7 +80,7 @@ export type CloudSyncLocalMeta = {
  */
 export interface CloudSyncConfigStore {
   getConfig(): Promise<Result<CloudSyncConfigDto, AppError>>;
-  setConfig(input: CloudSyncSetConfigInput): Promise<Result<void, AppError>>;
+  setConfig(input: CloudSyncConfigInput): Promise<Result<void, AppError>>;
   setEnabled(enabled: boolean): Promise<void>;
   getPublicConfig(): Promise<Result<CloudSyncPublicConfig, AppError>>;
   getSecretAccessKey(): Promise<string | null>;

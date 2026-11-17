@@ -8,12 +8,12 @@ import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-te
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
 import { blocksToGeminiParts, chatMessagesToGeminiContents, geminiPartsToBlocks, toolsToGeminiFunctionDeclarations } from "../logic/gemini-content-mapper.js";
-import { createGeminiSseParserState, feedGeminiSseChunk, finishGeminiSse, finishGeminiSsePartial } from "../logic/gemini-sse-parser.js";
+import { createGeminiSseParser } from "../logic/gemini-sse-parser.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
-import { applyGeminiThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { parseGeminiUsage } from "../logic/usage-parser.js";
+import { applyThinkingToBody } from "../logic/apply-thinking-to-body.js";
+import { parseUsage } from "../logic/usage-parser.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "gemini" as const;
@@ -41,12 +41,12 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     if (req.stream) {
       const url = this.modelUrl(req, "streamGenerateContent");
-      const state = createGeminiSseParserState();
+      const parser = createGeminiSseParser({ onStream: req.onStream });
 
       try {
         const headers = { "Content-Type": "application/json", ...req.extraHeaders };
         const init = { method: "POST", headers, body: JSON.stringify(this.buildRequestBody(req)), signal: req.scope?.signal };
-        await postSse(url, init, (chunk) => feedGeminiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+        await postSse(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
         if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
@@ -54,10 +54,10 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       }
 
       const aborted = req.scope?.signal.aborted === true;
-      const finishResult = aborted ? finishGeminiSsePartial(state, req.onStream) : finishGeminiSse(state, req.onStream);
+      const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = messageBodyTextFromBlocks(blocks);
-      const usage = parseGeminiUsage(streamRaw);
+      const usage = parseUsage("gemini", streamRaw);
       const result: LlmChatResult = {
         assistantText,
         blocks,
@@ -78,7 +78,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     const parts = record.candidates?.[0]?.content?.parts ?? [];
     const blocks = geminiPartsToBlocks(parts);
     const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseGeminiUsage(raw);
+    const usage = parseUsage("gemini", raw);
     return { assistantText, blocks, raw, usage };
   }
 
@@ -103,7 +103,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "gemini") {
       body.generationConfig = { ...req.sampling.gemini };
     }
-    applyGeminiThinkingToBody(body, req.thinking);
+    applyThinkingToBody("gemini", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 generationConfig）。
     Object.assign(body, req.extraBody);
     return body;

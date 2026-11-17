@@ -45,7 +45,6 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { AgentStreamRegistry } from "../agent-stream-registry.port.js";
 import type { PersistentPreferences } from "../../persistent-preferences/persistent-preferences.port.js";
 import {
@@ -97,13 +96,8 @@ interface DefaultAgentRunnerDeps {
    */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
-  /**
-   * 压缩执行所需的消息服务；条件压缩命中时与 messageTranscriptEffects 同进同退。
-   * 对话轨由 assembleAgentRunnerDeps 注入。
-   */
+  /** 压缩执行所需的消息服务（hide + 截断入口）；对话轨由 assembleAgentRunnerDeps 注入。 */
   readonly messages?: MessageService;
-  /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
-  readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
@@ -452,15 +446,14 @@ export class DefaultAgentRunner implements AgentRunner {
           }
           if (shouldCompact && !stepCompactionEmitted) {
             // 条件压缩直调化：不再经 eventOrchestrator.emit，改调 runCompaction。
-            // messages / messageTranscriptEffects 由 assembleAgentRunnerDeps 在
-            // includeCompactionOrchestrator:true 时与 compactionConditions 同注入。
+            // messages 由 assembleAgentRunnerDeps 在 includeCompactionOrchestrator:true
+            // 时与 compactionConditions 同注入。
             const messages = this.deps.messages;
-            const messageTranscriptEffects = this.deps.messageTranscriptEffects;
-            assert(messages != null && messageTranscriptEffects != null, "compaction requires messages + transcript effects");
+            assert(messages != null, "compaction requires messages");
             const hiddenDepth = await this.deps.compactionConditions!.getHideStartDepth();
             if (!hiddenDepth.ok) raiseRunError(hiddenDepth.error);
             const hideStartDepth = hiddenDepth.value;
-            await runCompaction({ sessionKkv: this.deps.sessionKkv, messages, messageTranscriptEffects }, { sessionId, projectId, hideStartDepth });
+            await runCompaction({ sessionKkv: this.deps.sessionKkv, messages }, { sessionId, hideStartDepth });
             stepCompactionEmitted = true;
           }
         }

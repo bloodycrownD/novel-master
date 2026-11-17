@@ -34,6 +34,7 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -422,26 +423,10 @@ export class DefaultMessageService implements MessageService {
       return Result.err(new AppError("CHAT_NOT_FOUND", { detail: `message not found: ${afterMessageId}`, kind: "message", id: afterMessageId, sessionId, messageId: afterMessageId }));
     }
 
-    // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。
-    const tailRead = await this.deps.messages.listBySessionFromSeq(sessionId, anchor.seq + 1);
-    if (tailRead.kind === "failed") return Result.err(tailRead.error);
-    // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按边界语义转抛。
-    if (tailRead.kind !== "completed") throw createAbortError();
-    const tailMessages = tailRead.value;
-    if (tailMessages.length === 0) {
-      // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
-      await this.invalidatePromptTokens(sessionId);
-      return Result.ok(undefined);
-    }
-
+    // tail 截断核心与回滚 / 批量删共用 `truncateTailInTransaction`：删除链、backfill
+    // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
     await this.deps.conn.transaction(async (tx) => {
-      const messages = new SqliteMessageRepository(tx);
-      const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      // 发生删除即清 backfill 游标（tail 截断后 seq 复用，防线同 delete）。
-      await new SqliteSessionKkvRepository(tx).clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
-      const tailIds = tailMessages.map((m) => m.id);
-      await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
-      await messages.deleteAfterSeq(sessionId, anchor.seq);
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);

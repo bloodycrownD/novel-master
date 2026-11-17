@@ -399,7 +399,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     assert.equal(await readCursor(session.id), "3");
 
     // undo_send 主路径（truncate-tail）：回滚到 m1 发送前，m1 自身也会被删。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, m1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, m1.id);
     assert.equal(await readCursor(session.id), null, "发生删除即清游标");
 
     // 清尾后新消息复用被删的 seq（nextSeq = MAX(seq)+1，tail 已删则从头计）。

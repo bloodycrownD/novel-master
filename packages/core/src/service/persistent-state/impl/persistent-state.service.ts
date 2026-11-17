@@ -15,6 +15,17 @@ import { KEY_CURRENT_AGENT_ID, KEY_CURRENT_MODEL_ID, KEY_CURRENT_PROJECT_ID, KEY
 
 const MODULE = WORKSPACE_STATE_MODULE;
 
+/** 工作区指针 SSoT：`invalidatesPromptTokens` 决定 set 后是否丢弃当前会话 API 占用。 */
+const STATE_KEYS = {
+  currentProjectId: { key: KEY_CURRENT_PROJECT_ID, invalidatesPromptTokens: false },
+  currentSessionId: { key: KEY_CURRENT_SESSION_ID, invalidatesPromptTokens: false },
+  currentProviderId: { key: KEY_CURRENT_PROVIDER_ID, invalidatesPromptTokens: false },
+  currentModelId: { key: KEY_CURRENT_MODEL_ID, invalidatesPromptTokens: true },
+  currentAgentId: { key: KEY_CURRENT_AGENT_ID, invalidatesPromptTokens: true },
+} as const;
+
+type StateKey = keyof typeof STATE_KEYS;
+
 export class DefaultPersistentState implements PersistentState {
   /**
    * @param kkv 工作区指针存储（`nm-workspace-state`）。
@@ -25,100 +36,95 @@ export class DefaultPersistentState implements PersistentState {
   constructor(private readonly kkv: KkvService, private readonly sessionKkv?: SessionKkvService | null) {}
 
   getCurrentProjectId(): Promise<Result<string | undefined, AppError>> {
-    return this.get(KEY_CURRENT_PROJECT_ID);
+    return this.getPointer("currentProjectId");
   }
 
-  setCurrentProjectId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_PROJECT_ID, id);
+  setCurrentProjectId(id: string): Promise<Result<void, AppError>> {
+    return this.setPointer("currentProjectId", id);
   }
 
   resetCurrentProjectId(): Promise<void> {
-    return this.reset(KEY_CURRENT_PROJECT_ID);
+    return this.resetPointer("currentProjectId");
   }
 
   getCurrentSessionId(): Promise<Result<string | undefined, AppError>> {
-    return this.get(KEY_CURRENT_SESSION_ID);
+    return this.getPointer("currentSessionId");
   }
 
-  setCurrentSessionId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_SESSION_ID, id);
+  setCurrentSessionId(id: string): Promise<Result<void, AppError>> {
+    return this.setPointer("currentSessionId", id);
   }
 
   resetCurrentSessionId(): Promise<void> {
-    return this.reset(KEY_CURRENT_SESSION_ID);
+    return this.resetPointer("currentSessionId");
   }
 
   getCurrentProviderId(): Promise<Result<string | undefined, AppError>> {
-    return this.get(KEY_CURRENT_PROVIDER_ID);
+    return this.getPointer("currentProviderId");
   }
 
   /** nm-style: keep-public — PersistentState 端口方法；CLI `nm provider use` 单点消费（apps 禁调）。 */
-  setCurrentProviderId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_PROVIDER_ID, id);
+  setCurrentProviderId(id: string): Promise<Result<void, AppError>> {
+    return this.setPointer("currentProviderId", id);
   }
 
   resetCurrentProviderId(): Promise<void> {
-    return this.reset(KEY_CURRENT_PROVIDER_ID);
+    return this.resetPointer("currentProviderId");
   }
 
   getCurrentModelId(): Promise<Result<string | undefined, AppError>> {
-    return this.get(KEY_CURRENT_MODEL_ID);
+    return this.getPointer("currentModelId");
   }
 
   async setCurrentModelId(id: string): Promise<Result<void, AppError>> {
     const trimmed = id.trim();
     if (trimmed.includes("/")) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (legacy path not accepted): ${id}`, modelId: id }));
     if (!isSavedModelUuidFormat(trimmed)) return Result.err(new AppError("PROVIDER_INVALID_SAVED_MODEL_ID", { detail: `Invalid saved model id (expected UUID): ${id}`, modelId: id }));
-    return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
+    return this.setPointer("currentModelId", trimmed);
   }
 
   resetCurrentModelId(): Promise<void> {
-    return this.reset(KEY_CURRENT_MODEL_ID);
+    return this.resetPointer("currentModelId");
   }
 
   getCurrentAgentId(): Promise<Result<string | undefined, AppError>> {
-    return this.get(KEY_CURRENT_AGENT_ID);
+    return this.getPointer("currentAgentId");
   }
 
   setCurrentAgentId(id: string): Promise<Result<void, AppError>> {
-    return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_AGENT_ID, id);
+    return this.setPointer("currentAgentId", id);
   }
 
   /** nm-style: keep-public — PersistentState 端口方法；agent 删除链单点消费。 */
   resetCurrentAgentId(): Promise<void> {
-    return this.reset(KEY_CURRENT_AGENT_ID);
+    return this.resetPointer("currentAgentId");
   }
 
   /** `KKV_NOT_FOUND` 归一为 `undefined`，其余 KKV 失败经 `Result.err` 原样接力。 */
-  private async get(key: string): Promise<Result<string | undefined, AppError>> {
-    const raw = await this.kkv.get(MODULE, key);
+  private async getPointer(name: StateKey): Promise<Result<string | undefined, AppError>> {
+    const raw = await this.kkv.get(MODULE, STATE_KEYS[name].key);
     if (!raw.ok && !isAppError(raw.error, "KKV_NOT_FOUND")) return Result.err(raw.error);
     return Result.ok(raw.ok ? raw.value : undefined);
   }
 
-  private async set(key: string, value: string): Promise<void> {
-    await this.kkv.set(MODULE, key, value);
-  }
-
   /**
-   * 切换模型 / Agent 成功后，丢弃当前会话陈旧的 API 占用。
+   * 写指针；配置标记 `invalidatesPromptTokens` 时丢弃当前会话陈旧的 API 占用。
    *
    * 双删（进程内热层 + session KKV 行）：只清热层的话，重启后 KKV 里的
    * 旧模型占用会被读回，按 api 口径参与阈值判定（跳掉 heuristic 安全系数）。
    */
-  private async setAndInvalidatePromptTokenCache(key: string, value: string): Promise<Result<void, AppError>> {
-    await this.set(key, value);
-    const sessionId = await this.getCurrentSessionId();
+  private async setPointer(name: StateKey, value: string): Promise<Result<void, AppError>> {
+    await this.kkv.set(MODULE, STATE_KEYS[name].key, value);
+    if (!STATE_KEYS[name].invalidatesPromptTokens) return Result.ok(undefined);
+    const sessionId = await this.getPointer("currentSessionId");
     if (!sessionId.ok) return Result.err(sessionId.error);
-    if (sessionId.value != null) {
-      await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId.value);
-    }
+    if (sessionId.value != null) await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId.value);
     return Result.ok(undefined);
   }
 
-  private async reset(key: string): Promise<void> {
+  private async resetPointer(name: StateKey): Promise<void> {
     try {
-      await this.kkv.delete(MODULE, key);
+      await this.kkv.delete(MODULE, STATE_KEYS[name].key);
     } catch (error) {
       if (isAppError(error, "KKV_NOT_FOUND")) {
         return;

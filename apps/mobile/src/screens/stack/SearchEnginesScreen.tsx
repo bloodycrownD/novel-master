@@ -16,6 +16,7 @@ import type {SearchConfigPublic} from '@novel-master/core';
 import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
 import {BuiltinTag} from '@/components/provider/BuiltinTag';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
+import {HelpSection} from '@/components/common/HelpSection';
 import {ConfigListCard} from '@/components/ui/ConfigListCard';
 import {HelpIcon} from '@/components/icons/TabIcons';
 import {ModalShell} from '@/components/ui/ModalShell';
@@ -35,16 +36,6 @@ import {engineHint, engineTitle} from './search-engine-meta';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SearchEngineEntry = SearchConfigPublic['engines'][number];
-
-/** 帮助弹窗一段说明：小标题 + 一句话。 */
-function HelpSection({title, body, tokens}: {title: string; body: string; tokens: {text: string; textSecondary: string}}) {
-  return (
-    <View style={styles.helpSection}>
-      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
-      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>{body}</Text>
-    </View>
-  );
-}
 
 const EMPTY_ROWS: readonly SearchEngineEntry[] = [];
 
@@ -321,9 +312,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
-  helpSection: {marginBottom: 12},
-  helpSectionTitle: {fontSize: 14, fontWeight: '600', marginBottom: 2},
-  helpSectionBody: {fontSize: 13, lineHeight: 19},
   helpCloseRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: 2,

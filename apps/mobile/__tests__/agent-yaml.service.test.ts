@@ -64,10 +64,10 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 import {
-  decodeAgentYamlText,
   exportAgentYaml,
   importAgentYaml,
 } from '@/services/agent-yaml.service';
+import {decodeAgentYamlText} from '@novel-master/core/agent';
 
 describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
@@ -84,9 +84,10 @@ describe('agent-yaml.service', () => {
       },
     } as any;
     await expect(exportAgentYaml(runtime, 'a1')).resolves.toBe('saved');
+    // 编解码单源在 core：写出的是真实 YAML（不再是 mock 的 'yaml' 字面量）。
     expect(mockWriteFile).toHaveBeenCalledWith(
       '/tmp/a1.agent.yaml',
-      'yaml',
+      expect.stringContaining('name: A'),
       'utf8',
     );
     expect(mockSaveDocuments).toHaveBeenCalled();
@@ -109,15 +110,9 @@ describe('agent-yaml.service', () => {
     mockKeepLocalCopy.mockResolvedValueOnce([
       {status: 'success', localUri: 'file:///tmp/local-a1.agent.yaml'},
     ]);
-    mockReadFile.mockResolvedValueOnce('name: imported');
-    // 四期签名：decode 沿 Result 回传——fake 与真实契约同语义。
-    mockDecode.mockImplementationOnce(() => ({
-      ok: true as const,
-      value: {
-        name: 'imported',
-        prompts: {persist: [], dynamic: []},
-      },
-    }));
+    mockReadFile.mockResolvedValueOnce(
+      'schemaVersion: 1\nname: imported\nprompts: {}\n',
+    );
     const runtime = {
       agentRegistry: {
         upsert: jest.fn(async () => ({ok: true as const, value: undefined})),
@@ -135,14 +130,11 @@ describe('agent-yaml.service', () => {
   });
 
   it('rejects invalid yaml text', () => {
-    // 四期签名：parseText 失败沿 Result.err 回传（decodeAgentYamlText 不再抛错）。
-    mockParseText.mockImplementationOnce(() => ({
-      ok: false as const,
-      error: new Error('bad yaml'),
-    }));
+    // 编解码单源在 core：parseText 失败沿 Result.err 回传（AppError 通道，不再抛错）。
     const decoded = decodeAgentYamlText('name: [oops');
     expect(decoded.ok).toBe(false);
-    expect(decoded.ok ? undefined : decoded.error.message).toBe('bad yaml');
+    if (decoded.ok) return;
+    expect(decoded.error.key).toBe('CONFIG_DECODE_INVALID_SCHEMA');
   });
 
   it('rejects schema-invalid agent yaml', () => {
@@ -155,6 +147,10 @@ prompts:
       type: text
       role: system
 `;
-    expect(() => decodeAgentYamlText(yaml)).toThrow();
+    const decoded = decodeAgentYamlText(yaml);
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) return;
+    // schema 的 superRefine 把域 AppError 挂在 issue params 上原样带出，key 是 AGENT_INVALID_SCHEMA。
+    expect(decoded.error.key).toBe('AGENT_INVALID_SCHEMA');
   });
 });

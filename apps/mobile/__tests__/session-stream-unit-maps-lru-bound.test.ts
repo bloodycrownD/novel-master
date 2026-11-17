@@ -95,7 +95,7 @@ function fillIdleViews(
   start = 0,
 ): void {
   for (let i = start; i < start + count; i++) {
-    manager.hydrateSessionMessages('p1', `idle-${i}`);
+    manager.hydrateSessionMessages(`idle-${i}`, 'p1');
   }
 }
 

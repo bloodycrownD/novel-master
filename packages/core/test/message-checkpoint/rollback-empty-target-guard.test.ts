@@ -38,7 +38,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     const filesBefore = unwrap(await svfs.list("/")).length;
 
     await rejectsErr(
-      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
@@ -77,7 +77,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
       blocks: [{ type: "text", text: "hello" }],
     }));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
 
@@ -105,7 +105,7 @@ describe("MessageRollbackService S-13 empty-target guardrail (T-DS2)", () => {
     }));
 
     // anchor checkpoint 存在 → targetTree 非空 → 正常回滚，不抛护栏错误。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
 
     assert.equal(unwrap(await svfs.read("/anchor.md")).content, "at-send");
     assert.ok(!(await svfs.read("/later.md")).ok, "later.md 应已被回滚删除");

@@ -7,11 +7,11 @@ import { chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
-  notifyComposerStatusAfterFloorOrCompaction,
-  notifyComposerStatusAfterSessionKkvCleared,
+  refreshComposerStatusAfterFloorOrCompaction,
+  refreshComposerStatusAfterSessionKkvCleared,
 } from "../src/main/services/notify-composer-status-after-kkv-clear.js";
 
-describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
+describe("refresh-composer-status-after-kkv-clear (T-CR5)", () => {
   beforeEach(() => {
     chatAnnotateDraftStore.resetForTests();
   });
@@ -26,7 +26,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
       } as never;
     });
 
-    await notifyComposerStatusAfterSessionKkvCleared({} as never, "s1");
+    await refreshComposerStatusAfterSessionKkvCleared({} as never, { projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, { sessionId: "s1", attachments: [] });
@@ -63,7 +63,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
       userAnnotation: "note3",
     });
 
-    await notifyComposerStatusAfterFloorOrCompaction({} as never, "s1");
+    await refreshComposerStatusAfterFloorOrCompaction({} as never, { projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, {
@@ -90,7 +90,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
 
     // 清空 store 后再推 → 空 attachments（D7 收窄口径）
     chatAnnotateDraftStore.resetForTests();
-    await notifyComposerStatusAfterFloorOrCompaction({} as never, "s1");
+    await refreshComposerStatusAfterFloorOrCompaction({} as never, { projectId: "p1", sessionId: "s1" });
     assert.equal(sent.length, 2);
     assert.deepEqual(sent[1]?.payload, {
       sessionId: "s1",

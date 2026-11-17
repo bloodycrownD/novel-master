@@ -22,18 +22,13 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
+import { basenameOf } from "@/domain/vfs/logic/basename.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { createScopedVfsService } from "../create-scoped-vfs-service.js";
 import type { PhysicalVfsService } from "../physical-vfs.port.js";
 
-/** 路径末段（basename），无 label 行的排序回退键。 */
-function basenameOf(path: string): string {
-  const segments = path.split("/").filter(Boolean);
-  return segments[segments.length - 1] ?? path;
-}
-
-/** 目录行优先、再按展示键（label，无则路径末段）字典序；合成行按项目名/会话名排而非 UUID。 */
+/** 目录行优先、再按展示键（label，无则路径末段 basename，单源 `domain/vfs/logic/basename.ts`）字典序；合成行按项目名/会话名排而非 UUID。 */
 function compareEntries(a: VfsListEntry, b: VfsListEntry): number {
   if (a.kind !== b.kind) {
     return a.kind === "directory" ? -1 : 1;

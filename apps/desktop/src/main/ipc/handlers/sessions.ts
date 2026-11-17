@@ -89,7 +89,7 @@ export function handleSessionsPullTemplate(req: SessionPullTemplateRequest): Pro
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    return rt.sessions.pullTemplate(req.sessionId);
+    return rt.sessions.pullSessionTemplate(req.sessionId);
   });
 }
 
@@ -108,7 +108,7 @@ export function handleSessionsPushTemplate(req: SessionPushTemplateRequest): Pro
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const pushed = await rt.sessions.pushTemplate(req.sessionId);
+    const pushed = await rt.sessions.pushSessionTemplate(req.sessionId);
     if (!pushed.ok) return pushed;
     const session = await rt.sessions.get(req.sessionId);
     if (!session.ok) return Result.err(session.error);

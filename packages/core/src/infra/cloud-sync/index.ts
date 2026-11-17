@@ -18,6 +18,7 @@ export type {
   CloudSyncLock,
   CloudSyncStatus,
 } from "./model/cloud-sync-status.js";
+export type { CloudSyncConfigInput } from "./model/cloud-sync-config.js";
 
 export {
   isEffectiveLock,

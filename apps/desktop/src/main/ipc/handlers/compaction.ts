@@ -31,7 +31,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
-import { notifyComposerStatusAfterFloorOrCompaction } from "../../services/notify-composer-status-after-kkv-clear.js";
+import { refreshComposerStatusAfterFloorOrCompaction } from "../../services/notify-composer-status-after-kkv-clear.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
 import { outcomeIfAborted, runAbortable } from "../run-scope.js";
@@ -80,7 +80,6 @@ export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: Com
   const deps: RunCompactionDeps = {
     sessionKkv: rt.sessionKkv,
     messages: rt.messages,
-    messageTranscriptEffects: rt.messageTranscriptEffects,
   };
   const hiddenDepth = await rt.compactionConditionEvaluator.getHideStartDepth();
   if (!hiddenDepth.ok) return { kind: "failed", error: hiddenDepth.error };
@@ -91,7 +90,6 @@ export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: Com
   const hooks: LongTaskHooks = { checkpoint: () => scope.checkpoint() };
   const params: Parameters<typeof runCompaction>[1] & { readonly hooks: LongTaskHooks } = {
     sessionId: req.sessionId,
-    projectId: req.projectId,
     hideStartDepth,
     trigger: "manual",
     hooks,
@@ -103,7 +101,7 @@ export async function doCompactionManual(rt: DesktopNovelMasterRuntime, req: Com
   }
   if (result.ok) {
     // 置位/压缩：project∪annotate；禁止终态强制 []
-    await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
+    await refreshComposerStatusAfterFloorOrCompaction(rt, { projectId: req.projectId, sessionId: req.sessionId });
   }
   return { kind: "completed", value: { ok: result.ok } };
 }

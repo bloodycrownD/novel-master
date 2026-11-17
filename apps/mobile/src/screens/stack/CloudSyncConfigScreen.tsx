@@ -115,7 +115,7 @@ export function CloudSyncConfigScreen() {
     setSaving(true);
     try {
       const input = toInput();
-      if (!input.secretAccessKey.trim() && secretKeySet) {
+      if (!input.secretAccessKey?.trim() && secretKeySet) {
         const existing = await runtime.secretStore.get('cloud-sync/s3-secret-key');
         if (!existing) {
           showToast('请填写 Secret Key');

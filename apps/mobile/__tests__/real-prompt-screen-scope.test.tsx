@@ -11,7 +11,7 @@
  * 另附 T-PR1/T-PR2：focus 重载单通道与 load 竞态守卫（手动压缩后 workplace
  * 重评估，靠聚焦回流取新数据）。
  *
- * 观测面是 `buildRealPromptPreviewTurns` 收到的实参（注入缝，与实现同源）。
+ * 观测面是 `buildRealPromptPreviewTurnsAdapter` 收到的实参（注入缝，与实现同源）。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import React from 'react';
@@ -61,7 +61,7 @@ jest.mock('@/hooks/useRuntime', () => ({
 }));
 
 jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewTurns: (...args: unknown[]) =>
+  buildRealPromptPreviewTurnsAdapter: (...args: unknown[]) =>
     mockBuildSegments(...(args as [])),
 }));
 
@@ -230,7 +230,7 @@ async function renderScreen(): Promise<TestRenderer.ReactTestRenderer> {
 
 // ⚠️ 每条用例后必须卸载：TestRenderer 造出的根不会随用例结束消失，它留在
 // 后面用例的 act/冲刷里继续 setState 与重渲染，会把「本用例调了几次
-// buildRealPromptPreviewTurns」这类计数断言搅浑（实测会多出等量的陈年调用）。
+// buildRealPromptPreviewTurnsAdapter」这类计数断言搅浑（实测会多出等量的陈年调用）。
 afterEach(() => {
   while (mountedTrees.length > 0) {
     act(() => {

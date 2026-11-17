@@ -12,6 +12,11 @@ import { normalizePath } from "../repositories/impl/normalize-path.js";
 /** VFS visibility scope (global, project, session, and meta domains). */
 export type VfsScope = { kind: "global" } | { kind: "project"; projectId: string } | { kind: "session"; projectId: string; sessionId: string } | { kind: "global-meta" } | { kind: "project-meta"; projectId: string };
 
+/** 是否为会话工作区 scope（需走 userVfsTurn）。 */
+export function isSessionVfsScope(scope: VfsScope): scope is Extract<VfsScope, { kind: "session" }> {
+  return scope.kind === "session";
+}
+
 /**
  * global-meta 域的物理挂载前缀为**空串**：域内逻辑路径自带 `/meta` 段
  * （SkillsService 约定写 `/meta/skills/...`），物理路径 = 逻辑路径原样，

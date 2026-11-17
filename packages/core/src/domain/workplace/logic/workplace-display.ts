@@ -5,7 +5,7 @@
  */
 
 import { Xml } from "@/common/xml.js";
-import { formatLocalDateTime } from "@/infra/date-format.js";
+import { DateTime } from "@/common/datetime.js";
 import type { DisplayState } from "../model/workplace-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
 
@@ -13,10 +13,11 @@ import { parseMarkdownFrontMatter } from "./front-matter.js";
  * Formats epoch ms as local `yyyy-MM-dd HH:mm:ss`.
  *
  * nm-style: keep-public — `public/workplace.ts` 仍导出该兼容别名，撤除需同步
- * public barrel（本轮只改 domain 范围）；实现已是 infra 单源 `formatLocalDateTime`。
+ * public barrel（本轮只改 domain 范围）；实现已是 `common/datetime.ts` 的
+ * `DateTime.localDateTime` 单源。
  */
 export function formatLocalMtime(mtimeMs: number): string {
-  return formatLocalDateTime(mtimeMs);
+  return DateTime.localDateTime(mtimeMs);
 }
 
 /**

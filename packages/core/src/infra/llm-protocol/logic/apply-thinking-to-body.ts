@@ -1,53 +1,51 @@
 /**
- * 将 {@link ModelThinkingParams} 合并进各协议 HTTP 请求 body。
+ * 将 {@link ModelThinkingParams} 写入各协议 HTTP 请求 body。
  *
  * @module infra/llm-protocol/logic/apply-thinking-to-body
  */
 
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
+import type { LlmProtocolKind } from "../ports/adapter.port.js";
 
-/**
- * 若 thinking 为 Anthropic 协议，写入 `body.thinking`。
- *
- * @param body 待序列化的请求 body。
- * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
- */
-export function applyAnthropicThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
-  if (thinking?.protocol !== "anthropic") {
+type ThinkingOf<P extends LlmProtocolKind> = Extract<ModelThinkingParams, { protocol: P }>;
+
+/** 各协议 thinking 的 wire 落点：父字段（可选，已存在则浅合并）+ 写入键 + 值投影。 */
+type ThinkingBodyField<P extends LlmProtocolKind> = {
+  readonly parent?: string;
+  readonly key: string;
+  readonly project: (thinking: ThinkingOf<P>) => unknown;
+};
+
+const ANTHROPIC_THINKING_FIELD: ThinkingBodyField<"anthropic"> = { key: "thinking", project: (t) => ({ type: t.anthropic.type, budget_tokens: t.anthropic.budget_tokens }) };
+const OPENAI_THINKING_FIELD: ThinkingBodyField<"openai"> = { key: "reasoning_effort", project: (t) => t.openai.reasoning_effort };
+const GEMINI_THINKING_FIELD: ThinkingBodyField<"gemini"> = { parent: "generationConfig", key: "thinkingConfig", project: (t) => ({ ...t.gemini.thinkingConfig }) };
+
+function writeThinkingField<P extends LlmProtocolKind>(body: Record<string, unknown>, field: ThinkingBodyField<P>, thinking: ThinkingOf<P>): void {
+  const value = field.project(thinking);
+  if (field.parent == null) {
+    body[field.key] = value;
     return;
   }
-  body.thinking = {
-    type: thinking.anthropic.type,
-    budget_tokens: thinking.anthropic.budget_tokens,
-  };
+  // 父字段与采样参数共用（gemini 的 generationConfig）：浅合并，保留已有键。
+  const existing = (body[field.parent] ?? {}) as Record<string, unknown>;
+  body[field.parent] = { ...existing, [field.key]: value };
 }
 
 /**
- * 若 thinking 为 OpenAI 协议，写入 `reasoning_effort`；与厂商型号无关。
+ * 按 adapter 期望协议写入 thinking 字段；thinking 缺失或协议不一致时不写。
  *
- * @param body 待序列化的请求 body。
- * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
+ * 判别用 adapter 侧协议而非 `thinking.protocol`：两者不一致时宁可不写，
+ * 也不把别的协议字段塞进当前 body。
  */
-export function applyOpenAiThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
-  if (thinking?.protocol !== "openai") {
+export function applyThinkingToBody(protocol: LlmProtocolKind, body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
+  if (thinking?.protocol !== protocol) {
     return;
   }
-  body.reasoning_effort = thinking.openai.reasoning_effort;
-}
-
-/**
- * 若 thinking 为 Gemini 协议，合并 `generationConfig.thinkingConfig`。
- *
- * @param body 待序列化的请求 body。
- * @param thinking 协议级思考参数；缺失或协议不匹配时不写入。
- */
-export function applyGeminiThinkingToBody(body: Record<string, unknown>, thinking: ModelThinkingParams | undefined): void {
-  if (thinking?.protocol !== "gemini") {
-    return;
+  if (thinking.protocol === "anthropic") {
+    writeThinkingField(body, ANTHROPIC_THINKING_FIELD, thinking);
+  } else if (thinking.protocol === "openai") {
+    writeThinkingField(body, OPENAI_THINKING_FIELD, thinking);
+  } else {
+    writeThinkingField(body, GEMINI_THINKING_FIELD, thinking);
   }
-  const existing = (body.generationConfig ?? {}) as Record<string, unknown>;
-  body.generationConfig = {
-    ...existing,
-    thinkingConfig: { ...thinking.gemini.thinkingConfig },
-  };
 }

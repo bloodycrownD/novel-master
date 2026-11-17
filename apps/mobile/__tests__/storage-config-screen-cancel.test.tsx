@@ -75,8 +75,8 @@ jest.mock('@/services/db-backup.service', () => ({
 }));
 
 jest.mock('@/services/db-maintenance.service', () => ({
-  getDatabaseMaintenanceStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
-  runDatabaseMaintenance: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
+  getDbMaintenanceStats: (..._args: unknown[]) => mockGetDatabaseMaintenanceStats(),
+  runDbMaintenance: (..._args: unknown[]) => mockRunDatabaseMaintenance(),
 }));
 
 jest.mock('@/services/log-export', () => ({

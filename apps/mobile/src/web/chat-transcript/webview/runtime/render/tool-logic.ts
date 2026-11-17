@@ -1,10 +1,11 @@
-import {summarizeToolInput} from '@novel-master/core/presentation/chat/tool-summary.js';
 import type {ToolCallRow} from '../state/state';
 
 /**
  * 工具调用摘要与状态标签（非 JSX）。
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
+ * `toolCallSummary` 单源在 core（RN 同用），这里只保留 webview 的入口名。
  */
+export {toolCallSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
 
 /**
  * 解析工具卡片「结果阅读」的可读正文：resultContent 非空（trim 口径）
@@ -17,22 +18,6 @@ import type {ToolCallRow} from '../state/state';
 export function readableToolResult(tool: ToolCallRow): string | undefined {
   const pickReadable = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value : undefined);
   return pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
-}
-
-export function toolCallSummary(row: ToolCallRow): string {
-  if (row.status === 'error' && row.summary) {
-    // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
-    // 超长按与成功摘要同档截断。
-    const firstLine = String(row.summary).split('\n')[0]?.trim() ?? '';
-    return firstLine.length > 120 ? firstLine.slice(0, 117) + '…' : firstLine;
-  }
-  const fromInput = summarizeToolInput(row.name || '', row.input || {});
-  if (fromInput) return fromInput;
-  if (row.resultContent) {
-    const t = String(row.resultContent).trim();
-    return t.length > 120 ? t.slice(0, 117) + '…' : t;
-  }
-  return '';
 }
 
 // nm-style: keep-public — 状态→文案映射与 toolStatusClass 成对供 ToolGroup 单点调用（本片禁改），内联会在渲染组件里复制状态阶梯。

@@ -20,7 +20,7 @@ export interface AssembleAgentRunnerDepsInput {
   /** AgentTurnRuntimePort 或 EventActionDeps 的 runtime 切片（modelRequests、eventBus 等）。 */
   readonly runtime: Pick<
     AgentTurnRuntimePort,
-    "messages" | "messageTranscriptEffects" | "modelRequests" | "messageCheckpoint" | "eventBus" | "sessionKkv" | "streamRegistry" | "skills" | "preferences"
+    "messages" | "modelRequests" | "messageCheckpoint" | "eventBus" | "sessionKkv" | "streamRegistry" | "skills" | "preferences"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly savedModelRepo?: SavedModelRepository;
@@ -76,13 +76,12 @@ export function assembleAgentRunnerDeps(input: AssembleAgentRunnerDepsInput): Cr
     return base;
   }
 
-  // 对话轨：注入压缩执行所需的 messages + messageTranscriptEffects，
-  // 以及压缩条件评估器。agent-runner 检测到 compactionConditions 命中时
-  // 直调 runCompaction，不再经 eventOrchestrator。
+  // 对话轨：注入压缩执行所需的 messages 以及压缩条件评估器。
+  // agent-runner 检测到 compactionConditions 命中时直调 runCompaction，
+  // 不再经 eventOrchestrator。
   return {
     ...base,
     compactionConditions: input.runtime.compactionConditionEvaluator,
     messages: input.runtime.messages,
-    messageTranscriptEffects: input.runtime.messageTranscriptEffects,
   };
 }

@@ -55,7 +55,7 @@ jest.mock('@/hooks/useRuntime', () => ({
 }));
 
 jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewTurns: (...args: unknown[]) =>
+  buildRealPromptPreviewTurnsAdapter: (...args: unknown[]) =>
     mockBuildTurns(...(args as [])),
 }));
 

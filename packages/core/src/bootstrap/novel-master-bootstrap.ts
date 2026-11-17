@@ -44,7 +44,7 @@ import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, runPendingSchemaMigrations } from "./schema-migrations/index.js";
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 
 const log = createLogger("bootstrap");
@@ -326,7 +326,7 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<Result<
  * @param conn - 已打开的 TDBC 连接
  */
 export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
-  clearDecodedContentCaches();
+  decodedContentCache.clear();
   await conn.transaction(async (tx) => {
     const bootRows = await tx.query<{ user_version: number }>("PRAGMA user_version");
     if (Number(bootRows[0]?.user_version ?? 0) >= SCHEMA_BOOT_VERSION) {

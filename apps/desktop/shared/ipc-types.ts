@@ -124,6 +124,8 @@ export const IPC_CHANNELS = {
   PREFERENCES_SET_SUBAGENT_STREAM: "nm:preferences/setSubagentStream",
   PREFERENCES_GET_THINKING_CONTEXT: "nm:preferences/getThinkingContext",
   PREFERENCES_SET_THINKING_CONTEXT: "nm:preferences/setThinkingContext",
+  PREFERENCES_GET_USER_VFS_UNIFIED_TOOL_TURN: "nm:preferences/getUserVfsUnifiedToolTurn",
+  PREFERENCES_SET_USER_VFS_UNIFIED_TOOL_TURN: "nm:preferences/setUserVfsUnifiedToolTurn",
 
   PROVIDERS_LIST: "nm:providers/list",
   PROVIDERS_GET: "nm:providers/get",

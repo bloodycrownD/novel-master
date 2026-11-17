@@ -2,8 +2,8 @@
  * db-maintenance.service（mobile）单测：T-DMM1 / T-DMM2。
  *
  * - T-DMM1：Agent 运行中两入口均 reject 中文错误且不触 stat/core；
- *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量，
- *   runDatabaseMaintenance 按序 stat → core 维护 → stat 返回前后体积。
+ *   正常路径 getDbMaintenanceStats 返回文件体积 + 可回收量，
+ *   runDbMaintenance 按序 stat → core 维护 → stat 返回前后体积。
  * - T-DMM2：core runDatabaseMaintenance 抛错时以 reject 语义上抛
  *   （可被调用方捕获），不吞错、错误后不再采后置体积。
  *
@@ -14,8 +14,8 @@
  */
 import {createAbortRegistry} from '@novel-master/core/abort';
 import {
-  getDatabaseMaintenanceStats,
-  runDatabaseMaintenance,
+  getDbMaintenanceStats,
+  runDbMaintenance,
 } from '@/services/db-maintenance.service';
 
 const mockGetPath = jest.fn();
@@ -86,11 +86,11 @@ describe('db-maintenance.service', () => {
     });
   });
 
-  it('T-DMM1: Agent 运行中 getDatabaseMaintenanceStats reject 中文错误且不触 stat/core', async () => {
+  it('T-DMM1: Agent 运行中 getDbMaintenanceStats reject 中文错误且不触 stat/core', async () => {
     mockAgentActive.mockReturnValue(true);
 
     // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
-    const stats = await getDatabaseMaintenanceStats(runtime);
+    const stats = await getDbMaintenanceStats(runtime);
     expect(stats.ok).toBe(false);
     if (!stats.ok) {
       expect(stats.error.message).toMatch(/Agent 运行中/);
@@ -99,11 +99,11 @@ describe('db-maintenance.service', () => {
     expect(mockCreateService).not.toHaveBeenCalled();
   });
 
-  it('T-DMM1: Agent 运行中 runDatabaseMaintenance reject 中文错误且不触 stat/core', async () => {
+  it('T-DMM1: Agent 运行中 runDbMaintenance reject 中文错误且不触 stat/core', async () => {
     mockAgentActive.mockReturnValue(true);
 
     // 四期签名：已知失败沿 Result.err 回传（中文文案在 detail），不再 reject。
-    const result = await runDatabaseMaintenance(runtime);
+    const result = await runDbMaintenance(runtime);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toMatch(/Agent 运行中/);
@@ -112,10 +112,10 @@ describe('db-maintenance.service', () => {
     expect(mockCreateService).not.toHaveBeenCalled();
   });
 
-  it('T-DMM1: getDatabaseMaintenanceStats 正常路径返回文件体积与可回收量', async () => {
+  it('T-DMM1: getDbMaintenanceStats 正常路径返回文件体积与可回收量', async () => {
     mockStat.mockResolvedValue({size: 1048576});
 
-    const stats = await getDatabaseMaintenanceStats(runtime);
+    const stats = await getDbMaintenanceStats(runtime);
 
     expect(mockStat).toHaveBeenCalledWith('/db/novel_master_vfs');
     expect(mockCreateService).toHaveBeenCalledWith(liveConn);
@@ -130,12 +130,12 @@ describe('db-maintenance.service', () => {
     });
   });
 
-  it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {
+  it('T-DMM1: runDbMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {
     mockStat
       .mockResolvedValueOnce({size: 1048576})
       .mockResolvedValueOnce({size: 524288});
 
-    const result = await runDatabaseMaintenance(runtime);
+    const result = await runDbMaintenance(runtime);
 
     expect(mockRunMaintenance).toHaveBeenCalledTimes(1);
     expect(mockRunMaintenance).toHaveBeenCalledWith();
@@ -158,7 +158,7 @@ describe('db-maintenance.service', () => {
       .mockResolvedValue({size: 999999});
 
     // rejects.toThrow 本身证明错误以 reject 语义上抛且可被调用方捕获
-    await expect(runDatabaseMaintenance(runtime)).rejects.toThrow(
+    await expect(runDbMaintenance(runtime)).rejects.toThrow(
       /VACUUM failed/,
     );
     // 错误中止后不再采后置体积（stat 仅前置一次）

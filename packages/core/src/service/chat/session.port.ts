@@ -61,14 +61,17 @@ export interface SessionService {
   /**
    * Overwrites session VFS + worktree from project template;
    * clears session-fs data but not messages.
+   *
+   * 分层门面：树复制 / 事务 / GC 的权威在 {@link TemplatePullService}，
+   * 会话存在性校验也只在那里做一次。
    */
-  pullTemplate(sessionId: string): Promise<Result<void, AppError>>;
+  pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
   /**
    * 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板，
    * 后续新建会话与其它会话「从上级同步」都会拿到覆盖后的母本。
    */
-  pushTemplate(sessionId: string): Promise<Result<void, AppError>>;
+  pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
   /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
   getComposerDraftJson(id: string): Promise<Result<string | null, AppError>>;

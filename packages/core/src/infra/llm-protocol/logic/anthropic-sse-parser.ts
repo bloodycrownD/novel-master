@@ -2,6 +2,7 @@
  * Incremental Anthropic Messages API SSE parser.
  *
  * Shared by {@link postSse} chunk delivery; abort partial uses {@link buildStreamPartialBlocks}.
+ * State 收在 {@link createAnthropicSseParser} 闭包里，同名动词归位到对象方法。
  *
  * @module infra/llm-protocol/logic/anthropic-sse-parser
  */
@@ -11,11 +12,10 @@ import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
-import { feedSseLines } from "./sse-line-buffer.js";
-import { parseSseDataLine } from "./sse-data-line.js";
-import { assertSseParseSucceededOrThrow, recordMalformedSseLine, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
+import { feedSseJsonEvents } from "./sse-json-events.js";
+import { assertSseParseSucceededOrThrow, type SseFinishResult, type SseParseDiagnostics } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
-import { parseAnthropicUsage } from "./usage-parser.js";
+import { ANTHROPIC_USAGE_FIELDS, parseUsage } from "./usage-parser.js";
 
 type ToolUseAccumulator = {
   id: string;
@@ -29,7 +29,8 @@ type ActiveBlock =
   | { type: "redacted_thinking"; data: string; signature?: string }
   | { type: "tool_use"; index: number };
 
-type AnthropicSseParserState = SseParseDiagnostics & {
+/** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
+export type AnthropicSseParserState = SseParseDiagnostics & {
   buffer: string;
   blocks: ContentBlock[];
   active: ActiveBlock | null;
@@ -43,19 +44,17 @@ type AnthropicSseParserState = SseParseDiagnostics & {
   degradedToolCalls: DegradedToolCall[];
 };
 
-export function createAnthropicSseParserState(): AnthropicSseParserState {
-  return {
-    buffer: "",
-    blocks: [],
-    active: null,
-    toolUses: [],
-    messageStartRaw: undefined,
-    messageDeltaRaw: undefined,
-    lastEmittedCompletionTokens: undefined,
-    malformedLineCount: 0,
-    degradedToolCalls: [],
-  };
-}
+export type AnthropicSseParserOptions = {
+  readonly onStream?: (event: LlmStreamEvent) => void;
+  readonly toolNames?: AnthropicToolNameWire;
+};
+
+export type AnthropicSseParser = {
+  readonly state: AnthropicSseParserState;
+  readonly feed: (chunk: string) => void;
+  readonly finish: () => SseFinishResult;
+  readonly finishPartial: () => SseFinishResult;
+};
 
 function flushActiveBlock(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): void {
   const active = state.active;
@@ -143,93 +142,6 @@ function ensureActiveThinking(state: AnthropicSseParserState): Extract<ActiveBlo
 }
 
 /**
- * Feed one UTF-8 text chunk (may split mid-line); emits stream events via `onStream`.
- *
- * message_delta 到达时同步 emit 流中 usage 事件（输出侧累计口径）：数据已在手，
- * 累计 output_tokens 与上次 emit 相同（或缺失）时不发——协议层不节流，事件量由上层合批吸收。
- */
-export function feedAnthropicSseChunk(state: AnthropicSseParserState, chunk: string, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): void {
-  feedSseLines(state, chunk, (line) => {
-    const payload = parseSseDataLine(line);
-    if (payload == null) {
-      return;
-    }
-    if (payload === "[DONE]") {
-      return;
-    }
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(payload) as Record<string, unknown>;
-    } catch {
-      recordMalformedSseLine(state, payload);
-      return;
-    }
-    const type = event.type;
-    if (type === "message_start") {
-      state.messageStartRaw = event;
-    } else if (type === "message_delta") {
-      state.messageDeltaRaw = event;
-      const usage = parseAnthropicUsage(state.messageDeltaRaw);
-      const completionTokens = usage?.completionTokens;
-      if (usage != null && completionTokens != null && completionTokens !== state.lastEmittedCompletionTokens) {
-        state.lastEmittedCompletionTokens = completionTokens;
-        onStream?.({ type: "usage", usage });
-      }
-    }
-    if (type === "content_block_start") {
-      flushActiveBlock(state, onStream, toolNames);
-      const block = event.content_block;
-      if (!Guards.isRecord(block) || typeof block.type !== "string") {
-        return;
-      }
-      if (block.type === "tool_use") {
-        state.toolUses.push({
-          id: typeof block.id === "string" ? block.id : "",
-          name: typeof block.name === "string" ? block.name : "",
-          inputJson: "",
-        });
-        state.active = { type: "tool_use", index: state.toolUses.length - 1 };
-      } else if (block.type === "thinking") {
-        state.active = { type: "thinking", text: [], signature: [] };
-      } else if (block.type === "redacted_thinking") {
-        const data = typeof block.data === "string" ? block.data : "";
-        const signature = typeof block.signature === "string" && block.signature !== "" ? block.signature : undefined;
-        state.active = { type: "redacted_thinking", data, signature };
-      } else if (block.type === "text") {
-        state.active = { type: "text", parts: [] };
-      }
-    } else if (type === "content_block_delta") {
-      const delta = event.delta;
-      if (!Guards.isRecord(delta)) {
-        return;
-      }
-      if (delta.type === "text_delta" && typeof delta.text === "string") {
-        // 非 text active 先收尾，再切到新的 text 块。
-        let activeText = state.active;
-        if (activeText?.type !== "text") {
-          flushActiveBlock(state);
-          activeText = { type: "text", parts: [] };
-          state.active = activeText;
-        }
-        activeText.parts.push(delta.text);
-        onStream?.({ type: "text-delta", text: delta.text });
-      } else if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
-        ensureActiveThinking(state).text.push(delta.thinking);
-        onStream?.({ type: "thinking-delta", text: delta.thinking });
-      } else if (delta.type === "signature_delta" && typeof delta.signature === "string") {
-        // Claude 4+ streams opaque signature fragments before content_block_stop.
-        ensureActiveThinking(state).signature.push(delta.signature);
-      } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string" && state.active?.type === "tool_use") {
-        const tu = state.toolUses[state.active.index]!;
-        tu.inputJson += delta.partial_json;
-      }
-    } else if (type === "content_block_stop") {
-      flushActiveBlock(state, onStream, toolNames);
-    }
-  });
-}
-
-/**
  * 合并 message_start / message_delta 双槽为单个 raw。
  *
  * usage 取 start 的输入侧（input_tokens + cache 字段）+ delta 的累计 output_tokens；
@@ -256,7 +168,7 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
   const startUsage = Guards.isRecord(startMessage?.usage) ? startMessage!.usage : Guards.isRecord(start.usage) ? start.usage : undefined;
   const usage: Record<string, unknown> = {};
   if (startUsage != null) {
-    const inputSideKeys = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "cache_creation"];
+    const inputSideKeys = [ANTHROPIC_USAGE_FIELDS.prompt, ANTHROPIC_USAGE_FIELDS.cacheRead, ANTHROPIC_USAGE_FIELDS.cacheCreationFlat, ANTHROPIC_USAGE_FIELDS.cacheCreationNested];
     for (const key of inputSideKeys) {
       if (startUsage[key] != null) {
         usage[key] = startUsage[key];
@@ -272,57 +184,140 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
   return merged;
 }
 
-/** Finalize parser state into content blocks (normal stream end). */
-export function finishAnthropicSse(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): SseFinishResult {
-  if (state.buffer !== "") {
-    feedAnthropicSseChunk(state, "\n", onStream, toolNames);
-  }
-
-  flushActiveBlock(state, onStream, toolNames);
-
-  // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
-  const asserted = assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
-  if (!asserted.ok) throw asserted.error;
-  return {
-    blocks: state.blocks,
-    streamRaw: mergeAnthropicStreamRaw(state),
-    degradedToolCalls: state.degradedToolCalls,
-  };
-}
-
-/** Partial snapshot when the user aborted mid-stream. */
-export function finishAnthropicSsePartial(state: AnthropicSseParserState, onStream?: (event: LlmStreamEvent) => void, toolNames?: AnthropicToolNameWire): SseFinishResult {
-  if (state.buffer !== "") {
-    feedAnthropicSseChunk(state, "\n", onStream, toolNames);
-  }
-
-  flushActiveBlock(state, onStream, toolNames);
-
-  const stateTextBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text");
-  const text = stateTextBlocks.map((b) => b.text).join("");
-  const stateThinkingBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking");
-  const thinking = stateThinkingBlocks.map((b) => b.text).join("");
-  // thinking 文本级签名：取**最后一个非空** thinkingSignature（与 gemini 的
-  // `state.thinkingSignature`「后到覆盖」语义一致）。
-  const thinkingSignature = stateThinkingBlocks.reduce<string | undefined>((acc, b) => (b.thinkingSignature != null ? b.thinkingSignature : acc), undefined);
-  const toolUses = state.blocks
-    .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
-    .map((b) => ({
-      id: b.id,
-      name: b.name,
-      input: b.input,
-      // 块上本就带签名，partial 侧必须透传（不传 ⇒ 中断收尾的 tool_use 比
-      // 正常收尾少签名，回传时 400）。
-      ...(b.thinkingSignature != null ? { thinkingSignature: b.thinkingSignature } : {}),
-    }));
-  const otherBlocks = state.blocks.filter((b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use");
-
-  const blocks = buildStreamPartialBlocks({ text, thinking, thinkingSignature, toolUses }, onStream);
-  blocks.push(...otherBlocks);
-
-  return {
-    blocks,
-    streamRaw: mergeAnthropicStreamRaw(state) ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+/** 创建一个单流 Anthropic SSE parser；`state` 持有本次流的全部累加器。 */
+export function createAnthropicSseParser(options: AnthropicSseParserOptions = {}): AnthropicSseParser {
+  const onStream = options.onStream;
+  const toolNames = options.toolNames;
+  const state: AnthropicSseParserState = {
+    buffer: "",
+    blocks: [],
+    active: null,
+    toolUses: [],
+    messageStartRaw: undefined,
+    messageDeltaRaw: undefined,
+    lastEmittedCompletionTokens: undefined,
+    malformedLineCount: 0,
     degradedToolCalls: [],
   };
+
+  const feed = (chunk: string): void => {
+    feedSseJsonEvents(state, chunk, (event) => {
+      const type = event.type;
+      if (type === "message_start") {
+        state.messageStartRaw = event;
+      } else if (type === "message_delta") {
+        state.messageDeltaRaw = event;
+        const usage = parseUsage("anthropic", state.messageDeltaRaw);
+        const completionTokens = usage?.completionTokens;
+        if (usage != null && completionTokens != null && completionTokens !== state.lastEmittedCompletionTokens) {
+          state.lastEmittedCompletionTokens = completionTokens;
+          onStream?.({ type: "usage", usage });
+        }
+      }
+      if (type === "content_block_start") {
+        flushActiveBlock(state, onStream, toolNames);
+        const block = event.content_block;
+        if (!Guards.isRecord(block) || typeof block.type !== "string") {
+          return;
+        }
+        if (block.type === "tool_use") {
+          state.toolUses.push({
+            id: typeof block.id === "string" ? block.id : "",
+            name: typeof block.name === "string" ? block.name : "",
+            inputJson: "",
+          });
+          state.active = { type: "tool_use", index: state.toolUses.length - 1 };
+        } else if (block.type === "thinking") {
+          state.active = { type: "thinking", text: [], signature: [] };
+        } else if (block.type === "redacted_thinking") {
+          const data = typeof block.data === "string" ? block.data : "";
+          const signature = typeof block.signature === "string" && block.signature !== "" ? block.signature : undefined;
+          state.active = { type: "redacted_thinking", data, signature };
+        } else if (block.type === "text") {
+          state.active = { type: "text", parts: [] };
+        }
+      } else if (type === "content_block_delta") {
+        const delta = event.delta;
+        if (!Guards.isRecord(delta)) {
+          return;
+        }
+        if (delta.type === "text_delta" && typeof delta.text === "string") {
+          // 非 text active 先收尾，再切到新的 text 块。
+          let activeText = state.active;
+          if (activeText?.type !== "text") {
+            flushActiveBlock(state);
+            activeText = { type: "text", parts: [] };
+            state.active = activeText;
+          }
+          activeText.parts.push(delta.text);
+          onStream?.({ type: "text-delta", text: delta.text });
+        } else if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
+          ensureActiveThinking(state).text.push(delta.thinking);
+          onStream?.({ type: "thinking-delta", text: delta.thinking });
+        } else if (delta.type === "signature_delta" && typeof delta.signature === "string") {
+          // Claude 4+ streams opaque signature fragments before content_block_stop.
+          ensureActiveThinking(state).signature.push(delta.signature);
+        } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string" && state.active?.type === "tool_use") {
+          const tu = state.toolUses[state.active.index]!;
+          tu.inputJson += delta.partial_json;
+        }
+      } else if (type === "content_block_stop") {
+        flushActiveBlock(state, onStream, toolNames);
+      }
+    });
+  };
+
+  const drain = (): void => {
+    if (state.buffer !== "") {
+      feed("\n");
+    }
+  };
+
+  const finish = (): SseFinishResult => {
+    drain();
+    flushActiveBlock(state, onStream, toolNames);
+    // 断言失败沿 parser 既有 throw 通道上行（transport catch → reject），不新增构造。
+    const asserted = assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
+    if (!asserted.ok) throw asserted.error;
+    return {
+      blocks: state.blocks,
+      streamRaw: mergeAnthropicStreamRaw(state),
+      degradedToolCalls: state.degradedToolCalls,
+    };
+  };
+
+  const finishPartial = (): SseFinishResult => {
+    drain();
+    flushActiveBlock(state, onStream, toolNames);
+
+    const stateTextBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text");
+    const text = stateTextBlocks.map((b) => b.text).join("");
+    const stateThinkingBlocks = state.blocks.filter((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking");
+    const thinking = stateThinkingBlocks.map((b) => b.text).join("");
+    // thinking 文本级签名：取**最后一个非空** thinkingSignature（与 gemini 的
+    // `state.thinkingSignature`「后到覆盖」语义一致）。
+    const thinkingSignature = stateThinkingBlocks.reduce<string | undefined>((acc, b) => (b.thinkingSignature != null ? b.thinkingSignature : acc), undefined);
+    const toolUses = state.blocks
+      .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        input: b.input,
+        // 块上本就带签名，partial 侧必须透传（不传 ⇒ 中断收尾的 tool_use 比
+        // 正常收尾少签名，回传时 400）。
+        ...(b.thinkingSignature != null ? { thinkingSignature: b.thinkingSignature } : {}),
+      }));
+    const otherBlocks = state.blocks.filter((b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use");
+
+    const blocks = buildStreamPartialBlocks({ text, thinking, thinkingSignature, toolUses }, onStream);
+    blocks.push(...otherBlocks);
+
+    return {
+      blocks,
+      streamRaw: mergeAnthropicStreamRaw(state) ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+      degradedToolCalls: [],
+    };
+  };
+
+  return { state, feed, finish, finishPartial };
 }

@@ -135,7 +135,7 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
       messages: rowsB,
       hasMoreMessages: true,
     });
-    manager.hydrateSessionMessages('proj-1', 'sess-B');
+    manager.hydrateSessionMessages('sess-B', 'proj-1');
     expect(manager.readMessagesSnapshot('sess-B')?.messages).toEqual(rowsB);
 
     // B 的分页发起后挂起；期间 A 完成一轮 tail 加载（模拟切换查看）。

@@ -32,7 +32,7 @@ import type {
 } from '../../../../shared/ipc-types.js';
 import { toIpcResult } from "../ipc-result.js";
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
-import { notifyComposerStatusAfterFloorOrCompaction, notifyComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
+import { refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
 
 function toDto(msg: ChatMessageData): ChatMessageDto {
   const metadata = readMessageMetadata(msg.raw);
@@ -129,9 +129,7 @@ export function handleMessagesHide(req: MessagesHideRequest): Promise<IpcResult<
     const rt = built.value;
     const msg = await rt.messages.get(req.messageId);
     if (!msg.ok) return Result.err(msg.error);
-    const session = await rt.sessions.get(msg.value.sessionId);
-    if (!session.ok) return Result.err(session.error);
-    const hidden = await rt.messageTranscriptEffects.hideMessagesInRange(session.value.projectId, msg.value.sessionId, msg.value.seq, msg.value.seq);
+    const hidden = await rt.messages.hideRange(msg.value.sessionId, msg.value.seq, msg.value.seq);
     return hidden.map(() => undefined);
   });
 }
@@ -144,9 +142,7 @@ export function handleMessagesShow(req: MessagesShowRequest): Promise<IpcResult<
     const rt = built.value;
     const msg = await rt.messages.get(req.messageId);
     if (!msg.ok) return Result.err(msg.error);
-    const session = await rt.sessions.get(msg.value.sessionId);
-    if (!session.ok) return Result.err(session.error);
-    const shown = await rt.messageTranscriptEffects.showMessagesInRange(session.value.projectId, msg.value.sessionId, msg.value.seq, msg.value.seq);
+    const shown = await rt.messages.showRange(msg.value.sessionId, msg.value.seq, msg.value.seq);
     return shown.map(() => undefined);
   });
 }
@@ -157,9 +153,7 @@ export function handleMessagesHideRange(req: MessagesHideRangeRequest): Promise<
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const session = await rt.sessions.get(req.sessionId);
-    if (!session.ok) return Result.err(session.error);
-    const count = await rt.messageTranscriptEffects.hideMessagesInRange(session.value.projectId, req.sessionId, req.fromSeq, req.toSeq);
+    const count = await rt.messages.hideRange(req.sessionId, req.fromSeq, req.toSeq);
     return count.map((n) => ({ count: n }));
   });
 }
@@ -170,9 +164,7 @@ export function handleMessagesShowRange(req: MessagesShowRangeRequest): Promise<
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const session = await rt.sessions.get(req.sessionId);
-    if (!session.ok) return Result.err(session.error);
-    const count = await rt.messageTranscriptEffects.showMessagesInRange(session.value.projectId, req.sessionId, req.fromSeq, req.toSeq);
+    const count = await rt.messages.showRange(req.sessionId, req.fromSeq, req.toSeq);
     return count.map((n) => ({ count: n }));
   });
 }
@@ -208,7 +200,7 @@ export function handleMessagesSetFloor(req: MessagesSetFloorPayload): Promise<Ip
     const result = await rt.messageTranscriptEffects.setMessageFloorAtMessage(req.projectId, req.sessionId, req.messageId);
     // 置位：project∪annotate；禁止终态强制 []
     if (!result.ok) return Result.err(result.error);
-    await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
+    await refreshComposerStatusAfterFloorOrCompaction(rt, { projectId: req.projectId, sessionId: req.sessionId });
     return Result.ok(result.value);
   });
 }
@@ -243,14 +235,14 @@ export function handleMessagesRollback(req: SessionFsRollbackRequest): Promise<I
       ...(req.skipVfsReconcile ? { skipVfsReconcile: true as const } : {}),
       ...(req.revisionHeadBackfill ? { revisionHeadBackfill: true as const } : {}),
     };
-    const rollback = await rt.sessionFs.rollbackToMessage(req.sessionId, req.projectId, req.messageId, rollbackOptions);
+    const rollback = await rt.sessionFs.rollbackFilesToMessage(req.sessionId, req.projectId, req.messageId, rollbackOptions);
     if (!rollback.ok) return Result.err(rollback.error);
 
     // D8：undo_send / rewind 均推空状态条；main 侧 annotate store 一并清。
     // main 进程拿不到 mode（mode 由 renderer 算）——renderer 侧的清空 / 反投影
     // 由 renderer 的 applyUndoAnnotateRestore 按锚点角色区分处理（CR-5）。
     chatAnnotateDraftStore.clear(req.sessionId);
-    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
+    await refreshComposerStatusAfterSessionKkvCleared(rt, { projectId: req.projectId, sessionId: req.sessionId });
     return Result.ok(undefined);
   });
 }

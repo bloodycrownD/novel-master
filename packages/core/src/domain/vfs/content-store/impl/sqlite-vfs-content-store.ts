@@ -13,7 +13,7 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import { hashContent } from "../logic/hash-content.js";
 import { decodePackMembers, type VfsPackSpan } from "../logic/pack-codec.js";
 import { asUint8Array, compressZlib, decodeCompressedBytes, decompressZlib, tightBytes, VFS_CONTENT_ENCODING_ZLIB } from "../logic/zlib-codec.js";
-import { lookupDecodedContentBody, rememberDecodedContentBody } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { VfsContentStore } from "../vfs-content-store.port.js";
 
 /**
@@ -91,7 +91,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与
     // session-kkv file_cache 的 content_hash 同一个算法（hashContent(明文)），
     // 两套存储共享同一份内存条目。
-    const cached = lookupDecodedContentBody(contentHash);
+    const cached = decodedContentCache.get(contentHash);
     if (cached != null) {
       return Result.ok(cached);
     }
@@ -105,7 +105,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
       const plainUtf8 = decompressZlib(compressed.value);
       if (!plainUtf8.ok) return Result.err(plainUtf8.error);
       const plain = new TextDecoder().decode(plainUtf8.value);
-      rememberDecodedContentBody(contentHash, plain);
+      decodedContentCache.set(contentHash, plain);
       return Result.ok(plain);
     }
 
@@ -125,7 +125,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const plain = new TextDecoder().decode(plainUtf8);
     // member 的 content_hash 与 blob 同一个键空间（hashContent(明文)），
     // 解码产物同样进进程内缓存层。
-    rememberDecodedContentBody(contentHash, plain);
+    decodedContentCache.set(contentHash, plain);
     return Result.ok(plain);
   }
 
@@ -139,7 +139,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const toLoad: string[] = [];
     const seen = new Set<string>();
     for (const hash of hashes) {
-      const cached = lookupDecodedContentBody(hash);
+      const cached = decodedContentCache.get(hash);
       if (cached != null) {
         result.set(hash, cached);
         continue;
@@ -161,7 +161,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         if (!plainUtf8.ok) return Result.err(plainUtf8.error);
         const plain = new TextDecoder().decode(plainUtf8.value);
         const contentHash = String(row.content_hash);
-        rememberDecodedContentBody(contentHash, plain);
+        decodedContentCache.set(contentHash, plain);
         result.set(contentHash, plain);
       }
       // blob 未命中的 hash 落 member 侧批量解析；全部命中时零额外查询。
@@ -207,7 +207,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
             const plains = decoded.value;
             members.forEach((member, index) => {
               const plain = packDecoder.decode(plains[index]!);
-              rememberDecodedContentBody(member.contentHash, plain);
+              decodedContentCache.set(member.contentHash, plain);
               result.set(member.contentHash, plain);
             });
           }

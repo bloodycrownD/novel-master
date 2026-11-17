@@ -9,20 +9,10 @@ import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isAbortLikeError } from "@novel-master/core/abort";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/agent";
+import { Errors } from "@novel-master/core/common";
 import { domainOf } from "@novel-master/core/errors";
-import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../../../shared/logic/core-i18n.js";
 import { ZodError } from "zod";
-
-/**
- * 错误 → 用户可见中文文案：i18n 后 AppError 在 descriptor 模式下 `message`
- * 是英文 desc，中文在 messageKey/catalog 里；IPC 边界统一解析，renderer 拿到
- * 的 message 直接可显示。未覆盖的错误回退原 message。
- */
-function visibleMessage(err: unknown, fallback: string): string {
-  const descriptor = userMessageOf(err);
-  return descriptor != null ? coreT(descriptor) : fallback;
-}
 
 const FIELD_LABELS: Record<string, string> = {
   endDepth: "结束深度",
@@ -60,15 +50,15 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   //    域判定走 domainOf（spec-3 §3.7），不依赖 key 命名约定。core service 已直抛
   //    AppError（三期 Step 6 删 legacy mapper），不设历史对象兜底。
   if (isAppError(err) && (domainOf(err.code) === "VFS" || domainOf(err.code) === "VFS_CHARACTER_CARD")) {
-    return { code: err.key, message: visibleMessage(err, err.message) };
+    return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
   }
   // 3. PROVIDER_*：文案走码表 messageKey。
   if (isAppError(err) && domainOf(err.code) === "PROVIDER") {
-    return { code: err.key, message: visibleMessage(err, err.message) };
+    return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
   }
   // 4. CLOUD_SYNC_*：文案走码表 messageKey / 构造点 descriptor。
   if (isAppError(err) && domainOf(err.code) === "CLOUD_SYNC") {
-    return { code: err.key, message: visibleMessage(err, err.message) };
+    return { code: err.key, message: Errors.visibleMessage(err, err.message, coreT) };
   }
   // 5. 旧 ToolError 的 VFS cause 解包（类已退役，等价判 TOOL_FAILED；cause 双写在
   //    Error.cause 与 details.cause，一期 spec §2.5 保留）。VFS cause 透传 VFS_ 前缀
@@ -76,10 +66,10 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   if (isAppError(err, "TOOL_FAILED")) {
     const cause = err.cause ?? (err.details as { cause?: unknown } | undefined)?.cause;
     if (isAppError(cause) && (domainOf(cause.code) === "VFS" || domainOf(cause.code) === "VFS_CHARACTER_CARD")) {
-      return { code: cause.key, message: visibleMessage(cause, cause.message) };
+      return { code: cause.key, message: Errors.visibleMessage(cause, cause.message, coreT) };
     }
     const fallback = cause instanceof Error ? cause.message : err.message;
-    return { code: err.key, message: visibleMessage(err, fallback) };
+    return { code: err.key, message: Errors.visibleMessage(err, fallback, coreT) };
   }
   // 6. 其余 AppError 通配（SESSION_FS_* 的 missingLogicalPaths 在此透传）。
   if (isAppError(err)) {
@@ -88,7 +78,7 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
     const missingLogicalPaths = paths != null && paths.length > 0 ? paths : undefined;
     return {
       code: err.key,
-      message: visibleMessage(err, err.message),
+      message: Errors.visibleMessage(err, err.message, coreT),
       ...(missingLogicalPaths != null ? { missingLogicalPaths } : {}),
     };
   }

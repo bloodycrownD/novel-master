@@ -36,6 +36,10 @@ const liveConn = {tag: 'live'};
 const restoreConn = {close: mockRestoreConnClose};
 
 jest.mock('@novel-master/core', () => ({
+  // 头校验是下沉 core 的纯函数：走真实实现，测试覆盖「拒绝非 SQLite 字节」的真实分支。
+  assertSqliteBackupHeader: jest.requireActual(
+    '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js',
+  ).assertSqliteBackupHeader,
   dumpProviderTableSnapshot: (...args: unknown[]) => mockDumpSnapshot(...args),
   scrubProviderTablesInDatabase: (...args: unknown[]) =>
     mockScrubInDatabase(...args),

@@ -19,7 +19,7 @@ import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
 import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
-import {buildRealPromptPreviewTurns} from '@/services/prompt-preview.service';
+import {buildRealPromptPreviewTurnsAdapter} from '@/services/prompt-preview.service';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {RootStackParamList} from '@/navigation/types';
 
@@ -44,7 +44,7 @@ export function RealPromptScreen() {
   const [openGroupIds, setOpenGroupIds] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * load 请求序号（竞态守卫）：每次发起前 ++，响应回来后对不上号即整轮丢弃。
-   * 预览取数没有中止点（`buildSessionPromptInput` 不传 shouldBail，行为不变），
+   * 预览取数没有中止点（`buildSessionPromptInputAdapter` 不传 shouldBail，行为不变），
    * 快速进出聚焦时旧响应可能后到、盖掉新一轮数据，故按序号过滤（与
    * `TokenUsageStatsScreen.reloadSeqRef` 同款）。
    */
@@ -107,7 +107,7 @@ export function RealPromptScreen() {
       }
       try {
         const previewScope = {projectId, sessionId};
-        const built = await buildRealPromptPreviewTurns(runtime, previewScope);
+        const built = await buildRealPromptPreviewTurnsAdapter(runtime, previewScope);
         if (requestId !== requestIdRef.current) {
           return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
         }

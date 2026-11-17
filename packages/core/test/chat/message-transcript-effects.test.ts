@@ -28,34 +28,27 @@ import {
 novelMasterTestFixture();
 
 describe('MessageTranscriptEffectsService', () => {
-  it('T-WEC1：hideMessagesInRange 更新 hidden', async () => {
+  it('T-WEC1：hideRange 更新 hidden（transcript 纯委托包装已删，直连 MessageService）', async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
     const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     }));
 
-    const count = unwrap(await effects.hideMessagesInRange(
-      project.id,
-      session.id,
-      1,
-      2,
-    ));
+    const count = unwrap(await ctx.messages.hideRange(session.id, 1, 2));
     assert.equal(count, 2);
 
     const updated = unwrap(await ctx.messages.get(assistant.id));
     assert.equal(updated.hidden, true);
   });
 
-  it('T-WEC2：showMessagesInRange 更新 hidden', async () => {
+  it('T-WEC2：showRange 更新 hidden（transcript 纯委托包装已删，直连 MessageService）', async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
@@ -63,7 +56,7 @@ describe('MessageTranscriptEffectsService', () => {
     }));
     unwrap(await ctx.messages.hideRange(session.id, 1, 2));
 
-    unwrap(await effects.showMessagesInRange(project.id, session.id, 1, 2));
+    unwrap(await ctx.messages.showRange(session.id, 1, 2));
 
     const messages = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.ok(messages.every(m => !m.hidden));

@@ -1,37 +1,23 @@
 /**
  * Agent YAML import/export via Electron dialog.
  *
+ * 文本编解码单源在 core（`@novel-master/core/agent` 的 `decodeAgentYamlText` /
+ * `encodeAgentYamlText`）；本模块只保留对话框编排与 registry 落库。
+ *
  * @module services/agent-yaml
  */
-import { decode, encode, parseText, registerBuiltinTools, stringifyText, ToolRegistry } from "@novel-master/core";
-
-import { agentDefinitionSchema, validateAgentDefinition, type AgentDefinition, type AppError } from "@novel-master/core/agent";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { decodeAgentYamlText, encodeAgentYamlText, validateAgentDefinition } from "@novel-master/core/agent";
 import { Errors } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
 
-export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
-  // 错误通道迁移七期：parseText / decode 沿 Result 原样接力，不再解包抛错；
-  // 对话框 consume 回调（yaml-shared，Promise<void>，只有 throw 通道）在唯一
-  // 调用处经 Errors.normalizeYaml 贴标签还原抛错契约。
-  const parsed = parseText(yaml, "yaml");
-  if (!parsed.ok) return Result.err(parsed.error);
-  const decoded = decode(parsed.value, agentDefinitionSchema);
-  if (!decoded.ok) return Result.err(decoded.error);
-  return Result.ok(decoded.value);
-}
-
-export function encodeAgentYamlText(def: AgentDefinition): string {
-  const doc = encode(def, agentDefinitionSchema);
-  return stringifyText(doc, "yaml");
-}
-
 export async function exportAgentYamlWithDialog(runtime: DesktopNovelMasterRuntime, agentId: string, parentWindow?: BrowserWindow | null): Promise<"saved" | "cancelled"> {
   const def = await runtime.agentRegistry.get(agentId);
   if (!def.ok) {
-    // 导出对话框回调无 Result 通道：registry 已知失败转 throw，由对话框调用方 catch 收口。
+    // 导出调用方只有 throw 通道：registry 已知失败转 throw，由 caller catch 收口。
     const failure = def.error;
     throw failure;
   }
@@ -39,35 +25,24 @@ export async function exportAgentYamlWithDialog(runtime: DesktopNovelMasterRunti
   return exportYamlWithDialog(yaml, `${agentId}.agent.yaml`, parentWindow);
 }
 
-export async function importAgentYamlWithDialog(runtime: DesktopNovelMasterRuntime, agentId: string, parentWindow?: BrowserWindow | null): Promise<"imported" | "cancelled"> {
+export async function importAgentYamlWithDialog(runtime: DesktopNovelMasterRuntime, agentId: string, parentWindow?: BrowserWindow | null): Promise<Result<"imported" | "cancelled", Error>> {
   return importYamlWithDialog(async (yaml) => {
     try {
       const defR = decodeAgentYamlText(yaml);
-      // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-      // 过 Errors.normalizeYaml 贴标签后抛出（错误通道迁移七期边界保留点）；
-      // 外层 catch 见到已带前缀的产物原样放行，避免二次套前缀。
-      if (!defR.ok) throw Errors.normalizeYaml(defR.error, "Agent YAML 无效");
+      // consume 回调与 mobile 同通道（Result）：已知失败过 Errors.normalizeYaml 贴标签回传。
+      if (!defR.ok) return Result.err(Errors.normalizeYaml(defR.error, "Agent YAML 无效"));
       const def = defR.value;
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
       const validation = await validateAgentDefinition(def, { registeredToolNames: probe.list() });
-      if (!validation.ok) {
-        // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-        // 在此直接过 Errors.normalizeYaml 转码后抛出（错误通道迁移四期，边界保留点）；
-        // 外层 catch 见到已带「Agent YAML 无效」前缀的产物原样放行，避免二次套前缀。
-        throw Errors.normalizeYaml(validation.error, "Agent YAML 无效");
-      }
+      if (!validation.ok) return Result.err(Errors.normalizeYaml(validation.error, "Agent YAML 无效"));
       const saved = await runtime.agentRegistry.upsert(agentId, def, { registeredToolNames: probe.list() });
-      if (!saved.ok) {
-        // consume 回调协议只有 throw 通道（yaml-shared，Promise<void>）：已知失败
-        // 在此过 Errors.normalizeYaml 转码后抛出（错误通道迁移四期，边界保留点）。
-        throw Errors.normalizeYaml(saved.error, "Agent YAML 无效");
-      }
+      if (!saved.ok) return Result.err(Errors.normalizeYaml(saved.error, "Agent YAML 无效"));
+      return Result.ok(undefined);
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("Agent YAML 无效")) {
-        throw error;
-      }
-      throw Errors.normalizeYaml(error, "Agent YAML 无效");
+      // registry/校验链的意外抛出同样贴标签后走 Result；已贴标签的产物不会二次进入本分支
+      // （本函数不再 throw 已知失败），故无需旧的「前缀已存在则放行」守卫。
+      return Result.err(Errors.normalizeYaml(error, "Agent YAML 无效"));
     }
   }, parentWindow);
 }

@@ -1,8 +1,8 @@
 import {readFileSync} from 'fs';
 import {join} from 'path';
 import {
-  decrementAgentActive,
-  incrementAgentActive,
+  decrementMobileAgentActive,
+  incrementMobileAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
   subscribeMobileAgentActivity,
@@ -23,31 +23,31 @@ describe('agent-activity', () => {
   describe('refcount', () => {
     it('increment 后 isMobileAgentActive 为 true', () => {
       expect(isMobileAgentActive()).toBe(false);
-      incrementAgentActive();
+      incrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(true);
     });
 
     it('decrement 至 0 后 isMobileAgentActive 为 false', () => {
-      incrementAgentActive();
-      decrementAgentActive();
+      incrementMobileAgentActive();
+      decrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(false);
     });
 
     it('多次 increment 需等量 decrement 才回落', () => {
-      incrementAgentActive();
-      incrementAgentActive();
+      incrementMobileAgentActive();
+      incrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(true);
 
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(true);
 
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(false);
     });
 
     it('decrement 在计数为 0 时幂等', () => {
-      decrementAgentActive();
-      decrementAgentActive();
+      decrementMobileAgentActive();
+      decrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(false);
     });
 
@@ -55,10 +55,10 @@ describe('agent-activity', () => {
       const listener = jest.fn();
       const unsubscribe = subscribeMobileAgentActivity(listener);
 
-      incrementAgentActive();
+      incrementMobileAgentActive();
       expect(listener).toHaveBeenCalledWith(true);
 
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(listener).toHaveBeenCalledWith(false);
 
       unsubscribe();
@@ -68,15 +68,15 @@ describe('agent-activity', () => {
       const listener = jest.fn();
       subscribeMobileAgentActivity(listener);
 
-      incrementAgentActive();
-      incrementAgentActive();
+      incrementMobileAgentActive();
+      incrementMobileAgentActive();
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener).toHaveBeenLastCalledWith(true);
 
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(listener).toHaveBeenCalledTimes(1);
 
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(listener).toHaveBeenCalledTimes(2);
       expect(listener).toHaveBeenLastCalledWith(false);
     });
@@ -101,13 +101,13 @@ describe('agent-activity', () => {
     });
 
     it('覆盖 refcount 状态', () => {
-      incrementAgentActive();
-      incrementAgentActive();
+      incrementMobileAgentActive();
+      incrementMobileAgentActive();
       setMobileAgentActive(false);
       expect(isMobileAgentActive()).toBe(false);
 
       setMobileAgentActive(true);
-      decrementAgentActive();
+      decrementMobileAgentActive();
       expect(isMobileAgentActive()).toBe(false);
     });
   });
@@ -273,7 +273,7 @@ describe('agent-activity', () => {
         // 匹配「调用或具名导入」形状；只读视图（isMobileAgentActive /
         // subscribeMobileAgentActivity）与注释里的提及不算碰计数。
         expect(source).not.toMatch(
-          /\b(?:incrementAgentActive|decrementAgentActive|setMobileAgentActive)\s*\(|import\s*\{[^}]*\b(?:incrementAgentActive|decrementAgentActive|setMobileAgentActive)\b/,
+          /\b(?:incrementMobileAgentActive|decrementMobileAgentActive|setMobileAgentActive)\s*\(|import\s*\{[^}]*\b(?:incrementMobileAgentActive|decrementMobileAgentActive|setMobileAgentActive)\b/,
         );
       }
     });

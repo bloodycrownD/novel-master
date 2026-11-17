@@ -16,8 +16,9 @@ import type { AppError } from "@/errors/app-error.js";
 import type { Result } from "@/errors/either.js";
 
 export interface TemplatePullService {
-  sessionTemplatePull(sessionId: string): Promise<Result<void, AppError>>;
+  /** 用 project 模板整树覆盖 session 工作区；会话存在性校验的唯一落点。 */
+  pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 
   /** 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板。 */
-  sessionTemplatePush(sessionId: string): Promise<Result<void, AppError>>;
+  pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>>;
 }

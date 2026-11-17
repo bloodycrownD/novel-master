@@ -13,14 +13,14 @@ import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readMessageNotificationEnabled, writeMessageNotificationEnabled} from '../../storage/message-notification-pref';
+import {readBoolPref, writeBoolPref} from '../../storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT, APP_UI_KEY_MESSAGE_NOTIFICATION} from '../../storage/app-ui-keys';
 import {
   ensureAgentNotificationPermission,
   getAgentNotificationPermissionStatus,
   requestAgentNotificationPermissionManually,
   setKeepAliveResidentEnabled,
 } from '../../services/agent-finished-notification';
-import {readChatRichTextEnabled, writeChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
@@ -80,14 +80,14 @@ export function ChatConfigScreen() {
     if (appUi == null) {
       return;
     }
-    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
+    setChatRichTextEnabled(await readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false));
   }, [appUi]);
 
   const refreshMessageNotificationPref = useCallback(async () => {
     if (appUi == null) {
       return;
     }
-    setMessageNotificationEnabled(await readMessageNotificationEnabled(appUi));
+    setMessageNotificationEnabled(await readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false));
   }, [appUi]);
 
   const refreshNotificationPermission = useCallback(async () => {
@@ -245,7 +245,7 @@ export function ChatConfigScreen() {
           setChatRichTextEnabled(enabled);
           if (appUi) {
             void persistSwitchWithRollback(
-              () => writeChatRichTextEnabled(appUi, enabled),
+              () => writeBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, enabled),
               () => setChatRichTextEnabled(!enabled),
             );
           }
@@ -263,7 +263,7 @@ export function ChatConfigScreen() {
           if (appUi) {
             void persistSwitchWithRollback(
               async () => {
-                await writeMessageNotificationEnabled(appUi, enabled);
+                await writeBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, enabled);
                 // 存储已持久化，通知模块的进程级副作用失败只 toast 不回滚
                 //（不易回滚，下次启动按存储态收敛）。
                 setKeepAliveResidentEnabled(enabled).catch(cause => {

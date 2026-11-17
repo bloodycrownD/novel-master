@@ -8,6 +8,7 @@ export {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
 } from "../domain/agent/logic/validate-agent-definition.js";
+export { decodeAgentYamlText, encodeAgentYamlText } from "../domain/agent/logic/agent-yaml-codec.js";
 export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tools.js";
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";

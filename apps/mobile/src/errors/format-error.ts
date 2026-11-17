@@ -7,8 +7,8 @@
  */
 import {TdbcError} from '@novel-master/core';
 import {AgentTurnError, isAppError} from '@novel-master/core/agent';
+import {Errors} from '@novel-master/core/common';
 import {domainOf} from '@novel-master/core/errors';
-import {userMessageOf} from '@novel-master/core/i18n';
 import {vfsUserMessage} from '@novel-master/core/vfs';
 import {coreT} from '@/i18n/core';
 
@@ -21,12 +21,6 @@ function readCause(error: Error): unknown {
   return (error as Error & {cause?: unknown}).cause;
 }
 
-/** 错误 → 用户可见中文文案：descriptor 走 catalog（coreT 渲染），未覆盖回退 message。 */
-function visibleMessage(error: unknown, fallback: string): string {
-  const descriptor = userMessageOf(error);
-  return descriptor != null ? coreT(descriptor) : fallback;
-}
-
 /** Formats an error for on-screen display; unwraps known Core error types. */
 export function formatError(error: unknown): string {
   // 1. VFS_*：AppError 且 code 落 VFS 域段（102 VFS + 103 VFS_CHARACTER_CARD），
@@ -37,11 +31,11 @@ export function formatError(error: unknown): string {
   }
   // 2. PROVIDER_*：文案走码表 messageKey + coreT（原两条硬编码中文已进 catalog）。
   if (isAppError(error) && domainOf(error.code) === 'PROVIDER') {
-    return visibleMessage(error, error.message);
+    return Errors.visibleMessage(error, error.message, coreT);
   }
   // 3. CLOUD_SYNC_*：文案走码表 messageKey / 构造点 descriptor。
   if (isAppError(error) && domainOf(error.code) === 'CLOUD_SYNC') {
-    return visibleMessage(error, error.message);
+    return Errors.visibleMessage(error, error.message, coreT);
   }
   // 4. 旧 ToolError 的 VFS cause 解包：类已退役，等价判 TOOL_FAILED；cause 双写在
   //    Error.cause 与 details.cause（一期 spec §2.5）。VFS cause 透传 vfs 文案。
@@ -51,11 +45,11 @@ export function formatError(error: unknown): string {
       return formatVfsErrorForUser(cause);
     }
     const fallback = cause instanceof Error ? cause.message : error.message;
-    return visibleMessage(error, fallback);
+    return Errors.visibleMessage(error, fallback, coreT);
   }
   // 5. 其余 AppError 通配 → userMessageOf + coreT，未覆盖回退原 message。
   if (isAppError(error)) {
-    return visibleMessage(error, error.message);
+    return Errors.visibleMessage(error, error.message, coreT);
   }
   // 6. TdbcError：message + cause。
   if (error instanceof TdbcError) {

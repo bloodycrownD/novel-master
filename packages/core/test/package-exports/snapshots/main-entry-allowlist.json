@@ -35,6 +35,7 @@
   "ToolRunner",
   "WORKSPACE_STATE_MODULE",
   "anyToolUseMutatesWorkspace",
+  "assertSqliteBackupHeader",
   "bindExpressionToContext",
   "bootstrapNovelMaster",
   "buildLease",

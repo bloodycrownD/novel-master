@@ -6,7 +6,7 @@
  * Boundary: per-model counter mode comes from
  * {@link resolveTokenCounterModeForModel} → `resolveCurrentPromptTokens`（API 优先，否则本地）。
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
- * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} reports
+ * (`counterKind: "heuristic"`) when {@link buildSessionPromptInputAdapter} reports
  * `Result.err`（错误通道迁移四期；bail 哨兵仍走 throw，见同文件 isChipBailError）。
  *
  * stream-metrics-native ④：两处「拿不到模型 / 构建失败」的早退路径原本走
@@ -33,7 +33,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // 对拍 core 真实现而非 mock 行为）。
 import {TokenFormat} from '@novel-master/core/common';
 import {createLogger} from '@novel-master/core/log';
-import {buildSessionPromptInput} from './session-prompt-input.service';
+import {buildSessionPromptInputAdapter} from './session-prompt-input.service';
 import {ChatPromptBuildBailedError} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
 
@@ -115,7 +115,7 @@ async function loadChatTokenLabelWithFlag(runtime: MobileNovelMasterRuntime, sco
   const resolveBail = (): Interrupt | null => (shouldBail != null && shouldBail() === true ? {kind: 'replaced'} : null);
   let bundle;
   try {
-    bundle = await buildSessionPromptInput(runtime, scope, undefined, opt);
+    bundle = await buildSessionPromptInputAdapter(runtime, scope, undefined, opt);
   } catch (error) {
     if (error instanceof ChatPromptBuildBailedError) {
       // run 起步后中途弃权：label 空串是「保留旧标签」哨兵（hook 侧对空串
@@ -620,7 +620,7 @@ async function loadChatPromptTokenLabelFallback(runtime: MobileNovelMasterRuntim
   const workspaceModelId = currentModel.value ?? '';
   let savedModelId: string | undefined;
   try {
-    const built = await buildSessionPromptInput(runtime, scope);
+    const built = await buildSessionPromptInputAdapter(runtime, scope);
     if (!built.ok) {
       savedModelId = workspaceModelId || undefined;
     } else {

@@ -1,6 +1,9 @@
 /**
  * RN ↔ Web code editor bridge: typed JSON envelopes ({ v, type, payload }).
+ * 四函数编解码单源在 `webview-host/typed-message-bridge.ts`。
  */
+import {createMessageBridge} from '@/webview-host/typed-message-bridge';
+
 export const CODE_EDITOR_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
@@ -55,48 +58,10 @@ export type CodeEditorSelection = {
   readonly end: number;
 };
 
-// nm-style: keep-public — code-editor 桥编码 API（webview 契约）
-export function encodeHostToCodeEditor(message: HostToCodeEditorMessage): string {
-  return JSON.stringify(message);
-}
+const codeEditorBridge = createMessageBridge<HostToCodeEditorMessage, CodeEditorToHostMessage>(CODE_EDITOR_BRIDGE_VERSION, 'code-editor');
 
-// nm-style: keep-public — code-editor 桥对称编码 API（协议契约对称面）
-export function encodeCodeEditorToHost(message: CodeEditorToHostMessage): string {
-  return JSON.stringify(message);
-}
-
-export function decodeCodeEditorToHost(raw: string): CodeEditorToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  const record = parsed as Record<string, unknown>;
-  if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封版本不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope version');
-  }
-  if (typeof record.type !== 'string' || typeof record.payload !== 'object') {
-    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  return parsed as CodeEditorToHostMessage;
-}
-
-export function decodeHostToCodeEditor(raw: string): HostToCodeEditorMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  const record = parsed as Record<string, unknown>;
-  if (record.v !== CODE_EDITOR_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：to-host 信封版本不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope version');
-  }
-  if (typeof record.type !== 'string') {
-    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid code-editor bridge envelope shape');
-  }
-  return parsed as HostToCodeEditorMessage;
-}
+// nm-style: keep-public — code-editor 桥四函数（webview 契约，消费方 CodeEditorWebView / 测试）
+export const encodeHostToCodeEditor = codeEditorBridge.encodeToClient;
+export const encodeCodeEditorToHost = codeEditorBridge.encodeToHost;
+export const decodeCodeEditorToHost = codeEditorBridge.decodeToHost;
+export const decodeHostToCodeEditor = codeEditorBridge.decodeToClient;

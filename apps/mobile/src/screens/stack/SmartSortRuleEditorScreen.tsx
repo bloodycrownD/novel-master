@@ -38,6 +38,7 @@ import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import {FormSwitchRow} from '@/components/form/FormSwitchRow';
 import {FormTextInput} from '@/components/form/FormTextInput';
+import {HelpSection} from '@/components/common/HelpSection';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
@@ -505,16 +506,6 @@ function toDraft(rule: SmartSortRule): DraftFields {
   };
 }
 
-/** 帮助弹窗一段说明：小标题 + 正文（照搜索配置同款）。 */
-function HelpSection({title, body, tokens}: {title: string; body: string; tokens: ThemeTokens}) {
-  return (
-    <View style={styles.helpSection}>
-      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
-      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>{body}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   helpPanel: {
     borderRadius: 16,
@@ -524,9 +515,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
-  helpSection: {marginBottom: 12},
-  helpSectionTitle: {fontSize: 14, fontWeight: '600', marginBottom: 2},
-  helpSectionBody: {fontSize: 13, lineHeight: 19},
   helpCloseRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
     marginTop: 2,

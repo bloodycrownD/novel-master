@@ -13,7 +13,7 @@ import {
 } from '@novel-master/core/prompt';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {buildSessionPromptInput} from './session-prompt-input.service';
+import {buildSessionPromptInputAdapter} from './session-prompt-input.service';
 
 interface PromptPreviewScope {
   readonly projectId: string;
@@ -57,11 +57,11 @@ async function budgetSkillsIndex(runtime: MobileNovelMasterRuntime, projectId: s
  * core 侧钉死，本地不再二次加工。
  * 失败沿 `Result.err` 接力（错误通道迁移四期），调用方屏幕收口 formatError。
  */
-export async function buildRealPromptPreviewTurns(runtime: MobileNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
+export async function buildRealPromptPreviewTurnsAdapter(runtime: MobileNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
   const resolved = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
   if (!resolved.ok) return Result.err(resolved.error);
   const {definition} = resolved.value;
-  const built = await buildSessionPromptInput(runtime, scope, definition);
+  const built = await buildSessionPromptInputAdapter(runtime, scope, definition);
   if (!built.ok) return Result.err(built.error);
   const {layout, ctx} = built.value;
   const skillsIndex = await budgetSkillsIndex(runtime, scope.projectId, definition);

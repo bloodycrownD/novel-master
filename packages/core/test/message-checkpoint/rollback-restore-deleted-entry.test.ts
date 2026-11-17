@@ -74,7 +74,7 @@ describe("rollback-restore-deleted-entry", () => {
     assert.ok(entryB != null);
     assert.notEqual(entryB.entryId, entryA.entryId, "重建应为新 entry");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -145,7 +145,7 @@ describe("rollback-restore-deleted-entry", () => {
       assert.ok(!r.ok && isAppError(r.error, "VFS_NOT_FOUND"), "删除后读取应走 Err 且为 VFS_NOT_FOUND");
     }
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -177,7 +177,7 @@ describe("rollback-restore-deleted-entry", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("more")));
     await svfs.renamePath("/origin.md", "/renamed.md");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -234,7 +234,7 @@ describe("rollback-restore-deleted-entry", () => {
     // 不带 revisionHeadBackfill：missing 探测按 checkpoint 旧 entryA 寻址，
     // (entryA, 2) 在 → 不算 missing、不抛 BACKFILL_REQUIRED，restore 直接
     // 墓碑 entryB 并复活 entryA。
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -293,7 +293,7 @@ describe("rollback-restore-deleted-entry", () => {
     // revisionHeadBackfill 重试降级），而非整体 VFS_RESTORE_FAILED。
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
     );
   });
@@ -342,14 +342,14 @@ describe("rollback-restore-deleted-entry", () => {
     // 先走默认确认流：抛 BACKFILL_REQUIRED。
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
     );
 
     // 双端 UI 确认后带 revisionHeadBackfill 重试：回补必须打在旧 entryA 上
     //（restore 用占位行按 live hash 降级复活）；修复前回补打在 entryB 上，
     // entryA 仍无行，restore 抛 restore-missing 被包成 VFS_RESTORE_FAILED。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id, {
       revisionHeadBackfill: true,
     });
 
@@ -417,7 +417,7 @@ describe("rollback-restore-deleted-entry", () => {
     // UI 确认后带 revisionHeadBackfill:true 重试才降级完成回滚。
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => isRollbackRevisionBackfillRequiredError(error),
     );
   });

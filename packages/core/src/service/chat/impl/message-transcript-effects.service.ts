@@ -29,14 +29,6 @@ interface MessageTranscriptEffectsServiceDeps {
 export class DefaultMessageTranscriptEffectsService implements MessageTranscriptEffectsService {
   constructor(private readonly deps: MessageTranscriptEffectsServiceDeps) {}
 
-  async hideMessagesInRange(_projectId: string, sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    return this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
-  }
-
-  async showMessagesInRange(_projectId: string, sessionId: string, fromSeq: number, toSeq: number): Promise<Result<number, AppError>> {
-    return this.deps.messages.showRange(sessionId, fromSeq, toSeq);
-  }
-
   /** nm-style: keep-public — MessageTranscriptEffectsService 端口方法，desktop IPC handler 经 runtime 调用；内联会拆掉端口契约。 */
   async truncateMessagesAfter(projectId: string, sessionId: string, afterSeq: number, options?: { sweepRevisions?: boolean }): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
@@ -47,6 +39,9 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
         sweepRevisions: options?.sweepRevisions ?? false,
       });
     });
+    // 与 MessageService.truncateAfter 同口径：tail 删除后可见 prompt 变了，API 占用
+    // 双删（进程内热层 + session KKV 行），否则陈旧占用会继续参与阈值判定。
+    await invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
   }
 
   async setMessageFloorAtMessage(_projectId: string, sessionId: string, messageId: string): Promise<Result<SetMessageFloorResult, AppError>> {

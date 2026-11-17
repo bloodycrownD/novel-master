@@ -1,14 +1,14 @@
 /**
- * T-CA5（mobile 侧）：预览口径 parity —— buildSessionPromptInput（预览路径）
+ * T-CA5（mobile 侧）：预览口径 parity —— buildSessionPromptInputAdapter（预览路径）
  * 在 definition 带 customAttach 时，产出的 messages 里含 <extra-info> 块。
  *
- * 预览路径（buildSessionPromptInput）与真实路径（agent-runner）最终都经
+ * 预览路径（buildSessionPromptInputAdapter）与真实路径（agent-runner）最终都经
  * prepareUserMessagesForPrompt → wrapUserMessageForLlm，所以只要断言预览路径
  * 注入了 extra-info 块，就能守住「UI 预览与发给模型的提示词在 extra-info 段上一致」。
  *
  * r3-chip-1 / r3-test-1 ④：build 段分段弃权检查点（shouldBail 命中即抛
  * ChatPromptBuildBailedError，后续段不得执行）。这两组用例都**不整体 mock**
- * buildSessionPromptInput——真跑本文件的分段逻辑，只 mock 最底层 IO
+ * buildSessionPromptInputAdapter——真跑本文件的分段逻辑，只 mock 最底层 IO
  * （messages.listBySession / sessionVkv / vfs），段与段的边界用各段内部依赖
  * 的调用与否钉住。
  *
@@ -28,10 +28,7 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
 
-import {
-  buildSessionPromptInput,
-  ChatPromptBuildBailedError,
-} from '@/services/session-prompt-input.service';
+import {buildSessionPromptInputAdapter, ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */
@@ -149,7 +146,7 @@ function makeStubRuntime(options?: {
   } as unknown as MobileNovelMasterRuntime;
 }
 
-describe('buildSessionPromptInput (T-CA5 mobile)', () => {
+describe('buildSessionPromptInputAdapter (T-CA5 mobile)', () => {
   it('definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块', async () => {
     const runtime = makeStubRuntime();
     const definition =
@@ -160,7 +157,7 @@ describe('buildSessionPromptInput (T-CA5 mobile)', () => {
       customAttach: '这是常驻附加信息：优先级最高',
     };
 
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -178,7 +175,7 @@ describe('buildSessionPromptInput (T-CA5 mobile)', () => {
   });
 });
 
-describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () => {
+describe('buildSessionPromptInputAdapter 分段弃权检查点（r3-test-1 ④）', () => {
   /**
    * 段序（与实现一一对应，含组装段内部检查点）：resolve agent → messages →
    * workplace（组装内：快照加载后 1 次 + 每文件 1 次）→ prepare。
@@ -223,7 +220,7 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
       calls += 1;
       return calls === bailAtCall;
     };
-    const promise = buildSessionPromptInput(
+    const promise = buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -236,7 +233,7 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
     const runtime = makeBailRuntime();
     const definition = makeBailDefinition();
     const shouldBail = jest.fn(() => false);
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -296,7 +293,7 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
   it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {
     const runtime = makeStubRuntime();
     const definition = buildDefaultAgentDefinitionPreservingName('plain-agent');
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -316,7 +313,7 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
  * 删掉任一字段全部照绿，workplaceSeen 静默回落 seenPaths（只含 full 档），
  * G6 修的洞以静默倒退回归。
  *
- * 本用例不整体 mock buildSessionPromptInput：stub runtime 的
+ * 本用例不整体 mock buildSessionPromptInputAdapter：stub runtime 的
  * `evaluateRuleView` 产出 full 档 + header 档各一，让组装真分家，再由
  * `listBySession` 返回带附件的历史消息，看 prepare 后的附件正文。
  * 删掉任一接线字段，断言①/② 之一必红。
@@ -326,12 +323,12 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
  *
  * 预算降级此前只在 core 的 prepare 单测里钉过，双端 service 侧零断言，实现方
  * 以「一致性由 prepare 单源结构性保证」判过。本用例把结构性保证**落成一条会红
- * 的断言**：超大文本附件经 buildSessionPromptInput（预览路径）产出后，attach
+ * 的断言**：超大文本附件经 buildSessionPromptInputAdapter（预览路径）产出后，attach
  * XML 必须是 filename 档 + 「文件过长，可用 read 配合 offset/limit 分段读取」
  * 引导文案，且不得残留正文——真发链（agent-runner）走同一个 prepare，出现分歧
  * 时这条会红。
  */
-describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
+describe('buildSessionPromptInputAdapter 附件预算降级 parity（T-A8）', () => {
   /** 预览路径要 hydrate 的超大附件路径。 */
   const HUGE_PATH = '/huge.md';
   /**
@@ -367,7 +364,7 @@ describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
     });
     const definition = buildDefaultAgentDefinitionPreservingName('budget-agent');
 
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,
@@ -389,7 +386,7 @@ describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
   });
 });
 
-describe('buildSessionPromptInput S0 双读接线（d-s0/G-1）', () => {
+describe('buildSessionPromptInputAdapter S0 双读接线（d-s0/G-1）', () => {
   /** 复用既有 harness 的路径常量：一个 full 档、一个 header 档。 */
   const FULL_PATH = WORKPLACE_FILES[0];
   const HEADER_PATH = WORKPLACE_FILES[1];
@@ -438,7 +435,7 @@ describe('buildSessionPromptInput S0 双读接线（d-s0/G-1）', () => {
     // 显式开 workplace 块：不开则组装短路，两集合恒为 []，本用例没有牙齿。
     definition.prompts = {...definition.prompts, workplace: '【工作区】'};
 
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       {projectId: 'p1', sessionId: 's1'},
       definition,

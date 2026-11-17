@@ -33,7 +33,7 @@ describe("rollbackToMessage", () => {
     unwrap(await svfs.write("/rb1.md", "later-body", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -73,7 +73,7 @@ describe("rollbackToMessage", () => {
     unwrap(await svfs.write("/poem.md", "violets", { versionCheck: false }));
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -106,7 +106,7 @@ describe("rollbackToMessage", () => {
     // S-13 护栏：user1 首条 plain user，prior 与 anchor 均无 baseline 快照，
     // targetTree 为空 → 拒绝 reconcile，保留 /poem.md 与现有消息。
     await rejectsErr(
-      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
@@ -130,7 +130,7 @@ describe("rollbackToMessage", () => {
 
     // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝删除。
     await rejectsErr(
-      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      () => ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
       (error: unknown) =>
         isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
     );
@@ -202,7 +202,7 @@ describe("rollbackToMessage", () => {
     }));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
     const left = outcomeValue(await ctx.messages.listBySession(session.id));
     assert.equal(left.length, 2);
     assert.equal(left[0]!.id, user1.id);

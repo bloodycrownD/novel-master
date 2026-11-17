@@ -6,11 +6,12 @@
  * renderer、mobile）共享。文件按类别组织（encoding / errors / json / release…），
  * 新工具优先并进已有类别文件。
  *
- * 例外：断言原语（assert / assertNever / AssertionError）与 i18n 工厂 + 类型族
- * 保持裸导出，不包命名空间。
+ * 例外：断言原语（assert / assertNever / AssertionError）、i18n 工厂 + 类型族
+ * 与并发原语工厂（createBusyFlag）保持裸导出，不包命名空间。
  */
 export {Coerce} from "./coerce.js";
 export {Guards} from "./guards.js";
+export {createBusyFlag, type BusyFlag} from "./concurrency.js";
 export {Json} from "./json.js";
 export {Text} from "./text.js";
 export type {DecodeHtmlEntitiesOptions} from "./text.js";

@@ -9,7 +9,6 @@ const {isSnoozed: isSnoozedActual} = jest.requireActual<
 >('../src/storage/update-prefs');
 
 const mockCheckForUpdates = jest.fn();
-const mockReadUpdatesAutoCheck = jest.fn();
 const mockReadSnoozeUntil = jest.fn();
 const mockWriteSnoozeUntil = jest.fn();
 const mockPersistUpdateCheckResult = jest.fn();
@@ -28,7 +27,8 @@ let modalProps: {
 jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     status: 'ready',
-    appUi: {get: jest.fn(), set: jest.fn()},
+    // auto-check 走 readBoolPref(appUi, key, true)：未写值回退默认开。
+    appUi: {get: jest.fn(async () => ({ok: true, value: undefined})), set: jest.fn()},
   }),
 }));
 
@@ -38,8 +38,6 @@ jest.mock('@/components/chrome/ToastHost', () => ({
 
 jest.mock('@/storage/update-prefs', () => ({
   isSnoozed: jest.requireActual('@/storage/update-prefs').isSnoozed,
-  readUpdatesAutoCheck: (...args: unknown[]) =>
-    mockReadUpdatesAutoCheck(...args),
   readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
   writeSnoozeUntil: (...args: unknown[]) => mockWriteSnoozeUntil(...args),
   persistUpdateCheckResult: (...args: unknown[]) =>
@@ -85,14 +83,12 @@ describe('useAutoUpdateCheck', () => {
     jest.useFakeTimers();
     modalProps = null;
     mockCheckForUpdates.mockClear();
-    mockReadUpdatesAutoCheck.mockClear();
     mockReadSnoozeUntil.mockClear();
     mockWriteSnoozeUntil.mockClear();
     mockPersistUpdateCheckResult.mockClear();
     mockPersistFailedUpdateCheck.mockClear();
     mockReadDismissedVersion.mockClear();
     mockWriteDismissedVersion.mockClear();
-    mockReadUpdatesAutoCheck.mockResolvedValue(true);
     mockReadSnoozeUntil.mockResolvedValue({ok: true, value: undefined});
     mockReadDismissedVersion.mockResolvedValue({ok: true, value: undefined});
     mockPersistUpdateCheckResult.mockResolvedValue(undefined);
@@ -236,10 +232,8 @@ describe('useAutoUpdateCheck', () => {
   });
 
   it('B-5: 偏好读失败（Result.err）被兑住，走失败持久化与错误弹窗', async () => {
-    // 错误通道迁移四期：auto-check/snooze 读失败不再走 reject，改为 Result.err
-    // ——读 auto-check 失败回退默认（true，继续检查）；读 snooze 失败未知静音
-    // 状态，按「读偏好失败」终端收口（fail 路径）。
-    mockReadUpdatesAutoCheck.mockResolvedValue({ok: true, value: true});
+    // 错误通道迁移四期：auto-check 未写值回退默认开（readBoolPref，继续检查）；
+    // 读 snooze 失败（Result.err）未知静音状态，按「读偏好失败」终端收口（fail 路径）。
     mockReadSnoozeUntil.mockResolvedValue({ok: false, error: new Error('pref boom')});
 
     act(() => {

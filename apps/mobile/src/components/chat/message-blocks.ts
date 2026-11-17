@@ -3,12 +3,11 @@
  */
 import {type ChatMessageData, type ContentBlock, type MessageAttachment, type ToolResultBlock, type ToolUseBlock} from '@novel-master/core/chat';
 import {resolveToolResultOk} from '@novel-master/core';
-import {summarizeToolInput} from '@novel-master/core/chat';
 
 import {skillToolRefResolver, resolveVfsToolFilePath} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
+import {Text} from '@novel-master/core/common';
 import type {TranscriptRow} from './ChatTranscriptBridge';
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
 export interface ToolCallView {
   readonly toolUseId: string;
@@ -246,12 +245,6 @@ export function toolCallViewFromUse(use: ToolUseBlock, results: ReadonlyMap<stri
   };
 }
 
-/**
- * 工具入参摘要：单源在 core（`@novel-master/core/chat` 的 `summarizeToolInput`）。
- * 本文件此前持有一份**两个特判都没有**的副本，与 desktop / mobile WebView 行为不一致，
- * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/message/tool-summary.ts`。
- */
-
 /** 工具卡片可打开的逻辑文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
   return resolveVfsToolFilePath(tool.name, tool.input);
@@ -268,23 +261,8 @@ export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolR
   return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
-export function toolCallSummary(tool: ToolCallView): string {
-  if (tool.status === 'error' && tool.summary) {
-    // 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情），
-    // 超长按与成功摘要同档截断，卡片不被整段报错撑开。
-    const firstLine = tool.summary.split('\n')[0]?.trim() ?? '';
-    return firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
-  }
-  const fromInput = summarizeToolInput(tool.name, tool.input);
-  if (fromInput) {
-    return fromInput;
-  }
-  if (tool.resultContent) {
-    const t = tool.resultContent.trim();
-    return t.length > 120 ? `${t.slice(0, 117)}…` : t;
-  }
-  return '';
-}
+// nm-style: keep-public — 工具卡片摘要单源在 core（`presentation/chat/tool-summary.ts`），本文件只保留入口名给 ToolCallCard。
+export {toolCallSummary} from '@novel-master/core/chat';
 
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 // prettier-ignore
@@ -402,8 +380,8 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
     id: item.message.id,
     role: item.message.role === 'user' ? 'user' : 'assistant',
     hidden: item.message.hidden,
-    text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
-    thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
+    text: Text.decodeHtmlEntities(item.textParts.join('\n')),
+    thinking: Text.decodeHtmlEntities(item.thinkingParts.join('\n')),
     ...(rawAttachments.length > 0 ? {attachments: rowAttachments} : {}),
     ...(item.tools.length > 0
       ? {

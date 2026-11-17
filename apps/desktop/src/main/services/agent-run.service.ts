@@ -36,7 +36,7 @@ export { AgentTurnError as AgentRunError };
  * `resolveCurrentAgentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
  * 不会产 resolve key），属薄壳，已删；调用点直接用 core 的 `Result` 通道。
  */
-export async function resolveCurrentAgentDefinition(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
+export async function resolveCurrentAgentDefinitionAdapter(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 

@@ -312,7 +312,7 @@ describe("rollback version short-circuit", () => {
 
     assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
 
     assert.equal(unwrap(await svfs.read("/stable.md")).content, "keep-me");
     assert.equal(unwrap(await svfs.read("/stable.md")).version, headVersion);

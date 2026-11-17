@@ -31,7 +31,6 @@
   "createProviderServices",
   "defaultSavedModelSettings",
   "formatApplicationModelId",
-  "formatLocalDateTime",
   "formatSavedModelDisplayName",
   "getEncoding",
   "getProtocolAdapter",

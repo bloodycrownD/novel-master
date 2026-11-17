@@ -282,8 +282,9 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   cancelPreciseUpgrade: jest.fn(),
 }));
 
-jest.mock('../src/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: jest.fn(async () => false),
+jest.mock('../src/storage/app-ui-pref-io', () => ({
+  ...jest.requireActual('../src/storage/app-ui-pref-io'),
+  readBoolPref: jest.fn(async () => false),
 }));
 
 // `{virtual: true}`：`session-messages-loader` 已随「Wave D 死通道删净」退役删除

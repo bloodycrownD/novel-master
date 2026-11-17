@@ -16,7 +16,7 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { clearDecodedContentCaches, decodedContentCacheStats } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
@@ -42,7 +42,7 @@ async function corruptBlobRow(conn: TdbcConnection, table: "vfs_content_blob" | 
 
 describe("vfs content-store × 进程内解压产物层", () => {
   it("第二次 get 走内存：blob 行被投毒仍读到原正文；清池后必失败（反向锁）", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const plain = `vfs 正文-${testIsolationSuffix()}：${"行内容\n".repeat(80)}`;
@@ -50,19 +50,19 @@ describe("vfs content-store × 进程内解压产物层", () => {
 
     // 第一次读：真解压，同时回填内存层
     assert.equal(unwrap(await store.get(hash)), plain);
-    const afterFirst = decodedContentCacheStats().find((s) => s.name === "content-body");
-    assert.ok(afterFirst != null && afterFirst.entries > 0, "首读后应已入池");
+    const afterFirst = decodedContentCache.stats();
+    assert.ok(afterFirst.entries > 0, "首读后应已入池");
 
     await corruptBlobRow(conn, "vfs_content_blob", hash);
     assert.equal(unwrap(await store.get(hash)), plain, "第二次读命中内存层（没有碰被投毒的 blob）");
 
     // 反向锁：清掉内存层再读 → 必须撞上脏数据（证明上一条不是巧合）
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     await rejectsErr(() => store.get(hash));
   });
 
   it("getMany：内存命中的 hash 参与结果但不解压，未命中的照常读库", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const cachedPlain = `命中正文-${testIsolationSuffix()}`;
@@ -80,7 +80,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
   });
 
   it("全命中时连 blob 表 SQL 都不发（getMany 的零查询形态）", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const ctx = countingCtx!;
     const store = new SqliteVfsContentStore(ctx.conn);
     const plains = [1, 2, 3].map((n) => `计数正文-${n}-${testIsolationSuffix()}`);
@@ -108,7 +108,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
   });
 
   it("统一层：同一正文在 vfs 与 file_cache 两条存储里共享同一条内存条目", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const sessionKkv = createSessionKkvService(conn);
@@ -139,7 +139,7 @@ describe("vfs content-store × 进程内解压产物层", () => {
     assert.equal(payload.value.mtimeMs, 42, "mtime 仍来自 entry 行，不进内存池");
 
     // 反向锁：清池后 file_cache 读链自己解压 → 解压失败按 miss 自愈（返回 null）
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key), null, "投毒行真的坏（清池后读不到），上一条命中确属内存层");
   });
 });

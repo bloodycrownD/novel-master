@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import {
-  handlePreferencesGetSubagentStream,
-  handlePreferencesSetSubagentStream,
+  handlePreferencesGet,
+  handlePreferencesSet,
 } from "../src/main/ipc/handlers/preferences.js";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
@@ -24,7 +24,7 @@ describe("preferences IPC handlers — subagentStream（T-D1）", () => {
   });
 
   it("get 默认 true（未 set 过键）", async () => {
-    const got = await handlePreferencesGetSubagentStream();
+    const got = await handlePreferencesGet("subagentStream");
     assert.equal(got.ok, true);
     if (!got.ok) {
       return;
@@ -33,14 +33,14 @@ describe("preferences IPC handlers — subagentStream（T-D1）", () => {
   });
 
   it("set false 后回读 false", async () => {
-    const set = await handlePreferencesSetSubagentStream(false);
+    const set = await handlePreferencesSet("subagentStream", false);
     assert.equal(set.ok, true);
     if (!set.ok) {
       return;
     }
     assert.equal(set.data, undefined);
 
-    const got = await handlePreferencesGetSubagentStream();
+    const got = await handlePreferencesGet("subagentStream");
     assert.equal(got.ok, true);
     if (!got.ok) {
       return;
@@ -55,7 +55,7 @@ describe("preferences IPC handlers — subagentStream（T-D1）", () => {
     const rt = rtR.value;
     await rt.preferences.resetSubagentStreamEnabled();
 
-    const got = await handlePreferencesGetSubagentStream();
+    const got = await handlePreferencesGet("subagentStream");
     assert.equal(got.ok, true);
     if (!got.ok) {
       return;

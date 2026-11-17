@@ -84,7 +84,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     );
 
     await rejectsErr(
-      () => sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      () => sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id),
       (error: unknown) => {
         assert.equal(
           isSessionFsError(error, "ROLLBACK_CONFLICT"),
@@ -137,7 +137,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
       ),
     );
 
-    await sessionFs.rollbackToMessage(session.id, project.id, user1.id);
+    await sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id);
 
     // 重试后锡点消息被截断（undo_send 语义含锡点），竞态写入也被一起截掉。
     const messages = outcomeValue(await ctx.messages.listBySession(session.id));
@@ -161,7 +161,7 @@ describe("MessageRollbackService A-22 optimistic lock (T-SC11)", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 走默认的 ctx.sessionFs（未包装 conn，没有任何注入）。
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
 
     // rewind 锡点 assistant1 保留，其后无 tail。
     const messages = outcomeValue(await ctx.messages.listBySession(session.id));

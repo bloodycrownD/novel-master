@@ -2,10 +2,11 @@
  * RN ↔ Web composer 输入框桥：带类型信封 `{v, type, payload}`（对齐 vfs/CodeEditorBridge）。
  *
  * 单源约束：web 侧同形声明在 `src/web/composer-input/webview/runtime/model.ts`，
- * 两侧 BRIDGE_V 必须同为 1（`__tests__/composer-input-bridge.test.ts` 有一致性断言）。
+ * 两侧 BRIDGE_V 必须同为 1（`__tests__/composer-input-bridge.test.ts` 有一致性断言）；
+ * 四函数编解码单源在 `webview-host/typed-message-bridge.ts`。
  * decode 走抛错口径（坏信封 = JSON 坏 / v 不符 / type 缺失），由宿主 try/catch 静默丢弃。
  */
-import {Guards} from '@novel-master/core/common';
+import {createMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
@@ -82,38 +83,10 @@ export type ComposerInputToHostMessage =
   | BridgeEnvelope<'blur', Record<string, never>>
   | BridgeEnvelope<'heightChange', {height: number}>;
 
-// nm-style: keep-public — ComposerInput 桥编码 API（webview 契约，调用方在 WebView 组件）
-export function encodeHostToComposerInput(message: HostToComposerInputMessage): string {
-  return JSON.stringify(message);
-}
+const composerInputBridge = createMessageBridge<HostToComposerInputMessage, ComposerInputToHostMessage>(COMPOSER_INPUT_BRIDGE_VERSION, 'composer-input');
 
-// nm-style: keep-public — ComposerInput 桥对称编码 API（协议契约对称面）
-export function encodeComposerInputToHost(message: ComposerInputToHostMessage): string {
-  return JSON.stringify(message);
-}
-
-export function decodeComposerInputToHost(raw: string): ComposerInputToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Guards.isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid composer-input bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string' || !Guards.isRecord(parsed.payload)) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid composer-input bridge envelope shape');
-  }
-  return parsed as ComposerInputToHostMessage;
-}
-
-export function decodeHostToComposerInput(raw: string): HostToComposerInputMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Guards.isRecord(parsed) || parsed.v !== COMPOSER_INPUT_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：to-host 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid composer-input bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string') {
-    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid composer-input bridge envelope shape');
-  }
-  return parsed as HostToComposerInputMessage;
-}
+// nm-style: keep-public — ComposerInput 桥四函数（webview 契约，调用方 ComposerInputWebView / 测试）
+export const encodeHostToComposerInput = composerInputBridge.encodeToClient;
+export const encodeComposerInputToHost = composerInputBridge.encodeToHost;
+export const decodeComposerInputToHost = composerInputBridge.decodeToHost;
+export const decodeHostToComposerInput = composerInputBridge.decodeToClient;

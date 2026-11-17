@@ -5,7 +5,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
-import type {VfsService} from '@novel-master/core/vfs';
+import {basenameOf, type VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
@@ -21,13 +21,6 @@ import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
 import {formatCharCount} from '@novel-master/core/format';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
-
-/** VFS logical path → file name segment for toolbar (full path stays in route params). */
-function vfsBasename(logicalPath: string): string {
-  const trimmed = logicalPath.replace(/\/+$/, '');
-  const slash = trimmed.lastIndexOf('/');
-  return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
-}
 
 /** Last-saved timestamp for the stats row (device local time). */
 function formatFileMtime(ms: number): string {
@@ -271,7 +264,7 @@ export function FileEditorScreen() {
         disabled: saving || !isDirty || previewMode || isReadOnly,
         onPress: () => handleSave().catch(() => undefined),
       }}
-      title={isDirty ? '未保存' : vfsBasename(path)}
+      title={isDirty ? '未保存' : basenameOf(path)}
       titleDanger={isDirty}
       titleFontSize={14}
       titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}

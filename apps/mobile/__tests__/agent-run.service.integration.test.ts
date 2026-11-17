@@ -2,7 +2,7 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {userMessageOf} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';
-import {runAgentTurn} from '@/services/agent-run.service';
+import {runAgentTurnAdapter} from '@/services/agent-run.service';
 
 function baseRuntime(overrides: Partial<any> = {}) {
   return {
@@ -75,7 +75,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
   };
 }
 
-describe('runAgentTurn integration', () => {
+describe('runAgentTurnAdapter integration', () => {
   it('empty input + last user → allowed, no empty message appended', async () => {
     const runtime = baseRuntime({
       messages: {
@@ -85,7 +85,7 @@ describe('runAgentTurn integration', () => {
       },
     });
     try {
-      await runAgentTurn(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
+      await runAgentTurnAdapter(runtime as any, {projectId: 'p', sessionId: 's'}, '', {
         allowResumeWithoutInput: true,
       });
     } catch {
@@ -107,7 +107,7 @@ describe('runAgentTurn integration', () => {
     });
     // 前奏期空输入拦截走 AgentTurnError（带 messageKey 的 descriptor，
     // Error.message 为 key 原文），经 core translator 解析后再断言用户可见中文。
-    const error = await runAgentTurn(
+    const error = await runAgentTurnAdapter(
       runtime as any,
       {projectId: 'p', sessionId: 's'},
       '',

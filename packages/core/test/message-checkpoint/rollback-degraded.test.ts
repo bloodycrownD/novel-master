@@ -75,7 +75,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
         assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
         assert.equal(isRollbackVfsDegradableError(error), false);
@@ -100,7 +100,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -121,10 +121,10 @@ describe("MessageRollbackService (degraded fallback)", () => {
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await rejectsErr(() =>
-      ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+      ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
     );
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -142,7 +142,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -172,7 +172,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     }));
     await svfs.write("/state.md", "v2", { versionCheck: false });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, textOnly.id);
 
     assert.equal(unwrap(await svfs.read("/state.md")).content, "v1");
     const messages = outcomeValue(await ctx.messages.listBySession(session.id));
@@ -187,7 +187,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
 
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(
+        ctx.sessionFs.rollbackFilesToMessage(
           session.id,
           project.id,
           "missing-message-id",
@@ -248,7 +248,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     }));
     await svfs.write("/keep.md", "mutated", { versionCheck: false });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
 
@@ -277,7 +277,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, user1.id, {
       revisionHeadBackfill: true,
     });
 
@@ -294,10 +294,10 @@ describe("MessageRollbackService (degraded fallback)", () => {
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await rejectsErr(() =>
-      ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+      ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
     );
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,

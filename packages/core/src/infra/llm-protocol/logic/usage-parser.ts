@@ -1,11 +1,13 @@
 /**
  * LLM response usage field parsers (OpenAI, Anthropic, Gemini shapes).
  *
+ * 三家差异全部是数据：根位置、字段名、total 形态、cache 落点、早退判据。
+ *
  * @module infra/llm-protocol/logic/usage-parser
  */
 
 import { Guards } from "@/common/guards.js";
-import type { LlmTokenUsage } from "../ports/adapter.port.js";
+import type { LlmProtocolKind, LlmTokenUsage } from "../ports/adapter.port.js";
 
 function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -17,89 +19,91 @@ function nonNegativeNum(value: unknown): number | undefined {
   return n != null && n >= 0 ? n : undefined;
 }
 
-/** 仅在值存在时展开字段，保持「无 cache 字段 → 返回对象不含该二字段」的契约。 */
-function cacheFields(cacheReadTokens?: number, cacheCreationTokens?: number): Pick<LlmTokenUsage, "cacheReadTokens" | "cacheCreationTokens"> {
+function readPath(root: Record<string, unknown>, path: readonly string[]): unknown {
+  let current: unknown = root;
+  for (const key of path) {
+    if (!Guards.isRecord(current)) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+type UsageTokenField = "prompt" | "completion" | "total";
+
+/** 各协议 usage 的字段落点（声明式，无独有算法）。 */
+type UsageShape = {
+  /** 承载 usage 的根路径候选（按序取第一个 record；Anthropic 兼容流式 message.usage）。 */
+  readonly roots: readonly (readonly string[])[];
+  readonly prompt: readonly string[];
+  readonly completion: readonly string[];
+  /** total 路径；"sum" = prompt + completion（两者都非缺席时派生）。 */
+  readonly total: readonly string[] | "sum";
+  readonly cacheRead?: readonly string[];
+  /** cache_creation 双形态：嵌套父对象在场时只读嵌套键，否则回退扁平键。 */
+  readonly cacheCreation?: { readonly nested: readonly string[]; readonly flat: readonly string[] };
+  /** 早退判据：这些字段全部缺席时返回 undefined（派生的 total 不参与）。 */
+  readonly requireAny: readonly UsageTokenField[];
+};
+
+/** Anthropic usage 字段名：解析与流 raw 合并（anthropic-sse-parser）共用同一份，防两处手抄漂移。 */
+export const ANTHROPIC_USAGE_FIELDS = {
+  prompt: "input_tokens",
+  completion: "output_tokens",
+  cacheRead: "cache_read_input_tokens",
+  cacheCreationNested: "cache_creation",
+  cacheCreationInput: "input_tokens",
+  cacheCreationFlat: "cache_creation_input_tokens",
+} as const;
+
+const ANTHROPIC_USAGE_SHAPE: UsageShape = {
+  roots: [["usage"], ["message", "usage"]],
+  prompt: [ANTHROPIC_USAGE_FIELDS.prompt],
+  completion: [ANTHROPIC_USAGE_FIELDS.completion],
+  total: "sum",
+  cacheRead: [ANTHROPIC_USAGE_FIELDS.cacheRead],
+  cacheCreation: { nested: [ANTHROPIC_USAGE_FIELDS.cacheCreationNested, ANTHROPIC_USAGE_FIELDS.cacheCreationInput], flat: [ANTHROPIC_USAGE_FIELDS.cacheCreationFlat] },
+  requireAny: ["prompt", "completion"],
+};
+
+const USAGE_SHAPES: Record<LlmProtocolKind, UsageShape> = {
+  openai: { roots: [["usage"]], prompt: ["prompt_tokens"], completion: ["completion_tokens"], total: ["total_tokens"], cacheRead: ["prompt_tokens_details", "cached_tokens"], requireAny: ["prompt", "completion", "total"] },
+  anthropic: ANTHROPIC_USAGE_SHAPE,
+  gemini: { roots: [["usageMetadata"]], prompt: ["promptTokenCount"], completion: ["candidatesTokenCount"], total: ["totalTokenCount"], cacheRead: ["cachedContentTokenCount"], requireAny: ["prompt", "completion", "total"] },
+};
+
+/** Parses provider response usage by protocol. */
+export function parseUsage(protocol: LlmProtocolKind, raw: unknown): LlmTokenUsage | undefined {
+  if (!Guards.isRecord(raw)) {
+    return undefined;
+  }
+  const shape = USAGE_SHAPES[protocol];
+  const usage = shape.roots.map((path) => readPath(raw, path)).find((value) => Guards.isRecord(value));
+  if (usage == null) {
+    return undefined;
+  }
+  const promptTokens = num(readPath(usage, shape.prompt));
+  const completionTokens = num(readPath(usage, shape.completion));
+  const totalTokens = shape.total === "sum" ? (promptTokens != null && completionTokens != null ? promptTokens + completionTokens : undefined) : num(readPath(usage, shape.total));
+  const present: Record<UsageTokenField, boolean> = { prompt: promptTokens != null, completion: completionTokens != null, total: totalTokens != null };
+  if (!shape.requireAny.some((field) => present[field])) {
+    return undefined;
+  }
+  const cacheReadTokens = shape.cacheRead == null ? undefined : nonNegativeNum(readPath(usage, shape.cacheRead));
+  const cacheCreation = shape.cacheCreation;
+  let cacheCreationTokens: number | undefined;
+  if (cacheCreation != null) {
+    // 嵌套父对象在场时只读嵌套键（即使嵌套键缺失也不回退），否则读扁平键。
+    const nestedParent = cacheCreation.nested[0];
+    cacheCreationTokens = nestedParent != null && Guards.isRecord(usage[nestedParent]) ? nonNegativeNum(readPath(usage, cacheCreation.nested)) : nonNegativeNum(readPath(usage, cacheCreation.flat));
+  }
   return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    // 仅在值存在时展开字段，保持「无 cache 字段 → 返回对象不含该二字段」的契约。
     ...(cacheReadTokens != null ? { cacheReadTokens } : {}),
     ...(cacheCreationTokens != null ? { cacheCreationTokens } : {}),
-  };
-}
-
-/** Parses OpenAI chat completion `usage` object. */
-export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!Guards.isRecord(raw)) {
-    return undefined;
-  }
-  const usage = raw.usage;
-  if (!Guards.isRecord(usage)) {
-    return undefined;
-  }
-  const promptTokens = num(usage.prompt_tokens);
-  const completionTokens = num(usage.completion_tokens);
-  const totalTokens = num(usage.total_tokens);
-  if (promptTokens == null && completionTokens == null && totalTokens == null) {
-    return undefined;
-  }
-  // OpenAI 无 cache write 概念，只读命中侧 cached_tokens。
-  const details = Guards.isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
-  const cacheReadTokens = nonNegativeNum(details?.cached_tokens);
-  return {
-    promptTokens,
-    completionTokens,
-    totalTokens,
-    ...cacheFields(cacheReadTokens),
-  };
-}
-
-/** Parses Anthropic messages API `usage` object (non-stream or stream events). */
-export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!Guards.isRecord(raw)) {
-    return undefined;
-  }
-  let usage = raw.usage;
-  if (!Guards.isRecord(usage) && Guards.isRecord(raw.message) && Guards.isRecord(raw.message.usage)) {
-    usage = raw.message.usage;
-  }
-  if (!Guards.isRecord(usage)) {
-    return undefined;
-  }
-  const promptTokens = num(usage.input_tokens);
-  const completionTokens = num(usage.output_tokens);
-  if (promptTokens == null && completionTokens == null) {
-    return undefined;
-  }
-  const totalTokens = promptTokens != null && completionTokens != null ? promptTokens + completionTokens : undefined;
-  const cacheReadTokens = nonNegativeNum(usage.cache_read_input_tokens);
-  // cache_creation 有两种 wire 形态：新版嵌套 cache_creation.input_tokens，旧版扁平 cache_creation_input_tokens。
-  const cacheCreation = Guards.isRecord(usage.cache_creation) ? nonNegativeNum(usage.cache_creation.input_tokens) : nonNegativeNum(usage.cache_creation_input_tokens);
-  return {
-    promptTokens,
-    completionTokens,
-    totalTokens,
-    ...cacheFields(cacheReadTokens, cacheCreation),
-  };
-}
-
-/** Parses Gemini generateContent `usageMetadata` object. */
-export function parseGeminiUsage(raw: unknown): LlmTokenUsage | undefined {
-  if (!Guards.isRecord(raw)) {
-    return undefined;
-  }
-  const meta = raw.usageMetadata;
-  if (!Guards.isRecord(meta)) {
-    return undefined;
-  }
-  const promptTokens = num(meta.promptTokenCount);
-  const completionTokens = num(meta.candidatesTokenCount);
-  const totalTokens = num(meta.totalTokenCount);
-  if (promptTokens == null && completionTokens == null && totalTokens == null) {
-    return undefined;
-  }
-  const cacheReadTokens = nonNegativeNum(meta.cachedContentTokenCount);
-  return {
-    promptTokens,
-    completionTokens,
-    totalTokens,
-    ...cacheFields(cacheReadTokens),
   };
 }

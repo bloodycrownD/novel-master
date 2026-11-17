@@ -31,11 +31,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
-import {
-  resolveCurrentAgentDefinition,
-  resolveDesktopSavedModelId,
-  runAgentTurnAdapter,
-} from "../../services/agent-run.service.js";
+import { resolveCurrentAgentDefinitionAdapter, resolveDesktopSavedModelId, runAgentTurnAdapter } from "../../services/agent-run.service.js";
 import {
   decrementDesktopAgentActive,
   incrementDesktopAgentActive,
@@ -73,7 +69,7 @@ export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurre
     if (agentId == null) {
       return Result.ok({ agentId: undefined, agentName: "未配置 Agent", modelLabel: "—", hasDedicatedModel: false });
     }
-    const { definition } = await resolveCurrentAgentDefinition(rt);
+    const { definition } = await resolveCurrentAgentDefinitionAdapter(rt);
     const hasDedicatedModel = definition.model != null && definition.model !== "";
     // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
     const savedModelId = definition.model;
@@ -381,7 +377,7 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
     const rt = built.value;
-    await resolveDesktopSavedModelId(rt, (await resolveCurrentAgentDefinition(rt)).definition, req.sessionId);
+    await resolveDesktopSavedModelId(rt, (await resolveCurrentAgentDefinitionAdapter(rt)).definition, req.sessionId);
     const { sessionId } = req;
     // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
     // core runAgentTurn 内部自建 internalController 注册到 rt.agentAbortRegistry，

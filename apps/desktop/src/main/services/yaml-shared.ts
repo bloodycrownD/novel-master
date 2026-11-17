@@ -9,6 +9,7 @@ import { dialog, type BrowserWindow } from "electron";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Result } from "@novel-master/core/errors";
 
 /**
  * 通过系统保存对话框把 YAML 文本落盘。
@@ -38,18 +39,20 @@ export async function exportYamlWithDialog(yaml: string, fileName: string, paren
 /**
  * 通过系统打开对话框挑选一个 YAML 文件，把内容交给 `consume` 回调。
  *
- * 打开对话框 + readFile 之后，decode/validate/persist 的逻辑
- * 全部由调用方在 `consume` 里完成，方便按各 schema 自己处理。
+ * 打开对话框 + readFile 之后，decode/validate/persist 的逻辑全部由调用方在
+ * `consume` 里完成。通道与 mobile 对齐（`Result`）：consume 的已知失败沿
+ * `Result.err` 接力；readFile 等平台异常仍走 reject，由调用方 catch 收口。
  */
-export async function importYamlWithDialog(consume: (yamlText: string) => Promise<void>, parentWindow?: BrowserWindow | null): Promise<"imported" | "cancelled"> {
+export async function importYamlWithDialog(consume: (yamlText: string) => Promise<Result<void, Error>>, parentWindow?: BrowserWindow | null): Promise<Result<"imported" | "cancelled", Error>> {
   const win = parentWindow ?? undefined;
   const openDialogOptions: Electron.OpenDialogOptions = { filters: [{ name: "YAML", extensions: ["yaml", "yml"] }], properties: ["openFile"] };
   const result = win ? await dialog.showOpenDialog(win, openDialogOptions) : await dialog.showOpenDialog(openDialogOptions);
   if (result.canceled || result.filePaths.length === 0) {
-    return "cancelled";
+    return Result.ok("cancelled");
   }
 
   const yaml = await readFile(result.filePaths[0]!, "utf8");
-  await consume(yaml);
-  return "imported";
+  const consumed = await consume(yaml);
+  if (!consumed.ok) return Result.err(consumed.error);
+  return Result.ok("imported");
 }

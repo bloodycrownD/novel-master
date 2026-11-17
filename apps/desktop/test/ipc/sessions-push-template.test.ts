@@ -1,6 +1,6 @@
 /**
  * SESSIONS_PUSH_TEMPLATE handler（workspace-push spec T-WP6）：
- * - 成功：调 rt.sessions.pushTemplate(sessionId)，随后 notify 项目工作区面板刷新，
+ * - 成功：调 rt.sessions.pushSessionTemplate(sessionId)，随后 notify 项目工作区面板刷新，
  *   payload 必须是 IPC 面板语义 `{workspaceScope:'session', projectId}`——
  *   面板 scope 'session' 就是项目工作区（core project 域），'chat' 才是会话域；
  *   projectId 经会话查询取得（不改 Request 形状）。
@@ -63,7 +63,7 @@ beforeEach(() => {
 describe("handleSessionsPushTemplate（T-WP6）", () => {
   it("成功：调 pushTemplate 并以 IPC 面板语义 notify 项目工作区", async () => {
     globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushTemplate, get: getSession },
+      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
     const result = await handleSessionsPushTemplate({ sessionId: "s-1" });
@@ -87,7 +87,7 @@ describe("handleSessionsPushTemplate（T-WP6）", () => {
       throw new Error("push failed");
     });
     globalThis.__sessionsPushTestRuntime = {
-      sessions: { pushTemplate, get: getSession },
+      sessions: { pushSessionTemplate: pushTemplate, get: getSession },
     };
 
     const result = await handleSessionsPushTemplate({ sessionId: "s-1" });

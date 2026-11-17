@@ -60,7 +60,7 @@ export interface SessionPromptInputBundle {
  */
 type SessionPromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
 
-export async function buildSessionPromptInput(runtime: MobileRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: BuildSessionPromptInputOptions): SessionPromptInputResult {
+export async function buildSessionPromptInputAdapter(runtime: MobileRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: BuildSessionPromptInputOptions): SessionPromptInputResult {
   // 分段弃权 + 分段计时（__DEV__ 诊断，logcat 过滤 [nm-chip-build]；长期保留的诊断日志）：
   // 2026-09-30 回滚竞态里一次 build 墙钟 18.9s，靠分段读数定位被谁拖住。
   const shouldBail = options?.shouldBail;

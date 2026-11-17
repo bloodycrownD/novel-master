@@ -39,6 +39,7 @@
   "skillToolRefResolver",
   "summarizeToolInput",
   "textBlocks",
+  "toolCallSummary",
   "userMessageFormatter",
   "userVfsTurnStorage"
 ]

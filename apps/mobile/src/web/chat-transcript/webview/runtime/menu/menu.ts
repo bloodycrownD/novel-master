@@ -1,4 +1,5 @@
 import {MENU_OPEN_GRACE_MS} from '@web/shared/constants';
+import {createViewSlot} from '@web/shared/view-slot';
 import {
   computeAnchoredMenuWidth,
   layoutAnchoredMenuForHeight,
@@ -37,20 +38,20 @@ type HitEl = EventTarget | null;
 /** 调用参数：null = 卸载 overlay，非 null = 刷新 props。 */
 type MenuProps = MenuOverlayViewProps | null;
 
-let _renderContextMenuView: RenderContextMenuView | null = null;
+const contextMenuView = createViewSlot<MenuProps>();
 
 /** 由 main 注册 Preact MenuOverlay 刷新/卸载实现。 */
+// nm-style: keep-public — 槽实例保持模块私有；bundle 契约测（factory 装配链 / boot 产物）按名锁定
 export function registerRenderContextMenu(fn: RenderContextMenuView): void {
-  _renderContextMenuView = fn;
+  contextMenuView.register(fn);
 }
 
 /**
  * 调用已注册实现；未注册时返回 false。
  */
+// nm-style: keep-public — 槽实例保持模块私有；runtime 门面与契约测按名引用
 export function invokeRegisteredRenderContextMenu(props: MenuProps): boolean {
-  if (!_renderContextMenuView) return false;
-  _renderContextMenuView(props);
-  return true;
+  return contextMenuView.invoke(props);
 }
 
 /**

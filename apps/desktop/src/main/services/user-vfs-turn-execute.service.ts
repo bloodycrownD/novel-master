@@ -4,16 +4,14 @@
  * @module services/user-vfs-turn-execute.service
  */
 import { type UserVfsTurnOp } from "@novel-master/core/chat";
-import { type VfsScope } from "@novel-master/core/vfs";
+import { isSessionVfsScope } from "@novel-master/core/vfs";
 import { Result } from "@novel-master/core/errors";
 import { ComposerAttachmentsSuggestForwarder } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { projectComposerStatusForSession } from "./project-composer-status.service.js";
 
-/** 是否为会话工作区 scope（需走 userVfsTurn）。 */
-export function isSessionVfsScope(scope: VfsScope): scope is Extract<VfsScope, { kind: "session" }> {
-  return scope.kind === "session";
-}
+// 类型窄化本体在 core（VfsScope 定义处）；这里转出给 handlers/vfs.ts 与 vfs-batch 沿用既有 import 面。
+export { isSessionVfsScope };
 
 /**
  * 经 userVfsTurn 执行；失败沿 `Result` 返回，由调用方转码（handlers/vfs.ts 各

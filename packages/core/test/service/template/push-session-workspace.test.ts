@@ -2,7 +2,7 @@
  * 推送链 core 层测试（workspace-push spec Step 2）：
  * - T-WP1 整树覆盖：project 有 A/B、session 有 B'/C → push 后 project 为 B'/C（A 被删）
  * - T-WP2 目录规则覆盖：push 后 project 规则 = session 版本（copyScope 覆盖语义）
- * - T-WP3 blob 无孤儿（sessionTemplatePush 载体，镜像 vfs-gc-trigger T-G2 模式）
+ * - T-WP3 blob 无孤儿（pushSessionTemplate 载体，镜像 vfs-gc-trigger T-G2 模式）
  * - T-WP4 会话不存在抛 CHAT_NOT_FOUND；事务失败回滚不留半态
  *
  * T-WP5（既有 pull/template 测试不回归）由同目录既有测试文件守护，本文件不重复。
@@ -44,7 +44,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await svfs.write("/b.md", `B-new-${suffix}`));
     unwrap(await svfs.write("/sub/c.md", `C-${suffix}`));
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePush(session.id);
+    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
 
     // project 树 == session 快照：b'/c 在，a 被删
     const paths = unwrap(await pvfs.list("/", { recursive: true }))
@@ -99,7 +99,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await swt.setDirRule({ logicalPath: "/", ruleEnabled: true, headCount: 5 }));
     unwrap(await swt.setFileRule({ logicalPath: "/c.md", inclusionMode: "show" }));
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePush(session.id);
+    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
 
     // push 后：project 规则 == session 版本（headCount=5），session 没有的规则被清除
     const projectDirRule = unwrap(await pwt.getDirRule("/"));
@@ -131,7 +131,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     unwrap(await svfs.write("/a.md", `A2-${suffix}`));
     unwrap(await svfs.write("/new.md", `NEW-${suffix}`));
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePush(session.id);
+    await createTemplatePullService(ctx.conn).pushSessionTemplate(session.id);
 
     assert.equal(
       unwrap(await pvfs.read("/a.md")).content,
@@ -149,14 +149,14 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     assert.equal(
       Number(orphanRows[0]!.n),
       0,
-      "sessionTemplatePush 后不应有 orphan blob",
+      "pushSessionTemplate 后不应有 orphan blob",
     );
   });
 
   it("T-WP4a: 会话不存在走 Err 通道（CHAT_NOT_FOUND）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const pushed = await createTemplatePullService(ctx.conn).sessionTemplatePush(`missing-${suffix}`);
+    const pushed = await createTemplatePullService(ctx.conn).pushSessionTemplate(`missing-${suffix}`);
     assert.ok(!pushed.ok, "会话不存在应走 Err 通道");
     if (!pushed.ok) {
       assert.ok(isAppError(pushed.error, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");

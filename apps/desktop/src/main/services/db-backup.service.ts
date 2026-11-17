@@ -11,7 +11,7 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot } from "@novel-master/core";
+import { assertSqliteBackupHeader, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
 import { createAbortError } from "@novel-master/core/abort";
 import { Errors } from "@novel-master/core/common";
@@ -27,7 +27,6 @@ import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.db-backup");
 
-const SQLITE_MAGIC = "SQLite format 3";
 const SQLITE_HEADER_BYTES = 16;
 const EXPORT_ATTACH_ALIAS = "export_db";
 
@@ -81,17 +80,6 @@ export function __setDbBackupFsOpsForTest(ops: Partial<typeof fsOps> | null): vo
   fsOps.copyFile = ops?.copyFile ?? copyFile;
   fsOps.unlink = ops?.unlink ?? unlink;
   fsOps.open = ops?.open ?? openFileHandle;
-}
-
-function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
-  if (bytes.length < 16) {
-    return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "文件过小，不是有效的数据库备份" }));
-  }
-  const header = String.fromCharCode(...bytes.subarray(0, 16));
-  if (!header.startsWith(SQLITE_MAGIC)) {
-    return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "不是有效的 SQLite 数据库备份" }));
-  }
-  return Result.ok(undefined);
 }
 
 /**
@@ -232,7 +220,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
     try {
       const buf = Buffer.alloc(SQLITE_HEADER_BYTES);
       const { bytesRead } = await handle.read(buf, 0, SQLITE_HEADER_BYTES, 0);
-      checked = assertSqliteFile(new Uint8Array(buf.subarray(0, bytesRead)));
+      checked = assertSqliteBackupHeader(new Uint8Array(buf.subarray(0, bytesRead)));
     } finally {
       await handle.close();
     }
@@ -258,7 +246,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
   acquireDesktopDbMaintenanceBusy();
   try {
     // 内存态校验：bytes 已在堆上，不涉及整包读盘。失败沿 Result.err（同 FromPath 口径）。
-    const checked = assertSqliteFile(bytes);
+    const checked = assertSqliteBackupHeader(bytes);
     if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();

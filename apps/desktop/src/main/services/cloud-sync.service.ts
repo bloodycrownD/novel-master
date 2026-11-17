@@ -8,16 +8,17 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
 import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+import { createBusyFlag } from "@novel-master/core/common";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import { isDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
-import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta, type CloudSyncSetConfigInput } from "./cloud-sync-config.store.js";
+import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
 
 export type CloudSyncLocalStatusDto = {
   configured: boolean;
@@ -36,12 +37,14 @@ export type CloudSyncLocalStatusDto = {
   maintenanceBusy: boolean;
 };
 
-let syncBusy = false;
+/**
+ * 云同步执行窗口（pull/push 互斥；计数实现与 db-maintenance-busy 同源）。
+ * 单实例计数与旧布尔等价：`if (syncBusy.isBusy())` 守卫保证不会嵌套 acquire。
+ */
+const syncBusy = createBusyFlag();
 
 /** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
-export function isDesktopCloudSyncBusy(): boolean {
-  return syncBusy;
-}
+export const isDesktopCloudSyncBusy = syncBusy.isBusy;
 
 class DesktopCloudSyncService {
   /**
@@ -77,7 +80,7 @@ class DesktopCloudSyncService {
     return this.runtimeIdentity === runtime;
   }
 
-  async setConfig(input: CloudSyncSetConfigInput): Promise<Result<void, AppError>> {
+  async setConfig(input: CloudSyncConfigInput): Promise<Result<void, AppError>> {
     return this.configStore.setConfig(input);
   }
 
@@ -192,7 +195,7 @@ class DesktopCloudSyncService {
       lastPullResult: meta.value.lastPullResult || undefined,
       lastPushResult: meta.value.lastPushResult || undefined,
       suggestsPull,
-      syncBusy,
+      syncBusy: syncBusy.isBusy(),
       agentActive,
       maintenanceBusy: isDesktopDbMaintenanceBusy(),
     });
@@ -213,10 +216,10 @@ class DesktopCloudSyncService {
    * `databaseReplaced` 恒为 `false`。
    */
   async pull(options?: { readonly checkpoint?: () => Interrupt | null }): Promise<Result<{ rev: number; databaseReplaced: boolean }, AppError>> {
-    if (syncBusy) {
+    if (syncBusy.isBusy()) {
       return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
-    syncBusy = true;
+    syncBusy.acquire();
     let meta: CloudSyncLocalMeta | undefined;
     let exportTempPath: string | undefined;
     let importTempPath: string | undefined;
@@ -280,7 +283,7 @@ class DesktopCloudSyncService {
       // 未知的运行期异常：沿未知通道抛给 handler catch（错误通道迁移四期不动）。
       throw error;
     } finally {
-      syncBusy = false;
+      syncBusy.release();
       if (exportTempPath != null) {
         await unlink(exportTempPath).catch(() => undefined);
       }
@@ -312,10 +315,10 @@ class DesktopCloudSyncService {
   }
 
   async push(options?: { forceOverwriteRemote?: boolean; readonly checkpoint?: () => Interrupt | null }): Promise<Result<{ rev: number }, AppError>> {
-    if (syncBusy) {
+    if (syncBusy.isBusy()) {
       return Result.err(new AppError("CLI_INVALID_ARGUMENT", { detail: "云同步进行中，请稍后再试" }));
     }
-    syncBusy = true;
+    syncBusy.acquire();
     let exportTempPath: string | undefined;
     let importTempPath: string | undefined;
     try {
@@ -350,7 +353,7 @@ class DesktopCloudSyncService {
       // coordinator 侧故障（core CloudSyncError 体系）与未知异常：未知通道原样抛。
       throw error;
     } finally {
-      syncBusy = false;
+      syncBusy.release();
       if (exportTempPath != null) {
         await unlink(exportTempPath).catch(() => undefined);
       }
@@ -498,11 +501,9 @@ export async function getDesktopCloudSyncService(): Promise<Result<DesktopCloudS
 /** 测试用：重置单例与忙碌状态 */
 export function resetDesktopCloudSyncServiceForTest(): void {
   service = undefined;
-  syncBusy = false;
+  syncBusy.resetForTest();
   storageOverrideForTest = undefined;
 }
 
 /** 测试用：直接置位云同步忙碌状态（模拟 pull/push 执行窗口）。 */
-export function setDesktopCloudSyncBusyForTest(busy: boolean): void {
-  syncBusy = busy;
-}
+export const setDesktopCloudSyncBusyForTest = syncBusy.set;

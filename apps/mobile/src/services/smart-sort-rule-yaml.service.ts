@@ -9,12 +9,12 @@ import {Errors} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {exportYamlFile, importYamlFile} from './yaml-shared';
+import {exportYamlWithDialog, importYamlWithDialog} from './yaml-shared';
 
 export async function exportSmartSortRuleYaml(runtime: MobileNovelMasterRuntime): Promise<'saved' | 'cancelled'> {
   const doc = await runtime.smartSortRule.exportRules();
   const yaml = stringifyText(doc, 'yaml');
-  return exportYamlFile(yaml, 'smart-sort-rules.yaml');
+  return exportYamlWithDialog(yaml, 'smart-sort-rules.yaml');
 }
 
 /**
@@ -40,7 +40,7 @@ export async function importSmartSortRuleYaml(runtime: MobileNovelMasterRuntime)
       throw Errors.normalizeSmartSortImport(error);
     }
   };
-  const result = await importYamlFile(consumeYaml);
+  const result = await importYamlWithDialog(consumeYaml);
   if (!result.ok) return Result.err(result.error);
   return Result.ok(count);
 }

@@ -13,14 +13,14 @@
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter } from "../ports/adapter.port.js";
-import { chatMessagesToOpenAi, openAiChoiceToBlocks, openAiStreamAccumulatorsToPartialBlocks } from "../logic/openai-content-mapper.js";
+import { chatMessagesToOpenAi, openAiChoiceToBlocks } from "../logic/openai-content-mapper.js";
 import { isRequestAborted } from "../logic/request-abort.js";
 import { blocksToTextOnly, chatMessagesToTextOnly, isTextOnlyHistory } from "../logic/text-only-content.js";
-import { parseOpenAiUsage } from "../logic/usage-parser.js";
+import { parseUsage } from "../logic/usage-parser.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
-import { createOpenAiSseParserState, feedOpenAiSseChunk, finishOpenAiSse } from "../logic/openai-sse-parser.js";
-import { applyOpenAiThinkingToBody } from "../logic/apply-thinking-to-body.js";
+import { createOpenAiSseParser } from "../logic/openai-sse-parser.js";
+import { applyThinkingToBody } from "../logic/apply-thinking-to-body.js";
 
 export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "openai" as const;
@@ -48,7 +48,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         messages: [{ role: "user", content: userText.value }],
         ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
       };
-      applyOpenAiThinkingToBody(body, req.thinking);
+      applyThinkingToBody("openai", body, req.thinking);
       // 与 buildBody 一致：自定义参数最后合并，覆盖同名标准字段。
       Object.assign(body, req.extraBody);
 
@@ -59,18 +59,18 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       const record = raw as { choices?: Array<{ message?: unknown }> };
       const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
       const assistantText = messageBodyTextFromBlocks(blocks);
-      const usage = parseOpenAiUsage(raw);
+      const usage = parseUsage("openai", raw);
       return { assistantText, blocks, raw, usage };
     }
 
     if (req.stream) {
       const url = joinUrl(req.baseUrl, "/chat/completions");
-      const state = createOpenAiSseParserState();
+      const parser = createOpenAiSseParser({ onStream: req.onStream });
 
       try {
         const headers = { Authorization: `Bearer ${req.apiKey}`, "Content-Type": "application/json", ...req.extraHeaders };
         const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true)), signal: req.scope?.signal };
-        await postSse(url, init, (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+        await postSse(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
         if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
@@ -78,15 +78,13 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       }
 
       const aborted = req.scope?.signal.aborted === true;
-      const abortedResult = {
-        blocks: openAiStreamAccumulatorsToPartialBlocks(state, req.onStream),
-        streamRaw: state.lastUsageEvent ?? state.lastEvent ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
-        degradedToolCalls: [] as const,
-      };
-      const finishResult = aborted ? abortedResult : finishOpenAiSse(state, req.onStream);
+      // 保持既有顺序：正常收尾也先构造一次 partial——它先 emit 流中已完整的
+      // tool-use 并标记 emittedToolIndices，finish 只补剩余项，事件次序不变。
+      const partialResult = parser.finishPartial();
+      const finishResult = aborted ? partialResult : parser.finish();
       const { blocks, streamRaw, degradedToolCalls } = finishResult;
       const assistantText = messageBodyTextFromBlocks(blocks);
-      const usage = parseOpenAiUsage(streamRaw);
+      const usage = parseUsage("openai", streamRaw);
       const result: LlmChatResult = {
         assistantText,
         blocks,
@@ -106,7 +104,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
     const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseOpenAiUsage(raw);
+    const usage = parseUsage("openai", raw);
     return { assistantText, blocks, raw, usage };
   }
 
@@ -144,7 +142,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "openai") {
       Object.assign(body, req.sampling.openai);
     }
-    applyOpenAiThinkingToBody(body, req.thinking);
+    applyThinkingToBody("openai", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
     Object.assign(body, req.extraBody);
     return body;

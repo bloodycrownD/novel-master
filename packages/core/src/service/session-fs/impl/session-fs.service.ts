@@ -21,7 +21,8 @@ interface SessionFsServiceDeps {
 export class DefaultSessionFsService implements SessionFsService {
   constructor(private readonly deps: SessionFsServiceDeps) {}
 
-  async rollbackToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
+  /** nm-style: keep-public — SessionFsService 端口方法；MessageRollbackService 是唯一实现，这里只做分层门面。 */
+  async rollbackFilesToMessage(sessionId: string, projectId: string, messageId: string, options?: RollbackOptions): Promise<Result<void, AppError>> {
     return this.deps.messageRollback.rollbackToMessage(sessionId, projectId, messageId, options);
   }
 }

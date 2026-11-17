@@ -1,11 +1,8 @@
 import {createAppUiPreferences} from '@/storage/app-ui-prefs';
-import {
-  readChatRichTextEnabled,
-  writeChatRichTextEnabled,
-} from '@/storage/chat-rich-text-pref';
+import {readBoolPref, writeBoolPref} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
 import {AppError, Result} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
-import {APP_UI_KKV_MODULE} from '@/storage/app-ui-keys';
 
 function createMemoryKkv(): KkvService {
   const data = new Map<string, string>();
@@ -50,13 +47,13 @@ function createMemoryKkv(): KkvService {
 describe('chat-rich-text-pref', () => {
   it('defaults to false when key is missing', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(readChatRichTextEnabled(prefs)).resolves.toBe(false);
+    await expect(readBoolPref(prefs, APP_UI_KEY_CHAT_RICH_TEXT, false)).resolves.toBe(false);
   });
 
   it('round-trips true after write', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await writeChatRichTextEnabled(prefs, true);
-    await expect(readChatRichTextEnabled(prefs)).resolves.toBe(true);
+    await writeBoolPref(prefs, APP_UI_KEY_CHAT_RICH_TEXT, true);
+    await expect(readBoolPref(prefs, APP_UI_KEY_CHAT_RICH_TEXT, false)).resolves.toBe(true);
     await expect(prefs.listKeys()).resolves.toContain('chatRichText');
   });
 });

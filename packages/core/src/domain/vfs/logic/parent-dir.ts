@@ -8,21 +8,34 @@ import { Result } from "@/errors/either.js";
 import type { AppError } from "@/errors/app-error.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
+/** 已规范化路径的父目录（root 的父目录仍是 root）；调用方保证入参已过 normalizePath。 */
+export function parentDirOfNormalized(normalized: string): string {
+  if (normalized === "/") {
+    return "/";
+  }
+  const idx = normalized.lastIndexOf("/");
+  return idx <= 0 ? "/" : normalized.slice(0, idx);
+}
+
 /** Returns the parent directory path; root's parent is `/`.
  * normalizePath 失败走 `Result.err`（错误通道迁移四期：`throw r.error` 清零，决定权交给上层；isStorageRootParent 同款）。
  */
 export function parentDir(path: string): Result<string, AppError> {
   const resolved = normalizePath(path);
   if (!resolved.ok) return resolved;
-  const normalized = resolved.value;
-  if (normalized === "/") {
-    return Result.ok("/");
-  }
-  const idx = normalized.lastIndexOf("/");
-  if (idx <= 0) {
-    return Result.ok("/");
-  }
-  return Result.ok(normalized.slice(0, idx));
+  return Result.ok(parentDirOfNormalized(resolved.value));
+}
+
+/**
+ * Strict（Result）之外的 lenient 态：宽松父目录（裸返回值，无错误通道）。
+ *
+ * root → `null`（无父目录）；非法路径（空串 / 非绝对 / 越根）→ `null`。
+ * 给 UI 导航这类「解析不出就当没有」的消费方用；要保留错误原因走 {@link parentDir}。
+ */
+export function parentDirOrNull(path: string): string | null {
+  const resolved = normalizePath(path);
+  if (!resolved.ok || resolved.value === "/") return null;
+  return parentDirOfNormalized(resolved.value);
 }
 
 /**

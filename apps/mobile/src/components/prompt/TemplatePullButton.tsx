@@ -1,5 +1,5 @@
 /**
- * Confirm + run sessions.pullTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
+ * Confirm + run sessions.pullSessionTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
  */
 import React, {useState} from 'react';
 import {
@@ -42,7 +42,7 @@ export function TemplatePullButton({
   const runPull = async () => {
     setPulling(true);
     try {
-      await runtime.sessions.pullTemplate(scope.sessionId);
+      await runtime.sessions.pullSessionTemplate(scope.sessionId);
       onPulled?.();
       showToast('同步完成');
     } catch (error) {

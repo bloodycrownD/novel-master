@@ -64,7 +64,8 @@ import {
 } from '@/runtime/agent-activity';
 import type {RootStackParamList} from '@/navigation/types';
 import {readChatTranscriptEngine} from '@/storage/chat-transcript-engine';
-import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
+import {readBoolPref} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
 import {useChatTabMessages} from './useChatTabMessages';
 import {
   useChatTabScope,
@@ -423,7 +424,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     if (appUi == null) {
       return;
     }
-    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
+    setChatRichTextEnabled(await readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false));
   }, [appUi]);
 
   /**

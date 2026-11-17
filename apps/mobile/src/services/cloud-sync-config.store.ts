@@ -3,7 +3,7 @@
  *
  * @module services/cloud-sync-config.store
  */
-import {ensureTrailingSlash} from '@novel-master/core';
+import {ensureTrailingSlash, type CloudSyncConfigInput} from '@novel-master/core';
 import {Kkv} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {type SecretStore} from '@novel-master/core/provider';
@@ -33,17 +33,8 @@ const KEY_LAST_PUSH_AT = 'lastPushAt';
 const KEY_LAST_PULL_RESULT = 'lastPullResult';
 const KEY_LAST_PUSH_RESULT = 'lastPushResult';
 
-/** 保存配置时的输入（含明文 SK，仅写入时短暂存在内存） */
-export type CloudSyncConfigInput = {
-  endpoint: string;
-  bucket: string;
-  region: string;
-  pathPrefix: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  forcePathStyle: boolean;
-  deviceLabel?: string;
-};
+/** 保存配置的输入类型统一由 core 提供（与 desktop `CloudSyncConfigInput` 单一类型）；此处转发保留既有 import 面。 */
+export type {CloudSyncConfigInput} from '@novel-master/core';
 
 /** 对外展示的配置（不含 SK 明文） */
 type CloudSyncConfigPublic = {
@@ -153,12 +144,13 @@ export async function getCloudSyncLocalStatus(runtime: MobileNovelMasterRuntime)
   });
 }
 
-/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。校验失败与已知失败统一沿 `Result.err` 上行。 */
-export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, input: CloudSyncConfigInput): Promise<Result<CloudSyncConfigPublic, AppError>> {
+/** 保存配置：校验非空、生成 deviceId（若缺）、SK 写 SKSP。校验失败与已知失败统一沿 `Result.err` 上行；成功返回 void（与 desktop `setConfig` 返回通道一致）。 */
+export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, input: CloudSyncConfigInput): Promise<Result<void, AppError>> {
   if (!input.endpoint.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Endpoint'}));
   if (!input.bucket.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Bucket'}));
   if (!input.accessKeyId.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Access Key'}));
-  if (!input.secretAccessKey.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Secret Key'}));
+  const secret = input.secretAccessKey?.trim() ?? '';
+  if (!secret) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Secret Key'}));
   const {kkv, secretStore} = runtime;
 
   const existingDeviceId = await Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_ID);
@@ -178,7 +170,7 @@ export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, inpu
     kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_ACCESS_KEY_ID, input.accessKeyId.trim()),
     kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_FORCE_PATH_STYLE, input.forcePathStyle ? 'true' : 'false'),
     kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_ID, deviceId),
-    secretStore.set(CLOUD_SYNC_SECRET_REF, input.secretAccessKey.trim()),
+    secretStore.set(CLOUD_SYNC_SECRET_REF, secret),
   ]);
 
   const label = input.deviceLabel?.trim();
@@ -186,7 +178,7 @@ export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, inpu
     await kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_LABEL, label);
   }
 
-  return getCloudSyncConfig(runtime);
+  return Result.ok(undefined);
 }
 
 /** 更新本机 Pull/Push 结果与时间戳。 */

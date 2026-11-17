@@ -42,7 +42,8 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
+import {readBoolPref} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_CHAT_RICH_TEXT} from '@/storage/app-ui-keys';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
 import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -140,7 +141,7 @@ export function SubagentSessionScreen() {
     if (appUi == null) {
       return;
     }
-    const prefRead = readChatRichTextEnabled(appUi);
+    const prefRead = readBoolPref(appUi, APP_UI_KEY_CHAT_RICH_TEXT, false);
     prefRead.then(setRichTextEnabled).catch(() => undefined);
   }, [appUi]);
 

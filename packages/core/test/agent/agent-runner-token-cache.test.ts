@@ -29,7 +29,6 @@ import {
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type VfsService } from "@novel-master/core/vfs";
 import type { MessageService } from "../../src/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
@@ -623,12 +622,6 @@ describe("AgentRunner 每 step usage 回锚", () => {
         messages: {
           listBySession: async () => [],
         } as unknown as MessageService,
-        messageTranscriptEffects: {
-          hideMessagesInRange: async () => {},
-          showMessagesInRange: async () => {},
-          truncateMessagesAfter: async () => {},
-          setMessageFloorAtMessage: async () => {},
-        } as unknown as MessageTranscriptEffectsService,
       }),
     );
 
@@ -754,12 +747,6 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     const messagesStub = {
       listBySession: async () => [],
     } as unknown as MessageService;
-    const effectsStub = {
-      hideMessagesInRange: async () => {},
-      showMessagesInRange: async () => {},
-      truncateMessagesAfter: async () => {},
-      setMessageFloorAtMessage: async () => {},
-    } as unknown as MessageTranscriptEffectsService;
 
     const secondRegistry = new ToolRegistry();
     registerBuiltinTools(secondRegistry);
@@ -797,7 +784,6 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           },
         },
         messages: messagesStub,
-        messageTranscriptEffects: effectsStub,
       }),
     );
 
@@ -887,12 +873,6 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
           messages: {
             listBySession: async () => [],
           } as unknown as MessageService,
-          messageTranscriptEffects: {
-            hideMessagesInRange: async () => {},
-            showMessagesInRange: async () => {},
-            truncateMessagesAfter: async () => {},
-            setMessageFloorAtMessage: async () => {},
-          } as unknown as MessageTranscriptEffectsService,
         }),
       );
       // 清掉上一轮可能落下的 api 值：两轮都强制走本地档，比的才是 tools 段。
@@ -1007,12 +987,6 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         messages: {
           listBySession: async () => [],
         } as unknown as MessageService,
-        messageTranscriptEffects: {
-          hideMessagesInRange: async () => {},
-          showMessagesInRange: async () => {},
-          truncateMessagesAfter: async () => {},
-          setMessageFloorAtMessage: async () => {},
-        } as unknown as MessageTranscriptEffectsService,
       }),
     );
 

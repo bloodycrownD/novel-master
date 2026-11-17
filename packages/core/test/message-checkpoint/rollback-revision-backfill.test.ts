@@ -101,7 +101,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+        ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
         assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
         const err = error as { details?: { missingLogicalPaths?: readonly string[] } };
@@ -122,7 +122,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/b.md");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -185,7 +185,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     unwrap(await svfs.delete("/gone.md"));
 
     // 不手工删 revision 行——checkpoint 的 path 快照 + 旧 entryId 应让回滚复活文件。
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -220,7 +220,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     // entry 已删但 checkpoint 旧 entryId 的 revision 行在 → 不算 missing，
     // 无需 revisionHeadBackfill 确认也不应抛 BACKFILL_REQUIRED。
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -267,7 +267,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
       [entryId, revisions[0]!.version],
     );
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -290,7 +290,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -308,7 +308,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -365,7 +365,7 @@ describe("MessageRollbackService (revision head backfill)", () => {
 
     await rejectsErr(
       () =>
-        ctx.sessionFs.rollbackToMessage(
+        ctx.sessionFs.rollbackFilesToMessage(
           session.id,
           project.id,
           assistant1.id,

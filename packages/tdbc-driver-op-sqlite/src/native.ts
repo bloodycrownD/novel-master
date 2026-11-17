@@ -1,6 +1,9 @@
 /**
  * RN / Metro 入口：静态 op-sqlite 绑定（{@link NativeOpSqliteAdapter}）。
  *
+ * 与主入口 `.` 是同一包的两种平台入口（本入口静态绑定、主入口动态加载），
+ * 属于有意的平台分流而非重复注册；注册实现统一转发 `register.js`。
+ *
  * @module tdbc-driver-op-sqlite/native
  */
 

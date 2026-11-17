@@ -4,7 +4,7 @@
  * 让 handleAgentRun 走到 finally 的早退兜底分支。
  */
 
-export async function resolveCurrentAgentDefinition() {
+export async function resolveCurrentAgentDefinitionAdapter() {
   return {
     agentId: "agent-test",
     definition: { name: "测试 Agent", mode: "primary" },

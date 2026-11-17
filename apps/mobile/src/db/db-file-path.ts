@@ -3,7 +3,8 @@
  *
  * @module db/db-file-path
  */
-import ReactNativeBlobUtil from 'react-native-blob-util';
+import type ReactNativeBlobUtil from 'react-native-blob-util';
+import {blobFs} from '@/services/rn-file-io';
 import {MOBILE_VFS_DB_NAME} from '@/vfs/constants';
 
 /** Subfolder under app files dir used by quick-sqlite when `location: 'default'`. */
@@ -15,16 +16,6 @@ export const QUICK_SQLITE_DEFAULT_LOCATION = 'default';
  * iOS 默认落在 DocumentDir 根部，已被 `base/name` 候选覆盖，无需额外推导。
  */
 let cachedDbFilePath: string | undefined;
-
-function blobFs(): typeof ReactNativeBlobUtil.fs {
-  const anyMod = ReactNativeBlobUtil as unknown as {fs?: typeof ReactNativeBlobUtil.fs; default?: {fs?: typeof ReactNativeBlobUtil.fs}};
-  const fs = anyMod.fs ?? anyMod.default?.fs;
-  if (fs == null) {
-    // nm-throw: keep — 平台边界：react-native-blob-util 原生模块不可用，同步路径解析无失败位
-    throw new Error('react-native-blob-util.fs unavailable');
-  }
-  return fs;
-}
 
 /**
  * Candidate paths for `novel_master_vfs` across driver layouts.

@@ -1,5 +1,5 @@
 /**
- * Mobile agent run — thin wrapper over core {@link runAgentTurn}.
+ * Mobile agent run adapter — thin wrapper over core `runAgentTurn`.
  */
 import {runAgentTurn as coreRunAgentTurn, type AgentRunResult, type AgentTurnScope} from '@novel-master/core/agent';
 import type {AppError, Result} from '@novel-master/core/errors';
@@ -19,7 +19,7 @@ export type AgentRunOptions = {
 };
 
 /** Appends a user message and runs the agent loop (streaming via event bus). */
-export async function runAgentTurn(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
+export async function runAgentTurnAdapter(runtime: MobileNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: AgentRunOptions): Promise<Result<AgentRunResult, AppError>> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
     onRunFailed: ctx => {

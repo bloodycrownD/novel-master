@@ -21,27 +21,14 @@ import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-h
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
-import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
+import { createChatRepoDeps } from "../chat-repo-wiring.js";
 import type { ProjectService } from "../project.port.js";
-
-function reposFor(conn: TdbcConnection) {
-  return {
-    projects: new SqliteProjectRepository(conn),
-    sessions: new SqliteSessionRepository(conn),
-    messages: new SqliteMessageRepository(conn),
-    vfs: new SqliteVfsEntryRepository(conn),
-    revisions: new SqliteVfsRevisionRepository(conn),
-  };
-}
 
 /** Dependencies for {@link DefaultProjectService}. */
 interface ProjectServiceDeps {
@@ -103,7 +90,7 @@ export class DefaultProjectService implements ProjectService {
 
   async delete(id: string): Promise<Result<void, AppError>> {
     await this.deps.conn.transaction(async (tx) => {
-      const r = reposFor(tx);
+      const r = {...createChatRepoDeps(tx), revisions: new SqliteVfsRevisionRepository(tx)};
       const project = await r.projects.findById(id);
       if (project == null) {
         throw new AppError("CHAT_NOT_FOUND", { detail: `project not found: ${id}`, kind: "project", id });
@@ -214,7 +201,7 @@ export class DefaultProjectService implements ProjectService {
     const src = source.value;
     const sourceAgentConfigJson = await this.deps.projects.getAgentConfig(id);
     const copyTransaction = this.deps.conn.transaction(async (tx) => {
-      const r = reposFor(tx);
+      const r = {...createChatRepoDeps(tx), revisions: new SqliteVfsRevisionRepository(tx)};
       const now = Date.now();
       const copy: ChatProject = {
         id: Random.uuid(),

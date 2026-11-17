@@ -25,6 +25,19 @@ export function resolveZipDirectoryPath(directoryPath?: string): Result<string, 
 }
 
 /**
+ * 从目标路径推导 ZIP 基名：子目录取末段、文件取文件名；根目录返回 null
+ * （由调用方解析项目名兜底，见各端 exportVfsZip 的目录名/项目名规则）。
+ */
+export function zipBaseNameFromPath(targetPath: string): string | null {
+  const normalized = targetPath.replace(/\/+$/, "");
+  if (normalized === "" || normalized === "/") {
+    return null;
+  }
+  const lastSegment = normalized.slice(normalized.lastIndexOf("/") + 1);
+  return lastSegment === "" ? null : lastSegment;
+}
+
+/**
  * 将域内逻辑路径转为相对 `directoryPath` 的 ZIP entry（无 leading `/`）。
  * 目标目录自身返回空串（调用方应跳过）。
  */

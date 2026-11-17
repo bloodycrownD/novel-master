@@ -58,7 +58,7 @@ describe("rollback execution redesign", () => {
 
     const resetSpy = mock.method(RevisionAwareVfsService.prototype, "resetHeadToVersion");
     try {
-      await ctx.sessionFs.rollbackToMessage(
+      await ctx.sessionFs.rollbackFilesToMessage(
         session.id,
         project.id,
         anchorAssistant.id,
@@ -116,7 +116,7 @@ describe("rollback execution redesign", () => {
     );
 
     try {
-      await ctx.sessionFs.rollbackToMessage(
+      await ctx.sessionFs.rollbackFilesToMessage(
         session.id,
         project.id,
         anchorAssistant.id,
@@ -160,7 +160,7 @@ describe("rollback execution redesign", () => {
     await svfs.write("/stable.md", "chapter-3", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id));
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant2.id,
@@ -171,7 +171,7 @@ describe("rollback execution redesign", () => {
     assert.ok(await checkpoints.hasCheckpoint(session.id, assistant2.id));
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant3.id), false);
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,

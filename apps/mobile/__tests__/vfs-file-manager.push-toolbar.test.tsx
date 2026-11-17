@@ -106,7 +106,7 @@ jest.mock('@/hooks/useAndroidModalKeyboardAvoid', () => ({
 }));
 
 const mockRuntime = {
-  sessions: {pushTemplate: jest.fn(), pullTemplate: jest.fn()},
+  sessions: {pushSessionTemplate: jest.fn(), pullSessionTemplate: jest.fn()},
 };
 
 jest.mock('@/hooks/useRuntime', () => ({

@@ -30,6 +30,9 @@ export {
 } from "../service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
+export { zipBaseNameFromPath } from "../domain/vfs/logic/vfs-zip-path.js";
+export { resolveZipDirectoryPath } from "../domain/vfs/logic/vfs-zip-path.js";
+export { assertZipArchiveMagic, assertZipArchiveComplete } from "../domain/vfs/logic/vfs-zip-archive.js";
 export type {
   VfsZipIoService,
   VfsZipImportOptions,
@@ -64,6 +67,10 @@ export type {
 export { SqliteVfsRevisionRepository } from "../domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 export type { VfsRevisionRepository } from "../domain/vfs/repositories/vfs-revision.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
+export { isSessionVfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
+// 路径族单源：宽松父目录（root/非法 → null）与 basename（root → `/`），UI 导航/标题消费。
+export { parentDirOrNull } from "../domain/vfs/logic/parent-dir.js";
+export { basenameOf } from "../domain/vfs/logic/basename.js";
 export {
   resolveLogicalPath,
   validateLogicalPath,
@@ -72,6 +79,11 @@ export {
   scopePhysicalPrefix,
   projectVfsPrefix,
 } from "../domain/vfs/logic/vfs-path-mapper.js";
+export {
+  createVfsFile,
+  createVfsDirectory,
+  deleteVfsEntry,
+} from "../domain/vfs/logic/vfs-entry-ops.js";
 export {
   moveVfsPath,
   remapPathUnderDir,

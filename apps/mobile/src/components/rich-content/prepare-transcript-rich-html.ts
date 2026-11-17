@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
-import {decodeAfterSanitize, decodeForMarkdownInput} from './decode-literal-html-entities';
+import {Text} from '@novel-master/core/common';
+import {decodeAfterSanitize} from './decode-literal-html-entities';
 import {normalizeFenceLang, resolveHighlight} from './highlight-code';
 import {sanitizeRichHtml} from './sanitize-rich-html';
 
@@ -106,7 +107,7 @@ markdown.renderer.rules.code_block = (tokens, idx) => {
  * 安全规则由共享的 sanitizeRichHtml 统一（各富文本管线同源）；不做 RN RenderHTML 的 class 物化。
  */
 export function prepareTranscriptRichHtml(content: string): string {
-  const normalized = decodeForMarkdownInput(content);
+  const normalized = Text.decodeHtmlEntities(content);
   // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
   // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
   // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。

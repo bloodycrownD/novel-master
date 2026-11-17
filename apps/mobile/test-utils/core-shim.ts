@@ -16,6 +16,8 @@ export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
+// db-backup 导入前的 SQLite 头校验（十七期下沉 core，desktop/mobile 同源）。
+export {assertSqliteBackupHeader} from '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 // Result 同时是值（ok/err 静态入口）与类型（Ok|Err 联合）：云同步测试按
 // coordinator 的 Result 通道造 mock 返回值（错误通道迁移四期适配）。

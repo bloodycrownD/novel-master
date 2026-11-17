@@ -228,7 +228,9 @@ export async function handleAgentYamlImport(req: AgentYamlImportRequest): Promis
     const rt = built.value;
     const win = BrowserWindow.getFocusedWindow();
     const result = await yamlIo.importAgentYamlWithDialog(rt, req.agentId, win);
-    return { ok: true, data: result };
+    // import 通道与 mobile 一致走 Result：已知失败就地转码，未知异常仍由 catch 兜。
+    if (!result.ok) return { ok: false, error: formatIpcError(result.error) };
+    return { ok: true, data: result.value };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

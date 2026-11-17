@@ -159,7 +159,8 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
     const {runtime, kkv, secretStore} = makeRuntime();
     const setResult = await setCloudSyncConfig(runtime, validInput());
     if (!setResult.ok) throw setResult.error;
-    const config = setResult.value;
+    // setConfig 返回通道与 desktop 对齐（void）；写后状态经 getCloudSyncConfig 读回。
+    const config = await getConfigOrThrow(runtime);
 
     expect(config).toEqual({
       endpoint: 'https://s3.example.com',
@@ -196,7 +197,7 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
       pathPrefix: '   ',
     });
     if (!setResult.ok) throw setResult.error;
-    const config = setResult.value;
+    const config = await getConfigOrThrow(runtime);
     expect(config.pathPrefix).toBe(DEFAULT_CLOUD_SYNC_PATH_PREFIX);
     expect(config.deviceId).toBe('dev-fixed');
   });

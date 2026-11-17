@@ -1,26 +1,16 @@
-import {decode, encode, parseText, stringifyText} from '@novel-master/core';
+/**
+ * Agent YAML import/export via document picker.
+ *
+ * 文本编解码单源在 core（`@novel-master/core/agent` 的 `decodeAgentYamlText` /
+ * `encodeAgentYamlText`）；本模块只保留选择器编排与 registry 落库。
+ */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {agentDefinitionSchema, validateAgentDefinition, type AgentDefinition} from '@novel-master/core/agent';
+import {decodeAgentYamlText, encodeAgentYamlText, validateAgentDefinition} from '@novel-master/core/agent';
 import {Errors} from '@novel-master/core/common';
-import {Result, type AppError} from '@novel-master/core/errors';
+import {Result} from '@novel-master/core/errors';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {exportYamlFile, importYamlFile} from './yaml-shared';
-
-export function decodeAgentYamlText(yaml: string): Result<AgentDefinition, AppError> {
-  // 错误通道迁移四期：parseText / decode 的已知失败沿 Result 接力；导入侧
-  // 由唯一调用方 importAgentYaml 统一走 Errors.normalizeYaml 贴标签。
-  const parsed = parseText(yaml, 'yaml');
-  if (!parsed.ok) return Result.err(parsed.error);
-  const decoded = decode(parsed.value, agentDefinitionSchema);
-  if (!decoded.ok) return Result.err(decoded.error);
-  return Result.ok(decoded.value);
-}
-
-export function encodeAgentYamlText(def: AgentDefinition): string {
-  const doc = encode(def, agentDefinitionSchema);
-  return stringifyText(doc, 'yaml');
-}
+import {exportYamlWithDialog, importYamlWithDialog} from './yaml-shared';
 
 export async function exportAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<'saved' | 'cancelled'> {
   const def = await runtime.agentRegistry.get(agentId);
@@ -30,12 +20,12 @@ export async function exportAgentYaml(runtime: MobileNovelMasterRuntime, agentId
     throw failure;
   }
   const yaml = encodeAgentYamlText(def.value);
-  return exportYamlFile(yaml, `${agentId}.agent.yaml`);
+  return exportYamlWithDialog(yaml, `${agentId}.agent.yaml`);
 }
 
-/** 校验失败套「YAML 无效」前缀沿 Result 接力（错误通道迁移四期）；decode/upsert 的平台异常仍走 reject。 */
+/** 校验失败套「YAML 无效」前缀沿 Result 接力；decode/upsert 的平台异常仍走 reject。 */
 export async function importAgentYaml(runtime: MobileNovelMasterRuntime, agentId: string): Promise<Result<void, Error>> {
-  return importYamlFile(async yaml => {
+  return importYamlWithDialog(async yaml => {
     try {
       const decoded = decodeAgentYamlText(yaml);
       if (!decoded.ok) {

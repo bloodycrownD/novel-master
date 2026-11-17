@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatLocalDateTime } from "@novel-master/core/provider";
+import { DateTime } from "../../src/common/datetime.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
 import { unwrap } from "../helpers/result-unwrap.js";
@@ -20,7 +20,7 @@ describe("renderMacro", () => {
     const out = unwrap(renderMacro("at {{ $.time }}", {
       dot: {},
       root: {
-        time: formatLocalDateTime(fixedNow),
+        time: DateTime.localDateTime(fixedNow),
         week_cn: fixedNow.toLocaleDateString("zh-CN", { weekday: "long" }),
       },
     }));

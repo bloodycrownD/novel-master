@@ -1,7 +1,7 @@
 /**
  * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import {type VfsListEntry} from '@novel-master/core/vfs';
+import {basenameOf, parentDirOrNull as parentLogicalPath, type VfsListEntry} from '@novel-master/core/vfs';
 import {displayStateLabel, inclusionModeLabel, type RuleState, type WorkplaceListRow} from '@novel-master/core/workplace';
 import {coreT} from '../../i18n/core';
 
@@ -22,30 +22,16 @@ export interface MappedVfsRow {
   readonly ruleEnabled: boolean;
 }
 
-/** Parent logical path; session root `/` stays `/`. */
-export function parentLogicalPath(path: string): string | null {
-  if (path === '/') {
-    return null;
-  }
-  const idx = path.lastIndexOf('/');
-  if (idx <= 0) {
-    return '/';
-  }
-  return path.slice(0, idx);
-}
+/**
+ * Parent logical path; session root `/` → `null`（无父目录）。
+ * 单源：core `domain/vfs/logic/parent-dir.ts` 的 `parentDirOrNull`（含 normalizePath
+ * 校验：非法路径也返回 `null`，不再对裸相对路径伪造 `/`）。
+ */
+export {parentLogicalPath};
 
 /** Whether `childPath` is an immediate child of `dirPath`. */
 export function isDirectChild(dirPath: string, childPath: string): boolean {
   return parentLogicalPath(childPath) === dirPath;
-}
-
-/** Basename for display. */
-export function entryName(path: string): string {
-  if (path === '/') {
-    return '/';
-  }
-  const idx = path.lastIndexOf('/');
-  return path.slice(idx + 1);
 }
 
 /**
@@ -95,7 +81,7 @@ export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
 
 /** Map a worktree row to vfs-fm subtitle + badge. */
 export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): MappedVfsRow {
-  const name = entryName(row.path);
+  const name = basenameOf(row.path);
   if (row.kind === 'dir') {
     const ruleEnabled = row.ruleState === 'rule_on';
     const subtitle = childFileCount != null && childFileCount > 0 ? `${childFileCount}个文件` : '';
@@ -128,7 +114,7 @@ export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): 
 /** Fallback row when VFS has a path not yet in worktree listing. */
 export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
   // label 为物理树合成目录行的展示名（项目名/会话名）；未填充时回退路径末段。
-  const name = entry.label ?? entryName(entry.path);
+  const name = entry.label ?? basenameOf(entry.path);
   if (entry.kind === 'directory') {
     return {
       path: entry.path,

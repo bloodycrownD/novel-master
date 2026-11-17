@@ -17,7 +17,6 @@ import type { SessionKkvService } from "../session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "../workplace/workplace.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/create-compaction-condition-evaluator.js";
 import type { MessageService } from "../chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "../chat/message-transcript-effects.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint/message-checkpoint.port.js";
 import type { PersistentPreferences } from "../persistent-preferences/persistent-preferences.port.js";
 import type { AgentRunner } from "./agent.port.js";
@@ -47,13 +46,8 @@ export interface CreateAgentRunnerDeps {
    */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
-  /**
-   * 压缩执行所需的消息服务；对话轨由 assembleAgentRunnerDeps 注入。
-   * 条件压缩命中时与 messageTranscriptEffects 同进同退。
-   */
+  /** 压缩执行所需的消息服务（hide + 截断入口）；对话轨由 assembleAgentRunnerDeps 注入。 */
   readonly messages?: MessageService;
-  /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
-  readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /**
    * 每步模型请求的 tool_use 查找源（Gemini `functionResponse.name` 解析 +
    * hidden tool_use 的合成 model turn）。**可见-only**：出站历史先经

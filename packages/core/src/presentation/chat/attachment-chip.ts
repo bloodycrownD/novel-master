@@ -51,12 +51,25 @@ export function formatStatusChipLabel(action: MessageAttachmentAction, path: str
     return `${zh}:${path}`;
 }
 
+/** chip 文案口径（三端单源 + 通道配置）。 */
+export interface StatusChipLabelOptions {
+    /**
+     * `source === "attach"` 时输出 `@path`（WebView 附件行口径；RN 状态条不进 attach）。
+     * 该短路优先于 action（webview 语义：attach 附件一律 `@路径`）。
+     */
+    readonly attachPrefixed?: boolean;
+}
+
 /**
  * 从附件读 `action`/`path`（及 rename/move 的 `to`）生成 chip 文案。
  * 有 `action` 时直接走 {@link STATUS_CHIP_ZH}（action 自描述，不再靠 name hack）。
  * 无 `action` 时按降级规则（不做英文 /「规则 ·」/ emoji 兼容承诺）。
  */
-export function formatStatusChipLabelFromAttachment(a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">): string {
+export function formatStatusChipLabelFromAttachment(a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">, options?: StatusChipLabelOptions): string {
+    if (options?.attachPrefixed === true && a.source === "attach") {
+        const path = a.path || a.name || "";
+        return path.startsWith("@") ? path : `@${path}`;
+    }
     if (a.action != null) {
         if (a.action === "userAttach") {
             return "";

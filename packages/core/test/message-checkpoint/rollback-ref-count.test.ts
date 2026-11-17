@@ -22,7 +22,7 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -54,7 +54,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     try {
-      await ctx.sessionFs.rollbackToMessage(
+      await ctx.sessionFs.rollbackFilesToMessage(
         session.id,
         project.id,
         assistant1.id,
@@ -274,7 +274,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.equal(Number(tailRefBefore[0]?.ref_count), 2);
 
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id,
@@ -392,7 +392,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       [orphanHash]
     );
     assert.equal(Number(blobRows[0]!.n), 0, "orphan blob 行已被 gc");
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     assert.ok(!(await contentStore.get(orphanHash)).ok, "缺失 blob 的冷态读必须走 Err");
     assert.equal(unwrap(await svfs.read("/defer.md")).content, "keep-final");
   });

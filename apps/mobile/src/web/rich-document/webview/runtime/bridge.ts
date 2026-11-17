@@ -9,6 +9,7 @@ import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscr
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {applyHostTheme} from '@web/shared/host-theme';
 import type {HostTheme} from '@web/shared/host-theme';
+import {createViewSlot} from '@web/shared/view-slot';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -16,20 +17,20 @@ import type {HostTheme} from '@web/shared/host-theme';
  */
 type SetDocumentView = (payload: DocumentPayload) => void;
 
-let _setDocumentView: SetDocumentView | null = null;
+const documentView = createViewSlot<DocumentPayload>();
 
 /** 由 main 注册 Preact（或其它）文档视图刷新实现。 */
+// nm-style: keep-public — 槽实例保持模块私有；main.ts 装配点与 bundle 契约测按名引用
 export function registerSetDocumentView(fn: SetDocumentView): void {
-  _setDocumentView = fn;
+  documentView.register(fn);
 }
 
 /**
  * 调用已注册实现；未注册时返回 false。
  */
+// nm-style: keep-public — 槽实例保持模块私有；setDocument 门面与契约测按名引用
 export function invokeRegisteredSetDocumentView(payload: DocumentPayload): boolean {
-  if (!_setDocumentView) return false;
-  _setDocumentView(payload);
-  return true;
+  return documentView.invoke(payload);
 }
 
 export {post};

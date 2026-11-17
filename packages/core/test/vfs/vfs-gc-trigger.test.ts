@@ -3,7 +3,7 @@
  *
  * T-G1（V5）：revision 行被 sweep 删除 → 对应 blob ref_count 递减 → 归零 blob 行被触发器删除 → 无 orphan blob。
  * T-G2（V10）：模板替换链后无 orphan blob。原载体 projectTemplatePull 已随
- * pull 拆除（Step 2）移除：第一例换 sessionTemplatePull 载体，第二例直调
+ * pull 拆除（Step 2）移除：第一例换 pullSessionTemplate 载体，第二例直调
  * replaceVfsSubtree 盯通用 sweep/GC 语义（原「隔离豁免」断言依赖的
  * excludePrefixes:"meta/skills" 语义已随技能重定位消失）。
  *
@@ -145,8 +145,8 @@ describe("T-G1: sweep 删除 revision → 触发器自动回收 orphan blob", ()
   });
 });
 
-describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体）", () => {
-  it("sessionTemplatePull 执行后所有 blob 都被某 revision 引用", async () => {
+describe("T-G2: 模板替换链后无 orphan blob（pullSessionTemplate 载体）", () => {
+  it("pullSessionTemplate 执行后所有 blob 都被某 revision 引用", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
 
@@ -163,7 +163,7 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     await pvfs.write("/a.md", `A2-${suffix}`, { versionCheck: false });
     await pvfs.write("/b.md", `B-${suffix}`);
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     // 替换后 session 树与 project 快照一致
     const paths = (unwrap(await svfs.list("/", { recursive: true })))
@@ -188,7 +188,7 @@ describe("T-G2: 模板替换链后无 orphan blob（sessionTemplatePull 载体�
     assert.equal(
       Number(orphanRows[0]!.n),
       0,
-      "sessionTemplatePull 后不应有既无 revision 也无 entry 引用的 blob",
+      "pullSessionTemplate 后不应有既无 revision 也无 entry 引用的 blob",
     );
   });
 

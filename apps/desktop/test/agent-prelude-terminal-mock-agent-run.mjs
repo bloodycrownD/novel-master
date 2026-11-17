@@ -35,7 +35,7 @@ export function __failRun(error) {
   p?.reject(error ?? new Error("prelude boom"));
 }
 
-export async function resolveCurrentAgentDefinition() {
+export async function resolveCurrentAgentDefinitionAdapter() {
   return {
     agentId: "agent-test",
     definition: { name: "测试 Agent", mode: "primary" },

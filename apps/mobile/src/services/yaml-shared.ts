@@ -16,8 +16,11 @@ import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
  *
  * 内部先写入 CacheDir 的临时文件，再走 `saveDocuments` 弹出系统保存 UI；
  * 不管保存成功还是取消，都会在 finally 里清理临时文件，避免污染缓存。
+ *
+ * 命名与 desktop 的 `yaml-shared` 对齐（`xxxWithDialog`）：两端 UI 形态不同
+ * （Electron dialog vs 文档选择器），但都是「弹系统 UI + 回调注入」的编排层。
  */
-export async function exportYamlFile(yaml: string, fileName: string): Promise<'saved' | 'cancelled'> {
+export async function exportYamlWithDialog(yaml: string, fileName: string): Promise<'saved' | 'cancelled'> {
   return exportBytesViaDocumentPicker({
     fileName,
     mimeType: 'application/yaml',
@@ -32,12 +35,13 @@ export async function exportYamlFile(yaml: string, fileName: string): Promise<'s
  * 通过 blobUtil 读出 UTF-8 文本。decode/validate/persist 的逻辑
  * 全部由调用方在 `consume` 里完成，方便按各 schema 自己处理。
  *
- * 失败通道（错误通道迁移四期）：consume 的已知失败沿 `Result.err` 接力给
+ * 失败通道（与 desktop 对齐）：consume 的已知失败沿 `Result.err` 接力给
  * 调用方；pick/读文件的平台异常仍走 reject（调用方 catch 收口）。
- * 错误类型是 `Error`：core `Errors.normalizeYaml` 的归一产物含普通 Error
- * （字符串前缀分支），不强升 AppError。
+ * ⚠️ 载荷是 `Error` 而非 `AppError`：core `Errors.normalizeYaml` 的字符串前缀
+ * 分支产出普通 `Error`，`normalizeSmartSortImport` 还可能原样透传 `TdbcError`；
+ * 强改成 AppError 会改掉 formatError 的 messageKey 分派与文案（见本轮 notes）。
  */
-export async function importYamlFile(consume: (yamlText: string) => Promise<Result<void, Error>>): Promise<Result<void, Error>> {
+export async function importYamlWithDialog(consume: (yamlText: string) => Promise<Result<void, Error>>): Promise<Result<void, Error>> {
   const pickOptions: PickLocalFileOptions = {
     mimeTypes: yamlImportPickTypes(),
     fallbackLocalFileName: 'yaml-import.yaml',

@@ -1,9 +1,6 @@
 import {Platform} from 'react-native';
-import {
-  exportVfsZip,
-  importVfsZip,
-  zipBaseNameFromPath,
-} from '@/services/vfs-zip.service';
+import {zipBaseNameFromPath} from '@novel-master/core/vfs';
+import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();

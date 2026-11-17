@@ -240,8 +240,9 @@ jest.mock('@/services/chat-prompt-tokens.service', () => ({
   cancelPreciseUpgrade: jest.fn(),
 }));
 
-jest.mock('@/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: jest.fn(async () => false),
+jest.mock('@/storage/app-ui-pref-io', () => ({
+  ...jest.requireActual('@/storage/app-ui-pref-io'),
+  readBoolPref: jest.fn(async () => false),
 }));
 
 jest.mock('@/storage/chat-transcript-engine', () => ({

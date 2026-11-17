@@ -19,7 +19,7 @@ import {settingsTranslator} from '../../i18n/settings';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {exportDatabaseBackup, importDatabaseBackup} from '../../services/db-backup.service';
-import {getDatabaseMaintenanceStats, runDatabaseMaintenance} from '../../services/db-maintenance.service';
+import {getDbMaintenanceStats, runDbMaintenance} from '../../services/db-maintenance.service';
 import {exportMobileLogs} from '../../services/log-export';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {isMobileAgentActive, subscribeMobileAgentActivity} from '../../runtime/agent-activity';
@@ -59,7 +59,7 @@ export function StorageConfigScreen() {
   }, [runtime]);
 
   const refreshMaintenanceStats = useCallback(async () => {
-    const stats = await getDatabaseMaintenanceStats(runtime);
+    const stats = await getDbMaintenanceStats(runtime);
     // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位；
     // 平台异常仍走 reject，由外层调用方的 .catch 收口。
     setDbFileBytes(stats.ok ? stats.value.fileBytes : null);
@@ -119,7 +119,7 @@ export function StorageConfigScreen() {
               text: '开始清理',
               onPress: () => {
                 setDbBusy(true);
-                runDatabaseMaintenance(runtime)
+                runDbMaintenance(runtime)
                   .then(result => {
                     if (!result.ok) {
                       showToast(toastMessage('清理失败', result.error));

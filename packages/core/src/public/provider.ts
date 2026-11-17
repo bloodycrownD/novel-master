@@ -104,7 +104,6 @@ export type {
   ModelRequestService,
   ModelRequestOptions,
 } from "../service/provider/model-request.port.js";
-export { formatLocalDateTime } from "../infra/date-format.js";
 export type {
   LlmProtocolKind,
   LlmToolDefinition,

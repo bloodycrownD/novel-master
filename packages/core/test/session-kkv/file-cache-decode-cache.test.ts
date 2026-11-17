@@ -18,7 +18,7 @@ import { after, before, describe, it } from "node:test";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -64,7 +64,7 @@ async function entryHash(conn: { query<T extends Record<string, unknown>>(sql: s
 
 describe("file_cache × 进程内解压产物层", () => {
   it("第二次 get 走内存：blob 被投毒仍读到原正文；mtime 取自 entry 行现拼", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const sessionKkv = createSessionKkvService(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
@@ -90,12 +90,12 @@ describe("file_cache × 进程内解压产物层", () => {
     assert.equal(payload.mtimeMs, 2000, "mtime 是行上的新值，不是缓存里的旧值");
 
     // 反向锁：清池后再读 → 投毒的 blob 解压失败 → 按 miss 自愈返回 null
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key), null);
   });
 
   it("getMany：部分命中时命中项不吃投毒、未命中项照常解压", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const { conn } = getNovelMasterTestContext();
     const sessionKkv = createSessionKkvService(conn);
     const sessionId = `s-${testIsolationSuffix()}`;
@@ -119,7 +119,7 @@ describe("file_cache × 进程内解压产物层", () => {
   });
 
   it("全命中时连 blob 表 SQL 都不发（workplace 批次读形态）", async () => {
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
     const ctx = countingCtx!;
     const sessionKkv = createSessionKkvService(ctx.conn);
     const sessionId = `s-count-${testIsolationSuffix()}`;

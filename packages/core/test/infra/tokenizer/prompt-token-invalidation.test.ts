@@ -208,7 +208,7 @@ describe("prompt 占用失效挂点", () => {
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 
-  it("回滚（sessionFs.rollbackToMessage）后 KKV 行被清", async () => {
+  it("回滚（sessionFs.rollbackFilesToMessage）后 KKV 行被清", async () => {
     const { ctx, project, session } = await makeSession();
     const svfs = ctx.sessionVfs(project.id, session.id);
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("poem")));
@@ -230,7 +230,7 @@ describe("prompt 占用失效挂点", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id));
 
     await seedRow(ctx.sessionKkv, session.id);
-    await ctx.sessionFs.rollbackToMessage(
+    await ctx.sessionFs.rollbackFilesToMessage(
       session.id,
       project.id,
       assistant1.id

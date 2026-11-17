@@ -23,7 +23,7 @@ import {
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { TdbcConnection } from "@novel-master/core";
 import {
   getNovelMasterTestContext,
@@ -50,7 +50,7 @@ async function assertColdReadRejects(
   store: SqliteVfsContentStore,
   contentHash: string
 ): Promise<void> {
-  clearDecodedContentCaches();
+  decodedContentCache.clear();
   const r = await store.get(contentHash);
   assert.ok(!r.ok, "行已缺失 + 池冷态 ⇒ get 必须返回 Err");
 }

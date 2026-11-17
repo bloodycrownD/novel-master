@@ -46,7 +46,7 @@ describe("revision GC", () => {
     assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v1));
     assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v2));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant1.id);
 
     const after = await revisions.listKeysUnderScope(sk, "/");
     assert.ok(after.some((r) => r.entryId === entry.entryId && r.version === v1));
@@ -86,7 +86,7 @@ describe("revision GC", () => {
     const entry = unwrap(await entries.findByPath(sk, "/trim.md"));
     assert.ok(entry != null);
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id);
+    await ctx.sessionFs.rollbackFilesToMessage(session.id, project.id, assistant.id);
 
     const keys = await revisions.listKeysUnderScope(sk, "/");
     const versions = keys.filter((k) => k.entryId === entry.entryId).map((k) => k.version);

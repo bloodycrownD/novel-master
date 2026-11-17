@@ -17,6 +17,7 @@
 
 import {h, render} from 'preact';
 
+import {createViewSlot} from '@web/shared/view-slot';
 import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
 type MermaidViewerViewProps = {
@@ -29,14 +30,15 @@ type RenderMermaidViewerView = (props: MermaidViewerViewProps | null) => void;
 
 type MermaidViewerPost = (type: string, payload?: Record<string, unknown>) => void;
 
-let _renderView: RenderMermaidViewerView | null = null;
+const viewerSlot = createViewSlot<MermaidViewerViewProps | null>();
 let _post: MermaidViewerPost | null = null;
 let _open = false;
 let _delegationAttached = false;
 
 /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
+// nm-style: keep-public — 槽实例保持模块私有；两管线 main/factory 装配点按名引用
 export function registerMermaidViewerView(fn: RenderMermaidViewerView): void {
-  _renderView = fn;
+  viewerSlot.register(fn);
 }
 
 /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
@@ -45,7 +47,7 @@ export function openMermaidViewer(chart: Element): void {
     return;
   }
   // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
-  if (!_renderView || !_post) {
+  if (!viewerSlot.has() || !_post) {
     return;
   }
   const svg = chart.querySelector('svg');
@@ -55,9 +57,7 @@ export function openMermaidViewer(chart: Element): void {
   const svgClone = svg.cloneNode(true) as Element;
   _open = true;
   document.body.classList.add('mermaid-viewer-open');
-  if (_renderView) {
-    _renderView({svgClone});
-  }
+  viewerSlot.invoke({svgClone});
   if (_post) {
     _post('mermaidViewerOpened', {});
   }
@@ -70,9 +70,7 @@ export function closeMermaidViewer(notifyHost: boolean = true): void {
   }
   _open = false;
   document.body.classList.remove('mermaid-viewer-open');
-  if (_renderView) {
-    _renderView(null);
-  }
+  viewerSlot.invoke(null);
   if (notifyHost && _post) {
     _post('mermaidViewerClosed', {});
   }

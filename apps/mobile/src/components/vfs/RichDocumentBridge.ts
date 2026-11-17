@@ -2,7 +2,7 @@
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
  * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
-import {Guards} from '@novel-master/core/common';
+import {createMessageBridge} from '@/webview-host/typed-message-bridge';
 
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -102,38 +102,10 @@ type RichDocumentToHostMessage =
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>;
 
-// nm-style: keep-public — rich-document 桥编码 API（webview 契约）
-export function encodeHostToRichDocument(message: HostToRichDocumentMessage): string {
-  return JSON.stringify(message);
-}
+const richDocumentBridge = createMessageBridge<HostToRichDocumentMessage, RichDocumentToHostMessage>(RICH_DOCUMENT_BRIDGE_VERSION, 'rich-document');
 
-// nm-style: keep-public — rich-document 桥对称编码 API（协议契约对称面）
-export function encodeRichDocumentToHost(message: RichDocumentToHostMessage): string {
-  return JSON.stringify(message);
-}
-
-export function decodeRichDocumentToHost(raw: string): RichDocumentToHostMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Guards.isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid rich-document bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string' || !Guards.isRecord(parsed.payload)) {
-    // nm-throw: keep — webview bridge 边界：from-web 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid rich-document bridge envelope shape');
-  }
-  return parsed as RichDocumentToHostMessage;
-}
-
-export function decodeHostToRichDocument(raw: string): HostToRichDocumentMessage {
-  const parsed: unknown = JSON.parse(raw);
-  if (!Guards.isRecord(parsed) || parsed.v !== RICH_DOCUMENT_BRIDGE_VERSION) {
-    // nm-throw: keep — webview bridge 边界：to-host 信封版本/形状不符由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid rich-document bridge envelope version');
-  }
-  if (typeof parsed.type !== 'string') {
-    // nm-throw: keep — webview bridge 边界：to-host 信封畸形由宿主 onMessage catch 后静默丢弃
-    throw new Error('Invalid rich-document bridge envelope shape');
-  }
-  return parsed as HostToRichDocumentMessage;
-}
+// nm-style: keep-public — rich-document 桥四函数（webview 契约，消费方 RichDocumentWebView / 测试）
+export const encodeHostToRichDocument = richDocumentBridge.encodeToClient;
+export const encodeRichDocumentToHost = richDocumentBridge.encodeToHost;
+export const decodeRichDocumentToHost = richDocumentBridge.decodeToHost;
+export const decodeHostToRichDocument = richDocumentBridge.decodeToClient;

@@ -100,7 +100,7 @@ jest.mock('@/services/session-prompt-input.service', () => {
     }
   }
   return {
-    buildSessionPromptInput: (...args: unknown[]) =>
+    buildSessionPromptInputAdapter: (...args: unknown[]) =>
       mockBuildSessionPromptInput(...args),
     ChatPromptBuildBailedError,
   };
@@ -277,7 +277,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(label).toBe('远程 = 24k / 128k (19%)');
   });
 
-  it('T-S6: service 把 buildSessionPromptInput 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
+  it('T-S6: service 把 buildSessionPromptInputAdapter 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
     // 构造一个可识别的 rawMessages，验证它作为第二参被透传。
     const rawMessages = [
       {

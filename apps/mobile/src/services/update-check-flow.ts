@@ -10,10 +10,11 @@ import {
   persistUpdateCheckResult,
   readDismissedVersion,
   readSnoozeUntil,
-  readUpdatesAutoCheck,
   writeDismissedVersion,
   writeSnoozeUntil,
 } from '../storage/update-prefs';
+import {readBoolPref} from '../storage/app-ui-pref-io';
+import {APP_UI_KEY_UPDATES_AUTO_CHECK} from '../storage/app-ui-keys';
 import {checkForUpdates} from '../update-check/check-for-updates';
 import type {UpdateCheckData} from '../update-check/types';
 
@@ -45,7 +46,7 @@ export async function runAutoUpdateCheckFlow(appUi: AppUiPreferences, fx: Update
   // 未预期异常（appUi.get reject）与 Result 失败同终端——fail 收口，不冒泡。
   let autoCheck: boolean;
   try {
-    autoCheck = await readUpdatesAutoCheck(appUi);
+    autoCheck = await readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true);
   } catch {
     await fail();
     return;

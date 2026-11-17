@@ -141,5 +141,35 @@ export function summarizeToolInput(name: string, input: ToolInput): string {
  * `raw.slice(0, 117)`，与 common/text 的截断口径重复。
  */
 function clampSummary(raw: string): string {
-  return Text.truncate(raw, 117);
+    return Text.truncate(raw, 117);
+}
+
+/** 工具卡片摘要入参（RN `ToolCallView` 与 WebView `ToolCallRow` 的结构并集）。 */
+export interface ToolCallSummarySource {
+    readonly name?: string | null;
+    readonly input?: Record<string, unknown> | null;
+    readonly status?: string;
+    readonly summary?: string | null;
+    readonly resultContent?: unknown;
+}
+
+/**
+ * 工具卡片一行摘要（**三端单源**）：失败摘要首行 → 入参摘要 → 结果正文首段 → 空串。
+ *
+ * 失败摘要只取首行（搜索链聚合错误等多行诊断全文见工具详情）；两处截断口径
+ * 一致（> 120 字符取前 117 + `…`）。此前 RN `components/chat/message-blocks.ts`
+ * 与 WebView `runtime/render/tool-logic.ts` 各持一份逐字相同的副本，现只此一份。
+ */
+export function toolCallSummary(tool: ToolCallSummarySource): string {
+    if (tool.status === "error" && tool.summary) {
+        const firstLine = String(tool.summary).split("\n")[0]?.trim() ?? "";
+        return firstLine.length > 120 ? `${firstLine.slice(0, 117)}…` : firstLine;
+    }
+    const fromInput = summarizeToolInput(tool.name || "", tool.input || {});
+    if (fromInput) return fromInput;
+    if (tool.resultContent) {
+        const text = String(tool.resultContent).trim();
+        return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+    }
+    return "";
 }

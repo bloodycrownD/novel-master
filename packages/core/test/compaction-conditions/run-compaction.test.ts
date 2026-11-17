@@ -3,7 +3,7 @@
  *
  * T-CC1 覆盖 v3 文档读迁移到 v4（store 层）；
  * T-CC2/T-CC3 用真实 DB fixture 验证 runCompaction 端到端副作用；
- * T-CC4 用抛异常的 messageTranscriptEffects stub 验证降级返回；
+ * T-CC4 用 hideRange 抛异常的 messages stub 验证降级返回；
  * T-CR1 验证手动压缩清 `rule_snapshot` + `file_cache`，
  * T-CR1b 验证 hide 命中 0 条时 manual 仍清两域且 ok:true（短会话真实路径），
  * T-CR2 验证 auto（不传 trigger / 显式 "auto"）两域保留，
@@ -18,7 +18,6 @@ import { describe, it } from "node:test";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { ChatAgentSession } from "../../src/service/agent/impl/chat-agent-session.js";
 import { runCompaction } from "../../src/service/compaction-conditions/run-compaction.js";
-import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
 import { createCompactionConditionsStore } from "../../src/service/compaction-conditions/create-compaction-conditions-store.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
@@ -27,7 +26,6 @@ import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
@@ -43,17 +41,19 @@ novelMasterTestFixture();
 const RULE_SNAPSHOT = "rule_snapshot";
 const FILE_CACHE = "file_cache";
 
-/** 构造一个一定会抛异常的 effects，用于 T-CC4。 */
-function throwingEffects(): MessageTranscriptEffectsService {
-  const boom = async (): Promise<never> => {
-    throw new Error("boom-from-effects");
-  };
-  return {
-    hideMessagesInRange: boom,
-    showMessagesInRange: boom,
-    truncateMessagesAfter: boom,
-    setMessageFloorAtMessage: boom,
-  };
+/** 构造一个 hideRange 一定抛异常的 messages，用于 T-CC4（其余方法转发真实实现）。 */
+function throwingMessages(base: MessageService): MessageService {
+  return new Proxy(base, {
+    get(target, prop, receiver) {
+      if (prop === "hideRange") {
+        return async (): Promise<never> => {
+          throw new Error("boom-from-hide");
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as MessageService;
 }
 
 async function appendMany(
@@ -154,8 +154,6 @@ describe("runCompaction", () => {
         "assistant",
       ]);
 
-      const effects = createMessageTranscriptEffectsService(ctx.conn);
-
       // 预置 rule_snapshot / file_cache 数据，验证**自动**压缩不清这两域
       // （2026-09-29 修正：缓存与消息可见性正交，agent 回合中段压缩要保前缀冻结；
       // 用户主动的置位/导入/手动压缩才清）。
@@ -173,11 +171,9 @@ describe("runCompaction", () => {
         {
           sessionKkv: ctx.sessionKkv,
           messages: ctx.messages,
-          messageTranscriptEffects: effects,
         },
         {
           sessionId,
-          projectId: project.id,
           ...(trigger === undefined ? {} : { trigger }),
         },
       );
@@ -220,8 +216,6 @@ describe("runCompaction", () => {
       "assistant",
     ]);
 
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
-
     // 预置两域各一条：手动压缩后下一次组装按当前工作区完整刷新
     // （等价「手动调整工作区规则」的效果），所以这里必须都清掉。
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
@@ -236,9 +230,8 @@ describe("runCompaction", () => {
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
-        messageTranscriptEffects: effects,
       },
-      { sessionId, projectId: project.id, trigger: "manual" },
+      { sessionId, trigger: "manual" },
     );
 
     assert.equal(result.ok, true);
@@ -279,12 +272,9 @@ describe("runCompaction", () => {
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
-        messageTranscriptEffects:
-          createMessageTranscriptEffectsService(ctx.conn),
       },
       {
         sessionId,
-        projectId: project.id,
         hideStartDepth: 6,
         trigger: "manual",
       },
@@ -350,10 +340,8 @@ describe("runCompaction", () => {
         {
           sessionKkv: boomKkv,
           messages: ctx.messages,
-          messageTranscriptEffects:
-            createMessageTranscriptEffectsService(ctx.conn),
         },
-        { sessionId, projectId: project.id, trigger: "manual" },
+        { sessionId, trigger: "manual" },
       );
     } finally {
       restoreDefaultLogSink();
@@ -388,7 +376,6 @@ describe("runCompaction", () => {
       "user",
     ]);
 
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 99,
@@ -400,9 +387,8 @@ describe("runCompaction", () => {
       {
         sessionKkv: ctx.sessionKkv,
         messages: ctx.messages,
-        messageTranscriptEffects: effects,
       },
-      { sessionId, projectId: project.id, hideStartDepth: 10 },
+      { sessionId, hideStartDepth: 10 },
     );
 
     assert.equal(result.ok, true);
@@ -452,10 +438,9 @@ describe("runCompaction", () => {
     const result = await runCompaction(
       {
         sessionKkv: ctx.sessionKkv,
-        messages: ctx.messages,
-        messageTranscriptEffects: throwingEffects(),
+        messages: throwingMessages(ctx.messages),
       },
-      { sessionId, projectId: project.id, trigger: "manual" },
+      { sessionId, trigger: "manual" },
     );
 
     assert.equal(result.ok, false);

@@ -10,7 +10,8 @@
 import {TdbcError} from "../infra/tdbc/errors.js";
 import {AppError} from "../errors/app-error.js";
 import type {CoreMessageDescriptor} from "../i18n/keys.js";
-import {resolveLocalizedMessage} from "@/i18n/index.js";
+import type {MessageLike} from "./i18n.js";
+import {resolveLocalizedMessage, userMessageOf} from "@/i18n/index.js";
 
 export const Errors = {
     /**
@@ -89,5 +90,17 @@ export const Errors = {
             return error;
         }
         return Errors.normalizeYaml(error, {key: "error.smart_sort_rule.import_yaml_invalid"});
+    },
+
+    /**
+     * 错误 → 用户可见文案：descriptor 存在时交给宿主 translator 渲染，否则回落 fallback。
+     *
+     * `userMessageOf` 自己沿 cause 链（带环检测）找 messageKey，两端曾各有一份逐字
+     * 实现（desktop `format-ipc-error` / mobile `format-error`）；差异只在各自的
+     * `coreT` 实例——catalog 装载与 locale 归宿主，core 不持 translator，故以参数注入。
+     */
+    visibleMessage: (error: unknown, fallback: string, translate: (message: MessageLike) => string): string => {
+        const descriptor = userMessageOf(error);
+        return descriptor != null ? translate(descriptor) : fallback;
     },
 } as const;

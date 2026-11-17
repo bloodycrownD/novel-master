@@ -2,7 +2,6 @@
  * Read/write helpers for update-check Client UI preferences.
  */
 import {
-  APP_UI_KEY_UPDATES_AUTO_CHECK,
   APP_UI_KEY_UPDATES_DISMISSED_VERSION,
   APP_UI_KEY_UPDATES_LAST_CHECK_AT,
   APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION,
@@ -11,18 +10,8 @@ import {
 } from './app-ui-keys';
 import type {Result} from '@novel-master/core/errors';
 import type {AppError} from '@novel-master/core/errors';
-import {readBoolPref, writeBoolPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 import type {UpdateCheckData} from '../update-check/types';
-
-/** Reads auto-check toggle (default on). */
-export async function readUpdatesAutoCheck(appUi: AppUiPreferences): Promise<boolean> {
-  return readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true);
-}
-
-export async function writeUpdatesAutoCheck(appUi: AppUiPreferences, enabled: boolean): Promise<void> {
-  await writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, enabled);
-}
 
 export async function readDismissedVersion(appUi: AppUiPreferences): Promise<Result<string | undefined, AppError>> {
   return appUi.get(APP_UI_KEY_UPDATES_DISMISSED_VERSION);

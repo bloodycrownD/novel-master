@@ -10,6 +10,7 @@
  */
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
+import {toFileUri} from '@/services/rn-file-io';
 
 type WebViewAssetPackageId = 'rich-document' | 'code-editor' | 'composer-input' | 'chat-transcript';
 
@@ -27,13 +28,6 @@ function iosMainBundleDir(): string {
     throw new Error('无法解析 iOS MainBundleDir，WebView 资产 URI 不可用（请确认 react-native-blob-util 已链接）');
   }
   return dir.replace(/\/+$/, '');
-}
-
-function toFileUri(absolutePath: string): string {
-  if (absolutePath.startsWith('file://')) {
-    return absolutePath;
-  }
-  return `file://${absolutePath}`;
 }
 
 /**

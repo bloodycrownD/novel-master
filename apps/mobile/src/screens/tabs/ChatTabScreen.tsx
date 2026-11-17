@@ -106,7 +106,7 @@ function ChatTabScreenContent({sessionBatch}: {sessionBatch: ReturnType<typeof u
       await setCurrentSession(sid);
       // 会话切换防闪：view cache 命中即同步采纳进 manager 的 idle 消息面
       // （Step 7 收口：原 hook 的 hydrateFromSessionCache 等价迁移）。
-      ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(ctx.projectId, sid);
+      ctx.runtime.sessionStreamUnitManager.hydrateSessionMessages(sid, ctx.projectId);
       ctx.setChatSubview('conversation');
       ctx.setConversationPanel('chat');
     },

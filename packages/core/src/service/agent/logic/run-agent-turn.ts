@@ -58,7 +58,6 @@ import type { CompactionConditionEvaluator } from "@/service/compaction-conditio
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
@@ -146,8 +145,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly sessions: SessionService;
   readonly projects: ProjectService;
   readonly messages: MessageService;
-  /** hide/show/truncate 消息 transcript（runCompaction 执行压缩时使用）。 */
-  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
   readonly savedModelRepo: SavedModelRepository;

@@ -65,7 +65,7 @@ export interface MobileNovelMasterRuntime {
   readonly messages: MessageService;
   /** Token 用量统计聚合（天/小时桶、汇总、分模型）。 */
   readonly usageStats: UsageStatsService;
-  /** hide/show/truncate 消息 transcript（不 capture worktree 块）。 */
+  /** tail 截断 / 置位消息 transcript（不 capture worktree 块；hide/show 直连 messages）。 */
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;

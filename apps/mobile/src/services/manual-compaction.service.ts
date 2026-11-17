@@ -68,7 +68,7 @@ function interruptedOutcome(hit: Interrupt): Outcome<never> {
  * （清理尾巴），不触发 `onFailed`（取消不是失败）。
  */
 export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<void> {
-  const {projectId, sessionId} = scope;
+  const {sessionId} = scope;
   // AbortScope 与业务参数 `scope` 撞名：按 spec 约定命名为 abortScope。
   const abortScope = createAbortScope();
   runtime.abortRegistry.register(ABORT_KEY.compaction(sessionId), abortScope);
@@ -93,13 +93,13 @@ export async function runManualCompaction(runtime: MobileNovelMasterRuntime, sco
         if (beforeHide != null) {
           work = interruptedOutcome(beforeHide);
         } else {
-          const compactionDeps = {sessionKkv: runtime.sessionKkv, messages: runtime.messages, messageTranscriptEffects: runtime.messageTranscriptEffects};
+          const compactionDeps = {sessionKkv: runtime.sessionKkv, messages: runtime.messages};
           // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
           // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
           // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
           // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
           // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
-          const compactionOptions = {sessionId, projectId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
+          const compactionOptions = {sessionId, hideStartDepth: hiddenDepth.value, trigger: 'manual' as const};
           const result = await runCompaction(compactionDeps, compactionOptions);
           // `completed.value` 是压缩本体自己的 `ok`——「明确返回失败」仍是
           // 完成态的一部分（不是 failed，保留 `onFailed(undefined)` 的既有语义）。

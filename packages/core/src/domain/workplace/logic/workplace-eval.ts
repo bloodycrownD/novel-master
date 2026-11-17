@@ -6,6 +6,7 @@
 
 import type { DisplayState, FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule } from "../model/workplace-types.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "./default-dir-rule.js";
+import { basenameOf } from "@/domain/vfs/logic/basename.js";
 import { compareSmartBasenames, extractSortKey, type CompiledSmartSortRule, type SmartSortKeyCache } from "./smart-sort.js";
 
 /** File metadata used for sorting within a directory. */
@@ -42,11 +43,6 @@ export function computeHeadTailIndices(totalCount: number, head: number, tail: n
   return indices;
 }
 
-function basename(logicalPath: string): string {
-  const idx = logicalPath.lastIndexOf("/");
-  return idx >= 0 ? logicalPath.slice(idx + 1) : logicalPath;
-}
-
 function compareStrings(a: string, b: string, order: SortOrder): number {
   const cmp = a.localeCompare(b);
   return order === "asc" ? cmp : -cmp;
@@ -76,18 +72,18 @@ export function sortFilesForDir(files: readonly WorkplaceFileSortMeta[], dirRule
   const sortOrder: SortOrder = dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(files.map((f) => basename(f.logicalPath)), opts?.smartRules ?? []);
+    smartCache = decorateSmartCache(files.map((f) => basenameOf(f.logicalPath)), opts?.smartRules ?? []);
   }
   const sorted = [...files];
   sorted.sort((a, b) => {
     switch (sortField) {
       case "name":
-        return compareStrings(basename(a.logicalPath), basename(b.logicalPath), sortOrder);
+        return compareStrings(basenameOf(a.logicalPath), basenameOf(b.logicalPath), sortOrder);
       case "created":
       case "updated":
         return compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
       case "smart":
-        return compareSmartBasenames(basename(a.logicalPath), basename(b.logicalPath), sortOrder, smartCache);
+        return compareSmartBasenames(basenameOf(a.logicalPath), basenameOf(b.logicalPath), sortOrder, smartCache);
     }
   });
   return sorted;
@@ -145,7 +141,7 @@ export function sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceD
   const sortField: SortField = parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(paths.map((p) => basename(p)), opts?.smartRules ?? []);
+    smartCache = decorateSmartCache(paths.map((p) => basenameOf(p)), opts?.smartRules ?? []);
   }
   const sorted = [...paths];
   sorted.sort((a, b) => {
@@ -159,15 +155,15 @@ export function sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceD
           cmp = compareNumbers(mtimeA, mtimeB, sortOrder);
         } else {
           // 缺 mtime（缺省 map / 孤儿路径）或 mtime 相等 → basename 字典序（D7 退化分支）
-          cmp = compareStrings(basename(a), basename(b), sortOrder);
+          cmp = compareStrings(basenameOf(a), basenameOf(b), sortOrder);
         }
         break;
       }
       case "smart":
-        cmp = compareSmartBasenames(basename(a), basename(b), sortOrder, smartCache);
+        cmp = compareSmartBasenames(basenameOf(a), basenameOf(b), sortOrder, smartCache);
         break;
       default:
-        cmp = compareStrings(basename(a), basename(b), sortOrder);
+        cmp = compareStrings(basenameOf(a), basenameOf(b), sortOrder);
     }
     if (cmp !== 0) {
       return cmp;

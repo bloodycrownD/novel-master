@@ -9,6 +9,7 @@
  */
 import { parseText, stringifyText } from "@novel-master/core";
 import { Errors } from "@novel-master/core/common";
+import { Result } from "@novel-master/core/errors";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
@@ -21,16 +22,18 @@ export async function exportSmartSortRuleYamlWithDialog(runtime: DesktopNovelMas
   return exportYamlWithDialog(yaml, EXPORT_FILE_NAME, parentWindow);
 }
 
-export async function importSmartSortRuleYamlWithDialog(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<"imported" | "cancelled"> {
+export async function importSmartSortRuleYamlWithDialog(runtime: DesktopNovelMasterRuntime, parentWindow?: BrowserWindow | null): Promise<Result<"imported" | "cancelled", Error>> {
   return importYamlWithDialog(async (yaml) => {
     try {
       // service.importRules 内部走 core 单源 decode（含 zod 校验）。
+      // ⚠️ 既有口径：返回值未检查（known-failure 也只当成功）——本轮只改通道形状，不动语义。
       await runtime.smartSortRule.importRules(parseText(yaml, "yaml"));
+      return Result.ok(undefined);
     } catch (error) {
       // 存储/事务类故障原样上抛、其余套「YAML 无效」前缀——判据与前缀都在
       // core 的 Errors.normalizeSmartSortImport 里（mobile 侧调同一个函数）。
       // 别在这里把三元抄回本地：两份字面量必然漂一份，而旧测试只重演不断接线。
-      throw Errors.normalizeSmartSortImport(error);
+      return Result.err(Errors.normalizeSmartSortImport(error));
     }
   }, parentWindow);
 }

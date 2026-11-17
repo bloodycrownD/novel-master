@@ -5,6 +5,7 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { parentDirOfNormalized } from "@/domain/vfs/logic/parent-dir.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceScope } from "../model/workplace-types.js";
@@ -16,15 +17,8 @@ import { workplaceRootLogicalPath } from "./workplace-scope.js";
 export function parentDirOf(logicalPath: string): Result<string | null, AppError> {
   const resolved = normalizePath(logicalPath);
   if (!resolved.ok) return Result.err(resolved.error);
-  const n = resolved.value;
-  if (n === "/") {
-    return Result.ok(null);
-  }
-  const idx = n.lastIndexOf("/");
-  if (idx <= 0) {
-    return Result.ok("/");
-  }
-  return Result.ok(n.slice(0, idx));
+  // 公式单源：domain/vfs/logic/parent-dir.ts（root 在本层收敛为 null，无父目录）。
+  return Result.ok(resolved.value === "/" ? null : parentDirOfNormalized(resolved.value));
 }
 
 function addParentChain(dirs: Set<string>, logicalPath: string, root: string): Result<void, AppError> {

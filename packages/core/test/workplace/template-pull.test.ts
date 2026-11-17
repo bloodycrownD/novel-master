@@ -127,7 +127,7 @@ describe("template pull", () => {
     await ctx.projectVfs(project.id).write("/x.md", "NEW", {
       versionCheck: false,
     });
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
@@ -164,7 +164,7 @@ describe("template pull", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/orphan.md", "orphan");
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     const paths = unwrap(await svfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
@@ -197,7 +197,7 @@ describe("template pull", () => {
       "前置条件：file_cache 域应有行",
     );
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     assert.equal(
       (await kkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT)).length,
@@ -225,7 +225,7 @@ describe("template pull", () => {
       "42"
     );
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     assert.equal(
       unwrap(await kkv.get(
@@ -272,7 +272,7 @@ describe("template pull", () => {
       .projectVfs(project.id)
       .write("/a.md", `v2-${suffix}`, { versionCheck: false });
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     const second = await assembleWorkplace(project.id, session.id);
     assert.ok(
@@ -308,7 +308,7 @@ describe("template pull", () => {
     );
     assert.ok(orphanVersion != null, "前置条件：孤儿文件应有 live-head revision");
 
-    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+    await createTemplatePullService(ctx.conn).pullSessionTemplate(session.id);
 
     const rows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n

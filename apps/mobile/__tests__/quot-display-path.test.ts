@@ -1,8 +1,8 @@
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {Text} from '@novel-master/core/common';
 import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 function bootEscapeHtml(text: string): string {
-  const decoded = decodeLiteralHtmlEntities(text);
+  const decoded = Text.decodeHtmlEntities(text);
   return decoded
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

@@ -1,19 +1,28 @@
 /**
  * VFS mutations for the file manager (create / delete / rename).
+ *
+ * 基础动作（createVfsFile / createVfsDirectory）的实现已下沉 core（`vfs-entry-ops`，
+ * 双端同一份）；重命名就是 `moveVfsPath` 的导出别名。本模块保留会话 scope 的
+ * userVfsTurn 包装（边界转换）与工作区删除的规则清理。
  */
-import {type VfsListEntry, type VfsScope, type VfsService} from '@novel-master/core/vfs';
+import {type VfsScope, type VfsService} from '@novel-master/core/vfs';
 import {
   buildUserVfsCreateFileOp,
   buildUserVfsDeleteOp,
   buildUserVfsMkdirOp,
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
-  moveVfsPath,
+  createVfsDirectory,
+  createVfsFile,
   readUserVfsSaveBaseline,
   remapPathUnderDir,
 } from '@novel-master/core/vfs';
-import {Result, AppError} from '@novel-master/core/errors';
+import {Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {executeSessionUserVfsOp, type ExecuteSessionUserVfsOpOptions} from './user-vfs-turn-execute.service';
+
+export {createVfsDirectory, createVfsFile};
+export {moveVfsPath as renameVfsDirectory, moveVfsPath as renameVfsFile} from '@novel-master/core/vfs';
 
 type MobileRuntime = MobileNovelMasterRuntime;
 
@@ -22,33 +31,16 @@ type DeleteScopedOptions = {
   useUserVfsTurn: boolean;
   sessionId?: string;
 };
-import {executeSessionUserVfsOp, type ExecuteSessionUserVfsOpOptions} from './user-vfs-turn-execute.service';
-
-/** Create a new file (empty by default). */
-export async function createVfsFile(vfs: VfsService, path: string, content = ''): Promise<void> {
-  await vfs.write(path, content);
-}
 
 /** 会话 scope：新建文件经 userVfsTurn。 */
 export async function sessionCreateVfsFile(runtime: MobileRuntime, sessionId: string, path: string, content = ''): Promise<Result<void, unknown>> {
   return executeSessionUserVfsOp(runtime, sessionId, buildUserVfsCreateFileOp(path, content));
 }
 
-/** Create an empty directory node. */
-export async function createVfsDirectory(vfs: VfsService, dirPath: string): Promise<void> {
-  const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  await vfs.mkdir(normalized);
-}
-
 /** 会话 scope：新建目录经 userVfsTurn。 */
 export async function sessionCreateVfsDirectory(runtime: MobileRuntime, sessionId: string, dirPath: string): Promise<Result<void, unknown>> {
   const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
   return executeSessionUserVfsOp(runtime, sessionId, buildUserVfsMkdirOp(normalized));
-}
-
-/** Delete a file or directory tree. */
-export async function deleteVfsEntry(vfs: VfsService, path: string, options?: {recursive?: boolean}): Promise<void> {
-  await vfs.delete(path, {recursive: options?.recursive ?? true});
 }
 
 /** 会话 scope：删除经 userVfsTurn。 */
@@ -64,7 +56,7 @@ export async function deleteScopedVfsEntry(runtime: MobileRuntime, scope: VfsSco
     if (!deleted.ok) return deleted;
   } else {
     // 错误通道迁移四期：vfs.delete 失败沿 Result 接力，不再静默吞掉
-    // （deleteVfsEntry 的 void 包装不检查返回值，这里必须自判）。
+    // （core 的 deleteVfsEntry 是 void 包装不检查返回值，这里必须自判）。
     const deleted = await vfs.delete(path, {recursive});
     if (!deleted.ok) return Result.err(deleted.error);
   }
@@ -72,21 +64,10 @@ export async function deleteScopedVfsEntry(runtime: MobileRuntime, scope: VfsSco
   return Result.ok(undefined);
 }
 
-/** Rename a file or directory (delegates to Core move logic). */
-export async function renameVfsFile(vfs: VfsService, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 失败沿 Result 接力（错误通道迁移四期）：调用方 VfsFileManager 收口 formatError → toast。
-  if (!moved.ok) return moved;
-  return Result.ok(undefined);
-}
-
 /** 会话 scope：重命名文件经 userVfsTurn。 */
 export async function sessionRenameVfsFile(runtime: MobileRuntime, sessionId: string, oldPath: string, newPath: string, options?: ExecuteSessionUserVfsOpOptions): Promise<Result<void, unknown>> {
   return executeSessionUserVfsOp(runtime, sessionId, buildUserVfsRenameOp(oldPath, newPath), options);
 }
-
-/** Rename a directory tree (delegates to Core move logic; same impl as file rename). */
-export const renameVfsDirectory = renameVfsFile;
 
 /** 会话 scope：重命名目录经 userVfsTurn（与文件重命名同一实现）。 */
 export const sessionRenameVfsDirectory = sessionRenameVfsFile;
@@ -107,4 +88,3 @@ export async function sessionSaveVfsFile(runtime: MobileRuntime, sessionId: stri
 }
 
 export {remapPathUnderDir};
-export type {VfsListEntry};

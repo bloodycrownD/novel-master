@@ -192,8 +192,8 @@ function ChatConversationWebSurface(props: {
    * 与 web dock 的 resolveChipLabels 同口径；chips 引用稳定时文案引用随稳。
    */
   const chipLabels = useMemo(
-    () =>
-      composer.composerState.chips.map(formatStatusChipLabelFromAttachment),
+    // 显式单参回调：core 该函数第二参是 chip 口径 options，直接当 map 回调会把 index 当 options。
+    () => composer.composerState.chips.map(a => formatStatusChipLabelFromAttachment(a)),
     [composer.composerState.chips],
   );
 

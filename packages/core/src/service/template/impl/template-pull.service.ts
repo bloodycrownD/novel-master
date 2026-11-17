@@ -25,7 +25,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
   constructor(private readonly conn: TdbcConnection) {}
 
   /** nm-style: keep-public — TemplatePullService 端口方法；chat session.service 单点消费。 */
-  async sessionTemplatePull(sessionId: string): Promise<Result<void, AppError>> {
+  async pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);
     if (session == null) {
@@ -42,14 +42,14 @@ export class DefaultTemplatePullService implements TemplatePullService {
     // 两域清空 + 失效 prompt token cache + toolUseCount 哨兵。
     // 不清的话 file_cache 读口命中即无条件返回、不校验 mtime，agent 的
     // <workplace> 前缀会继续注入已被替换掉的旧正文。
-    // sessionTemplatePush 不加：push 是会话 → 项目方向，会话侧文件树不变，
+    // pushSessionTemplate 不加：push 是会话 → 项目方向，会话侧文件树不变，
     // 自己的 file_cache 依然有效，清了只会让下一 step 无谓重算。
     await clearSessionPromptCaches(sessionId, createSessionKkvService(this.conn));
     return Result.ok(undefined);
   }
 
   /** nm-style: keep-public — TemplatePullService 端口方法；chat session.service 单点消费。 */
-  async sessionTemplatePush(sessionId: string): Promise<Result<void, AppError>> {
+  async pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
     // 推送与拉取同一套校验/事务/GC 骨架，只是方向对调（session → project）。
     const sessions = new SqliteSessionRepository(this.conn);
     const session = await sessions.findById(sessionId);

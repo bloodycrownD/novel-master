@@ -34,7 +34,7 @@ async function statDatabaseFileBytes(): Promise<number> {
  *
  * 仅用于展示，Agent 运行中抛中文 Error，由调用方决定静默或提示。
  */
-export async function getDatabaseMaintenanceStats(runtime: MobileNovelMasterRuntime): Promise<Result<{fileBytes: number; reclaimableBytes: number}, AppError>> {
+export async function getDbMaintenanceStats(runtime: MobileNovelMasterRuntime): Promise<Result<{fileBytes: number; reclaimableBytes: number}, AppError>> {
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }
@@ -50,7 +50,7 @@ export async function getDatabaseMaintenanceStats(runtime: MobileNovelMasterRunt
  * VACUUM 耗时随库体积增长（大库数十秒）；期间计数式置 busy——后台搬运
  * 循环据此让路（与数据清理互斥）。
  */
-export async function runDatabaseMaintenance(runtime: MobileNovelMasterRuntime): Promise<Result<{beforeBytes: number; afterBytes: number}, AppError>> {
+export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promise<Result<{beforeBytes: number; afterBytes: number}, AppError>> {
   if (isMobileAgentActive()) {
     return Result.err(new AppError('AGENT_BUSY', {detail: 'Agent 运行中，请稍后再操作'}));
   }

@@ -2,7 +2,7 @@
  * workspace-push spec T-WP8（mobile）——TemplatePushButton 确认流：
  * - 点击弹确认：标题/一句话覆盖事实与不可撤销，推送按钮 destructive；
  * - 取消不调用 pushTemplate；
- * - 确认调用 runtime.sessions.pushTemplate 且出「推送完成」 toast + onPushed。
+ * - 确认调用 runtime.sessions.pushSessionTemplate 且出「推送完成」 toast + onPushed。
  */
 import React from 'react';
 import {Alert} from 'react-native';
@@ -16,7 +16,7 @@ const mockPushTemplate = jest.fn();
 
 jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => ({
-    sessions: {pushTemplate: mockPushTemplate},
+    sessions: {pushSessionTemplate: mockPushTemplate},
   }),
 }));
 

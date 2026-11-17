@@ -20,3 +20,4 @@ export {
   ProviderTableSnapshotError,
 } from "./provider-table-snapshot-error.js";
 export { validateProviderTableSnapshot } from "./provider-table-snapshot-validate.js";
+export { assertSqliteBackupHeader } from "./sqlite-backup-header.js";

@@ -26,6 +26,7 @@ import { BrowserWindow } from "electron";
 import { matchSmartSortPattern } from "@novel-master/core/smart-sort-rule";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
+import { formatIpcError } from "../format-ipc-error.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   exportSmartSortRuleYamlWithDialog,
@@ -176,11 +177,15 @@ export async function handleSmartSortRuleYamlExport(): Promise<IpcResult<SmartSo
 }
 
 export async function handleSmartSortRuleYamlImport(): Promise<IpcResult<SmartSortRuleYamlImportResult>> {
-  return toIpcResult(async () => {
+  try {
     const built = await getDesktopRuntime();
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
-    if (!built.ok) return Result.err(built.error);
-    const rt = built.value;
-    return Result.ok(await importSmartSortRuleYamlWithDialog(rt, BrowserWindow.getFocusedWindow()));
-  });
+    if (!built.ok) return { ok: false, error: formatIpcError(built.error) };
+    const imported = await importSmartSortRuleYamlWithDialog(built.value, BrowserWindow.getFocusedWindow());
+    // import 通道与 mobile 一致走 Result；载荷是 YAML 归一层的 Error，转码口径同旧 catch。
+    if (!imported.ok) return { ok: false, error: formatIpcError(imported.error) };
+    return { ok: true, data: imported.value };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
 }

@@ -34,7 +34,6 @@ import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { createLogger } from "@/infra/log/logger.js";
 
@@ -47,13 +46,11 @@ type CompactionTrigger = "manual" | "auto";
 export interface RunCompactionDeps {
   readonly sessionKkv: SessionKkvService;
   readonly messages: MessageService;
-  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
 }
 
 /** runCompaction 的调用参数。 */
 interface RunCompactionParams {
   readonly sessionId: string;
-  readonly projectId: string;
   /** hide-message 起始深度（tail 0 = newest），缺省按 {@link DEFAULT_HIDE_START_DEPTH}。 */
   readonly hideStartDepth?: number;
   /**
@@ -129,7 +126,8 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
         // 失效 → KKV 清理），中途抛错会留下半应用态。
         const hideCancelled = cancelledResult(params.hooks);
         if (hideCancelled != null) return hideCancelled;
-        await deps.messageTranscriptEffects.hideMessagesInRange(params.projectId, params.sessionId, range.fromSeq, range.toSeq);
+        // 失败口径保持原样：只吞 throw（下方 catch → { ok:false }），Result.err 不翻转压缩结果。
+        await deps.messages.hideRange(params.sessionId, range.fromSeq, range.toSeq);
       }
     }
   } catch {

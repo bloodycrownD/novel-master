@@ -19,7 +19,8 @@ import {createSessionRunStateService} from '@novel-master/core/session-run-state
 import {createSessionStreamTokenEstimator, primeStreamTokenModelHint} from '@/services/stream-token-estimator';
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
-import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
+import {readBoolPref} from '@/storage/app-ui-pref-io';
+import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 import {tokensForMode} from '../theme/tokens';
 
 type RuntimeStatus = 'loading' | 'ready' | 'error';
@@ -66,10 +67,10 @@ function formatBootstrapError(err: unknown): string {
 /**
  * 常驻保活启动挂点：按消息通知开关拉起常驻前台服务通知。
  *
- * 直读 storage 层 readMessageNotificationEnabled（不走 prefBridge，避免
+ * 直读 storage 层 app-ui 偏好（不走 prefBridge，避免
  * appUi 未就绪降级口径干扰），开则 setKeepAliveResidentEnabled(true)。
  * 签名显式接受 undefined：appUiRef.current 的声明类型就是
- * `AppUiPreferences | undefined`，而 readMessageNotificationEnabled 参数
+ * `AppUiPreferences | undefined`，而 readBoolPref 参数
  * 非空——守卫收在函数体内（typecheck 强制；时序上 effect 触发时 appUi
  * 必已就绪，守卫非时序需要）。拉起失败只 console.error，不向上抛
  * （fire-and-forget，与桥装配风格一致）。
@@ -78,7 +79,7 @@ export async function ensureKeepAliveResidentBoot(appUi: AppUiPreferences | unde
   if (appUi == null) {
     return;
   }
-  if (!(await readMessageNotificationEnabled(appUi))) {
+  if (!(await readBoolPref(appUi, APP_UI_KEY_MESSAGE_NOTIFICATION, false))) {
     return;
   }
   try {
@@ -101,7 +102,7 @@ export function createNotificationPrefBridge(getAppUi: () => AppUiPreferences | 
       if (appUiNow == null) {
         return Promise.resolve(false);
       }
-      return readMessageNotificationEnabled(appUiNow);
+      return readBoolPref(appUiNow, APP_UI_KEY_MESSAGE_NOTIFICATION, false);
     },
   };
 }

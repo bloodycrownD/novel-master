@@ -17,6 +17,8 @@
   "createAgentRegistryService",
   "createAgentRunner",
   "createAgentStreamRegistry",
+  "decodeAgentYamlText",
+  "encodeAgentYamlText",
   "isAppError",
   "mapResolveError",
   "promptsDocumentSchema",

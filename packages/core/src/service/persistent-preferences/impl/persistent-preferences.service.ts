@@ -11,60 +11,70 @@ import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
 import { PREF_KEY_CHAT_LLM_STREAM, PREF_KEY_CHAT_SUBAGENT_STREAM, PREF_KEY_CHAT_THINKING_CONTEXT, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, PREFERENCES_MODULE } from "./preference-keys.js";
 
+/** 布尔偏好配置：新增开关只加一行，公开三元组方法名保持不变（调用方零改动）。 */
+const BOOLEAN_PREFS = {
+  llmStream: { key: PREF_KEY_CHAT_LLM_STREAM, defaultValue: true },
+  subagentStream: { key: PREF_KEY_CHAT_SUBAGENT_STREAM, defaultValue: true },
+  thinkingContext: { key: PREF_KEY_CHAT_THINKING_CONTEXT, defaultValue: false },
+  userVfsUnifiedToolTurn: { key: PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, defaultValue: true },
+} as const;
+
+type BooleanPrefName = keyof typeof BOOLEAN_PREFS;
+
 export class DefaultPersistentPreferences implements PersistentPreferences {
   constructor(private readonly kkv: KkvService) {}
 
   async getLlmStreamEnabled(): Promise<Result<boolean, AppError>> {
-    return this.getBooleanPref(PREF_KEY_CHAT_LLM_STREAM, true);
+    return this.getBooleanPref("llmStream");
   }
 
   async setLlmStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_LLM_STREAM, Kkv.formatBoolean(enabled));
+    await this.setBooleanPref("llmStream", enabled);
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetLlmStreamEnabled(): Promise<Result<void, AppError>> {
-    return this.deletePref(PREF_KEY_CHAT_LLM_STREAM);
+    return this.resetBooleanPref("llmStream");
   }
 
   async getSubagentStreamEnabled(): Promise<Result<boolean, AppError>> {
-    return this.getBooleanPref(PREF_KEY_CHAT_SUBAGENT_STREAM, true);
+    return this.getBooleanPref("subagentStream");
   }
 
   async setSubagentStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_SUBAGENT_STREAM, Kkv.formatBoolean(enabled));
+    await this.setBooleanPref("subagentStream", enabled);
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetSubagentStreamEnabled(): Promise<Result<void, AppError>> {
-    return this.deletePref(PREF_KEY_CHAT_SUBAGENT_STREAM);
+    return this.resetBooleanPref("subagentStream");
   }
 
   async getThinkingContextEnabled(): Promise<Result<boolean, AppError>> {
-    return this.getBooleanPref(PREF_KEY_CHAT_THINKING_CONTEXT, false);
+    return this.getBooleanPref("thinkingContext");
   }
 
   async setThinkingContextEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_THINKING_CONTEXT, Kkv.formatBoolean(enabled));
+    await this.setBooleanPref("thinkingContext", enabled);
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetThinkingContextEnabled(): Promise<Result<void, AppError>> {
-    return this.deletePref(PREF_KEY_CHAT_THINKING_CONTEXT);
+    return this.resetBooleanPref("thinkingContext");
   }
 
   async getUserVfsUnifiedToolTurn(): Promise<Result<boolean, AppError>> {
-    return this.getBooleanPref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, true);
+    return this.getBooleanPref("userVfsUnifiedToolTurn");
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 写入单点消费。 */
   async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, Kkv.formatBoolean(enabled));
+    await this.setBooleanPref("userVfsUnifiedToolTurn", enabled);
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
   async resetUserVfsUnifiedToolTurn(): Promise<Result<void, AppError>> {
-    return this.deletePref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN);
+    return this.resetBooleanPref("userVfsUnifiedToolTurn");
   }
 
   async list(): Promise<ReadonlyArray<{ key: string; value: string }>> {
@@ -100,7 +110,8 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     await this.kkv.set(PREFERENCES_MODULE, key, value);
   }
 
-  private async getBooleanPref(key: string, defaultValue: boolean): Promise<Result<boolean, AppError>> {
+  private async getBooleanPref(name: BooleanPrefName): Promise<Result<boolean, AppError>> {
+    const { key, defaultValue } = BOOLEAN_PREFS[name];
     const raw = await this.getPreference(key);
     if (!raw.ok) return Result.err(raw.error);
     if (raw.value === undefined) return Result.ok(defaultValue);
@@ -110,9 +121,13 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return Result.ok(parsed);
   }
 
+  private async setBooleanPref(name: BooleanPrefName, enabled: boolean): Promise<void> {
+    await this.setPreference(BOOLEAN_PREFS[name].key, Kkv.formatBoolean(enabled));
+  }
+
   /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */
-  private async deletePref(key: string): Promise<Result<void, AppError>> {
-    const deleted = await this.kkv.delete(PREFERENCES_MODULE, key);
+  private async resetBooleanPref(name: BooleanPrefName): Promise<Result<void, AppError>> {
+    const deleted = await this.kkv.delete(PREFERENCES_MODULE, BOOLEAN_PREFS[name].key);
     if (!deleted.ok && !isAppError(deleted.error, "KKV_NOT_FOUND")) return deleted;
     return Result.ok(undefined);
   }

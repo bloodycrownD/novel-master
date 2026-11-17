@@ -58,10 +58,11 @@ describe('runManualCompaction（r3-orc-1）', () => {
     // 且这件事在编排层没有任何报错，属于静默失效，故在此钉死。
     // 用**全等**而非 objectContaining：压缩深度 `hideStartDepth` 同样得钉住
     // （beforeEach 固定回 3），少传/误清该键时 core 会静默走默认深度。
+    // `projectId` 不在 core 契约里：hide 已直连 `messages.hideRange`，
+    // 压缩参数只剩 sessionId / 深度 / trigger 三项（多传会成为无效字段）。
     await runManualCompaction(stubRuntime(), {projectId: 'p', sessionId: 's-manual'}, {});
     expect(mockRunCompaction).toHaveBeenCalledWith(expect.anything(), {
       sessionId: 's-manual',
-      projectId: 'p',
       hideStartDepth: 3,
       trigger: 'manual',
     });

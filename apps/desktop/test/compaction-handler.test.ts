@@ -4,7 +4,7 @@
  * T-IPC1R（原 T-IPC1 反转）：runCompaction 以 `trigger:"manual"` 成功后**清掉**
  * 预置的 session kkv（file_cache / rule_snapshot 都空——手动压缩是用户主动的
  * 重整意图，下一次拼提示词时 workplace 块按当前工作区重评估；自动压缩才不清），
- * 保留 user_vfs_pending，并调 notifyComposerStatusAfterFloorOrCompaction。
+ * 保留 user_vfs_pending，并调 refreshComposerStatusAfterFloorOrCompaction。
  * 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
  * COMPOSER_ATTACHMENTS_SUGGEST，用 ComposerAttachmentsSuggestForwarder.setTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
@@ -129,7 +129,7 @@ describe("handleCompactionManual", () => {
       "canon",
     ]);
 
-    // SPEC L274：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction，
+    // SPEC L274：runCompaction 成功后调 refreshComposerStatusAfterFloorOrCompaction，
     // 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
     // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
     // notify-composer-status-after-kkv-clear.test.ts 同范式）。
@@ -164,7 +164,7 @@ describe("handleCompactionManual", () => {
       pendingJson,
     );
 
-    // notifyComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
+    // refreshComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
     // payload 携带本次 sessionId。
     const composerBroadcasts = sent.filter(
       (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
@@ -172,7 +172,7 @@ describe("handleCompactionManual", () => {
     assert.equal(
       composerBroadcasts.length,
       1,
-      "notifyComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
+      "refreshComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
     );
     assert.deepEqual(composerBroadcasts[0]?.payload, {
       sessionId,

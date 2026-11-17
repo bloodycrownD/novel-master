@@ -108,7 +108,7 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       );
 
       const start = performance.now();
-      await ctx.sessionFs.rollbackToMessage(
+      await ctx.sessionFs.rollbackFilesToMessage(
         session.id,
         project.id,
         anchorAssistant.id,

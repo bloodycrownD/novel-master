@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-import { formatLocalDateTime } from "@/infra/date-format.js";
+import { DateTime } from "@/common/datetime.js";
 import { renderMacro } from "@/infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
 
@@ -46,7 +46,7 @@ export async function expandDynamicMacros(content: string, ctx: DynamicMacroCont
     }
   }
   const root = {
-    time: formatLocalDateTime(now),
+    time: DateTime.localDateTime(now),
     week_cn: formatWeekCn(now),
     filetree,
   };

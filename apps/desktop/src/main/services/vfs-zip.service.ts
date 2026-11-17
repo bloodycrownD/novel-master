@@ -1,45 +1,19 @@
 /**
  * Desktop VFS ZIP export/import via Core service + Electron dialog.
  *
+ * ZIP 基名推导、目录路径规范化与归档魔数校验都在 core（`@novel-master/core/vfs`）；
+ * 本模块只保留 Electron 对话框与文件落盘。
+ *
  * @module services/vfs-zip
  */
-import { AppError, createVfsZipIoService, type VfsScope } from "@novel-master/core/vfs";
+import { AppError, assertZipArchiveMagic, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
 import { Result } from "@novel-master/core/errors";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
-/**
- * 从目标路径推导 ZIP 基名：子目录取末段、文件取文件名；根目录返回 null
- * （由服务层解析项目名，见 resolveWorkspaceZipName）。
- */
-export function zipBaseNameFromPath(targetPath: string): string | null {
-  const normalized = targetPath.replace(/\/+$/, "");
-  if (normalized === "" || normalized === "/") {
-    return null;
-  }
-  const lastSegment = normalized.slice(normalized.lastIndexOf("/") + 1);
-  return lastSegment === "" ? null : lastSegment;
-}
-
 /** 根目录导出的备用名：项目已删除或域无 projectId 时使用。 */
 const WORKSPACE_FALLBACK_ZIP_NAME = "workspace.zip";
-
-function assertZipArchive(bytes: Uint8Array): Result<void, AppError> {
-  const hasMagic = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
-  const ok = hasMagic && (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) && (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
-  if (!ok) {
-    return Result.err(new AppError("VFS_ZIP_INVALID_ARCHIVE", { detail: `not a ZIP archive (${bytes.length} bytes)` }));
-  }
-  return Result.ok(undefined);
-}
-
-function resolveDirectoryPath(directoryPath?: string): string {
-  if (directoryPath == null || directoryPath.trim() === "") {
-    return "/";
-  }
-  return directoryPath;
-}
 
 /**
  * 导出 VFS 子树为 ZIP：默认名 = 覆盖名（fileName） > 子目录末段 > 根目录项目名
@@ -49,13 +23,15 @@ type ExportVfsZipOptions = { readonly directoryPath?: string; readonly fileName?
 type ExportZipResult = Result<"saved" | "cancelled", AppError>;
 
 export async function exportVfsZipWithDialog(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ExportVfsZipOptions = {}, parentWindow?: BrowserWindow | null): Promise<ExportZipResult> {
-  const directoryPath = resolveDirectoryPath(options.directoryPath);
+  const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+  if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
+  const directoryPath = directoryPathResult.value;
   const zipSvc = createVfsZipIoService(runtime.conn);
   const exported = await zipSvc.export(scope, { directoryPath });
   // 失败沿 Result 返回，由唯一调用方 handleVfsZipExport 转码。
   if (!exported.ok) return Result.err(exported.error);
   const bytes = exported.value;
-  const archiveCheck = assertZipArchive(bytes);
+  const archiveCheck = assertZipArchiveMagic(bytes);
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
 
   const base = zipBaseNameFromPath(directoryPath);
@@ -90,7 +66,7 @@ export async function pickVfsZipBytesWithDialog(parentWindow?: BrowserWindow | n
     return Result.ok(null);
   }
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
-  const archiveCheck = assertZipArchive(bytes);
+  const archiveCheck = assertZipArchiveMagic(bytes);
   if (!archiveCheck.ok) return Result.err(archiveCheck.error);
   return Result.ok(bytes);
 }
@@ -99,13 +75,14 @@ export async function pickVfsZipBytesWithDialog(parentWindow?: BrowserWindow | n
 type ImportVfsZipBytesOptions = { readonly bytes: Uint8Array; readonly confirmed: boolean; readonly directoryPath?: string };
 
 export async function importVfsZipBytes(runtime: DesktopNovelMasterRuntime, scope: VfsScope, options: ImportVfsZipBytesOptions): Promise<Result<void, AppError>> {
-  const directoryPath = resolveDirectoryPath(options.directoryPath);
-  const archiveCheck = assertZipArchive(options.bytes);
+  const archiveCheck = assertZipArchiveMagic(options.bytes);
   if (!archiveCheck.ok) return archiveCheck;
+  const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
+  if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
   const zipSvc = createVfsZipIoService(runtime.conn);
   return zipSvc.import(scope, options.bytes, {
     confirmed: options.confirmed,
-    directoryPath,
+    directoryPath: directoryPathResult.value,
   });
 }
 

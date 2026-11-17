@@ -105,8 +105,8 @@ import {SESSION_KKV_DOMAIN_STREAM_METRICS as METRICS_DOMAIN, STREAM_METRICS_FINA
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SessionRunState, SessionRunStateSettleInput, SessionRunStatus} from '@novel-master/core/session-run-state';
 import {ABORT_KEY} from '@novel-master/core/abort';
-import {decrementAgentActive, incrementAgentActive} from '@/runtime/agent-activity';
-import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
+import {decrementMobileAgentActive, incrementMobileAgentActive} from '@/runtime/agent-activity';
+import {runAgentTurnAdapter as defaultRunAgentTurn} from '@/services/agent-run.service';
 import {bootTimingLog, timingLog} from '@/debug/run-timing';
 import {
   notifyAgentRunFinished,
@@ -880,7 +880,7 @@ export class SessionStreamUnitManager {
     const unit = this.units.get(sessionId);
     if (unit != null) {
       if (!isSessionStreamUnitSettled(unit.getStatus()) && !this.consumptiveSessions.has(sessionId)) {
-        decrementAgentActive();
+        decrementMobileAgentActive();
       }
       this.removeUnit(sessionId, unit);
     } else {
@@ -1204,7 +1204,7 @@ export class SessionStreamUnitManager {
    * nm-style: keep-public — 会话切换防闪的唯一水合入口，读写 manager 私有
    * idleMessageViews 与 view cache，调用侧无法 own 这段状态。
    */
-  hydrateSessionMessages(projectId: string, sessionId: string): void {
+  hydrateSessionMessages(sessionId: string, projectId: string): void {
     if (this.units.has(sessionId)) {
       return;
     }
@@ -1326,7 +1326,7 @@ export class SessionStreamUnitManager {
     });
     this.notifyChanged();
     timingLog('notifyChanged done (metrics bar scheduled)');
-    incrementAgentActive();
+    incrementMobileAgentActive();
     // 受理后按需刷新保活通知：消息通知总开关开启才操作（开关关时受理不
     // 产生任何通知刷新）。两段式时序（Step 8 忙期优先）——第一段无标签调
     // startAgentKeepAliveService(sessionId) 登记受理意图（常驻模式下该调用
@@ -1480,7 +1480,7 @@ export class SessionStreamUnitManager {
         // destroy 的单元安全，这里无条件调。
         unit.invokeOnSettled('failed');
         this.notifyChanged();
-        decrementAgentActive();
+        decrementMobileAgentActive();
         this.stopKeepAliveQuietly(sessionId);
       });
 
@@ -1666,7 +1666,7 @@ export class SessionStreamUnitManager {
     }
     this.evictSettledOverflow();
     this.notifyChanged();
-    decrementAgentActive();
+    decrementMobileAgentActive();
     this.stopKeepAliveQuietly(sessionId);
 
     if (status === 'failed') {
@@ -1943,7 +1943,7 @@ export class SessionStreamUnitManager {
       // 但只清活跃 run 的计数（settled 单元在 finishRun 时已 decrement；
       // 消费型单元从未 increment）。
       if (!isSessionStreamUnitSettled(unit.getStatus()) && !this.consumptiveSessions.has(unit.sessionId)) {
-        decrementAgentActive();
+        decrementMobileAgentActive();
       }
       this.removeUnit(unit.sessionId, unit);
     }

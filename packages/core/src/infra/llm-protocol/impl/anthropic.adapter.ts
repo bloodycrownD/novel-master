@@ -11,14 +11,14 @@ import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sa
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { FetchFn, LlmChatRequest, LlmChatResult, LlmListModelsResult, LlmProtocolAdapter, LlmToolDefinition } from "../ports/adapter.port.js";
 import { anthropicContentToBlocks, blocksToAnthropicContent, chatMessagesToAnthropic } from "../logic/anthropic-content-mapper.js";
-import { createAnthropicSseParserState, feedAnthropicSseChunk, finishAnthropicSse, finishAnthropicSsePartial } from "../logic/anthropic-sse-parser.js";
+import { createAnthropicSseParser } from "../logic/anthropic-sse-parser.js";
 import { anthropicToolsNeedWireEncoding, createAnthropicToolNameWire, type AnthropicToolNameWire } from "../logic/anthropic-tool-names.js";
 import { ANTHROPIC_API_VERSION } from "../logic/anthropic-api-version.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
-import { applyAnthropicThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { parseAnthropicUsage } from "../logic/usage-parser.js";
+import { applyThinkingToBody } from "../logic/apply-thinking-to-body.js";
+import { parseUsage } from "../logic/usage-parser.js";
 
 function resolveAnthropicToolNameWire(req: LlmChatRequest): AnthropicToolNameWire | undefined {
   const names = new Set<string>();
@@ -61,12 +61,12 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     if (req.stream) {
       const toolNames = resolveAnthropicToolNameWire(req);
       const url = joinUrl(req.baseUrl, "/v1/messages");
-      const state = createAnthropicSseParserState();
+      const parser = createAnthropicSseParser({ onStream: req.onStream, toolNames });
 
       try {
         const headers = { "x-api-key": req.apiKey, "anthropic-version": ANTHROPIC_API_VERSION, "Content-Type": "application/json", ...req.extraHeaders };
         const init = { method: "POST", headers, body: JSON.stringify(this.buildBody(req, true, toolNames)), signal: req.scope?.signal };
-        await postSse(url, init, (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
+        await postSse(url, init, (chunk) => parser.feed(chunk), undefined, { fetchFn: this.fetchFn, signal: req.scope?.signal });
       } catch (error) {
         if (!isRequestAborted(error, req.scope?.signal)) {
           throw error;
@@ -74,10 +74,10 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       }
 
       const aborted = req.scope?.signal.aborted === true;
-      const finishResult = aborted ? finishAnthropicSsePartial(state, req.onStream, toolNames) : finishAnthropicSse(state, req.onStream, toolNames);
+      const finishResult = aborted ? parser.finishPartial() : parser.finish();
       const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
       const assistantText = messageBodyTextFromBlocks(blocks);
-      const usage = parseAnthropicUsage(streamRaw);
+      const usage = parseUsage("anthropic", streamRaw);
       const result: LlmChatResult = {
         assistantText,
         blocks,
@@ -98,7 +98,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
     const assistantText = messageBodyTextFromBlocks(blocks);
-    const usage = parseAnthropicUsage(raw);
+    const usage = parseUsage("anthropic", raw);
     return { assistantText, blocks, raw, usage };
   }
 
@@ -133,7 +133,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       if (s.top_k != null) body.top_k = s.top_k;
       if (s.max_tokens != null) body.max_tokens = s.max_tokens;
     }
-    applyAnthropicThinkingToBody(body, req.thinking);
+    applyThinkingToBody("anthropic", body, req.thinking);
     // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
     Object.assign(body, req.extraBody);
     return body;

@@ -22,7 +22,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { copyVfsTree, replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
-import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -135,7 +135,7 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
     // 已把 a.txt 读进池，不清池的话第二次 replace 能从内存里把正文复原、
     // 「源侧明文不可回退」这个前提就不成立（缺失失败不可观测）。本用例要
     // 验的是那个前提下的失败与回滚，故先把池清成冷态。
-    clearDecodedContentCaches();
+    decodedContentCache.clear();
 
     // 第二次 replace（走慢路径）：scanContents/ensureBlob 缺失即抛，事务应回滚
     await assert.rejects(

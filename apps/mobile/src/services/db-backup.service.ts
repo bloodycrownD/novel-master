@@ -12,7 +12,7 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase} from '@novel-master/core';
+import {assertSqliteBackupHeader, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
 import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
@@ -25,7 +25,6 @@ import {acquireMobileDbMaintenanceBusy, releaseMobileDbMaintenanceBusy} from './
 import {exportBytesViaDocumentPicker, pickToLocalPath, type ExportViaPickerOptions} from './document-io';
 import {blobFs, bytesToAsciiString} from './rn-file-io';
 
-const SQLITE_MAGIC = 'SQLite format 3';
 const BACKUP_EXT = '.nmbackup';
 const EXPORT_ATTACH_ALIAS = 'export_db';
 /** 分块落盘，避免 100MB+ Uint8Array → 单次 base64 撑爆 Hermes 堆。 */
@@ -177,10 +176,9 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
  * 覆盖（含落盘窗口），本函数无需再叠加。
  */
 export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<Result<DbImportOutcome, AppError>> {
-  // 内存态校验：失败沿 Result.err（与 FromPath 同口径）。
-  if (bytes.length < 16) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '文件过小，不是有效的数据库备份'}));
-  const header = String.fromCharCode(...bytes.subarray(0, 16));
-  if (!header.startsWith(SQLITE_MAGIC)) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '不是有效的 SQLite 数据库备份'}));
+  // 内存态校验（魔数 + 体积，与 desktop 同源）：失败沿 Result.err（与 FromPath 同口径）。
+  const checked = assertSqliteBackupHeader(bytes);
+  if (!checked.ok) return Result.err(checked.error);
 
   const fs = blobFs();
   const tmpPath = `${fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;

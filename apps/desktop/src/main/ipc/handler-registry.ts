@@ -54,14 +54,7 @@ import {
 } from "./handlers/search.js";
 import { handleAppCheckForUpdates, handleAppGetInfo, handleAppOpenExternal } from "./handlers/app-info.js";
 import { handleShellMenuPopup, handleShellSetTitleBarTheme } from "./handlers/shell.js";
-import {
-  handlePreferencesGetLlmStream,
-  handlePreferencesGetSubagentStream,
-  handlePreferencesGetThinkingContext,
-  handlePreferencesSetLlmStream,
-  handlePreferencesSetSubagentStream,
-  handlePreferencesSetThinkingContext,
-} from "./handlers/preferences.js";
+import { handlePreferencesGet, handlePreferencesSet, PREFERENCE_FEATURES, type PreferenceFeature } from "./handlers/preferences.js";
 import {
   handleProviderModelsDeleteSaved,
   handleProviderModelsEditSaved,
@@ -267,12 +260,11 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.COMPACTION_MANUAL, handleCompactionManual);
 
-  bindNoArg(IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM, handlePreferencesGetLlmStream);
-  bindBool(IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM, handlePreferencesSetLlmStream);
-  bindNoArg(IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM, handlePreferencesGetSubagentStream);
-  bindBool(IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM, handlePreferencesSetSubagentStream);
-  bindNoArg(IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT, handlePreferencesGetThinkingContext);
-  bindBool(IPC_CHANNELS.PREFERENCES_SET_THINKING_CONTEXT, handlePreferencesSetThinkingContext);
+  // 布尔偏好：feature 表是唯一来源（含 VFS 统一 tool turn），新增开关只加表内一行。
+  for (const feature of Object.keys(PREFERENCE_FEATURES) as PreferenceFeature[]) {
+    bindNoArg(PREFERENCE_FEATURES[feature].getChannel, () => handlePreferencesGet(feature));
+    bindBool(PREFERENCE_FEATURES[feature].setChannel, (enabled) => handlePreferencesSet(feature, enabled));
+  }
 
   bindNoArg(IPC_CHANNELS.PROVIDERS_LIST, handleProvidersList);
   bindReq(IPC_CHANNELS.PROVIDERS_GET, handleProvidersGet);

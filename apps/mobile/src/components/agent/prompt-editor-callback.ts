@@ -5,18 +5,20 @@
  * 在 push 前写入，PromptEditorScreen 挂载时读走（读后即清，防串台）。
  */
 
+import {createCallbackSlot} from '../../runtime/callback-slot';
+
 export type PromptEditorOnSaved = (text: string) => void;
 
-let onSaved: PromptEditorOnSaved | null = null;
+const slot = createCallbackSlot<PromptEditorOnSaved>();
 
 /** push 前写入当次回调（闭包捕获当次 setter；每次打开全屏都覆盖新回调）。 */
+// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
 export function setPromptEditorOnSaved(cb: PromptEditorOnSaved) {
-  onSaved = cb;
+  slot.set(cb);
 }
 
 /** 挂载时读取并清空：take 语义避免残留旧回调（取消路径不消费即丢弃）。 */
+// nm-style: keep-public — 槽实例保持模块私有；set/take 是跨屏导航的唯一存取口
 export function takePromptEditorOnSaved(): PromptEditorOnSaved | null {
-  const cb = onSaved;
-  onSaved = null;
-  return cb;
+  return slot.take();
 }

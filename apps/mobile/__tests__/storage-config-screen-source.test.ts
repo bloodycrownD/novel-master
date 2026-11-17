@@ -39,7 +39,7 @@ describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
   });
 
   it('ProfileStatusCard 展示库体积与可回收量（进入页面拉取统计）', () => {
-    expect(source).toMatch(/getDatabaseMaintenanceStats/);
+    expect(source).toMatch(/getDbMaintenanceStats/);
     expect(source).toMatch(/label: '库体积'/);
     expect(source).toMatch(/label: '可回收'/);
   });
@@ -79,8 +79,8 @@ describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
     expect(source).toMatch(/\.finally\(\(\) => setDbBusy\(false\)\)/);
   });
 
-  it('确认后调用 runDatabaseMaintenance(runtime)，成功 toast 含前后体积对比', () => {
-    expect(source).toMatch(/runDatabaseMaintenance\(runtime\)/);
+  it('确认后调用 runDbMaintenance(runtime)，成功 toast 含前后体积对比', () => {
+    expect(source).toMatch(/runDbMaintenance\(runtime\)/);
     expect(source).toMatch(/清理完成/);
   });
 });

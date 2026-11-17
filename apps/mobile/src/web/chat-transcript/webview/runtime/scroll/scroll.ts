@@ -1,29 +1,30 @@
 import {NEAR_BOTTOM_THRESHOLD_PX} from '@web/shared/constants';
+import {ScrollMath} from '@web/shared/scroll-math';
 import {state, SCHEMA_V} from '../state/state';
 import {post} from '../bridge';
 import {handleRowWindowScroll} from '../render/row-windowing';
 /**
- * 滚动锚点、贴底与加载更早消息。
+ * 滚动锚点、贴底与加载更早消息。公式单源：`web/shared/scroll-math.ts`，
+ * 本文件只做 DOM「取值 → 调公式 → 写回」。
  */
 const SCROLL_TOP_LOAD_OLDER = 24;
 
 export function offsetFromBottom(el: HTMLElement): number {
-  return Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
+  return ScrollMath.offsetFromBottom(el.scrollTop, el.scrollHeight, el.clientHeight);
 }
 
 export function isNearBottom(el: HTMLElement): boolean {
-  return offsetFromBottom(el) <= NEAR_BOTTOM_THRESHOLD_PX;
+  return ScrollMath.isNearBottomOffset(offsetFromBottom(el), NEAR_BOTTOM_THRESHOLD_PX);
 }
 
 export function stickToBottom(el: HTMLElement): void {
-  el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+  el.scrollTop = ScrollMath.scrollTopForBottom(el.scrollHeight, el.clientHeight);
   state.nearBottom = true;
 }
 
 /** Tail shrink (rollback): prevScrollTop may exceed new max — clamp to avoid bubble jump. */
 export function clampScrollTop(el: HTMLElement, prevScrollTop: number): void {
-  const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-  el.scrollTop = Math.min(prevScrollTop, maxScroll);
+  el.scrollTop = ScrollMath.clampScrollTop(prevScrollTop, el.scrollHeight, el.clientHeight);
 }
 
 export function scheduleStickIfNearBottom(): void {
@@ -64,7 +65,7 @@ export function emitScrollSnapshot(): void {
   const scroller = document.getElementById('scroller');
   if (!scroller) return;
   const off = offsetFromBottom(scroller);
-  const near = off <= NEAR_BOTTOM_THRESHOLD_PX;
+  const near = ScrollMath.isNearBottomOffset(off, NEAR_BOTTOM_THRESHOLD_PX);
   state.nearBottom = near;
   post('scrollSnapshot', {
     schemaVersion: SCHEMA_V,

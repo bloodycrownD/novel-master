@@ -17,7 +17,7 @@ import type { SqlValue } from "@/infra/tdbc/types.js";
 import type { SessionKkvEntry } from "../../model/session-kkv-entry.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../model/session-kkv-domains.js";
 import { compressFileCacheBodyForBlob, decodeFileCacheBlobBody, hashFileCachePayload } from "../../logic/file-cache-blob-codec.js";
-import { lookupDecodedContentBody, rememberDecodedContentBody } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvRepository } from "../session-kkv.port.js";
 
@@ -59,7 +59,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       const mtimeMs = Number(entry.mtime_ms);
       // 解压产物进程内层（见 getMany 的说明）：命中即免掉 blob 行读取与
       // inflate，直接用 entry 行的 mtime 还原出与 set 时同形的 JSON。
-      const cachedBody = lookupDecodedContentBody(contentHash);
+      const cachedBody = decodedContentCache.get(contentHash);
       if (cachedBody != null) {
         return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: serializeFileCachePayload({ body: cachedBody, mtimeMs }) };
       }
@@ -75,7 +75,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         return null;
       }
       const body = decoded.value;
-      rememberDecodedContentBody(contentHash, body);
+      decodedContentCache.set(contentHash, body);
       return { sessionId, domain: SESSION_KKV_DOMAIN_FILE_CACHE, key, value: serializeFileCachePayload({ body, mtimeMs }) };
     }
     return this.getLegacyEntry(sessionId, domain, key);
@@ -123,7 +123,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
           if (bodies.has(contentHash) || pendingHashes.has(contentHash)) {
             continue;
           }
-          const cachedBody = lookupDecodedContentBody(contentHash);
+          const cachedBody = decodedContentCache.get(contentHash);
           if (cachedBody != null) {
             bodies.set(contentHash, cachedBody);
             continue;
@@ -146,7 +146,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
               // 解压 / 解码失败：按 miss 跳过（上层自愈重读），与单键 get 同口径。
               continue;
             }
-            rememberDecodedContentBody(contentHash, decoded.value);
+            decodedContentCache.set(contentHash, decoded.value);
             bodies.set(contentHash, decoded.value);
           }
         }

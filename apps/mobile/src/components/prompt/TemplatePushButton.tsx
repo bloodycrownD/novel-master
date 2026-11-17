@@ -1,5 +1,5 @@
 /**
- * Confirm + run sessions.pushTemplate：用当前聊天工作区整树覆盖项目工作区
+ * Confirm + run sessions.pushSessionTemplate：用当前聊天工作区整树覆盖项目工作区
  * （该项目所有会话的模板母本）。与 TemplatePullButton 完全镜像。
  */
 import React, {useState} from 'react';
@@ -45,7 +45,7 @@ export function TemplatePushButton({
   const runPush = async () => {
     setPushing(true);
     try {
-      await runtime.sessions.pushTemplate(scope.sessionId);
+      await runtime.sessions.pushSessionTemplate(scope.sessionId);
       onPushed?.();
       showToast('推送完成');
     } catch (error) {

@@ -124,4 +124,5 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
-export { summarizeToolInput } from "../presentation/chat/tool-summary.js";
+export { summarizeToolInput, toolCallSummary } from "../presentation/chat/tool-summary.js";
+export type { ToolCallSummarySource } from "../presentation/chat/tool-summary.js";

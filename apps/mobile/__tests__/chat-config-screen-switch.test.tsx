@@ -155,32 +155,21 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-const mockWriteChatRichTextEnabled = jest.fn();
-const mockReadChatRichTextEnabled = jest.fn();
+const mockReadBoolPref = jest.fn();
+const mockWriteBoolPref = jest.fn();
 const mockAppUi = {get: jest.fn(), set: jest.fn()};
 
-jest.mock('@/storage/chat-rich-text-pref', () => ({
-  readChatRichTextEnabled: (...args: unknown[]) =>
-    mockReadChatRichTextEnabled(...args),
-  writeChatRichTextEnabled: (...args: unknown[]) =>
-    mockWriteChatRichTextEnabled(...args),
+// 富文本 / 消息通知两个布尔开关都经 app-ui-pref-io 的通用读写口。
+jest.mock('@/storage/app-ui-pref-io', () => ({
+  readBoolPref: (...args: unknown[]) => mockReadBoolPref(...args),
+  writeBoolPref: (...args: unknown[]) => mockWriteBoolPref(...args),
 }));
 
-// 消息通知开关的存储与通知模块副作用（ui/G-1：ChatConfigScreen 直连的
-// 新导出，全部 mock；平台门禁在服务内部，屏幕侧只断言调用接线）。
-const mockReadMessageNotificationEnabled = jest.fn();
-const mockWriteMessageNotificationEnabled = jest.fn();
+// 消息通知开关的通知模块副作用（平台门禁在服务内部，屏幕侧只断言调用接线）。
 const mockSetKeepAliveResidentEnabled = jest.fn();
 const mockEnsureAgentNotificationPermission = jest.fn();
 const mockGetAgentNotificationPermissionStatus = jest.fn();
 const mockRequestAgentNotificationPermissionManually = jest.fn();
-
-jest.mock('@/storage/message-notification-pref', () => ({
-  readMessageNotificationEnabled: (...args: unknown[]) =>
-    mockReadMessageNotificationEnabled(...args),
-  writeMessageNotificationEnabled: (...args: unknown[]) =>
-    mockWriteMessageNotificationEnabled(...args),
-}));
 
 jest.mock('@/services/agent-finished-notification', () => ({
   setKeepAliveResidentEnabled: (...args: unknown[]) =>
@@ -198,6 +187,7 @@ jest.mock('@/runtime/novel-master-context', () => ({
 }));
 
 import {ChatConfigScreen} from '@/screens/stack/ChatConfigScreen';
+import {APP_UI_KEY_MESSAGE_NOTIFICATION} from '@/storage/app-ui-keys';
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用）。 */
 function treeText(
@@ -301,8 +291,8 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
       hideStartDepth: 6,
     }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
   });
 
   it('B-3: 父会话流式写入失败回滚并 toast', async () => {
@@ -329,7 +319,7 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
   });
 
   it('B-3: 富文本消息写入失败回滚并 toast', async () => {
-    mockWriteChatRichTextEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+    mockWriteBoolPref.mockRejectedValueOnce(new Error('盘炸了'));
     const {renderer} = await renderScreen();
 
     await toggleSwitchAsync(renderer.root, '富文本消息');
@@ -390,11 +380,11 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
       tokenRatio: 0.8,
       hideStartDepth: 6,
     }});
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
-    mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
     mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
     mockGetAgentNotificationPermissionStatus
@@ -414,8 +404,9 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
 
     // 关 → 开：存储先持久化成功，通知模块副作用照常接线
     await toggleSwitchAsync(renderer.root, '消息通知');
-    expect(mockWriteMessageNotificationEnabled).toHaveBeenCalledWith(
+    expect(mockWriteBoolPref).toHaveBeenCalledWith(
       mockAppUi,
+      APP_UI_KEY_MESSAGE_NOTIFICATION,
       true,
     );
     expect(mockSetKeepAliveResidentEnabled).toHaveBeenCalledWith(true);
@@ -537,10 +528,8 @@ describe('ChatConfigScreen 压缩配置即时保存', () => {
       hideStartDepth: 6,
     }});
     mockSetConditions.mockReset().mockResolvedValue(undefined);
-    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
-    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
-    mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
-    mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadBoolPref.mockReset().mockResolvedValue(false);
+    mockWriteBoolPref.mockReset().mockResolvedValue(undefined);
     mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
     mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
     mockGetAgentNotificationPermissionStatus

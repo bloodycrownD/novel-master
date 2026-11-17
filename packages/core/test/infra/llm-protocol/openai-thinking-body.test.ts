@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { applyOpenAiThinkingToBody } from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
+import { applyThinkingToBody } from "../../../src/infra/llm-protocol/logic/apply-thinking-to-body.js";
 import { OpenAiProtocolAdapter } from "../../../src/infra/llm-protocol/impl/openai.adapter.js";
 
 function jsonResponse(): Response {
@@ -13,9 +13,9 @@ function jsonResponse(): Response {
 }
 
 describe("OpenAI thinking body", () => {
-  it("applyOpenAiThinkingToBody 写入 reasoning_effort", () => {
+  it("applyThinkingToBody('openai') 写入 reasoning_effort", () => {
     const body: Record<string, unknown> = { model: "gpt-4o" };
-    applyOpenAiThinkingToBody(body, {
+    applyThinkingToBody("openai", body, {
       protocol: "openai",
       openai: { reasoning_effort: "high" },
     });
@@ -26,7 +26,7 @@ describe("OpenAI thinking body", () => {
 
   it("未传 thinking 时不写入字段", () => {
     const body: Record<string, unknown> = { model: "gpt-4o" };
-    applyOpenAiThinkingToBody(body, undefined);
+    applyThinkingToBody("openai", body, undefined);
     assert.equal(body.reasoning_effort, undefined);
     assert.equal(body.thinking, undefined);
   });
@@ -34,7 +34,7 @@ describe("OpenAI thinking body", () => {
   it("GLM 型号与 gpt-* 行为一致：仅写入 reasoning_effort", () => {
     for (const model of ["glm-4.7", "glm-5.2"]) {
       const body: Record<string, unknown> = { model };
-      applyOpenAiThinkingToBody(body, {
+      applyThinkingToBody("openai", body, {
         protocol: "openai",
         openai: { reasoning_effort: "medium" },
       });
@@ -46,7 +46,7 @@ describe("OpenAI thinking body", () => {
 
   it("GLM 型号未传 thinking 时不写入任何思考字段", () => {
     const body: Record<string, unknown> = { model: "glm-4.7" };
-    applyOpenAiThinkingToBody(body, undefined);
+    applyThinkingToBody("openai", body, undefined);
     assert.equal("reasoning_effort" in body, false);
     assert.equal("thinking" in body, false);
     assert.equal("enable_thinking" in body, false);
@@ -54,7 +54,7 @@ describe("OpenAI thinking body", () => {
 
   it("协议不匹配时不写入字段", () => {
     const body: Record<string, unknown> = { model: "gpt-4o" };
-    applyOpenAiThinkingToBody(body, {
+    applyThinkingToBody("openai", body, {
       protocol: "anthropic",
       anthropic: { type: "enabled", budget_tokens: 1000 },
     });

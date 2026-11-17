@@ -4,22 +4,23 @@
  * 流式壳已迁 ui/stream；不再保留 renderAssistantBubbleInner 拼串。
  */
 import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {createViewSlot} from '@web/shared/view-slot';
 import type {TranscriptFlags} from '../state/state';
 
 type RenderRowsView = () => void;
 
-let _renderRowsView: RenderRowsView | null = null;
+const rowsView = createViewSlot<void>();
 
 /** 由 main 注册 Preact（或其它）行列表刷新实现。 */
+// nm-style: keep-public — 槽实例保持模块私有；bundle 契约测（factory 装配链）按名锁定
 export function registerRenderRows(fn: RenderRowsView): void {
-  _renderRowsView = fn;
+  rowsView.register(fn);
 }
 
 /** 调用已注册实现；未注册时返回 false。 */
+// nm-style: keep-public — 槽实例保持模块私有；runtime 门面与契约测按名引用
 export function invokeRegisteredRenderRows(): boolean {
-  if (!_renderRowsView) return false;
-  _renderRowsView();
-  return true;
+  return rowsView.invoke();
 }
 
 export function flagsEqual(a: TranscriptFlags, b: TranscriptFlags): boolean {
@@ -33,7 +34,10 @@ export function renderRows(): void {
   invokeRegisteredRenderRows();
 }
 
-/** 附件芯片主标签（明文；无 emoji /「规则 ·」）。 */
+/**
+ * 附件芯片主标签（明文；无 emoji /「规则 ·」）。
+ * 文案单源：core `presentation/chat/attachment-chip.ts`，本文件只传 attach 前缀口径。
+ */
 export function attachmentChipLabel(a: {
   source?: string;
   type?: string;
@@ -42,11 +46,7 @@ export function attachmentChipLabel(a: {
   action?: string;
   content?: string | null;
 }): string {
-  if (a.source === 'attach') {
-    const path = a.path || a.name || '';
-    return path.startsWith('@') ? path : `@${path}`;
-  }
-  return formatStatusChipLabelFromAttachment({
+  const attachment = {
     source: (a.source as 'workplace' | 'attach' | 'user_ops') ?? 'user_ops',
     name: a.name ?? '',
     path: a.path,
@@ -62,7 +62,8 @@ export function attachmentChipLabel(a: {
       | 'annotate'
       | undefined,
     content: a.content ?? null,
-  });
+  };
+  return formatStatusChipLabelFromAttachment(attachment, {attachPrefixed: true});
 }
 
 /** 附件来源副标签（明文）。 */

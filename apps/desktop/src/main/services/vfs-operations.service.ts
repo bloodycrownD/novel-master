@@ -1,37 +1,9 @@
 /**
- * VFS mutations for desktop file manager (ported from mobile).
+ * VFS mutations for desktop file manager.
+ *
+ * 基础动作（create / delete）的实现已下沉 core（`@novel-master/core/vfs` 的
+ * `vfs-entry-ops`）；重命名就是 `moveVfsPath` 的导出别名。本模块保留既有
+ * import 面，避免 handler 侧多一条 main→main 依赖变更。
  */
-import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
-import { type AppError } from "@novel-master/core/agent";
-import { Result } from "@novel-master/core/errors";
-import { moveVfsPath, remapPathUnderDir } from "@novel-master/core/vfs";
-
-export async function createVfsFile(vfs: VfsService, path: string, content = ""): Promise<void> {
-  await vfs.write(path, content);
-}
-
-export async function createVfsDirectory(vfs: VfsService, dirPath: string): Promise<void> {
-  const normalized = dirPath.endsWith("/") ? dirPath.slice(0, -1) : dirPath;
-  await vfs.mkdir(normalized);
-}
-
-export async function deleteVfsEntry(vfs: VfsService, path: string, options?: { recursive?: boolean }): Promise<void> {
-  await vfs.delete(path, { recursive: options?.recursive ?? true });
-}
-
-export async function renameVfsFile(vfs: VfsService, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 失败沿 Result 返回，由唯一调用方 handleVfsRename 转码（ipcErr + formatIpcError）。
-  if (!moved.ok) return Result.err(moved.error);
-  return Result.ok(undefined);
-}
-
-export async function renameVfsDirectory(vfs: VfsService, oldPath: string, newPath: string): Promise<Result<void, AppError>> {
-  const moved = await moveVfsPath(vfs, oldPath, newPath);
-  // 失败沿 Result 返回，由唯一调用方 handleVfsRename 转码（ipcErr + formatIpcError）。
-  if (!moved.ok) return Result.err(moved.error);
-  return Result.ok(undefined);
-}
-
-export { remapPathUnderDir };
-export type { VfsListEntry };
+export { deleteVfsEntry } from "@novel-master/core/vfs";
+export { moveVfsPath as renameVfsDirectory, moveVfsPath as renameVfsFile } from "@novel-master/core/vfs";

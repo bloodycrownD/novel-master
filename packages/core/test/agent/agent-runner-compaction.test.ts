@@ -16,7 +16,6 @@ import { after, describe, it, mock } from "node:test";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
-import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type {
   AgentDefinition,
   CreateAgentRunnerDeps,
@@ -30,7 +29,6 @@ const runCompactionCalls: Array<{
   deps: unknown;
   params: {
     sessionId: unknown;
-    projectId: unknown;
     hideStartDepth?: unknown;
     trigger?: unknown;
   };
@@ -41,7 +39,6 @@ const runCompactionMock = mock.fn(
     _deps: unknown,
     params: {
       sessionId: unknown;
-      projectId: unknown;
       hideStartDepth?: unknown;
       trigger?: unknown;
     },
@@ -185,17 +182,11 @@ describe("AgentRunner compaction (T-AR1)", () => {
       HIDE_START_DEPTH,
     );
 
-    // messages / messageTranscriptEffects 只需满足 runCompaction 被 mock 后
-    // 不会真用到；用最小桩即可。非 null 即可让 agent-runner 走直调分支。
+    // messages 只需满足 runCompaction 被 mock 后不会真用到；用最小桩即可。
+    // 非 null 即可让 agent-runner 走直调分支。
     const messagesStub = {
       listBySession: async () => [],
     } as unknown as MessageService;
-    const effectsStub = {
-      hideMessagesInRange: async () => {},
-      showMessagesInRange: async () => {},
-      truncateMessagesAfter: async () => {},
-      setMessageFloorAtMessage: async () => {},
-    } as unknown as MessageTranscriptEffectsService;
 
     const deps: CreateAgentRunnerDeps = {
       session,
@@ -218,7 +209,6 @@ describe("AgentRunner compaction (T-AR1)", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     };
     const runner = createAgentRunner(deps);
 
@@ -231,7 +221,7 @@ describe("AgentRunner compaction (T-AR1)", () => {
       workspaceModelId: RUN_MODEL_ID,
     }));
 
-    // run 正常完成（说明没有触发 "messages/messageTranscriptEffects 缺失" 的硬错误，
+    // run 正常完成（说明没有触发 "compaction requires messages" 的硬错误，
     // 也没有任何 eventOrchestrator 相关的依赖报错——CreateAgentRunnerDeps 根本没这个字段）。
     assert.equal(result.finished, true);
 
@@ -239,10 +229,9 @@ describe("AgentRunner compaction (T-AR1)", () => {
     assert.equal(runCompactionMock.mock.callCount(), 1);
     assert.equal(runCompactionCalls.length, 1);
 
-    // 收到正确的 sessionId / projectId / hideStartDepth。
+    // 收到正确的 sessionId / hideStartDepth（projectId 不再是 runCompaction 参数）。
     const call = runCompactionCalls[0];
     assert.equal(call.params.sessionId, MOCK_SESSION_ID);
-    assert.equal(call.params.projectId, MOCK_PROJECT_ID);
     assert.equal(call.params.hideStartDepth, HIDE_START_DEPTH);
 
     // T-CR8：自动压缩路径**不传 trigger**（缺省即 "auto"）——回合中段压缩
@@ -334,12 +323,6 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
   const messagesStub = {
     listBySession: async () => [],
   } as unknown as MessageService;
-  const effectsStub = {
-    hideMessagesInRange: async () => {},
-    showMessagesInRange: async () => {},
-    truncateMessagesAfter: async () => {},
-    setMessageFloorAtMessage: async () => {},
-  } as unknown as MessageTranscriptEffectsService;
 
   it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
     const session = new CountingAgentSession(MOCK_SESSION_ID);
@@ -373,7 +356,6 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     });
 
     const result = unwrap(await runner.run({
@@ -430,7 +412,6 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
         }) as never,
       compactionConditions,
       messages: messagesStub,
-      messageTranscriptEffects: effectsStub,
     });
 
     const result = unwrap(await runner.run({
@@ -524,7 +505,6 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
           }) as never,
         compactionConditions: realVisibleFloorEvaluator(visibleFloor),
         messages: messagesStub,
-        messageTranscriptEffects: effectsStub,
       });
 
       const result = unwrap(await runner.run({

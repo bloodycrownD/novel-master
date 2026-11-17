@@ -19,14 +19,10 @@ import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
+import { createTemplatePullService } from "@/service/template/create-template-pull-service.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
-import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
@@ -34,16 +30,8 @@ import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
+import { createChatRepoDeps } from "../chat-repo-wiring.js";
 import type { SessionService } from "../session.port.js";
-
-function reposFor(conn: TdbcConnection) {
-  return {
-    projects: new SqliteProjectRepository(conn),
-    sessions: new SqliteSessionRepository(conn),
-    messages: new SqliteMessageRepository(conn),
-    vfs: new SqliteVfsEntryRepository(conn),
-  };
-}
 
 /** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。toWire 失败沿 `Result.err` 上递（五期门⑦）。 */
 function serializeSessionAgentConfigForStorage(config: SessionAgentConfig): Result<string, AppError> {
@@ -111,7 +99,7 @@ export class DefaultSessionService implements SessionService {
     if (!serialized.ok) return Result.err(serialized.error);
     const configJson = serialized.value;
     const createTransaction = this.deps.conn.transaction(async (tx) => {
-      const r = reposFor(tx);
+      const r = createChatRepoDeps(tx);
       const now = Date.now();
       const session: ChatSession = {
         id: Random.uuid(),
@@ -193,7 +181,7 @@ export class DefaultSessionService implements SessionService {
    *
    * @remarks **修法 3（`yieldFn` 透传）本波未做 ⇒ 这里的窄投影读仍是同步 parse。**
    *          C1-5 修法 3 是可选项（`SessionServiceDeps` 增 `messageRowYieldFn` +
-   *          `reposFor(tx, yieldFn)` 透传），落地后这条递归链上的逐行
+   *          `createChatRepoDeps(tx, yieldFn)` 透传），落地后这条递归链上的逐行
    *          `JSON.parse` 才会分片让出事件循环。当前形态下 `deleteSessionTree`
    *          整段（含 N 层递归）都同步 parse 完才进下一步；会话消息量级大时，
    *          这一段的锁持有期 = 全部子会话的 `JSON.parse` 之和。
@@ -203,7 +191,7 @@ export class DefaultSessionService implements SessionService {
    *          **可选**而非必做，spec 的验收 I6 也写明「仅当修法 3 做了才立」。
    */
   private async deleteSessionTree(tx: TdbcConnection, session: ChatSession): Promise<void> {
-    const r = reposFor(tx);
+    const r = createChatRepoDeps(tx);
     // 先递归删全部子 session（深度优先，避免删自己后子变孤儿）。
     const children = await r.sessions.listByParentSession(session.id);
     for (const child of children) {
@@ -222,20 +210,14 @@ export class DefaultSessionService implements SessionService {
     }
   }
 
-  async pullTemplate(sessionId: string): Promise<Result<void, AppError>> {
-    const r = await this.get(sessionId);
-    if (!r.ok) return Result.err(r.error);
-    const pulled = await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePull(sessionId);
-    if (!pulled.ok) return pulled;
-    return Result.ok(undefined);
+  /** nm-style: keep-public — SessionService 端口方法（runtime.sessions 跨端契约）；树复制权威在 TemplatePullService。 */
+  async pullSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
+    return createTemplatePullService(this.deps.conn).pullSessionTemplate(sessionId);
   }
 
-  async pushTemplate(sessionId: string): Promise<Result<void, AppError>> {
-    const r = await this.get(sessionId);
-    if (!r.ok) return Result.err(r.error);
-    const pushed = await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePush(sessionId);
-    if (!pushed.ok) return pushed;
-    return Result.ok(undefined);
+  /** nm-style: keep-public — SessionService 端口方法（runtime.sessions 跨端契约）；树复制权威在 TemplatePullService。 */
+  async pushSessionTemplate(sessionId: string): Promise<Result<void, AppError>> {
+    return createTemplatePullService(this.deps.conn).pushSessionTemplate(sessionId);
   }
 
   async getComposerDraftJson(id: string): Promise<Result<string | null, AppError>> {
@@ -323,7 +305,7 @@ export class DefaultSessionService implements SessionService {
     const src = source.value;
     // 事务外读：repo 绑 `this.deps.conn`（不是 tx）——在事务回调里用外层 conn
     // 会撞驱动层 AsyncMutex 不可重入，那是死锁不是报错。
-    const messagesRead = await reposFor(this.deps.conn).messages.listBySession(src.id, undefined, hooks);
+    const messagesRead = await createChatRepoDeps(this.deps.conn).messages.listBySession(src.id, undefined, hooks);
     if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
     // 中断不是错误：本方法出口是边界，转抛 AbortError（未注入 hooks 时不可达）。
     if (messagesRead.kind !== "completed") throw createAbortError();
@@ -348,7 +330,7 @@ export class DefaultSessionService implements SessionService {
 
     const copyTransaction = this.deps.conn.transaction(async (tx) => {
       // 事务回调里出现的每一个 repo 都必须来自 tx。
-      const r = reposFor(tx);
+      const r = createChatRepoDeps(tx);
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 刻意不复制 composer_draft_json（维持现状）

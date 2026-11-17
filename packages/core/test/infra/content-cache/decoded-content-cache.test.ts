@@ -14,10 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DecodedContentPool,
-  clearDecodedContentCaches,
-  decodedContentCacheStats,
-  lookupDecodedContentBody,
-  rememberDecodedContentBody,
+  decodedContentCache,
 } from "@/infra/content-cache/logic/decoded-content-cache.js";
 
 describe("DecodedContentPool", () => {
@@ -132,29 +129,26 @@ describe("DecodedContentPool", () => {
 
 describe("统一层单例池", () => {
   it("内容正文池：存取往返命中，清空后归零", () => {
-    clearDecodedContentCaches();
-    rememberDecodedContentBody("hash-1", "文件正文");
+    decodedContentCache.clear();
+    decodedContentCache.set("hash-1", "文件正文");
 
-    assert.equal(lookupDecodedContentBody("hash-1"), "文件正文");
+    assert.equal(decodedContentCache.get("hash-1"), "文件正文");
 
-    clearDecodedContentCaches();
-    assert.equal(lookupDecodedContentBody("hash-1"), null);
+    decodedContentCache.clear();
+    assert.equal(decodedContentCache.get("hash-1"), null);
   });
 
   it("空串是合法值：存取往返仍是「命中」而不是 miss", () => {
-    clearDecodedContentCaches();
-    rememberDecodedContentBody("empty", "");
-    assert.equal(lookupDecodedContentBody("empty"), "", "空文件正文要能缓存");
+    decodedContentCache.clear();
+    decodedContentCache.set("empty", "");
+    assert.equal(decodedContentCache.get("empty"), "", "空文件正文要能缓存");
 
-    const stats = decodedContentCacheStats();
-    const contentStats = stats.find((s) => s.name === "content-body");
-    assert.ok(contentStats != null);
-    assert.equal(contentStats.hits, 1);
-    clearDecodedContentCaches();
-    const cleared = decodedContentCacheStats().find(
-      (s) => s.name === "content-body"
-    );
-    assert.equal(cleared!.hits, 0);
-    assert.equal(cleared!.entries, 0);
+    const stats = decodedContentCache.stats();
+    assert.equal(stats.name, "content-body");
+    assert.equal(stats.hits, 1);
+    decodedContentCache.clear();
+    const cleared = decodedContentCache.stats();
+    assert.equal(cleared.hits, 0);
+    assert.equal(cleared.entries, 0);
   });
 });
