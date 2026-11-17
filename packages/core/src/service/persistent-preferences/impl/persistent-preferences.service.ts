@@ -6,7 +6,7 @@
 
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { formatBoolean, parseBoolean } from "@/infra/kkv-value-codec.js";
+import { Kkv } from "@/common/kkv.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
 import { PREF_KEY_CHAT_LLM_STREAM, PREF_KEY_CHAT_SUBAGENT_STREAM, PREF_KEY_CHAT_THINKING_CONTEXT, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, PREFERENCES_MODULE } from "./preference-keys.js";
@@ -19,7 +19,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setLlmStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_LLM_STREAM, formatBoolean(enabled));
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_LLM_STREAM, Kkv.formatBoolean(enabled));
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
@@ -32,7 +32,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setSubagentStreamEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_SUBAGENT_STREAM, formatBoolean(enabled));
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_SUBAGENT_STREAM, Kkv.formatBoolean(enabled));
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
@@ -45,7 +45,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async setThinkingContextEnabled(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_THINKING_CONTEXT, formatBoolean(enabled));
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_CHAT_THINKING_CONTEXT, Kkv.formatBoolean(enabled));
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
@@ -59,7 +59,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 写入单点消费。 */
   async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
-    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, formatBoolean(enabled));
+    await this.kkv.set(PREFERENCES_MODULE, PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, Kkv.formatBoolean(enabled));
   }
 
   /** nm-style: keep-public — PersistentPreferences 端口方法；CLI preferences-cmd 重置单点消费。 */
@@ -104,10 +104,10 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     const raw = await this.getPreference(key);
     if (!raw.ok) return Result.err(raw.error);
     if (raw.value === undefined) return Result.ok(defaultValue);
-    const parsed = parseBoolean(raw.value);
-    if (!parsed.ok)
+    const parsed = Kkv.parseBoolean(raw.value);
+    if (parsed === null)
       return Result.err(new AppError("PREFERENCES_INVALID_VALUE", { detail: `Preference key "${key}" expected boolean, got: ${raw.value}`, key, expectedType: "boolean", actualValue: raw.value }));
-    return Result.ok(parsed.value);
+    return Result.ok(parsed);
   }
 
   /** `KKV_NOT_FOUND` 幂等归一为成功；其余 KKV 失败经 `Result.err` 原样接力。 */

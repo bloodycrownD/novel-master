@@ -25,4 +25,14 @@ export const Kkv = {
         const deleted = await kkv.delete(module, key);
         return deleted.ok || isAppError(deleted.error, "KKV_NOT_FOUND") ? Result.ok(undefined) : deleted;
     },
+
+    /** 解析 KKV 布尔线格式 `"true"` / `"false"`；其余 → `null`（调用方自带错误码与文案）。 */
+    parseBoolean: (value: string): boolean | null => {
+        if (value === "true") return true;
+        if (value === "false") return false;
+        return null;
+    },
+
+    /** 布尔 → KKV 线格式（对称于 {@link parseBoolean}）。 */
+    formatBoolean: (value: boolean): "true" | "false" => (value ? "true" : "false"),
 } as const;

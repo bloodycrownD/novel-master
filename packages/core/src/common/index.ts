@@ -22,6 +22,7 @@ export {Xml} from "./xml.js";
 export {Hash} from "./hash.js";
 export {Errors} from "./errors.js";
 export {Kkv} from "./kkv.js";
+export {Random} from "./random.js";
 export {Release} from "./release.js";
 export {
     UpdateCheck,

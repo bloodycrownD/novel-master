@@ -4,7 +4,7 @@
  * @module service/chat/impl/session.service
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { SessionAgentConfig, SessionAgentConfigPatch } from "@/domain/chat/model/session-agent-config.js";
@@ -114,7 +114,7 @@ export class DefaultSessionService implements SessionService {
       const r = reposFor(tx);
       const now = Date.now();
       const session: ChatSession = {
-        id: randomUUID(),
+        id: Random.uuid(),
         projectId,
         title: title ?? null,
         parentSessionId: null,
@@ -146,7 +146,7 @@ export class DefaultSessionService implements SessionService {
     }
     const now = Date.now();
     const session: ChatSession = {
-      id: randomUUID(),
+      id: Random.uuid(),
       projectId,
       title: title ?? null,
       parentSessionId,
@@ -330,7 +330,7 @@ export class DefaultSessionService implements SessionService {
     const messages = messagesRead.value;
     const now = Date.now();
     const copy: ChatSession = {
-      id: randomUUID(),
+      id: Random.uuid(),
       projectId: src.projectId,
       title: src.title == null ? null : `${src.title} (copy)`,
       // P2-13：fork/copy 出的是独立主会话，不继承源会话的 parent 关系。
@@ -341,7 +341,7 @@ export class DefaultSessionService implements SessionService {
     const newMessages: { id: string }[] = [];
     // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
     const copyMessages = messages.map((msg) => {
-      const newId = randomUUID();
+      const newId = Random.uuid();
       newMessages.push({ id: newId });
       return { ...msg, id: newId, sessionId: copy.id };
     });

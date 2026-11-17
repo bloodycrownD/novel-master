@@ -59,7 +59,7 @@ import {
   EVENT_AGENT_STREAM_USAGE,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 const log = createLogger("agent.runner");
@@ -129,7 +129,7 @@ export class DefaultAgentRunner implements AgentRunner {
     const bus = this.deps.eventBus;
     const session = persistMessages ? this.deps.session : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
-    const runId = randomUUID();
+    const runId = Random.uuid();
 
     // 注意：EVENT_AGENT_RUN_STARTED 的 publish 位置已下移到主 try 紧前
     // （r3-run-2 步骤 1）。原先在 `runId` 生成后立刻发，导致

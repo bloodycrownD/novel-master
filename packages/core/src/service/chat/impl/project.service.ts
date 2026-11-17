@@ -4,7 +4,7 @@
  * @module service/chat/impl/project.service
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
 import { DEFAULT_PROJECT_AGENT_CONFIG, type ProjectAgentConfig, type ProjectAgentConfigPatch } from "@/domain/chat/model/project-agent-config.js";
@@ -77,7 +77,7 @@ export class DefaultProjectService implements ProjectService {
     }
     const now = Date.now();
     const project: ChatProject = {
-      id: randomUUID(),
+      id: Random.uuid(),
       name: trimmed,
       createdAtMs: now,
       updatedAtMs: now,
@@ -217,7 +217,7 @@ export class DefaultProjectService implements ProjectService {
       const r = reposFor(tx);
       const now = Date.now();
       const copy: ChatProject = {
-        id: randomUUID(),
+        id: Random.uuid(),
         name: `${src.name} (copy)`,
         createdAtMs: now,
         updatedAtMs: now,

@@ -14,6 +14,10 @@ import type { MessageRollbackService, RollbackProbe } from "./message-rollback.p
 
 /**
  * Creates a {@link MessageCheckpointService} for the given connection.
+ *
+ * nm-style: keep-public — 边界隔离壳：`public/message-checkpoint.ts` 只导出端口与本工厂，
+ * 不导出实现类 `DefaultMessageCheckpointService`；删掉工厂会把实现类暴露到 public 面。
+ * 与同文件 `createMessageRollbackService` 不同，它没有装配逻辑（无 repo 构造、无 deps 展开）。
  */
 export function createMessageCheckpointService(conn: TdbcConnection): MessageCheckpointService {
   return new DefaultMessageCheckpointService({ conn });

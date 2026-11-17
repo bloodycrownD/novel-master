@@ -4,7 +4,7 @@
  * @module service/chat/impl/message.service
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { parseMessageContentValue } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
@@ -138,7 +138,7 @@ export class DefaultMessageService implements MessageService {
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
     const message: ChatMessageData = {
-      id: randomUUID(),
+      id: Random.uuid(),
       sessionId,
       seq,
       role,
@@ -286,7 +286,7 @@ export class DefaultMessageService implements MessageService {
       const toCopy = all;
       const now = Date.now();
       const forked: ChatSession = {
-        id: randomUUID(),
+        id: Random.uuid(),
         projectId: source.projectId,
         title: forkTitle,
         // P2-13：fork 出的是独立主会话，不继承源会话的 parent 关系。
@@ -317,7 +317,7 @@ export class DefaultMessageService implements MessageService {
       // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
       const forkedMessages: ChatMessageData[] = [];
       for (const msg of toCopy) {
-        const id = randomUUID();
+        const id = Random.uuid();
         // Preserve hidden state when forking
         forkedMessages.push({ ...msg, id, sessionId: forked.id, seq });
         newMessages.push({ id });

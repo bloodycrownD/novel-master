@@ -14,7 +14,7 @@ import {
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
-import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
+import { Random } from "../../src/common/random.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -589,7 +589,7 @@ describe("AgentRunner", () => {
     await Promise.resolve();
 
     assert.ok(started);
-    assert.ok(isRandomUuidV4(started.runId));
+    assert.ok(Random.isUuidV4(started.runId));
     assert.equal(runIds.length, 4);
     assert.ok(runIds.every((id) => id === started!.runId));
   });

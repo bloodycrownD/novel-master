@@ -5,7 +5,7 @@
  */
 
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
@@ -68,7 +68,7 @@ export class DefaultProviderService implements ProviderService {
     const name = requireNonEmptyDisplayName(input.displayName);
     if (!name.ok) return Result.err(name.error);
     const displayName = name.value;
-    const id = randomUUID();
+    const id = Random.uuid();
     const now = Date.now();
     const secretRef = input.apiKey ? providerApiKeyRef(id) : null;
     const provider: LlmProvider = {

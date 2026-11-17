@@ -4,7 +4,7 @@
  * @module service/provider/impl/provider-model.service
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -98,7 +98,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     const persistedModelName = trimmedModelName ?? normalizedVendorModelId;
     const now = Date.now();
     const model: SavedModel = {
-      id: randomUUID(),
+      id: Random.uuid(),
       providerId,
       vendorModelId: normalizedVendorModelId,
       modelName: persistedModelName,

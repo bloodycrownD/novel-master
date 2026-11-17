@@ -4,7 +4,7 @@
  * @module domain/agent/session/impl/in-memory-agent-session
  */
 
-import { randomUUID } from "@/infra/random-uuid.js";
+import { Random } from "@/common/random.js";
 import type { ChatMessageData, MessageContent } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -29,7 +29,7 @@ export class InMemoryAgentSession implements AgentSession {
   async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<Result<ChatMessageData, AppError>> {
     this.seq += 1;
     const message: ChatMessageData = {
-      id: randomUUID(),
+      id: Random.uuid(),
       sessionId: this.sessionId,
       seq: this.seq,
       role,
