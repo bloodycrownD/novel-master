@@ -180,6 +180,12 @@
     },
     {
       "segment": "inline",
+      "file": "packages/core/src/common/update-check.ts",
+      "symbol": "checkForUpdates",
+      "reason": "object namespace 的成员绑定（UpdateCheck.check = checkForUpdates），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
+    },
+    {
+      "segment": "inline",
       "file": "packages/core/src/service/prompt/render-prompt.ts",
       "symbol": "computeLlmExportZonesFromLayout",
       "reason": "object namespace 的成员绑定（PromptBuilder.xxx = fn），不是单点私有函数；check-inline 把「被对象字面量引用」数成 1 ref 判 INLINE_LOCAL"
