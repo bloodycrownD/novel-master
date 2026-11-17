@@ -9,6 +9,7 @@
 export {base64ToBytes, bytesToBase64, utf8ByteLength} from "./encoding.js";
 export {parseJsonText, applyMergePatch} from "./json.js";
 export {truncateText} from "./text.js";
+export {pad2} from "./format-number.js";
 export {isBinaryFilePath, isImageFilePath} from "./file.js";
 export {integerAtLeast, nullableText, stringOrEmpty} from "./coerce.js";
 export {errorText, normalizeYamlError, normalizeSmartSortImportError} from "./error.js";

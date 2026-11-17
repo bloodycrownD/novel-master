@@ -3,8 +3,9 @@
  */
 import type {Result} from '@novel-master/core/errors';
 import {AppError} from '@novel-master/core/errors';
-import {useCallback} from 'react';
+import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
+import {ABORT_KEY, isAbortLikeError} from '@novel-master/core/abort';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {type ChatMessageData, ChatMessage, attachmentXmlCodec, rollbackConfirm} from '@novel-master/core/chat';
 
@@ -36,7 +37,8 @@ type UseChatTabMessageActionsParams = {
   setDraftRestoreToken: (updater: (token: number) => number) => void;
   agentRunning: boolean;
   resetStreamingDisplay: () => void;
-  showToast: (message: string) => void;
+  /** Toast 宿主支持可选行动按钮：手动压缩在途的「取消压缩」入口靠它承载。 */
+  showToast: (message: string, options?: {actionLabel?: string; onAction?: () => void}) => void;
   refreshChatTokenLabel: () => Promise<void>;
   /**
    * 快照完成信号（rollback-large-jank Step 5）：回滚链的 token 全量重算
@@ -71,6 +73,11 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
+  // 手动压缩在途标记（signal-abort-scope Step 14）：在途时再点「压缩上下文」
+  // 只把取消入口重新挂出来，不重复发起——同一 key 重复 register 会覆盖旧
+  // scope，旧 scope 的取消就失效了。
+  const compactionInFlightRef = useRef(false);
+
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
       showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
@@ -79,11 +86,28 @@ export function useChatTabMessageActions({
     if (projectId == null || sessionId == null) {
       return;
     }
+    // 取消入口走 action toast（本屏反馈面就是 toast）：可中断窗口只有
+    // 「入口 + hide 开始前」，action toast 的 8s 行动窗口与之匹配；hide 之后
+    // 取消无效，压缩按原语义跑完（hide → invalidate → KKV 清理不可中断）。
+    const showCompactionCancel = () => {
+      showToast('正在压缩上下文…', {
+        actionLabel: '取消压缩',
+        onAction: () => {
+          runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
+        },
+      });
+    };
+    if (compactionInFlightRef.current) {
+      showCompactionCancel();
+      return;
+    }
     Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
       {text: '取消', style: 'cancel'},
       {
         text: '压缩',
         onPress: () => {
+          compactionInFlightRef.current = true;
+          showCompactionCancel();
           // 编排收在 runManualCompaction（r3-orc-1：详情页那份手工副本曾与
           // 之漂移五处），本处只留 UI 尾巴。token 读数不做显式预热（2026-10-07
           // 拍板，与置位同路径）：toast 即回，chip 由下面的 refresh 走常规
@@ -110,9 +134,21 @@ export function useChatTabMessageActions({
               showToast('已压缩');
             },
           };
-          // 取消是 runManualCompaction 唯一会 reject 的出口（T-S16）：调用侧必须
-          // 显式收掉，否则 Step 14 接真实取消按钮后会变成 unhandled rejection。
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks).catch(() => undefined);
+          // 取消是 runManualCompaction 唯一会 reject 的出口（T-S16）：AbortError
+          // 吞掉并复位在途标记、只留「已取消压缩」提示（不是错误 toast）；其它
+          // 异常兜底提示（编排内部已自吞，这里只防御未来改动），绝不重新抛出
+          // ——调用方是 void，重抛就是 unhandled rejection。
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks)
+            .catch((error: unknown) => {
+              if (isAbortLikeError(error)) {
+                showToast('已取消压缩');
+                return;
+              }
+              showToast(toastMessage('压缩失败', error));
+            })
+            .finally(() => {
+              compactionInFlightRef.current = false;
+            });
         },
       },
     ]);

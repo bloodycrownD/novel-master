@@ -14,6 +14,8 @@ import {
 } from "@shared/ipc-types";
 import { createInvokeClient } from "./invoke-registry";
 
+export { isIpcAborted } from "./invoke-registry";
+
 export function getDesktopBridge() {
   if (window.novelMasterDesktop) return window.novelMasterDesktop;
   const inBrowser = typeof navigator !== "undefined" && !/Electron/i.test(navigator.userAgent);
@@ -84,6 +86,7 @@ export const {
   ipcMessagesSetFloor,
   ipcAgentRun,
   ipcAgentAbort,
+  ipcRunAbort,
   ipcAgentRunIsActive,
   ipcAgentResolveCurrent,
   ipcAgentListPicker,

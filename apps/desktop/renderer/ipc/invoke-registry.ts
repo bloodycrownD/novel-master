@@ -17,8 +17,12 @@ import {
   type AppGetInfoResponse,
   type AppOpenExternalRequest,
   type AppUiGetResponse,
+  type BackupExportResult,
+  type BackupImportResult,
   type BootstrapStatusResponse,
   type ChatMessageDto,
+  type CloudSyncPushRequest,
+  type CloudSyncPushResult,
   type CompactionManualRequest,
   type DbMaintenanceResult,
   type DbStatsResult,
@@ -46,6 +50,8 @@ import {
   type PromptPreviewTurnDto,
   type PromptChatTokenStatsResponse,
   type PromptScopeRequest,
+  type ProviderModelSuggestionDto,
+  type ProviderModelsSaveRequest,
   type ScopeSetProjectRequest,
   type ScopeSetSessionRequest,
   type ScopeSnapshotDto,
@@ -144,6 +150,17 @@ function withBool<TRes>(invoke: InvokeFn, channel: string): (enabled: boolean) =
   return (enabled) => invoke<TRes>(channel, enabled);
 }
 
+/** 长任务请求体：`runId` 由 renderer 生成、取消时原样回传；缺省时 main 只建 scope、不登记。 */
+type RunRequest = { readonly runId?: string };
+
+/**
+ * `IPC_ABORTED` 是取消终态而非业务失败：长任务调用方据此静默收尾、不弹错误 toast
+ * （signal-abort-scope Step 14 / T-S22：取消是用户主动行为，弹错是噪声）。
+ */
+export function isIpcAborted(result: IpcResult<unknown>): boolean {
+  return !result.ok && result.error.code === "IPC_ABORTED";
+}
+
 // nm-style: keep-public — 通道映射表与 bridge 注入分离：本模块隔离 window 桥这一不稳定依赖，client.ts 只负责注入 invoke
 /** 由 client.ts 注入 bridge().invoke，生成全部 ipc* 封装。 */
 export function createInvokeClient(invoke: InvokeFn) {
@@ -206,6 +223,8 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcMessagesSetFloor: withReq<MessagesSetFloorPayload, IpcResult<MessagesSetFloorResult>>(invoke, IPC_CHANNELS.MESSAGES_SET_FLOOR),
     ipcAgentRun: withReq<AgentRunRequest, IpcResult<{ started: boolean }>>(invoke, IPC_CHANNELS.AGENT_RUN),
     ipcAgentAbort: withReq<AgentAbortRequest, IpcResult<void>>(invoke, IPC_CHANNELS.AGENT_ABORT),
+    // 统一取消入口（signal-abort-scope §五）：{ kind, id } 与 main 侧 handleRunAbort 同形。
+    ipcRunAbort: (target: { readonly kind: string; readonly id: string }) => invoke<IpcResult<null>>(IPC_CHANNELS.NM_RUN_ABORT, target),
     ipcAgentRunIsActive: withReq<AgentRunIsActiveRequest, IpcResult<boolean>>(invoke, IPC_CHANNELS.AGENT_RUN_IS_ACTIVE),
     ipcAgentResolveCurrent: noArg<IpcResult<AgentResolveCurrentResponse>>(invoke, IPC_CHANNELS.AGENT_RESOLVE_CURRENT),
     ipcAgentListPicker: noArg<IpcResult<AgentListPickerResponse>>(invoke, IPC_CHANNELS.AGENT_LIST_PICKER),
@@ -231,9 +250,9 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcProvidersEdit: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDERS_EDIT),
     ipcProvidersDelete: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDERS_DELETE),
     ipcProviderModelsSavedList: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST),
-    ipcProviderModelsFetch: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_FETCH),
-    ipcProviderModelsSuggestList: withReq<{ providerId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST),
-    ipcProviderModelsSave: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SAVE),
+    ipcProviderModelsFetch: withReq<{ providerId: string }, IpcResult<void>>(invoke, IPC_CHANNELS.PROVIDER_MODELS_FETCH),
+    ipcProviderModelsSuggestList: withReq<{ providerId: string }, IpcResult<ProviderModelSuggestionDto[]>>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST),
+    ipcProviderModelsSave: withReq<ProviderModelsSaveRequest, IpcResult<void>>(invoke, IPC_CHANNELS.PROVIDER_MODELS_SAVE),
     ipcProviderModelsDeleteSaved: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED),
     ipcProviderModelsGetSaved: withReq<{ savedModelId: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED),
     ipcProviderModelsEditSaved: withReq<{ savedModelId: string; modelName?: string }, unknown>(invoke, IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED),
@@ -272,10 +291,10 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SKILLS_UPDATE_INFO),
     ipcCompactionConditionsGet: noArg(invoke, IPC_CHANNELS.COMPACTION_CONDITIONS_GET),
     ipcCompactionConditionsSet: withReq<unknown, unknown>(invoke, IPC_CHANNELS.COMPACTION_CONDITIONS_SET),
-    ipcBackupExport: noArg(invoke, IPC_CHANNELS.BACKUP_EXPORT),
-    ipcBackupImport: noArg(invoke, IPC_CHANNELS.BACKUP_IMPORT),
+    ipcBackupExport: (req?: RunRequest) => invoke<IpcResult<BackupExportResult>>(IPC_CHANNELS.BACKUP_EXPORT, req),
+    ipcBackupImport: (req?: RunRequest) => invoke<IpcResult<BackupImportResult>>(IPC_CHANNELS.BACKUP_IMPORT, req),
     ipcDbStats: noArg<IpcResult<DbStatsResult>>(invoke, IPC_CHANNELS.DB_STATS),
-    ipcDbMaintenance: noArg<IpcResult<DbMaintenanceResult>>(invoke, IPC_CHANNELS.DB_MAINTENANCE),
+    ipcDbMaintenance: (req?: RunRequest) => invoke<IpcResult<DbMaintenanceResult>>(IPC_CHANNELS.DB_MAINTENANCE, req),
     ipcCloudSyncGetConfig: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG),
     ipcCloudSyncSetConfig: withReq<
       {
@@ -294,7 +313,7 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcCloudSyncTestConnection: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION),
     ipcCloudSyncGetLocalStatus: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS),
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
-    ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) => invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
+    ipcCloudSyncPush: (req?: CloudSyncPushRequest) => invoke<IpcResult<CloudSyncPushResult>>(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
     ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(invoke, IPC_CHANNELS.SEARCH_GET_CONFIG),
     ipcSearchSaveEngineKey: withReq<SearchSaveEngineKeyRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
     ipcSearchClearEngineKey: withReq<SearchClearEngineKeyRequest, IpcResult<void>>(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),

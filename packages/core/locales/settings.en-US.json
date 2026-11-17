@@ -146,5 +146,8 @@
   "settings.search.curl.section_desc.desktop": "Paste a curl command (supports -X / -H / -d / --data-raw / -G); any plaintext key found is replaced with {{apiKey}} and written to the secure keystore when you save.",
   "settings.search.curl.command_label.desktop": "curl command",
   "settings.search.curl.parse_action.desktop": "Parse and prefill",
-  "settings.search.curl.key_detected.desktop": "A key was detected and filled into the API Key field below; it is written to the secure keystore when you save."
+  "settings.search.curl.key_detected.desktop": "A key was detected and filled into the API Key field below; it is written to the secure keystore when you save.",
+  "settings.long_task.cancel": "Cancel",
+  "settings.long_task.cancelled": "Cancelled",
+  "settings.long_task.maintenance_uninterruptible": "Maintenance in progress; cannot be interrupted"
 }

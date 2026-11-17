@@ -9,6 +9,7 @@
 import { copyFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { app, dialog, shell } from "electron";
+import { pad2 } from "@novel-master/core/common";
 
 /** 导出诊断包需要的全部外部能力。 */
 // nm-style: keep-public — spec 4.6 要求的 seams 契约：菜单动作与测试共用同一份形状。
@@ -45,10 +46,6 @@ export function createDesktopDiagnosticsSeams(): DiagnosticsSeams {
     arch: process.arch,
     packaged: app.isPackaged,
   };
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
 }
 
 /** 「打开日志目录」：把 logs 目录交给系统文件管理器。 */

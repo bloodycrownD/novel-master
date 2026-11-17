@@ -9,30 +9,24 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {ABORT_KEY, isAbortLikeError} from '@novel-master/core/abort';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {settingsTranslator} from '../../i18n/settings';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
-import {
-  exportDatabaseBackup,
-  importDatabaseBackup,
-} from '../../services/db-backup.service';
-import {
-  getDatabaseMaintenanceStats,
-  runDatabaseMaintenance,
-} from '../../services/db-maintenance.service';
+import {exportDatabaseBackup, importDatabaseBackup} from '../../services/db-backup.service';
+import {getDatabaseMaintenanceStats, runDatabaseMaintenance} from '../../services/db-maintenance.service';
 import {exportMobileLogs} from '../../services/log-export';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
-import {
-  isMobileAgentActive,
-  subscribeMobileAgentActivity,
-} from '../../runtime/agent-activity';
+import {isMobileAgentActive, subscribeMobileAgentActivity} from '../../runtime/agent-activity';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type BackupTask = 'export' | 'import';
 
 // prettier-ignore
 const CLEANUP_CONFIRM_TEXT = '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？';
@@ -46,6 +40,10 @@ export function StorageConfigScreen() {
   const {retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [dbBusy, setDbBusy] = useState(false);
+  // 可取消的长任务仅覆盖备份导出/导入（backup("local")）；数据清理的
+  // VACUUM 区段不可中断，spec 明确不提供取消按钮，故不纳入此状态。
+  const [backupBusy, setBackupBusy] = useState<BackupTask | null>(null);
+  const [backupCancelling, setBackupCancelling] = useState(false);
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [agentActive, setAgentActive] = useState(false);
   const [dbFileBytes, setDbFileBytes] = useState<number | null>(null);
@@ -66,6 +64,16 @@ export function StorageConfigScreen() {
     setDbFileBytes(stats.ok ? stats.value.fileBytes : null);
     setDbReclaimBytes(stats.ok ? stats.value.reclaimableBytes : null);
   }, [runtime]);
+
+  // 备份导出/导入的任务级取消（Step 14）：service 注册的 key 固定
+  // `backup("local")`；点击后先收起按钮，AbortError 由下方 catch 静默收尾。
+  const handleCancelBackup = useCallback(() => {
+    if (backupBusy == null || backupCancelling) {
+      return;
+    }
+    setBackupCancelling(true);
+    runtime.abortRegistry.abort(ABORT_KEY.backup('local'));
+  }, [backupBusy, backupCancelling, runtime]);
 
   const formatStorageBytes = (bytes: number | null): string => {
     if (bytes == null) {
@@ -94,11 +102,7 @@ export function StorageConfigScreen() {
   useFocusEffect(refreshStorageOnFocus);
 
   return (
-    <ScrollView
-      style={[styles.scroll, {backgroundColor: tokens.background}]}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={[styles.scroll, {backgroundColor: tokens.background}]} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <ProfileStatusCard
         title="存储空间"
         hint="数据库文件体积与清理可回收的空间"
@@ -108,19 +112,11 @@ export function StorageConfigScreen() {
         ]}
         tokens={tokens}
       />
-      <ProfileMenuItem
-        icon="☁️"
-        label="云端配置"
-        value={cloudConfigured ? '已配置' : '未配置'}
-        tokens={tokens}
-        onPress={() => navigation.navigate('CloudSyncStorage')}
-      />
+      <ProfileMenuItem icon="☁️" label="云端配置" value={cloudConfigured ? '已配置' : '未配置'} tokens={tokens} onPress={() => navigation.navigate('CloudSyncStorage')} />
       <ProfileMenuItem
         icon="🧹"
         label="数据清理"
-        value={
-          dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'
-        }
+        value={dbBusy ? '处理中…' : agentActive ? 'Agent 运行中' : '清理数据库空间'}
         tokens={tokens}
         onPress={() => {
           if (dbBusy) {
@@ -160,14 +156,26 @@ export function StorageConfigScreen() {
             return;
           }
           setDbBusy(true);
+          setBackupBusy('export');
+          setBackupCancelling(false);
           exportDatabaseBackup(runtime)
             .then(result => {
               if (result.ok && result.value === 'saved') {
                 showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
               }
             })
-            .catch(err => showToast(toastMessage('导出失败', err)))
-            .finally(() => setDbBusy(false));
+            .catch(err => {
+              // 取消是控制流不是失败：不弹错误 toast（与桌面 IPC_ABORTED 同口径）。
+              if (isAbortLikeError(err)) {
+                return;
+              }
+              showToast(toastMessage('导出失败', err));
+            })
+            .finally(() => {
+              setBackupBusy(null);
+              setBackupCancelling(false);
+              setDbBusy(false);
+            });
         }}
       />
       <ProfileMenuItem
@@ -205,6 +213,8 @@ export function StorageConfigScreen() {
               text: '继续选择文件',
               onPress: () => {
                 setDbBusy(true);
+                setBackupBusy('import');
+                setBackupCancelling(false);
                 importDatabaseBackup(runtime, retry)
                   .then(result => {
                     if (result.ok) {
@@ -213,13 +223,32 @@ export function StorageConfigScreen() {
                       showToast(toastMessage('导入失败', result.error));
                     }
                   })
-                  .catch(err => showToast(toastMessage('导入失败', err)))
-                  .finally(() => setDbBusy(false));
+                  .catch(err => {
+                    // 取消是控制流不是失败：不弹错误 toast（与桌面 IPC_ABORTED 同口径）。
+                    if (isAbortLikeError(err)) {
+                      return;
+                    }
+                    showToast(toastMessage('导入失败', err));
+                  })
+                  .finally(() => {
+                    setBackupBusy(null);
+                    setBackupCancelling(false);
+                    setDbBusy(false);
+                  });
               },
             },
           ]);
         }}
       />
+      {backupBusy != null && !backupCancelling ? (
+        <ProfileMenuItem
+          icon="✖️"
+          label={settingsTranslator({key: 'settings.long_task.cancel'})}
+          value={backupBusy === 'export' ? '导出数据库' : '导入数据库'}
+          tokens={tokens}
+          onPress={handleCancelBackup}
+        />
+      ) : null}
     </ScrollView>
   );
 }

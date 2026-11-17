@@ -10,6 +10,8 @@
  * @module infra/log/log-file-policy
  */
 
+import {pad2} from "@/common/format-number.js";
+
 /** 目录里的一份同名家族日志文件（`name` 不含目录）。 */
 // nm-style: keep-public — 三端文件 sink 构造 `existing` 的入参类型，core 内部无消费者。
 export interface LogFileEntry {
@@ -31,10 +33,6 @@ const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const DEFAULT_KEEP = 5;
 /** 分段号上限：超了退到 `<baseName>.<hhmmss>.log`，避免无限试探文件系统。 */
 const MAX_SEGMENT = 99;
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
 
 /**
  * 规划一次日志写入。

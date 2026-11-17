@@ -15,6 +15,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, DeviceEventEmitter, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ABORT_KEY, isAbortLikeError} from '@novel-master/core/abort';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
@@ -52,6 +53,8 @@ export function SessionDetailScreen() {
   const [titleDraft, setTitleDraft] = useState('');
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  // 手动压缩在途：压缩卡片就地换成取消入口（signal-abort-scope Step 14）。
+  const [compacting, setCompacting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,6 +140,10 @@ export function SessionDetailScreen() {
   // 2) Alert 文案保持一致；
   // 3) 成功后同样调 refreshComposerStatusAfterFloorOrCompaction 刷新 composer 状态。
   const handleCompact = useCallback(() => {
+    if (compacting) {
+      // 在途时压缩卡片已就地变成取消入口（handleCancelCompaction），走不到这里。
+      return;
+    }
     if (isMobileAgentActive()) {
       showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
       return;
@@ -146,6 +153,7 @@ export function SessionDetailScreen() {
       {
         text: '压缩',
         onPress: () => {
+          setCompacting(true);
           // 编排收在 runManualCompaction（r3-orc-1：与聊天页那份手工副本曾
           // 漂移五处），本处只留 UI 尾巴——三出口（成功 / 明确失败 / 抛错）
           // 一个不能少。token 读数不做显式预热（2026-10-07 拍板，与置位同
@@ -170,12 +178,31 @@ export function SessionDetailScreen() {
               await load();
             },
           };
-          // 取消是唯一会 reject 的出口（T-S16）：吞掉，避免 unhandled rejection。
-          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks).catch(() => undefined);
+          // 取消是唯一会 reject 的出口（T-S16）：AbortError 吞掉并复位在途状态、
+          // 只留「已取消压缩」提示（不是错误 toast）；其它异常兜底提示（编排内部
+          // 已自吞，这里只防御未来改动），绝不重新抛出——调用方是 void，重抛就是
+          // unhandled rejection。
+          void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks)
+            .catch((error: unknown) => {
+              if (isAbortLikeError(error)) {
+                showToast('已取消压缩');
+                return;
+              }
+              showToast(toastMessage('压缩失败', error));
+            })
+            .finally(() => {
+              setCompacting(false);
+            });
         },
       },
     ]);
-  }, [runtime, sessionId, projectId, showToast, load]);
+  }, [compacting, runtime, sessionId, projectId, showToast, load]);
+
+  // 压缩在途的取消入口（signal-abort-scope Step 14）：key 由 runManualCompaction
+  // 注册；可中断窗口是「入口 + hide 开始前」，hide 之后取消无效、压缩照常跑完。
+  const handleCancelCompaction = useCallback(() => {
+    runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
+  }, [runtime, sessionId]);
 
   // Android 裁切窗口：与 ScreenFormLayout 同款——用 marginBottom 收缩键盘高度，
   // 内容区跟铉缩到键盘以上。不能只 translateY：ScrollView 高度不变的话顶部会被裁掉。
@@ -328,29 +355,55 @@ export function SessionDetailScreen() {
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
 
-      {/* 压缩上下文：发 SESSION_COMPACTION_REQUESTED 事件，与聊天页抽屉入口一致。 */}
-      <Pressable
-        testID="compact-row"
-        onPress={handleCompact}
-        accessibilityLabel="压缩上下文"
-        style={[
-          styles.card,
-          cardShadow,
-          {
-            backgroundColor: tokens.surface,
-            borderColor: tokens.borderLight,
-          },
-        ]}
-      >
-        <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
-          <Text style={styles.iconGlyph}>🗜️</Text>
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>减少上下文占用</Text>
-        </View>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-      </Pressable>
+      {/* 压缩上下文：发 SESSION_COMPACTION_REQUESTED 事件，与聊天页抽屉入口一致。
+          在途时同一张卡片就地换成「取消压缩」入口（Step 14 真实取消）。 */}
+      {compacting ? (
+        <Pressable
+          testID="compact-cancel-row"
+          onPress={handleCancelCompaction}
+          accessibilityLabel="取消压缩"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+            },
+          ]}
+        >
+          <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
+            <Text style={styles.iconGlyph}>🗜️</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>正在压缩…</Text>
+          </View>
+          <Text style={[styles.cancelAction, {color: tokens.danger}]}>取消</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          testID="compact-row"
+          onPress={handleCompact}
+          accessibilityLabel="压缩上下文"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+            },
+          ]}
+        >
+          <View style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}>
+            <Text style={styles.iconGlyph}>🗜️</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>压缩上下文</Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>减少上下文占用</Text>
+          </View>
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+        </Pressable>
+      )}
 
       {/* 技能：点击进会话技能面板。 */}
       <Pressable
@@ -444,5 +497,7 @@ const styles = StyleSheet.create({
   cardValue: {fontSize: 16, fontWeight: '600'},
   // 右侧 chevron / 锁图标，暗示是否可点。
   chevron: {fontSize: 18, fontWeight: '500'},
+  // 压缩在途的右侧文字按钮。
+  cancelAction: {fontSize: 15, fontWeight: '600'},
   lockHint: {fontSize: 12, marginTop: 4, lineHeight: 16},
 });

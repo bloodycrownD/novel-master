@@ -14,14 +14,11 @@ import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "no
 import path from "node:path";
 import { app } from "electron";
 import { addLogSink, planLogFileWrite, type LogFileEntry, type LogLevel, type LogRecord } from "@novel-master/core/log";
+import { pad2 } from "@novel-master/core/common";
 import { isDesktopLlmDebug } from "./llm-debug-flag.js";
 
 /** 日志级别从低到高；`minLevel` 以下的记录在写盘前丢弃。 */
 const LEVEL_ORDER: readonly LogLevel[] = ["debug", "info", "warn", "error"];
-
-function pad2(value: number): string {
-  return String(value).padStart(2, "0");
-}
 
 /**
  * 安装桌面文件 sink；返回摘除函数。

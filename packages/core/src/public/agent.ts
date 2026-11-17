@@ -56,7 +56,9 @@ export type {
 export {
   runAgentTurn,
   AgentTurnError,
+  mapResolveError,
 } from "../service/agent/logic/run-agent-turn.js";
+export { AgentActivityTracker } from "../service/agent/logic/agent-activity-tracker.js";
 export type {
   AgentTurnScope,
   AgentTurnRuntimePort,

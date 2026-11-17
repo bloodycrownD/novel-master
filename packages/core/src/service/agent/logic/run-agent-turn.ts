@@ -361,7 +361,8 @@ interface RunAgentTurnOptions {
  * `AgentTurnError`（turn 异常通道，双端按同一 key 口径归一文案）；其余原样抛，
  * 由本函数 catch（AppError → `Result.err`）收口。
  */
-async function mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T> {
+// nm-style: keep-public — desktop agent-run.service 的 resolve 包装直接消费（三端同一转码口径）。
+export async function mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T> {
   const result = await fn();
   if (!result.ok) {
     if (AGENT_RUN_RESOLVE_KEYS.has(result.error.key)) {

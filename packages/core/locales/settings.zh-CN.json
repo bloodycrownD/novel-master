@@ -146,5 +146,8 @@
   "settings.search.curl.section_desc.desktop": "粘贴一条 curl 命令（支持 -X / -H / -d / --data-raw / -G）；识别到的明文密钥会替换为 {{apiKey}} 并在保存时写入安全密钥库。",
   "settings.search.curl.command_label.desktop": "curl 命令",
   "settings.search.curl.parse_action.desktop": "解析并预填",
-  "settings.search.curl.key_detected.desktop": "已识别到密钥，已填入下方 API Key 输入框；保存后写入安全密钥库。"
+  "settings.search.curl.key_detected.desktop": "已识别到密钥，已填入下方 API Key 输入框；保存后写入安全密钥库。",
+  "settings.long_task.cancel": "取消",
+  "settings.long_task.cancelled": "已取消",
+  "settings.long_task.maintenance_uninterruptible": "正在整理，无法中断"
 }

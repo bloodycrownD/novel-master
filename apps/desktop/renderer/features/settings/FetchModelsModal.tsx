@@ -5,7 +5,9 @@ import {
   ipcProviderModelsFetch,
   ipcProviderModelsSave,
   ipcProviderModelsSuggestList,
+  ipcRunAbort,
 } from "@/ipc/client";
+import { settingsTranslator } from "@/i18n/settings";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 
 type SuggestionRow = {
@@ -34,6 +36,8 @@ export function FetchModelsModal({
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
   // 已保存成功的行（与 mobile FetchModelsSheet 的 addedIds 同语义）：
@@ -62,17 +66,28 @@ export function FetchModelsModal({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setCancelled(false);
+    setCancelling(false);
     setError(undefined);
     try {
       const fetchRes = await ipcProviderModelsFetch({ providerId });
       if (!fetchRes.ok) {
         setRows([]);
+        // 取消是控制流终态（IPC_ABORTED），不渲染成错误；落到「已取消 + 重试」态。
+        if (fetchRes.error.code === "IPC_ABORTED") {
+          setCancelled(true);
+          return;
+        }
         setError(fetchRes.error.message);
         return;
       }
       const sugRes = await ipcProviderModelsSuggestList({ providerId });
       if (!sugRes.ok) {
         setRows([]);
+        if (sugRes.error.code === "IPC_ABORTED") {
+          setCancelled(true);
+          return;
+        }
         setError(sugRes.error.message);
         return;
       }
@@ -98,6 +113,8 @@ export function FetchModelsModal({
     setRows([]);
     setQuery("");
     setError(undefined);
+    setCancelled(false);
+    setCancelling(false);
     void load();
   }, [open, load, exit]);
 
@@ -173,7 +190,44 @@ export function FetchModelsModal({
         </p>
 
         {loading ? (
-          <p className="fetch-models-modal__status">拉取中…</p>
+          <div className="fetch-models-modal__status fetch-models-modal__status--loading">
+            <p>拉取中…</p>
+            <button
+              type="button"
+              className="fetch-models-modal__cancel"
+              disabled={cancelling}
+              // providerModels 的取消键形态是 `models:<providerId>`（ABORT_KEY.providerModels），
+              // id 直接复用弹窗的 providerId；取消请求本身不弹 toast，终态由 load 的 IPC_ABORTED 分支收口。
+              onClick={() => {
+                if (cancelling) {
+                  return;
+                }
+                setCancelling(true);
+                void (async () => {
+                  try {
+                    await ipcRunAbort({ kind: "models", id: providerId });
+                  } catch {
+                    // IPC bridge 不可用时保持 loading，用户可再次点击取消。
+                  } finally {
+                    setCancelling(false);
+                  }
+                })();
+              }}
+            >
+              {settingsTranslator({ key: "settings.long_task.cancel" })}
+            </button>
+          </div>
+        ) : cancelled ? (
+          <div className="fetch-models-modal__status fetch-models-modal__status--cancelled">
+            <p>{settingsTranslator({ key: "settings.long_task.cancelled" })}</p>
+            <button
+              type="button"
+              className="fetch-models-modal__retry"
+              onClick={() => void load()}
+            >
+              重试
+            </button>
+          </div>
         ) : error ? (
           <div className="fetch-models-modal__status fetch-models-modal__status--error">
             <p>{error}</p>

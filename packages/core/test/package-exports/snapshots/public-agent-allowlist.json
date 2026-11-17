@@ -1,5 +1,6 @@
 [
   "AGENT_RUN_RESOLVE_KEYS",
+  "AgentActivityTracker",
   "AgentTurnError",
   "AppError",
   "ChatAgentSession",
@@ -16,6 +17,7 @@
   "createAgentRunner",
   "createAgentStreamRegistry",
   "isAppError",
+  "mapResolveError",
   "promptsDocumentSchema",
   "resolveAgentForProject",
   "resolveAgentToolRegistry",

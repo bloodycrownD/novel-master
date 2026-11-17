@@ -63,7 +63,7 @@ describe("SettingsViews 数据清理 UI（T-UID1）", () => {
   it("执行前置 busy：setBusy(true) 先于 invoke ipcDbMaintenance", () => {
     const body = extractFunction(source, "runMaintenance");
     const busyAt = body.indexOf("setBusy(true)");
-    const invokeAt = body.indexOf("await ipcDbMaintenance()");
+    const invokeAt = body.indexOf("await ipcDbMaintenance({ runId })");
     assert.ok(busyAt >= 0, "runMaintenance 内未找到 setBusy(true)");
     assert.ok(invokeAt > busyAt, "setBusy(true) 必须在 invoke 之前");
   });

@@ -4,9 +4,8 @@
  * @module services/agent-run
  */
 import {
-  AGENT_RUN_RESOLVE_KEYS,
   AgentTurnError,
-  isAppError,
+  mapResolveError,
   resolveApplicationModelIdForRun,
   resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
   resolveCurrentAgentId as resolveCoreAgentId,
@@ -30,31 +29,10 @@ export type AgentRunScope = AgentTurnScope;
 export { AgentTurnError as AgentRunError };
 
 /**
- * resolve 链失败转码（错误通道迁移五期跨片收口）：core 的 resolve 系已改沿
- * `Result.err 返回已知失败（不再 throw），本包装同时接住两条通道——
- * 返回值通道（`{ok:false} 解包 + key 判定转 AgentTurnError）与既有异常
- * 通道（catch 里同款判定），转码结果对 desktop 消费方保持旧的 throw 契约。
+ * resolve 链失败转码（错误通道迁移五期跨片收口）：core 的 resolve 系沿
+ * `Result.err` 回传已知失败（不再 throw），转码统一走 core 的 `mapResolveError`——
+ * resolve key 转 `AgentTurnError`，其余原样抛，对 desktop 消费方保持旧的 throw 契约。
  */
-function mapResolveError<T>(fn: () => Promise<unknown>): Promise<T> {
-  const transcode = (error: unknown): never => {
-    if (isAppError(error) && AGENT_RUN_RESOLVE_KEYS.has(error.key)) {
-      throw new AgentTurnError(error.message);
-    }
-    throw error;
-  };
-  return fn()
-    .then((value) => {
-      // Result 形状按运行时判定（core 侧签名 Result 化后部分 resolver 仍走 throw）
-      if (value != null && typeof value === "object" && "ok" in value && ((value as { ok: unknown }).ok === true || (value as { ok: unknown }).ok === false)) {
-        const result = value as Result<unknown, AppError>;
-        if (!result.ok) return transcode(result.error);
-        return result.value as T;
-      }
-      return value as T;
-    })
-    .catch((error: unknown) => transcode(error));
-}
-
 export async function resolveCurrentAgentId(runtime: DesktopNovelMasterRuntime): Promise<string | undefined> {
   // 错误通道迁移五期：core resolveCurrentAgentId 沿 Result 回传；infra 失败
   // (非 resolve key) 原样上抛，成功解包取值。
