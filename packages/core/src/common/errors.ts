@@ -10,7 +10,7 @@
 import {TdbcError} from "../infra/tdbc/errors.js";
 import {AppError} from "../errors/app-error.js";
 import type {CoreMessageDescriptor} from "../i18n/keys.js";
-import {resolveLocalizedMessage} from "../i18n/localized-message.js";
+import {resolveLocalizedMessage} from "@/i18n/index.js";
 
 export const Errors = {
     /**
