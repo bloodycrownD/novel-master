@@ -214,15 +214,7 @@ function buildScope(opts: CreateAbortScopeOptions): AbortScope {
     if (disposed) {
       return work;
     }
-    return raceWithCancel(
-      work,
-      () => checkpoint() != null,
-      (fn) =>
-        onCancel(() => {
-          fn();
-        }),
-      rejectWith
-    );
+    return raceWithCancel(work, () => checkpoint() != null, (fn) => onCancel(fn), rejectWith);
   };
 
   const fork = (forkOpts?: { timeoutMs?: number }): AbortScope => {

@@ -102,14 +102,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     }
 
     // 段 1（事务外，只读）：定位空窗 + 取 live head 指针快照。
-    const scan = await scanBackfillGap({
-      entryRepo,
-      messageRepo,
-      checkpointRepo,
-      projectId,
-      sessionId,
-      signal: scope?.signal,
-    });
+    const scan = await scanBackfillGap({entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal: scope?.signal});
     if (scan.gapMessageIds.length === 0 && !scan.confirmedNoGap) {
       // 无 live 文件：无法建点也无法验证，不算确认——游标留空让下次继续走全量。
       return;
