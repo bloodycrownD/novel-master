@@ -5,12 +5,12 @@
  */
 
 import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { registerSkspDriver } from "@novel-master/core/sksp";
+import { SkspRegistry } from "@novel-master/core/sksp";
 import { createAndroidSecretStore } from "./android-secret-store.js";
 
 /** Registers `android` SKSP driver (Keystore + SQLite). */
 export function registerSkspAndroidDriver(): void {
-  registerSkspDriver({
+  SkspRegistry.register({
     name: "android",
     createStore: (conn) => createAndroidSecretStore(conn as TdbcConnection),
   });

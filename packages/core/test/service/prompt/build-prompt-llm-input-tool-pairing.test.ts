@@ -3,7 +3,7 @@ import { unwrap } from "../../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
-import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
+import { PromptBuilder } from "@novel-master/core/prompt";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("buildPromptLlmInputFromLayout tool pairing", () => {
@@ -50,7 +50,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
       },
     ];
 
-    const input = unwrap(await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       {
         persistEnabled: true,
         persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],

@@ -31,6 +31,7 @@ import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import { importFailure } from "./import-failure.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("vfs.zip-io");
@@ -64,28 +65,6 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
   if (existing.entryKind !== "directory") {
     throw new AppError("VFS_NOT_A_DIRECTORY", { path: logical, detail: `Not a directory: ${logical}` });
   }
-}
-
-/**
- * 导入失败的错误包装：保留测试钩子直抛原形，其余（含事务内业务 AppError 与
- * 驱动层裸 Error）包成 `VFS_ZIP_IMPORT_FAILED`，并在消息里带上分片进度
- * （已提交 N 片 / 失败在第 K 片）。与 character-card 的 failImport
- * 不同：这里业务错不透传——事务内的 parentCheck 失败历来也落 IMPORT_FAILED
- * （旧 mapper 产物 name="VfsError" 同样被包），口径不变。
- *
- * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
- * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
- */
-function wrapImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
-  if (error instanceof Error && error.message === "test import failure") {
-    return error;
-  }
-  const base = error instanceof Error ? error.message : "import transaction failed";
-  // 进度段拆独立 key（同 character-card wrap 口径）：无进度时维持英文 message 直传
-  if (committedShards != null && failedShard != null) {
-    return new AppError("VFS_ZIP_IMPORT_FAILED", { descriptor: { key: "error.vfs.zip_import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } } });
-  }
-  return new AppError("VFS_ZIP_IMPORT_FAILED", { detail: base });
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<Result<void, AppError>> {
@@ -166,7 +145,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<Result<void, AppError>> {
     // 五期业务抛点收编：confirmed 门闸在首个写之前、零副作用，走返回值通道
     //（本方法自四期起已是 Result 签名，段 B0 之前的路径全部 Result.err）。
-    // 导入事务链（段 B0 起）仍按边界抛出，由 wrapImportError 收口。
+    // 导入事务链（段 B0 起）仍按边界抛出，由 importFailure 收口。
     if (options.confirmed !== true) {
       return Result.err(new AppError("VFS_ZIP_NOT_CONFIRMED", { detail: "import requires explicit confirmation (CLI --yes or mobile confirm dialog)" }));
     }
@@ -200,7 +179,12 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         }
       });
     } catch (error) {
-      throw wrapImportError(error);
+      // 测试钩子直抛原形；其余（含事务内业务 AppError 与驱动层裸 Error）一律包成
+      // VFS_IMPORT_FAILED——zip 侧业务错不透传，parentCheck 失败历来也落本码。
+      if (error instanceof Error && error.message === "test import failure") {
+        throw error;
+      }
+      throw importFailure(error);
     }
 
     // 段 B0 提交后立刻收被替换掉的旧内容：sweep 把旧 blob 的 ref_count 递减到 0
@@ -223,7 +207,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
-              // nm-throw: keep — 测试故障注入点：wrapImportError 按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
+              // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
@@ -245,7 +229,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         } catch (compensateError) {
           log.warn("import compensation failed", { error: compensateError });
         }
-        throw wrapImportError(error, committedShards, shardIndex + 1);
+        if (error instanceof Error && error.message === "test import failure") {
+          throw error;
+        }
+        throw importFailure(error, committedShards, shardIndex + 1);
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
       await yieldToEventLoop();

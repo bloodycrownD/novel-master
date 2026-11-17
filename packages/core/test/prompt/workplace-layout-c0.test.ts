@@ -10,10 +10,7 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return unwrap(decodeRaw(raw, schema));
 }
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import {
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-} from "@novel-master/core/prompt";
+import { PromptBuilder } from "@novel-master/core/prompt";
 import {
   assembleWorkplaceDisplay,
   layoutHasWorkplace,
@@ -55,7 +52,7 @@ describe("Workplace C0 协议", () => {
     assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
 
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
@@ -70,7 +67,7 @@ describe("Workplace C0 协议", () => {
       persist: [{ name: "u", type: "text", role: "user", content: "hidden" }],
       dynamic: [],
     };
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
@@ -123,7 +120,7 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "WT-BODY",
       messages: [],
       now: fixedNow,
@@ -142,7 +139,7 @@ describe("Workplace C0 协议", () => {
       persist: [],
       dynamic: [],
     };
-    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await PromptBuilder.assemble(layout, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
@@ -201,14 +198,14 @@ describe("Workplace C0 协议", () => {
     assert.equal(health.value.prompts.workplace, undefined);
     assert.deepEqual(health.value.prompts.persist, []);
 
-    const input = unwrap(await buildPromptLlmInputFromLayout(health.value.prompts, {
+    const input = unwrap(await PromptBuilder.llmInput(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     }));
     assert.equal(input.messages.length, 0);
 
-    const segments = unwrap(await buildPromptAssemblyFromLayout(health.value.prompts, {
+    const segments = unwrap(await PromptBuilder.assemble(health.value.prompts, {
       workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,

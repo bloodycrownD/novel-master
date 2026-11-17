@@ -4,7 +4,7 @@
  * @module register
  */
 
-import { registerTokenizerDriver } from "@novel-master/core/nmtp";
+import { TokenizerRegistry } from "@novel-master/core/nmtp";
 import { countPromptLlmInput } from "./count-prompt-llm-input.js";
 import { createNodeTokenizerLoader, defaultTokenizerAssetsRoot, setNodeTokenizerLoader } from "./node-tokenizer-loader.js";
 
@@ -18,7 +18,7 @@ export interface RegisterTokenizerNodeDriverOptions {
 export function registerTokenizerNodeDriver(options?: RegisterTokenizerNodeDriverOptions): void {
   const root = options?.assetsRoot ?? defaultTokenizerAssetsRoot();
   setNodeTokenizerLoader(createNodeTokenizerLoader(root));
-  registerTokenizerDriver({
+  TokenizerRegistry.register({
     name: NODE_DRIVER_NAME,
     countPromptLlmInput,
   });

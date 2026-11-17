@@ -7,7 +7,7 @@
  * @module test/helpers/register-node-tokenizer-driver-for-tests
  */
 
-import { clearTokenizerDrivers, registerTokenizerDriver } from "../../src/infra/nmtp/index.js";
+import { TokenizerRegistry } from "../../src/infra/nmtp/index.js";
 import { countPromptLlmInput } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
 import {
   createNodeTokenizerLoader,
@@ -18,10 +18,10 @@ import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js
 
 /** Registers the Node driver for tests; clears any prior drivers first. */
 export function registerNodeTokenizerDriverForTests(assetsRoot?: string): void {
-  clearTokenizerDrivers();
+  TokenizerRegistry.clear();
   const root = assetsRoot ?? defaultTokenizerAssetsRoot();
   setNodeTokenizerLoader(createNodeTokenizerLoader(root));
-  registerTokenizerDriver({
+  TokenizerRegistry.register({
     name: NODE_DRIVER_NAME,
     countPromptLlmInput,
   });

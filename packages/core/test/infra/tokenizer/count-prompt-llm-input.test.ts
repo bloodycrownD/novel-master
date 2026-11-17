@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import {
-  clearTokenizerDrivers,
   countPromptLlmInput,
   createDefaultTokenCounterRegistry,
   TokenizerError,
+  TokenizerRegistry,
 } from "../../../src/infra/tokenizer/index.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
@@ -22,7 +22,7 @@ describe("countPromptLlmInput", () => {
   });
 
   it("throws NOT_REGISTERED when no NMTP driver is registered", async () => {
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
     await assert.rejects(
       () => countPromptLlmInput(minimalParams),
       (e) =>

@@ -11,10 +11,7 @@ import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node
 import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
 import { Result } from "../../../src/errors/either.js";
-import {
-  clearTokenizerDrivers,
-  registerTokenizerDriver,
-} from "../../../src/infra/nmtp/index.js";
+import { TokenizerRegistry } from "../../../src/infra/nmtp/index.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   PROMPT_WHOLE_CACHE_KEY,
@@ -419,8 +416,8 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("本地 miss → 透传模型家族计数器（glm 不再强制估算档，真机复验拍板）", async () => {
     const captured: { override?: unknown; sessionId?: unknown } = {};
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-stats-first",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
@@ -460,8 +457,8 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("本地 miss + 调用方显式 override → 原样透传（heuristic 不被改写）", async () => {
     const captured: { override?: unknown; sessionId?: unknown } = {};
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-stats-first-2",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
@@ -497,8 +494,8 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
 
   it("preferEstimate：不调驱动、CJK 下限生效、api 命中不受影响", async () => {
     const captured: { driverCalled: number } = { driverCalled: 0 };
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-prefer-estimate",
       countPromptLlmInput: async () => {
         captured.driverCalled += 1;
@@ -801,7 +798,7 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
 
   afterEach(() => {
     sessionApiPromptTokenCache.clearAll();
-    clearTokenizerDrivers();
+    TokenizerRegistry.clear();
   });
 
   it("插入点①：preferEstimate 段在序列化之前 bail（整串重活根本没起跑）", async () => {
@@ -841,8 +838,8 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
     // 用计数驱动替代真 node 驱动，把「驱动被调了几次」钉成可断言量——
     // 整串原生计数是 resolve 链最重的一步，弃权必须在它起跑前生效。
     let driverCalled = 0;
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
+    TokenizerRegistry.clear();
+    TokenizerRegistry.register({
       name: "mock-resolve-bail",
       countPromptLlmInput: async () => {
         driverCalled += 1;

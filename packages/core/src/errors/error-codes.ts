@@ -46,7 +46,7 @@ export const ErrorCodes = {
   VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: {code: 103002, desc: "unsupported character card spec", messageKey: "error.vfs.character_card_unsupported_spec"},
   VFS_CHARACTER_CARD_INVALID_PATH: {code: 103003, desc: "invalid character card path"},
   VFS_CHARACTER_CARD_NOT_CONFIRMED: {code: 103004, desc: "character card import not confirmed"},
-  VFS_CHARACTER_CARD_IMPORT_FAILED: {code: 103005, desc: "character card import failed"},
+  // 103 VFS_CHARACTER_CARD 005：导入失败已合入 VFS_IMPORT_FAILED（102030），码位不回收。
   VFS_CHARACTER_CARD_TOO_LARGE: {code: 103006, desc: "character card too large"},
   CHAT_INVALID_ARGUMENT: {code: 106001, desc: "invalid chat argument"},
 
@@ -93,12 +93,15 @@ export const ErrorCodes = {
   VFS_OPERATION_UNSUPPORTED: {code: 102022, desc: "vfs operation unsupported by this service"},
   VFS_ZIP_NOT_CONFIRMED: {code: 102023, desc: "zip import not confirmed", messageKey: "error.vfs.zip_not_confirmed"},
   VFS_ZIP_EXTERNAL_NOT_SUPPORTED: {code: 102024, desc: "external directory ingest unsupported", messageKey: "error.vfs.zip_external_not_supported"},
-  VFS_ZIP_IMPORT_FAILED: {code: 102025, desc: "zip import failed"},
+  // 102 VFS 025：导入失败已合入 VFS_IMPORT_FAILED（102030），码位不回收。
   // 102 VFS 026-029：mobile 单文件导入/导出（三期 VfsSingleFileError 退役预登记）。
   VFS_SINGLE_FILE_TOO_LARGE: {code: 102026, desc: "single-file import payload too large", messageKey: "error.vfs.single_file_too_large"},
   VFS_SINGLE_FILE_READ_FAILED: {code: 102027, desc: "single-file import read failed", messageKey: "error.vfs.single_file_read_failed"},
   VFS_SINGLE_FILE_NOT_FOUND: {code: 102028, desc: "picked file not found on disk", messageKey: "error.vfs.single_file_not_found"},
   VFS_SINGLE_FILE_EXPORT_TARGET_INVALID: {code: 102029, desc: "export target is not a single file", messageKey: "error.vfs.single_file_export_target_invalid"},
+  // 102 VFS 030：zip 与角色卡导入失败的统一出口（原 VFS_ZIP_IMPORT_FAILED 102025 /
+  // VFS_CHARACTER_CARD_IMPORT_FAILED 103005 已合入本码，码位不回收）。
+  VFS_IMPORT_FAILED: {code: 102030, desc: "vfs import failed", messageKey: "error.vfs.import_failed"},
 
   // 104 TOOL 001-999：工具入参（phase 2 logic）、搜索配置/引擎失败与工具取消。
   TOOL_INVALID_ARGUMENT: {code: 104001, desc: "invalid tool argument"},

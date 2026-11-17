@@ -8,7 +8,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
+import { PromptBuilder } from "@novel-master/core/prompt";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
 import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
@@ -620,7 +620,7 @@ describe("userMessageFormatter / promptAssembler (Step 6)", () => {
       persist: [] as const,
       dynamic: [] as const,
     };
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "",
       messages: realPromptPrepared,
     }));

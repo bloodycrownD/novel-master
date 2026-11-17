@@ -7,7 +7,7 @@
 
 import type { TdbcConnection } from "../ports/connection.port.js";
 import { TdbcError } from "../errors.js";
-import { resolveDriver } from "./registry.js";
+import { TdbcRegistry } from "./registry.js";
 import type { OpenOptions } from "../types.js";
 
 const TDBC_SCHEME = "tdbc:";
@@ -58,7 +58,7 @@ export function parseUrl(url: string): ParsedTdbcUrl {
  */
 export async function open(url: string, options?: OpenOptions): Promise<TdbcConnection> {
   const parsed = parseUrl(url);
-  const driver = resolveDriver(options?.driver);
+  const driver = TdbcRegistry.resolve(options?.driver);
   return driver.open({
     ...options,
     url,

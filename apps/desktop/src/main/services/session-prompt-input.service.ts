@@ -4,7 +4,7 @@
 import { type AgentDefinition, type AppError, resolveAgentForProject } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import { promptAssembler } from "@novel-master/core/chat";
-import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
+import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay, type Interrupt } from "@novel-master/core/workplace";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -144,8 +144,8 @@ export async function buildSessionPromptInput(runtime: DesktopNovelMasterRuntime
     workplaceFingerprint: fingerprint,
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块。
-  // 四期签名：buildPromptLlmInputFromLayout 沿 Result 回传，Err 并进本函数通道。
-  const built = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  // 四期签名：PromptBuilder.llmInput 沿 Result 回传，Err 并进本函数通道。
+  const built = await PromptBuilder.llmInput(resolved.prompts, ctx);
   if (!built.ok) return Result.err(built.error);
   return Result.ok({ definition: resolved, layout: resolved.prompts, ctx, input: built.value, rawMessages: visibleMessages });
 }

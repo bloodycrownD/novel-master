@@ -12,7 +12,7 @@ export type { EvaluateTestOptions, SqlParseResult, ParseOptions, SqlTemplateErro
 /**
  * TDBC：异步 SQLite 连接协议（驱动由调用方独立注册）。
  */
-export { TdbcError, open, parseUrl, registerDriver, getDriver, listDrivers, resolveDriver, normalizeBindings, executeTemplate, queryTemplate } from "./infra/tdbc/index.js";
+export { TdbcError, open, parseUrl, TdbcRegistry, normalizeBindings, executeTemplate, queryTemplate } from "./infra/tdbc/index.js";
 export type { TdbcConnection, TdbcDriver, TdbcErrorCode, SqlValue, Row, ExecuteResult, BatchResult, OpenOptions, ParsedTdbcUrl } from "./infra/tdbc/index.js";
 
 /**

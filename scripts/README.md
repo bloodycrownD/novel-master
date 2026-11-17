@@ -60,6 +60,7 @@ node scripts/prettier-guard.mjs -- --check --print-width 200 packages/core/src
 | --- | --- | --- |
 | `check-encoding.mjs` | 根 `check:encoding` + `.githooks/pre-commit` + `ci.yml` | 三类编码问题（控制台/源码/暂存区 blob）分开报 |
 | `check-ci-gates.mjs` | 根 `check:ci-gates` | 解析 `ci.yml`，校验门禁步登记表没漏项/没多登记（只解析 ci.yml，不覆盖 nightly） |
+| `typecheck-workspaces.mjs` | 根 `typecheck` | 按根 `workspaces` 逐包跑 typecheck，跳过已停止维护的 `apps/cli`（`--workspaces` 会把它带进来） |
 | `collect-check.mjs` | `packages/tdbc-driver-*`、`tokenizer-driver-node` 的 scripts | 校验测试「收集数非零」；现状断言在 `lib/zero-collect-guard.mjs` |
 | `link-hooks.mjs` | 根 `prepare` | 装 `.githooks` 到 `.git/hooks` |
 

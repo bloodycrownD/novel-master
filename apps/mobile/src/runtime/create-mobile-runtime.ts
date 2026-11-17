@@ -20,7 +20,7 @@ import {createWorkplaceService} from '@novel-master/core/workplace';
 import {createKkvService} from '@novel-master/core/kkv';
 import {createSessionKkvService} from '@novel-master/core/session-kkv';
 import {createSkillsService} from '@novel-master/core/skills';
-import {createCompositeSecretStore, resolveSkspDriver} from '@novel-master/core/sksp';
+import {createCompositeSecretStore, SkspRegistry} from '@novel-master/core/sksp';
 import {getMobileConnection} from '../db/connection';
 import {Result, AppError} from '@novel-master/core/errors';
 import {mobileSkspDriverName} from './mobile-sksp';
@@ -80,7 +80,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
   const streamRegistry = createAgentStreamRegistry();
 
   const secretStore = createCompositeSecretStore({
-    db: resolveSkspDriver(mobileSkspDriverName()).createStore(conn),
+    db: SkspRegistry.resolve(mobileSkspDriverName()).createStore(conn),
   });
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});

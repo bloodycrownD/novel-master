@@ -20,7 +20,7 @@ import { createWorkplaceService } from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
 import { createSessionKkvService } from "@novel-master/core/session-kkv";
 import { createSkillsService } from "@novel-master/core/skills";
-import { createCompositeSecretStore, createEnvSecretStore, resolveSkspDriver } from "@novel-master/core/sksp";
+import { createCompositeSecretStore, createEnvSecretStore, SkspRegistry } from "@novel-master/core/sksp";
 import { getDesktopConnection } from "./connection.js";
 import { getPlatformSkspName } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
@@ -50,7 +50,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
 
   const skspName = getPlatformSkspName();
   if (!skspName.ok) return Result.err(skspName.error);
-  const dbStore = resolveSkspDriver(skspName.value).createStore(conn);
+  const dbStore = SkspRegistry.resolve(skspName.value).createStore(conn);
   const envStore = process.env.NM_SKSP_DISABLE_ENV === "1" ? undefined : createEnvSecretStore();
   const secretStore = createCompositeSecretStore({
     db: dbStore,

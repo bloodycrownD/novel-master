@@ -9,7 +9,7 @@
  * @internal
  */
 
-import { registerDriver } from "@novel-master/core";
+import { TdbcRegistry } from "@novel-master/core";
 import type { OpSqliteAdapter } from "./adapter.js";
 import { OpSqliteDriver } from "./driver.js";
 
@@ -29,5 +29,5 @@ export function registerOpSqliteDriverWith(
   adapter: OpSqliteAdapter,
   isBackground?: () => boolean,
 ): void {
-  registerDriver(new OpSqliteDriver(adapter, isBackground));
+  TdbcRegistry.register(new OpSqliteDriver(adapter, isBackground));
 }

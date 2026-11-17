@@ -7,6 +7,9 @@ error:
     not_found: File does not exist or has been deleted.
     zip_not_confirmed: Zip import requires explicit confirmation (CLI --yes or the client confirm dialog).
     zip_external_not_supported: External directory ingest is not supported; provide a zip archive.
+    # 父 key 本身是叶子，子段只能用带点引号的同级 key 表达（YAML 同一路径不能既是标量又是映射）。
+    import_failed: "Import failed: {detail}"
+    "import_failed.with_progress": "(committed {committed} shards / failed on shard {failed_shard})"
     single_file_too_large: "File too large: {size_bytes} bytes exceeds the import limit of {max_bytes} bytes (~32MB); import rejected."
     single_file_read_failed: "Unable to read the selected file: {reason}"
     single_file_not_found: "Selected file does not exist: {path}"

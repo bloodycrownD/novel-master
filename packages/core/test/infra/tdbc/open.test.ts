@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import { TdbcError } from "@/infra/tdbc/errors.js";
 import { open, parseUrl } from "@/infra/tdbc/logic/open.js";
-import {
-  clearDrivers,
-  registerDriver,
-} from "@/infra/tdbc/logic/registry.js";
+import { TdbcRegistry } from "@/infra/tdbc/logic/registry.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { TdbcDriver } from "@/infra/tdbc/ports/driver.port.js";
 
@@ -39,7 +36,7 @@ describe("parseUrl", () => {
 });
 
 describe("open", () => {
-  beforeEach(() => clearDrivers());
+  beforeEach(() => TdbcRegistry.clear());
 
   it("throws UNKNOWN_DRIVER when none registered", async () => {
     await assert.rejects(
@@ -63,8 +60,8 @@ describe("open", () => {
         closed.closed = true;
       },
     };
-    registerDriver(mockDriver("better-sqlite3", conn));
-    registerDriver(mockDriver("rn", conn));
+    TdbcRegistry.register(mockDriver("better-sqlite3", conn));
+    TdbcRegistry.register(mockDriver("rn", conn));
 
     const c = await open("tdbc:sqlite:file::memory:", {
       driver: "better-sqlite3",

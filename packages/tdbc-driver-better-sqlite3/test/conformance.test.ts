@@ -1,6 +1,6 @@
 import { describe } from "node:test";
 import { open } from "@novel-master/core";
-import { clearDrivers } from "@novel-master/core/tdbc";
+import { TdbcRegistry } from "@novel-master/core/tdbc";
 import { runConformanceTests } from "@novel-master/tdbc-conformance";
 import {
   registerBetterSqlite3Driver,
@@ -16,7 +16,7 @@ runConformanceTests({
       filename: ":memory:",
     }),
   beforeUnknownDriverTest: () => {
-    clearDrivers();
+    TdbcRegistry.clear();
   },
   afterUnknownDriverTest: () => {
     registerBetterSqlite3Driver();

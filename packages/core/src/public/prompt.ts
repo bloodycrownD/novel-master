@@ -44,32 +44,21 @@ export {
   validateDynamicMacros,
 } from "../domain/prompt/logic/validate-dynamic-macros.js";
 export { expandDynamicMacros } from "../domain/prompt/logic/expand-dynamic-macros.js";
-export {
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-  computeLlmExportZonesFromLayout,
-  formatPromptLlmInputForCliFromLayout,
-  buildPromptPreviewSegmentsFromLayout,
-} from "../service/prompt/render-prompt.js";
+export { PromptBuilder } from "../service/prompt/render-prompt.js";
 export type {
   PromptAssemblySegment,
   PromptAssemblyOptions,
   PromptPreviewSegment,
-} from "../service/prompt/render-prompt.js";
-export { buildPromptPreviewTurnsFromLayout } from "../service/prompt/prompt-preview-turns.js";
-export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
-export type {
-  PromptWorkplaceCardData,
-  PromptWorkplaceFileCardData,
-} from "../service/prompt/prompt-preview-turns.js";
-export type {
   PromptPreviewTurn,
-  PromptTurnCardData,
   PromptTextCardData,
   PromptToolGroupCardData,
   PromptToolGroupResultData,
   PromptToolGroupStatus,
-} from "../service/prompt/prompt-preview-turns.js";
+  PromptTurnCardData,
+  PromptWorkplaceCardData,
+  PromptWorkplaceFileCardData,
+} from "../service/prompt/render-prompt.js";
+export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
 export type {
   PromptRenderContext,
   PromptSkillIndexEntry,

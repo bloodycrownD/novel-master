@@ -9,8 +9,8 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
-  resolveSkspDriver,
   SkspError,
+  SkspRegistry,
 } from "@novel-master/core/sksp";
 import { setLinuxKeychainTestPassthrough } from "../src/keychain.js";
 import { createLinuxSecretStore } from "../src/sqlite-secret-store.js";
@@ -82,7 +82,7 @@ describe("LinuxSqliteSecretStore", () => {
 
   it("registers and resolves linux driver", () => {
     registerSkspLinuxDriver();
-    const driver = resolveSkspDriver("linux");
+    const driver = SkspRegistry.resolve("linux");
     assert.equal(driver.name, "linux");
     assert.equal(typeof driver.createStore, "function");
   });

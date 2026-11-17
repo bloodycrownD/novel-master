@@ -65,7 +65,7 @@ export interface ErrorParamsMap {
   VFS_PARENT_NOT_FOUND: { readonly path: string };
   VFS_INVALID_PATTERN: { readonly pattern: string };
   VFS_CHARACTER_CARD_UNSUPPORTED_SPEC: { readonly spec?: string };
-  VFS_CHARACTER_CARD_IMPORT_FAILED: { readonly base?: string };
+  VFS_IMPORT_FAILED: { readonly base?: string };
   VFS_CONTENT_CORRUPT: {
     readonly format?: string;
     readonly memberCount?: number;

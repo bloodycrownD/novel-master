@@ -4,7 +4,7 @@
  * @module tdbc-driver-better-sqlite3
  */
 
-import { registerDriver } from "@novel-master/core";
+import { TdbcRegistry } from "@novel-master/core";
 import { BetterSqlite3Driver } from "./driver.js";
 
 export { BetterSqlite3Connection } from "./connection.js";
@@ -18,5 +18,5 @@ export { AsyncMutex } from "./mutex.js";
  * Registers the better-sqlite3 driver as `better-sqlite3`.
  */
 export function registerBetterSqlite3Driver(): void {
-  registerDriver(new BetterSqlite3Driver());
+  TdbcRegistry.register(new BetterSqlite3Driver());
 }

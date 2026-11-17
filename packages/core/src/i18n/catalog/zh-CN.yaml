@@ -231,10 +231,9 @@ error:
       total_content: 角色卡过大：全部文件内容合计 {total_bytes} 字节，超过总量上限 {limit_bytes} 字节，已拒绝导入
       file_count: 角色卡过大：共 {count} 个文件，超过条目数上限 {limit}，已拒绝导入
       input: 角色卡文件过大：{size_bytes} 字节，超过输入上限 {limit_bytes} 字节（约 48MB），已拒绝导入
-    character_card_import_failed:
-      with_progress: （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
-    zip_import_failed:
-      with_progress: （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
+    # 父 key 本身是叶子，子段只能用带点引号的同级 key 表达（YAML 同一路径不能既是标量又是映射）。
+    import_failed: 导入失败：{detail}
+    "import_failed.with_progress": （已提交 {committed} 片 / 失败在第 {failed_shard} 片）
     batch_ingest_partial: "{reason}（已提交 {committed} 片，失败在第 {failed_shard} 片）"
     single_file_too_large: "文件过大：{size_bytes} 字节，超过导入上限 {max_bytes} 字节（约 32MB），已拒绝导入"
     single_file_read_failed: 无法读取所选文件：{reason}

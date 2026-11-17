@@ -4,7 +4,7 @@
 import {type AgentDefinition, resolveAgentForProject} from '@novel-master/core/agent';
 
 import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
-import {buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
+import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
 import type {Interrupt} from '@novel-master/core/workplace';
 import {Result, AppError} from '@novel-master/core/errors';
@@ -158,7 +158,7 @@ export async function buildSessionPromptInput(runtime: MobileRuntime, scope: Ses
     workplaceFiles,
     workplaceFingerprint: fingerprint,
   };
-  const inputResult = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  const inputResult = await PromptBuilder.llmInput(resolved.prompts, ctx);
   if (!inputResult.ok) return Result.err(inputResult.error);
   if (__DEV__) {
     console.log(`[nm-chip-build] layout +${Date.now() - diagT0}ms`);

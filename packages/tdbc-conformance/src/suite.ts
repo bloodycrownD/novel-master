@@ -12,7 +12,7 @@ import {
   open,
   type TdbcConnection,
 } from "@novel-master/core";
-import { clearDrivers } from "@novel-master/core/tdbc";
+import { TdbcRegistry } from "@novel-master/core/tdbc";
 
 export type ConformanceFactory = () => Promise<TdbcConnection>;
 
@@ -324,7 +324,7 @@ export function runConformanceTests(options: ConformanceOptions): void {
 
     describe("C11 unknown driver", () => {
       it("open without registered driver throws UNKNOWN_DRIVER", async () => {
-        clearDrivers();
+        TdbcRegistry.clear();
         beforeUnknownDriverTest?.();
         try {
           await assert.rejects(

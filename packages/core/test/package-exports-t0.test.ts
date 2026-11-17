@@ -17,7 +17,7 @@ import type {
   SessionAgentConfigPatch,
 } from "@novel-master/core/chat";
 import { createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { buildPromptAssemblyFromLayout } from "@novel-master/core/prompt";
+import { PromptBuilder } from "@novel-master/core/prompt";
 import { createProviderServices } from "@novel-master/core/provider";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import { createScopedVfsService } from "@novel-master/core/vfs";
@@ -58,7 +58,7 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.createAgentRegistryService, undefined);
     assert.equal(mainEntry.createMessageService, undefined);
     assert.equal(mainEntry.createCompactionConditionsStore, undefined);
-    assert.equal(mainEntry.buildPromptAssemblyFromLayout, undefined);
+    assert.equal(mainEntry.PromptBuilder, undefined);
     assert.equal(mainEntry.createProviderServices, undefined);
     assert.equal(mainEntry.createSessionFsService, undefined);
     assert.equal(mainEntry.createScopedVfsService, undefined);
@@ -78,7 +78,8 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createAgentRegistryService, "function");
     assert.equal(typeof createMessageService, "function");
     assert.equal(typeof createCompactionConditionsStore, "function");
-    assert.equal(typeof buildPromptAssemblyFromLayout, "function");
+    assert.equal(typeof PromptBuilder, "object");
+    assert.equal(typeof PromptBuilder.assemble, "function");
     assert.equal(typeof createProviderServices, "function");
     assert.equal(typeof createSessionFsService, "function");
     assert.equal(typeof createScopedVfsService, "function");

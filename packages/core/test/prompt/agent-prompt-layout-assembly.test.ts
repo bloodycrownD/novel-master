@@ -5,8 +5,7 @@ import { Result } from "../../src/errors/either.js";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
-  buildPromptLlmInputFromLayout,
-  formatPromptLlmInputForCliFromLayout,
+  PromptBuilder,
   messageBodyTextFromBlocks,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
@@ -58,7 +57,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
 
   it("顺序：system 字段 + worktree 对 + persist 文本 + chat + dynamic", async () => {
     const workplace = mockWorktree("/\n└── readme.md 全部加载");
-    const input = unwrap(await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       layout,
       {
         workplaceDisplay: "WT-BODY",
@@ -79,7 +78,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   });
 
   it("dynamic 块在 step≥1 跳过（once 语义）", async () => {
-    const input = unwrap(await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       layout,
       { workplaceDisplay: "WT", messages: [], workplace: mockWorktree("/") },
       { agentStepIndex: 1 }
@@ -99,7 +98,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     const vfs = {
       list,
     } as unknown as import("@novel-master/core/vfs").VfsService;
-    const input = unwrap(await buildPromptLlmInputFromLayout(
+    const input = unwrap(await PromptBuilder.llmInput(
       {
         dynamicEnabled: true,
         persist: [],
@@ -117,7 +116,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
 
 describe("formatPromptLlmInputForCliFromLayout", () => {
   it("system 段在首行", async () => {
-    const out = unwrap(await formatPromptLlmInputForCliFromLayout(
+    const out = unwrap(await PromptBuilder.cliText(
       { system: "ctx", persist: [], dynamic: [] },
       { workplaceDisplay: "", messages: [] }
     ));

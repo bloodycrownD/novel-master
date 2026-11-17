@@ -5,12 +5,12 @@
  */
 
 import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { registerSkspDriver } from "@novel-master/core/sksp";
+import { SkspRegistry } from "@novel-master/core/sksp";
 import { createLinuxSecretStore } from "./sqlite-secret-store.js";
 
 /** Registers `linux` SKSP driver (Secret Service + AES-GCM + SQLite). */
 export function registerSkspLinuxDriver(): void {
-  registerSkspDriver({
+  SkspRegistry.register({
     name: "linux",
     createStore: (conn) => createLinuxSecretStore(conn as TdbcConnection),
   });

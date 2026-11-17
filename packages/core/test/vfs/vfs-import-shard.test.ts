@@ -203,8 +203,8 @@ describe("CS-05 导入分片提交（vfs-zip-io）", () => {
           { confirmed: true }
         ),
       (e: unknown) =>
-        isAppError(e, "VFS_ZIP_IMPORT_FAILED") &&
-        (e as {messageKey?: string}).messageKey === "error.vfs.zip_import_failed.with_progress" &&
+        isAppError(e, "VFS_IMPORT_FAILED") &&
+        (e as {messageKey?: string}).messageKey === "error.vfs.import_failed.with_progress" &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.committed === 1 &&
         (e as {messageParams?: {committed?: number; failed_shard?: number}}).messageParams?.failed_shard === 2
     );

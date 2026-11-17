@@ -3,7 +3,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
-import { formatPromptLlmInputForCliFromLayout, type AgentPromptLayout } from "@novel-master/core/prompt";
+import { PromptBuilder, type AgentPromptLayout } from "@novel-master/core/prompt";
 
 import { serializePromptLlmInput } from "@novel-master/core/provider";
 
@@ -35,7 +35,7 @@ describe("prompt assembly parity", () => {
       messages: [message("user", "hi", 1)],
     };
     const serialized = unwrap(await serializePromptLlmInput(layout, ctx));
-    const formatted = unwrap(await formatPromptLlmInputForCliFromLayout(layout, ctx));
+    const formatted = unwrap(await PromptBuilder.cliText(layout, ctx));
     assert.equal(serialized, formatted);
   });
 

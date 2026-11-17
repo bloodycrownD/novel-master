@@ -4,8 +4,8 @@
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 import {resolveAgentForProject, resolveAgentToolRegistry, type AgentDefinition} from '@novel-master/core/agent';
 import {
+  PromptBuilder,
   applyThinkingContextForLlm,
-  buildPromptPreviewTurnsFromLayout,
   resolvePreviewThinkingContext,
   type PromptPreviewTurn,
   type PromptRenderContext,
@@ -88,7 +88,7 @@ export async function buildRealPromptPreviewTurns(runtime: MobileNovelMasterRunt
     requestThinkingEnabled,
   });
   const previewCtx: PromptRenderContext = skillsIndex != null ? {...ctx, skillsIndex, messages: filteredMessages} : {...ctx, messages: filteredMessages};
-  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {includeThinkingBlocks: enabled});
+  const turns = await PromptBuilder.previewTurns(layout, previewCtx, {includeThinkingBlocks: enabled});
   if (!turns.ok) return Result.err(turns.error);
   return Result.ok(turns.value);
 }

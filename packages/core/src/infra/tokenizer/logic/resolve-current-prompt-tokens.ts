@@ -39,7 +39,7 @@ import {
   rememberChatTokenEstimateMemo,
   rememberWorkplaceEstimateByFingerprint,
 } from "./chat-token-estimate-memo.js";
-import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
+import { TokenizerRegistry } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { buildCounterScope, chunkHash16, tokenChunkCache } from "./token-chunk-cache.js";
@@ -166,7 +166,7 @@ async function lookupWholeCacheEntry(sessionId: string, params: CountPromptLlmIn
   try {
     let driverName: string;
     try {
-      driverName = resolveTokenizerDriver().name;
+      driverName = TokenizerRegistry.resolve().name;
     } catch {
       return null;
     }

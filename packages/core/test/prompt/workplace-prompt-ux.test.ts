@@ -15,7 +15,7 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
 }
 import { isAppError } from "@novel-master/core/agent";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@novel-master/core/workplace";
 import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
@@ -125,7 +125,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       dynamic: [],
     };
     const wrapped = `<workplace>\n${inner}\n</workplace>`;
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: wrapped,
       messages: [],
       now: fixedNow,
@@ -160,7 +160,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       persist: [],
       dynamic: [],
     };
-    const input = unwrap(await buildPromptLlmInputFromLayout(layout, {
+    const input = unwrap(await PromptBuilder.llmInput(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",
       messages: [],
       now: fixedNow,
@@ -169,7 +169,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
     assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), custom);
     assert.notEqual(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
-    const segments = unwrap(await buildPromptAssemblyFromLayout(layout, {
+    const segments = unwrap(await PromptBuilder.assemble(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",
       messages: [],
       now: fixedNow,

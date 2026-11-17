@@ -9,8 +9,8 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
-  resolveSkspDriver,
   SkspError,
+  SkspRegistry,
 } from "@novel-master/core/sksp";
 import { setMacKeychainTestPassthrough } from "../src/keychain.js";
 import { createMacSecretStore } from "../src/sqlite-secret-store.js";
@@ -82,7 +82,7 @@ describe("MacSqliteSecretStore", () => {
 
   it("registers and resolves macos driver", () => {
     registerSkspMacDriver();
-    const driver = resolveSkspDriver("macos");
+    const driver = SkspRegistry.resolve("macos");
     assert.equal(driver.name, "macos");
     assert.equal(typeof driver.createStore, "function");
   });

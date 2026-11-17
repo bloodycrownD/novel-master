@@ -6,8 +6,8 @@
  * assistant 轮正文已在 `body` 一份字符串里。
  */
 import {
+  PromptBuilder,
   applyThinkingContextForLlm,
-  buildPromptPreviewTurnsFromLayout,
   resolvePreviewThinkingContext,
   type PromptPreviewTurn,
   type PromptRenderContext,
@@ -79,7 +79,7 @@ export async function buildRealPromptPreviewTurns(runtime: DesktopNovelMasterRun
   });
   const previewCtx: PromptRenderContext = skillsIndex != null ? { ...ctx, skillsIndex, messages: filteredMessages } : { ...ctx, messages: filteredMessages };
   const turnOptions = { includeThinkingBlocks: thinking.enabled };
-  const turns = await buildPromptPreviewTurnsFromLayout(layout, previewCtx, turnOptions);
+  const turns = await PromptBuilder.previewTurns(layout, previewCtx, turnOptions);
   if (!turns.ok) return Result.err(turns.error);
   return Result.ok(turns.value);
 }

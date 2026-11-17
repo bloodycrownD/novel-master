@@ -10,7 +10,7 @@ import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-co
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
+import { TokenizerRegistry } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
@@ -62,7 +62,7 @@ export interface PromptTokenCountResult {
  */
 // nm-style: keep-local — 单行转手但负责解析驱动注册表单例（隔离不稳定依赖），调用点不应各自查 registry。
 export async function countPromptLlmInput(params: CountPromptLlmInputParams): Promise<Result<PromptTokenCountResult, AppError>> {
-  return resolveTokenizerDriver().countPromptLlmInput(params);
+  return TokenizerRegistry.resolve().countPromptLlmInput(params);
 }
 
 export async function resolveVendorModelIdFromSaved(savedModelId: string, savedModels?: Pick<SavedModelRepository, "findById">): Promise<string> {

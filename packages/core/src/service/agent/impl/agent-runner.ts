@@ -23,7 +23,7 @@ import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.j
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
 import { invalidateSessionApiPromptTokenEntry, writeSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { ModelRequestOptions, ModelRequestService } from "../../provider/model-request.port.js";
-import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
+import { PromptBuilder } from "../../prompt/render-prompt.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
@@ -424,7 +424,7 @@ export class DefaultAgentRunner implements AgentRunner {
           // （记忆键 / 增量分解的按指纹缓存）消费，渲染侧忽略——零行为影响。
           workplaceFingerprint: fingerprint,
         };
-        const promptInputBuilt = await buildPromptLlmInputFromLayout(options.definition.prompts, promptRenderCtx, { agentStepIndex: step });
+        const promptInputBuilt = await PromptBuilder.llmInput(options.definition.prompts, promptRenderCtx, { agentStepIndex: step });
         if (!promptInputBuilt.ok) raiseRunError(promptInputBuilt.error);
         const promptInput = promptInputBuilt.value;
 
@@ -466,7 +466,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const llmInput = promptInput;
-        const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
+        const zones = PromptBuilder.zones(options.definition.prompts, {
           agentStepIndex: step,
           workplaceDisplay,
           skillsIndex,

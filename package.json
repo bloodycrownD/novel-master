@@ -24,7 +24,7 @@
     "check:encoding": "node scripts/check-encoding.mjs",
     "check:ci-gates": "node scripts/check-ci-gates.mjs",
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "node scripts/typecheck-workspaces.mjs",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format:check": "npm run format:check --workspaces --if-present",

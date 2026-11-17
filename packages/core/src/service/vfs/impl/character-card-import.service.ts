@@ -37,6 +37,7 @@ import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import { importFailure } from "./import-failure.js";
 import { createLogger } from "@/infra/log/logger.js";
 
 const log = createLogger("vfs.character-card-import");
@@ -53,34 +54,6 @@ export type CharacterCardImportTestHook = {
    */
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
-
-/**
- * import 的失败出口归一：测试钩子裸 Error（非域注入）维持直抛——测试按
- * `instanceof Error` 断言回滚，不能伪装成业务失败；AppError 原形与包装后的
- * `VFS_CHARACTER_CARD_IMPORT_FAILED` 进 `Result.err`（业务失败走返回值通道）。
- *
- * 包装在消息里带上分片进度（`committedShards` / `failedShard` 都给时拆独立 key）。
- * 分片后**已提交片不再回滚** ⇒ 本条唯一的真实行为损失：旧内容在段 B0 就已
- * 删除，补偿只把半棵新树清掉、不恢复旧内容。
- */
-function failImport(error: unknown, committedShards?: number, failedShard?: number): Result<void, AppError> {
-  if (error instanceof Error && error.message === "test import failure") {
-    throw error;
-  }
-  if (isAppError(error)) {
-    return Result.err(error);
-  }
-  const base = error instanceof Error ? error.message : "import transaction failed";
-  // 进度段拆独立 key（spec keyRule 可选片段）：有进度时 descriptor 随 messageKey 流动
-  if (committedShards != null && failedShard != null) {
-    const failed = new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", {
-      descriptor: { key: "error.vfs.character_card_import_failed.with_progress", params: { committed: committedShards, failed_shard: failedShard } },
-      base,
-    });
-    return Result.err(failed);
-  }
-  return Result.err(new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", { detail: base }));
-}
 
 type DefaultCharacterCardImportServiceOptions = {
   /** @internal import rollback tests only */
@@ -114,11 +87,11 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     }
 
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
-    if (!directoryPathResult.ok) return failImport(directoryPathResult.error);
+    if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
     const directoryPath = directoryPathResult.value;
     const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
-    // wrap 对 AppError 直通：repo 查询失败原样进 Err。
-    if (!directoryRow.ok) return failImport(directoryRow.error);
+    // 业务 AppError 原形透传（不影响既有语义）。
+    if (!directoryRow.ok) return Result.err(directoryRow.error);
     if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
       return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `character card target path is a file, not a directory: ${directoryPath}` }));
     }
@@ -205,7 +178,13 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         }
       });
     } catch (error) {
-      return failImport(error);
+      // 测试钩子裸 Error（非域注入）维持直抛——测试按 instanceof Error 断言回滚；
+      // AppError 原形进 Result.err（业务失败走返回值通道），其余包成 VFS_IMPORT_FAILED。
+      if (error instanceof Error && error.message === "test import failure") {
+        throw error;
+      }
+      if (isAppError(error)) return Result.err(error);
+      return Result.err(importFailure(error));
     }
 
     // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
@@ -226,7 +205,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
           for (const [logical, content] of shard) {
             if (this.testHook?.throwOnInsertLogical === logical) {
               // 测试钩子：故意抛裸 Error 模拟事务内失败，测试按 instanceof Error 断言回滚；这是注入点而非业务错误，不纳入 AppError 口径。
-              // nm-throw: keep — 测试故障注入点：failImport 按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
+              // nm-throw: keep — 测试故障注入点：调用方按 "test import failure" 原文案直供抛回（用例断言该 message），非业务错误。
               throw new Error("test import failure");
             }
             // 解包走 unwrapOrRollback（事务回调，总纲 §五例外 2）：失败靠抛错回滚。
@@ -247,7 +226,12 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         } catch (compensateError) {
           log.warn("import compensation failed", { error: compensateError });
         }
-        return failImport(error, committedShards, shardIndex + 1);
+        // 钩子直抛优先于包装与透传（用例断言原始 Error 原形）。
+        if (error instanceof Error && error.message === "test import failure") {
+          throw error;
+        }
+        if (isAppError(error)) return Result.err(error);
+        return Result.err(importFailure(error, committedShards, shardIndex + 1));
       }
       // 让步只落在片与片之间，绝不落在事务回调内部。
       await yieldToEventLoop();
