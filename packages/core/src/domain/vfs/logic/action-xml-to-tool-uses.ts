@@ -6,15 +6,12 @@
  * @module domain/vfs/logic/action-xml-to-tool-uses
  */
 
+import { Coerce } from "@/common/coerce.js";
 import { parseUserVfsActionsFromText } from "./user-vfs-action-xml.js";
 
 export interface DerivedToolUseInput {
   readonly name: string;
   readonly input: Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 /** 解析 action XML 字符串，按序返回推导的 tool 名与 input（不含 id）。 */
@@ -24,20 +21,20 @@ export function actionXmlToToolUses(actionXml: string): DerivedToolUseInput[] {
     const params = action.params;
     switch (action.name) {
       case "write":
-        results.push({ name: "write", input: { path: asString(params.path), content: asString(params.content) } });
+        results.push({ name: "write", input: { path: Coerce.string(params.path), content: Coerce.string(params.content) } });
         break;
       case "edit":
-        results.push({ name: "edit", input: { path: asString(params.path), oldString: asString(params.oldString), newString: asString(params.newString) } });
+        results.push({ name: "edit", input: { path: Coerce.string(params.path), oldString: Coerce.string(params.oldString), newString: Coerce.string(params.newString) } });
         break;
       case "mkdir":
-        results.push({ name: "fs", input: { action: "mkdir", path: asString(params.path) } });
+        results.push({ name: "fs", input: { action: "mkdir", path: Coerce.string(params.path) } });
         break;
       case "delete":
-        results.push({ name: "fs", input: { action: "rm", path: asString(params.path), recursive: params.recursive === true || params.recursive === "true" } });
+        results.push({ name: "fs", input: { action: "rm", path: Coerce.string(params.path), recursive: params.recursive === true || params.recursive === "true" } });
         break;
       case "rename":
       case "move":
-        results.push({ name: "fs", input: { action: "mv", from: asString(params.from), to: asString(params.to) } });
+        results.push({ name: "fs", input: { action: "mv", from: Coerce.string(params.from), to: Coerce.string(params.to) } });
         break;
     }
   }
