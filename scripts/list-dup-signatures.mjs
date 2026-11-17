@@ -22,12 +22,16 @@
  *
  * 与 prettier 的关系：不要对全仓跑 prettier，见 scripts/prettier-guard.mjs。
  *
- * 收集范围：
- *   - 顶层非 export 的 function 声明
- *   - 顶层非 export 的 const/let 箭头函数与函数表达式
+ * 收集范围（**export 与非 export 一视同仁**）：
+ *   - 所有顶层 function 声明（标注 `export` 与否）
+ *   - 所有顶层 const/let 箭头函数与函数表达式
  *   - class 内所有方法（带 `ClassName.method`）
- *   - class 内非 export 的箭头函数属性
- * 不含：getter/setter、constructor、interface/type 签名、导出的顶层函数。
+ *   - class 内所有箭头函数属性
+ * 不含：getter/setter、constructor、interface/type 签名。
+ *
+ * 为什么必须含 export：跨域重复的典型形态是「一处 export、另一处私有」
+ * （如 `scope-prefix-helpers.ts` 的 export `normalizePrefix` 与
+ * `vfs-tree-copy.ts` 的私有同名函数）。只扫非 export 会漏掉这种配对。
  */
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -57,7 +61,9 @@ function listFiles() {
     .split("\n")
     .map((f) => f.trim())
     .filter((f) => (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.endsWith(".d.ts"))
-    .filter((f) => (scanAll ? f.includes("/src/") : f.includes("/src/") || f.includes("/test/")));
+    .filter((f) => (scanAll ? f.includes("/src/") : f.includes("/src/") || f.includes("/test/")))
+    // apps/cli 已停止维护（见 memory #276）：不纳入任何代码质量判据
+    .filter((f) => !f.startsWith("apps/cli/"));
 }
 
 const hasMod = (node, kind) => (node.modifiers ?? []).some((m) => m.kind === kind);
@@ -82,12 +88,13 @@ function signatureOf(name, params, ret) {
 }
 
 const records = [];
-function push(file, sf, node, kind, name, params, ret, line) {
+function push(file, sf, node, kind, name, params, ret, line, exported) {
   records.push({
     file,
     line,
     kind,
     name,
+    exported,
     signature: signatureOf(name, params, ret),
     // 分组键：忽略名字与返回类型，只看「参数形态」——重复实现最常表现为此相同
     shapeKey: `(${params.join(", ").replace(/[A-Za-z_$][\w$]*:/g, ":")})`,
@@ -95,16 +102,17 @@ function push(file, sf, node, kind, name, params, ret, line) {
 }
 
 function walk(node, sf, file) {
-  if (ts.isFunctionDeclaration(node) && node.name && !isExported(node)) {
+  if (ts.isFunctionDeclaration(node) && node.name) {
     const params = node.parameters.map((p) => paramText(p, sf));
-    push(file, sf, node, "function", node.name.getText(sf), params, retText(node, sf), sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1);
+    push(file, sf, node, "function", node.name.getText(sf), params, retText(node, sf), sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1, isExported(node));
   }
-  if (ts.isVariableStatement(node) && !isExported(node)) {
+  if (ts.isVariableStatement(node)) {
+    const stmtExported = isExported(node);
     for (const d of node.declarationList.declarations) {
       const init = d.initializer;
       if (!init || (!ts.isArrowFunction(init) && !ts.isFunctionExpression(init))) continue;
       const params = init.parameters.map((p) => paramText(p, sf));
-      push(file, sf, d, "const-fn", d.name.getText(sf), params, retText(init, sf), sf.getLineAndCharacterOfPosition(d.getStart(sf)).line + 1);
+      push(file, sf, d, "const-fn", d.name.getText(sf), params, retText(init, sf), sf.getLineAndCharacterOfPosition(d.getStart(sf)).line + 1, stmtExported);
     }
   }
   if (ts.isClassDeclaration(node) && node.name) {
@@ -113,12 +121,12 @@ function walk(node, sf, file) {
       if (ts.isMethodDeclaration(m) && m.name) {
         const kind = hasMod(m, ts.SyntaxKind.PrivateKeyword) ? "method-private" : "method";
         const params = m.parameters.map((p) => paramText(p, sf));
-        push(file, sf, m, kind, `${cls}.${m.name.getText(sf)}`, params, retText(m, sf), sf.getLineAndCharacterOfPosition(m.getStart(sf)).line + 1);
+        push(file, sf, m, kind, `${cls}.${m.name.getText(sf)}`, params, retText(m, sf), sf.getLineAndCharacterOfPosition(m.getStart(sf)).line + 1, isExported(node));
       }
       if (ts.isPropertyDeclaration(m) && m.name && m.initializer && (ts.isArrowFunction(m.initializer) || ts.isFunctionExpression(m.initializer))) {
         const kind = hasMod(m, ts.SyntaxKind.PrivateKeyword) ? "prop-fn-private" : "prop-fn";
         const params = m.initializer.parameters.map((p) => paramText(p, sf));
-        push(file, sf, m, kind, `${cls}.${m.name.getText(sf)}`, params, retText(m.initializer, sf), sf.getLineAndCharacterOfPosition(m.getStart(sf)).line + 1);
+        push(file, sf, m, kind, `${cls}.${m.name.getText(sf)}`, params, retText(m.initializer, sf), sf.getLineAndCharacterOfPosition(m.getStart(sf)).line + 1, isExported(node));
       }
     }
   }
@@ -220,9 +228,9 @@ if (asJson) {
   const out = {
     scannedFiles: files.length,
     totalSymbols: records.length,
-    dupByName: [...byName.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ name: k, count: v.length, sites: v.map((r) => `${r.file}:${r.line}`) })),
-    dupByShape: [...byShape.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ shape: k, count: v.length, sites: v.map((r) => `${r.name} @ ${r.file}:${r.line}`) })),
-    dupBySignature: [...bySig.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ signature: k, count: v.length, sites: v.map((r) => `${r.file}:${r.line}`) })),
+    dupByName: [...byName.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ name: k, count: v.length, sites: v.map((r) => `${r.file}:${r.line}`), exported: v.map((r) => r.exported === true) })),
+    dupByShape: [...byShape.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ shape: k, count: v.length, sites: v.map((r) => `${r.name} @ ${r.file}:${r.line}`), exported: v.map((r) => r.exported === true) })),
+    dupBySignature: [...bySig.entries()].filter(([, v]) => v.length > 1).map(([k, v]) => ({ signature: k, count: v.length, sites: v.map((r) => `${r.file}:${r.line}`), exported: v.map((r) => r.exported === true) })),
   };
   console.log(JSON.stringify(out, null, 2));
   process.exit(0);
@@ -236,7 +244,7 @@ function section(title, note, groups) {
   }
   for (const [key, list] of groups.sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))) {
     console.log(`\n${list.length}×  ${key}`);
-    for (const r of list) console.log(`     ${r.file}:${r.line}   [${r.kind}] ${r.name}`);
+    for (const r of list) console.log(`     ${r.exported ? "[export]" : "[local] "} ${r.file}:${r.line}   [${r.kind}] ${r.name}`);
   }
 }
 

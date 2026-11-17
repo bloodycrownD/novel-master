@@ -168,6 +168,24 @@ for (const target of fakeTargets) {
 }
 
 const failed = !signatures || !inline || !methods || fakeFailed;
+// —— dup-signatures：所有函数（含 export）的签名重复增量门禁 ——
+console.log(String.fromCharCode(10) + "== dup-signatures（所有函数，含 export）==");
+try {
+  const {execFileSync} = await import("node:child_process");
+  const {resolve, join} = await import("node:path");
+  // 被扫的仓库可能是 worktree，而 dup 脚本在主仓。用 git 的 common-dir 定位主仓根，
+  // 不靠固定层数上溯（worktree 的 .agents 层级与主仓相同，上溯会落到 worktree 根）。
+  const commonDir = execFileSync("git", ["rev-parse", "--git-common-dir"], {encoding: "utf8", cwd: process.cwd()}).trim();
+  const mainRoot = resolve(process.cwd(), commonDir, "..");
+  const dupScript = join(mainRoot, "scripts", "list-dup-signatures.mjs");
+  const out = execFileSync(process.execPath, [dupScript, process.cwd(), "--all", "--gate"], {encoding: "utf8", cwd: mainRoot});
+  console.log(out.split(String.fromCharCode(10)).filter((l) => l.startsWith("dup-signatures:")).join(String.fromCharCode(10)));
+} catch (err) {
+  const out = String(err.stdout ?? "");
+  const keep = out.split(String.fromCharCode(10)).filter((l) => l.startsWith("dup-signatures:") || l.trim().startsWith("[新增"));
+  console.log(keep.length ? keep.slice(0, 60).join(String.fromCharCode(10)) : "dup-signatures: （未能执行，检查 scripts/list-dup-signatures.mjs 是否存在）");
+}
+
 console.log("\n== check-oop ==");
 const oop = run("check-oop.mjs", [...(flags.changed ? ["--changed"] : []), ...flags.paths, ...(flags.strict ? ["--strict"] : [])]);
 const oopFailed = flags.strict && oop !== 0;
