@@ -82,8 +82,22 @@ for (const f of files) {
       const ex = isExported(node) ? "export " : "";
       for (const d of node.declarationList.declarations) {
         const init = d.initializer;
-        if (!init || (!ts.isArrowFunction(init) && !ts.isFunctionExpression(init))) continue;
-        rows.push([f, at(d), ex + "const " + d.name.getText(sf) + " = (" + init.parameters.map((p) => paramText(p, sf)).join(", ") + ")" + retText(init, sf)]);
+        if (!init) continue;
+        if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
+          rows.push([f, at(d), ex + "const " + d.name.getText(sf) + " = (" + init.parameters.map((p) => paramText(p, sf)).join(", ") + ")" + retText(init, sf)]);
+          continue;
+        }
+        // 引用别名：`export const X = Y.member`（不是函数定义，四个 check 脚本都抓不到）。
+        // 换名别名（X !== member）是「假抽象层」：不增代码量、有消费者、名字平行。
+        // 只认**模块顶层 + export** 的：函数体内的 `const rt = built.value` 是局部变量，不是别名。
+        if (ts.isPropertyAccessExpression(init) && ex === "export " && node.parent != null && ts.isSourceFile(node.parent)) {
+          const src = oneLine(init.getText(sf));
+          const target = init.name.getText(sf);
+          const alias = d.name.getText(sf);
+          const tag = alias === target ? "[alias 同名转发]" : "[alias 换名 → " + src + "]";
+          rows.push([f, at(d), ex + "const " + alias + " = " + src + "   " + tag]);
+          continue;
+        }
       }
     }
     if (ts.isClassDeclaration(node) && node.name) {
@@ -109,15 +123,37 @@ for (const [f, line, sig] of rows) {
   byFile.get(f).push([line, sig]);
 }
 const exported = rows.filter(([, , s]) => s.startsWith("export ")).length;
+const aliasRows = rows.filter(([, , s]) => s.includes("[alias "));
+const renamedAliases = aliasRows.filter(([, , s]) => s.includes("[alias 换名"));
+const sameNameAliases = aliasRows.filter(([, , s]) => s.includes("[alias 同名转发"));
+// 同一个源被别名多次 = 两个平行名字指向同一实现（最隐蔽的冗余）
+const aliasTargets = new Map();
+for (const [, , s] of aliasRows) {
+  const m = s.match(/\bconst\s+(\w+)\s*=\s*([\w.]+)/);
+  if (!m) continue;
+  if (!aliasTargets.has(m[2])) aliasTargets.set(m[2], []);
+  aliasTargets.get(m[2]).push(m[1]);
+}
+const multiAliased = [...aliasTargets.entries()].filter(([, names]) => names.length > 1);
 const lines = [
-  `# 全部函数签名（${files.length} 文件 / ${rows.length} 个，export ${exported} / 非 export ${rows.length - exported}）`,
+  `# 全部函数签名（扫描 ${files.length} 文件 / ${byFile.size} 个含函数 / 共 ${rows.length} 个签名，export ${exported} / 非 export ${rows.length - exported}）`,
   "",
   "## 怎么用这份清单（只看签名，不读实现）",
   "",
   "① 语义重复：同参同返回、或同参数形态的组 → 交 `list-dup-signatures.mjs --all --json` 交叉验证",
-  "② OOP 聚合：同一首参反复出现 / createXxxState + 一串 fn(state,…) / clear·reset·ForTests 信号 → 见 SKILL.md §5.5",
+  "② OOP 聚合：同一首参反复出现 / createXxxState + 一串 fn(state,…) / clear·reset·ForTests 信号 → 见 SKILL.md §9.4",
+  "③ 引用别名：标 `[alias …]` 的行是 `export const X = Y.member` —— 四个 check 脚本都抓不到。",
+  "   · `[alias 换名]` = 换了名字的假抽象层，该问「为什么需要这个名字」",
+  "   · `[alias 同名转发]` = 纯转发，建议删、调用点改 import 原成员",
+  "",
+  `## 引用别名汇总（${aliasRows.length} 处：换名 ${renamedAliases.length} / 同名转发 ${sameNameAliases.length}）`,
   "",
 ];
+for (const [src, names] of multiAliased.sort((a, b) => b[1].length - a[1].length)) {
+  lines.push(`- ⚠️ \`${src}\` 被别名 ${names.length} 次：${names.join(" / ")}`);
+}
+if (multiAliased.length === 0) lines.push("- （无同一源被多次别名）");
+lines.push("");
 for (const [f, list] of [...byFile.entries()].sort()) {
   lines.push(`## ${f}  (${list.length})`);
   for (const [line, sig] of list.sort((a, b) => a[0] - b[0])) lines.push(`  ${String(line).padStart(4)}  ${sig}`);
