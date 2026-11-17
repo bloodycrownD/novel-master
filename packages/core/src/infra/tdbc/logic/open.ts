@@ -5,6 +5,7 @@
  * @invariant Only `tdbc:sqlite:…` URLs are supported in v1.
  */
 
+import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "../ports/connection.port.js";
 import { TdbcError } from "../errors.js";
 import { TdbcRegistry } from "./registry.js";
@@ -25,17 +26,18 @@ export interface ParsedTdbcUrl {
  * - `tdbc:sqlite:./path/to.db`
  * - `tdbc:sqlite:file::memory:`
  *
- * @throws {TdbcError} `INVALID_URL` when the URL is malformed
+ * URL 非法是调用方预期的配置失败，走 `Err`（`INVALID_URL`），本函数不抛；
+ * {@link open} 作为建连边界把 `Err` 转成 throw。
  */
-export function parseUrl(url: string): ParsedTdbcUrl {
+export function parseUrl(url: string): Result<ParsedTdbcUrl, TdbcError> {
   if (!url.startsWith(TDBC_SCHEME)) {
-    throw new TdbcError("INVALID_URL", `URL must start with ${TDBC_SCHEME}`);
+    return Result.err(new TdbcError("INVALID_URL", `URL must start with ${TDBC_SCHEME}`));
   }
 
   const rest = url.slice(TDBC_SCHEME.length);
   const sqliteMatch = /^sqlite:(.+)$/s.exec(rest);
   if (!sqliteMatch) {
-    throw new TdbcError("INVALID_URL", "Expected tdbc:sqlite:<path>");
+    return Result.err(new TdbcError("INVALID_URL", "Expected tdbc:sqlite:<path>"));
   }
 
   let filename = sqliteMatch[1]!;
@@ -44,10 +46,10 @@ export function parseUrl(url: string): ParsedTdbcUrl {
   }
 
   if (filename.length === 0) {
-    throw new TdbcError("INVALID_URL", "Missing database path in URL");
+    return Result.err(new TdbcError("INVALID_URL", "Missing database path in URL"));
   }
 
-  return { filename };
+  return Result.ok({ filename });
 }
 
 /**
@@ -58,10 +60,13 @@ export function parseUrl(url: string): ParsedTdbcUrl {
  */
 export async function open(url: string, options?: OpenOptions): Promise<TdbcConnection> {
   const parsed = parseUrl(url);
+  if (!parsed.ok) {
+    throw parsed.error;
+  }
   const driver = TdbcRegistry.resolve(options?.driver);
   return driver.open({
     ...options,
     url,
-    filename: options?.filename ?? parsed.filename,
+    filename: options?.filename ?? parsed.value.filename,
   });
 }

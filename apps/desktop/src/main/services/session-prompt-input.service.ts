@@ -54,7 +54,12 @@ export interface SessionPromptInputBundle {
 
 type PromptInputResult = Promise<Result<SessionPromptInputBundle, AppError>>;
 
-export async function buildSessionPromptInput(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: PromptBuildOptions): PromptInputResult {
+/**
+ * Desktop prompt-input adapter：把 desktop runtime（messages / workplace / sessionKkv /
+ * skills）适配到 core 的 assemble + promptAssembler + PromptBuilder；失败沿用 core
+ * 的 `Result` 通道（`ChatPromptBuildBailedError` 是控制流哨兵，仍走 throw）。
+ */
+export async function buildSessionPromptInputAdapter(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, definition?: AgentDefinition, options?: PromptBuildOptions): PromptInputResult {
   // 分段弃权：每段之间看一眼「run 是不是已经起步了」。mobile 真机实锤过
   // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
   // 连接），desktop main 是同进程同连接，问题一模一样。

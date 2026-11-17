@@ -198,7 +198,6 @@ export class DefaultMessageService implements MessageService {
     await this.deps.conn.transaction(async (tx) => {
       const messages = new SqliteMessageRepository(tx);
       const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      const entries = new SqliteVfsEntryRepository(tx);
       const revisions = new SqliteVfsRevisionRepository(tx);
 
       const deleted = await messages.delete(id);
@@ -210,7 +209,7 @@ export class DefaultMessageService implements MessageService {
       // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
       await new SqliteSessionKkvRepository(tx).clearDomain(message.sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
       await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
-      await sweepSessionRevisions(revisions, entries, checkpoints, session.projectId, message.sessionId, tx);
+      await sweepSessionRevisions(revisions, session.projectId, message.sessionId);
     });
     await runDeferredBlobGc(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);

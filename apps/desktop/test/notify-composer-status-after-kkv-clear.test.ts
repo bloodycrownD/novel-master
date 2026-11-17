@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
   notifyComposerStatusAfterFloorOrCompaction,
   notifyComposerStatusAfterSessionKkvCleared,
@@ -18,7 +18,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
 
   it("Undo rewind/手动：推空 attachments", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -31,12 +31,12 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, { sessionId: "s1", attachments: [] });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   it("T-UO4: 置位/压缩推 annotate store 投影（按 path 去重）；无草稿推空", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -97,6 +97,6 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 });

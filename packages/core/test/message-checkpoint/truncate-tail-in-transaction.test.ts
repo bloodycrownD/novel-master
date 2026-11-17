@@ -18,7 +18,7 @@ import {
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from "../../src/service/message-checkpoint/truncate-tail-wiring.js";
+} from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";

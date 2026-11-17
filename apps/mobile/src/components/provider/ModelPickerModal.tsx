@@ -15,6 +15,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
 import {PickerListModal, type PickerListLoadResult} from '../ui/PickerListModal';
+import {ModelKey} from '../../utils/model-key';
 
 interface SavedModelRow {
   readonly savedModelId: string;
@@ -32,10 +33,6 @@ type Props = {
    */
   sessionId?: string;
 };
-
-function modelNameKey(providerId: string, modelName: string): string {
-  return `${providerId}\0${modelName}`;
-}
 
 export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
@@ -80,11 +77,11 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
     }
     const nameCounts = new Map<string, number>();
     for (const model of allModels) {
-      const key = modelNameKey(model.providerId, model.modelName);
+      const key = ModelKey.name(model.providerId, model.modelName);
       nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
     }
     const collected: SavedModelRow[] = allModels.map(model => {
-      const duplicate = (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) > 1;
+      const duplicate = (nameCounts.get(ModelKey.name(model.providerId, model.modelName)) ?? 0) > 1;
       const providerDisplayName = nameById.get(model.providerId) ?? '未知服务商';
       return {
         savedModelId: model.id,

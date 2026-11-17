@@ -13,17 +13,15 @@
 
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
-import type { MessageCheckpointRepository } from "../repositories/message-checkpoint.port.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /**
  * 仅 revision 行打扫（scope 前缀 ref_count<=0 DELETE + 全局孤儿兜底）。
  *
  * 历史上本函数会依据 `vfs-revision-ref-count-v1` 是否登记而 fallback 到可达集路径；
- * Step 21 后该 migration 退役、Step 22 曾最低支持 v1.4.08（现为 v1.4.27），ref_count 回填路径恒为常态，
- * 本函数仅保留原签名以兼容调用方，`entryRepo` / `checkpoints` / `conn` 参数不再使用。
+ * Step 21 后该 migration 退役、Step 22 曾最低支持 v1.4.08（现为 v1.4.27），ref_count 回填路径恒为常态。
+ * 同期遗留的三个弃参（entryRepo / checkpoints / conn）已在 tuple 收口时删除——
+ * 函数体从未使用它们，调用方也不再为接口让位传真对象。
  *
  * 两步打扫：
  * 1. path-scoped `deleteUnreferencedUnderScope`——靠 JOIN vfs_entry 圈定当前 session
@@ -45,7 +43,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
  *
  * @returns Count of deleted revision rows (scoped + global orphans).
  */
-export async function sweepSessionRevisions(revisionRepo: VfsRevisionRepository, _entryRepo: VfsEntryRepository, _checkpoints: MessageCheckpointRepository, projectId: string, sessionId: string, _conn: TdbcConnection, options?: { includeGlobalOrphans?: boolean }): Promise<number> {
+export async function sweepSessionRevisions(revisionRepo: VfsRevisionRepository, projectId: string, sessionId: string, options?: { includeGlobalOrphans?: boolean }): Promise<number> {
   const scope: VfsScope = {
     kind: "session",
     projectId,

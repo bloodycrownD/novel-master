@@ -229,14 +229,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.ok(report.rowsAdjusted >= 1);
 
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    await sweepSessionRevisions(revisions, project.id, session.id);
     assert.ok(unwrap(await revisions.findByEntryAndVersion(eid, version)));
   });
 
@@ -348,7 +341,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     assert.equal(Number(refBefore[0]?.ref_count), 2);
 
-    await deleteSessionFsData(ctx.conn, session.id, project.id);
+    await deleteSessionFsData(ctx.conn, project.id, session.id);
 
     assert.equal(
       (await checkpoints.listFilePointersForSession(session.id)).length,
@@ -364,7 +357,6 @@ describe("rollback ref_count + deferred blob gc", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
 
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -383,14 +375,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     const orphanRev = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));
     assert.ok(orphanRev != null, "orphan revision 应在 sweep 前存在");
 
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    await sweepSessionRevisions(revisions, project.id, session.id);
 
     // sweep 后 orphan revision 应被删除
     const afterSweep = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));

@@ -10,9 +10,9 @@
 
 import { listSessionFileHeads } from "./list-session-files.js";
 import type { MessageCheckpointRepository } from "../repositories/message-checkpoint.port.js";
+import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
@@ -26,6 +26,29 @@ import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
 export interface BackfillBaselineResult {
   readonly confirmedNoGap: boolean;
 }
+
+/** backfill 段 0/段 1（短路判定 + 扫描）与 {@link backfillBaselineCheckpoints} 入口的依赖。 */
+export type BackfillScanDeps = Pick<CheckpointRepoDeps, "entryRepo" | "checkpointRepo"> & {
+  readonly messageRepo: MessageRepository;
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly signal?: AbortSignal;
+};
+
+/** backfill 段 2（补写）的依赖：只消费 checkpointRepo。 */
+export type BackfillWriteDeps = Pick<CheckpointRepoDeps, "checkpointRepo"> & {
+  readonly sessionId: string;
+  readonly scan: BackfillScanResult;
+  readonly signal?: AbortSignal;
+};
+
+/** backfill operation（detect + repair）的依赖。 */
+export type BackfillOperationDeps = Pick<CheckpointRepoDeps, "entryRepo" | "checkpointRepo"> & {
+  readonly messageRepo: MessageRepository;
+  readonly sessionKkv: SessionKkvRepository;
+  readonly projectId: string;
+  readonly sessionId: string;
+};
 
 /**
  * {@link scanBackfillGap} 的产出：**只读**的判定结果，尚未写任何行。
@@ -151,7 +174,7 @@ async function resolveFirstGapIndex(checkpointRepo: MessageCheckpointRepository,
  * 允许读到一个稍旧的 head 快照——checkpoint 的语义本就是「某时刻的指针快照」，
  * 旧一版合法；写阶段会对空窗段做「连续前缀复核」闭合并发插点的 TOCTOU。
  */
-export async function scanBackfillGap(args: { readonly entryRepo: VfsEntryRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly projectId: string; readonly sessionId: string; readonly signal?: AbortSignal }): Promise<BackfillScanResult> {
+export async function scanBackfillGap(args: BackfillScanDeps): Promise<BackfillScanResult> {
   const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
   const empty: BackfillScanResult = {
     confirmedNoGap: false,
@@ -228,7 +251,7 @@ export async function scanBackfillGap(args: { readonly entryRepo: VfsEntryReposi
  * 「查时」，并不真正消除它）。调用方按普通失败重试即可：backfill 幂等，
  * 下轮重新扫描拿到的是收敛后的空窗段。
  */
-export async function writeBackfillGap(args: { readonly checkpointRepo: MessageCheckpointRepository; readonly sessionId: string; readonly scan: BackfillScanResult; readonly signal?: AbortSignal }): Promise<BackfillBaselineResult> {
+export async function writeBackfillGap(args: BackfillWriteDeps): Promise<BackfillBaselineResult> {
   const { checkpointRepo, sessionId, scan, signal } = args;
   const gap = scan.gapMessageIds;
   if (gap.length === 0) {
@@ -279,9 +302,9 @@ export async function writeBackfillGap(args: { readonly checkpointRepo: MessageC
  *   会把游标写到 count，下一轮判定短路成「已确认」，剩下的空窗永远补不上。
  *   已 insert 的行随事务提交留下且不可覆盖（幂等），下轮接着补。
  */
-export async function backfillBaselineCheckpoints(entryRepo: VfsEntryRepository, messageRepo: MessageRepository, checkpointRepo: MessageCheckpointRepository, projectId: string, sessionId: string, signal?: AbortSignal): Promise<BackfillBaselineResult> {
-  const scanInput = { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal };
-  const scan = await scanBackfillGap(scanInput);
+export async function backfillBaselineCheckpoints(args: BackfillScanDeps): Promise<BackfillBaselineResult> {
+  const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
+  const scan = await scanBackfillGap({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal });
   return writeBackfillGap({ checkpointRepo, sessionId, scan, signal });
 }
 
@@ -297,7 +320,7 @@ export async function backfillBaselineCheckpoints(entryRepo: VfsEntryRepository,
  * repair 直接调用 {@link backfillBaselineCheckpoints}，幂等安全（已有 checkpoint
  * 不会被覆盖）；repair 不写游标——残留旧游标只导致下次判定保守回退，无正确性影响。
  */
-export function createBaselineCheckpointBackfillOperation(args: { readonly entryRepo: VfsEntryRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly sessionKkv: SessionKkvRepository; readonly projectId: string; readonly sessionId: string }): IntegrityRepairOperation {
+export function createBaselineCheckpointBackfillOperation(args: BackfillOperationDeps): IntegrityRepairOperation {
   const { entryRepo, messageRepo, checkpointRepo, sessionKkv, projectId, sessionId } = args;
   return {
     name: `baseline-checkpoint-backfill:session=${sessionId}`,
@@ -329,7 +352,7 @@ export function createBaselineCheckpointBackfillOperation(args: { readonly entry
       };
     },
     async repair() {
-      await backfillBaselineCheckpoints(entryRepo, messageRepo, checkpointRepo, projectId, sessionId);
+      await backfillBaselineCheckpoints({ entryRepo, messageRepo, checkpointRepo, projectId, sessionId });
     },
   };
 }

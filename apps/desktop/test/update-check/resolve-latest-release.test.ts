@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveLatestRelease } from "../../src/main/update-check/resolve-latest-release.js";
+import { UpdateCheck } from "@novel-master/core/common";
 
 describe("resolveLatestRelease", () => {
   it("maps latest JSON fixture", async () => {
@@ -15,7 +15,7 @@ describe("resolveLatestRelease", () => {
         }),
       }) as Response;
 
-    const release = await resolveLatestRelease(mockFetch);
+    const release = await UpdateCheck.resolveLatest(mockFetch);
     assert.equal(release.tagName, "v2.1.0");
     assert.equal(release.version, "2.1.0");
     assert.match(release.htmlUrl, /releases\/tag\/v2.1.0/);

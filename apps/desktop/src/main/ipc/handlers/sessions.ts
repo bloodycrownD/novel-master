@@ -21,7 +21,7 @@ import type {
   SessionSetModelOverrideRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { notifyWorkspaceMutatedToRenderer } from "../forward-workspace-mutated.js";
+import { WorkspaceMutatedForwarder } from "../forward-workspace-mutated.js";
 import { toIpcResult } from "../ipc-result.js";
 import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
@@ -112,7 +112,7 @@ export function handleSessionsPushTemplate(req: SessionPushTemplateRequest): Pro
     if (!pushed.ok) return pushed;
     const session = await rt.sessions.get(req.sessionId);
     if (!session.ok) return Result.err(session.error);
-    notifyWorkspaceMutatedToRenderer({ workspaceScope: "session", projectId: session.value.projectId });
+    WorkspaceMutatedForwarder.notify({ workspaceScope: "session", projectId: session.value.projectId });
     return Result.ok(undefined);
   });
 }

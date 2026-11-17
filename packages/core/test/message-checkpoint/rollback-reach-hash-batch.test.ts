@@ -110,16 +110,14 @@ describe("rollback reach hash batch", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = unwrap(await findMissingRevisionPointers(
-      revisionRepo,
-      entryRepo,
+    const missing = unwrap(await findMissingRevisionPointers({ revisionRepo, entryRepo }, {
       scope,
-      new Map([
+      targetTree: new Map([
         ["/a.md", 1],
         ["/b.md", 2],
       ]),
-      ["/a.md", "/b.md"]
-    ));
+      pathsToReconcile: ["/a.md", "/b.md"],
+    }));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
@@ -176,7 +174,7 @@ describe("rollback reach hash batch", () => {
       liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
-    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/hash-same.md", 1, new Map([["/hash-same.md", 3]]), entryRepo, prefetch);
+    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath: new Map([["/hash-same.md", 3]]), prefetch });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;

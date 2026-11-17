@@ -14,6 +14,7 @@ import { dialog, type BrowserWindow } from "electron";
 import { dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
 import { createAbortError } from "@novel-master/core/abort";
+import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { checkpointDesktopDatabase, closeDesktopConnection, getDesktopConnection } from "../runtime/connection.js";
@@ -91,10 +92,6 @@ function assertSqliteFile(bytes: Uint8Array): Result<void, AppError> {
     return Result.err(new AppError("INFRA_VALIDATION_FAILED", { detail: "不是有效的 SQLite 数据库备份" }));
   }
   return Result.ok(undefined);
-}
-
-function errorDetail(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -188,7 +185,7 @@ async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, p
       // 此刻它是磁盘上唯一的一份，删掉等于让用户无声丢失本地数据。
       keepBackupForManualRecovery = true;
       const recoveryHint = bakCreated ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。` : "导入前没有可备份的活动库文件，无旧库副本可保留。";
-      const replacedMessage = `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}${recoveryHint}`;
+      const replacedMessage = `数据库已导入，但本机服务商配置恢复失败：${Errors.text(error)}${recoveryHint}`;
       throw new DatabaseReplacedError(replacedMessage, false);
     }
 
@@ -203,7 +200,7 @@ async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, p
     }
     if (rollbackError != null) {
       rollbackFailed = true;
-      throw new AppError("INFRA_UNEXPECTED_ERROR", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}` }, { cause: [error, rollbackError] });
+      throw new AppError("INFRA_UNEXPECTED_ERROR", { detail: `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${Errors.text(rollbackError)}` }, { cause: [error, rollbackError] });
     }
     throw error;
   } finally {

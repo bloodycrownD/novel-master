@@ -11,6 +11,8 @@
  * @module infra/db-backup/provider-table-snapshot-validate
  */
 
+import { Result } from "@/errors/either.js";
+import { Coerce } from "@/common/coerce.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { ProviderTableSnapshotError } from "./provider-table-snapshot-error.js";
 import type { ProviderBackupTableName, ProviderTableSnapshot } from "./provider-tables.js";
@@ -18,87 +20,75 @@ import type { ProviderBackupTableName, ProviderTableSnapshot } from "./provider-
 /** 与 LlmProtocolKind 运行时枚举保持一致的单源。 */
 const KNOWN_PROTOCOLS: ReadonlySet<LlmProtocolKind> = new Set(["openai", "anthropic", "gemini"]);
 
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function nonEmptyString(value: unknown): string | null {
-  const str = asString(value);
-  return str != null && str.trim() !== "" ? str : null;
-}
-
 /**
  * 对即将写入主库的快照做整体校验：行级字段 + 跨表 FK 一致性。
- * 任一行非法即抛 {@link ProviderTableSnapshotError}，调用方应在事务外
- * 先调用本函数，再决定是否进入 scrub + INSERT 流程。
+ * 任一行非法即返回 `Err`（首错即止），调用方应在事务外先调用本函数，
+ * 再决定是否进入 scrub + INSERT 流程。
  *
  * llm_provider 行与 SqliteProviderRepository.rowToProvider +
  * DefaultProviderService.requireNonEmptyDisplayName 对齐；llm_saved_model
  * 只校验两种 schema 都有的不变式（provider_id 命中、vendor_model_id /
  * settings_json 非空）；sksp_secrets 的 iv 允许 NULL，其余字段必填。
  */
-export function validateProviderTableSnapshot(snapshot: ProviderTableSnapshot): void {
-  snapshot.llm_provider.forEach((row, rowIndex) => {
+export function validateProviderTableSnapshot(snapshot: ProviderTableSnapshot): Result<void, ProviderTableSnapshotError> {
+  for (const [rowIndex, row] of snapshot.llm_provider.entries()) {
     const table: ProviderBackupTableName = "llm_provider";
-    const id = nonEmptyString(row.id);
+    const id = Coerce.nonEmptyText(row.id);
     if (id == null) {
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_id_missing", params: { row_index: rowIndex } }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_id_missing", params: { row_index: rowIndex } }, { table, rowIndex }));
     }
-    const protocol = asString(row.protocol);
+    const protocol = Coerce.strictText(row.protocol);
     if (protocol == null || !KNOWN_PROTOCOLS.has(protocol as LlmProtocolKind)) {
       const params = { row_index: rowIndex, protocol: String(row.protocol) };
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_protocol_invalid", params }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_protocol_invalid", params }, { table, rowIndex }));
     }
-    if (nonEmptyString(row.base_url) == null) {
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_base_url_empty", params: { row_index: rowIndex, id } }, { table, rowIndex });
+    if (Coerce.nonEmptyText(row.base_url) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_base_url_empty", params: { row_index: rowIndex, id } }, { table, rowIndex }));
     }
-    if (nonEmptyString(row.display_name) == null) {
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_display_name_empty", params: { row_index: rowIndex, id } }, { table, rowIndex });
+    if (Coerce.nonEmptyText(row.display_name) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_display_name_empty", params: { row_index: rowIndex, id } }, { table, rowIndex }));
     }
-    if (asNumber(row.is_builtin) == null) {
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_is_builtin_not_number", params: { row_index: rowIndex, id } }, { table, rowIndex });
+    if (Coerce.strictNumber(row.is_builtin) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_is_builtin_not_number", params: { row_index: rowIndex, id } }, { table, rowIndex }));
     }
-    if (asNumber(row.created_at_ms) == null || asNumber(row.updated_at_ms) == null) {
-      throw new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_timestamp_invalid", params: { row_index: rowIndex, id } }, { table, rowIndex });
+    if (Coerce.strictNumber(row.created_at_ms) == null || Coerce.strictNumber(row.updated_at_ms) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_PROVIDER_ROW", { key: "error.db_backup.provider_row_timestamp_invalid", params: { row_index: rowIndex, id } }, { table, rowIndex }));
     }
-  });
-  const knownProviderIds = new Set(snapshot.llm_provider.map((row) => nonEmptyString(row.id)).filter((id): id is string => id != null));
-  snapshot.llm_saved_model.forEach((row, rowIndex) => {
+  }
+  const knownProviderIds = new Set(snapshot.llm_provider.map((row) => Coerce.nonEmptyText(row.id)).filter((id): id is string => id != null));
+  for (const [rowIndex, row] of snapshot.llm_saved_model.entries()) {
     const table: ProviderBackupTableName = "llm_saved_model";
-    const providerId = nonEmptyString(row.provider_id);
+    const providerId = Coerce.nonEmptyText(row.provider_id);
     if (providerId == null) {
-      throw new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_provider_id_empty", params: { row_index: rowIndex } }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_provider_id_empty", params: { row_index: rowIndex } }, { table, rowIndex }));
     }
     if (!knownProviderIds.has(providerId)) {
-      throw new ProviderTableSnapshotError("DANGLING_SAVED_MODEL", { key: "error.db_backup.dangling_saved_model", params: { row_index: rowIndex, provider_id: providerId } }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("DANGLING_SAVED_MODEL", { key: "error.db_backup.dangling_saved_model", params: { row_index: rowIndex, provider_id: providerId } }, { table, rowIndex }));
     }
-    if (nonEmptyString(row.vendor_model_id) == null) {
+    if (Coerce.nonEmptyText(row.vendor_model_id) == null) {
       const params = { row_index: rowIndex, provider_id: providerId };
-      throw new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_vendor_model_id_empty", params }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_vendor_model_id_empty", params }, { table, rowIndex }));
     }
-    if (asString(row.settings_json) == null) {
+    if (Coerce.strictText(row.settings_json) == null) {
       const params = { row_index: rowIndex, provider_id: providerId };
-      throw new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_settings_json_missing", params }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_SAVED_MODEL_ROW", { key: "error.db_backup.saved_model_row_settings_json_missing", params }, { table, rowIndex }));
     }
-  });
-  snapshot.sksp_secrets.forEach((row, rowIndex) => {
+  }
+  for (const [rowIndex, row] of snapshot.sksp_secrets.entries()) {
     const table: ProviderBackupTableName = "sksp_secrets";
-    const ref = nonEmptyString(row.ref);
+    const ref = Coerce.nonEmptyText(row.ref);
     if (ref == null) {
-      throw new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_ref_missing", params: { row_index: rowIndex } }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_ref_missing", params: { row_index: rowIndex } }, { table, rowIndex }));
     }
     if (row.ciphertext == null) {
-      throw new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_ciphertext_missing", params: { row_index: rowIndex, ref } }, { table, rowIndex });
+      return Result.err(new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_ciphertext_missing", params: { row_index: rowIndex, ref } }, { table, rowIndex }));
     }
-    if (nonEmptyString(row.algo) == null) {
-      throw new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_algo_empty", params: { row_index: rowIndex, ref } }, { table, rowIndex });
+    if (Coerce.nonEmptyText(row.algo) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_algo_empty", params: { row_index: rowIndex, ref } }, { table, rowIndex }));
     }
-    if (asNumber(row.version) == null) {
-      throw new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_version_not_number", params: { row_index: rowIndex, ref } }, { table, rowIndex });
+    if (Coerce.strictNumber(row.version) == null) {
+      return Result.err(new ProviderTableSnapshotError("INVALID_SECRET_ROW", { key: "error.db_backup.secret_row_version_not_number", params: { row_index: rowIndex, ref } }, { table, rowIndex }));
     }
-  });
+  }
+  return Result.ok(undefined);
 }

@@ -10,7 +10,7 @@ import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
-import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/truncate-tail-wiring.js";
+import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";

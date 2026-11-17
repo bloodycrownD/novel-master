@@ -100,30 +100,30 @@ export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
 /**
- * 解析 `attachments_json`；NULL/空/非法 → `undefined`。
+ * 解析 `attachments_json`；NULL/空/非法 → `null`（无值），整数组逐条降级。
  *
  * 口径（逐条降级，与 `parseComposerDraftJson` 对齐）：**一条不合规不牵连其余**；
- * 只在整段不是合法 JSON 数组时整体降级为 `undefined`，数组内逐条 `safeParse`、
- * 只保留成功项（全部失败时返回 `[]` 而非 `undefined`——两者在消费侧 `?? []`
+ * 只在整段不是合法 JSON 数组时整体降级为 `null`，数组内逐条 `safeParse`、
+ * 只保留成功项（全部失败时返回 `[]` 而非 `null`——两者在消费侧 `?? []`
  * 等价，但返回 `[]` 让「本来就没附件」与「全被丢弃」在下游表现一致）。
  * 理由：消息是 append-only 的历史数据、附件形态跨版本演进，宁可少附件也不可让
  * 整条消息的附件静默蒸发——那会造成落库历史与送给 LLM 的提示词不一致。
  *
  * nm-style: keep-public — attachments_json 唯一读侧解码入口；逐条降级/空值写 NULL 是 wire 契约。
  */
-export function parseAttachmentsJson(raw: string | null | undefined): MessageAttachment[] | undefined {
+export function parseAttachmentsJson(raw: string | null | undefined): MessageAttachment[] | null {
   if (raw == null || raw === "") {
-    return undefined;
+    return null;
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return undefined;
+    return null;
   }
   // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
   if (!Array.isArray(parsed)) {
-    return undefined;
+    return null;
   }
   const kept: MessageAttachment[] = [];
   for (const item of parsed) {

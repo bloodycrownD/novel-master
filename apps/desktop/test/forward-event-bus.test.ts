@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_USAGE, SimpleEventBus } from "@novel-master/core/events";
-import {
-  attachEventBusForwarder,
-  setEventBusForwardTarget,
-} from "../src/main/ipc/forward-event-bus.js";
+import { EventBusForwarder } from "../src/main/ipc/forward-event-bus.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
 describe("forward-event-bus", () => {
@@ -12,15 +9,15 @@ describe("forward-event-bus", () => {
     const bus = new SimpleEventBus();
     const forwarded: unknown[] = [];
 
-    setEventBusForwardTarget(() => ({
+    EventBusForwarder.setTarget(() => ({
       send(channel: string, payload: unknown) {
         assert.equal(channel, IPC_CHANNELS.AGENT_STREAM);
         forwarded.push(payload);
       },
     }));
 
-    attachEventBusForwarder(bus);
-    attachEventBusForwarder(bus);
+    EventBusForwarder.attach(bus);
+    EventBusForwarder.attach(bus);
 
     bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
       sessionId: "s1",
@@ -34,14 +31,14 @@ describe("forward-event-bus", () => {
     const bus = new SimpleEventBus();
     const forwarded: Array<{ type: string; payload: unknown }> = [];
 
-    setEventBusForwardTarget(() => ({
+    EventBusForwarder.setTarget(() => ({
       send(channel: string, payload: unknown) {
         assert.equal(channel, IPC_CHANNELS.AGENT_STREAM);
         forwarded.push(payload as { type: string; payload: unknown });
       },
     } as never));
 
-    attachEventBusForwarder(bus);
+    EventBusForwarder.attach(bus);
 
     bus.publish(EVENT_AGENT_STREAM_USAGE, {
       sessionId: "s1",

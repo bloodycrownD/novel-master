@@ -210,7 +210,7 @@ export class DefaultSessionService implements SessionService {
       await this.deleteSessionTree(tx, child);
     }
     await r.messages.deleteBySession(session.id);
-    await deleteSessionFsData(tx, session.id, session.projectId);
+    await deleteSessionFsData(tx, session.projectId, session.id);
     await createSessionKkvService(tx).clearSession(session.id);
     // 同事务清 run_state 行：留着孤儿 starting/running 行会在重启水合时
     // 生成幽灵 interrupted 单元（递归子会话在本函数逐层清理时一并覆盖）。

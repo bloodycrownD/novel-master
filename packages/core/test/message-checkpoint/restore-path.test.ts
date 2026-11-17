@@ -4,8 +4,6 @@ import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { unwrap } from "../helpers/result-unwrap.js";
-import { unwrap } from "../helpers/result-unwrap.js";
-import { unwrap } from "../helpers/result-unwrap.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -30,7 +28,7 @@ describe("restorePathToRevision", () => {
     // 在 entry_id 化后，entry 被删除后无法通过 entryId 寻址，预期返回 restoreRevisionMissing。
     // 父级为文件占位符时的 NOT_A_DIRECTORY 检查在 ensureDirectoryChain 阶段生效，
     // 但 entry 缺失会在那之前返回领域失败。
-    const result = await restorePathToRevision(svfs, revisions, scope, "/dir/child.md", version, undefined, entries);
+    const result = await restorePathToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/dir/child.md", version });
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.equal(result.error.key, "SESSION_FS_RESTORE_REVISION_MISSING");

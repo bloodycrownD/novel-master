@@ -262,13 +262,13 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
       .sort();
 
     const before = await checkpointIds(conn, seeded.sessionId);
-    await backfillBaselineCheckpoints(
-      entries,
-      messages,
-      plain,
-      seeded.projectId,
-      seeded.sessionId
-    );
+    await backfillBaselineCheckpoints({
+      entryRepo: entries,
+      messageRepo: messages,
+      checkpointRepo: plain,
+      projectId: seeded.projectId,
+      sessionId: seeded.sessionId,
+    });
     const after = await checkpointIds(conn, seeded.sessionId);
 
     const added = after.filter((id) => !before.includes(id)).sort();

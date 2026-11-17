@@ -6,11 +6,9 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { DefaultMessageCheckpointService } from "./impl/message-checkpoint.service.js";
 import { DefaultMessageRollbackService } from "./impl/message-rollback.service.js";
+import { createCheckpointRepoDeps } from "./checkpoint-repo-wiring.js";
 import type { MessageCheckpointService } from "./message-checkpoint.port.js";
 import type { MessageRollbackService, RollbackProbe } from "./message-rollback.port.js";
 
@@ -18,10 +16,7 @@ import type { MessageRollbackService, RollbackProbe } from "./message-rollback.p
  * Creates a {@link MessageCheckpointService} for the given connection.
  */
 export function createMessageCheckpointService(conn: TdbcConnection): MessageCheckpointService {
-  return new DefaultMessageCheckpointService({
-    conn,
-    entries: new SqliteVfsEntryRepository(conn),
-  });
+  return new DefaultMessageCheckpointService({ conn });
 }
 
 /** {@link createMessageRollbackService} 可选装配项（均缺省 = 现状行为）。 */
@@ -42,10 +37,8 @@ export interface MessageRollbackServiceOptions {
 export function createMessageRollbackService(conn: TdbcConnection, options?: MessageRollbackServiceOptions): MessageRollbackService {
   return new DefaultMessageRollbackService({
     conn,
-    messages: new SqliteMessageRepository(conn, options?.yieldFn),
-    entries: new SqliteVfsEntryRepository(conn),
-    revisions: new SqliteVfsRevisionRepository(conn),
-    checkpoints: new SqliteMessageCheckpointRepository(conn),
+    messageRepo: new SqliteMessageRepository(conn, options?.yieldFn),
+    ...createCheckpointRepoDeps(conn),
     probe: options?.probe,
   });
 }

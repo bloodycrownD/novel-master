@@ -27,7 +27,7 @@ export {
   DEFAULT_LEASE_SECONDS,
 } from "./logic/lock.js";
 
-export { normalizePrefix, statusKey, snapshotKey } from "./logic/paths.js";
+export { ensureTrailingSlash, statusKey, snapshotKey } from "./logic/paths.js";
 
 export { CloudSyncCoordinator } from "./impl/cloud-sync-coordinator.js";
 export type {

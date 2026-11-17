@@ -113,14 +113,14 @@ function makeScanHarness(args: {
     hasCalls: () => hasCalls,
     insertCalls: () => insertCalls,
     run: () =>
-      backfillBaselineCheckpoints(
+      backfillBaselineCheckpoints({
         entryRepo,
         messageRepo,
         checkpointRepo,
-        "p1",
-        "s1",
-        controller.signal
-      ),
+        projectId: "p1",
+        sessionId: "s1",
+        signal: controller.signal,
+      }),
   };
 }
 
@@ -132,24 +132,24 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     );
     const hasCheckpoint = mock.fn(async (): Promise<boolean> => false);
     const insertCheckpoint = mock.fn(async (): Promise<void> => undefined);
-    const result = await backfillBaselineCheckpoints(
-      {
+    const result = await backfillBaselineCheckpoints({
+      entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
         ],
       } as unknown as VfsEntryRepository,
-      {
+      messageRepo: {
         listMessageHeadersBySession: async () => headerMessages(50),
       } as unknown as MessageRepository,
-      {
+      checkpointRepo: {
         findLastCheckpointedMessageId,
         hasCheckpoint,
         insertCheckpoint,
       } as unknown as MessageCheckpointRepository,
-      "p1",
-      "s1",
-      AbortSignal.abort()
-    );
+      projectId: "p1",
+      sessionId: "s1",
+      signal: AbortSignal.abort(),
+    });
     assert.equal(
       (findLastCheckpointedMessageId as ReturnType<typeof mock.fn>).mock.callCount(),
       0,
@@ -197,23 +197,23 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     );
     const hasCheckpoint = mock.fn(async (): Promise<boolean> => false);
     const insertCheckpoint = mock.fn(async (): Promise<void> => undefined);
-    const result = await backfillBaselineCheckpoints(
-      {
+    const result = await backfillBaselineCheckpoints({
+      entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
         ],
       } as unknown as VfsEntryRepository,
-      {
+      messageRepo: {
         listMessageHeadersBySession: async () => headerMessages(6),
       } as unknown as MessageRepository,
-      {
+      checkpointRepo: {
         findLastCheckpointedMessageId,
         hasCheckpoint,
         insertCheckpoint,
       } as unknown as MessageCheckpointRepository,
-      "p1",
-      "s1"
-    );
+      projectId: "p1",
+      sessionId: "s1",
+    });
     assert.equal(result.confirmedNoGap, true, "不传 signal 必须照旧全量完成");
     assert.equal(
       (findLastCheckpointedMessageId as ReturnType<typeof mock.fn>).mock.callCount(),
@@ -255,16 +255,16 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
     // 起点若靠「最后一个 checkpointed id」单点收敛会把 m1..m9 永久跳过。
     let insertCalls = 0;
     const inserted: string[] = [];
-    const result = await backfillBaselineCheckpoints(
-      {
+    const result = await backfillBaselineCheckpoints({
+      entryRepo: {
         listFileHeadsUnderPrefix: async () => [
           { entryId: "e1", path: "/a.md", headVersion: 1 },
         ],
       } as unknown as VfsEntryRepository,
-      {
+      messageRepo: {
         listMessageHeadersBySession: async () => headerMessages(10),
       } as unknown as MessageRepository,
-      {
+      checkpointRepo: {
         // 会话里已有一个 checkpoint 在 m0 ⇒ gap 从 m1 开始。
         findLastCheckpointedMessageId: async () => "m0",
         hasCheckpoint: async (_sessionId: string, messageId: string) =>
@@ -274,9 +274,9 @@ describe("backfillBaselineCheckpoints 弃权信号（r3-run-4 步骤 2）", () =
           inserted.push(input.messageId);
         },
       } as unknown as MessageCheckpointRepository,
-      "p1",
-      "s1"
-    );
+      projectId: "p1",
+      sessionId: "s1",
+    });
     assert.equal(result.confirmedNoGap, true);
     assert.equal(insertCalls, 8, "m1 被并发建点后跳过、m2..m9 共 8 条照写");
     assert.deepEqual(inserted, ["m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9"]);

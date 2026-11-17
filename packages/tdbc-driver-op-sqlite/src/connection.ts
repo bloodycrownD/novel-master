@@ -11,9 +11,9 @@ import type {
   TdbcConnection,
 } from "@novel-master/core";
 import { TdbcError } from "@novel-master/core";
+import { AsyncMutex } from "@novel-master/core/tdbc";
 import type { OpSqliteAdapter } from "./adapter.js";
 import { normalizeOpSqliteBindings } from "./bindings.js";
-import { AsyncMutex } from "./mutex.js";
 import { rowsFromResult } from "./row-mapper.js";
 
 export class OpSqliteConnection implements TdbcConnection {

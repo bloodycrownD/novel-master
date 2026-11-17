@@ -13,10 +13,7 @@ import {
   handleWorkplaceSetDirRule,
   handleWorkplaceSetFileRule,
 } from "../src/main/ipc/handlers/workplace.js";
-import {
-  setComposerAttachmentsSuggestForwardTarget,
-  notifyComposerAttachmentsSuggestToRenderer,
-} from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import {
   setupDesktopDbTestEnv,
@@ -57,7 +54,7 @@ describe("workplace ipc handlers", () => {
   });
 
   after(async () => {
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
     await teardownDesktopDbTestEnv(tempDir);
   });
 
@@ -86,7 +83,7 @@ describe("workplace ipc handlers", () => {
     );
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -112,7 +109,7 @@ describe("workplace ipc handlers", () => {
       0,
       "规则保存不得再推 workplace 差集 suggest",
     );
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   it("T-CR2: setFileRule → 写 rule_snapshot；file_cache 空", async () => {
@@ -142,7 +139,7 @@ describe("workplace ipc handlers", () => {
 
   it("composerAttachmentsSuggest 通道独立；空 attachments 仍 send（整表替换）", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -150,7 +147,7 @@ describe("workplace ipc handlers", () => {
       } as never;
     });
 
-    notifyComposerAttachmentsSuggestToRenderer({
+    ComposerAttachmentsSuggestForwarder.notify({
       sessionId,
       attachments: [
         {
@@ -162,7 +159,7 @@ describe("workplace ipc handlers", () => {
         },
       ],
     });
-    notifyComposerAttachmentsSuggestToRenderer({
+    ComposerAttachmentsSuggestForwarder.notify({
       sessionId,
       attachments: [],
     });
@@ -186,6 +183,6 @@ describe("workplace ipc handlers", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 });

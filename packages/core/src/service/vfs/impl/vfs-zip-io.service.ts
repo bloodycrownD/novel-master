@@ -265,7 +265,13 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints(new SqliteVfsEntryRepository(tx), new SqliteMessageRepository(tx), new SqliteMessageCheckpointRepository(tx), scope.projectId, scope.sessionId);
+          await backfillBaselineCheckpoints({
+            entryRepo: new SqliteVfsEntryRepository(tx),
+            messageRepo: new SqliteMessageRepository(tx),
+            checkpointRepo: new SqliteMessageCheckpointRepository(tx),
+            projectId: scope.projectId,
+            sessionId: scope.sessionId,
+          });
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，且不得

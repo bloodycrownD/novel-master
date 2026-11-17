@@ -5,6 +5,7 @@ import {languageExtensionForPath} from './language-for-path';
 import {composerTokenEnabled, composerTokenHighlight} from './composer-tokens';
 import {editorSyntaxHighlighting, editorTheme} from './theme';
 import {post} from './post';
+import {clampIndex} from '@web/shared/clamp-index';
 
 let view: EditorView | null = null;
 let currentPath = '';
@@ -141,11 +142,6 @@ type EditorSelectionRange = {
   readonly start: number;
   readonly end: number;
 };
-
-function clampIndex(value: number, length: number): number {
-  if (!Number.isFinite(value)) return length;
-  return Math.max(0, Math.min(Math.floor(value), length));
-}
 
 /** 转成 CM 选区 spec；无选区期望时返回 undefined（事务里等价于不设）。 */
 function selectionSpec(text: string, selection?: EditorSelectionRange): {anchor: number; head: number} | undefined {

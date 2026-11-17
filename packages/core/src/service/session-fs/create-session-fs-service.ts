@@ -47,7 +47,7 @@ export function createSessionFsService(conn: TdbcConnection, options?: SessionFs
  * 顺序：−checkpoint ref → −live ref → 删 checkpoint 行 → revision 前缀打扫。
  * blob gc 由调用方在事务提交后调度 {@link runDeferredBlobGc}。
  */
-export async function deleteSessionFsData(conn: TdbcConnection, sessionId: string, projectId: string): Promise<void> {
+export async function deleteSessionFsData(conn: TdbcConnection, projectId: string, sessionId: string): Promise<void> {
   const checkpoints = new SqliteMessageCheckpointRepository(conn);
   const revisions = new SqliteVfsRevisionRepository(conn);
   const entries = new SqliteVfsEntryRepository(conn);
@@ -60,7 +60,7 @@ export async function deleteSessionFsData(conn: TdbcConnection, sessionId: strin
 
   await checkpoints.deleteCheckpointsForSession(sessionId);
   await decrementLiveRefsUnderScope(revisions, entries, sk, "/");
-  await sweepSessionRevisions(revisions, entries, checkpoints, projectId, sessionId, conn);
+  await sweepSessionRevisions(revisions, projectId, sessionId);
 }
 
 /** 事务提交后调度全库 blob gc（项目/会话删除批量路径用）。 */

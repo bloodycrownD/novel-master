@@ -12,14 +12,14 @@
  * 它把 POST 派发从 +1.2s 拖到 +19.6s。desktop 侧四层落点：
  * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
  * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
- * ③ build 分段弃权（{@link buildSessionPromptInput} 的 shouldBail）与 resolve 段
+ * ③ build 分段弃权（{@link buildSessionPromptInputAdapter} 的 shouldBail）与 resolve 段
  *   弃权（错误通道迁移二期起 core 读口沿 Outcome.cancelled/replaced 返回，
  *   读口就地转抛 build 同款哨兵）——两类都由 {@link isChipBailError} 收口，
  *   **绝不进 fallback**；
  * ④ run 终态后补推一次读口（走防抖入口，与抽屉自发那次合并，见文件末尾注册处）。
  *
  * r3-cache-3：第二相投递改为「直接推暖机手里已有的精确档」，不再「补读一次现值」
- * ——补读走的是完整链，等于把 {@link buildSessionPromptInput} 整个重跑一遍，正是
+ * ——补读走的是完整链，等于把 {@link buildSessionPromptInputAdapter} 整个重跑一遍，正是
  * 本文件要消灭的重活。仅「暖机期间模型已变」才补读（见
  * {@link pushPreciseStatsIfReady}）。
  *
@@ -43,11 +43,11 @@ import {
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import { createLogger } from "@novel-master/core/log";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
-import { notifyPromptChatTokenUpdatedToRenderer } from "../ipc/forward-prompt-chat-token-updated.js";
+import { PromptChatTokenUpdatedForwarder } from "../ipc/forward-prompt-chat-token-updated.js";
 import { isDesktopSessionRunInFlight, setRunFinishedTokenStatsRefresh } from "../ipc/handlers/agent.js";
 import { getDesktopRuntimeOrThrow } from "../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { buildSessionPromptInput, ChatPromptBuildBailedError, type SessionPromptInputBundle, type SessionPromptScope } from "./session-prompt-input.service.js";
+import { buildSessionPromptInputAdapter, ChatPromptBuildBailedError, type SessionPromptInputBundle, type SessionPromptScope } from "./session-prompt-input.service.js";
 
 const log = createLogger("desktop.chat-prompt-tokens");
 
@@ -173,7 +173,7 @@ type NullableStatsResult = Result<PromptChatTokenStatsResponse | null, AppError>
 // 失败 / countFn 已知失败），由 resilient 统一收口降级；弃权哨兵
 // ChatPromptBuildBailedError 与未知异常仍走 throw 通道。
 async function computeChatPromptTokenStats(runtime: DesktopNovelMasterRuntime, scope: SessionPromptScope, countFn: CountFn, shouldBail?: () => boolean): Promise<StatsResult> {
-  const built = await buildSessionPromptInput(runtime, scope, undefined, shouldBail != null ? { shouldBail } : undefined);
+  const built = await buildSessionPromptInputAdapter(runtime, scope, undefined, shouldBail != null ? { shouldBail } : undefined);
   if (!built.ok) return Result.err(built.error);
   const { definition, layout, ctx, rawMessages } = built.value;
 
@@ -278,7 +278,7 @@ async function isPreciseWarmStillCurrent(runtime: DesktopNovelMasterRuntime, sco
  * 花钱数出来的精确读数，转头又被一次同输入的 build 抵消掉。
  *
  * 现在：
- * 1. **直接推** warm 手里那份结果（`buildSessionPromptInput` 调用 0 次）；
+ * 1. **直接推** warm 手里那份结果（`buildSessionPromptInputAdapter` 调用 0 次）；
  * 2. 仅当「warm 期间模型已变」（{@link isPreciseWarmStillCurrent}）才补读一次
  *    现值——补读固定 `armPreciseWarm:false`（**绝不再排一轮暖机**，否则
  *    「每次读内容都在变」的会话会让推送与补读互相喂养、后台无休止计数）；
@@ -305,7 +305,7 @@ async function pushPreciseStatsIfReady(runtime: DesktopNovelMasterRuntime, scope
     if (stats == null || stats.estimated) {
       return;
     }
-    notifyPromptChatTokenUpdatedToRenderer({
+    PromptChatTokenUpdatedForwarder.notify({
       sessionId: scope.sessionId,
       stats,
     });
@@ -323,7 +323,7 @@ async function pushPreciseStatsIfReady(runtime: DesktopNovelMasterRuntime, scope
     return;
   }
   const contextWindow = cw.value;
-  notifyPromptChatTokenUpdatedToRenderer({
+  PromptChatTokenUpdatedForwarder.notify({
     sessionId: scope.sessionId,
     stats: buildTokenStats(warm.tokenCount, warm.estimated, warm.counterKind, contextWindow ?? undefined, warm.source),
   });

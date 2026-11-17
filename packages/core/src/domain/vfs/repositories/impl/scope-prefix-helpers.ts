@@ -13,8 +13,13 @@ export function escapeLike(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-/** 把前缀规整成不带尾斜杠的形态（根 `/` 保留）。 */
-export function normalizePrefix(prefix: string): string {
+/**
+ * 把前缀规整成不带尾斜杠的形态（根 `/` 保留）。
+ *
+ * 与 `infra/cloud-sync/logic/paths.ts` 的 `ensureTrailingSlash` **语义相反**（那边补尾斜杠），
+ * 两者不可互替（nm-code-style §5.4 / §9.4 已登记的同名反义先例）。
+ */
+export function stripTrailingSlash(prefix: string): string {
   if (prefix === "/") {
     return prefix;
   }

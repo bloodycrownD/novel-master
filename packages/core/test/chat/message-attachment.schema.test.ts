@@ -181,8 +181,8 @@ describe("messageAttachmentSchema", () => {
     const json = JSON.stringify(list);
     assert.deepEqual(parseAttachmentsJson(json), list);
     assert.deepEqual(parseAttachmentsJson("[]"), []);
-    assert.equal(parseAttachmentsJson(null), undefined);
-    assert.equal(parseAttachmentsJson("not-json"), undefined);
+    assert.equal(parseAttachmentsJson(null), null);
+    assert.equal(parseAttachmentsJson("not-json"), null);
   });
 
   // ---- 逐条降级：一条不合规不牵连其余（append-only 历史数据的宽容读法）----
@@ -231,14 +231,14 @@ describe("messageAttachmentSchema", () => {
     );
   });
 
-  it("MA-3: 非 JSON / 非数组 ⇒ 仍返回 undefined（既有行为回归锁）", () => {
-    assert.equal(parseAttachmentsJson(null), undefined);
-    assert.equal(parseAttachmentsJson(""), undefined);
-    assert.equal(parseAttachmentsJson("not-json"), undefined);
+  it("MA-3: 非 JSON / 非数组 ⇒ 返回 null（非法输入的无值口径）", () => {
+    assert.equal(parseAttachmentsJson(null), null);
+    assert.equal(parseAttachmentsJson(""), null);
+    assert.equal(parseAttachmentsJson("not-json"), null);
     // 非数组（无粒度可 salv，整体降级）
-    assert.equal(parseAttachmentsJson('{"a":1}'), undefined);
-    assert.equal(parseAttachmentsJson("null"), undefined);
-    assert.equal(parseAttachmentsJson("123"), undefined);
+    assert.equal(parseAttachmentsJson('{"a":1}'), null);
+    assert.equal(parseAttachmentsJson("null"), null);
+    assert.equal(parseAttachmentsJson("123"), null);
   });
 
   it("MA-D2: 标量元素数组 ⇒ []（元素不是对象，逐条全丢）", () => {

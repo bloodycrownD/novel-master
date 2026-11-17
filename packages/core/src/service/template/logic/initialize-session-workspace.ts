@@ -24,7 +24,7 @@ interface InitializeSessionWorkspaceOptions {
  */
 export async function initializeSessionWorkspace(tx: TdbcConnection, projectId: string, sessionId: string, options: InitializeSessionWorkspaceOptions): Promise<void> {
   if (options.clearCheckpoints) {
-    await deleteSessionFsData(tx, sessionId, projectId);
+    await deleteSessionFsData(tx, projectId, sessionId);
   }
   const vfs = new SqliteVfsEntryRepository(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);

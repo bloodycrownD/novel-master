@@ -26,6 +26,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import { Text } from "@/common/text.js";
 import {
   engineApiErrorMessage,
   engineFailed,
@@ -48,32 +49,13 @@ const DUCKDUCKGO_TIMEOUT_MS = 30_000;
 const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
 
 /**
- * HTML 实体解码：只处理标题/摘要/href 中常见的五个命名实体
- * （`&amp;` 必须最后替换，避免 `&amp;lt;` 被二次解成 `<`）；
- * `&#NN;` 一般数字实体不做（真实页面罕用，简化口径）。
- */
-const HTML_ENTITY_DECODES: readonly (readonly [RegExp, string])[] = [
-  [/&quot;/g, '"'],
-  [/&#x27;/g, "'"],
-  [/&#39;/g, "'"],
-  [/&lt;/g, "<"],
-  [/&gt;/g, ">"],
-  [/&amp;/g, "&"],
-];
-
-function decodeHtmlEntities(text: string): string {
-  let decoded = text;
-  for (const [pattern, replacement] of HTML_ENTITY_DECODES) decoded = decoded.replace(pattern, replacement);
-  return decoded;
-}
-
-/**
  * 锚文本清洗：去内嵌标签（snippet 内的 `<b>` 高亮等）→ 实体解码 →
  * 折叠空白（HTML 折行缩进折成单空格）→ trim。对应 DOM 的
  * `textContent.trim()` 加浏览器渲染的空白折叠语义。
  */
+// nm-style: keep-local — 标签剥离 + 空白折叠是 DDG 的 DOM 语义适配（两处复用），实体解码本身走 Text.decodeHtmlEntities。
 function cleanAnchorText(innerHtml: string): string {
-  const stripped = decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, ""));
+  const stripped = Text.decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, ""));
   return stripped.replace(/\s+/g, " ").trim();
 }
 
@@ -171,7 +153,7 @@ export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, quer
       let resultUrl: string | null = null;
       if (href.length > 0) {
         try {
-          const link = new URL(decodeHtmlEntities(href), DUCKDUCKGO_SEARCH_URL);
+          const link = new URL(Text.decodeHtmlEntities(href), DUCKDUCKGO_SEARCH_URL);
           const target = new URL(link.searchParams.get("uddg") ?? link.href);
           if (target.protocol === "http:" || target.protocol === "https:") resultUrl = target.href;
         } catch {

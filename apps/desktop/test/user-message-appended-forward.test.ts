@@ -3,19 +3,16 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import {
-  notifyUserMessageAppendedToRenderer,
-  setUserMessageAppendedForwardTarget,
-} from "../src/main/ipc/forward-user-message-appended.js";
+import { UserMessageAppendedForwarder } from "../src/main/ipc/forward-user-message-appended.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
 afterEach(() => {
-  setUserMessageAppendedForwardTarget(() => undefined);
+  UserMessageAppendedForwarder.setTarget(() => undefined);
 });
 
 test("T-AN5: notifyUserMessageAppended 推送 nm:agent/userMessageAppended {sessionId}", () => {
   const sent: Array<{ channel: string; payload: unknown }> = [];
-  setUserMessageAppendedForwardTarget(() => {
+  UserMessageAppendedForwarder.setTarget(() => {
     return {
       send(channel: string, payload: unknown) {
         sent.push({ channel, payload });
@@ -23,7 +20,7 @@ test("T-AN5: notifyUserMessageAppended 推送 nm:agent/userMessageAppended {sess
     } as never;
   });
 
-  notifyUserMessageAppendedToRenderer({ sessionId: "s-append" });
+  UserMessageAppendedForwarder.notify({ sessionId: "s-append" });
 
   assert.equal(sent.length, 1);
   assert.equal(sent[0]?.channel, IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED);

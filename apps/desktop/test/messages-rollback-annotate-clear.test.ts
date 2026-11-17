@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import { textBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { handleMessagesRollback } from "../src/main/ipc/handlers/messages.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
@@ -93,7 +93,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     assert.equal(chatAnnotateDraftStore.list(sessionId).length, 1);
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -118,7 +118,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   it("T-UO4 rewind: rollback 后 main 侧 annotate store 清空、推空", async () => {
@@ -149,7 +149,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     assert.equal(chatAnnotateDraftStore.list(sessionId).length, 1);
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -171,6 +171,6 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 });

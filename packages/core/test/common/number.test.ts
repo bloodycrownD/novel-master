@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { Number as Num } from "../../src/common/number.js";
+import { Number as Num, STORAGE_BYTES } from "../../src/common/number.js";
 
 describe("common/number · Number.pad2", () => {
   it("补零到两位；超过两位原样返回不截断", () => {
@@ -50,5 +50,40 @@ describe("common/number · Number.formatBytes", () => {
 
   it("极大值继续以 MB 表达", () => {
     assert.equal(Num.formatBytes(globalThis.Number.MAX_SAFE_INTEGER), "8589934592MB");
+  });
+
+  it("B 档按原值输出（不四舍五入小数；字节数正常是整数，这里钉住历史口径）", () => {
+    assert.equal(Num.formatBytes(0.5), "0.5B");
+    assert.equal(Num.formatBytes(512.7), "512.7B");
+    assert.equal(Num.formatBytes(-0.5), "-0.5B");
+  });
+});
+
+describe("common/number · Number.formatBytes(STORAGE_BYTES)", () => {
+  const KB = 1024;
+  const MB = 1024 ** 2;
+  const GB = 1024 ** 3;
+
+  it("单位档边界：KB / MB / GB 各自从 scale 起跳", () => {
+    assert.equal(Num.formatBytes(0, STORAGE_BYTES), "0 KB");
+    assert.equal(Num.formatBytes(1023, STORAGE_BYTES), "1 KB");
+    assert.equal(Num.formatBytes(KB, STORAGE_BYTES), "1 KB");
+    assert.equal(Num.formatBytes(MB - 1, STORAGE_BYTES), "1024 KB");
+    assert.equal(Num.formatBytes(MB, STORAGE_BYTES), "1.0 MB");
+    assert.equal(Num.formatBytes(GB - 1, STORAGE_BYTES), "1024.0 MB");
+    assert.equal(Num.formatBytes(GB, STORAGE_BYTES), "1.00 GB");
+    assert.equal(Num.formatBytes(GB * 5, STORAGE_BYTES), "5.00 GB");
+  });
+
+  it("每档精度不同且不去尾零：KB 0 位 / MB 1 位 / GB 2 位", () => {
+    assert.equal(Num.formatBytes(1536, STORAGE_BYTES), "2 KB");
+    assert.equal(Num.formatBytes(MB * 1.5, STORAGE_BYTES), "1.5 MB");
+    assert.equal(Num.formatBytes(GB * 1.5, STORAGE_BYTES), "1.50 GB");
+  });
+
+  it("分隔符是空格；非有限值仍原样字符串化", () => {
+    assert.match(Num.formatBytes(MB, STORAGE_BYTES), /^\S+ (KB|MB|GB)$/);
+    assert.equal(Num.formatBytes(globalThis.Number.NaN, STORAGE_BYTES), "NaN");
+    assert.equal(Num.formatBytes(globalThis.Number.POSITIVE_INFINITY, STORAGE_BYTES), "Infinity");
   });
 });

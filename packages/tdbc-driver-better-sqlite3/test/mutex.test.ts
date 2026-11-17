@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AsyncMutex } from "../src/mutex.js";
+import { AsyncMutex } from "@novel-master/core/tdbc";
 
 describe("AsyncMutex", () => {
   it("serializes concurrent tasks", async () => {

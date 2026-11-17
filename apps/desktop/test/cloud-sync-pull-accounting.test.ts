@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { normalizePrefix, snapshotKey, statusKey, type ObjectStoragePort } from "@novel-master/core";
+import { ensureTrailingSlash, snapshotKey, statusKey, type ObjectStoragePort } from "@novel-master/core";
 import { Result } from "@novel-master/core/errors";
 import {
   __setDesktopCloudSyncStorageOverrideForTest,
@@ -110,7 +110,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
       endpoint: "https://s3.example.com",
       bucket: "test-bucket",
       region: "",
-      pathPrefix: normalizePrefix(PREFIX),
+      pathPrefix: ensureTrailingSlash(PREFIX),
       accessKeyId: "test-ak",
       secretAccessKey: "test-sk",
       forcePathStyle: true,

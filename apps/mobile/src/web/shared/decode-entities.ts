@@ -1,6 +1,10 @@
 /**
  * 解码字面 HTML 实体（供 escape 前归一化 / sanitize 出口修复）。
- * 须与 RN `decode-literal-html-entities.ts` 语义对齐。
+ *
+ * 实现单源在 `common/text.ts` 的 `Text.decodeHtmlEntities`；RN 侧是它的薄入口
+ * （`components/rich-content/decode-literal-html-entities.ts`），本文件是 WebView
+ * 侧的镜像副本——WebView 构建门禁（build-webview.mjs 门 B）按白名单限制 core
+ * 模块，不能自由引 core。两侧等价性由 `__tests__/decode-entities-parity.test.ts` 守护。
  */
 
 export type DecodeLiteralHtmlEntitiesOptions = {

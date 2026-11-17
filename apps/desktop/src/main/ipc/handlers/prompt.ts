@@ -21,7 +21,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
-import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
+import { buildRealPromptPreviewTurnsAdapter } from "../../services/prompt-preview.service.js";
 import { coreT } from "../../../../shared/logic/core-i18n.js";
 import { toIpcResult } from "../ipc-result.js";
 
@@ -30,7 +30,7 @@ export function handlePromptRealPreview(req: PromptScopeRequest): Promise<IpcRes
     const built = await getDesktopRuntime();
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const preview = await buildRealPromptPreviewTurns(rt, req);
+    const preview = await buildRealPromptPreviewTurnsAdapter(rt, req);
     if (!preview.ok) return Result.err(preview.error);
     return Result.ok(preview.value.map((turn) => ({
       id: turn.id,

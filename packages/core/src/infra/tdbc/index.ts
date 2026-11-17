@@ -10,6 +10,7 @@ export type { TdbcConnection } from "./ports/connection.port.js";
 export type { TdbcDriver } from "./ports/driver.port.js";
 export { TdbcError } from "./errors.js";
 export type { TdbcErrorCode } from "./errors.js";
+export { AsyncMutex } from "./logic/async-mutex.js";
 export { normalizeBindings } from "./logic/normalize-bindings.js";
 export { open, parseUrl } from "./logic/open.js";
 export type { ParsedTdbcUrl } from "./logic/open.js";

@@ -8,6 +8,7 @@ import {
   assertSavedModelUuid,
   savedModelDisplayName,
 } from "@novel-master/core/provider";
+import { resolveCurrentAgentId } from "@novel-master/core/agent";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -32,9 +33,8 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import {
   resolveCurrentAgentDefinition,
-  resolveCurrentAgentId,
   resolveDesktopSavedModelId,
-  runAgentTurn,
+  runAgentTurnAdapter,
 } from "../../services/agent-run.service.js";
 import {
   decrementDesktopAgentActive,
@@ -45,7 +45,7 @@ import { createLogger } from "@novel-master/core/log";
 import { type AppError, Result } from "@novel-master/core/errors";
 import { formatIpcError } from "../format-ipc-error.js";
 import { toIpcResult } from "../ipc-result.js";
-import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-appended.js";
+import { UserMessageAppendedForwarder } from "../forward-user-message-appended.js";
 
 const log = createLogger("desktop.ipc.agent");
 
@@ -66,7 +66,10 @@ export function handleAgentResolveCurrent(): Promise<IpcResult<AgentResolveCurre
     // runtime 装配的已知失败沿 Result 上行（错误通道迁移七期），就地短路。
     if (!built.ok) return Result.err(built.error);
     const rt = built.value;
-    const agentId = await resolveCurrentAgentId(rt);
+    const resolvedId = await resolveCurrentAgentId(rt);
+    // 错误通道迁移：core 沿 Result 回传，已知失败就地并进本 handler 的 Result 通道。
+    if (!resolvedId.ok) return Result.err(resolvedId.error);
+    const agentId = resolvedId.value;
     if (agentId == null) {
       return Result.ok({ agentId: undefined, agentName: "未配置 Agent", modelLabel: "—", hasDedicatedModel: false });
     }
@@ -394,10 +397,10 @@ export async function handleAgentRun(req: AgentRunRequest): Promise<IpcResult<{ 
       attachments: req.attachments,
       annotateDrafts: req.annotateDrafts,
       onUserMessageAppended: () => {
-        notifyUserMessageAppendedToRenderer({ sessionId });
+        UserMessageAppendedForwarder.notify({ sessionId });
       },
     };
-    void runAgentTurn(rt, { projectId: req.projectId, sessionId }, req.userContent, runOptions)
+    void runAgentTurnAdapter(rt, { projectId: req.projectId, sessionId }, req.userContent, runOptions)
       .then((outcome) => {
         // 已知失败沿 Result 到达（四期门⑦）：终态事件已由 core 补发，这里只记日志。
         if (!outcome.ok) {

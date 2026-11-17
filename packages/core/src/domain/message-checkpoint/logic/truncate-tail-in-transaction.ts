@@ -4,13 +4,10 @@
  * @module domain/message-checkpoint/logic/truncate-tail-in-transaction
  */
 
-import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
+import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
 import { SESSION_KKV_COMPOSER_STATUS_DOMAINS, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
 
@@ -32,16 +29,11 @@ export type TruncateTailParams = {
   readonly deferGlobalOrphanGc?: boolean;
 };
 
-/** {@link truncateTailInTransaction} 依赖。 */
-export type TruncateTailDeps = {
-  readonly messages: MessageRepository;
-  readonly checkpoints: MessageCheckpointRepository;
+/** {@link truncateTailInTransaction} 依赖（共享底座里只取 checkpoint / revision 两项）。 */
+export type TruncateTailDeps = Pick<CheckpointRepoDeps, "checkpointRepo" | "revisionRepo"> & {
+  readonly messageRepo: MessageRepository;
   /** Composer 状态条真源：session kkv（tail 非空时按域清空）。 */
   readonly sessionKkv: SessionKkvRepository;
-  readonly revisions: VfsRevisionRepository;
-  readonly entries: VfsEntryRepository;
-  /** 用于 migration 分支判断与 sweep。 */
-  readonly conn: TdbcConnection;
 };
 
 /**
@@ -59,23 +51,23 @@ export async function truncateTailInTransaction(deps: TruncateTailDeps, params: 
   // 拉 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表删除链素材。
   // read 引用 −1（尾截断的消息不再持有 revision）已随 E1 清理版退役。
   // 本函数在事务内执行：已知失败与中断都必须抛错才能触发整体回滚。
-  const tailRead = await deps.messages.listBySessionFromSeq(sessionId, afterSeq + 1);
+  const tailRead = await deps.messageRepo.listBySessionFromSeq(sessionId, afterSeq + 1);
   if (tailRead.kind === "failed") throw tailRead.error;
   // 未注入 hooks，中断分支不可达；命中说明调用链被改动，按事务边界语义转抛。
   if (tailRead.kind !== "completed") throw createAbortError();
   const tailIds = tailRead.value.map((m) => m.id);
 
   if (tailIds.length > 0) {
-    await deps.checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
+    await deps.checkpointRepo.deleteCheckpointsForMessages(sessionId, tailIds);
   }
-  await deps.messages.deleteAfterSeq(sessionId, afterSeq);
+  await deps.messageRepo.deleteAfterSeq(sessionId, afterSeq);
 
   if (sweepRevisions) {
     // rollback-large-jank Step 4：默认保持原行为——scoped 打扫后接着做全局
     // 孤儿兜底（全表 DELETE）。只有显式 deferGlobalOrphanGc 的调用方（回滚
     // 链）才把它移出事务，改由该调用方在事务提交后 fire-and-forget 调度
     // scheduleDeferredRevisionOrphanGc 补做。
-    await sweepSessionRevisions(deps.revisions, deps.entries, deps.checkpoints, projectId, sessionId, deps.conn, deferGlobalOrphanGc === true ? { includeGlobalOrphans: false } : undefined);
+    await sweepSessionRevisions(deps.revisionRepo, projectId, sessionId, deferGlobalOrphanGc === true ? { includeGlobalOrphans: false } : undefined);
   }
 
   if (tailIds.length > 0) {

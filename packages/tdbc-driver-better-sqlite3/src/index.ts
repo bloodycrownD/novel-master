@@ -12,7 +12,6 @@ export {
   BetterSqlite3Driver,
   BETTER_SQLITE3_DRIVER_NAME,
 } from "./driver.js";
-export { AsyncMutex } from "./mutex.js";
 
 /**
  * Registers the better-sqlite3 driver as `better-sqlite3`.

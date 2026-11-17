@@ -59,10 +59,15 @@ export async function scrubProviderTablesInDatabase(conn: TdbcConnection, attach
  * INSERT 之前先跑 service 级 {@link validateProviderTableSnapshot}，把过去
  * 绕过 service upsert 的 raw INSERT 路径（db-backup import / cloud-sync pull）
  * 拉回到与 DefaultProviderService.create 等价的校验水位。校验在事务外执行，
- * 任意行非法直接抛 {@link ProviderTableSnapshotError}，主库保持原状。
+ * 校验失败是调用方预期的业务失败（Result 通道），本函数作为写库边界把它
+ * 转成 throw，保持「任意行非法则抛 {@link ProviderTableSnapshotError}、主库
+ * 保持原状」的对外契约。
  */
 export async function restoreProviderTableSnapshot(conn: TdbcConnection, snapshot: ProviderTableSnapshot): Promise<void> {
-  validateProviderTableSnapshot(snapshot);
+  const validation = validateProviderTableSnapshot(snapshot);
+  if (!validation.ok) {
+    throw validation.error;
+  }
   await conn.transaction(async (tx) => {
     await scrubProviderTablesWithPrefix(tx);
     for (const table of RESTORE_TABLE_ORDER) {

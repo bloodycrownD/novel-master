@@ -7,6 +7,10 @@
 import type { OpSqliteResult } from "./adapter.js";
 import type { Row, SqlValue } from "@novel-master/core";
 
+/**
+ * 与 better-sqlite3 的 mapValue 不同：op-sqlite 的 JSI rows 可能是 ArrayBuffer，
+ * 这里多一支转换；**不要合并**——合并会把 ArrayBuffer 分支带进 better-sqlite3 的行路径。
+ */
 function mapValue(value: unknown): SqlValue {
   if (value === null || value === undefined) {
     return null;

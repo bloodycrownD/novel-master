@@ -23,7 +23,7 @@ import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type { VfsDeleteOptions, VfsListOptions } from "../../model/vfs-options.js";
 import type { VfsEntryRepository } from "../vfs-entry.port.js";
 import { normalizePath } from "./normalize-path.js";
-import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
+import { escapeLike, stripTrailingSlash } from "./scope-prefix-helpers.js";
 
 /** 统一前缀扫描的 LIKE 子串（base 为 `/` 时匹配 `/%`）。 */
 function childLikePattern(base: string): string {
@@ -367,7 +367,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   /** nm-style: keep-public — 实现 VfsEntryRepository.deleteRecursiveIfAny 端口方法；内联会把探测 + 批量删除 SQL 搬进调用层。 */
   async deleteRecursiveIfAny(scopeKey: string, prefix: string): Promise<Result<number, AppError>> {
     // 先探测：prefix 下无任何 entry 时静默返回 0，避免 recursive:true 分支的 vfsNotFound。
-    const base = normalizePrefix(prefix);
+    const base = stripTrailingSlash(prefix);
     const entries = await this.listEntriesUnderPrefix(scopeKey, base);
     if (entries.length === 0) {
       return Result.ok(0);
@@ -391,7 +391,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async listDirectoryPathsUnderPrefix(scopeKey: string, pathPrefix: string): Promise<string[]> {
-    const base = normalizePrefix(pathPrefix);
+    const base = stripTrailingSlash(pathPrefix);
     const pattern = childLikePattern(base);
     const sql39 = "SELECT path FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'directory'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY path";
     const rows = await queryTemplate<{ path: string }>(this.conn, this.parser, sql39, { scopeKey, path: base, pattern });
@@ -400,7 +400,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.listDirectoryMetaUnderPrefix 端口方法；内联会把前缀扫描 SQL 搬进调用层。 */
   async listDirectoryMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
-    const base = normalizePrefix(pathPrefix);
+    const base = stripTrailingSlash(pathPrefix);
     const pattern = childLikePattern(base);
     const sql40 = "SELECT path, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'directory'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY path";
     const rows = await queryTemplate<{ path: string; mtime_ms: number }>(this.conn, this.parser, sql40, { scopeKey, path: base, pattern });
@@ -411,7 +411,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async listEntriesUnderPrefix(scopeKey: string, pathPrefix: string): Promise<VfsListEntry[]> {
-    const base = normalizePrefix(pathPrefix);
+    const base = stripTrailingSlash(pathPrefix);
     const pattern = childLikePattern(base);
     const sql41 = "SELECT path, entry_kind FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY path";
     const rows = await queryTemplate<{ path: string; entry_kind: string }>(this.conn, this.parser, sql41, { scopeKey, path: base, pattern });
@@ -423,7 +423,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.listFileMetaUnderPrefix 端口方法；内联会把前缀扫描 SQL 搬进调用层。 */
   async listFileMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
-    const base = normalizePrefix(pathPrefix);
+    const base = stripTrailingSlash(pathPrefix);
     const pattern = childLikePattern(base);
     const sql42 = "SELECT path, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY path";
     const rows = await queryTemplate<{ path: string; mtime_ms: number }>(this.conn, this.parser, sql42, { scopeKey, path: base, pattern });
@@ -451,7 +451,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       mtimeMs: number;
     }>
   > {
-    const base = normalizePrefix(pathPrefix);
+    const base = stripTrailingSlash(pathPrefix);
     const pattern = childLikePattern(base);
     const sql44 = "SELECT entry_id, path, head_version, mtime_ms FROM vfs_entry\n       WHERE scope_key = #{scopeKey}\n         AND entry_kind = 'file'\n         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY path";
     const rows = await queryTemplate<{ entry_id: number; path: string; head_version: number; mtime_ms: number }>(this.conn, this.parser, sql44, { scopeKey, path: base, pattern });
@@ -654,8 +654,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   /** nm-style: keep-public — 实现 VfsEntryRepository.renamePrefixInScope 端口方法；内联会把前缀重命名两条 UPDATE 搬进调用层。 */
   async renamePrefixInScope(tx: TdbcConnection, scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
-    const oldBase = normalizePrefix(oldPrefix);
-    const newBase = normalizePrefix(newPrefix);
+    const oldBase = stripTrailingSlash(oldPrefix);
+    const newBase = stripTrailingSlash(newPrefix);
     const parser = this.parser;
     // 目录前缀重命名：把 `oldBase/...` 整体替换成 `newBase/...`；含 oldBase 自身。
     // 必须用「剥定长前缀 + 拼新前缀」的定点写法（substr），**不能用 REPLACE**：

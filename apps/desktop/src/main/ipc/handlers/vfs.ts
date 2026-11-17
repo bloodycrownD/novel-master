@@ -73,10 +73,7 @@ import {
   getWorkplaceForScope,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
-import {
-  notifyWorkspaceMutatedToRenderer,
-  workspaceMutatedPayloadFromRequest,
-} from "../forward-workspace-mutated.js";
+import { WorkspaceMutatedForwarder } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr, toIpcResult } from "../ipc-result.js";
 import { createLogger } from "@novel-master/core/log";
@@ -90,7 +87,7 @@ function focusedWindow(): BrowserWindow | undefined {
 
 /** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）。 */
 function pushWorkspaceMutated(req: VfsScopeRequest): void {
-  notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+  WorkspaceMutatedForwarder.notify(WorkspaceMutatedForwarder.payloadFromRequest(req));
 }
 
 /**

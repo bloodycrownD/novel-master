@@ -32,7 +32,7 @@ import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import {
   chatPromptTokenDebounceExecCountForTests,
@@ -91,7 +91,7 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
   }
 
   before(async () => {
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {

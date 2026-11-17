@@ -1,10 +1,15 @@
 /**
- * 通用文本截断 / 转义纯工具。
+ * 通用文本截断 / 转义 / HTML 实体解码纯工具。
  *
  * @module common/text
  */
 
 import {Encoding} from "./encoding.js";
+
+/** `Text.decodeHtmlEntities` 的选项：`preserveAngleBrackets` 保留尖括号（sanitize 出口路径用）。 */
+export interface DecodeHtmlEntitiesOptions {
+    readonly preserveAngleBrackets?: boolean;
+}
 
 export const Text = {
     /**
@@ -47,4 +52,43 @@ export const Text = {
 
     /** 转义正则元字符，使结果可作为字面量拼进 `new RegExp`。 */
     escapeRegExp: (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+
+    /**
+     * 逐行剥前缀：按 `"\n"` 切行，**每行至多替换一次**（`pattern` 无需全局标志），再按原分隔符拼回。
+     *
+     * @remarks 判据全部落在 `pattern` 里（锚定形态、是否容忍前导空格），本函数不持有任何业务口径。
+     */
+    stripLinePrefix: (body: string, pattern: RegExp): string => body.split("\n").map((line) => line.replace(pattern, "")).join("\n"),
+
+    /**
+     * HTML 转义：`&` `<` `>` `"` 四个实体（**不处理单引号**，与历史输出逐字节一致）。
+     *
+     * @remarks 入参取 `unknown`（WebView 侧原口径）：非字符串先 `String(value)` 化，
+     * 调用方已保证 string 时行为不变。
+     */
+    escapeHtml: (value: unknown): string => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"),
+
+    /**
+     * 解码字面 HTML 实体：命名实体 + 引号/尖括号的十进制与十六进制数值实体，
+     * 最多 3 轮（处理 `&amp;quot;` 这类双重编码）。
+     *
+     * @remarks 替换顺序固定为 amp → quot/apos（含数值）→ 尖括号（含数值），逐轮重跑直到稳定；
+     * `preserveAngleBrackets` 为 true 时跳过尖括号那一档（sanitize 出口用，避免把转义后的
+     * 伪标签再变回裸尖括号）。非字符串按 WebView 侧 `String(value || "")` 口径（falsy → 空串）。
+     */
+    decodeHtmlEntities: (value: unknown, options?: DecodeHtmlEntitiesOptions): string => {
+        const preserveAngleBrackets = options?.preserveAngleBrackets === true;
+        let current = String(value || "");
+        let previous = "";
+        let pass = 0;
+        while (current !== previous && pass < 3) {
+            previous = current;
+            current = current.replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#(?:0*34|x0*22);/gi, '"').replace(/&apos;/gi, "'").replace(/&#(?:0*39|x0*27);/gi, "'");
+            if (!preserveAngleBrackets) {
+                current = current.replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&#(?:0*60|x0*3c);/gi, "<").replace(/&#(?:0*62|x0*3e);/gi, ">");
+            }
+            pass += 1;
+        }
+        return current;
+    },
 } as const;

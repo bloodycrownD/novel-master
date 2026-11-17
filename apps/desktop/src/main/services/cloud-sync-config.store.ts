@@ -4,8 +4,9 @@
  * @module services/cloud-sync-config.store
  */
 import { randomUUID } from "node:crypto";
-import { normalizePrefix } from "@novel-master/core";
-import { AppError, isAppError } from "@novel-master/core/agent";
+import { ensureTrailingSlash } from "@novel-master/core";
+import { AppError } from "@novel-master/core/agent";
+import { Kkv } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
@@ -100,20 +101,6 @@ export interface CloudSyncConfigStore {
   recordPush(success: boolean, detail: string): Promise<void>;
 }
 
-async function kkvGet(kkv: KkvService, key: string): Promise<Result<string | undefined, AppError>> {
-  const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
-  if (!raw.ok) {
-    if (isAppError(raw.error, "KKV_NOT_FOUND")) {
-      return Result.ok(undefined);
-    }
-    // 非 NOT_FOUND 的 KKV 读失败沿 Result 上行（错误通道迁移四期）：
-    // readPublicConfig 聚合 → store 方法 → DesktopCloudSyncService 记账 →
-    // handlers/cloud-sync.ts 转码收口。
-    return Result.err(raw.error);
-  }
-  return Result.ok(raw.value);
-}
-
 /**
  * 参数校验失败返回错误对象（调用方 `setConfig` 沿 `Result.err` 收口）：
  * 空值属用户可纠正的已知失败，不再走 throw。
@@ -126,20 +113,20 @@ export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretS
   /** 14 个 KKV 键一次并行读齐；任一已知失败整包 err（错误通道迁移四期）。 */
   async function readPublicConfig(): Promise<Result<CloudSyncPublicConfig, AppError>> {
     const readTasks = [
-      kkvGet(kkv, CLOUD_SYNC_KEY_ENDPOINT),
-      kkvGet(kkv, CLOUD_SYNC_KEY_BUCKET),
-      kkvGet(kkv, CLOUD_SYNC_KEY_REGION),
-      kkvGet(kkv, CLOUD_SYNC_KEY_PATH_PREFIX),
-      kkvGet(kkv, CLOUD_SYNC_KEY_ACCESS_KEY_ID),
-      kkvGet(kkv, CLOUD_SYNC_KEY_FORCE_PATH_STYLE),
-      kkvGet(kkv, CLOUD_SYNC_KEY_DEVICE_ID),
-      kkvGet(kkv, CLOUD_SYNC_KEY_DEVICE_LABEL),
-      kkvGet(kkv, CLOUD_SYNC_KEY_ENABLED),
-      kkvGet(kkv, CLOUD_SYNC_KEY_LAST_SYNCED_REV),
-      kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PULL_AT),
-      kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_AT),
-      kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PULL_RESULT),
-      kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_RESULT),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENDPOINT),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_BUCKET),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_REGION),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_PATH_PREFIX),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ACCESS_KEY_ID),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_FORCE_PATH_STYLE),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_DEVICE_ID),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_DEVICE_LABEL),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENABLED),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_SYNCED_REV),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PULL_AT),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PUSH_AT),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PULL_RESULT),
+      Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_LAST_PUSH_RESULT),
     ];
     const results = await Promise.all(readTasks);
     for (const r of results) {
@@ -205,7 +192,7 @@ export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretS
 
       const deviceId = existing.value.deviceId.trim().length > 0 ? existing.value.deviceId : randomUUID();
 
-      const normalizedPrefix = normalizePrefix(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
+      const normalizedPrefix = ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENDPOINT, input.endpoint.trim()),

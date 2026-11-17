@@ -10,18 +10,12 @@ import { installDesktopLogSink } from "./log/desktop-log-sink.js";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
 import { attachAgentRunLifecycleListeners } from "./ipc/handlers/agent.js";
-import {
-  attachEventBusForwarder,
-  setEventBusForwardTarget,
-} from "./ipc/forward-event-bus.js";
-import {
-  attachAgentActivityForwarder,
-  setAgentActivityForwardTarget,
-} from "./ipc/forward-agent-activity.js";
-import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-composer-attachments-suggest.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "./ipc/forward-prompt-chat-token-updated.js";
-import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
+import { EventBusForwarder } from "./ipc/forward-event-bus.js";
+import { AgentActivityForwarder } from "./ipc/forward-agent-activity.js";
+import { WorkspaceMutatedForwarder } from "./ipc/forward-workspace-mutated.js";
+import { ComposerAttachmentsSuggestForwarder } from "./ipc/forward-composer-attachments-suggest.js";
+import { PromptChatTokenUpdatedForwarder } from "./ipc/forward-prompt-chat-token-updated.js";
+import { UserMessageAppendedForwarder } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -102,7 +96,7 @@ function createMainWindow(): BrowserWindow {
     clearTimeout(showFallback);
   });
 
-  setEventBusForwardTarget(() => {
+  EventBusForwarder.setTarget(() => {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   });
@@ -110,11 +104,11 @@ function createMainWindow(): BrowserWindow {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   };
-  setWorkspaceMutatedForwardTarget(resolvePushWebContents);
-  setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
-  setPromptChatTokenUpdatedForwardTarget(resolvePushWebContents);
-  setUserMessageAppendedForwardTarget(resolvePushWebContents);
-  setAgentActivityForwardTarget(resolvePushWebContents);
+  WorkspaceMutatedForwarder.setTarget(resolvePushWebContents);
+  ComposerAttachmentsSuggestForwarder.setTarget(resolvePushWebContents);
+  PromptChatTokenUpdatedForwarder.setTarget(resolvePushWebContents);
+  UserMessageAppendedForwarder.setTarget(resolvePushWebContents);
+  AgentActivityForwarder.setTarget(resolvePushWebContents);
 
   // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
   // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>
@@ -170,9 +164,9 @@ app.whenReady().then(async () => {
     } else {
       const runtime = built.value;
       detachMainEventBusListeners();
-      detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
+      detachEventBusForwarder = EventBusForwarder.attach(runtime.eventBus);
       detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(runtime.eventBus);
-      detachAgentActivityForwarder = attachAgentActivityForwarder();
+      detachAgentActivityForwarder = AgentActivityForwarder.attach();
     }
   } catch (error) {
     log.error("bootstrap failed", { error });

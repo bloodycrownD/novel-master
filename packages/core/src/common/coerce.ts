@@ -14,6 +14,12 @@ export const Coerce = {
     /** 从 SQL 行安全取出可空 TEXT，禁止 `String(null)` → `"null"`：null / undefined → null，其余 String 化。 */
     nullableText: (value: unknown): string | null => (value == null ? null : String(value)),
 
+    /**
+     * 只有 string 通过；数字 / 布尔 / 对象 / null → null（**不 String 化**）。
+     * 处理不可信 JSON / YAML / 备份快照时用它；SQL 动态类型取值走 {@link Coerce.nullableText}。
+     */
+    strictText: (value: unknown): string | null => (typeof value === "string" ? value : null),
+
     /** 整数（number 或数字字符串）且 >= min；其余（小数 / 非数字 / 越界 / NaN / Infinity）→ undefined。 */
     integerAtLeast: (value: unknown, min: number): number | undefined => {
         if (typeof value === "number" && Number.isInteger(value) && value >= min) {
@@ -39,6 +45,12 @@ export const Coerce = {
         }
         return undefined;
     },
+
+    /**
+     * 只有有限 number 通过；数字字符串 → null（**不解析**）。
+     * 处理不可信 JSON / YAML / 备份快照时用它；宽松解析走 {@link Coerce.number}。
+     */
+    strictNumber: (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null),
 
     /** 非负数字（含数字字符串）→ number；负数 / 非数字 / NaN / Infinity → undefined。 */
     nonNegativeNumber: (value: unknown): number | undefined => {

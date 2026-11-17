@@ -11,8 +11,7 @@ import type {
   Row,
   TdbcConnection,
 } from "@novel-master/core";
-import { TdbcError, normalizeBindings } from "@novel-master/core";
-import { AsyncMutex } from "./mutex.js";
+import { AsyncMutex, TdbcError, normalizeBindings } from "@novel-master/core/tdbc";
 import { mapRow } from "./row-mapper.js";
 
 export class BetterSqlite3Connection implements TdbcConnection {

@@ -12,6 +12,9 @@
  * 带偏移视图 / 真实 codec 往返），确认可直接绑二进制 BLOB 往返无失真。
  * 防御性拷贝仍保留：它同时兜住「源视图带 byteOffset」这一与驱动无关的
  * 越界坑，VFS blob 写入路径的堆安全不赌假设。
+ *
+ * **不要与 core 的 `normalizeBindings` 合并**：那个只把 undefined 映射成 null，
+ * 这里额外把 Uint8Array 拷成独立 ArrayBuffer（语义不同，合并会改 op-sqlite 绑参行为）。
  */
 export function normalizeOpSqliteBindings(
   parameters?: readonly unknown[],

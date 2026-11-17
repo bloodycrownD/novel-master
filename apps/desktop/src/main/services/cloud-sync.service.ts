@@ -8,7 +8,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
 import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
@@ -106,7 +106,7 @@ class DesktopCloudSyncService {
       forcePathStyle: s3Config.forcePathStyle ?? false,
     };
     const client = new S3Client(clientConfig);
-    const pathPrefix = normalizePrefix(publicConfig.value.pathPrefix);
+    const pathPrefix = ensureTrailingSlash(publicConfig.value.pathPrefix);
 
     try {
       await client.send(new HeadBucketCommand({ Bucket: s3Config.bucket }));

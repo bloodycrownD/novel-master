@@ -22,7 +22,7 @@ import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
 import {
-  buildSessionPromptInput,
+  buildSessionPromptInputAdapter,
   ChatPromptBuildBailedError,
 } from "../src/main/services/session-prompt-input.service.js";
 import {
@@ -99,7 +99,7 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
       customAttach: "这是常驻附加信息：优先级最高",
     };
 
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       rt,
       { projectId, sessionId },
       definition,
@@ -196,7 +196,7 @@ describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () 
     const rtR = await getDesktopRuntime();
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
-    const bundleResult = await buildSessionPromptInput(rt, { projectId, sessionId })
+    const bundleResult = await buildSessionPromptInputAdapter(rt, { projectId, sessionId })
     if (!bundleResult.ok) throw bundleResult.error;
     const bundle = bundleResult.value;
 
@@ -325,7 +325,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      buildSessionPromptInputAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -343,7 +343,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      buildSessionPromptInputAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -365,7 +365,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      buildSessionPromptInputAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -390,7 +390,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
     await assert.rejects(
-      buildSessionPromptInput(
+      buildSessionPromptInputAdapter(
         runtime,
         { projectId, sessionId },
         undefined,
@@ -467,7 +467,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
         workplace: "【工作区】",
       };
       await assert.rejects(
-        buildSessionPromptInput(rt, { projectId, sessionId }, definition, {
+        buildSessionPromptInputAdapter(rt, { projectId, sessionId }, definition, {
           shouldBail: () => readCalls >= 1,
         }),
         (error: unknown) => error instanceof ChatPromptBuildBailedError,
@@ -484,7 +484,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     if (!rtR.ok) throw rtR.error;
     const rt = rtR.value;
     const { runtime, counts } = probeRuntime(rt);
-    const bundleResult = await buildSessionPromptInput(
+    const bundleResult = await buildSessionPromptInputAdapter(
       runtime,
       { projectId, sessionId },
       undefined,
@@ -496,7 +496,7 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
     assert.ok(counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1);
 
     // 预览消费方（不传 options）：原签名调用零变化。
-    const previewResult = await buildSessionPromptInput(
+    const previewResult = await buildSessionPromptInputAdapter(
       runtime,
       { projectId, sessionId },
     );

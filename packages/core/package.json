@@ -86,6 +86,10 @@
       "types": "./dist/infra/sksp/index.d.ts",
       "import": "./dist/infra/sksp/index.js"
     },
+    "./sksp-node": {
+      "types": "./dist/infra/sksp/node.d.ts",
+      "import": "./dist/infra/sksp/node.js"
+    },
     "./nmtp": {
       "types": "./dist/infra/nmtp/index.d.ts",
       "import": "./dist/infra/nmtp/index.js"

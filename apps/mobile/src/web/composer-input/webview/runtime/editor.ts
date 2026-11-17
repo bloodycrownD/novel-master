@@ -16,6 +16,7 @@ import {composerTokenRanges, splitComposerTokenSegments} from '@/components/chat
 import {tryAtomicRangeDelete, type AtomicDeleteRange} from '@/components/common/atomic-range-delete';
 import {escapeHtml} from '@/components/common/html';
 import {findWhitelistMacroRanges} from '@/components/agent/prompt-macro-input';
+import {clampIndex} from '@web/shared/clamp-index';
 import {post} from './bridge';
 import type {ComposerMetrics, ComposerMode, ComposerTheme, InitPayload} from './model';
 
@@ -287,13 +288,6 @@ function reportSelection(state: ComposerEditorState): void {
   }
   state.lastSelection = next;
   post('selectionChange', next);
-}
-
-function clampIndex(value: number, length: number): number {
-  if (!Number.isFinite(value)) {
-    return length;
-  }
-  return Math.max(0, Math.min(Math.floor(value), length));
 }
 
 /* ---- host 下行应用的对外入口 ---- */

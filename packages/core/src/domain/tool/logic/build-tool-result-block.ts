@@ -10,6 +10,7 @@
 
 import { Guards } from "@/common/guards.js";
 import { Encoding } from "@/common/encoding.js";
+import { Number } from "@/common/number.js";
 import { isAppError } from "@/errors/app-error.js";
 import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
@@ -44,18 +45,6 @@ export function resolveToolResultOk(block: ToolResultBlock): boolean {
     return true;
   }
   return !block.content.trimStart().startsWith("Error:");
-}
-
-/** 字节数格式化：1024 进位（B/KB/MB）、保留 1 位小数（整数位不带 .0）。 */
-function formatByteSize(bytes: number): string {
-  const trimFraction = (n: number): string => {
-    const s = n.toFixed(1);
-    return s.endsWith(".0") ? s.slice(0, -2) : s;
-  };
-  if (bytes < 1024) return `${bytes}B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${trimFraction(kb)}KB`;
-  return `${trimFraction(kb / 1024)}MB`;
 }
 
 // nm-style: keep-local — summary 与 format-tool-output 抬头同词（响应文本 / 已落盘 / N 条结果），且整段必须整体先于泛化 matches/paths 兜底求值；这条跨工具一致口径是单点契约，拆进 assembler 会与持久化装配混层。
@@ -190,9 +179,9 @@ function summarizeToolSuccess(toolName: string | undefined, output: unknown): st
         const bodyBytes = typeof output.body === "string" ? Encoding.utf8ByteLength(output.body) : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
         const kept = bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES ? bodyBytes : TOOL_OUTPUT_MAX_BYTES;
-        return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
+        return `truncated · ${Number.formatBytes(kept)}/${Number.formatBytes(originalBytes)}`;
       }
-      return `${status} · ${formatByteSize(originalBytes)}`;
+      return `${status} · ${Number.formatBytes(originalBytes)}`;
     }
   }
 

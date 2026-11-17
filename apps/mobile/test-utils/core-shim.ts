@@ -20,7 +20,9 @@ export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 // Result 同时是值（ok/err 静态入口）与类型（Ok|Err 联合）：云同步测试按
 // coordinator 的 Result 通道造 mock 返回值（错误通道迁移四期适配）。
 export {Result} from '../../../packages/core/dist/errors/either.js';
-export {CloudSyncCoordinator, normalizePrefix, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
+// 路径前缀归一是「补尾斜杠」语义：旧名 normalizePrefix 已按同名反义拆分改名为
+// ensureTrailingSlash（nm-code-style §5.4），dist 导出名与 core 源码同步。
+export {CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey} from '../../../packages/core/dist/infra/cloud-sync/index.js';
 export type {KkvService} from '../../../packages/core/dist/service/kkv/kkv.port.js';
 export {matchDepth, validateDepthSlice} from '../../../packages/core/dist/domain/depth/logic/depth-slice.js';
 export {sortDirPaths, sortFilesForDir} from '../../../packages/core/dist/domain/workplace/logic/workplace-eval.js';

@@ -13,9 +13,7 @@ import {
 import { sweepSessionRevisions } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
-import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
   getNovelMasterTestContext,
@@ -177,8 +175,6 @@ describe("fail restore compensation (sessionVfs)", () => {
     const session = unwrap(await ctx.sessions.create(project.id));
     const vfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const sk = scopeKey(project.id, session.id);
 
     unwrap(await vfs.mkdir("/empty"));
@@ -206,14 +202,7 @@ describe("fail restore compensation (sessionVfs)", () => {
 
     // sweep 现在含 deleteGlobalOrphans：entry 已删、ref_count<=0 的 orphan revision
     // 会被全局清扫回收（findings 发现 14 修复）。
-    const deleted = await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    const deleted = await sweepSessionRevisions(revisions, project.id, session.id);
     assert.ok(deleted >= 1, "sweep 应通过全局孤儿清扫回收到 entry 已删的 orphan revision");
 
     // re-create entry 后旧 entry_id 的 revision 已被上一步 sweep 清掉（不再残留）

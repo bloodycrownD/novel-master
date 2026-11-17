@@ -75,7 +75,7 @@ export {
   buildLease,
   renewLease,
   DEFAULT_LEASE_SECONDS,
-  normalizePrefix,
+  ensureTrailingSlash,
   statusKey,
   snapshotKey,
 } from "./infra/cloud-sync/index.js";

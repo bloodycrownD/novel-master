@@ -27,6 +27,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {ModelKey} from '../../utils/model-key';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'ProviderDetail'>;
@@ -38,10 +39,6 @@ interface ModelRow {
   label: string;
   subtitle: string;
   hasSampling: boolean;
-}
-
-function modelNameKey(providerId: string, modelName: string): string {
-  return `${providerId}\0${modelName}`;
 }
 
 export function ProviderDetailScreen() {
@@ -88,13 +85,13 @@ export function ProviderDetailScreen() {
       if (!saved.ok) throw saved.error;
       const nameCounts = new Map<string, number>();
       for (const model of saved.value) {
-        const key = modelNameKey(model.providerId, model.modelName);
+        const key = ModelKey.name(model.providerId, model.modelName);
         nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
       }
       return saved.value.map(model => {
         const sampling = savedModelSampling(model.settings);
         const hasSampling = Boolean(sampling.enabled && sampling.params);
-        const duplicate = (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) > 1;
+        const duplicate = (nameCounts.get(ModelKey.name(model.providerId, model.modelName)) ?? 0) > 1;
         const label = formatSavedModelDisplayName(provider.displayName, model.modelName);
         const subtitleParts = [duplicate ? model.vendorModelId : undefined, hasSampling ? '已配采样' : undefined].filter(Boolean);
         return {

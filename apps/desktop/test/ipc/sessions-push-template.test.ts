@@ -20,7 +20,7 @@ register(new URL("./sessions-push-runtime-hook.mjs", import.meta.url));
 const { handleSessionsPushTemplate } = await import(
   "../../src/main/ipc/handlers/sessions.js"
 );
-const { notifyWorkspaceMutatedToRenderer, setWorkspaceMutatedForwardTarget } =
+const { WorkspaceMutatedForwarder } =
   await import("../../src/main/ipc/forward-workspace-mutated.js");
 
 /** fake webContents：捕获 send 的 channel + payload。 */
@@ -31,9 +31,9 @@ const fakeWebContents = {
   },
 };
 
-setWorkspaceMutatedForwardTarget(() => fakeWebContents);
+WorkspaceMutatedForwarder.setTarget(() => fakeWebContents);
 after(() => {
-  setWorkspaceMutatedForwardTarget(() => undefined);
+  WorkspaceMutatedForwarder.setTarget(() => undefined);
 });
 
 // pushTemplate 同走 Result（handler 侧 `!ok` 即 throw），桩返回 ok wire。

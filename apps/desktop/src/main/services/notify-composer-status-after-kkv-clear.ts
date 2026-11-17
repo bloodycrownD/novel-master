@@ -6,7 +6,7 @@
  * - 手动重置：推空条。
  * 不清 composer_draft（正文+attach 保留）。
  */
-import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
+import { ComposerAttachmentsSuggestForwarder } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { projectComposerStatusForSession } from "./project-composer-status.service.js";
 
@@ -15,7 +15,7 @@ import { projectComposerStatusForSession } from "./project-composer-status.servi
  * Renderer 侧仍会 ∪ annotate store（若有）。
  */
 export async function notifyComposerStatusAfterSessionKkvCleared(_rt: DesktopNovelMasterRuntime, sessionId: string): Promise<void> {
-  notifyComposerAttachmentsSuggestToRenderer({
+  ComposerAttachmentsSuggestForwarder.notify({
     sessionId,
     attachments: [],
   });
@@ -28,7 +28,7 @@ export async function notifyComposerStatusAfterSessionKkvCleared(_rt: DesktopNov
  */
 export async function notifyComposerStatusAfterFloorOrCompaction(rt: DesktopNovelMasterRuntime, sessionId: string): Promise<void> {
   const attachments = await projectComposerStatusForSession(rt, sessionId);
-  notifyComposerAttachmentsSuggestToRenderer({
+  ComposerAttachmentsSuggestForwarder.notify({
     sessionId,
     attachments,
   });

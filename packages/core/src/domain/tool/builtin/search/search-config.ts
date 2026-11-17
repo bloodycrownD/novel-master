@@ -22,7 +22,8 @@
  */
 
 import { Guards } from "@/common/guards.js";
-import { AppError, isAppError } from "@/errors/app-error.js";
+import { Kkv } from "@/common/kkv.js";
+import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -154,19 +155,6 @@ export function normalizeEngineBaseUrl(value: string): string | null {
   }
 }
 
-/**
- * KKV 删除：NOT_FOUND 忽略（幂等清除），其余失败沿 `Result.err` 接力
- * （四期门⑦；先例 persistent-preferences.service 同款 KKV 读适配）。
- */
-async function kkvDelete(kkv: KkvService, key: string): Promise<Result<void, AppError>> {
-  const deleted = await kkv.delete(SEARCH_KKV_MODULE, key);
-  if (!deleted.ok) {
-    if (isAppError(deleted.error, "KKV_NOT_FOUND")) return Result.ok(undefined);
-    return deleted;
-  }
-  return Result.ok(undefined);
-}
-
 /** JSON 解析（损坏值归一为 undefined；调用方按缺省语义处理）。 */
 function parseJson(raw: string | undefined): unknown {
   if (raw == null) return undefined;
@@ -177,20 +165,10 @@ function parseJson(raw: string | undefined): unknown {
   }
 }
 
-/** KKV 读取容错：NOT_FOUND 归一化为 undefined（缺省视同未配置），其余失败沿 `Result.err` 接力（四期门⑦）。 */
-async function readStateKey(kkv: KkvService, key: string): Promise<Result<string | undefined, AppError>> {
-  const raw = await kkv.get(SEARCH_KKV_MODULE, key);
-  if (!raw.ok) {
-    if (isAppError(raw.error, "KKV_NOT_FOUND")) return Result.ok(undefined);
-    return raw;
-  }
-  return Result.ok(raw.value);
-}
-
 /** 读取并归一全部存储状态（5 次 KKV 并行读；容错归一集中于此，读模型与链解析共用）。失败沿 `Result.err` 接力（四期门⑦）。 */
 async function readEngineState(kkv: KkvService): Promise<Result<SearchEngineState, AppError>> {
-  const [orderRaw, enabledRaw] = await Promise.all([readStateKey(kkv, KEY_ENGINE_ORDER_V2), readStateKey(kkv, KEY_ENABLED_ENGINES)]);
-  const [customRaw, overridesRaw, baseUrlsRaw] = await Promise.all([readStateKey(kkv, KEY_CUSTOM_ENGINES), readStateKey(kkv, KEY_PRESET_OVERRIDES), readStateKey(kkv, KEY_ENGINE_BASE_URLS)]);
+  const [orderRaw, enabledRaw] = await Promise.all([Kkv.getOptional(kkv, SEARCH_KKV_MODULE, KEY_ENGINE_ORDER_V2), Kkv.getOptional(kkv, SEARCH_KKV_MODULE, KEY_ENABLED_ENGINES)]);
+  const [customRaw, overridesRaw, baseUrlsRaw] = await Promise.all([Kkv.getOptional(kkv, SEARCH_KKV_MODULE, KEY_CUSTOM_ENGINES), Kkv.getOptional(kkv, SEARCH_KKV_MODULE, KEY_PRESET_OVERRIDES), Kkv.getOptional(kkv, SEARCH_KKV_MODULE, KEY_ENGINE_BASE_URLS)]);
   for (const raw of [orderRaw, enabledRaw, customRaw, overridesRaw, baseUrlsRaw]) {
     if (!raw.ok) return Result.err(raw.error);
   }
@@ -486,7 +464,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
   const { kkv, secretStore } = deps;
   const writeKkv = (key: string, value: object): Promise<void> => kkv.set(SEARCH_KKV_MODULE, key, JSON.stringify(value));
   const writeBaseUrls = async (baseUrls: Readonly<Record<string, string>>): Promise<Result<void, AppError>> => {
-    if (Object.keys(baseUrls).length === 0) return kkvDelete(kkv, KEY_ENGINE_BASE_URLS);
+    if (Object.keys(baseUrls).length === 0) return Kkv.deleteIfPresent(kkv, SEARCH_KKV_MODULE, KEY_ENGINE_BASE_URLS);
     await writeKkv(KEY_ENGINE_BASE_URLS, baseUrls);
     return Result.ok(undefined);
   };
@@ -650,7 +628,7 @@ export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigSto
       const overrides = { ...state.value.presetOverrides };
       delete overrides[engineId];
       if (Object.keys(overrides).length === 0) {
-        const deleted = await kkvDelete(kkv, KEY_PRESET_OVERRIDES);
+        const deleted = await Kkv.deleteIfPresent(kkv, SEARCH_KKV_MODULE, KEY_PRESET_OVERRIDES);
         if (!deleted.ok) return Result.err(deleted.error);
       } else {
         await writeKkv(KEY_PRESET_OVERRIDES, overrides);

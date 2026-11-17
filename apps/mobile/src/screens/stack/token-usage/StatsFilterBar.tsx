@@ -12,8 +12,8 @@ import {
   type ProviderModelOption,
   type RangeKind,
   providerModelFilterOptionKey,
-  providerModelKey,
 } from './format';
+import {ModelKey} from '../../../utils/model-key';
 import {styles} from './styles';
 
 /** 弹层选项：id 为稳定键（testID/选中比对），value 为选中后回传的筛选值。 */
@@ -71,12 +71,12 @@ export function StatsFilterBar({
   const pickerOptions: readonly ModelPickerOption[] = [
     {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
     ...combos.map(c => ({
-      id: providerModelKey(c.providerId, c.model),
+      id: ModelKey.providerModel(c.providerId, c.model),
       label: `${c.providerLabel}/${c.model}`,
       value: {providerId: c.providerId, model: c.model},
     })),
     ...providers.map(p => ({
-      id: providerModelKey(p.id, MODEL_OTHER_KEY),
+      id: ModelKey.providerModel(p.id, MODEL_OTHER_KEY),
       label: `${p.label}/其他模型`,
       value: {providerId: p.id, model: null},
     })),

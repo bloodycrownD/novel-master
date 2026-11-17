@@ -3,6 +3,7 @@
  */
 
 import { type AppError, type Result } from "@novel-master/core/errors";
+import type { UpdateCheckData } from "@novel-master/core/common";
 import { formatIpcError } from "../format-ipc-error.js";
 import type {
   AppCheckForUpdatesResponse,
@@ -10,7 +11,6 @@ import type {
   AppOpenExternalRequest,
   IpcResult,
 } from "../../../../shared/ipc-types.js";
-import type { UpdateCheckData } from "../../update-check/types.js";
 
 type AppInfoSeams = {
   getVersion: () => string;

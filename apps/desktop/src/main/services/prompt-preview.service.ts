@@ -17,7 +17,7 @@ import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { resolveAgentForProject, resolveAgentToolRegistry, type AppError } from "@novel-master/core/agent";
 import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { buildSessionPromptInput } from "./session-prompt-input.service.js";
+import { buildSessionPromptInputAdapter } from "./session-prompt-input.service.js";
 
 interface PromptPreviewScope {
   readonly projectId: string;
@@ -27,12 +27,16 @@ interface PromptPreviewScope {
 /** 与 core skill-tool 的 SKILL_TOOL_NAME 同值（core 未公开导出，本地常量）。 */
 const SKILL_TOOL_NAME = "skill";
 
-export async function buildRealPromptPreviewTurns(runtime: DesktopNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
+/**
+ * Desktop preview adapter：把 desktop runtime 适配到 core 的 prompt 组装与
+ * `PromptBuilder.previewTurns`；失败沿用 core 的 `Result` 通道。
+ */
+export async function buildRealPromptPreviewTurnsAdapter(runtime: DesktopNovelMasterRuntime, scope: PromptPreviewScope): Promise<Result<readonly PromptPreviewTurn[], AppError>> {
   // 错误通道迁移五期：resolveAgentForProject 沿 Result 回传，Err 并进本函数通道。
   const resolvedAgent = await resolveAgentForProject(runtime, scope.projectId, scope.sessionId);
   if (!resolvedAgent.ok) return Result.err(resolvedAgent.error);
   const definition = resolvedAgent.value.definition;
-  const built = await buildSessionPromptInput(runtime, scope, definition);
+  const built = await buildSessionPromptInputAdapter(runtime, scope, definition);
   // build 的已知失败沿 Result 原样上行（错误通道迁移四期）。
   if (!built.ok) return Result.err(built.error);
   const { layout, ctx } = built.value;

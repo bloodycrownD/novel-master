@@ -5,8 +5,8 @@
  * 预置的 session kkv（file_cache / rule_snapshot 都空——手动压缩是用户主动的
  * 重整意图，下一次拼提示词时 workplace 块按当前工作区重评估；自动压缩才不清），
  * 保留 user_vfs_pending，并调 notifyComposerStatusAfterFloorOrCompaction。
- * 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
- * COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget 注入假 webContents
+ * 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
+ * COMPOSER_ATTACHMENTS_SUGGEST，用 ComposerAttachmentsSuggestForwarder.setTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
  *
  * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.agentAbortRegistry` 真注册一个
@@ -47,8 +47,8 @@ import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,
 } from "../shared/ipc-types.js";
-import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { ComposerAttachmentsSuggestForwarder } from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
 import { loadChatPromptTokenStats } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
@@ -130,11 +130,11 @@ describe("handleCompactionManual", () => {
     ]);
 
     // SPEC L274：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction，
-    // 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
+    // 该函数最终经 ComposerAttachmentsSuggestForwarder 向 renderer 广播
     // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
     // notify-composer-status-after-kkv-clear.test.ts 同范式）。
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -179,7 +179,7 @@ describe("handleCompactionManual", () => {
       attachments: [],
     });
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   /**
@@ -228,7 +228,7 @@ describe("handleCompactionManual", () => {
     );
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -276,7 +276,7 @@ describe("handleCompactionManual", () => {
       );
     } finally {
       rt.agentAbortRegistry.unregister(cr6SessionId, controller);
-      setComposerAttachmentsSuggestForwardTarget(() => undefined);
+      ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
     }
   });
 
@@ -289,7 +289,7 @@ describe("handleCompactionManual", () => {
   // 本用例聚焦 IPC 层 handleCompactionManual → runCompaction → notify 的链路。
   it("T-CR5: 无预置 kkv 时 runCompaction 仍返回 ok 并触发 composer 广播", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
-    setComposerAttachmentsSuggestForwardTarget(() => {
+    ComposerAttachmentsSuggestForwarder.setTarget(() => {
       return {
         send(channel: string, payload: unknown) {
           sent.push({ channel, payload });
@@ -315,7 +315,7 @@ describe("handleCompactionManual", () => {
       "runCompaction 成功时应广播一次 COMPOSER_ATTACHMENTS_SUGGEST",
     );
 
-    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    ComposerAttachmentsSuggestForwarder.setTarget(() => undefined);
   });
 
   /**
@@ -386,7 +386,7 @@ describe("handleCompactionManual", () => {
     promptWholeCache.clearForTests();
 
     const pushed: PromptChatTokenUpdatedPayload[] = [];
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {
@@ -442,7 +442,7 @@ describe("handleCompactionManual", () => {
       assert.equal(upgraded.stats.estimated, false);
       assert.equal(upgraded.stats.counterKind, "tiktoken");
     } finally {
-      setPromptChatTokenUpdatedForwardTarget(() => undefined);
+      PromptChatTokenUpdatedForwarder.setTarget(() => undefined);
     }
   });
 

@@ -14,7 +14,7 @@ import type {
 import { refreshRuleSnapshot } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getWorkplaceForScope, resolveVfsScopeFromRequest } from "../resolve-vfs-scope.js";
-import { notifyWorkspaceMutatedToRenderer, workspaceMutatedPayloadFromRequest } from "../forward-workspace-mutated.js";
+import { WorkspaceMutatedForwarder } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
@@ -73,7 +73,7 @@ export async function handleWorkplaceSetDirRule(req: WorkplaceSetDirRuleRequest)
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    WorkspaceMutatedForwarder.notify(WorkspaceMutatedForwarder.payloadFromRequest(req));
     await refreshRuleSnapshotAfterRuleChange(rt, req);
     return { ok: true, data: undefined };
   } catch (err) {
@@ -95,7 +95,7 @@ export async function handleWorkplaceSetFileRule(req: WorkplaceSetFileRuleReques
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
     });
-    notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    WorkspaceMutatedForwarder.notify(WorkspaceMutatedForwarder.payloadFromRequest(req));
     await refreshRuleSnapshotAfterRuleChange(rt, req);
     return { ok: true, data: undefined };
   } catch (err) {

@@ -35,6 +35,28 @@ describe("common/coerce · Coerce.nullableText", () => {
   });
 });
 
+describe("common/coerce · Coerce.strictText", () => {
+  it("只有 string 通过（空串原样保留）", () => {
+    assert.equal(Coerce.strictText(""), "");
+    assert.equal(Coerce.strictText("  x  "), "  x  ");
+  });
+
+  it("数字 / 布尔 / 对象 / null 一律 null（不做 String 化）", () => {
+    assert.equal(Coerce.strictText(42), null);
+    assert.equal(Coerce.strictText(0), null);
+    assert.equal(Coerce.strictText(false), null);
+    assert.equal(Coerce.strictText(null), null);
+    assert.equal(Coerce.strictText(undefined), null);
+    assert.equal(Coerce.strictText({a: 1}), null);
+    assert.equal(Coerce.strictText(["x"]), null);
+  });
+
+  it("与宽松版 nullableText 的语义差：数字不 String 化", () => {
+    assert.equal(Coerce.nullableText(42), "42");
+    assert.equal(Coerce.strictText(42), null);
+  });
+});
+
 describe("common/coerce · Coerce.integerAtLeast", () => {
   it("整数 / 数字字符串且达到 min → 数字", () => {
     assert.equal(Coerce.integerAtLeast(3, 1), 3);
@@ -84,6 +106,31 @@ describe("common/coerce · Coerce.number", () => {
     assert.equal(Coerce.number(false), undefined);
     assert.equal(Coerce.number({}), undefined);
     assert.equal(Coerce.number([]), undefined);
+  });
+});
+
+describe("common/coerce · Coerce.strictNumber", () => {
+  it("只有有限 number 通过（含 0 / 负数 / 小数）", () => {
+    assert.equal(Coerce.strictNumber(0), 0);
+    assert.equal(Coerce.strictNumber(-3.5), -3.5);
+    assert.equal(Coerce.strictNumber(12), 12);
+  });
+
+  it("数字字符串 / NaN / ±Infinity / 非原始类型一律 null（不解析）", () => {
+    assert.equal(Coerce.strictNumber("12"), null);
+    assert.equal(Coerce.strictNumber("0"), null);
+    assert.equal(Coerce.strictNumber(Number.NaN), null);
+    assert.equal(Coerce.strictNumber(Number.POSITIVE_INFINITY), null);
+    assert.equal(Coerce.strictNumber(Number.NEGATIVE_INFINITY), null);
+    assert.equal(Coerce.strictNumber(null), null);
+    assert.equal(Coerce.strictNumber(undefined), null);
+    assert.equal(Coerce.strictNumber(true), null);
+    assert.equal(Coerce.strictNumber({}), null);
+  });
+
+  it("与宽松版 number 的语义差：数字字符串不解析", () => {
+    assert.equal(Coerce.number("12"), 12);
+    assert.equal(Coerce.strictNumber("12"), null);
   });
 });
 

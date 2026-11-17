@@ -8,21 +8,33 @@
  */
 
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
+
+/** {@link findMissingRevisionPointers} 依赖（共享底座里只取 entry / revision 两项）。 */
+export type FindMissingRevisionDeps = Pick<CheckpointRepoDeps, "entryRepo" | "revisionRepo">;
+
+/** {@link findMissingRevisionPointers} 的定位参数。 */
+export type FindMissingRevisionParams = {
+  readonly scope: VfsScope;
+  readonly targetTree: ReadonlyMap<string, number>;
+  readonly pathsToReconcile: Iterable<string>;
+  readonly checkpointEntryIdByPath?: ReadonlyMap<string, number>;
+};
 
 /**
  * 扫描待 reconcile 路径，找出目标树中 revision 行不存在的逻辑路径。
  *
  * @remarks 仅检查 `targetTree` 中有版本指针的路径；待删除路径（不在 targetTree）不参与检测。
- * @param checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
+ * @param params.checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
  *        entry 行已被物理删除但 checkpoint 有指针的路径按旧 entryId 查 revision，
  *        行在即视为可恢复（复活），不算 missing。
  */
-export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scope: VfsScope, targetTree: ReadonlyMap<string, number>, pathsToReconcile: Iterable<string>, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<Result<string[], AppError>> {
+export async function findMissingRevisionPointers(deps: FindMissingRevisionDeps, params: FindMissingRevisionParams): Promise<Result<string[], AppError>> {
+  const { revisionRepo, entryRepo } = deps;
+  const { scope, targetTree, pathsToReconcile, checkpointEntryIdByPath } = params;
   const scopeKeyStr = scopeKey(scope);
   const pairs: Array<{
     logicalPath: string;

@@ -6,7 +6,7 @@
 import { type UserVfsTurnOp } from "@novel-master/core/chat";
 import { type VfsScope } from "@novel-master/core/vfs";
 import { Result } from "@novel-master/core/errors";
-import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
+import { ComposerAttachmentsSuggestForwarder } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { projectComposerStatusForSession } from "./project-composer-status.service.js";
 
@@ -28,7 +28,7 @@ export async function executeSessionUserVfsOp(rt: DesktopNovelMasterRuntime, ses
   const result = await rt.userVfsTurn.executeOp(sessionId, op);
   if (!result.ok) return Result.err(result.error);
   const attachments = await projectComposerStatusForSession(rt, sessionId);
-  notifyComposerAttachmentsSuggestToRenderer({
+  ComposerAttachmentsSuggestForwarder.notify({
     sessionId,
     attachments,
   });

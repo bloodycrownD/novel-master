@@ -13,12 +13,23 @@ export {Coerce} from "./coerce.js";
 export {Guards} from "./guards.js";
 export {Json} from "./json.js";
 export {Text} from "./text.js";
-export {Number} from "./number.js";
+export type {DecodeHtmlEntitiesOptions} from "./text.js";
+export {Number, STORAGE_BYTES} from "./number.js";
+export type {BytesFormat, BytesUnit} from "./number.js";
+export {DateTime} from "./datetime.js";
 export {Encoding} from "./encoding.js";
 export {Xml} from "./xml.js";
 export {Hash} from "./hash.js";
 export {Errors} from "./errors.js";
+export {Kkv} from "./kkv.js";
 export {Release} from "./release.js";
+export {
+    UpdateCheck,
+    type FetchFn,
+    type LatestRelease,
+    type UpdateCheckData,
+    type UpdateCheckStatus,
+} from "./update-check.js";
 export {
     TokenFormat,
     // token-source-label：badge 参数契约随 namespace 一起转出

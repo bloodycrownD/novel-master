@@ -107,7 +107,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         }
       }
       // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
-      await sweepSessionRevisions(this.deps.revisions, this.deps.entries, this.deps.checkpoints, session.projectId, sessionId, this.deps.conn);
+      await sweepSessionRevisions(this.deps.revisions, session.projectId, sessionId);
       await runDeferredBlobGc(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {

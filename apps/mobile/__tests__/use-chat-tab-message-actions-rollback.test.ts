@@ -572,7 +572,7 @@ describe('useChatTabMessageActions rollback', () => {
       path: '/chapter/a.md',
     });
 
-    const anchor = plainUserMessage('请看历史批注', parsedAttachments);
+    const anchor = plainUserMessage('请看历史批注', parsedAttachments ?? undefined);
     const api = mountActions([anchor]);
 
     await act(async () => {

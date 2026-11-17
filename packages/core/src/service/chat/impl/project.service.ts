@@ -122,7 +122,7 @@ export class DefaultProjectService implements ProjectService {
       }
       for (const session of allSessions) {
         await r.messages.deleteBySession(session.id);
-        await deleteSessionFsData(tx, session.id, id);
+        await deleteSessionFsData(tx, id, session.id);
         await sessionKkv.clearSession(session.id);
         // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
         // 【勿换成 sweepRevisionsUnderScope】：该 scope 的 live ref 已由上面的

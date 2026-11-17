@@ -15,10 +15,7 @@ import {
   onCoreRunFinished,
   onCoreRunStarted,
 } from "../src/main/ipc/handlers/agent.js";
-import {
-  attachEventBusForwarder,
-  setEventBusForwardTarget,
-} from "../src/main/ipc/forward-event-bus.js";
+import { EventBusForwarder } from "../src/main/ipc/forward-event-bus.js";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 
 describe("agent run lifecycle", () => {
@@ -89,13 +86,13 @@ describe("agent run lifecycle", () => {
   it("eventBus RUN_STARTED/FINISHED 订阅触发登记与清理", () => {
     const bus = new SimpleEventBus();
     const forwarded: unknown[] = [];
-    setEventBusForwardTarget(() => ({
+    EventBusForwarder.setTarget(() => ({
       send(channel: string, payload: unknown) {
         assert.equal(channel, IPC_CHANNELS.AGENT_STREAM);
         forwarded.push(payload);
       },
     }));
-    attachEventBusForwarder(bus);
+    EventBusForwarder.attach(bus);
     attachAgentRunLifecycleListeners(bus);
 
     incrementDesktopAgentActive();

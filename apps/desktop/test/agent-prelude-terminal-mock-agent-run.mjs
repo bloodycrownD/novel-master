@@ -1,7 +1,7 @@
 /**
  * r3-run-1/2 单测专用 mock：agent-run.service。
  *
- * 关键点是 **runAgentTurn 的 settle 由测试显式控制**——本组用例要复刻的形态
+ * 关键点是 **runAgentTurnAdapter 的 settle 由测试显式控制**——本组用例要复刻的形态
  * 全都是「promise 还没 settle，但终态事件已经到了」（core 前奏期秒级窗口里
  * 发完 FINISHED('') 就返回），以及「STARTED 到了但终态一个都没来」。
  * 自动 reject 的 mock 排不掉这个时序，只能手动闸门。
@@ -16,7 +16,7 @@ export function __hasPendingRun() {
 
 /**
  * 让挂起的 run 以 resolve 收尾（模拟 core 正常返回）。
- * 契约对齐错误通道迁移：runAgentTurn 返回 Result，成功分支是 `{ ok: true, value }`
+ * 契约对齐错误通道迁移：runAgentTurnAdapter 返回 Result，成功分支是 `{ ok: true, value }`
  * ——直接 resolve 裸 outcome 会被 handler 的 `if (!outcome.ok)` 判成失败。
  */
 export function __settleRun(value) {
@@ -35,10 +35,6 @@ export function __failRun(error) {
   p?.reject(error ?? new Error("prelude boom"));
 }
 
-export async function resolveCurrentAgentId() {
-  return "agent-test";
-}
-
 export async function resolveCurrentAgentDefinition() {
   return {
     agentId: "agent-test",
@@ -50,7 +46,7 @@ export async function resolveDesktopSavedModelId() {
   return { savedModelId: "model-test", workspaceModelId: "" };
 }
 
-export function runAgentTurn() {
+export function runAgentTurnAdapter() {
   return new Promise((resolve, reject) => {
     pending = { resolve, reject };
   });

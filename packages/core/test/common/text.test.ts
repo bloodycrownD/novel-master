@@ -71,3 +71,63 @@ describe("common/text · Text.escapeRegExp", () => {
     assert.equal(new RegExp(`^${Text.escapeRegExp(literal)}$`).test("axbbbc"), false);
   });
 });
+
+describe("common/text · Text.stripLinePrefix", () => {
+  it("逐行剥前缀，每行至多替换一次（非全局正则也只剥第一个匹配）", () => {
+    assert.equal(Text.stripLinePrefix("1|a\n2|b", /^\d+\|/), "a\nb");
+    assert.equal(Text.stripLinePrefix("1|a|b\n2|", /^\d+\|/), "a|b\n");
+  });
+
+  it("不匹配的行原样保留；空串 / 单行 / 末尾换行按 \\n 切分拼回", () => {
+    assert.equal(Text.stripLinePrefix("", /^\d+\|/), "");
+    assert.equal(Text.stripLinePrefix("plain", /^\d+\|/), "plain");
+    assert.equal(Text.stripLinePrefix("1|a\n", /^\d+\|/), "a\n");
+  });
+
+  it("判据全在 pattern 里：前导空格是否容忍由调用方正则决定", () => {
+    const zeroIndent = /^\d+\|/;
+    const spaceTolerant = /^ +\d+\|/;
+    assert.equal(Text.stripLinePrefix("  1|a", zeroIndent), "  1|a");
+    assert.equal(Text.stripLinePrefix("  1|a", spaceTolerant), "a");
+  });
+});
+
+describe("common/text · Text.escapeHtml", () => {
+  it("转义 & < > \" 四个实体（不含单引号）", () => {
+    assert.equal(Text.escapeHtml('a&b<c>d"e'), "a&amp;b&lt;c&gt;d&quot;e");
+    assert.equal(Text.escapeHtml("'single'"), "'single'");
+    assert.equal(Text.escapeHtml(""), "");
+  });
+
+  it("入参取 unknown：非字符串先 String 化", () => {
+    assert.equal(Text.escapeHtml(123), "123");
+    assert.equal(Text.escapeHtml(null), "null");
+    assert.equal(Text.escapeHtml(undefined), "undefined");
+  });
+});
+
+describe("common/text · Text.decodeHtmlEntities", () => {
+  it("命名实体与十进制 / 十六进制数值实体", () => {
+    assert.equal(Text.decodeHtmlEntities("&quot;x&quot;"), '"x"');
+    assert.equal(Text.decodeHtmlEntities("&#34;x&#34;"), '"x"');
+    assert.equal(Text.decodeHtmlEntities("&#x22;x&#x22;"), '"x"');
+    assert.equal(Text.decodeHtmlEntities("&apos;x&apos;"), "'x'");
+    assert.equal(Text.decodeHtmlEntities("&lt;x&gt;"), "<x>");
+  });
+
+  it("多轮解码双重编码（&amp;quot; → \"）", () => {
+    assert.equal(Text.decodeHtmlEntities("&amp;quot;x&amp;quot;"), '"x"');
+    assert.equal(Text.decodeHtmlEntities("&amp;lt;x&amp;gt;"), "<x>");
+  });
+
+  it("preserveAngleBrackets 保留尖括号实体（sanitize 出口形态）", () => {
+    assert.equal(Text.decodeHtmlEntities("&lt;x&gt;&amp;quot;y&amp;quot;", {preserveAngleBrackets: true}), "&lt;x&gt;\"y\"");
+  });
+
+  it("非字符串按 String(value || \"\") 口径（falsy → 空串）", () => {
+    assert.equal(Text.decodeHtmlEntities(null), "");
+    assert.equal(Text.decodeHtmlEntities(undefined), "");
+    assert.equal(Text.decodeHtmlEntities(0), "");
+    assert.equal(Text.decodeHtmlEntities(123), "123");
+  });
+});

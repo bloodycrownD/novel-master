@@ -10,6 +10,7 @@
 import { ChatMessage } from "../../domain/chat/logic/message/chat-message.js";
 import type { ChatMessageData } from "../../domain/chat/model/message.js";
 import type { MessageLike } from "../../common/i18n.js";
+import { Text } from "../../common/text.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview, messageBodyTextFromBlocks } from "../../domain/chat/content/message-body-text.js";
 import type { ContentBlock, ToolResultBlock } from "../../domain/chat/model/content-block.js";
@@ -306,9 +307,9 @@ export interface PromptToolGroupResultData {
   /**
    * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
    *
-   * @remarks 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据见
-   * {@link stripToolResultLinePrefix}）；wire 侧同源正文在 `PromptPreviewTurn.items`
-   * / `.body` 里原样保留。
+   * @remarks 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据
+   * `TOOL_RESULT_LINE_PREFIX`，经 `Text.stripLinePrefix` 逐行至多剥一次）；wire 侧
+   * 同源正文在 `PromptPreviewTurn.items` / `.body` 里原样保留。
    */
   readonly body: string;
 }
@@ -350,8 +351,8 @@ export interface PromptWorkplaceFileCardData {
   /**
    * 块内正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
    *
-   * @remarks 判据 `^\d+\|`（零前导空格），逐行至多剥一次（见
-   * {@link stripWorkplaceLinePrefix}）。header 档为 front-matter 行，兜底两行
+   * @remarks 判据 `WORKPLACE_LINE_PREFIX`（`^\d+\|`，零前导空格），经 `Text.stripLinePrefix`
+   * 逐行至多剥一次。header 档为 front-matter 行，兜底两行
    * （`（无 Front Matter）` / `（空 Front Matter）`）同形，一并剥前缀。
    * wire 侧的带行号原文在 `ctx.workplaceFiles` 与 `PromptPreviewTurn.body` 里原样保留。
    */
@@ -439,27 +440,18 @@ function blockTextForCard(block: ContentBlock): string | null {
   return text === "" ? null : text;
 }
 
-/** workplace 行的行号前缀：`^\d+\|`（零前导空格）。 */
-const WORKPLACE_LINE_PREFIX = /^\d+\|/;
-
 /**
- * 剥 workplace 文件块正文的 `N|` 行号前缀（**每行至多替换一次**，非全局贪婪）。
+ * workplace 行的行号前缀：`^\d+\|`（零前导空格）。
  *
  * @remarks 判据零前导空格是刻意收窄的：`workplace-display.ts` 的 `${idx+1}|` /
  * filename 档 `1|basename` / header 档兜底 `1|（无 Front Matter）` 都是零空格形态。
  * 原文自身以 `数字|` 开头的行（如 `12|2024|年报`）只剥外层一次即逐字还原——
  * 正则 `^\d+\|` 锚定行首且单次替换，`1|12|34` → `12|34` 而非继续吃掉内层。
  */
-function stripWorkplaceLinePrefix(body: string): string {
-  const lines = body.split("\n");
-  return lines.map((line) => line.replace(WORKPLACE_LINE_PREFIX, "")).join("\n");
-}
-
-/** tool result 行的行号前缀：`^ +\d+\|`（**至少 1 个前导空格**）。 */
-const TOOL_RESULT_LINE_PREFIX = /^ +\d+\|/;
+const WORKPLACE_LINE_PREFIX = /^\d+\|/;
 
 /**
- * 剥 tool result 正文的 read 行号前缀（**每行至多替换一次**）。
+ * tool result 行的行号前缀：`^ +\d+\|`（**至少 1 个前导空格**）。
  *
  * @remarks read / skill load 用 `String(n).padStart(6, " ")` 右对齐
  * （`format-tool-output.ts` 的 `formatLineNumber`），行号 < 100000 时**必有前导空格**；
@@ -470,10 +462,7 @@ const TOOL_RESULT_LINE_PREFIX = /^ +\d+\|/;
  * @remarks 已知边界：**行号 ≥ 100000 的超长文件行漏剥**（`padStart` 不再补空格，
  * 形态与 workplace 判据撞不上）——罕见，spec 已登记接受。
  */
-function stripToolResultLinePrefix(body: string): string {
-  const lines = body.split("\n");
-  return lines.map((line) => line.replace(TOOL_RESULT_LINE_PREFIX, "")).join("\n");
-}
+const TOOL_RESULT_LINE_PREFIX = /^ +\d+\|/;
 
 /**
  * user 附件 action 块（`userAttach` / `workplaceChange`）：JSON 正文在 `"content": "…"` 值内。
@@ -562,7 +551,7 @@ function buildMessageCards(message: ChatMessageData, results: ReadonlyMap<string
                 toolUseId: resultBlock.toolUseId,
                 ok,
                 // cards 是显示层口径 → 剥行号；同源 wire 正文在 items/body 段原样保留。
-                body: stripToolResultLinePrefix(formatToolResultContentForDisplay(resultBlock.content)),
+                body: Text.stripLinePrefix(formatToolResultContentForDisplay(resultBlock.content), TOOL_RESULT_LINE_PREFIX),
               },
         status: resultBlock === undefined ? "lost" : ok ? "ok" : "error",
         parallel,
@@ -726,7 +715,7 @@ async function buildPromptPreviewTurnsFromLayout(layout: AgentPromptLayout, ctx:
           // 直传的源头（`handlers/prompt.ts`），改它会连 wire 侧一起污染。
           files: workplaceFiles.map((file) => ({
             ...file,
-            body: stripWorkplaceLinePrefix(file.body),
+            body: Text.stripLinePrefix(file.body, WORKPLACE_LINE_PREFIX),
           })),
         });
       } else {

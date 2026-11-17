@@ -118,7 +118,7 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = unwrap(await findMissingRevisionPointers(revisionRepo, entryRepo, scope, new Map([["/a.md", 1]]), ["/a.md"]));
+    const missing = unwrap(await findMissingRevisionPointers({ revisionRepo, entryRepo }, { scope, targetTree: new Map([["/a.md", 1]]), pathsToReconcile: ["/a.md"] }));
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
@@ -193,7 +193,7 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/same.md", 2, liveHeadByPath, entryRepo);
+    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/same.md", version: 2, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -254,7 +254,7 @@ describe("rollback version short-circuit", () => {
     // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
     const liveHeadByPath = new Map([["/hash-same.md", 3]]);
 
-    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/hash-same.md", 1, liveHeadByPath, entryRepo);
+    const result = await restorePathToRevision({ vfs, revisionRepo, entryRepo }, { scope, logicalPath: "/hash-same.md", version: 1, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;
@@ -283,7 +283,7 @@ describe("rollback version short-circuit", () => {
     await svfs.write("/delta.md", "tail", { versionCheck: false });
     const liveHeadByPath = new Map([["/delta.md", unwrap(await svfs.read("/delta.md")).version]]);
 
-    const result = await restorePathToRevision(svfs, revisions, scope, "/delta.md", anchorVersion, liveHeadByPath, entries);
+    const result = await restorePathToRevision({ vfs: svfs, revisionRepo: revisions, entryRepo: entries }, { scope, logicalPath: "/delta.md", version: anchorVersion, liveHeadByPath });
 
     assert.equal(result.ok, true);
     if (!result.ok) return;

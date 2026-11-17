@@ -10,6 +10,7 @@ import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ABORT_KEY, isAbortLikeError} from '@novel-master/core/abort';
+import {Number, STORAGE_BYTES} from '@novel-master/core/common';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -75,19 +76,9 @@ export function StorageConfigScreen() {
     runtime.abortRegistry.abort(ABORT_KEY.backup('local'));
   }, [backupBusy, backupCancelling, runtime]);
 
-  const formatStorageBytes = (bytes: number | null): string => {
-    if (bytes == null) {
-      return '—';
-    }
-    const mb = bytes / (1024 * 1024);
-    if (mb >= 1024) {
-      return `${(mb / 1024).toFixed(2)} GB`;
-    }
-    if (mb >= 1) {
-      return `${mb.toFixed(1)} MB`;
-    }
-    return `${Math.max(0, Math.round(bytes / 1024))} KB`;
-  };
+  // `null → "—"` 是 UI 空值文案，留在调用侧；`Math.max(0, …)` 是历史口径
+  // （旧实现的 KB 分支把负数夹到 0，库体积不会为负，纯防御）。
+  const formatStorageBytes = (bytes: number | null): string => (bytes == null ? '—' : Number.formatBytes(Math.max(0, bytes), STORAGE_BYTES));
 
   useEffect(() => {
     setAgentActive(isMobileAgentActive());

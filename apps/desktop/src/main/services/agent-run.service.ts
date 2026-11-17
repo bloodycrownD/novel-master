@@ -1,5 +1,6 @@
 /**
- * Desktop agent run — thin wrapper over core {@link runAgentTurn}.
+ * Desktop agent run adapter — 平台薄壳：把 desktop 的日志钩子挂到 core
+ * {@link coreRunAgentTurn} 上，返回值通道（`Result`）与 core 对齐。
  *
  * @module services/agent-run
  */
@@ -8,7 +9,6 @@ import {
   mapResolveError,
   resolveApplicationModelIdForRun,
   resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
-  resolveCurrentAgentId as resolveCoreAgentId,
   runAgentTurn as coreRunAgentTurn,
   type AgentDefinition,
   type AgentRunResult,
@@ -32,13 +32,10 @@ export { AgentTurnError as AgentRunError };
  * resolve 链失败转码（错误通道迁移五期跨片收口）：core 的 resolve 系沿
  * `Result.err` 回传已知失败（不再 throw），转码统一走 core 的 `mapResolveError`——
  * resolve key 转 `AgentTurnError`，其余原样抛，对 desktop 消费方保持旧的 throw 契约。
+ *
+ * `resolveCurrentAgentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
+ * 不会产 resolve key），属薄壳，已删；调用点直接用 core 的 `Result` 通道。
  */
-export async function resolveCurrentAgentId(runtime: DesktopNovelMasterRuntime): Promise<string | undefined> {
-  // 错误通道迁移五期：core resolveCurrentAgentId 沿 Result 回传；infra 失败
-  // (非 resolve key) 原样上抛，成功解包取值。
-  return mapResolveError(() => resolveCoreAgentId(runtime));
-}
-
 export async function resolveCurrentAgentDefinition(runtime: DesktopNovelMasterRuntime): Promise<{ agentId: string; definition: AgentDefinition }> {
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
@@ -56,7 +53,7 @@ type RunAgentTurnOptions = {
   readonly onUserMessageAppended?: () => void | Promise<void>;
 };
 
-export async function runAgentTurn(runtime: DesktopNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
+export async function runAgentTurnAdapter(runtime: DesktopNovelMasterRuntime, scope: AgentRunScope, userContent: string, options?: RunAgentTurnOptions): Promise<Result<AgentRunResult, AppError>> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
     onAfterResolveModel: async (ctx) => {

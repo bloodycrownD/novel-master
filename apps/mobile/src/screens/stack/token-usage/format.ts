@@ -11,6 +11,8 @@
  *   归并项，筛该服务商下不在配置集的模型行（filter.model = null 由 core 侧解释）。
  */
 import type {UsageStatsRange} from '@novel-master/core/chat';
+import {TokenFormat} from '@novel-master/core/common';
+import {ModelKey} from '../../../utils/model-key';
 
 /** 时间范围筛选种类；custom 需经 MonthRangePickerSheet 选定区间。 */
 export type RangeKind = 'today' | 'last7' | 'last30' | 'custom';
@@ -21,7 +23,7 @@ export type PageTab = 'summary' | 'detail' | 'requests';
 export const MODEL_OPTION_ALL = '__all__';
 export const MODEL_OPTION_UNLOGGED = '__unlogged__';
 
-/** 服务商「其他模型」选项的组合键后缀（与 providerModelKey 拼成选项 id）。 */
+/** 服务商「其他模型」选项的组合键后缀（与 `ModelKey.providerModel` 拼成选项 id）。 */
 export const MODEL_OTHER_KEY = '__other__';
 
 /** 汇总卡空态文案：统计自本版本才开始积累，统一显示横杠（简洁，不占版面）。 */
@@ -94,12 +96,9 @@ export function formatTokensPerSecond(v: number | null, emptyText: string): stri
   return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
 }
 
-/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
+/** 平均首字延迟展示：数值分支复用 core 的 `TokenFormat.durationMs`（秒级 `x.x s` / 毫秒级 `xxx ms`）；无数据时返回调用方传入的空态文案。 */
 export function formatFirstTokenMs(ms: number | null, emptyText: string): string {
-  if (ms == null) {
-    return emptyText;
-  }
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+  return ms == null ? emptyText : TokenFormat.durationMs(ms);
 }
 
 /** 服务商×模型筛选项（数据统计维度，配置侧生成）。 */
@@ -120,19 +119,14 @@ export interface ProviderModelOption {
  */
 export type ProviderModelFilterValue = {providerId: string; model: string} | {providerId: string; model: null} | {providerId: null; model: undefined} | undefined;
 
-/** 组合的稳定展示键（testID/行 key 共用）。 */
-export function providerModelKey(providerId: string, model: string): string {
-  return `${providerId}::${model}`;
-}
-
 /**
  * 筛选值（非 undefined 形态）对应的选项 id，与 StatsFilterBar 的选项
  * 生成规则一致：未记录服务商 → unlogged 哨兵；服务商其他模型 →
- * `{providerId}::__other__`；具体组合 → providerModelKey。
+ * `{providerId}::__other__`；具体组合 → `ModelKey.providerModel`。
  */
 export function providerModelFilterOptionKey(value: Exclude<ProviderModelFilterValue, undefined>): string {
   if (value.providerId === null) {
     return MODEL_OPTION_UNLOGGED;
   }
-  return providerModelKey(value.providerId, value.model ?? MODEL_OTHER_KEY);
+  return ModelKey.providerModel(value.providerId, value.model ?? MODEL_OTHER_KEY);
 }

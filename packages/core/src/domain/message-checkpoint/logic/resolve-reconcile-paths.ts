@@ -18,16 +18,25 @@
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
 import type { SessionFileHead } from "../model/message-checkpoint.js";
 
 /** reconcile 需处理的路径集合。 */
 export type ReconcilePathSets = {
   readonly pathsNeedWrite: ReadonlySet<string>;
   readonly pathsNeedDelete: ReadonlySet<string>;
+};
+
+/** {@link resolveReconcilePathSets} 依赖（共享底座里只取 entry / revision 两项）。 */
+export type ResolveReconcilePathDeps = Pick<CheckpointRepoDeps, "entryRepo" | "revisionRepo">;
+
+/** {@link resolveReconcilePathSets} 的定位参数。 */
+export type ResolveReconcilePathParams = {
+  readonly scope: Extract<VfsScope, { kind: "session" }>;
+  readonly targetTree: ReadonlyMap<string, number>;
+  readonly checkpointEntryIdByPath?: ReadonlyMap<string, number>;
 };
 
 /**
@@ -43,10 +52,9 @@ export type ReconcilePathSets = {
 export function resolvePathsNeedDeleteInTransaction(args: { readonly liveHeads: ReadonlyArray<SessionFileHead>; readonly targetTree: ReadonlyMap<string, number>; readonly hasDirectTargetTree: boolean; readonly extraTailDeletePaths: ReadonlySet<string> }): ReadonlySet<string> {
   const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } = args;
   const pathsNeedDelete = new Set<string>();
-  // 与 {@link resolveReconcilePathSets} 的 hasDirectTargetTree 门同口径：
-  // rewind 分支在 targetTree 为空时拿不到任何删除（这一路是漏删而非误删，
-  // 误删由空树护栏兜住）——**两处门口径必须同改**，只放宽护栏会让 undo_send
-  // 侧反过来多删。
+  // 与 rollbackToMessage 的空树护栏（S-13）同口径：rewind 分支在 targetTree
+  // 为空时拿不到任何删除（这一路是漏删而非误删，误删由空树护栏兜住）——
+  // **两处门口径必须同改**，只放宽护栏会让 undo_send 侧反过来多删。
   if (!hasDirectTargetTree) {
     return pathsNeedDelete;
   }
@@ -68,11 +76,13 @@ export function resolvePathsNeedDeleteInTransaction(args: { readonly liveHeads: 
  *
  * 同 version 或同 content_hash 不进 pathsNeedWrite（对齐 restore 短路语义）。
  *
- * @param checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
+ * @param params.checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
  *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
  *        不再一律标 -1 判「必写盘+必 missing」。
  */
-export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scope: Extract<VfsScope, { kind: "session" }>, targetTree: ReadonlyMap<string, number>, _hasDirectTargetTree: boolean, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<Result<ReconcilePathSets, AppError>> {
+export async function resolveReconcilePathSets(deps: ResolveReconcilePathDeps, params: ResolveReconcilePathParams): Promise<Result<ReconcilePathSets, AppError>> {
+  const { entryRepo, revisionRepo } = deps;
+  const { scope, targetTree, checkpointEntryIdByPath } = params;
   const { projectId, sessionId } = scope;
   const scopeKeyStr = scopeKey(scope);
   const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);

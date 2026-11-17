@@ -6,8 +6,11 @@
 
 /**
  * 规范化路径前缀：非空时确保以 `/` 结尾。
+ *
+ * 与 `domain/vfs/repositories/impl/scope-prefix-helpers.ts` 的 `stripTrailingSlash`
+ * **语义相反**（那边去尾斜杠），两者不可互替（nm-code-style §5.4 / §9.4 已登记的同名反义先例）。
  */
-export function normalizePrefix(prefix: string): string {
+export function ensureTrailingSlash(prefix: string): string {
   const trimmed = prefix.trim();
   if (trimmed.length === 0) {
     return "";
@@ -17,7 +20,7 @@ export function normalizePrefix(prefix: string): string {
 
 /** 生成 status.json 对象键 */
 export function statusKey(prefix: string): string {
-  return `${normalizePrefix(prefix)}status.json`;
+  return `${ensureTrailingSlash(prefix)}status.json`;
 }
 
 /**
@@ -25,5 +28,5 @@ export function statusKey(prefix: string): string {
  */
 export function snapshotKey(prefix: string, rev: number): string {
   const revPart = String(rev).padStart(6, "0");
-  return `${normalizePrefix(prefix)}snapshots/rev-${revPart}.nmbackup`;
+  return `${ensureTrailingSlash(prefix)}snapshots/rev-${revPart}.nmbackup`;
 }

@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import {
@@ -23,7 +23,6 @@ import {
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { TdbcConnection } from "@novel-master/core";
 import {
@@ -64,7 +63,6 @@ describe("sweepSessionRevisions + blob gc", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
 
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -95,14 +93,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     assert.ok(midKeys.some((k) => k.entryId === entry.entryId && k.version === 2));
     assert.equal(unwrap(await contentStore.get(orphanHash)), "orphan-mid");
 
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    await sweepSessionRevisions(revisions, project.id, session.id);
     await runDeferredBlobGc(ctx.conn);
 
     const afterKeys = await revisions.listKeysUnderScope(
@@ -134,23 +125,14 @@ describe("sweepSessionRevisions + blob gc", () => {
     await svfsA.write("/a.md", sharedPlain, { versionCheck: false });
     await svfsB.write("/b.md", sharedPlain, { versionCheck: false });
 
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
 
     const onlyAHash = hashContent(onlyA);
     const sharedHash = hashContent(sharedPlain);
 
     // A 的 v1(onlyA) 在 live 已是 sharedPlain 且无 checkpoint → sweep A 应删 onlyA revision+blob
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      sessionA.id,
-      ctx.conn,
-    );
+    await sweepSessionRevisions(revisions, project.id, sessionA.id);
     await runDeferredBlobGc(ctx.conn);
 
     assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");

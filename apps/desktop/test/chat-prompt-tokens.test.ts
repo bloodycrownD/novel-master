@@ -43,7 +43,7 @@ import {
   handleSessionsCreate,
   handleSessionsSetModelOverride,
 } from "../src/main/ipc/handlers/sessions.js";
-import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
+import { PromptChatTokenUpdatedForwarder } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
 import {
   chatPromptTokenDebounceExecCountForTests,
   loadChatPromptTokenStats,
@@ -95,7 +95,7 @@ describe("chat-prompt-tokens.service", () => {
   }
 
   before(async () => {
-    setPromptChatTokenUpdatedForwardTarget(
+    PromptChatTokenUpdatedForwarder.setTarget(
       () =>
         ({
           send: (channel: string, payload: unknown) => {

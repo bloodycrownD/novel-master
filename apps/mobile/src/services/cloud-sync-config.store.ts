@@ -3,10 +3,9 @@
  *
  * @module services/cloud-sync-config.store
  */
-import {normalizePrefix} from '@novel-master/core';
-import {isAppError} from '@novel-master/core/agent';
+import {ensureTrailingSlash} from '@novel-master/core';
+import {Kkv} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
-import type {KkvService} from '@novel-master/core/kkv';
 import {type SecretStore} from '@novel-master/core/provider';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
@@ -70,25 +69,6 @@ export type CloudSyncLocalStatus = {
   lastPushResult?: string;
 };
 
-/**
- * KKV 读适配：`KKV_NOT_FOUND` 归一为 `undefined`（Ok），其余失败沿
- * `Result.err` 接力（错误通道迁移四期）。
- */
-async function kkvGet(kkv: KkvService, key: string): Promise<Result<string | undefined, AppError>> {
-  const raw = await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
-  if (!raw.ok) {
-    if (isAppError(raw.error, 'KKV_NOT_FOUND')) {
-      return Result.ok(undefined);
-    }
-    return Result.err(raw.error);
-  }
-  return Result.ok(raw.value);
-}
-
-async function kkvSet(kkv: KkvService, key: string, value: string): Promise<void> {
-  await kkv.set(CLOUD_SYNC_KKV_MODULE, key, value);
-}
-
 type RandomCrypto = {
   randomUUID?: () => string;
   getRandomValues?: (array: Uint8Array) => Uint8Array;
@@ -118,7 +98,7 @@ export function generateCloudSyncDeviceId(): string {
 export async function getCloudSyncConfig(runtime: MobileNovelMasterRuntime): Promise<Result<CloudSyncConfigPublic, AppError>> {
   const {kkv, secretStore} = runtime;
   const configKeys = [KEY_ENDPOINT, KEY_BUCKET, KEY_REGION, KEY_PATH_PREFIX, KEY_ACCESS_KEY_ID, KEY_FORCE_PATH_STYLE, KEY_DEVICE_ID, KEY_DEVICE_LABEL];
-  const [endpoint, bucket, region, pathPrefix, accessKeyId, forcePathStyle, deviceId, deviceLabel] = await Promise.all(configKeys.map(key => kkvGet(kkv, key)));
+  const [endpoint, bucket, region, pathPrefix, accessKeyId, forcePathStyle, deviceId, deviceLabel] = await Promise.all(configKeys.map(key => Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, key)));
   if (!endpoint.ok) return Result.err(endpoint.error);
   if (!bucket.ok) return Result.err(bucket.error);
   if (!region.ok) return Result.err(region.error);
@@ -149,7 +129,7 @@ export async function getCloudSyncLocalStatus(runtime: MobileNovelMasterRuntime)
   if (!config.ok) return Result.err(config.error);
   const {kkv} = runtime;
   const statusKeys = [KEY_LAST_SYNCED_REV, KEY_LAST_PULL_AT, KEY_LAST_PUSH_AT, KEY_LAST_PULL_RESULT, KEY_LAST_PUSH_RESULT];
-  const [lastSyncedRev, lastPullAt, lastPushAt, lastPullResult, lastPushResult] = await Promise.all(statusKeys.map(key => kkvGet(kkv, key)));
+  const [lastSyncedRev, lastPullAt, lastPushAt, lastPullResult, lastPushResult] = await Promise.all(statusKeys.map(key => Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, key)));
   if (!lastSyncedRev.ok) return Result.err(lastSyncedRev.error);
   if (!lastPullAt.ok) return Result.err(lastPullAt.error);
   if (!lastPushAt.ok) return Result.err(lastPushAt.error);
@@ -181,29 +161,29 @@ export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, inpu
   if (!input.secretAccessKey.trim()) return Result.err(new AppError('INFRA_VALIDATION_FAILED', {detail: '请填写 Secret Key'}));
   const {kkv, secretStore} = runtime;
 
-  const existingDeviceId = await kkvGet(kkv, KEY_DEVICE_ID);
+  const existingDeviceId = await Kkv.getOptional(kkv, CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_ID);
   if (!existingDeviceId.ok) return Result.err(existingDeviceId.error);
   let deviceId = existingDeviceId.value?.trim() ?? '';
   if (!deviceId) {
     deviceId = generateCloudSyncDeviceId();
   }
 
-  const normalizedPrefix = normalizePrefix(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
+  const normalizedPrefix = ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
   await Promise.all([
-    kkvSet(kkv, KEY_ENDPOINT, input.endpoint.trim()),
-    kkvSet(kkv, KEY_BUCKET, input.bucket.trim()),
-    kkvSet(kkv, KEY_REGION, input.region.trim()),
-    kkvSet(kkv, KEY_PATH_PREFIX, normalizedPrefix),
-    kkvSet(kkv, KEY_ACCESS_KEY_ID, input.accessKeyId.trim()),
-    kkvSet(kkv, KEY_FORCE_PATH_STYLE, input.forcePathStyle ? 'true' : 'false'),
-    kkvSet(kkv, KEY_DEVICE_ID, deviceId),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_ENDPOINT, input.endpoint.trim()),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_BUCKET, input.bucket.trim()),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_REGION, input.region.trim()),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_PATH_PREFIX, normalizedPrefix),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_ACCESS_KEY_ID, input.accessKeyId.trim()),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_FORCE_PATH_STYLE, input.forcePathStyle ? 'true' : 'false'),
+    kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_ID, deviceId),
     secretStore.set(CLOUD_SYNC_SECRET_REF, input.secretAccessKey.trim()),
   ]);
 
   const label = input.deviceLabel?.trim();
   if (label) {
-    await kkvSet(kkv, KEY_DEVICE_LABEL, label);
+    await kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_DEVICE_LABEL, label);
   }
 
   return getCloudSyncConfig(runtime);
@@ -222,19 +202,19 @@ export async function patchCloudSyncLocalStatus(runtime: MobileNovelMasterRuntim
   const {kkv} = runtime;
   const tasks: Promise<void>[] = [];
   if (patch.lastSyncedRev != null) {
-    tasks.push(kkvSet(kkv, KEY_LAST_SYNCED_REV, String(patch.lastSyncedRev)));
+    tasks.push(kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_LAST_SYNCED_REV, String(patch.lastSyncedRev)));
   }
   if (patch.lastPullAt != null) {
-    tasks.push(kkvSet(kkv, KEY_LAST_PULL_AT, patch.lastPullAt));
+    tasks.push(kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_LAST_PULL_AT, patch.lastPullAt));
   }
   if (patch.lastPushAt != null) {
-    tasks.push(kkvSet(kkv, KEY_LAST_PUSH_AT, patch.lastPushAt));
+    tasks.push(kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_LAST_PUSH_AT, patch.lastPushAt));
   }
   if (patch.lastPullResult != null) {
-    tasks.push(kkvSet(kkv, KEY_LAST_PULL_RESULT, patch.lastPullResult));
+    tasks.push(kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_LAST_PULL_RESULT, patch.lastPullResult));
   }
   if (patch.lastPushResult != null) {
-    tasks.push(kkvSet(kkv, KEY_LAST_PUSH_RESULT, patch.lastPushResult));
+    tasks.push(kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_LAST_PUSH_RESULT, patch.lastPushResult));
   }
   await Promise.all(tasks);
 }

@@ -46,6 +46,10 @@ const TOKENIZER_FAMILY_DISPLAY_NAMES: Readonly<Record<string, string>> = {
 /**
  * 上下文占用标签专用的紧凑计数：与 {@link TokenFormat.count} 同算法，但单位
  * 字母小写（`7.1k` / `2m`）。仅标签内使用；统计页卡片等场景仍走大写 K/M。
+ *
+ * nm-style: keep-local — 签名审计十五期判定**不收进 `common/number`**：它不是独立
+ * 数值格式化，而是本文件 `count()` 的单位大小写变体；挪过去会让 `Number` 反向依赖
+ * `TokenFormat`，或者复制一套 K/M 阈值（那是新增重复，不是收敛）。
  */
 function labelCount(n: number): string {
     return TokenFormat.count(n).replace(/[KM]$/, (unit) => unit.toLowerCase());
