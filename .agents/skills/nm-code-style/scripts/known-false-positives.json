@@ -3,6 +3,14 @@
   "matching": "匹配键 = segment + file + symbol（可选 line）。file 是相对仓库根的 posix 路径；symbol 为 null 时匹配该文件全部行，否则匹配行里的 name（inline 的 name / methods 的 Class.method 末段）或 signatures 的 detail；line 存在时还要求 location 行号一致。",
   "entries": [
     {
+      "segment": "methods",
+      "file": "packages/core/src/domain/chat/repositories/impl/sqlite-message.repository.ts",
+      "symbol": "deleteAfterSeq",
+      "category": "port-impl",
+      "reason": "SqliteMessageRepository 是 MessageRepository port 的实现，deleteAfterSeq 是对外接口方法而非单点私有函数；check-methods 只数实现内的直接调用点，数不到经 port 接口的消费者。十七期删掉 MessageTranscriptEffectsService 的纯委托包装后调用点从 2 变 1，触发 INLINE_METHOD 假阳性。",
+      "basis": "domain/chat/repositories/message.repository.port.ts 声明 deleteAfterSeq；实现处 sqlite-message.repository.ts:375。界面方法不能内联进调用方，否则 port 抽象失效。"
+    },
+    {
       "segment": "signatures",
       "file": "packages/core/src/domain/abort/logic/create-abort-scope.ts",
       "symbol": "raceWithCancel",
