@@ -9,15 +9,12 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { escapeLike } from "@/domain/vfs/repositories/impl/scope-prefix-helpers.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { WORKPLACE_DIR_RULE_TABLE, WORKPLACE_FILE_RULE_TABLE } from "@/bootstrap/workplace/workplace-schema.js";
 import type { FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule, WorkplaceFileRule } from "../../model/workplace-types.js";
 import type { WorkplaceRepository } from "../workplace.port.js";
-
-function escapeLike(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
 
 function rowToDirRule(row: Row): WorkplaceDirRule {
   return {

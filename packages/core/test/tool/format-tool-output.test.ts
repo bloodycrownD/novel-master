@@ -6,7 +6,7 @@ import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
   formatToolResultContentForDisplay,
-  isCurlOutput,
+  ToolOutput,
 } from "../../src/domain/tool/logic/format-tool-output.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
@@ -454,7 +454,7 @@ describe("curl 输出形状回归", () => {
       truncated: false,
       originalBytes: 13,
     };
-    assert.equal(isCurlOutput(curlOut), true);
+    assert.equal(ToolOutput.isCurl(curlOut), true);
 
     const out = formatToolOutputForLlm(curlOut);
     // 可读文本而非 JSON 串：不以 { 开头、无 JSON 键名、含 curl 请求行/Status 头。

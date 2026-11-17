@@ -119,6 +119,9 @@ const INSERT_OR_IGNORE_SMART_SORT_RULE_SQL = `INSERT OR IGNORE INTO ${SMART_SORT
 
 /**
  * 幂等写入内置智能排序规则（按 rule_id 主键 INSERT OR IGNORE，不覆盖存量行）。
+ *
+ * 错误通道同 `seedBuiltinProviders`：事务内 SQL 级异常靠 throw 回滚，
+ * 域内没有可判失败，故不套 `Result`。
  */
 export async function seedBuiltinSmartSortRules(conn: TdbcConnection): Promise<void> {
   const now = Date.now();

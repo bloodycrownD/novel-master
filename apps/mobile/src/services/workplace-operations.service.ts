@@ -1,17 +1,11 @@
 /**
  * Workplace rule toggles for VFS file manager row actions.
  */
-import {type VfsScope} from '@novel-master/core/vfs';
-
-import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService} from '@novel-master/core/workplace';
+import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService, workplaceRootLogicalPath} from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
 import {AppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
 import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
-
-function workplaceRootLogicalPath(_scope: VfsScope): string {
-  return '/';
-}
 
 const INCLUSION_CYCLE: InclusionMode[] = ['auto', 'show', 'hide'];
 
@@ -112,10 +106,6 @@ export function emptyDirRuleForm(logicalPath: string) {
 // nm-style: keep-public — VFS 根路径解析公开入口（VfsFileManager 消费）
 export function vfsScopeRootPath(scope: WorkplaceService['scope']): string {
   return workplaceRootLogicalPath(scope);
-}
-
-function pathUnderDir(dirPath: string, candidate: string): boolean {
-  return candidate === dirPath || candidate.startsWith(`${dirPath}/`);
 }
 
 /**

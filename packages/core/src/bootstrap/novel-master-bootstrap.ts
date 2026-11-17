@@ -373,9 +373,11 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
 
   // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
   // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
-  // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。
+  // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。两条失败通道
+  // 都要记：`Result.err` 是域内已知失败（技能读/写），throw 是 SQL 级未知异常。
   try {
-    await seedBuiltinSkills(conn);
+    const seeded = await seedBuiltinSkills(conn);
+    if (!seeded.ok) log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error: seeded.error });
   } catch (error) {
     log.warn("内置技能种入失败（不阻断启动，下次启动重试）", { error });
   }

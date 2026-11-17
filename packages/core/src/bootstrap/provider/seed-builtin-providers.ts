@@ -19,6 +19,9 @@ const INSERT_BUILTIN_PROVIDER_SQL = `INSERT INTO llm_provider (
 
 /**
  * 按 builtin_key 幂等插入内置服务商（已存在则跳过，不覆盖用户编辑）。
+ *
+ * 错误通道：调用点在 bootstrap 事务内，失败只可能是 SQL/驱动异常（`TdbcError`），
+ * throw 是事务回滚的唯一通道；域内没有可判失败，故不套 `Result`。
  */
 export async function seedBuiltinProviders(conn: TdbcConnection): Promise<void> {
   const parser = new SqlTemplateParser();

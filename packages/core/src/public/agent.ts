@@ -63,13 +63,7 @@ export type {
   AgentTurnScope,
   AgentTurnRuntimePort,
 } from "../service/agent/logic/run-agent-turn.js";
-export {
-  PENDING_RUN_ID,
-  shouldAcceptRunEvent,
-  shouldApplyTranscriptReload,
-  shouldIgnoreStaleRunStarted,
-  shouldReloadTranscriptOnRunEvent,
-} from "../service/agent/logic/agent-run-lifecycle-helpers.js";
+export { PENDING_RUN_ID, RunLifecycle } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export type { ShouldApplyTranscriptReloadOptions } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export {
   assembleAgentRunnerDeps,

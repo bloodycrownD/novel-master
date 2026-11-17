@@ -85,3 +85,4 @@ export {
   isWorkplacePathLoadedInCache,
   type WorkplaceLivePath,
 } from "../domain/workplace/logic/diff-workplace-paths.js";
+export { workplaceRootLogicalPath } from "../domain/workplace/logic/workplace-scope.js";

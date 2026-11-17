@@ -3,8 +3,7 @@
  *
  * 「isAppError + 域判定 + cause 链回溯」统一走 {@link inDomain}，域守卫
  * {@link isVfsError} / {@link isSessionFsError} 是本文件里它的一行组合（原 VFS 域与
- * session-fs 域守卫模块已并入，域判定只有一个实现入口）；key 判定的对偶是
- * {@link isAppErrorWithKey}；{@link domainOf} 段判定也
+ * session-fs 域守卫模块已并入，域判定只有一个实现入口）；{@link domainOf} 段判定也
  * 在这里（spec-3 §3.7 的唯一实现，public/errors 从这里转发），段表
  * {@link DOMAIN_RANGES} 仍在 errors/domain.ts 全仓唯一一份。
  * {@link VfsReplaceNotFoundDetails} 是 edit REPLACE_NOT_FOUND 的 LCS 诊断字段
@@ -16,11 +15,10 @@
 
 import { isAppError, type AppError } from "@/errors/app-error.js";
 import { DOMAIN_RANGES, type ErrorDomain } from "@/errors/domain.js";
-import type { ErrorKey } from "@/errors/error-codes.js";
 
 export { isAppError };
 
-/** 域守卫签名：收窄到 AppError，不收窄 key（key 判定走 {@link isAppErrorWithKey}）。 */
+/** 域守卫签名：收窄到 AppError，不收窄 key。 */
 type AppErrorGuard = (e: unknown) => e is AppError;
 
 /**
@@ -51,26 +49,22 @@ export function domainOf(code: number): ErrorDomain {
   return matched[0];
 }
 
-/** 沿 cause 链逐环判中（自引用与环由 visited 拦住），任一环命中即 true。 */
-function someCauseLink(e: unknown, hit: (link: unknown) => boolean): boolean {
-  const visited = new Set<unknown>();
-  let cur: unknown = e;
-  while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
-    visited.add(cur);
-    if (hit(cur)) {
-      return true;
-    }
-    cur = (cur as {cause?: unknown}).cause;
-  }
-  return false;
-}
-
 /**
  * 域守卫唯一组合：e 自身或 cause 链上任一环是 AppError 且 `code` 落在给定域段
  * 之一。域判定按段号而非 key 命名约定——语义属某域、前缀不同的 key 不会静默漏判。
  */
 export function inDomain(e: unknown, ...domains: ErrorDomain[]): e is AppError {
-  return someCauseLink(e, (link) => isAppError(link) && domains.includes(domainOf(link.code)));
+  // 沿 cause 链逐环判中（自引用与环由 visited 拦住），任一环命中即 true。
+  const visited = new Set<unknown>();
+  let cur: unknown = e;
+  while (typeof cur === "object" && cur !== null && !visited.has(cur)) {
+    visited.add(cur);
+    if (isAppError(cur) && domains.includes(domainOf(cur.code))) {
+      return true;
+    }
+    cur = (cur as {cause?: unknown}).cause;
+  }
+  return false;
 }
 
 /**
@@ -83,14 +77,6 @@ export const isVfsError: AppErrorGuard = (e) => inDomain(e, "VFS", "VFS_CHARACTE
 
 /** 结构守卫：AppError 且 `code` 落在 SESSION_FS 域段（116000-116999），沿 cause 链回溯。 */
 export const isSessionFsError: AppErrorGuard = (e) => inDomain(e, "SESSION_FS");
-
-/** key 守卫（inDomain 的 key 侧对偶）：e 自身或 cause 链上任一环是 AppError 且 key 命中。 */
-// nm-style: keep-public — guards 统一点名要求的守卫工具面（inDomain 的 key 侧对偶），
-// 与 inDomain 构成域/key 两个方向的成对 API；当前 rollback 守卫按 ask 保留 root-only
-// 函数体未迁移，是后续把它们收成一行组合时的判定底座。
-export function isAppErrorWithKey<K extends ErrorKey>(e: unknown, key: K): e is AppError<K> {
-  return someCauseLink(e, (link) => isAppError(link, key));
-}
 
 function unwrapCause(error: unknown): unknown {
   if (typeof error !== "object" || error === null) {

@@ -28,5 +28,6 @@
   "sortDirPaths",
   "sortFilesForDir",
   "splitMarkdownFrontMatter",
-  "workplaceFileTreeRootLabel"
+  "workplaceFileTreeRootLabel",
+  "workplaceRootLogicalPath"
 ]

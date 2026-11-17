@@ -2,7 +2,7 @@ import type {
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
 } from "@shared/logic/events";
-import { shouldApplyTranscriptReload } from "@shared/logic/agent";
+import { RunLifecycle } from "@shared/logic/agent";
 import { ipcMessagesAppend } from "@/ipc/client";
 import { flushAgentStepUi } from "./flush-run-ui";
 
@@ -22,16 +22,7 @@ export function stepCommittedShouldReload(
   lifecycle: AbortRetainLifecycle,
   phase: AgentStepCommittedPayload["phase"],
 ): boolean {
-  return shouldApplyTranscriptReload(
-    lifecycle.getUiRunning(),
-    lifecycle.getTranscriptFreezeCount(),
-    phase === "assistant"
-      ? {
-          abortRetainPending: lifecycle.getAbortRetainPending(),
-          phase: "assistant",
-        }
-      : undefined,
-  );
+  return RunLifecycle.shouldApply(lifecycle.getUiRunning(), lifecycle.getTranscriptFreezeCount(), phase === "assistant" ? {abortRetainPending: lifecycle.getAbortRetainPending(), phase: "assistant"} : undefined);
 }
 
 /**
@@ -53,7 +44,7 @@ export function shouldReloadOnRunFinished(
   runId: string,
 ): boolean {
   return (
-    runId === "" || shouldApplyTranscriptReload(uiRunning, freezeCount)
+    runId === "" || RunLifecycle.shouldApply(uiRunning, freezeCount)
   );
 }
 

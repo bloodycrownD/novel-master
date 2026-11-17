@@ -16,7 +16,7 @@ import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ResolvedEngineConfig } from "../../src/domain/tool/builtin/search/types.js";
-import { formatToolOutputForLlm, isCurlOutput, isSearchOutput } from "../../src/domain/tool/logic/format-tool-output.js";
+import { formatToolOutputForLlm, ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import type { ParallelToolOutcome } from "../../src/domain/tool/logic/tool-runner.js";
 
@@ -937,7 +937,7 @@ describe("search 工具：显式未知 engine（钉死未知 id）", () => {
 });
 
 describe("search 工具：formatter 与 summary", () => {
-  it("正常形态：isSearchOutput 命中且格式化为引擎抬头 + answer + 紧凑列表", () => {
+  it("正常形态：ToolOutput.isSearch 命中且格式化为引擎抬头 + answer + 紧凑列表", () => {
     const rec = {
       engine: "tavily",
       answer: "原生回答",
@@ -946,20 +946,20 @@ describe("search 工具：formatter 与 summary", () => {
         { title: "乙", url: "https://b.example.com", snippet: "摘要乙" },
       ],
     };
-    assert.equal(isSearchOutput(rec), true);
+    assert.equal(ToolOutput.isSearch(rec), true);
     const text = formatToolOutputForLlm(rec);
     assert.equal(text.split("\n")[0], "search tavily · 2 条结果");
     assert.ok(text.includes("原生回答"));
     assert.ok(text.includes("- 甲 — https://a.example.com — 摘要甲"));
   });
 
-  it("文本形态（模板引擎透传）：isSearchOutput 命中且格式化为「响应文本」抬头 + 尝试轨迹 + 原样文本块", () => {
+  it("文本形态（模板引擎透传）：ToolOutput.isSearch 命中且格式化为「响应文本」抬头 + 尝试轨迹 + 原样文本块", () => {
     const rec = {
       engine: "bocha",
       attempts: "duckduckgo 失败(403) → bocha 成功",
       results: '[{"name":"结果甲","link":"https://a.example.com"}]',
     };
-    assert.equal(isSearchOutput(rec), true);
+    assert.equal(ToolOutput.isSearch(rec), true);
     const text = formatToolOutputForLlm(rec);
     assert.equal(text.split("\n")[0], "search bocha · 响应文本");
     assert.ok(text.includes("尝试轨迹: duckduckgo 失败(403) → bocha 成功"));
@@ -967,7 +967,7 @@ describe("search 工具：formatter 与 summary", () => {
   });
 
   it("空结果集与无 answer 均为正常形态；不误撞 curl 形状", () => {
-    assert.equal(isSearchOutput({ engine: "bocha", results: [] }), true);
+    assert.equal(ToolOutput.isSearch({ engine: "bocha", results: [] }), true);
     const curlRec = {
       url: "https://x",
       finalUrl: "https://x",
@@ -978,8 +978,8 @@ describe("search 工具：formatter 与 summary", () => {
       truncated: false,
       originalBytes: 1,
     };
-    assert.equal(isSearchOutput(curlRec), false);
-    assert.equal(isCurlOutput(curlRec), true);
+    assert.equal(ToolOutput.isSearch(curlRec), false);
+    assert.equal(ToolOutput.isCurl(curlRec), true);
   });
 
   it("落盘形态：格式化为「已落盘 路径」", () => {
@@ -988,7 +988,7 @@ describe("search 工具：formatter 与 summary", () => {
       savedPath: "/tmp/search-20260906-ab12.json",
       message: "结果超过 50KB，全文已保存，可用 read 分页读取。",
     };
-    assert.equal(isSearchOutput(rec), true);
+    assert.equal(ToolOutput.isSearch(rec), true);
     assert.equal(formatToolOutputForLlm(rec), "已落盘 /tmp/search-20260906-ab12.json\n结果超过 50KB，全文已保存，可用 read 分页读取。");
   });
 

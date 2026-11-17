@@ -9,6 +9,7 @@
   "DoomLoopDetector",
   "InMemoryAgentSession",
   "PENDING_RUN_ID",
+  "RunLifecycle",
   "agentDefinitionDocumentSchema",
   "agentDefinitionSchema",
   "assembleAgentRunnerDeps",
@@ -25,10 +26,6 @@
   "resolveCurrentAgentDefinition",
   "resolveCurrentAgentId",
   "runAgentTurn",
-  "shouldAcceptRunEvent",
-  "shouldApplyTranscriptReload",
-  "shouldIgnoreStaleRunStarted",
-  "shouldReloadTranscriptOnRunEvent",
   "validateAgentDefinition",
   "validateAgentToolPolicy"
 ]

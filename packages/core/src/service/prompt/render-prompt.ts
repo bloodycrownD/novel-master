@@ -17,7 +17,7 @@ import { Result } from "../../errors/either.js";
 
 export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/model/prompt-render-context.js";
 
-/** One segment from the single assembly traversal (preview / serialize / LLM derive). */
+/** One segment from the single assembly traversal (preview / serialize / preview turns; LLM input derives separately). */
 export interface PromptAssemblySegment {
   readonly id: string;
   readonly role: string;

@@ -2,39 +2,33 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
+import { PENDING_RUN_ID, RunLifecycle } from "@shared/logic/agent";
 import {
-  PENDING_RUN_ID,
-  shouldAcceptRunEvent,
-  shouldIgnoreStaleRunStarted,
-  shouldReloadTranscriptOnRunEvent,
-} from "@shared/logic/agent";
-import {
-  shouldApplyTranscriptReload,
   useAgentRunLifecycle,
   type AgentRunLifecycle,
 } from "@/hooks/useAgentRunLifecycle";
 
-describe("shouldAcceptRunEvent", () => {
+describe("RunLifecycle.shouldAccept", () => {
   it("activeRunId 为空时拒绝", () => {
-    assert.equal(shouldAcceptRunEvent(null, "run-1"), false);
-    assert.equal(shouldAcceptRunEvent(null, undefined), false);
+    assert.equal(RunLifecycle.shouldAccept(null, "run-1"), false);
+    assert.equal(RunLifecycle.shouldAccept(null, undefined), false);
   });
 
   it("runId 为空时拒绝（非 PENDING 态）", () => {
-    assert.equal(shouldAcceptRunEvent("run-1", undefined), false);
-    assert.equal(shouldAcceptRunEvent("run-1", ""), false);
+    assert.equal(RunLifecycle.shouldAccept("run-1", undefined), false);
+    assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
   });
 
   it("runId 匹配时接受", () => {
-    assert.equal(shouldAcceptRunEvent("run-a", "run-a"), true);
+    assert.equal(RunLifecycle.shouldAccept("run-a", "run-a"), true);
   });
 
   it("stale runId 不匹配时拒绝", () => {
-    assert.equal(shouldAcceptRunEvent("run-a", "run-b"), false);
+    assert.equal(RunLifecycle.shouldAccept("run-a", "run-b"), false);
   });
 
   it("abort 后保留 activeRunId 时 RUN_FINISHED 仍可 accept", () => {
-    assert.equal(shouldAcceptRunEvent("run-abort", "run-abort"), true);
+    assert.equal(RunLifecycle.shouldAccept("run-abort", "run-abort"), true);
   });
 });
 
@@ -45,57 +39,57 @@ describe("shouldAcceptRunEvent", () => {
  * 此时还没收到 RUN_STARTED、activeRunId 只能是 beginUiRun 置的 PENDING 哨兵。
  * 不放行 ⇒ uiRunning 永久 true、abort 冻结永久挂起（「发送后立刻停止」按钮卡死）。
  */
-describe("shouldAcceptRunEvent 前奏终态放行（r3-run-1）", () => {
+describe("RunLifecycle.shouldAccept 前奏终态放行（r3-run-1）", () => {
   it("PENDING 态接受空串终态", () => {
-    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, ""), true);
+    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, ""), true);
   });
 
   it("PENDING 态不接受 null / undefined runId", () => {
-    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, undefined), false);
-    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, null), false);
+    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, undefined), false);
+    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, null), false);
   });
 
   it("空串终态不放宽到其他 activeRunId（含 null）", () => {
-    assert.equal(shouldAcceptRunEvent(null, ""), false);
-    assert.equal(shouldAcceptRunEvent("run-1", ""), false);
+    assert.equal(RunLifecycle.shouldAccept(null, ""), false);
+    assert.equal(RunLifecycle.shouldAccept("run-1", ""), false);
   });
 
   it("PENDING 哨兵不是真实 runId：真实事件不因哨兵而放行", () => {
     // RUN_STARTED 到达后 activeRunId 被真实 runId 覆盖；这里只确认哨兵
     // 与真实 runId 互不匹配（防有人把 PENDING_RUN_ID 当成 runId 上报）。
-    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, "run-1"), false);
+    assert.equal(RunLifecycle.shouldAccept(PENDING_RUN_ID, "run-1"), false);
     assert.notEqual(PENDING_RUN_ID, "");
   });
 });
 
-describe("shouldIgnoreStaleRunStarted", () => {
+describe("RunLifecycle.shouldIgnoreStale", () => {
   it("abort 后 uiRunning=false 时忽略 RUN_STARTED（保留 activeRunId 亦然）", () => {
-    assert.equal(shouldIgnoreStaleRunStarted(false, null), true);
-    assert.equal(shouldIgnoreStaleRunStarted(false, "run-1"), true);
+    assert.equal(RunLifecycle.shouldIgnoreStale(false, null), true);
+    assert.equal(RunLifecycle.shouldIgnoreStale(false, "run-1"), true);
   });
 
   it("beginUiRun 窗口内 uiRunning=true 时接受 RUN_STARTED", () => {
-    assert.equal(shouldIgnoreStaleRunStarted(true, null), false);
-    assert.equal(shouldIgnoreStaleRunStarted(true, "run-1"), false);
+    assert.equal(RunLifecycle.shouldIgnoreStale(true, null), false);
+    assert.equal(RunLifecycle.shouldIgnoreStale(true, "run-1"), false);
   });
 });
 
-describe("shouldApplyTranscriptReload", () => {
+describe("RunLifecycle.shouldApply", () => {
   it("uiRunning=false 时禁止 reload", () => {
     assert.equal(
-      shouldApplyTranscriptReload(false, null),
-      shouldReloadTranscriptOnRunEvent(false),
+      RunLifecycle.shouldApply(false, null),
+      RunLifecycle.shouldReload(false),
     );
-    assert.equal(shouldApplyTranscriptReload(false, null), false);
+    assert.equal(RunLifecycle.shouldApply(false, null), false);
   });
 
   it("uiRunning=true 且无 freeze 时允许 reload", () => {
-    assert.equal(shouldApplyTranscriptReload(true, null), true);
+    assert.equal(RunLifecycle.shouldApply(true, null), true);
   });
 
   it("freezeCount 非 null 时禁止一切增列表 reload", () => {
-    assert.equal(shouldApplyTranscriptReload(true, 3), false);
-    assert.equal(shouldApplyTranscriptReload(false, 3), false);
+    assert.equal(RunLifecycle.shouldApply(true, 3), false);
+    assert.equal(RunLifecycle.shouldApply(false, 3), false);
   });
 });
 
@@ -278,7 +272,7 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
  * r3-run-1 步骤 4 的 hook 级验收：未收 STARTED 直接收前奏终态。
  *
  * 这是「core 前奏期不发 RUN_STARTED」在 UI 侧的完整链路断言——修前
- * shouldAcceptRunEvent 拒收空串终态，uiRunning 会永远停在 true。
+ * RunLifecycle.shouldAccept 拒收空串终态，uiRunning 会永远停在 true。
  */
 describe("useAgentRunLifecycle 前奏终态收口（r3-run-1）", () => {
   function mountLifecycle(): AgentRunLifecycle {

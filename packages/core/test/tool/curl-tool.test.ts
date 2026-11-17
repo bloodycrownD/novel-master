@@ -9,7 +9,7 @@ import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-bui
 import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { formatToolErrorForLlm, formatToolOutputForLlm, isCurlOutput, isGlobOutput, isGrepOutput, isReadOutput } from "../../src/domain/tool/logic/format-tool-output.js";
+import { formatToolErrorForLlm, formatToolOutputForLlm, ToolOutput } from "../../src/domain/tool/logic/format-tool-output.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
@@ -478,12 +478,12 @@ describe("curl 工具", () => {
       truncated: false,
       originalBytes: 1,
     };
-    assert.equal(isCurlOutput(curlOut), true);
-    assert.equal(isReadOutput(curlOut), false);
-    assert.equal(isGrepOutput(curlOut), false);
-    assert.equal(isGlobOutput(curlOut), false);
+    assert.equal(ToolOutput.isCurl(curlOut), true);
+    assert.equal(ToolOutput.isRead(curlOut), false);
+    assert.equal(ToolOutput.isGrep(curlOut), false);
+    assert.equal(ToolOutput.isGlob(curlOut), false);
 
-    // 反向：read 输出也不会被 isCurlOutput 误撞（无 url+status 字段）。
+    // 反向：read 输出也不会被 ToolOutput.isCurl 误撞（无 url+status 字段）。
     const readOut = {
       path: "/a.md",
       content: "line-1",
@@ -491,7 +491,7 @@ describe("curl 工具", () => {
       returnedLines: 1,
       truncated: false,
     };
-    assert.equal(isCurlOutput(readOut), false);
+    assert.equal(ToolOutput.isCurl(readOut), false);
   });
 
   it("T-CT11: buildToolResultBlock 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {

@@ -69,7 +69,7 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
 /**
  * 导入失败的错误包装：保留测试钩子直抛原形，其余（含事务内业务 AppError 与
  * 驱动层裸 Error）包成 `VFS_ZIP_IMPORT_FAILED`，并在消息里带上分片进度
- * （已提交 N 片 / 失败在第 K 片）。与 character-card 的 wrapCardImportError
+ * （已提交 N 片 / 失败在第 K 片）。与 character-card 的 failImport
  * 不同：这里业务错不透传——事务内的 parentCheck 失败历来也落 IMPORT_FAILED
  * （旧 mapper 产物 name="VfsError" 同样被包），口径不变。
  *

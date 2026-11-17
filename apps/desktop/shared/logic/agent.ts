@@ -10,8 +10,5 @@ export type { AgentDefinition, AgentDefinitionPatch } from "@novel-master/core/a
 export {
   DEFAULT_SUBAGENT_DEFINITION,
   PENDING_RUN_ID,
-  shouldAcceptRunEvent,
-  shouldApplyTranscriptReload,
-  shouldIgnoreStaleRunStarted,
-  shouldReloadTranscriptOnRunEvent,
+  RunLifecycle,
 } from "@novel-master/core/agent";

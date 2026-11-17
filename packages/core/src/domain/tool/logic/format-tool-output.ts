@@ -35,12 +35,6 @@ type SearchResultShape = {
   readonly snippet: string;
 };
 
-/** Detects read tool output (including truncated). */
-// nm-style: keep-public — 测试文件直接 import 本组守卫锁输出形态（本片禁改测试），保留为守卫契约。
-export function isReadOutput(rec: Record<string, unknown>): boolean {
-  return typeof rec.path === "string" && typeof rec.content === "string" && typeof rec.totalLines === "number" && typeof rec.returnedLines === "number" && typeof rec.truncated === "boolean";
-}
-
 /** Formats read output with 6-digit right-aligned line numbers. */
 function formatReadOutput(rec: Record<string, unknown>): string {
   const content = rec.content as string;
@@ -66,84 +60,87 @@ function formatReadOutput(rec: Record<string, unknown>): string {
   return parts.join("\n\n");
 }
 
-/** Detects vfs grep tool output (excludes chat_grep). */
-// nm-style: keep-public — 测试文件直接 import 本组守卫锁输出形态（本片禁改测试），保留为守卫契约。
-export function isGrepOutput(rec: Record<string, unknown>): boolean {
-  if (!Array.isArray(rec.matches) || typeof rec.total !== "number" || typeof rec.truncated !== "boolean") {
-    return false;
-  }
-
-  if (rec.matches.length === 0) {
-    return !Array.isArray(rec.paths) && !Array.isArray(rec.entries);
-  }
-
-  const first = rec.matches[0];
-  if (first == null || typeof first !== "object") {
-    return false;
-  }
-
-  const match = first as Record<string, unknown>;
-  if ("messageId" in match || "seq" in match || "hidden" in match) {
-    return false;
-  }
-
-  return typeof match.path === "string" && typeof match.line === "number" && typeof match.column === "number" && typeof match.excerpt === "string";
-}
-
-/** Detects glob tool output. */
-// nm-style: keep-public — 测试文件直接 import 本组守卫锁输出形态（本片禁改测试），保留为守卫契约。
-export function isGlobOutput(rec: Record<string, unknown>): boolean {
-  return Array.isArray(rec.paths) && typeof rec.total === "number" && typeof rec.truncated === "boolean" && !Array.isArray(rec.entries) && !Array.isArray(rec.matches);
-}
-
 /**
- * Detects search tool output（正常 results 形态 / 超预算落盘 savedPath 形态）。
+ * Tool output shape guards.
  *
- * 正常形态：`engine` 字符串 + `results` 数组（空结果集也是正常形态；
- * 非空时首元素须具备 title/url/snippet 三字段）或 `results` 字符串
- * （模板引擎透传形态：提取结果的 JSON 文本，attempts 仍可叠加）；
- * 落盘形态（overflow-sink Step 6 接线后出现）：`savedPath` + `message` +
- * `engine`。未配置提示是纯字符串输出，不经过本守卫
- * （formatToolOutputForLlm 对 string 直通）。
+ * 分派顺序即 {@link formatToolOutputForLlm} 的守卫顺序：read → grep → glob →
+ * search → curl。测试文件直接 import 本命名空间锁输出形态。
  */
-// nm-style: keep-public — 测试文件直接 import 本组守卫锁输出形态（本片禁改测试），保留为守卫契约。
-export function isSearchOutput(rec: Record<string, unknown>): boolean {
-  if (typeof rec.engine !== "string") {
-    return false;
-  }
-  // 落盘形态：正文已存 /tmp/，回 {savedPath, message}。
-  if (typeof rec.savedPath === "string" && typeof rec.message === "string") {
-    return true;
-  }
-  // 模板引擎透传形态：results 为提取结果的 JSON 文本。
-  if (typeof rec.results === "string") {
-    return true;
-  }
-  if (!Array.isArray(rec.results)) {
-    return false;
-  }
-  if (rec.results.length === 0) {
-    return true;
-  }
-  const first = rec.results[0];
-  if (first == null || typeof first !== "object") {
-    return false;
-  }
-  const item = first as Record<string, unknown>;
-  return typeof item.title === "string" && typeof item.url === "string" && typeof item.snippet === "string";
-}
+export const ToolOutput = {
+  /** Detects read tool output (including truncated). */
+  isRead: (rec: Record<string, unknown>): boolean => typeof rec.path === "string" && typeof rec.content === "string" && typeof rec.totalLines === "number" && typeof rec.returnedLines === "number" && typeof rec.truncated === "boolean",
 
-/**
- * Detects curl tool output.
- *
- * 守卫要求 url + finalUrl + status + body + truncated 同时类型匹配；
- * 现有工具输出均无 url 字段，不会误撞 read / grep / glob / fs 形状。
- * method 不入守卫（curl 升级前的历史输出无该字段，formatter 缺省 GET）。
- */
-// nm-style: keep-public — 测试文件直接 import 本组守卫锁输出形态（本片禁改测试），保留为守卫契约。
-export function isCurlOutput(rec: Record<string, unknown>): boolean {
-  return typeof rec.url === "string" && typeof rec.finalUrl === "string" && typeof rec.status === "number" && typeof rec.body === "string" && typeof rec.truncated === "boolean";
-}
+  /** Detects vfs grep tool output (excludes chat_grep). */
+  isGrep: (rec: Record<string, unknown>): boolean => {
+    if (!Array.isArray(rec.matches) || typeof rec.total !== "number" || typeof rec.truncated !== "boolean") {
+      return false;
+    }
+
+    if (rec.matches.length === 0) {
+      return !Array.isArray(rec.paths) && !Array.isArray(rec.entries);
+    }
+
+    const first = rec.matches[0];
+    if (first == null || typeof first !== "object") {
+      return false;
+    }
+
+    const match = first as Record<string, unknown>;
+    if ("messageId" in match || "seq" in match || "hidden" in match) {
+      return false;
+    }
+
+    return typeof match.path === "string" && typeof match.line === "number" && typeof match.column === "number" && typeof match.excerpt === "string";
+  },
+
+  /** Detects glob tool output. */
+  isGlob: (rec: Record<string, unknown>): boolean => Array.isArray(rec.paths) && typeof rec.total === "number" && typeof rec.truncated === "boolean" && !Array.isArray(rec.entries) && !Array.isArray(rec.matches),
+
+  /**
+   * Detects search tool output（正常 results 形态 / 超预算落盘 savedPath 形态）。
+   *
+   * 正常形态：`engine` 字符串 + `results` 数组（空结果集也是正常形态；
+   * 非空时首元素须具备 title/url/snippet 三字段）或 `results` 字符串
+   * （模板引擎透传形态：提取结果的 JSON 文本，attempts 仍可叠加）；
+   * 落盘形态（overflow-sink Step 6 接线后出现）：`savedPath` + `message` +
+   * `engine`。未配置提示是纯字符串输出，不经过本守卫
+   * （formatToolOutputForLlm 对 string 直通）。
+   */
+  isSearch: (rec: Record<string, unknown>): boolean => {
+    if (typeof rec.engine !== "string") {
+      return false;
+    }
+    // 落盘形态：正文已存 /tmp/，回 {savedPath, message}。
+    if (typeof rec.savedPath === "string" && typeof rec.message === "string") {
+      return true;
+    }
+    // 模板引擎透传形态：results 为提取结果的 JSON 文本。
+    if (typeof rec.results === "string") {
+      return true;
+    }
+    if (!Array.isArray(rec.results)) {
+      return false;
+    }
+    if (rec.results.length === 0) {
+      return true;
+    }
+    const first = rec.results[0];
+    if (first == null || typeof first !== "object") {
+      return false;
+    }
+    const item = first as Record<string, unknown>;
+    return typeof item.title === "string" && typeof item.url === "string" && typeof item.snippet === "string";
+  },
+
+  /**
+   * Detects curl tool output.
+   *
+   * 守卫要求 url + finalUrl + status + body + truncated 同时类型匹配；
+   * 现有工具输出均无 url 字段，不会误撞 read / grep / glob / fs 形状。
+   * method 不入守卫（curl 升级前的历史输出无该字段，formatter 缺省 GET）。
+   */
+  isCurl: (rec: Record<string, unknown>): boolean => typeof rec.url === "string" && typeof rec.finalUrl === "string" && typeof rec.status === "number" && typeof rec.body === "string" && typeof rec.truncated === "boolean",
+} as const;
 
 /**
  * Compact tool success text for the model (e.g. write → `ok`).
@@ -159,7 +156,7 @@ export function formatToolOutputForLlm(out: unknown): string {
     const rec = out as Record<string, unknown>;
     const keys = Object.keys(rec);
 
-    if (isReadOutput(rec)) {
+    if (ToolOutput.isRead(rec)) {
       return formatReadOutput(rec);
     }
 
@@ -183,7 +180,7 @@ export function formatToolOutputForLlm(out: unknown): string {
       return out;
     }
 
-    if (isGrepOutput(rec)) {
+    if (ToolOutput.isGrep(rec)) {
       const matches = rec.matches as readonly GrepMatchShape[];
       let out = matches.map((match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`).join("\n");
       if (rec.truncated === true) {
@@ -194,7 +191,7 @@ export function formatToolOutputForLlm(out: unknown): string {
       return out;
     }
 
-    if (isGlobOutput(rec)) {
+    if (ToolOutput.isGlob(rec)) {
       const paths = rec.paths as readonly string[];
       let out = paths.join("\n");
       if (rec.truncated === true) {
@@ -205,7 +202,7 @@ export function formatToolOutputForLlm(out: unknown): string {
       return out;
     }
 
-    if (isSearchOutput(rec)) {
+    if (ToolOutput.isSearch(rec)) {
       // 落盘形态显示「已落盘路径」；正常形态是「引擎名 + 条数抬头」，
       // 串行降级时下一行展示尝试轨迹，tavily 原生回答紧随其后。
       if (typeof rec.savedPath === "string") {
@@ -237,7 +234,7 @@ export function formatToolOutputForLlm(out: unknown): string {
       return parts.join("\n");
     }
 
-    if (isCurlOutput(rec)) {
+    if (ToolOutput.isCurl(rec)) {
       const url = rec.url as string;
       const finalUrl = rec.finalUrl as string;
       const method = typeof rec.method === "string" && rec.method.length > 0 ? (rec.method as string) : "GET";

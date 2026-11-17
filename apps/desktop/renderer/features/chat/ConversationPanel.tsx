@@ -17,7 +17,7 @@ import type {
   AgentStepCommittedPayload,
 } from "@shared/logic/events";
 import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
-import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
+import { useAgentRunLifecycle, RunLifecycle } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
 import { createDesktopStreamTokenEstimator } from '@/hooks/stream-token-estimator';
@@ -433,7 +433,7 @@ export function ConversationPanel({
       // （且安全的）收口方式。
       //
       // 不强制会坏在哪：「发送→立刻停止」——abortUiRun 先行（uiRunning=false、
-      // freezeCount!=null），shouldApplyTranscriptReload 两个判据都不满足 →
+      // freezeCount!=null），RunLifecycle.shouldApply 两个判据都不满足 →
       // shouldReload=false；而本轮既没有 step 也没有 assistant 增量，
       // abort-retain 的 overlay 兜底又是空的（没有半截流式文本）→ 用户消息
       // 已落库却永不刷新，而 composer 正文已被清空 = 消息凭空消失。
@@ -474,10 +474,7 @@ export function ConversationPanel({
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload) => {
-      const shouldReload = shouldApplyTranscriptReload(
-        getUiRunning(),
-        getTranscriptFreezeCount(),
-      );
+      const shouldReload = RunLifecycle.shouldApply(getUiRunning(), getTranscriptFreezeCount());
       if (!failUiRun(payload)) {
         return;
       }
@@ -505,7 +502,7 @@ export function ConversationPanel({
   // ===== FR8-1：readOnly 子面板放宽守卫（对齐 mobile SubagentSessionScreen）=====
   //
   // readOnly 子会话的典型时序是「面板晚于 run 启动」：mount 时 RUN_STARTED 已是历史。
-  // 主会话的 beginUiRun + shouldAcceptRunEvent 守卫在这个场景断裂（beginUiRun 先把
+  // 主会话的 beginUiRun + RunLifecycle.shouldAccept 守卫在这个场景断裂（beginUiRun 先把
   // activeRunId 置 null，迟到 RUN_FINISHED 被守卫拒绝 → uiRunning 卡死）。
   // 这里另起一套回调：acceptRunEvent 放宽为非空 runId 即接受、不碰 activeRunId、
   // 只翻 uiRunning + 触发 reload。

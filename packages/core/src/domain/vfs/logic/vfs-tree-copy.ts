@@ -16,6 +16,7 @@ import type { Interrupt, Outcome } from "@/errors/outcome.js";
 import type { VfsContentStore } from "../content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
+import { normalizePrefix } from "../repositories/impl/scope-prefix-helpers.js";
 import { decrementLiveRefsUnderScope, deleteUnreferencedUnderScope } from "./revision-ref-count.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "./seed-live-head-revisions.js";
 import { isVfsPathAncestorOfExcluded, isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
@@ -23,13 +24,6 @@ import { isVfsPathAncestorOfExcluded, isVfsPathExcluded } from "./vfs-exclude-pr
 /** 轻量 scope 引用（只需 scopeKey 字符串）。 */
 export interface VfsCopyScope {
   readonly scopeKey: string;
-}
-
-function normalizePrefix(prefix: string): string {
-  if (prefix === "/" || prefix === "") {
-    return prefix;
-  }
-  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 }
 
 function relativeUnderPrefix(fullPath: string, prefix: string): string {
