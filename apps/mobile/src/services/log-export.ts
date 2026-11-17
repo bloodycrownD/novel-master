@@ -5,7 +5,7 @@
  * 每个文件前加 `===== <文件名> (<字节>) =====` 分隔头；总量超过 8MB 时
  * 从最旧的文件开始丢弃，并在头部写明丢了几个。
  */
-import {utf8ByteLength} from '@novel-master/core/common';
+import {pad2, utf8ByteLength} from '@novel-master/core/common';
 import {exportBytesViaDocumentPicker} from './document-io';
 import {blobFs} from './rn-file-io';
 
@@ -47,8 +47,7 @@ export async function exportMobileLogs(): Promise<'saved' | 'cancelled'> {
   const sections = [...kept].reverse().map(file => `===== ${file.name} (${file.bytes}) =====\n${file.text}${file.text.endsWith('\n') ? '' : '\n'}`);
   const body = header + sections.join('');
   const now = new Date();
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  const fileName = `nm-logs-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.txt`;
+  const fileName = `nm-logs-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.txt`;
   return exportBytesViaDocumentPicker({
     fileName,
     mimeType: 'text/plain',

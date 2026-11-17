@@ -2,15 +2,12 @@
  * Front Matter card HTML for RichDocumentWebView — mirrors RN FrontMatterCard layout
  * so FM and markdown body share one #doc scroll container.
  */
+import {escapeHtml} from '@/components/common/html';
 
 type FrontMatterDocumentInput = {
   readonly fields: readonly {readonly key: string; readonly value: string}[];
   readonly empty: boolean;
 };
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 /** Sanitized FM block; empty string when there is nothing to show. */
 export function buildFrontMatterDocumentHtml(input: FrontMatterDocumentInput): string {

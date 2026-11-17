@@ -14,6 +14,7 @@
  */
 import {composerTokenRanges, splitComposerTokenSegments} from '@/components/chat/composer-highlight';
 import {tryAtomicRangeDelete, type AtomicDeleteRange} from '@/components/common/atomic-range-delete';
+import {escapeHtml} from '@/components/common/html';
 import {findWhitelistMacroRanges} from '@/components/agent/prompt-macro-input';
 import {post} from './bridge';
 import type {ComposerMetrics, ComposerMode, ComposerTheme, InitPayload} from './model';
@@ -37,10 +38,6 @@ const DEFAULT_METRICS: ComposerMetrics = {
 /* ------------------------------------------------------------------ *
  * 纯函数层（jest 直测；不触碰 DOM）
  * ------------------------------------------------------------------ */
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 /** 高亮段统一形状（token 与宏两源归一，渲染只有一份）。 */
 type HighlightSegment = {

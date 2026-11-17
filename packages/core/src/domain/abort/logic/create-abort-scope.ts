@@ -172,6 +172,17 @@ function buildScope(opts: CreateAbortScopeOptions): AbortScope {
     }
   };
 
+  /** 已判定未 aborted 的 signal 挂取消监听；返回解绑函数（controller / 裸 signal 共用同一形状）。 */
+  const watchAbort = (target: AbortSignal): (() => void) => {
+    const onAbort = (): void => {
+      abortInternal("user-stop");
+    };
+    target.addEventListener("abort", onAbort);
+    return () => {
+      target.removeEventListener("abort", onAbort);
+    };
+  };
+
   const checkpoint = (): Interrupt | null => {
     if (disposed) {
       return null;
@@ -312,26 +323,14 @@ function buildScope(opts: CreateAbortScopeOptions): AbortScope {
   if (controller.signal.aborted) {
     abortInternal("user-stop");
   } else {
-    const onAbort = (): void => {
-      abortInternal("user-stop");
-    };
-    controller.signal.addEventListener("abort", onAbort);
-    removeControllerListener = () => {
-      controller.signal.removeEventListener("abort", onAbort);
-    };
+    removeControllerListener = watchAbort(controller.signal);
   }
 
   if (sourceSignal !== undefined && sourceSignal !== controller.signal) {
     if (sourceSignal.aborted) {
       abortInternal("user-stop");
     } else {
-      const onAbort = (): void => {
-        abortInternal("user-stop");
-      };
-      sourceSignal.addEventListener("abort", onAbort);
-      removeSourceListener = () => {
-        sourceSignal.removeEventListener("abort", onAbort);
-      };
+      removeSourceListener = watchAbort(sourceSignal);
     }
   }
 
