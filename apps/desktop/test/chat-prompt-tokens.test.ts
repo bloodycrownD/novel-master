@@ -22,8 +22,7 @@ import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, it } from "node:test";
 import type { WebContents } from "electron";
 import {
-  formatContextUsageLabel,
-  formatTokenSourceBadge,
+  TokenFormat,
   promptWholeCache,
   sessionApiPromptTokenCache,
 } from "@novel-master/core/provider";
@@ -192,10 +191,10 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(stats.source, "api");
 
     // T-TL3 对拍：main 下发的 label 与 core 单源（badge + 拼装）重算完全一致。
-    const expected = formatContextUsageLabel(
+    const expected = TokenFormat.contextUsageLabel(
       stats.tokenCount,
       stats.contextWindow,
-      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+      TokenFormat.sourceBadge(stats.source, stats.counterKind, stats.estimated),
     );
     assert.equal(stats.label, expected);
     // api 真值 → 远程 =（无 ~，无「上次请求」旧后缀）。
@@ -242,10 +241,10 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(second.counterKind, "tiktoken");
     assert.equal(second.estimated, false);
     assert.match(second.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
-    const expected = formatContextUsageLabel(
+    const expected = TokenFormat.contextUsageLabel(
       second.tokenCount,
       second.contextWindow,
-      formatTokenSourceBadge(second.source, second.counterKind, second.estimated),
+      TokenFormat.sourceBadge(second.source, second.counterKind, second.estimated),
     );
     assert.equal(second.label, expected);
   });

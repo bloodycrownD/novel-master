@@ -1,10 +1,9 @@
 /**
  * rn-file-io：URI/字节转换工具与 blobFs 双形态适配的单测。
  */
+import {Encoding} from '@novel-master/core/common';
 import {
-  base64ToBytes,
   bytesToAsciiString,
-  bytesToBase64,
   blobFs,
   localUriToFsPath,
   toFileUri,
@@ -65,13 +64,15 @@ describe('rn-file-io', () => {
       for (let i = 0; i < bytes.length; i++) {
         bytes[i] = i % 256;
       }
-      expect(base64ToBytes(bytesToBase64(bytes))).toEqual(bytes);
+      expect(
+        Encoding.base64ToBytes(Encoding.bytesToBase64(bytes)),
+      ).toEqual(bytes);
     });
 
     it('空字节 roundtrip 为空', () => {
-      expect(base64ToBytes(bytesToBase64(new Uint8Array(0)))).toEqual(
-        new Uint8Array(0),
-      );
+      expect(
+        Encoding.base64ToBytes(Encoding.bytesToBase64(new Uint8Array(0))),
+      ).toEqual(new Uint8Array(0));
     });
   });
 

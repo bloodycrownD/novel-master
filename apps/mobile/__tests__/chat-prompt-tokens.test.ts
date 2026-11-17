@@ -1,7 +1,4 @@
-import {
-  formatContextUsageLabel,
-  formatTokenSourceBadge,
-} from '@novel-master/core/common';
+import {TokenFormat} from '@novel-master/core/common';
 import {
   __setPreciseUpgradeDelayForTests,
   cancelPreciseUpgrade,
@@ -211,7 +208,7 @@ describe('chat-prompt-tokens.service', () => {
       source: 'local' as const,
     };
     const contextWindow = 128_000;
-    const badge = formatTokenSourceBadge(
+    const badge = TokenFormat.sourceBadge(
       result.source,
       result.counterKind,
       result.estimated,
@@ -219,7 +216,7 @@ describe('chat-prompt-tokens.service', () => {
     // 与 desktop T-T9b 同口径：local + 家族名 + est=false → 家族展示名 =。
     expect(badge).toEqual({mark: 'gemma', connector: '='});
     expect(
-      formatContextUsageLabel(result.tokenCount, contextWindow, badge),
+      TokenFormat.contextUsageLabel(result.tokenCount, contextWindow, badge),
     ).toBe('gemma = 24k / 128k (19%)');
   });
 
@@ -397,11 +394,11 @@ describe('chat-prompt-tokens.service', () => {
   it('T-S7（重写）：tiktoken 精确档与 heuristic 兜底档的记号分档（旧 formatCounterKindLabel 已退役）', () => {
     // 旧断言（api/heuristic → 「自动」）随 format-counter-kind-label 退役删除；
     // 新体系下同输入的记号断言（与 core T-TL1 单源映射一致）。
-    expect(formatTokenSourceBadge('local', 'tiktoken', false)).toEqual({
+    expect(TokenFormat.sourceBadge('local', 'tiktoken', false)).toEqual({
       mark: 'gpt',
       connector: '=',
     });
-    expect(formatTokenSourceBadge('local', 'heuristic', true)).toEqual({
+    expect(TokenFormat.sourceBadge('local', 'heuristic', true)).toEqual({
       mark: 'gpt',
       connector: '≈',
     });

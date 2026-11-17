@@ -1,35 +1,35 @@
-import { formatContextUsageLabel, formatTokenCount, formatTokenSourceBadge } from '@novel-master/core/common';
+import { TokenFormat } from '@novel-master/core/common';
 
 describe('formatTokenCount', () => {
   it('formats small counts as integers', () => {
-    expect(formatTokenCount(0)).toBe('0');
-    expect(formatTokenCount(999)).toBe('999');
+    expect(TokenFormat.count(0)).toBe('0');
+    expect(TokenFormat.count(999)).toBe('999');
   });
 
   it('formats thousands with K suffix', () => {
-    expect(formatTokenCount(2500)).toBe('2.5K');
-    expect(formatTokenCount(12000)).toBe('12K');
+    expect(TokenFormat.count(2500)).toBe('2.5K');
+    expect(TokenFormat.count(12000)).toBe('12K');
   });
 });
 
 describe('formatContextUsageLabel（token-source-label 新形态：badge 参数，无 ~ / estimated）', () => {
   it('shows count and ratio with percent against max tokens（2026-09-29 格式）', () => {
-    expect(formatContextUsageLabel(327, 128_000)).toBe('327 / 128k (0%)');
+    expect(TokenFormat.contextUsageLabel(327, 128_000)).toBe('327 / 128k (0%)');
   });
 
   it('falls back to count only without max', () => {
-    expect(formatContextUsageLabel(327)).toBe('327 tokens');
+    expect(TokenFormat.contextUsageLabel(327)).toBe('327 tokens');
   });
 
   it('prepends badge mark and connector when provided', () => {
     expect(
-      formatContextUsageLabel(64_000, 128_000, {
+      TokenFormat.contextUsageLabel(64_000, 128_000, {
         mark: '远程',
         connector: '=',
       }),
     ).toBe('远程 = 64k / 128k (50%)');
     expect(
-      formatContextUsageLabel(2_345, undefined, {
+      TokenFormat.contextUsageLabel(2_345, undefined, {
         mark: 'gpt',
         connector: '≈',
       }),
@@ -37,9 +37,9 @@ describe('formatContextUsageLabel（token-source-label 新形态：badge 参数�
   });
 
   it('非法 count 显示 —（不再输出 ~ 或 tokens (est.)）', () => {
-    expect(formatContextUsageLabel(Number.NaN, 128_000)).toBe('—');
+    expect(TokenFormat.contextUsageLabel(Number.NaN, 128_000)).toBe('—');
     expect(
-      formatContextUsageLabel(-1, undefined, {
+      TokenFormat.contextUsageLabel(-1, undefined, {
         mark: '远程',
         connector: '=',
       }),
@@ -47,7 +47,7 @@ describe('formatContextUsageLabel（token-source-label 新形态：badge 参数�
   });
 
   it('badge 由 formatTokenSourceBadge 单源产出', () => {
-    expect(formatTokenSourceBadge('api', 'api', false)).toEqual({
+    expect(TokenFormat.sourceBadge('api', 'api', false)).toEqual({
       mark: '远程',
       connector: '=',
     });
