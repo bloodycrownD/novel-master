@@ -1,5 +1,5 @@
 {
-  "note": "签名重复基线。新增重复组会让 --gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。 十七期第1轮后人工判定：新增 12 组同名 + 4 组同形态全部判「有意保留」——9 组双端镜像（runtime 类型不同、core 是唯一实现、C2/C6/C9 主动统一命名）/ 3 组三协议 SSE parser namespace 成员 / 4 组 C3 配置表与既有 args 对象。判据见 judgedAfterP17。同轮消除 45 组同名 + 24 组形态重复。",
+  "note": "签名重复基线。新增重复组会让 --gate 打红；存量允许保留（刻意重复：双端镜像对、测试 helper、接口实现）。 十七期第1轮后人工判定：新增 12 组同名 + 4 组同形态全部判「有意保留」——9 组双端镜像（runtime 类型不同、core 是唯一实现、C2/C6/C9 主动统一命名）/ 3 组三协议 SSE parser namespace 成员 / 4 组 C3 配置表与既有 args 对象。判据见 judgedAfterP17。同轮消除 45 组同名 + 24 组形态重复。 十八期第2轮后人工判定：新增 0 组同名、1 组同形态（删死参导致签名统一，判有意保留）。同轮消除 52 组同名 + 77 组形态重复。",
   "namedGroups": 105,
   "shapedGroups": 253,
   "named": {
@@ -3206,6 +3206,12 @@
     "(: StateKey)": [
       "DefaultPersistentState.getPointer @ packages/core/src/service/persistent-state/impl/persistent-state.service.ts:104",
       "DefaultPersistentState.resetPointer @ packages/core/src/service/persistent-state/impl/persistent-state.service.ts:125"
+    ],
+    "(: {readonly : string; readonly : string})": [
+      "refreshComposerStatusAfterSessionKkvCleared @ apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:28",
+      "refreshComposerStatusAfterFloorOrCompaction @ apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts:40",
+      "refreshComposerStatusAfterSessionKkvCleared @ apps/mobile/src/services/project-composer-status.service.ts:21",
+      "refreshComposerStatusAfterFloorOrCompaction @ apps/mobile/src/services/project-composer-status.service.ts:32"
     ]
   },
   "judgedAfterP17": {
@@ -3230,5 +3236,10 @@
       "(: StateKey)": "C3 配置表产物：get/set/resetPointer 三个方法同签名，同上。"
     }
   },
-  "generatedAt": "2026-11-17 (after p17-signature-audit-r1)"
+  "generatedAt": "2026-11-18 (after p18-signature-audit-r2)",
+  "judgedAfterP18": {
+    "shaped": {
+      "(: {readonly : string; readonly : string})": "十八期 C7 按 R1 组4 的方法删掉 refreshComposerStatusAfter* / projectComposerStatusForSession 的死首参（双端 `_rt`/`_runtime` 都没用过），签名统一成 scope 对象 `{projectId, sessionId}` 后同文件两个触发点与 mobile 镜像变成同形态。desktop notify-composer-status-after-kkv-clear.ts:28（推空条）/ :40（推实际 attachments）是两个不同触发点，mobile project-composer-status.service.ts:21 是双端镜像；三个函数体都只剩「调 forwarder / 取 attachments」两行，无可抽公共体。"
+    }
+  }
 }
