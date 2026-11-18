@@ -2,7 +2,7 @@ import {describe, expect, it} from '@jest/globals';
 import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
 
 // 历时分段/千分位口径的单源在 core（`formatStreamElapsed` /
-// `formatCharCount`），边界用例由 core 侧测试覆盖（cr-fix-spec
+// `Number.charCount`），边界用例由 core 侧测试覆盖（cr-fix-spec
 // core-metrics/C-2）；移动端旧 hook 的本地副本与再导出已删
 //（cr-fix-spec mobile-metrics/C-3），这里只锁消费侧文案形态。
 describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatCharCount } from "../../../src/domain/format/format-char-count.js";
+import { Number } from "../../../src/common/number.js";
 import {
   buildStreamMetricsLine,
   formatStreamElapsed,
@@ -14,9 +14,9 @@ function renderMetricsLine(metrics: StreamMetricsLineInput): string {
   return `${tCore(parts.prefix)} · ${parts.elapsed} · ${tCore(parts.body)}`;
 }
 
-describe("formatCharCount", () => {
+describe("Number.charCount", () => {
   it("uses zh-CN grouping", () => {
-    assert.match(formatCharCount(1234), /1/);
+    assert.match(Number.charCount(1234), /1/);
   });
 });
 

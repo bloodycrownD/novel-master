@@ -11,7 +11,7 @@
  */
 
 import type { CoreMessageDescriptor } from "@/i18n/keys.js";
-import { formatCharCount } from "./format-char-count.js";
+import { Number } from "@/common/number.js";
 
 /** 流式 metrics 展示切片。 */
 export type StreamMetricsLineInput = {
@@ -45,7 +45,7 @@ export function formatStreamElapsed(seconds: number): string {
 
 /** 构建 metrics 条文案切片（供 ChatStreamMetricsBar 与单测共用）。 */
 export function buildStreamMetricsLine(metrics: StreamMetricsLineInput): StreamMetricsLineParts {
-  const tokens = formatCharCount(metrics.completionTokens);
+  const tokens = Number.charCount(metrics.completionTokens);
   if (metrics.tokensPerSecond != null) {
     // tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
     // 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
@@ -53,7 +53,7 @@ export function buildStreamMetricsLine(metrics: StreamMetricsLineInput): StreamM
     return {
       prefix: { key: metrics.running ? "label.stream_metrics.running" : "label.stream_metrics.last" },
       elapsed: formatStreamElapsed(metrics.elapsedMs / 1000),
-      body: { key: "label.stream_metrics.line_with_rate", params: { tokens, rate: rate >= 100 ? Math.round(rate) : Number.parseFloat(rate.toFixed(1)) } },
+      body: { key: "label.stream_metrics.line_with_rate", params: { tokens, rate: rate >= 100 ? Math.round(rate) : parseFloat(rate.toFixed(1)) } },
     };
   }
   return {

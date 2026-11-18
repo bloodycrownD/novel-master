@@ -15,7 +15,6 @@ import { coreT } from "./core-i18n.js";
 
 export {
   buildStreamMetricsLine,
-  formatCharCount,
   formatStreamElapsed,
   slidingTokenRate,
   createTokenRateSampler,

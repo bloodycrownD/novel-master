@@ -19,7 +19,7 @@ import {FileMarkdownPreview, isMarkdownPreviewPath} from '../../components/vfs/F
 import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
 import {CodeEditorWebView, type CodeEditorWebViewHandle} from '../../components/vfs/CodeEditorWebView';
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
-import {formatCharCount} from '@novel-master/core/format';
+import {Number} from '@novel-master/core/common';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
@@ -239,7 +239,7 @@ export function FileEditorScreen() {
       statsRow = (
         <Pressable testID="file-editor-dismiss-stats" style={[styles.statsRow, {borderBottomColor: tokens.border}]} onPress={dismissEditor} accessibilityRole="button" accessibilityLabel="收起键盘">
           <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
+            更新于 {formatFileMtime(mtimeMs)} · {Number.charCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </Pressable>
       );
@@ -247,7 +247,7 @@ export function FileEditorScreen() {
       statsRow = (
         <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
           <Text style={[styles.statsText, {color: tokens.textSecondary}]} numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
+            更新于 {formatFileMtime(mtimeMs)} · {Number.charCount(content.length)} 字{isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </View>
       );

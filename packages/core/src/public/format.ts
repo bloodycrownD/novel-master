@@ -1,4 +1,3 @@
-export { formatCharCount } from "../domain/format/format-char-count.js";
 export {
   buildStreamMetricsLine,
   formatStreamElapsed,
