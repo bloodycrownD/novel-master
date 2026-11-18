@@ -4,7 +4,7 @@ import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
@@ -56,7 +56,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_ANTHROPIC}/apiKey`, "sk-ant-test");
     const model = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_ANTHROPIC, "claude-3-5-sonnet"));
 

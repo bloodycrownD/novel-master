@@ -2,7 +2,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import { DefaultProviderService } from "../../src/service/provider/impl/provider.service.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
@@ -47,7 +47,7 @@ novelMasterTestFixture();
 describe("ProviderService", () => {
   it("lists opencode with apiKey set via builtin default", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const list = unwrap(await bundle.providers.list());
     const opencode = list.find((p) => p.id === BUILTIN_PROVIDER_UUID_OPENCODE);
     assert.ok(opencode);
@@ -57,7 +57,7 @@ describe("ProviderService", () => {
 
   it("T-PI3：create 不传 id → UUID；缺/空白 displayName → 错误", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -81,7 +81,7 @@ describe("ProviderService", () => {
 
   it("T-PI4：edit 清空 displayName → 错误；改名后模型主文案前缀更新", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const provider = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -107,7 +107,7 @@ describe("ProviderService", () => {
 
   it("T-PI5：内置不可删、不可改 protocol", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     await rejectsErr(
       () =>
         bundle.providers.edit(BUILTIN_PROVIDER_UUID_OPENAI, {
@@ -123,7 +123,7 @@ describe("ProviderService", () => {
 
   it("model request fails when not saved", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     await rejectsErr(
       () =>
         bundle.modelRequests.request(
@@ -137,7 +137,7 @@ describe("ProviderService", () => {
   it("delete custom provider removes secret ref", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -154,7 +154,7 @@ describe("ProviderService", () => {
     // 守卫补全后必须抛 SAVED_MODEL_IN_USE，且**模型仍在**（证明没有「抛错但已删」的半套）。
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -191,7 +191,7 @@ describe("ProviderService", () => {
     // delete 成功**之后**才 resetCurrentModelId。服务层自己不清这条软指针。
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -225,7 +225,7 @@ describe("ProviderService", () => {
   it("delete removes secret at default ref when secretRef is null", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const displayName = "orphan" + testIsolationSuffix();
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
@@ -241,7 +241,7 @@ describe("ProviderService", () => {
   it("edit with empty apiKey clears stored secret", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -276,7 +276,7 @@ describe("ProviderService", () => {
       },
     };
     const kkv = createKkvService(ctx.conn);
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const realProvidersRepo = bundle.providerRepo;
     // 包一层让 insert 抛错，模拟中间步骤失败
     const failingProvidersRepo = Object.create(realProvidersRepo) as typeof realProvidersRepo;
@@ -334,7 +334,7 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const kkv = createKkvService(ctx.conn);
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",

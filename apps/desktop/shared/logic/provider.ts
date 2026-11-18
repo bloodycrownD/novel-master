@@ -1,6 +1,6 @@
 /**
  * Desktop renderer 对 `@novel-master/core/provider` 的具名薄再导出。
- * 禁止 `export *`；禁止 createProviderServices 等工厂。
+ * 禁止 `export *`；禁止 ProviderServiceFactory 等工厂。
  *
  * core 侧选项表 label 已是 descriptor（G3.3）：本层经 `coreT` 翻译成 string
  * 再导出，renderer 消费点零改动。

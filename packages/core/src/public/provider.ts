@@ -77,9 +77,8 @@ export type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
 } from "../service/provider/model-retry-policy.port.js";
-export { createModelRetryPolicyService } from "../service/provider/create-model-retry-policy-service.js";
-export { createProviderServices } from "../service/provider/create-provider-services.js";
-export type { ProviderServiceBundle } from "../service/provider/create-provider-services.js";
+export { ProviderServiceFactory } from "../service/provider/provider-service-factory.js";
+export type { ProviderServiceBundle } from "../service/provider/provider-service-factory.js";
 export type {
   ProviderService,
   ProviderListItem,

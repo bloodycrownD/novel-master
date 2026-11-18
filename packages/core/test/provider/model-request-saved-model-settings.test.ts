@@ -1,13 +1,12 @@
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
-import { createModelRetryPolicyService } from "../../src/service/provider/create-model-retry-policy-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 
@@ -50,7 +49,7 @@ describe("ModelRequestService saved model sampling", () => {
     const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
-      const bundle = createProviderServices(ctx.conn, secrets);
+      const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
       await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
       const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "profile-merge"));
       await bundle.providerModels.updateSettings(saved.id, {
@@ -86,7 +85,7 @@ describe("ModelRequestService saved model sampling", () => {
     const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
-      const bundle = createProviderServices(ctx.conn, secrets);
+      const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
       await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
       const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "no-profile"));
       await bundle.modelRequests.request(saved.id, "hi", {
@@ -121,8 +120,8 @@ describe("ModelRequestService saved model sampling", () => {
     const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
-      const bundle = createProviderServices(ctx.conn, secrets);
-      const retryPolicies = createModelRetryPolicyService(ctx.conn);
+      const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
+      const retryPolicies = ProviderServiceFactory.createRetryPolicy(ctx.conn);
       await retryPolicies.setPolicy({
         maxRetries: 1,
         baseDelayMs: 0,

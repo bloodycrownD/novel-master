@@ -6,7 +6,7 @@ import {
   BUILTIN_KEY_TO_UUID,
   BUILTIN_PROVIDER_UUID_OPENAI,
 } from "../../src/domain/provider/logic/builtin-providers.js";
-import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
 
@@ -50,7 +50,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
   for (const { key, vendorModelId, expected } of cases) {
     it(`maps builtin ${key}/${vendorModelId} -> ${expected}`, async () => {
       const ctx = getNovelMasterTestContext();
-      const bundle = createProviderServices(ctx.conn, memorySecretStore());
+      const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
       const providerId = BUILTIN_KEY_TO_UUID[key]!;
       const saved = unwrap(await bundle.providerModels.create(providerId, vendorModelId));
       assert.equal(
@@ -62,7 +62,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
 
   it("T-PI5b：providerId 为固定内置 UUID 时仍解析到正确 protocol", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(
       BUILTIN_PROVIDER_UUID_OPENAI,
       "gpt-4o",
@@ -75,7 +75,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
 
   it("自定义无 builtin_key 时须传入 providers 才走行上 protocol", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const created = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -99,7 +99,7 @@ describe("inferLlmProtocolFromSavedModelId", () => {
 
   it("missing saved model id falls back to anthropic", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     assert.equal(
       await inferLlmProtocolFromSavedModelId(
         "00000000-0000-4000-8000-000000000000",
