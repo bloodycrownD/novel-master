@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { performance } from "node:perf_hooks";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   getNovelMasterTestContext,
@@ -45,7 +45,7 @@ describe("checkpoint seed 批量化性能（200 文件 × 500 消息）", () => 
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

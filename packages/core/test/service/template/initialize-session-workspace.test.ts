@@ -16,7 +16,7 @@ import { textBlocks } from "@novel-master/core/chat";
 import { createSkillsService } from "@novel-master/core/skills";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -85,7 +85,7 @@ describe("session create / workspace initialize (core 层)", () => {
     );
 
     // --- revision 已 seed：每个 live head 都有一条 active revision 行 ---
-    const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
+    const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     for (const p of ["/a.md", "/sub/b.md"]) {

@@ -41,7 +41,7 @@ import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-ses
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import { scopeKey as makeScopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 
 const DB_PATH = "/tmp/nm-session-copy-bench.db";
@@ -206,7 +206,7 @@ async function main(): Promise<void> {
         const revisions2 = new SqliteVfsRevisionRepository(tx);
         const workplace2 = new SqliteWorkplaceRepository(tx);
         const checkpoints2 = new SqliteMessageCheckpointRepository(tx);
-        const targetScopeKey = makeScopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id });
+        const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: copySession.id });
 
         let t1 = performance.now();
         const heads = await listSessionFileHeads(entries2, project.id, copySession.id);

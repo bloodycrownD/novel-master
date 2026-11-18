@@ -32,16 +32,10 @@ import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
 import type { PromptWholeCacheEntry } from "./prompt-whole-cache.js";
-import {
-  buildChatTokenEstimateMemoKey,
-  lookupChatTokenEstimateMemo,
-  lookupWorkplaceEstimateByFingerprint,
-  rememberChatTokenEstimateMemo,
-  rememberWorkplaceEstimateByFingerprint,
-} from "./chat-token-estimate-memo.js";
+import { ChatTokenEstimateMemo } from "./chat-token-estimate-memo.js";
 import { TokenizerRegistry } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
-import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { buildCounterScope, chunkHash16, tokenChunkCache } from "./token-chunk-cache.js";
 import type { Interrupt, Outcome } from "../../../errors/outcome.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
@@ -209,7 +203,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // （错误通道迁移二期：哨兵 throw 改返回值）。api 命中分支不调用。
   const shouldBail = options?.shouldBail;
   const bail = (): Interrupt | null => shouldBail?.() ?? null;
-  const entry = await readSessionApiPromptTokenEntry(options?.sessionKkv, sessionId);
+  const entry = await SessionApiPromptTokenEntry.read(options?.sessionKkv, sessionId);
   if (entry != null && (entry.savedModelId == null || entry.savedModelId === params.savedModelId)) {
     return {
       kind: "completed",
@@ -246,7 +240,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
    * 定义成函数（而非早求值的常量）正是为此，调用位置与提取前逐字相同。
    */
   const resolveMemoKey = (): string | null =>
-    buildChatTokenEstimateMemoKey({
+    ChatTokenEstimateMemo.buildKey({
       savedModelId: params.savedModelId,
       workplaceFingerprint: params.ctx?.workplaceFingerprint,
       messages: params.ctx?.messages,
@@ -279,7 +273,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 命中即精确档，与下方 L1 预查同精神，不给「锁死估算档」留口）。
     const memoKey = resolveMemoKey();
     if (memoKey != null) {
-      const memoHit = lookupChatTokenEstimateMemo(sessionId, memoKey);
+      const memoHit = ChatTokenEstimateMemo.lookup(sessionId, memoKey);
       if (memoHit != null) {
         return {
           kind: "completed",
@@ -308,10 +302,10 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 恰是要消灭的成本；「同内容已有精确读数」由上方记忆精确条目覆盖。
     const fingerprint = params.ctx?.workplaceFingerprint;
     if (fingerprint != null && params.ctx != null && layoutHasWorkplace(params.layout) && params.ctx.workplaceDisplay.length > 0) {
-      let wpEstimate = lookupWorkplaceEstimateByFingerprint(fingerprint);
+      let wpEstimate = ChatTokenEstimateMemo.lookupWorkplaceEstimateByFingerprint(fingerprint);
       if (wpEstimate == null) {
         wpEstimate = estimateTokensCjkAware(params.ctx.workplaceDisplay);
-        rememberWorkplaceEstimateByFingerprint(fingerprint, wpEstimate);
+        ChatTokenEstimateMemo.rememberWorkplaceEstimateByFingerprint(fingerprint, wpEstimate);
       }
       const WP_SENTINEL = "W";
       const sentinelInput = { ...params.ctx, workplaceDisplay: WP_SENTINEL };
@@ -319,7 +313,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
       if (!sentinelSerialized.ok) return { kind: "failed", error: sentinelSerialized.error };
       const sentinelText = sentinelSerialized.value + serializeToolsForTokenCount(params.tools);
       const tokenCount = wpEstimate + estimateTokensCjkAware(sentinelText) - estimateTokensCjkAware(WP_SENTINEL);
-      rememberChatTokenEstimateMemo(sessionId, memoKey!, {
+      ChatTokenEstimateMemo.remember(sessionId, memoKey!, {
         tokenCount,
         estimated: true,
         counterKind: "heuristic",
@@ -357,7 +351,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
     // 浪费，直接用 CJK 感知单趟。
     const tokenCount = estimateTokensCjkAware(serialized);
     if (memoKey != null) {
-      rememberChatTokenEstimateMemo(sessionId, memoKey, {
+      ChatTokenEstimateMemo.remember(sessionId, memoKey, {
         tokenCount,
         estimated: true,
         counterKind: "heuristic",
@@ -394,7 +388,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // 零。命中但只有估读时照旧走真计数——升级本来就是来补精确值的。
   const preciseMemoKey = resolveMemoKey();
   if (preciseMemoKey != null) {
-    const preciseMemoHit = lookupChatTokenEstimateMemo(sessionId, preciseMemoKey);
+    const preciseMemoHit = ChatTokenEstimateMemo.lookup(sessionId, preciseMemoKey);
     if (preciseMemoHit != null && preciseMemoHit.estimated === false) {
       return {
         kind: "completed",
@@ -428,7 +422,7 @@ export async function resolveCurrentPromptTokens(sessionId: string, params: Coun
   // 预查兜底也不存在「锁死估算档」的回归口。失败/降级读数（heuristic 档）
   // 同样如实入册：同键复用与当场重算同值，不是缓存污染。
   if (preciseMemoKey != null) {
-    rememberChatTokenEstimateMemo(sessionId, preciseMemoKey, {
+    ChatTokenEstimateMemo.remember(sessionId, preciseMemoKey, {
       tokenCount: local.value.tokenCount,
       estimated: local.value.estimated,
       counterKind: local.value.counterKind,

@@ -14,7 +14,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey, toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
@@ -36,7 +36,7 @@ describe("fork/copy parity (F1)", () => {
     const m2 = unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("2")));
 
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
+    const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
     const sourceEntry = unwrap(await entries.findByPath(sk, "/note.md"));
     assert.ok(sourceEntry != null);
     const sourceHash = unwrap(await entries.findContentHash(sk, "/note.md"));
@@ -46,7 +46,7 @@ describe("fork/copy parity (F1)", () => {
     const forkedMsgs = outcomeValue(await ctx.messages.listBySession(forked.id));
     assert.equal(forkedMsgs.length, 2);
 
-    const forkSk = scopeKey({ kind: "session", projectId: project.id, sessionId: forked.id });
+    const forkSk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: forked.id });
     const targetEntry = unwrap(await entries.findByPath(forkSk, "/note.md"));
     assert.ok(targetEntry != null);
 

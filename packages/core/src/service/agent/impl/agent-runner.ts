@@ -21,7 +21,7 @@ import { Result } from "@/errors/either.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
-import { invalidateSessionApiPromptTokenEntry, writeSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { ModelRequestOptions, ModelRequestService } from "../../provider/model-request.port.js";
 import { PromptBuilder } from "../../prompt/render-prompt.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
@@ -265,7 +265,7 @@ export class DefaultAgentRunner implements AgentRunner {
         return;
       }
       lastAnchorSeq = anchorSeq;
-      writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
+      SessionApiPromptTokenEntry.write(this.deps.sessionKkv, sessionId, {
         promptTokens,
         atMs: Date.now(),
         savedModelId: options.savedModelId,
@@ -835,7 +835,7 @@ export class DefaultAgentRunner implements AgentRunner {
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
         // session KKV 行双删），避免重启后从 KKV 读回旧值。
         // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
-        void invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+        void SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_RUN_FAILED, {
             sessionId,
@@ -872,7 +872,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // 会话，与 anchorStepUsage / 失败消息落库同一条豁免，走 else 连旧值失效。
     const picked = pickLastPromptUsage(rounds);
     if (persistMessages && stopReason === "completed" && picked !== undefined) {
-      writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
+      SessionApiPromptTokenEntry.write(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
         atMs: Date.now(),
         savedModelId: options.savedModelId,
@@ -880,7 +880,7 @@ export class DefaultAgentRunner implements AgentRunner {
       });
     } else {
       // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
-      void invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+      void SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
     }
 
     return Result.ok({

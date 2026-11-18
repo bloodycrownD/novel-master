@@ -15,7 +15,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { resolveLogicalPath, scopeKey, scopePhysicalPrefix, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -66,7 +66,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   }
 
   async list(physicalPath: string): Promise<Result<VfsListEntry[], AppError>> {
-    const resolved = resolveLogicalPath(physicalPath);
+    const resolved = LogicalPath.resolve(physicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
 
@@ -159,7 +159,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    * nm-style: keep-public — PhysicalVfsService 端口方法；desktop IPC 全树拉取单点消费，内联会拆散跨层契约。
    */
   async listTree(physicalPath: string): Promise<Result<VfsListEntry[], AppError>> {
-    const resolved = resolveLogicalPath(physicalPath);
+    const resolved = LogicalPath.resolve(physicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
 
@@ -205,7 +205,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   }
 
   async read(physicalPath: string): Promise<Result<VfsReadResult, AppError>> {
-    const logicalResult = resolveLogicalPath(physicalPath);
+    const logicalResult = LogicalPath.resolve(physicalPath);
     if (!logicalResult.ok) return Result.err(logicalResult.error);
     const normalized = logicalResult.value;
     // 物理路径五前缀解析（顺序敏感：session → project-meta → project → global-meta → global）。
@@ -253,7 +253,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       }
       return result;
     }
-    const prefix = scopePhysicalPrefix(resolved.scope);
+    const prefix = LogicalPath.scopePhysicalPrefix(resolved.scope);
     return Result.ok({
       ...result.value,
       path: resolved.logicalPath === "/" ? prefix : `${prefix}${resolved.logicalPath}`,
@@ -262,7 +262,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
 
   /** 会话域内是否有任意 VFS 条目（用于过滤无工作区文件的子 agent 会话）。 */
   private async hasSessionEntries(projectId: string, sessionId: string): Promise<boolean> {
-    const entries = await this.entryRepo.listEntriesUnderPrefix(scopeKey({ kind: "session", projectId, sessionId }), "/");
+    const entries = await this.entryRepo.listEntriesUnderPrefix(LogicalPath.scopeKey({ kind: "session", projectId, sessionId }), "/");
     return entries.length > 0;
   }
 
@@ -277,10 +277,10 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    * 即 list 链路中挂载前缀退化为 base 本身，仅 read 输出 path 拼装仍用前缀。
    */
   private async listScopeFirstLevel(scope: VfsScope, physicalDir: string): Promise<VfsListEntry[]> {
-    const prefix = scopePhysicalPrefix(scope);
+    const prefix = LogicalPath.scopePhysicalPrefix(scope);
     const restDir = physicalDir.slice(prefix.length);
     const queryDir = restDir === "" ? "/" : restDir;
-    const entries = await this.entryRepo.listEntriesUnderPrefix(scopeKey(scope), queryDir);
+    const entries = await this.entryRepo.listEntriesUnderPrefix(LogicalPath.scopeKey(scope), queryDir);
     const base = queryDir === "/" ? "" : queryDir;
     const firstLevel = new Map<string, "file" | "directory">();
     for (const entry of entries) {
@@ -309,10 +309,10 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    * 一次消费）。`physicalDir` 语义同 {@link listScopeFirstLevel}。
    */
   private async scopeTreeRows(scope: VfsScope, physicalDir: string): Promise<VfsListEntry[]> {
-    const prefix = scopePhysicalPrefix(scope);
+    const prefix = LogicalPath.scopePhysicalPrefix(scope);
     const restDir = physicalDir.slice(prefix.length);
     const queryDir = restDir === "" ? "/" : restDir;
-    const entries = await this.entryRepo.listEntriesUnderPrefix(scopeKey(scope), queryDir);
+    const entries = await this.entryRepo.listEntriesUnderPrefix(LogicalPath.scopeKey(scope), queryDir);
     const base = queryDir === "/" ? "" : queryDir;
     // path → kind；同名合并规则与 listScopeFirstLevel 一致（已有文件行不被目录行覆盖）
     const rows = new Map<string, "file" | "directory">();

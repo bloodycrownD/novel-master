@@ -5,7 +5,7 @@ import { Result } from "../../src/errors/either.js";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
-import { scopeKey, toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -133,7 +133,7 @@ describe("rollback reach hash batch", () => {
       projectId: "p1",
       sessionId: "s1",
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
       findByEntryAndVersion: async () => {
@@ -196,7 +196,7 @@ describe("rollback reach hash batch", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     await svfs.write("/batch-del.md", "keep", { versionCheck: false });
     await svfs.write("/batch-del.md", "drop-me", { versionCheck: false });

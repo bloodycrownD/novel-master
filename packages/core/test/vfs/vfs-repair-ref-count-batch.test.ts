@@ -14,7 +14,7 @@ import { after, before, describe, it } from "node:test";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 
 import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -46,7 +46,7 @@ describe("T-RP1 repairRefCounts 批量化", () => {
     const c = getCtx();
     const project = await c.projects.create("p-rp1");
     const vfs = c.projectVfs(project.id);
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
 
     // 写 200 个文件，每个产生一条 revision，ref_count 由 live head +1 维护成 1。
     const N = 200;
@@ -129,7 +129,7 @@ describe("T-RP1 repairRefCounts 批量化", () => {
     const c = getCtx();
     const project = await c.projects.create("p-rp1-noop");
     const vfs = c.projectVfs(project.id);
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
 
     // 写 50 个文件，ref_count 已经正确（=1）。
     const N = 50;

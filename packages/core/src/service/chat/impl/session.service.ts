@@ -25,7 +25,7 @@ import { Result } from "@/errors/either.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
@@ -281,7 +281,7 @@ export class DefaultSessionService implements SessionService {
     // 口径收窄：只比较 overlay merge 前后真正变化的字段，避免把「patch 里
     // 出现但值相同」的无效写也清掉（那会让收窄白写，还多一次 KKV 写）。
     if (config.agentId !== baseline.value.agentId || config.modelId !== baseline.value.modelId) {
-      await invalidateSessionApiPromptTokenEntry(createSessionKkvService(this.deps.conn), id);
+      await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), id);
     }
     return Result.ok(config);
   }

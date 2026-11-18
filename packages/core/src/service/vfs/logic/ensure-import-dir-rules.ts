@@ -15,7 +15,7 @@
  * @module service/vfs/logic/ensure-import-dir-rules
  */
 
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -110,7 +110,7 @@ export async function ensureImportDirRules(deps: EnsureImportDirRulesDeps): Prom
     }
     const prefix = normalizedPrefix.value;
     const targetScopeKey = workplaceScopeKey(scope);
-    const directories = await vfsRepo.listDirectoryPathsUnderPrefix(scopeKey(scope), prefix);
+    const directories = await vfsRepo.listDirectoryPathsUnderPrefix(LogicalPath.scopeKey(scope), prefix);
     const existing = new Set<string>();
     for (const rule of await workplaceRepo.listDirRules(targetScopeKey)) {
       const normalized = normalizePath(rule.logicalPath);

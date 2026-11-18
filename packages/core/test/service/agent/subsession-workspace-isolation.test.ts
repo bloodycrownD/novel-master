@@ -41,7 +41,7 @@ import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.po
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { VfsService } from "@novel-master/core/vfs";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { fileCacheKey, parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
@@ -327,7 +327,7 @@ describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
     assert.equal(childEntries.length, 0, "子 session 的 VFS scope 应为空（无文件）");
 
     // 直查 vfs_entry 表确认子 scope 没有任何行。
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: child.id,

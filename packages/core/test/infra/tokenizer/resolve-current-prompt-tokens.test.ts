@@ -28,7 +28,7 @@ import {
   tokenChunkCache,
 } from "../../../src/infra/tokenizer/index.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
-import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
 import { formatChatMessageForCliPreview } from "../../../src/domain/chat/content/message-body-text.js";
 import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
@@ -125,7 +125,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 12_729,
         atMs: 1_700_000_000_000,
         savedModelId: RUN_MODEL_ID,
@@ -173,7 +173,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 99_999,
         atMs: 1,
         savedModelId: "anthropic/claude-old",
@@ -227,7 +227,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       SESSION_ID,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({ promptTokens: 999, atMs: 1 })
+      SessionApiPromptTokenEntry.serialize({ promptTokens: 999, atMs: 1 })
     );
     sessionApiPromptTokenCache.clearAll();
 
@@ -256,7 +256,7 @@ async function writeEntryFor(
     SESSION_ID,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens,
       atMs: Date.now(),
       savedModelId,

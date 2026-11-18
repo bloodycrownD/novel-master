@@ -14,10 +14,7 @@ import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import {
-  scopeKey,
-  toPhysicalPath,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -77,7 +74,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
 
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -117,7 +114,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     await svfs.write("/live.md", "a", { versionCheck: false });
     const v1 = unwrap(await svfs.read("/live.md")).version;
@@ -152,7 +149,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     await svfs.write("/multi.md", "same", { versionCheck: false });
     const version = unwrap(await svfs.read("/multi.md")).version;
@@ -200,8 +197,8 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
-    const physical = toPhysicalPath(scope, "/conserv.md");
+    const sk = LogicalPath.scopeKey(scope);
+    const physical = LogicalPath.toPhysical(scope, "/conserv.md");
 
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "w" }],
@@ -245,7 +242,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     const assistant1 = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "cp1" }],
@@ -322,7 +319,7 @@ describe("rollback ref_count + deferred blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     const assistant = unwrap(await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "w" }],
@@ -369,7 +366,7 @@ describe("rollback ref_count + deferred blob gc", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id));
 
     const orphanHash = hashContent(orphanContent);
-    const entry = unwrap(await entries.findByPath(scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md"));
+    const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md"));
     assert.ok(entry != null);
     // 确认 orphan revision 存在
     const orphanRev = unwrap(await revisions.findByEntryAndVersion(entry.entryId, 2));

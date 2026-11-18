@@ -1,5 +1,6 @@
 [
   "CHARACTER_CARD_MAX_INPUT_BYTES",
+  "LogicalPath",
   "SqliteVfsRevisionRepository",
   "VfsServiceFactory",
   "actionXmlToToolUses",
@@ -18,7 +19,6 @@
   "createVfsDirectory",
   "createVfsFile",
   "deleteVfsEntry",
-  "isSessionVfsScope",
   "joinTargetLogicalPath",
   "mapUserSaveToToolUses",
   "mkdirIgnoreExistingDirectory",
@@ -30,10 +30,7 @@
   "readUserVfsSaveBaseline",
   "relativePathUnderAnchor",
   "replaceVfsSubtree",
-  "resolveLogicalPath",
   "resolveZipDirectoryPath",
-  "scopePhysicalPrefix",
-  "validateLogicalPath",
   "validateVfsEntryName",
   "vfsUserMessage",
   "zipBaseNameFromPath"

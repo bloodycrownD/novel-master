@@ -2,7 +2,7 @@ import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -32,7 +32,7 @@ describe("ScopedVfsService", () => {
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/prompts/system.md", "system prompt");
     assert.equal(
-      unwrap(toPhysicalPath({ kind: "project", projectId: project.id }, "/prompts/system.md")),
+      unwrap(LogicalPath.toPhysical({ kind: "project", projectId: project.id }, "/prompts/system.md")),
       `/projects/${project.id}/template/prompts/system.md`,
     );
     const read = unwrap(await pvfs.read("/prompts/system.md"));

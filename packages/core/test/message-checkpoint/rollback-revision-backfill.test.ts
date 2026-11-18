@@ -49,8 +49,8 @@ async function deleteAnchorRevisionForPath(
   sessionId: string,
   logicalPath: string,
 ) {
-  const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
   const entries = new SqliteVfsEntryRepository(ctx.conn);
   const entry = unwrap(await entries.findByPath(sk, logicalPath));
   if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
@@ -149,8 +149,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-    const sk = scopeKey(scope);
+    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const sk = LogicalPath.scopeKey(scope);
 
     const backfilled = unwrap(await backfillMissingRevisionIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
@@ -243,8 +243,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
     // 先拿到 entryId 再删除 entry
-    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
-    const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
+    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const sk = LogicalPath.scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const entry = unwrap(await entries.findByPath(sk, "/gone.md"));
     assert.ok(entry != null);
@@ -328,13 +328,13 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const { LogicalPath } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
 
     await svfs.write("/exists.md", "content", { versionCheck: false });
     const entry = unwrap(await entries.findByPath(sk, "/exists.md"));

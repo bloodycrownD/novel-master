@@ -46,13 +46,7 @@ export {
 export {
   sessionApiPromptTokenCache,
 } from "./logic/session-api-prompt-token-cache.js";
-export {
-  serializeSessionApiPromptTokenEntry,
-  parseSessionApiPromptTokenEntry,
-  readSessionApiPromptTokenEntry,
-  writeSessionApiPromptTokenEntry,
-  invalidateSessionApiPromptTokenEntry,
-} from "./logic/session-api-prompt-token-store.js";
+export { SessionApiPromptTokenEntry } from "./logic/session-api-prompt-token-store.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
 export {
   promptWholeCache,

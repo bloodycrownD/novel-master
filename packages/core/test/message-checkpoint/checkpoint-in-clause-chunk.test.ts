@@ -28,7 +28,7 @@ import { after, before, describe, it } from "node:test";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -135,7 +135,7 @@ async function seedCheckpoints(
   const svfs = ctx.sessionVfs(projectId, sessionId);
   const entries = new SqliteVfsEntryRepository(ctx.conn);
   const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
 
   // 真实 revision（文件指针必须有指向，否则 delete 时的 ref 减一没有对账面）。
   const pointers: RevisionPointer[] = [];

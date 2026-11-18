@@ -13,7 +13,7 @@ import { Result } from "@/errors/either.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
-import { type VfsScope, scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { resolveZipDirectoryPath, zipDirectoryEntryNameRelativeToDirectory, zipEntryNameRelativeToDirectory } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
@@ -53,7 +53,7 @@ export type VfsZipImportTestHook = {
  * `conn.transaction` 回调内调用，失败靠抛错回滚。
  */
 async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
-  const sk = scopeKey(scope);
+  const sk = LogicalPath.scopeKey(scope);
   if (logical === "/") {
     return;
   }
@@ -69,7 +69,7 @@ async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope
 }
 
 async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<Result<void, AppError>> {
-  const existing = await repo.findByPath(scopeKey(scope), directoryPath);
+  const existing = await repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
   if (!existing.ok) return Result.err(existing.error);
   if (existing.value != null && existing.value.entryKind === "file") {
     return Result.err(new AppError("VFS_ZIP_INVALID_PATH", { detail: `ZIP target path is a file, not a directory: ${directoryPath}` }));
@@ -109,7 +109,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     const directoryPath = directoryPathResult.value;
     const dirCheck = await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
     if (!dirCheck.ok) return Result.err(dirCheck.error);
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const rowsResult = await this.repo.scanContents(sk, directoryPath);
     if (!rowsResult.ok) return Result.err(rowsResult.error);
     const rows = rowsResult.value;
@@ -163,7 +163,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     const validated = validateVfsZipEntries(scope, rawEntriesResult.value, directoryPath);
     if (!validated.ok) return Result.err(validated.error);
     const { files, directories } = validated.value;
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const fileEntries = [...files];
 
     // 段 B0（独立短事务）：删旧子树 + 目标目录行 + 全部显式目录行。

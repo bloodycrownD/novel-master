@@ -52,10 +52,10 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/dup.md", "old-content", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const { scopeKey } = await import(
+    const { LogicalPath } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
     );
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -208,10 +208,10 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const { scopeKey } = await import(
+    const { LogicalPath } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
     );
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -261,10 +261,10 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const { scopeKey } = await import(
+    const { LogicalPath } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
     );
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -313,10 +313,10 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/dup2.md", "old-v2", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const { scopeKey } = await import(
+    const { LogicalPath } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
     );
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -390,10 +390,10 @@ describe("rollback-restore-deleted-entry", () => {
     await svfs.write("/gone3.md", "anchor-gone", { versionCheck: false });
     unwrap(await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id));
 
-    const { scopeKey } = await import(
+    const { LogicalPath } = await import(
       "../../src/domain/vfs/logic/vfs-path-mapper.js"
     );
-    const sk = scopeKey({
+    const sk = LogicalPath.scopeKey({
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

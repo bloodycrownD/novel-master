@@ -32,7 +32,7 @@ import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/im
 import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
@@ -70,7 +70,7 @@ export class DefaultMessageService implements MessageService {
    * 都在 `conn.transaction` 块外，KKV 删除已 await（失败只吞 warn，不冒泡）。
    */
   private async invalidatePromptTokens(sessionId: string): Promise<void> {
-    await invalidateSessionApiPromptTokenEntry(createSessionKkvService(this.deps.conn), sessionId);
+    await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), sessionId);
   }
 
   /**

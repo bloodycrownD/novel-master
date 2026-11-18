@@ -54,15 +54,10 @@ export type {
 export { SqliteVfsRevisionRepository } from "../domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 export type { VfsRevisionRepository } from "../domain/vfs/repositories/vfs-revision.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
-export { isSessionVfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
+export { LogicalPath } from "../domain/vfs/logic/vfs-path-mapper.js";
 // 路径族单源：宽松父目录（root/非法 → null）留在 VFS 域；basename / 去尾斜杠 /
 // 改挂目录等纯字符串原语已收敛到 `@novel-master/core/common` 的 `Path`。
 export { parentDirOrNull } from "../domain/vfs/logic/parent-dir.js";
-export {
-  resolveLogicalPath,
-  validateLogicalPath,
-  scopePhysicalPrefix,
-} from "../domain/vfs/logic/vfs-path-mapper.js";
 export {
   createVfsFile,
   createVfsDirectory,

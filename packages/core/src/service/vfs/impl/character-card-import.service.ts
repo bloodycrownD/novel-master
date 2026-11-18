@@ -26,7 +26,7 @@ import { yieldToEventLoop } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { scopeKey, validateLogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { logicalFromZipEntryRelativeToDirectory, resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
@@ -90,7 +90,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
     const directoryPathResult = resolveZipDirectoryPath(options.directoryPath);
     if (!directoryPathResult.ok) return Result.err(directoryPathResult.error);
     const directoryPath = directoryPathResult.value;
-    const directoryRow = await this.repo.findByPath(scopeKey(scope), directoryPath);
+    const directoryRow = await this.repo.findByPath(LogicalPath.scopeKey(scope), directoryPath);
     // 业务 AppError 原形透传（不影响既有语义）。
     if (!directoryRow.ok) return Result.err(directoryRow.error);
     if (directoryRow.value != null && directoryRow.value.entryKind === "file") {
@@ -131,7 +131,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
         return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: logicalResult.error.message }));
       }
       const logical = logicalResult.value;
-      const allowed = validateLogicalPath(scope, logical);
+      const allowed = LogicalPath.validate(scope, logical);
       if (!allowed.ok) {
         return Result.err(new AppError("VFS_CHARACTER_CARD_INVALID_PATH", { detail: `md tree "${relativePath}" → logical "${logical}": ${allowed.error.message}` }));
       }
@@ -157,7 +157,7 @@ export class DefaultCharacterCardImportService implements CharacterCardImportSer
       const fileCount = { descriptor: { key: "error.vfs.character_card_too_large.file_count" as const, params: { count: files.size, limit: CHARACTER_CARD_MAX_FILE_COUNT } } };
       return Result.err(new AppError("VFS_CHARACTER_CARD_TOO_LARGE", fileCount));
     }
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const fileEntries = [...files];
 
     // 段 B0（独立短事务）：删旧子树 + 目标目录行。

@@ -20,7 +20,7 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
-import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
@@ -230,7 +230,7 @@ describe("UserVfsTurnService", () => {
     await rejectsErr(() => svfs.read("/b.md"));
 
     // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const keys = await revisions.listKeysUnderScope(sk, "/");
     // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
     assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");

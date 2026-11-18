@@ -11,10 +11,7 @@ import {
 // isSessionFsError 已从公开入口撤下（导出面收口注释：测试走 src 路径）。
 import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  scopeKey,
-  toPhysicalPath,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
 
@@ -51,7 +48,7 @@ async function deleteAnchorRevisionForPath(
   sessionId: string,
   logicalPath: string,
 ) {
-  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const sk = LogicalPath.scopeKey({ kind: "session", projectId, sessionId });
   const entries = new SqliteVfsEntryRepository(ctx.conn);
   const entry = unwrap(await entries.findByPath(sk, logicalPath));
   if (entry == null) throw new Error(`entry not found for ${logicalPath}`);

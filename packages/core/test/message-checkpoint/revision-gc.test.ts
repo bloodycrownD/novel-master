@@ -2,7 +2,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -38,7 +38,7 @@ describe("revision GC", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const entry = unwrap(await entries.findByPath(sk, "/gc.md"));
     assert.ok(entry != null);
 
@@ -82,7 +82,7 @@ describe("revision GC", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const sk = scopeKey(scope);
+    const sk = LogicalPath.scopeKey(scope);
     const entry = unwrap(await entries.findByPath(sk, "/trim.md"));
     assert.ok(entry != null);
 

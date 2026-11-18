@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { assert } from "@/common/assert.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
@@ -42,7 +42,7 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
     });
     // 与 MessageService.truncateAfter 同口径：tail 删除后可见 prompt 变了，API 占用
     // 双删（进程内热层 + session KKV 行），否则陈旧占用会继续参与阈值判定。
-    await invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+    await SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
   }
 
   async setMessageFloorAtMessage(_projectId: string, sessionId: string, messageId: string): Promise<Result<SetMessageFloorResult, AppError>> {
@@ -139,7 +139,7 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
     if (!ran.ok) return Result.err(ran.error);
     // 置位后上下文范围变了：API 占用双删（进程内热层 + session KKV 行），
     // 否则重启后从 KKV 读回旧值，与置位后的可见 prompt 不符。
-    await invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+    await SessionApiPromptTokenEntry.invalidate(this.deps.sessionKkv, sessionId);
 
     return Result.ok({ hiddenCount, shownCount });
   }

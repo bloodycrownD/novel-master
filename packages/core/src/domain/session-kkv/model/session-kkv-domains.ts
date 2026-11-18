@@ -46,7 +46,7 @@ export const STREAM_METRICS_FINAL_RATE_KEY = "finalRate" as const;
  * 后重启仍读到同一份 API 值。
  *
  * 失效口径：凡改变「当前可见 prompt」或模型绑定、且应丢弃陈旧 API 占用的
- * 路径，成功后必须调 `invalidateSessionApiPromptTokenEntry`（进程内层 +
+ * 路径，成功后必须调 `SessionApiPromptTokenEntry.invalidate`（进程内层 +
  * 本域行双删）。会话/项目删除走 `clearSession` 整表清。
  */
 export const SESSION_KKV_DOMAIN_PROMPT_TOKENS = "prompt_tokens" as const;

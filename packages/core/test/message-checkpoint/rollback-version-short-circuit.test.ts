@@ -7,7 +7,7 @@ import { Result } from "../../src/errors/either.js";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
-import { scopeKey, toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
@@ -40,14 +40,14 @@ describe("rollback version short-circuit", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/blob-only.md");
+    const physical = LogicalPath.toPhysical(scope, "/blob-only.md");
     const revisions = new SqliteVfsRevisionRepository(ctx.conn, createNoGetContentStore());
 
     // need to get entryId first; append now requires entryId
     const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
     const entries = new SqliteVfsEntryRepository(ctx.conn);
-    await entries.insert(scopeKey(scope), "/blob-only.md", "seed");
-    const entry = unwrap(await entries.findByPath(scopeKey(scope), "/blob-only.md"));
+    await entries.insert(LogicalPath.scopeKey(scope), "/blob-only.md", "seed");
+    const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey(scope), "/blob-only.md"));
     assert.ok(entry != null);
 
     unwrap(await revisions.append({

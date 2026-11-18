@@ -24,7 +24,7 @@ import {
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
 } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { ChatServiceFactory } from "../../../src/service/chat/chat-service-factory.js";
 import { clearSessionPromptCaches } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
@@ -47,7 +47,7 @@ async function seedRow(
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens: 4321,
       atMs: Date.now(),
     })

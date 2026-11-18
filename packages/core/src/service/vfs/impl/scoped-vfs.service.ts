@@ -9,7 +9,7 @@
  */
 
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { resolveLogicalPath, scopeKey, validateLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 import { matchGlob } from "../glob-match.js";
 import type { VfsGrepMatch, VfsGrepOptions, VfsListEntry, VfsReadResult, VfsService } from "../vfs.port.js";
@@ -27,59 +27,59 @@ export class ScopedVfsService implements VfsService {
   constructor(private readonly inner: InternalVfsService, private readonly scope: VfsScope) {}
 
   private get scopeKeyStr(): string {
-    return scopeKey(this.scope);
+    return LogicalPath.scopeKey(this.scope);
   }
 
   async list(dir: string, options?: { recursive?: boolean; maxDepth?: number }): Promise<Result<VfsListEntry[], AppError>> {
-    const resolvedDir = resolveLogicalPath(dir);
+    const resolvedDir = LogicalPath.resolve(dir);
     if (!resolvedDir.ok) return Result.err(resolvedDir.error);
     const logicalDir = resolvedDir.value;
-    const allowedDir = validateLogicalPath(this.scope, logicalDir);
+    const allowedDir = LogicalPath.validate(this.scope, logicalDir);
     if (!allowedDir.ok) return Result.err(allowedDir.error);
     return this.inner.list(this.scopeKeyStr, logicalDir, options);
   }
 
   async mkdir(path: string): Promise<Result<void, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return allowed;
     return this.inner.mkdir(this.scopeKeyStr, logical);
   }
 
   async read(path: string): Promise<Result<VfsReadResult, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return Result.err(allowed.error);
     return this.inner.read(this.scopeKeyStr, logical);
   }
 
   async findContentSize(path: string): Promise<Result<VfsContentSize | null, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return Result.err(allowed.error);
     return this.inner.findContentSize(this.scopeKeyStr, logical);
   }
 
   async write(path: string, content: string): Promise<Result<{ version: number }, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return Result.err(allowed.error);
     return this.inner.write(this.scopeKeyStr, logical, content);
   }
 
   async replace(path: string, oldString: string, newString: string, options?: { replaceAll?: boolean }): Promise<Result<{ version: number; replacements: number }, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return Result.err(allowed.error);
     return this.inner.replace(this.scopeKeyStr, logical, oldString, newString, options);
   }
@@ -88,10 +88,10 @@ export class ScopedVfsService implements VfsService {
     const cwd = options?.cwd;
     let logicalCwd: string | undefined;
     if (cwd != null) {
-      const resolved = resolveLogicalPath(cwd);
+      const resolved = LogicalPath.resolve(cwd);
       if (!resolved.ok) return Result.err(resolved.error);
       logicalCwd = resolved.value;
-      const allowedCwd = validateLogicalPath(this.scope, logicalCwd);
+      const allowedCwd = LogicalPath.validate(this.scope, logicalCwd);
       if (!allowedCwd.ok) return Result.err(allowedCwd.error);
     }
     return Result.ok(await this.inner.glob(this.scopeKeyStr, pattern, { cwd: logicalCwd }));
@@ -101,10 +101,10 @@ export class ScopedVfsService implements VfsService {
     const prefix = options?.pathPrefix;
     let logicalPrefix: string | undefined;
     if (prefix != null) {
-      const resolved = resolveLogicalPath(prefix);
+      const resolved = LogicalPath.resolve(prefix);
       if (!resolved.ok) return Result.err(resolved.error);
       logicalPrefix = resolved.value;
-      const allowedPrefix = validateLogicalPath(this.scope, logicalPrefix);
+      const allowedPrefix = LogicalPath.validate(this.scope, logicalPrefix);
       if (!allowedPrefix.ok) return Result.err(allowedPrefix.error);
     }
     const { pathGlob, ...innerOptions } = options ?? {};
@@ -114,56 +114,56 @@ export class ScopedVfsService implements VfsService {
   }
 
   async delete(path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return allowed;
     return this.inner.delete(this.scopeKeyStr, logical, options);
   }
 
   async resetHeadToVersion(path: string, version: number): Promise<Result<void, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return allowed;
     return this.inner.resetHeadToVersion(this.scopeKeyStr, logical, version);
   }
 
   async hardDelete(path: string, options?: { recursive?: boolean }): Promise<Result<void, AppError>> {
-    const resolved = resolveLogicalPath(path);
+    const resolved = LogicalPath.resolve(path);
     if (!resolved.ok) return Result.err(resolved.error);
     const logical = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logical);
+    const allowed = LogicalPath.validate(this.scope, logical);
     if (!allowed.ok) return allowed;
     return this.inner.hardDelete(this.scopeKeyStr, logical, options);
   }
 
   async renamePath(from: string, to: string, options?: { overwrite?: boolean }): Promise<Result<void, AppError>> {
-    const resolvedFrom = resolveLogicalPath(from);
+    const resolvedFrom = LogicalPath.resolve(from);
     if (!resolvedFrom.ok) return Result.err(resolvedFrom.error);
     const logicalFrom = resolvedFrom.value;
-    const resolvedTo = resolveLogicalPath(to);
+    const resolvedTo = LogicalPath.resolve(to);
     if (!resolvedTo.ok) return Result.err(resolvedTo.error);
     const logicalTo = resolvedTo.value;
-    const allowedFrom = validateLogicalPath(this.scope, logicalFrom);
+    const allowedFrom = LogicalPath.validate(this.scope, logicalFrom);
     if (!allowedFrom.ok) return allowedFrom;
-    const allowedTo = validateLogicalPath(this.scope, logicalTo);
+    const allowedTo = LogicalPath.validate(this.scope, logicalTo);
     if (!allowedTo.ok) return allowedTo;
     return this.inner.renamePath(this.scopeKeyStr, logicalFrom, logicalTo, options);
   }
 
   async renamePrefix(oldDir: string, newDir: string): Promise<Result<void, AppError>> {
-    const resolvedOld = resolveLogicalPath(oldDir);
+    const resolvedOld = LogicalPath.resolve(oldDir);
     if (!resolvedOld.ok) return Result.err(resolvedOld.error);
     const logicalOld = resolvedOld.value;
-    const resolvedNew = resolveLogicalPath(newDir);
+    const resolvedNew = LogicalPath.resolve(newDir);
     if (!resolvedNew.ok) return Result.err(resolvedNew.error);
     const logicalNew = resolvedNew.value;
-    const allowedOld = validateLogicalPath(this.scope, logicalOld);
+    const allowedOld = LogicalPath.validate(this.scope, logicalOld);
     if (!allowedOld.ok) return allowedOld;
-    const allowedNew = validateLogicalPath(this.scope, logicalNew);
+    const allowedNew = LogicalPath.validate(this.scope, logicalNew);
     if (!allowedNew.ok) return allowedNew;
     return this.inner.renamePrefix(this.scopeKeyStr, logicalOld, logicalNew);
   }

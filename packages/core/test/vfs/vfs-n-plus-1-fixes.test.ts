@@ -18,7 +18,7 @@ import {
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 
@@ -96,7 +96,7 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
       await vfs.write(`/tree/f${i}.md`, `body-${i}`);
     }
 
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
     const repo = new SqliteVfsEntryRepository(c.conn);
 
     c.counter.clear();
@@ -118,7 +118,7 @@ describe("T-DEL2 deleteVfsPrefix 批量删", () => {
   it("空 prefix（目录已空）不抛异常，静默返回", async () => {
     const c = getCtx();
     const project = await c.projects.create("p-del2-empty");
-    const sk = scopeKey({ kind: "project", projectId: project.id });
+    const sk = LogicalPath.scopeKey({ kind: "project", projectId: project.id });
     const repo = new SqliteVfsEntryRepository(c.conn);
 
     // 该 project 还没写过任何文件，prefix 下为空，不应抛 vfsNotFound。

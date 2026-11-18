@@ -17,11 +17,7 @@ import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import {
-  scopeKey,
-  scopePhysicalPrefix,
-  toPhysicalPath,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { decodedContentCache } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { TdbcConnection } from "@novel-master/core";
@@ -80,15 +76,15 @@ describe("sweepSessionRevisions + blob gc", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/gc1.md");
+    const physical = LogicalPath.toPhysical(scope, "/gc1.md");
     const orphanHash = hashContent("orphan-mid");
 
     // 确认 orphan-mid revision 存在且 blob 在
     const midKeys = await revisions.listKeysUnderScope(
-      scopeKey(scope),
+      LogicalPath.scopeKey(scope),
       "/",
     );
-    const entry = unwrap(await entries.findByPath(scopeKey(scope), "/gc1.md"));
+    const entry = unwrap(await entries.findByPath(LogicalPath.scopeKey(scope), "/gc1.md"));
     assert.ok(entry != null);
     assert.ok(midKeys.some((k) => k.entryId === entry.entryId && k.version === 2));
     assert.equal(unwrap(await contentStore.get(orphanHash)), "orphan-mid");
@@ -97,7 +93,7 @@ describe("sweepSessionRevisions + blob gc", () => {
     await runDeferredBlobGc(ctx.conn);
 
     const afterKeys = await revisions.listKeysUnderScope(
-      scopeKey(scope),
+      LogicalPath.scopeKey(scope),
       "/",
     );
     assert.equal(

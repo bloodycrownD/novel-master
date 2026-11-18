@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError, isAppError } from "@/errors/app-error.js";
-import { resolveLogicalPath, toLogicalPath, toPhysicalPath, validateLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** 把 Result 收成路径串：失败分支在测试里直接断言失败。 */
-function unwrapPath(result: ReturnType<typeof resolveLogicalPath>): string {
+function unwrapPath(result: ReturnType<typeof LogicalPath.resolve>): string {
   return result.ok ? result.value : assert.fail(`意外失败：${result.error.message}`);
 }
 
@@ -34,7 +34,7 @@ function legacyNormalizePath(path: string): string {
   return stack.length === 0 ? "/" : `/${stack.join("/")}`;
 }
 
-/** HEAD 的 throw 型 resolveLogicalPath（原样转录自 `git show HEAD:.../vfs-path-mapper.ts`），仅作对照。 */
+/** HEAD 的 throw 型 LogicalPath.resolve（原样转录自 `git show HEAD:.../vfs-path-mapper.ts`），仅作对照。 */
 function legacyResolveLogicalPath(input: string): string {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
@@ -58,22 +58,22 @@ function legacyOutcome(input: string): PathOutcome {
 }
 
 function resultOutcome(input: string): PathOutcome {
-  const result = resolveLogicalPath(input);
+  const result = LogicalPath.resolve(input);
   return result.ok ? {ok: true, value: result.value} : {ok: false, message: result.error.message, path: result.error.details?.path};
 }
 
-describe("resolveLogicalPath（Result 型）", () => {
+describe("LogicalPath.resolve（Result 型）", () => {
   it("成功分支逐值等价：相对/绝对/反斜杠与 `.`/`..` 消化的输出串与原实现一致", () => {
-    assert.equal(unwrapPath(resolveLogicalPath("notes/a.md")), "/notes/a.md");
-    assert.equal(unwrapPath(resolveLogicalPath("/notes/a.md")), "/notes/a.md");
-    assert.equal(unwrapPath(resolveLogicalPath("  notes/a.md  ")), "/notes/a.md");
-    assert.equal(unwrapPath(resolveLogicalPath("notes//a/./b/../c.md")), "/notes/a/c.md");
-    assert.equal(unwrapPath(resolveLogicalPath("notes\\a.md")), "/notes/a.md");
-    assert.equal(unwrapPath(resolveLogicalPath("/")), "/");
+    assert.equal(unwrapPath(LogicalPath.resolve("notes/a.md")), "/notes/a.md");
+    assert.equal(unwrapPath(LogicalPath.resolve("/notes/a.md")), "/notes/a.md");
+    assert.equal(unwrapPath(LogicalPath.resolve("  notes/a.md  ")), "/notes/a.md");
+    assert.equal(unwrapPath(LogicalPath.resolve("notes//a/./b/../c.md")), "/notes/a/c.md");
+    assert.equal(unwrapPath(LogicalPath.resolve("notes\\a.md")), "/notes/a.md");
+    assert.equal(unwrapPath(LogicalPath.resolve("/")), "/");
   });
 
   it("空输入 → VFS_INVALID_PATH，message/path 与原 VfsError 同口径，且不再抛出", () => {
-    const result = resolveLogicalPath("");
+    const result = LogicalPath.resolve("");
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
@@ -88,7 +88,7 @@ describe("resolveLogicalPath（Result 型）", () => {
   });
 
   it("规范化失败（越根）→ 透传 normalizePath 的 VFS_INVALID_PATH，路径串含此前补的 leading `/`", () => {
-    const result = resolveLogicalPath("a/../../b");
+    const result = LogicalPath.resolve("a/../../b");
     assert.equal(result.ok, false);
     if (result.ok) {
       return;
@@ -129,10 +129,10 @@ describe("resolveLogicalPath（Result 型）", () => {
 });
 
 describe("vfs-path-mapper 同文件 throw 型兄弟函数（错误通道迁移二期：全部并入 Result 通道）", () => {
-  it("validateLogicalPath：非法路径返回 VFS_INVALID_PATH，message 与旧 VfsError 同口径", () => {
+  it("LogicalPath.validate：非法路径返回 VFS_INVALID_PATH，message 与旧 VfsError 同口径", () => {
     const legacy = legacyOutcome("   ");
     const expected = legacy.ok ? "" : legacy.message;
-    const result = validateLogicalPath({ kind: "global" }, "   ");
+    const result = LogicalPath.validate({ kind: "global" }, "   ");
     assert.ok(!result.ok, "非法路径必须走 Err 分支（不再 throw）");
     if (!result.ok) {
       assert.equal(result.error.key, "VFS_INVALID_PATH");
@@ -140,26 +140,26 @@ describe("vfs-path-mapper 同文件 throw 型兄弟函数（错误通道迁移�
     }
   });
 
-  it("toPhysicalPath：非法路径返回 Err 且不产出物理路径；合法路径映射不变", () => {
-    const invalid = toPhysicalPath({ kind: "global" }, "a/../../b");
+  it("LogicalPath.toPhysical：非法路径返回 Err 且不产出物理路径；合法路径映射不变", () => {
+    const invalid = LogicalPath.toPhysical({ kind: "global" }, "a/../../b");
     assert.ok(!invalid.ok, "非法路径必须走 Err 分支");
     if (!invalid.ok) {
       assert.equal(invalid.error.key, "VFS_INVALID_PATH");
       assert.match(invalid.error.message, /Invalid path \/a\/\.\.\/\.\.\/b: path escapes above root/);
     }
-    const valid = toPhysicalPath({ kind: "project", projectId: "p1" }, "/prompts/system.md");
+    const valid = LogicalPath.toPhysical({ kind: "project", projectId: "p1" }, "/prompts/system.md");
     assert.ok(valid.ok);
     if (valid.ok) assert.equal(valid.value, "/projects/p1/template/prompts/system.md");
   });
 
-  it("toLogicalPath：物理路径非法时返回 Err，越 scope 仍按旧口径拒绝", () => {
-    const empty = toLogicalPath({ kind: "global" }, "");
+  it("LogicalPath.toLogical：物理路径非法时返回 Err，越 scope 仍按旧口径拒绝", () => {
+    const empty = LogicalPath.toLogical({ kind: "global" }, "");
     assert.ok(!empty.ok);
     if (!empty.ok) assert.match(empty.error.message, /Invalid path : path must be a non-empty string/);
-    const cross = toLogicalPath({ kind: "project", projectId: "p1" }, "/projects/p2/template/a.md");
+    const cross = LogicalPath.toLogical({ kind: "project", projectId: "p1" }, "/projects/p2/template/a.md");
     assert.ok(!cross.ok);
     if (!cross.ok) assert.match(cross.error.message, /not in project template scope/);
-    const valid = toLogicalPath({ kind: "global" }, "/template/seed/hello.md");
+    const valid = LogicalPath.toLogical({ kind: "global" }, "/template/seed/hello.md");
     assert.ok(valid.ok);
     if (valid.ok) assert.equal(valid.value, "/seed/hello.md");
   });

@@ -1848,15 +1848,6 @@
       "mkdirIgnoreExists",
       "moveVfsPath"
     ],
-    "packages/core/src/domain/vfs/logic/vfs-path-mapper.ts": [
-      "isSessionVfsScope",
-      "resolveLogicalPath",
-      "scopeKey",
-      "scopePhysicalPrefix",
-      "toLogicalPath",
-      "toPhysicalPath",
-      "validateLogicalPath"
-    ],
     "packages/core/src/domain/vfs/logic/vfs-rename-primitive.ts": [
       "renameVfsDirectory",
       "renameVfsEntry"
@@ -2242,15 +2233,6 @@
       "setClockForTests",
       "setFactoryForTests"
     ],
-    "packages/core/src/infra/tokenizer/logic/chat-token-estimate-memo.ts": [
-      "buildChatTokenEstimateMemoKey",
-      "clearChatTokenEstimateMemo",
-      "lookupChatTokenEstimateMemo",
-      "lookupWorkplaceEstimateByFingerprint",
-      "rememberChatTokenEstimateMemo",
-      "rememberWorkplaceEstimateByFingerprint",
-      "stampMessagesForEstimateMemo"
-    ],
     "packages/core/src/infra/tokenizer/logic/chunk-splitter.ts": [
       "splitTextIntoChunks"
     ],
@@ -2306,13 +2288,6 @@
     ],
     "packages/core/src/infra/tokenizer/logic/serialize-tools-for-token-count.ts": [
       "serializeToolsForTokenCount"
-    ],
-    "packages/core/src/infra/tokenizer/logic/session-api-prompt-token-store.ts": [
-      "invalidateSessionApiPromptTokenEntry",
-      "parseSessionApiPromptTokenEntry",
-      "readSessionApiPromptTokenEntry",
-      "serializeSessionApiPromptTokenEntry",
-      "writeSessionApiPromptTokenEntry"
     ],
     "packages/core/src/infra/tokenizer/logic/token-chunk-cache.ts": [
       "buildCounterScope",
