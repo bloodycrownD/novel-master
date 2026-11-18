@@ -1,11 +1,11 @@
 import React, {useMemo} from 'react';
 import {Text, View} from 'react-native';
 import type {UsageStatsBucket} from '@novel-master/core/chat';
-import {TokenFormat} from '@novel-master/core/common';
+import {DateTime, TokenFormat} from '@novel-master/core/common';
 import {StackedBars} from '../../../components/charts/StackedBars';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
-import {formatFirstTokenMs, formatHitRate, formatTokensPerSecond, hitRate, toLocalDayKey} from './format';
+import {formatFirstTokenMs, formatHitRate, formatTokensPerSecond, hitRate} from './format';
 import {styles} from './styles';
 
 /**
@@ -41,7 +41,7 @@ export function DetailTab({
 }) {
   const dailyData = useMemo(() => {
     return dailyBuckets.map(b => ({
-      key: toLocalDayKey(b.bucketStartMs),
+      key: DateTime.localDayKey(b.bucketStartMs),
       primary: b.promptTokens,
       secondary: b.completionTokens,
       calls: b.calls,
@@ -60,7 +60,7 @@ export function DetailTab({
     }));
   }, [hourlyBuckets]);
 
-  const selectedDayBucket = selectedDay != null ? dailyBuckets.find(b => toLocalDayKey(b.bucketStartMs) === selectedDay) : undefined;
+  const selectedDayBucket = selectedDay != null ? dailyBuckets.find(b => DateTime.localDayKey(b.bucketStartMs) === selectedDay) : undefined;
 
   // 长按检视的柱：分别往两图数据里找（key 域不同：daily 为日期、hourly 为序号）
   const dailyInspected = inspectedKey != null ? dailyData.find(d => d.key === inspectedKey) : undefined;

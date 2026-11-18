@@ -8,12 +8,12 @@
  * @module domain/vfs/logic/vfs-exclude-prefixes
  */
 
-import { stripTrailingSlash } from "../repositories/impl/scope-prefix-helpers.js";
+import { Path } from "@/common/path.js";
 
 /** 把调用方传入的排除前缀规范化为带前导 `/` 的无尾斜杠形态。 */
 export function normalizeExcludePrefix(raw: string): string {
   const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`;
-  return stripTrailingSlash(withLeadingSlash);
+  return Path.stripTrailingSlash(withLeadingSlash);
 }
 
 /**

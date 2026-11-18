@@ -10,7 +10,7 @@
 import { fileCacheKey, type WorkplaceDisplayStatus } from "./rule-snapshot-codec.js";
 
 /** live 条目：至少含 path；status 不参与「已加载」判定。 */
-export type WorkplaceLivePath = {
+type WorkplaceLivePath = {
   readonly path: string;
   readonly status?: WorkplaceDisplayStatus | string;
 };

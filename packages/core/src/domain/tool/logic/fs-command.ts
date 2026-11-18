@@ -15,7 +15,7 @@ import { Result } from "@/errors/either.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
 import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
 
-export type FsCommand =
+type FsCommand =
   | { readonly kind: "rm"; readonly path: string; readonly recursive: boolean }
   | { readonly kind: "rmdir"; readonly path: string }
   | { readonly kind: "mv"; readonly from: string; readonly to: string }
@@ -44,7 +44,7 @@ export type FsToolInput = {
   readonly recursive?: boolean;
 };
 
-export type FsLsOutput = {
+type FsLsOutput = {
   readonly entries: readonly VfsListEntry[];
   readonly total: number;
   readonly truncated: boolean;

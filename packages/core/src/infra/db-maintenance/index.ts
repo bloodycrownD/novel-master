@@ -12,7 +12,6 @@
 
 export {
   createDbMaintenanceService,
-  runStartupMaintenanceOnce,
 } from "./impl/db-maintenance.service.js";
 export type {
   DatabaseMaintenanceResult,

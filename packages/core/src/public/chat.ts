@@ -77,23 +77,17 @@ export {
 export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
 export { rollbackConfirm } from "../presentation/chat/rollback-confirm.js";
 export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../presentation/chat/rollback-confirm.js";
-export type { ChatMessageDescriptor, ChatMessageKey, ChatMessageLike } from "../domain/chat/i18n/keys.js";
+export type { ChatMessageDescriptor, ChatMessageKey } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
   createProjectService,
   createSessionService,
   createMessageService,
-  createUsageStatsService,
 } from "../service/chat/create-chat-services.js";
-export type {
-  ChatServiceBundle,
-  ChatServicesSessionDeps,
-} from "../service/chat/create-chat-services.js";
+export type { ChatServicesSessionDeps } from "../service/chat/create-chat-services.js";
 export {
-  createUserVfsTurnService,
   createUserVfsTurnServiceBundle,
 } from "../service/chat/create-user-vfs-turn-service.js";
-export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
 export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
 export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
@@ -125,4 +119,3 @@ export type {
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
 export { summarizeToolInput, toolCallSummary } from "../presentation/chat/tool-summary.js";
-export type { ToolCallSummarySource } from "../presentation/chat/tool-summary.js";

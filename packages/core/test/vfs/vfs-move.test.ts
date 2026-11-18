@@ -1,7 +1,8 @@
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { moveVfsPath, remapPathUnderDir } from "../../src/domain/vfs/logic/vfs-move.js";
+import { moveVfsPath } from "../../src/domain/vfs/logic/vfs-move.js";
+import { Path } from "../../src/common/path.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 
@@ -156,9 +157,9 @@ describe("moveVfsPath", () => {
   });
 });
 
-describe("remapPathUnderDir", () => {
+describe("Path.remapUnderDir", () => {
   it("remaps nested paths under a new directory root", () => {
-    assert.equal(remapPathUnderDir("/src/sub/file.txt", "/src", "/dst"), "/dst/sub/file.txt");
-    assert.equal(remapPathUnderDir("/src", "/src", "/dst"), "/dst");
+    assert.equal(Path.remapUnderDir("/src/sub/file.txt", "/src", "/dst"), "/dst/sub/file.txt");
+    assert.equal(Path.remapUnderDir("/src", "/src", "/dst"), "/dst");
   });
 });

@@ -24,7 +24,7 @@ export type DynamicPromptBlock = {
  * 编辑器/UI 用旧 worktree 块形状（域 layout 已废弃；读入 strip，写出 omit）。
  * @deprecated 使用 {@link AgentPromptLayout.workplace} 非空 string。
  */
-export type PersistWorktreePromptBlock = {
+type PersistWorktreePromptBlock = {
   readonly name: string;
   readonly type: "worktree";
   /** wire 缺省时视为 user。 */
@@ -32,7 +32,7 @@ export type PersistWorktreePromptBlock = {
 };
 
 /** 编辑器 persist 块（含过渡态 worktree）；域 {@link AgentPromptLayout.persist} 仅 text。 */
-export type EditorPersistPromptBlock = PersistTextPromptBlock | PersistWorktreePromptBlock;
+type EditorPersistPromptBlock = PersistTextPromptBlock | PersistWorktreePromptBlock;
 
 /** @deprecated 域 persist 仅 text；请用 {@link PersistTextPromptBlock}。 */
 export type PersistPromptBlock = EditorPersistPromptBlock;

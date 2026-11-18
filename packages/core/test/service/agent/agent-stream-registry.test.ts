@@ -16,12 +16,8 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../../src/errors/either.js";
 import { unwrap } from "../../helpers/result-unwrap.js";
-import {
-  createAgentRunner,
-  createAgentStreamRegistry,
-  InMemoryAgentSession,
-  type AgentDefinition,
-} from "@novel-master/core/agent";
+import { createAgentRunner, createAgentStreamRegistry, type AgentDefinition } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { SimpleEventBus } from "@novel-master/core/events";
 import {

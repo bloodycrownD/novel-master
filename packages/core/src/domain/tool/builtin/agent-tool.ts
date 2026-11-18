@@ -58,14 +58,14 @@ export interface AgentToolInput {
 }
 
 /** list 输出条目（来自装配期快照，含虚拟 seed general）。 */
-export interface AgentToolListEntry {
+interface AgentToolListEntry {
   readonly name: string;
   readonly description?: string;
   readonly mode: NonNullable<AgentDefinition["mode"]>;
 }
 
 /** list 输出（快照映射，无 IO；超限走 capMatchList 截断）。 */
-export interface AgentToolListOutput {
+interface AgentToolListOutput {
   readonly action: "list";
   readonly entries: readonly AgentToolListEntry[];
   readonly total: number;
@@ -73,7 +73,7 @@ export interface AgentToolListOutput {
 }
 
 /** get 输出（definition 为 registry 解码后的完整定义体，不截断）。 */
-export interface AgentToolGetOutput {
+interface AgentToolGetOutput {
   readonly action: "get";
   /** 仅按 agentId 查询时回填；按 name 查询（含虚拟 general）无 id。 */
   readonly agentId?: string;
@@ -81,13 +81,13 @@ export interface AgentToolGetOutput {
 }
 
 /** create / update 输出（保存回执；供摘要与 meta 透传，LLM 渲染为 ok）。 */
-export interface AgentToolWriteOutput {
+interface AgentToolWriteOutput {
   readonly action: "create" | "update";
   readonly name: string;
   readonly agentId: string;
 }
 
-export type AgentToolOutput = AgentToolListOutput | AgentToolGetOutput | AgentToolWriteOutput;
+type AgentToolOutput = AgentToolListOutput | AgentToolGetOutput | AgentToolWriteOutput;
 
 /** 校验 create / update 必填的 definition 对象字段（形状校验；语义交服务层）。 */
 function requireDefinition(action: "create" | "update", value: Record<string, unknown> | undefined): Result<Record<string, unknown>, AppError> {

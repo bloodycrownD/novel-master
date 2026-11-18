@@ -1,7 +1,6 @@
 export type { AgentDefinition, AgentDefinitionPatch } from "../domain/agent/model/agent-definition.js";
 export {
   agentDefinitionSchema,
-  agentDefinitionDocumentSchema,
   promptsDocumentSchema,
 } from "../domain/agent/model/agent-definition.schema.js";
 export {
@@ -25,7 +24,6 @@ export {
   DoomLoopDetector,
   type DoomLoopConfig,
 } from "../domain/agent/logic/doom-loop.js";
-export { InMemoryAgentSession } from "../domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "../service/agent/impl/chat-agent-session.js";
 export type {
   AgentRunner,
@@ -37,10 +35,7 @@ export type { AgentRegistryService } from "../service/agent/agent-registry.port.
 export { createAgentRegistryService } from "../service/agent/create-agent-registry-service.js";
 export type { AgentAbortRegistry } from "../service/agent/agent-abort-registry.port.js";
 export { createAgentAbortRegistry } from "../service/agent/create-agent-abort-registry.js";
-export type {
-  AgentStreamRegistry,
-  AgentStreamPartial,
-} from "../service/agent/agent-stream-registry.port.js";
+export type { AgentStreamRegistry } from "../service/agent/agent-stream-registry.port.js";
 export { createAgentStreamRegistry } from "../service/agent/create-agent-stream-registry.js";
 export {
   resolveCurrentAgentId,
@@ -50,10 +45,7 @@ export {
 } from "../service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "../service/agent/logic/agent-run-shared.js";
 export { resolveAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";
-export type {
-  ResolvedAgentForProject,
-  ResolveAgentForProjectRuntimePort,
-} from "../service/agent/logic/resolve-agent-for-project.js";
+export type { ResolvedAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";
 export {
   runAgentTurn,
   mapResolveError,

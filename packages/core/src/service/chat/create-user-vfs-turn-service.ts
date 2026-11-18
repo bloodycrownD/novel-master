@@ -23,7 +23,7 @@ import { DefaultUserVfsTurnService } from "./impl/user-vfs-turn.service.js";
 import type { UserVfsTurnService } from "./user-vfs-turn.port.js";
 
 /** `createUserVfsTurnServiceBundle` 杩斿洖鍊笺€?*/
-export interface UserVfsTurnServiceBundle {
+interface UserVfsTurnServiceBundle {
   readonly userVfsTurn: UserVfsTurnService;
 }
 
@@ -79,9 +79,4 @@ export function createUserVfsTurnServiceBundle(conn: TdbcConnection): UserVfsTur
   return {
     userVfsTurn,
   };
-}
-
-/** 鍒涘缓 {@link UserVfsTurnService} 瀹炰緥銆?*/
-export function createUserVfsTurnService(conn: TdbcConnection): UserVfsTurnService {
-  return createUserVfsTurnServiceBundle(conn).userVfsTurn;
 }

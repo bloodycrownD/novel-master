@@ -18,7 +18,7 @@
  */
 
 /** front matter 重写值：只提交要改的字段，未提交字段不动。 */
-export interface SkillFrontMatterValues {
+interface SkillFrontMatterValues {
   readonly name?: string;
   readonly description?: string;
 }

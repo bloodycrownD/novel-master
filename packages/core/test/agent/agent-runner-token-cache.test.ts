@@ -10,13 +10,8 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { z } from "zod";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type BuiltinToolContext,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
+import { createAgentRunner, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";

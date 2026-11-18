@@ -6,8 +6,9 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
+import { Text } from "@/common/text.js";
 import type { VfsReplaceNotFoundDetails } from "./compute-replace-not-found-error.js";
-import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
+import { MAX_LCS_SNIPPET_CHARS, MIN_LCS_LENGTH } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
 
@@ -24,7 +25,7 @@ function formatReplaceNotFound(details: VfsReplaceNotFoundDetails | undefined, p
     return `[REPLACE_NOT_FOUND] Replace string not found in ${pathLabel}.\nAlmost no matching text in file (longest common substring length=${details.lcsLength}). Re-read the file with read, then retry edit.`;
   }
 
-  const snippet = truncateLcsSnippet(details.longestCommonSubstring);
+  const snippet = Text.truncate(details.longestCommonSubstring, MAX_LCS_SNIPPET_CHARS);
   let out = `[REPLACE_NOT_FOUND] Replace string not found in ${pathLabel}.\nLongest matching substring in file (length=${details.lcsLength}, occurrences=${details.lcsOccurrences}): "${snippet}"\nUse this substring to locate the edit region and adjust oldString (e.g. whitespace/newlines).`;
   if (details.lcsOccurrences > 1) {
     out += "\nSubstring appears " + String(details.lcsOccurrences) + " times; ensure oldString is unique or include more context.";

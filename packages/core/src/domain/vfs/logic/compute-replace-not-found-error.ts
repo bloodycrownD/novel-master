@@ -5,7 +5,7 @@
  */
 
 import { AppError } from "@/errors/app-error.js";
-import { countOccurrences, longestCommonSubstring } from "./longest-common-substring.js";
+import { Text } from "@/common/text.js";
 
 /** 预览时最多取的字符数，避免错误信息过长。 */
 const MAX_PREVIEW_CHARS = 100;
@@ -36,8 +36,8 @@ function previewChars(input: string): string {
 
 /** 在 oldString 未命中时构造 VFS_REPLACE_NOT_FOUND（含最长公共子串诊断）。 */
 export function buildReplaceNotFoundError(path: string, fileContent: string, oldString: string): VfsReplaceNotFoundError {
-  const lcs = longestCommonSubstring(oldString, fileContent);
-  const occurrences = lcs.length > 0 ? countOccurrences(fileContent, lcs.substring) : 0;
+  const lcs = Text.longestCommonSubstring(oldString, fileContent);
+  const occurrences = lcs.length > 0 ? Text.countOccurrences(fileContent, lcs.substring) : 0;
   // 拿最长公共子串在文件里第一次出现的位置当锚点，从锚点起点截 100 字符；
   // 没有公共子串时退回文件开头 100 字符，让 oldString 与文件片段并列可比对。
   const lcsIndex = lcs.substring.length > 0 ? fileContent.indexOf(lcs.substring) : -1;

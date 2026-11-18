@@ -17,17 +17,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
+import { BASELINE_MIGRATION_IDS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
 import { userMessageOf } from "../../src/i18n/error-message.js";
 import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import { execLegacyVfsEntryTable } from "./helpers/legacy-db-fixtures.js";

@@ -10,7 +10,7 @@ import type { FsToolInput } from "./fs-command.js";
 import { parseFsCommand } from "./fs-command.js";
 
 /** fs 命令或 tool 调用的分类结果。 */
-export type FsCommandClassification = {
+type FsCommandClassification = {
   /** 是否改变工作区可见 VFS 状态。 */
   readonly mutating: boolean;
   /** 涉及路径；非突变或无法解析时为 `null`。 */

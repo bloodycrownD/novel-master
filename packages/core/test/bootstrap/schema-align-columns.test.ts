@@ -2,13 +2,8 @@ import { outcomeValue } from "../helpers/outcome-value.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  NOVEL_MASTER_SCHEMA_STATEMENTS,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
+import { BASELINE_MIGRATION_IDS, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -22,7 +17,6 @@ import {
   execLegacyV7ChatMessageDdl,
 } from "./helpers/legacy-db-fixtures.js";
 import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
-import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();

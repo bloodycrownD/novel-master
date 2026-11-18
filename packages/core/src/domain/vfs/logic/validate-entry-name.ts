@@ -17,7 +17,7 @@ import type { CoreMessageDescriptor } from "@/i18n/keys.js";
 type VfsInvalidNameError = AppError<"VFS_INVALID_NAME">;
 
 /** {@link validateVfsEntryName} 的返回形态（reason 为 invalid_name.* descriptor）。 */
-export type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: CoreMessageDescriptor };
+type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: CoreMessageDescriptor };
 
 /** C0（U+0000–U+001F，含 \n \r \t）、DEL（U+007F）与 C1（U+0080–U+009F）控制字符。 */
 // 校验目的就是拒绝控制字符，正则必须字面包含它们

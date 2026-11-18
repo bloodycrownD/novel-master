@@ -22,7 +22,6 @@ export {
   createIncrementalTokenCounter,
   SLIDING_TOKEN_RATE_WINDOW_MS,
   type StreamTokenSource,
-  type TokenRateSample,
   type TokenRateSampler,
   type IncrementalTokenCounter,
   type StreamMetricsLineInput,

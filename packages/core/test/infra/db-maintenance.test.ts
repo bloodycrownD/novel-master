@@ -3,13 +3,8 @@ import { rmSync, statSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  createDbMaintenanceService,
-  open,
-  runStartupMaintenanceOnce,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, createDbMaintenanceService, open, type TdbcConnection } from "@novel-master/core";
+import { runStartupMaintenanceOnce } from "../../src/infra/db-maintenance/impl/db-maintenance.service.js";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,

@@ -12,7 +12,7 @@
  */
 
 /** 若不存在则创建 vfs_content_pack 表（pack 头信息 + 压缩字节流）. */
-export const VFS_CONTENT_PACK_TABLE_DDL = `
+const VFS_CONTENT_PACK_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_content_pack (
   pack_id INTEGER PRIMARY KEY AUTOINCREMENT,
   entry_id INTEGER NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS vfs_content_pack (
 )`.trim();
 
 /** 若不存在则创建 vfs_content_pack_member 表（member 偏移索引，WITHOUT ROWID）. */
-export const VFS_CONTENT_PACK_MEMBER_TABLE_DDL = `
+const VFS_CONTENT_PACK_MEMBER_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_content_pack_member (
   content_hash TEXT NOT NULL PRIMARY KEY,
   pack_id INTEGER NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS vfs_content_pack_member (
 ) WITHOUT ROWID`.trim();
 
 /** 若不存在则创建 idx_vfs_content_pack_member_pack 索引（按 pack_id 反查成员）. */
-export const VFS_CONTENT_PACK_MEMBER_PACK_INDEX_DDL = `
+const VFS_CONTENT_PACK_MEMBER_PACK_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_vfs_content_pack_member_pack
   ON vfs_content_pack_member(pack_id)`.trim();
 

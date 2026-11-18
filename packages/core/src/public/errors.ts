@@ -12,8 +12,8 @@
  */
 
 export { Result, Ok, Err, type ResultWire } from "../errors/either.js";
-export { type AbortReason, type Interrupt, type Outcome, mapOutcome, andThenOutcome, matchOutcome, interruptOf } from "../errors/outcome.js";
-export { AppError, isAppError, type AppErrorWire } from "../errors/app-error.js";
+export { type AbortReason, type Interrupt, type Outcome, matchOutcome } from "../errors/outcome.js";
+export { AppError, isAppError } from "../errors/app-error.js";
 // domainOf 是域判定唯一入口（spec-3 §3.7，实现随 guards 统一收进 errors/guards.ts）；
 // DOMAIN_RANGES 段表留在 errors/domain.ts，供 core 内部守卫与 test 引用，不进 public 面。
 export { domainOf } from "../errors/guards.js";

@@ -33,6 +33,7 @@ import {
   formatDurationMs,
   formatRequestTime,
   pageWindowItems,
+  toLocalDayKey,
 } from "@shared/logic/usage-stats-format";
 
 type RangeKind = "today" | "last7" | "last30" | "custom";
@@ -46,14 +47,6 @@ type PageTab = "summary" | "detail" | "requests";
  */
 const MODEL_OPTION_ALL = "__all__";
 const MODEL_OPTION_UNLOGGED = "__unlogged__";
-
-/** ms → 本地日期键 `YYYY-MM-DD`（天/小时桶都用它定位天边界）。 */
-function toLocalDayKey(ms: number): string {
-  const d = new Date(ms);
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
 
 /** 今天偏移 N 天的本地日期键（命名窗口由应用层换算：「近 7 天」= {D-6, D} 共 7 桶）。 */
 function dayKeyOffset(offsetDays: number): string {

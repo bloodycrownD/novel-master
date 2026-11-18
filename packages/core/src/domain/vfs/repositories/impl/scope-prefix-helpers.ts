@@ -3,7 +3,9 @@
  *
  * entry_id 化后所有前缀扫描统一形如
  * `WHERE scope_key = ? AND (path = ? OR path LIKE ? ESCAPE '\\')`，本模块抽出
- * 公共的转义 / 归一化片段，避免在两个 repo 里各写一份。
+ * 公共的 LIKE 转义片段，避免在两个 repo 里各写一份。
+ *
+ * 去尾斜杠 / 补尾斜杠的纯路径原语已收敛到 `common/path.ts` 的 `Path`。
  *
  * @module domain/vfs/repositories/impl/scope-prefix-helpers
  */
@@ -11,17 +13,4 @@
 /** 转义 LIKE 串里的特殊字符，保证前缀匹配按字面量比较。 */
 export function escapeLike(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
-
-/**
- * 把前缀规整成不带尾斜杠的形态（根 `/` 保留）。
- *
- * 与 `infra/cloud-sync/logic/paths.ts` 的 `ensureTrailingSlash` **语义相反**（那边补尾斜杠），
- * 两者不可互替（nm-code-style §5.4 / §9.4 已登记的同名反义先例）。
- */
-export function stripTrailingSlash(prefix: string): string {
-  if (prefix === "/") {
-    return prefix;
-  }
-  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 }

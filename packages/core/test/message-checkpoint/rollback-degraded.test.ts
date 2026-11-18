@@ -13,8 +13,8 @@ import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   scopeKey,
+  toPhysicalPath,
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { toPhysicalPath } from "@novel-master/core/vfs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { tCore } from "../helpers/core-i18n.js";
 

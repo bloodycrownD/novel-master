@@ -12,13 +12,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  NOVEL_MASTER_SCHEMA_STATEMENTS,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
+import { NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,

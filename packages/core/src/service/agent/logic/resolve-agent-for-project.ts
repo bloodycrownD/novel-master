@@ -26,7 +26,7 @@ export type ResolvedAgentForProject = {
 };
 
 /** {@link resolveAgentForProject} 所需 runtime 表面。 */
-export interface ResolveAgentForProjectRuntimePort extends AgentRunRuntimePort {
+interface ResolveAgentForProjectRuntimePort extends AgentRunRuntimePort {
   readonly projects: ProjectService;
 }
 

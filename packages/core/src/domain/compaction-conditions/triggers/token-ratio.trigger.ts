@@ -29,7 +29,7 @@ export interface TokenRatioTriggerOptions {
  * heuristic 计数的默认保守系数：阈值打到精确档的 85%，
  * 留出 15% 的缓冲吸收估算误差。仅当 counterKind === "heuristic" 时生效。
  */
-export const DEFAULT_HEURISTIC_SAFETY_FACTOR = 0.85;
+const DEFAULT_HEURISTIC_SAFETY_FACTOR = 0.85;
 
 /** Fires when full prompt tokens exceed `floor(contextWindow * tokenRatio)`. */
 export class TokenRatioConditionTrigger implements CompactionConditionTrigger {

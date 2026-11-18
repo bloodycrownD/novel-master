@@ -38,7 +38,7 @@ export interface ResolvePreviewThinkingContextInput {
 }
 
 /** 预览思考上下文解析结果。 */
-export interface ResolvedPreviewThinkingContext {
+interface ResolvedPreviewThinkingContext {
   readonly enabled: boolean;
   readonly requestThinkingEnabled: boolean;
   readonly protocol: LlmProtocolKind;

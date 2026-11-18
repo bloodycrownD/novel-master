@@ -3,8 +3,8 @@
  *
  * @module services/cloud-sync-config.store
  */
-import {ensureTrailingSlash, type CloudSyncConfigInput} from '@novel-master/core';
-import {Kkv} from '@novel-master/core/common';
+import type {CloudSyncConfigInput} from '@novel-master/core';
+import {Kkv, Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {type SecretStore} from '@novel-master/core/provider';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
@@ -160,7 +160,7 @@ export async function setCloudSyncConfig(runtime: MobileNovelMasterRuntime, inpu
     deviceId = generateCloudSyncDeviceId();
   }
 
-  const normalizedPrefix = ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
+  const normalizedPrefix = Path.ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
   await Promise.all([
     kkv.set(CLOUD_SYNC_KKV_MODULE, KEY_ENDPOINT, input.endpoint.trim()),

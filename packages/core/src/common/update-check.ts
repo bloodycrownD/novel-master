@@ -16,14 +16,14 @@ import {Release} from "./release.js";
 export type FetchFn = typeof fetch;
 
 /** GitHub latest release 的归一形态。 */
-export type LatestRelease = {
+type LatestRelease = {
     readonly tagName: string;
     readonly version: string;
     readonly htmlUrl: string;
     readonly body: string;
 };
 
-export type UpdateCheckStatus = "up-to-date" | "update-available";
+type UpdateCheckStatus = "up-to-date" | "update-available";
 
 /** 更新检查结果 DTO（IPC / UI 共用）。 */
 export type UpdateCheckData = {

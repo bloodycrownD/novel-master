@@ -33,7 +33,7 @@ export interface VfsGrepMatch {
   readonly excerpt: string;
 }
 
-export type { VfsGrepMatchMode, VfsGrepOptions } from "../logic/vfs-grep.js";
+export type { VfsGrepOptions } from "../logic/vfs-grep.js";
 
 /**
  * Virtual file system capability (read/write/list/glob/grep/delete/mkdir).

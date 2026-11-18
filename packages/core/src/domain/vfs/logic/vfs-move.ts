@@ -6,33 +6,12 @@
 
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
+import { Path } from "@/common/path.js";
 import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
 
 /** mkdirIgnoreExistingDirectory 的失败载荷：`VFS_NOT_A_DIRECTORY` + 端口透传。 */
 type VfsNotADirectoryError = AppError;
-
-/** Strip trailing slash except for root `/`. */
-export function normalizeDirPath(path: string): string {
-  if (path.endsWith("/") && path !== "/") {
-    return path.slice(0, -1);
-  }
-  return path;
-}
-
-/** Remap a path under oldDir to the same relative location under newDir. */
-export function remapPathUnderDir(path: string, oldDir: string, newDir: string): string {
-  const normalizedOld = normalizeDirPath(oldDir);
-  const normalizedNew = normalizeDirPath(newDir);
-  if (path === normalizedOld) {
-    return normalizedNew;
-  }
-  const prefix = `${normalizedOld}/`;
-  if (!path.startsWith(prefix)) {
-    return path;
-  }
-  return `${normalizedNew}${path.slice(normalizedOld.length)}`;
-}
 
 /**
  * mkdir that treats an existing directory as success; fails when path is a file.
@@ -78,8 +57,8 @@ export async function mkdirIgnoreExists(vfs: VfsService, path: string): Promise<
  * directory move; else NOT_FOUND.
  */
 export async function moveVfsPath(vfs: VfsService, from: string, to: string): Promise<Result<void, AppError>> {
-  const normalizedFrom = normalizeDirPath(from);
-  const normalizedTo = normalizeDirPath(to);
+  const normalizedFrom = Path.stripTrailingSlash(from);
+  const normalizedTo = Path.stripTrailingSlash(to);
   // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
   if (normalizedFrom !== normalizedTo) {
     const alreadyExists = (): Result<void, AppError> => Result.err(new AppError("VFS_ALREADY_EXISTS", { detail: `Path already exists: ${to}`, path: to }));
@@ -92,7 +71,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
     }
     const targetList = await vfs.list(normalizedTo, { recursive: false });
     if (targetList.ok) {
-      const hasDirRow = targetList.value.some((e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo);
+      const hasDirRow = targetList.value.some((e) => e.kind === "directory" && Path.stripTrailingSlash(e.path) === normalizedTo);
       if (targetList.value.length > 0 || hasDirRow) return alreadyExists();
     } else if (targetList.error.key !== "VFS_NOT_FOUND") {
       return Result.err(targetList.error);
@@ -131,7 +110,7 @@ export async function moveVfsPath(vfs: VfsService, from: string, to: string): Pr
 
   // read 报 NOT_FOUND：只剩「无 directory 行但有子项」一种目录形态，靠 list 兜底。
   // 幽灵路径（无行、无子项）时 list 自身报 NOT_FOUND 或返回空列表，维持 NOT_FOUND。
-  const entries = await vfs.list(normalizeDirPath(from), { recursive: true });
+  const entries = await vfs.list(Path.stripTrailingSlash(from), { recursive: true });
   if (!entries.ok) return Result.err(entries.error);
   if (entries.value.length === 0) {
     return Result.err(new AppError("VFS_NOT_FOUND", { detail: `Path not found: ${from}`, path: from }));

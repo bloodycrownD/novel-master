@@ -7,8 +7,6 @@ export type {
   SortOrder,
   FillPolicy,
   WorkplaceRuleRow,
-  WorkplaceDirRuleRow,
-  WorkplaceFileRuleRow,
   WorkplaceListRow,
   WorkplaceDirRule,
   SetDirRuleInput,
@@ -25,7 +23,6 @@ export {
 } from "../domain/workplace/logic/workplace-path-map.js";
 export {
   evaluateFileDisplay,
-  computeHeadTailIndices,
   sortDirPaths,
   sortFilesForDir,
 } from "../domain/workplace/logic/workplace-eval.js";
@@ -40,7 +37,6 @@ export {
   renderFileBlock,
   renderFileBlockBody,
   joinFileBlocks,
-  formatLocalMtime,
 } from "../domain/workplace/logic/workplace-display.js";
 export {
   renderWorkplaceFileTree,
@@ -49,7 +45,7 @@ export {
 export { parseMarkdownFrontMatter } from "../domain/workplace/logic/front-matter.js";
 // split / 类型真源已收到 common/front-matter.ts（workplace 只是历史公开路径）；
 // 这里只改转发来源，公开符号名与 allowlist 快照不变。
-export { splitMarkdownFrontMatter, type MarkdownFrontMatterSplit } from "../common/front-matter.js";
+export { splitMarkdownFrontMatter } from "../common/front-matter.js";
 export { createWorkplaceService } from "../service/workplace/create-workplace-service.js";
 export type {
   WorkplaceService,
@@ -79,9 +75,5 @@ export {
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
 } from "../domain/workplace/logic/rule-snapshot-codec.js";
-export {
-  diffWorkplacePaths,
-  isWorkplacePathLoadedInCache,
-  type WorkplaceLivePath,
-} from "../domain/workplace/logic/diff-workplace-paths.js";
+export { isWorkplacePathLoadedInCache } from "../domain/workplace/logic/diff-workplace-paths.js";
 export { workplaceRootLogicalPath } from "../domain/workplace/logic/workplace-scope.js";

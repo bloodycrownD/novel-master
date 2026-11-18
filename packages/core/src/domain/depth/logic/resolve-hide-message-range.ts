@@ -8,7 +8,7 @@ import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { DepthSlice } from "./depth-slice.js";
 
-export interface HideMessageSeqRange {
+interface HideMessageSeqRange {
   readonly fromSeq: number;
   readonly toSeq: number;
 }

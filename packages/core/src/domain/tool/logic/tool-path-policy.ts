@@ -22,6 +22,8 @@
  * @module domain/tool/logic/tool-path-policy
  */
 
+import { Path } from "@/common/path.js";
+
 /** 约定：tool input 顶层这些字段出现时一律视为路径参与校验。 */
 const PATH_FIELDS = ["path", "filePath", "from", "to"] as const;
 
@@ -62,25 +64,6 @@ export function extractInputPaths(input: unknown): readonly string[] {
 }
 
 /**
- * 单条路径是否落在 `prefix` 之下。
- *
- * @remarks
- * `prefix` 是相对 session root 的逻辑前缀；自动忽略尾部斜杠。
- * 同时容忍 `/` 与 `\` 两种分隔符，方便 Windows 端直接复用。
- * 空前缀或 `/` 表示「整个工作区」，恒为通过。
- */
-export function pathStartsWithPrefix(path: string, prefix: string): boolean {
-  if (prefix === "" || prefix === "/" || prefix === "\\") {
-    return true;
-  }
-  const normalizedPrefix = prefix.endsWith("/") || prefix.endsWith("\\") ? prefix.slice(0, -1) : prefix;
-  if (path === normalizedPrefix) {
-    return true;
-  }
-  return path.startsWith(normalizedPrefix + "/") || path.startsWith(normalizedPrefix + "\\");
-}
-
-/**
  * 单条路径是否被 `allowedPaths` 放行。
  *
  * `allowedPaths === undefined` 表示不限制（向后兼容）。
@@ -89,7 +72,7 @@ export function isPathAllowed(path: string, allowedPaths?: readonly string[]): b
   if (allowedPaths === undefined) {
     return true;
   }
-  return allowedPaths.some((prefix) => pathStartsWithPrefix(path, prefix));
+  return allowedPaths.some((prefix) => Path.hasPrefix(path, prefix));
 }
 
 /**

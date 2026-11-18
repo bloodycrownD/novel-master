@@ -22,6 +22,7 @@
  */
 
 import { Guards } from "@/common/guards.js";
+import { Json } from "@/common/json.js";
 import { Kkv } from "@/common/kkv.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -158,11 +159,8 @@ export function normalizeEngineBaseUrl(value: string): string | null {
 /** JSON 解析（损坏值归一为 undefined；调用方按缺省语义处理）。 */
 function parseJson(raw: string | undefined): unknown {
   if (raw == null) return undefined;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
+  const parsed = Json.parseText(raw);
+  return parsed.ok ? parsed.value : undefined;
 }
 
 /** 读取并归一全部存储状态（5 次 KKV 并行读；容错归一集中于此，读模型与链解析共用）。失败沿 `Result.err` 接力（四期门⑦）。 */
@@ -423,7 +421,7 @@ function engineNotFound(engineId: string): AppError<"TOOL_SEARCH_INVALID_ARGUMEN
 }
 
 /** 保存路径域校验的失败载荷：TOOL_SEARCH 两 key 的并集（参数类 + 模板类）。 */
-export type SearchConfigSaveError = AppError<"TOOL_SEARCH_INVALID_ARGUMENT"> | AppError<"TOOL_SEARCH_TEMPLATE_INVALID">;
+type SearchConfigSaveError = AppError<"TOOL_SEARCH_INVALID_ARGUMENT"> | AppError<"TOOL_SEARCH_TEMPLATE_INVALID">;
 
 /**
  * 搜索配置存储（desktop / mobile runtime 用 core 导出的本工厂包

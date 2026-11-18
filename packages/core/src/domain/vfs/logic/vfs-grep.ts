@@ -12,7 +12,7 @@ import type { VfsGrepMatch } from "../ports/vfs-service.port.js";
 type VfsGrepError = AppError<"VFS_INVALID_PATTERN">;
 
 /** pattern 解释方式：auto 先尝试正则，失败则退化为字面量。 */
-export type VfsGrepMatchMode = "auto" | "literal" | "regex";
+type VfsGrepMatchMode = "auto" | "literal" | "regex";
 
 export interface VfsGrepOptions {
   /** 仅搜索路径以此前缀开头的文件 */

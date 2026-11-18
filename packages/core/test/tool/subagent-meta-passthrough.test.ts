@@ -5,7 +5,6 @@ import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-bloc
 import {
   formatToolOutputForLlm,
 } from "@/domain/tool/logic/format-tool-output.js";
-import { resolveSubagentSessionId } from "@/domain/tool/logic/subagent-tool-session-id.js";
 
 describe("subagent meta 透传链路", () => {
   it("T-T1: formatToolOutputForLlm 对 task 输出返回结构化 JSON（主 agent 可读 stopped / failureReason / text）", () => {
@@ -59,19 +58,6 @@ describe("subagent meta 透传链路", () => {
       output: { version: 1 },
     });
     assert.equal(block.meta, undefined);
-  });
-
-  it("C17: resolveSubagentSessionId 从 meta 读取（对称 vfs-tool-file-path）", () => {
-    assert.equal(
-      resolveSubagentSessionId({ meta: { subagentSessionId: "c1" } }),
-      "c1",
-    );
-    assert.equal(resolveSubagentSessionId({ meta: {} }), undefined);
-    assert.equal(resolveSubagentSessionId(undefined), undefined);
-    assert.equal(
-      resolveSubagentSessionId({ meta: { subagentSessionId: "" } }),
-      undefined,
-    );
   });
 
   it("T-A2: output.stopped=true → ok=false + content=JSON(含 text + failureReason) + meta 带 subagentSessionId + failureReason", () => {

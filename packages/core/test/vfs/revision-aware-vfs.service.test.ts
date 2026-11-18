@@ -1,4 +1,4 @@
-import { createVfsService } from "@novel-master/core/vfs";
+import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
 import { isAppError } from "@/errors/app-error.js";
 import type { TdbcConnection } from "@novel-master/core";
 import assert from "node:assert/strict";

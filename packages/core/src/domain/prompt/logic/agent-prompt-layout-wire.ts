@@ -7,17 +7,17 @@
 import type { DynamicPromptBlock, PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
 
 /** persist 文本块 wire 形状。 */
-export type PersistTextBlockWire = {
+type PersistTextBlockWire = {
   readonly type: "text";
   readonly role: "user" | "assistant";
   readonly content: string;
 };
 
 /** persist 块 wire 形状（仅 text）。 */
-export type PersistPromptBlockWire = PersistTextBlockWire;
+type PersistPromptBlockWire = PersistTextBlockWire;
 
 /** dynamic 块 wire 形状（lifecycle 已下线，恒不带该键）。 */
-export type DynamicPromptBlockWire = {
+type DynamicPromptBlockWire = {
   readonly type: "text";
   readonly role: "user" | "assistant";
   readonly content: string;

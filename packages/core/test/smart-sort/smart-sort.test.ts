@@ -6,11 +6,11 @@ import {
   extractSortKey,
   extractSortKeyDetail,
   formatSortTupleForDisplay,
-  parseChineseNum,
-  tokenizeNatural,
   type CompiledSmartSortRule,
   type SmartSortKeyCache,
 } from "../../src/domain/workplace/logic/smart-sort.js";
+import { Number } from "../../src/common/number.js";
+import { Text } from "../../src/common/text.js";
 import { tCore } from "../helpers/core-i18n.js";
 
 function compile(
@@ -53,88 +53,88 @@ function sortSmart(
 
 describe("parseChineseNum (T-SS1)", () => {
   it("converts single and small power-form numerals", () => {
-    assert.equal(parseChineseNum("一"), 1);
-    assert.equal(parseChineseNum("零"), 0);
-    assert.equal(parseChineseNum("两"), 2);
-    assert.equal(parseChineseNum("九"), 9);
-    assert.equal(parseChineseNum("十"), 10);
-    assert.equal(parseChineseNum("十一"), 11);
-    assert.equal(parseChineseNum("二十"), 20);
-    assert.equal(parseChineseNum("二十五"), 25);
+    assert.equal(Number.parseChineseNum("一"), 1);
+    assert.equal(Number.parseChineseNum("零"), 0);
+    assert.equal(Number.parseChineseNum("两"), 2);
+    assert.equal(Number.parseChineseNum("九"), 9);
+    assert.equal(Number.parseChineseNum("十"), 10);
+    assert.equal(Number.parseChineseNum("十一"), 11);
+    assert.equal(Number.parseChineseNum("二十"), 20);
+    assert.equal(Number.parseChineseNum("二十五"), 25);
   });
 
   it("converts power form with embedded zeros up to the spec boundary", () => {
-    assert.equal(parseChineseNum("一百"), 100);
-    assert.equal(parseChineseNum("一百零一"), 101);
-    assert.equal(parseChineseNum("一千零二十五"), 1025);
-    assert.equal(parseChineseNum("两千零一"), 2001);
+    assert.equal(Number.parseChineseNum("一百"), 100);
+    assert.equal(Number.parseChineseNum("一百零一"), 101);
+    assert.equal(Number.parseChineseNum("一千零二十五"), 1025);
+    assert.equal(Number.parseChineseNum("两千零一"), 2001);
     // T-SS1 点名边界：「一」~「一万零一百零一」
-    assert.equal(parseChineseNum("一万零一百零一"), 10101);
+    assert.equal(Number.parseChineseNum("一万零一百零一"), 10101);
   });
 
   it("converts positional form digit-by-digit (一零二五 = 1025)", () => {
-    assert.equal(parseChineseNum("一零二五"), 1025);
-    assert.equal(parseChineseNum("〇〇一二"), 12);
-    assert.equal(parseChineseNum("零零"), 0);
+    assert.equal(Number.parseChineseNum("一零二五"), 1025);
+    assert.equal(Number.parseChineseNum("〇〇一二"), 12);
+    assert.equal(Number.parseChineseNum("零零"), 0);
   });
 
   it("converts uppercase numerals (壹贰叁…拾)", () => {
-    assert.equal(parseChineseNum("壹"), 1);
-    assert.equal(parseChineseNum("玖"), 9);
-    assert.equal(parseChineseNum("壹佰贰拾叁"), 123);
-    assert.equal(parseChineseNum("贰仟零壹"), 2001);
+    assert.equal(Number.parseChineseNum("壹"), 1);
+    assert.equal(Number.parseChineseNum("玖"), 9);
+    assert.equal(Number.parseChineseNum("壹佰贰拾叁"), 123);
+    assert.equal(Number.parseChineseNum("贰仟零壹"), 2001);
   });
 
   it("handles unit abbreviations (一千二 = 1200) and 亿-level carry", () => {
-    assert.equal(parseChineseNum("一千二"), 1200);
-    assert.equal(parseChineseNum("两千五"), 2500);
-    assert.equal(parseChineseNum("十二亿"), 1200000000);
-    assert.equal(parseChineseNum("一万亿"), 1000000000000);
+    assert.equal(Number.parseChineseNum("一千二"), 1200);
+    assert.equal(Number.parseChineseNum("两千五"), 2500);
+    assert.equal(Number.parseChineseNum("十二亿"), 1200000000);
+    assert.equal(Number.parseChineseNum("一万亿"), 1000000000000);
   });
 
   it("converts whole ASCII integer runs via Number(), keeping leading zeros", () => {
-    assert.equal(parseChineseNum("001"), 1);
-    assert.equal(parseChineseNum("2024"), 2024);
-    assert.equal(parseChineseNum("００１"), 1); // full-width digits fold to half-width
+    assert.equal(Number.parseChineseNum("001"), 1);
+    assert.equal(Number.parseChineseNum("2024"), 2024);
+    assert.equal(Number.parseChineseNum("００１"), 1); // full-width digits fold to half-width
   });
 
   it("returns null for digit runs that overflow Number() to ±Infinity (core/B-4)", () => {
     // ~309 位以上的纯数字串经 Number() 溢出为 ±Infinity，与 fixed_min/max
     // 哨兵元组数值平权；必须按「转换失败」返回 null，数字管道永不产出 ±Infinity。
-    assert.equal(parseChineseNum("9".repeat(400)), null);
-    assert.equal(parseChineseNum(`-${"9".repeat(400)}`), null);
+    assert.equal(Number.parseChineseNum("9".repeat(400)), null);
+    assert.equal(Number.parseChineseNum(`-${"9".repeat(400)}`), null);
     // 中文逐位分支同型溢出："一"*400 → digits 400 位 → Infinity → null。
-    assert.equal(parseChineseNum("一".repeat(400)), null);
+    assert.equal(Number.parseChineseNum("一".repeat(400)), null);
     // 仍在有限范围内的长数字串正常返回（10^299 < Number.MAX_VALUE）。
-    const finite = parseChineseNum(`1${"0".repeat(299)}`);
-    assert.ok(finite !== null && Number.isFinite(finite));
+    const finite = Number.parseChineseNum(`1${"0".repeat(299)}`);
+    assert.ok(finite !== null && globalThis.Number.isFinite(finite));
     assert.equal(finite, 1e299);
   });
 
   it("returns null for empty / mixed / unknown inputs", () => {
-    assert.equal(parseChineseNum(""), null);
-    assert.equal(parseChineseNum("  "), null); // whitespace-only collapses to empty
-    assert.equal(parseChineseNum("第1章"), null); // mixed CJK + ASCII digit
-    assert.equal(parseChineseNum("一二三4"), null);
-    assert.equal(parseChineseNum("章"), null);
-    assert.equal(parseChineseNum("点五"), null);
-    assert.equal(parseChineseNum("1.5"), null);
+    assert.equal(Number.parseChineseNum(""), null);
+    assert.equal(Number.parseChineseNum("  "), null); // whitespace-only collapses to empty
+    assert.equal(Number.parseChineseNum("第1章"), null); // mixed CJK + ASCII digit
+    assert.equal(Number.parseChineseNum("一二三4"), null);
+    assert.equal(Number.parseChineseNum("章"), null);
+    assert.equal(Number.parseChineseNum("点五"), null);
+    assert.equal(Number.parseChineseNum("1.5"), null);
   });
 
   it("strips internal whitespace before parsing (legado stringToInt semantics)", () => {
-    assert.equal(parseChineseNum(" 一 千 "), 1000);
-    assert.equal(parseChineseNum("2 4"), 24);
+    assert.equal(Number.parseChineseNum(" 一 千 "), 1000);
+    assert.equal(Number.parseChineseNum("2 4"), 24);
   });
 });
 
 describe("tokenizeNatural (T-SS2)", () => {
   it("splits alternating ASCII-digit / non-digit chunks (digits are exactly 0-9)", () => {
-    assert.deepEqual(tokenizeNatural("2.txt"), ["2", ".txt"]);
-    assert.deepEqual(tokenizeNatural("10.txt"), ["10", ".txt"]);
-    assert.deepEqual(tokenizeNatural("第10话a2"), ["第", "10", "话a", "2"]);
-    assert.deepEqual(tokenizeNatural("abc"), ["abc"]);
-    assert.deepEqual(tokenizeNatural("007"), ["007"]);
-    assert.deepEqual(tokenizeNatural(""), []);
+    assert.deepEqual(Text.tokenizeNatural("2.txt"), ["2", ".txt"]);
+    assert.deepEqual(Text.tokenizeNatural("10.txt"), ["10", ".txt"]);
+    assert.deepEqual(Text.tokenizeNatural("第10话a2"), ["第", "10", "话a", "2"]);
+    assert.deepEqual(Text.tokenizeNatural("abc"), ["abc"]);
+    assert.deepEqual(Text.tokenizeNatural("007"), ["007"]);
+    assert.deepEqual(Text.tokenizeNatural(""), []);
   });
 
   it("orders numeric chunks by value (2.txt < 10.txt, natural fallback path)", () => {

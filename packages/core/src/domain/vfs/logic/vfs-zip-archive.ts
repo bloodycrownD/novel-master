@@ -20,7 +20,7 @@ const EOCD_MIN_BYTES = 22;
 const EOCD_MAX_COMMENT_BYTES = 0xffff;
 
 /** 校验深度：`"magic"` 只验魔数，`"complete"` 额外要求 EOCD 存在。 */
-export type ZipArchiveCheckDepth = "magic" | "complete";
+type ZipArchiveCheckDepth = "magic" | "complete";
 
 /**
  * 校验 ZIP 归档字节。

@@ -31,7 +31,7 @@ export type CheckpointFilePointer = {
  * 发生但消息未落库即崩溃）。**只报告不自动修**：只增不减哲学下泄漏可检测、
  * 误删不可恢复，方向性选择宁多不少。
  */
-export type OverExpectedRefRow = {
+type OverExpectedRefRow = {
   readonly entryId: number;
   readonly version: number;
   /** 当前库里的 ref_count。 */
@@ -41,7 +41,7 @@ export type OverExpectedRefRow = {
 };
 
 /** repairRefCounts 报告。 */
-export type RepairReport = {
+type RepairReport = {
   readonly rowsAdjusted: number;
   readonly rowsExamined: number;
   /** 期望值两类化后检出的偏高泄漏行（只报告，不自动修）。 */

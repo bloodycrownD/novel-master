@@ -2,13 +2,8 @@ import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type BuiltinToolContext,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
+import { createAgentRunner, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";

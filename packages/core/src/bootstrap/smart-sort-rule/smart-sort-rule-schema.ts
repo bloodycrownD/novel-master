@@ -7,7 +7,7 @@
 /** Canonical table: smart sort rules（单表无分组，spec D2）. */
 export const SMART_SORT_RULE_TABLE = "smart_sort_rule";
 /** Canonical index on rule priority order. */
-export const SMART_SORT_RULE_ORDER_INDEX = "idx_smart_sort_rule_order";
+const SMART_SORT_RULE_ORDER_INDEX = "idx_smart_sort_rule_order";
 
 /** Idempotent DDL for smart_sort_rule（spec Step 1 表结构 + D13 capture_kind）. */
 export const SMART_SORT_RULE_SCHEMA_STATEMENTS: readonly string[] = [

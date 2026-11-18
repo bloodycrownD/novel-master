@@ -16,7 +16,7 @@
  */
 
 /** 冻结速率快照：速率 + 采样当时的累计输出 token + 采样时刻。 */
-export interface StreamFinalRateSnapshot {
+interface StreamFinalRateSnapshot {
   /** 末值速率（token/秒）。 */
   readonly rate: number;
   /** 采样当时的累计输出 token（自检/调试用，不参与展示）。 */

@@ -4,8 +4,6 @@
  * @module domain/provider/model/model-thinking-params
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
-
 /** Anthropic Messages API thinking 字段。 */
 export interface AnthropicThinkingParams {
   readonly type: "enabled";
@@ -36,8 +34,3 @@ export type ModelThinkingParams =
     }
   | { readonly protocol: "openai"; readonly openai: OpenAiThinkingParams }
   | { readonly protocol: "gemini"; readonly gemini: GeminiThinkingParams };
-
-/** 返回思考参数的协议标签（若有）。 */
-export function thinkingProtocol(params: ModelThinkingParams | undefined): LlmProtocolKind | undefined {
-  return params?.protocol;
-}

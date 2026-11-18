@@ -18,7 +18,7 @@ import {
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
-import { InMemoryAgentSession } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 
 import { createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
 import { Result } from "../../src/errors/either.js";

@@ -24,7 +24,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { IntegrityRepairDetection, IntegrityRepairOperation } from "@/service/integrity-repair.js";
 
-export const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
+const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
 
 async function readSequenceBoundaries(conn: TdbcConnection): Promise<{ seq: number; needed: number }> {
   // 全新库在首次自增插入前 sqlite_sequence 尚未物化（没有 vfs_entry 行，

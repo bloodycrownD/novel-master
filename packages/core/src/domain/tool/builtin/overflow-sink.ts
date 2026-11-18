@@ -29,7 +29,7 @@ import { createLogger } from "@/infra/log/logger.js";
 const log = createLogger("tool.overflow-sink");
 
 /** 落盘子目录（会话工作区 VFS 内，子代理时为父会话工作区）。 */
-export const OVERFLOW_SINK_DIR = "/tmp";
+const OVERFLOW_SINK_DIR = "/tmp";
 
 /** `sinkOversizedOutput` 入参。 */
 export interface SinkOversizedInput {

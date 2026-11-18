@@ -411,7 +411,7 @@ describe("assembleWorkplaceDisplay", () => {
   });
 
   it("filename 档不得渲染 1970 假时间戳", async () => {
-    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `formatLocalMtime(0)`
+    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `DateTime.localDateTime(0)`
     // ⇒ 提示词里出现 createdAt="1970-01-01 08:00:00"。断言写成「不含 1970」而不是
     // 「等于某个具体时间」——后者会锁死夹具 mtime，脆且无额外价值。
     const ctx = getNovelMasterTestContext();

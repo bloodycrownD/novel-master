@@ -25,13 +25,3 @@ export interface SavedModel {
 export function savedModelDisplayName(model: SavedModel, providerDisplayName: string): string {
   return formatSavedModelDisplayName(providerDisplayName, model.modelName);
 }
-
-/** 构造带派生 displayName 视图的 saved model（map 层使用）。 */
-export type SavedModelView = SavedModel & { readonly displayName: string };
-
-export function toSavedModelView(model: SavedModel, providerDisplayName: string): SavedModelView {
-  return {
-    ...model,
-    displayName: savedModelDisplayName(model, providerDisplayName),
-  };
-}

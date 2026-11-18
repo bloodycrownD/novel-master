@@ -17,13 +17,13 @@ export interface SavedModelSamplingSettings {
 }
 
 /** 内部预算：不直接映射 HTTP 生成 body。 */
-export interface SavedModelInternalSettings {
+interface SavedModelInternalSettings {
   readonly contextWindowTokens: number;
   readonly tokenCounterMode: TokenizerOverride;
 }
 
 /** 生成参数：采样与思考强度档位。 */
-export interface SavedModelGenerationSettings {
+interface SavedModelGenerationSettings {
   readonly sampling: SavedModelSamplingSettings;
   readonly thinkingLevel: ThinkingLevel;
 }

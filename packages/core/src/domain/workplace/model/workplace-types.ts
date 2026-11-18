@@ -47,14 +47,14 @@ export interface WorkplaceFileRule {
 }
 
 /** RuleEngine DFS 单行：目录行。 */
-export type WorkplaceDirRuleRow = {
+type WorkplaceDirRuleRow = {
   readonly kind: "dir";
   readonly path: string;
   readonly ruleState: RuleState;
 };
 
 /** RuleEngine DFS 单行：文件行。 */
-export type WorkplaceFileRuleRow = {
+type WorkplaceFileRuleRow = {
   readonly kind: "file";
   readonly path: string;
   readonly inclusionMode: InclusionMode;

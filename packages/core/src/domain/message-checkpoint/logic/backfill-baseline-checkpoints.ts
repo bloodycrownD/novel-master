@@ -23,7 +23,7 @@ import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
  * `confirmedNoGap` 表示「本次调用后可确认会话无空窗」：无 live 文件时无法
  * 建点也无法验证（不算确认），调用方据此决定是否写 backfill 游标。
  */
-export interface BackfillBaselineResult {
+interface BackfillBaselineResult {
   readonly confirmedNoGap: boolean;
 }
 
@@ -56,7 +56,7 @@ export type BackfillOperationDeps = Pick<CheckpointRepoDeps, "entryRepo" | "chec
  * `gapMessageIds` 是需要补 baseline 快照的消息 id（seq 升序）。
  * `filePointers` 是同一份 live head 指针快照，写阶段每条 checkpoint 共用。
  */
-export interface BackfillScanResult {
+interface BackfillScanResult {
   /** 无 live 文件 → false（无法建点也无法验证，不算「确认」）。 */
   readonly confirmedNoGap: boolean;
   readonly gapMessageIds: ReadonlyArray<string>;

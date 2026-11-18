@@ -31,9 +31,10 @@
 import { z } from "zod";
 
 import { Encoding } from "@/common/encoding.js";
+import { Text } from "@/common/text.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { sliceUtf8BytePrefix, TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
+import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { sinkOversizedOutput, type OversizedSinkResult } from "./overflow-sink.js";
@@ -374,7 +375,7 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         }
         // 与 read/grep 同口径：字节预算内最大的完整码位前缀（不切半个字符），
         // 截断后缀由本工具的 Output truncated 文案自己拼。
-        const kept = sliceUtf8BytePrefix(text, TOOL_OUTPUT_MAX_BYTES);
+        const kept = Text.sliceUtf8Bytes(text, TOOL_OUTPUT_MAX_BYTES);
         return Result.ok({
           url: normalizedUrl,
           finalUrl,

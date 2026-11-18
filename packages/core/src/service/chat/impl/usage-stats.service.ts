@@ -8,6 +8,7 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { DateTime } from "@/common/datetime.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -99,11 +100,6 @@ function timeRangeSql(fromMs: number | null, toMs: number | null): string {
   return "AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}";
 }
 
-/** 以本地日为基点加天数（`days` 可为负）。 */
-function addLocalDays(base: Date, days: number): Date {
-  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
-}
-
 /** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30；`label` 用于报错指认字段）。 */
 function parseDayLocalDate(dayLocalDate: string, label = "dayLocalDate"): Result<{ year: number; month: number; day: number }, AppError> {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
@@ -187,9 +183,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const buckets: UsageStatsBucket[] = [];
     const from = parseDayLocalDate(filter.range.fromDay, "range.fromDay");
     if (!from.ok) return Result.err(from.error);
-    for (let cursor = new Date(from.value.year, from.value.month, from.value.day); ; cursor = addLocalDays(cursor, 1)) {
-      // 本地日期格式化为 `YYYY-MM-DD`（与 strftime 的 day_key 同构，年份补零 4 位防 <1000 年错位死循环）。
-      const dayKey = `${String(cursor.getFullYear()).padStart(4, "0")}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    for (let cursor = new Date(from.value.year, from.value.month, from.value.day); ; cursor = DateTime.addLocalDays(cursor, 1)) {
+      // 本地日期键与 strftime 的 day_key 同构（年份补零 4 位防 <1000 年错位死循环）。
+      const dayKey = DateTime.localDayKey(cursor);
       buckets.push(this.toBucket(cursor.getTime(), rowByDay.get(dayKey) ?? ZERO_AGG_ROW));
       if (dayKey === filter.range.toDay) {
         return Result.ok(buckets);
@@ -422,7 +418,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     }
     return Result.ok({
       fromMs: fromStart.getTime(),
-      toMs: addLocalDays(toStart, 1).getTime(),
+      toMs: DateTime.addLocalDays(toStart, 1).getTime(),
     });
   }
 

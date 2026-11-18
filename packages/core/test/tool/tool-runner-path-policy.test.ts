@@ -11,9 +11,9 @@ import {
   extractInputPaths,
   findDisallowedPath,
   isPathAllowed,
-  pathStartsWithPrefix,
   readAllowedPaths,
 } from "../../src/domain/tool/logic/tool-path-policy.js";
+import { Path } from "../../src/common/path.js";
 
 /**
  * A-14 / T-SC9：agent 试图写 allowedPaths 之外的路径，必须被 ToolRunner 拒掉。
@@ -22,25 +22,25 @@ import {
  */
 
 describe("A-14 tool path policy", () => {
-  describe("pathStartsWithPrefix / isPathAllowed", () => {
+  describe("Path.hasPrefix / isPathAllowed", () => {
     it("空前缀与根前缀恒为通过", () => {
-      assert.equal(pathStartsWithPrefix("any/path", ""), true);
-      assert.equal(pathStartsWithPrefix("any/path", "/"), true);
-      assert.equal(pathStartsWithPrefix("any/path", "\\"), true);
+      assert.equal(Path.hasPrefix("any/path", ""), true);
+      assert.equal(Path.hasPrefix("any/path", "/"), true);
+      assert.equal(Path.hasPrefix("any/path", "\\"), true);
     });
 
     it("精确匹配与子路径匹配", () => {
-      assert.equal(pathStartsWithPrefix("src/a.ts", "src"), true);
-      assert.equal(pathStartsWithPrefix("src/a.ts", "src/"), true);
-      assert.equal(pathStartsWithPrefix("src", "src"), true);
+      assert.equal(Path.hasPrefix("src/a.ts", "src"), true);
+      assert.equal(Path.hasPrefix("src/a.ts", "src/"), true);
+      assert.equal(Path.hasPrefix("src", "src"), true);
       // 不能只看字符串前缀，得是路径层级前缀，避免 src-foo 被放行
-      assert.equal(pathStartsWithPrefix("src-foo/a.ts", "src"), false);
-      assert.equal(pathStartsWithPrefix("source/a.ts", "src"), false);
+      assert.equal(Path.hasPrefix("src-foo/a.ts", "src"), false);
+      assert.equal(Path.hasPrefix("source/a.ts", "src"), false);
     });
 
     it("Windows 风格反斜杠分隔符同样识别", () => {
-      assert.equal(pathStartsWithPrefix("src\\a.ts", "src"), true);
-      assert.equal(pathStartsWithPrefix("src\\a.ts", "src\\"), true);
+      assert.equal(Path.hasPrefix("src\\a.ts", "src"), true);
+      assert.equal(Path.hasPrefix("src\\a.ts", "src\\"), true);
     });
 
     it("allowedPaths undefined 表示不限制", () => {

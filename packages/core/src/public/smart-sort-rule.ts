@@ -5,7 +5,6 @@
  */
 
 export {
-  BUILTIN_SMART_SORT_RULE_ID_PREFIX,
   isBuiltinSmartSortRuleId,
   SMART_SORT_CAPTURE_KINDS,
 } from "../domain/smart-sort-rule/model/smart-sort-rule.js";
@@ -13,45 +12,30 @@ export type {
   SmartSortRule,
   SmartSortCaptureKind,
 } from "../domain/smart-sort-rule/model/smart-sort-rule.js";
-export {
-  createSmartSortRuleSchema,
-  updateSmartSortRuleSchema,
-} from "../domain/smart-sort-rule/model/smart-sort-rule.schema.js";
 export type {
   CreateSmartSortRuleInput,
   UpdateSmartSortRuleInput,
 } from "../domain/smart-sort-rule/model/smart-sort-rule.schema.js";
 export {
-  SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
-  smartSortRuleBundleDocumentSchema,
   encodeSmartSortRuleBundle,
   decodeSmartSortRuleBundle,
 } from "../domain/smart-sort-rule/model/smart-sort-rule-io.js";
-export type {
-  SmartSortRuleBundleDocument,
-  SmartSortRuleBundleRule,
-} from "../domain/smart-sort-rule/model/smart-sort-rule-io.js";
+export type { SmartSortRuleBundleDocument } from "../domain/smart-sort-rule/model/smart-sort-rule-io.js";
 export {
   compileSmartSortRule,
   validateSmartSortRuleDraft,
 } from "../domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
-export type { SmartSortRuleValidationFields } from "../domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
 export {
   matchSmartSortPattern,
 } from "../domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
 export type {
   MatchSmartSortPatternResult,
-  MatchSmartSortPatternOk,
-  MatchSmartSortPatternErr,
   SmartSortPatternMatch,
 } from "../domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
 export {
   splitSmartSortHighlightSegments,
 } from "../domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
-export type {
-  SmartSortHighlightSegment,
-  SmartSortHighlightMatchInput,
-} from "../domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
+export type { SmartSortHighlightMatchInput } from "../domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
 export {
   formatPatternInput,
   parsePatternInput,

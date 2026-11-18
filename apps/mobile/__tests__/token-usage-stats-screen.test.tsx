@@ -189,8 +189,8 @@ import {TokenUsageStatsScreen} from '@/screens/stack/TokenUsageStatsScreen';
 import {
   isCustomRangeValid,
   localDayKeyOffset,
-  toLocalDayKey,
 } from '@/screens/stack/token-usage/format';
+import {DateTime} from '@novel-master/core/common';
 import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
 import {PieChart} from '@/components/charts/PieChart';
 import {ProfileTabScreen} from '@/screens/tabs/ProfileTabScreen';
@@ -302,7 +302,7 @@ const SAMPLE_REQUEST_ROWS = [
 
 /** 当天（运行时）与 N 天前偏移的本地日 key：与实现同用日历加法。 */
 function todayKey(): string {
-  return toLocalDayKey(Date.now());
+  return DateTime.localDayKey(Date.now());
 }
 function dayKeyOffset(offsetDays: number): string {
   return localDayKeyOffset(new Date(), offsetDays);
@@ -1089,8 +1089,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     // 自定义区间由 sheet 结果产日期字符串（本地日 key），不再有毫秒换算。
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
       range: {
-        fromDay: toLocalDayKey(dayMs(year, month, 3)),
-        toDay: toLocalDayKey(dayMs(year, month, 10)),
+        fromDay: DateTime.localDayKey(dayMs(year, month, 3)),
+        toDay: DateTime.localDayKey(dayMs(year, month, 10)),
       },
       model: undefined,
     });
@@ -1098,7 +1098,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
 
   it('自定义区间结束日跨 DST 边界：日期字符串按挂钟日产出（cross/B-2 / T-M6）', async () => {
     // 照 desktop test 的做法：运行时切纽约时区再断言；TZ 不可控则跳过
-    // （toLocalDayKey 直接读本地年月日，跨 DST 天然正确；用例锢定
+    // （DateTime.localDayKey 直接读本地年月日，跨 DST 天然正确；用例锢定
     // 日期字符串口径不回退到毫秒换算）。jest 没有 node:test 的
     // t.skip，这里以探测失败即返回兼底，避免假失败。
     const prevTz = process.env.TZ;

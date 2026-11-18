@@ -21,7 +21,7 @@ export async function createVfsFile(vfs: VfsService, path: string, content = "")
 /**
  * 新建目录节点，先去掉尾斜杠。
  *
- * 不复用 `normalizeDirPath`：后者保留根 `/`，这里对 `/` 会得到空串——两端既有
+ * 不复用 `Path.stripTrailingSlash`：后者保留根 `/`，这里对 `/` 会得到空串——两端既有
  * 行为如此，改掉会让根级 mkdir 从「报错」变成「在根上操作」，保持原样。
  */
 // nm-style: keep-public — 同上：双端共享原语，经各端 service 模块转出给文件管理器。

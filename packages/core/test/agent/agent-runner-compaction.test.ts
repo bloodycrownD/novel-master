@@ -55,10 +55,11 @@ mock.module("../../src/service/compaction-conditions/run-compaction.js", {
   },
 });
 
-const {
-  createAgentRunner,
-  InMemoryAgentSession,
-} = await import("@novel-master/core/agent");
+const { createAgentRunner } = await import("@novel-master/core/agent");
+// InMemoryAgentSession 只服务测试，已不在 core/agent 公开面；直接从源模块取（与其余 agent-runner 用例同款）。
+const { InMemoryAgentSession } = await import(
+  "../../src/domain/agent/session/impl/in-memory-agent-session.js"
+);
 const { textBlocks } = await import("@novel-master/core/chat");
 const { SimpleEventBus } = await import("@novel-master/core/events");
 const { registerBuiltinTools, ToolRegistry } = await import("@novel-master/core");

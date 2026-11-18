@@ -15,7 +15,7 @@ import type { SmartSortCaptureKind, SmartSortRule } from "../model/smart-sort-ru
 import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.js";
 
 /** Draft fields accepted by {@link validateSmartSortRuleDraft}. */
-export interface SmartSortRuleValidationFields {
+interface SmartSortRuleValidationFields {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;

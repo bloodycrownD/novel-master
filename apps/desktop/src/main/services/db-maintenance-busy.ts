@@ -18,4 +18,4 @@
 
 import {createBusyFlag} from "@novel-master/core/common";
 
-export const maintenanceBusy = createBusyFlag();
+export const maintenanceBusy: ReturnType<typeof createBusyFlag> = createBusyFlag();

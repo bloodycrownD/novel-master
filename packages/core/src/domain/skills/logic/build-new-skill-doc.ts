@@ -23,7 +23,7 @@
  *
  * 两者产出的 front matter 完全一致（同一份转义实现），只有正文不同。
  */
-export type SkillDocBodyVariant = "desktop" | "mobile";
+type SkillDocBodyVariant = "desktop" | "mobile";
 
 /** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
 export function buildNewSkillDoc(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {

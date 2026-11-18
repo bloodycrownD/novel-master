@@ -12,7 +12,7 @@ import { renderMacro } from "@/infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
 
 /** dynamic 宏展开上下文。 */
-export interface DynamicMacroContext {
+interface DynamicMacroContext {
   readonly now?: Date;
   readonly workplace?: WorkplaceService;
   /**

@@ -14,7 +14,7 @@
  *
  * 决策 4：切 WITHOUT ROWID 后生产代码里的 deleteUnreferencedUnderScope 已改用
  * `(entry_id, version) IN (...)` 复合 PK 寻址，不再依赖 rowid。 */
-export const VFS_REVISION_TABLE_DDL = `
+const VFS_REVISION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_revision (
   entry_id INTEGER NOT NULL,
   version INTEGER NOT NULL CHECK (version >= 1),
@@ -26,13 +26,8 @@ CREATE TABLE IF NOT EXISTS vfs_revision (
   CHECK (NOT (status = 'active' AND content_hash IS NULL))
 ) WITHOUT ROWID`.trim();
 
-/** entry_id 查询索引，用于 revision GC / restore / scope 扫描。 */
-export const VFS_REVISION_ENTRY_INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS idx_vfs_revision_entry
-  ON vfs_revision(entry_id)`.trim();
-
 /** revision INSERT 时，对非 NULL content_hash 的 blob ref_count + 1。 */
-export const VFS_REVISION_INSERT_TRIGGER_DDL = `
+const VFS_REVISION_INSERT_TRIGGER_DDL = `
 CREATE TRIGGER IF NOT EXISTS trg_revision_insert_inc_blob_ref
 AFTER INSERT ON vfs_revision
 WHEN NEW.content_hash IS NOT NULL
@@ -54,7 +49,7 @@ END`.trim();
  *
  * 方向是**保守**的（宁可留垃圾不可丢数据）：entry 还引用着就不删。
  */
-export const VFS_REVISION_DELETE_TRIGGER_DDL = `
+const VFS_REVISION_DELETE_TRIGGER_DDL = `
 CREATE TRIGGER trg_revision_delete_dec_blob_ref_v2
 AFTER DELETE ON vfs_revision
 WHEN OLD.content_hash IS NOT NULL
@@ -75,7 +70,7 @@ END`.trim();
  * 同款兜底」的推理不成立。`WHEN OLD.content_hash IS NOT NEW.content_hash`
  * 这一句本身就是逐字节同款缺陷（`IS NOT` 与 `!=` 等价），一并修掉。
  */
-export const VFS_REVISION_UPDATE_TRIGGER_DDL = `
+const VFS_REVISION_UPDATE_TRIGGER_DDL = `
 CREATE TRIGGER trg_revision_update_transfer_blob_ref_v2
 AFTER UPDATE OF content_hash ON vfs_revision
 WHEN OLD.content_hash IS NOT NEW.content_hash
@@ -110,7 +105,7 @@ export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT = "NOT EXISTS (SELECT 1 FROM v
  * v19 注记）：canonical DDL 只在**慢路径**重放，而 `bootVersion >= 18` 的库在
  * 快路径直接 return —— 不 bump 的话存量库永远补不上这个索引。
  */
-export const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
+const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
   ON vfs_entry(content_hash) WHERE content_hash IS NOT NULL`.trim();
 
@@ -149,7 +144,7 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = ["trg_revision_delete_dec_blob_r
  * 但 mobile 的 op-sqlite `execute` 对尾分号的容忍度**零用例覆盖** ⇒ 按全仓
  * 惯例去掉，零行为变化。
  */
-export const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
+const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
   ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
   ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map((name) => `DROP TRIGGER IF EXISTS ${name}`),
 ];

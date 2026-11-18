@@ -8,7 +8,6 @@
  */
 
 import { Guards } from "@/common/guards.js";
-import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { openAiStreamAccumulatorsToBlocks, openAiStreamAccumulatorsToPartialBlocks, openAiStreamDeltaToEvents } from "./openai-content-mapper.js";
 import { feedSseJsonEvents } from "./sse-json-events.js";
@@ -22,7 +21,7 @@ type ToolCallAccumulator = {
 };
 
 /** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
-export type OpenAiSseParserState = SseParseDiagnostics & {
+type OpenAiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -37,7 +36,7 @@ export type OpenAiSseParserOptions = {
   readonly onStream?: (event: LlmStreamEvent) => void;
 };
 
-export type OpenAiSseParser = {
+type OpenAiSseParser = {
   readonly state: OpenAiSseParserState;
   readonly feed: (chunk: string) => void;
   readonly finish: () => SseFinishResult;
@@ -101,21 +100,4 @@ export function createOpenAiSseParser(options: OpenAiSseParserOptions = {}): Ope
   };
 
   return { state, feed, finish, finishPartial };
-}
-
-/** Read a fetch `ReadableStream` body and parse OpenAI SSE incrementally. */
-export async function parseOpenAiSseStream(body: ReadableStream<Uint8Array>, onStream?: (event: LlmStreamEvent) => void): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const parser = createOpenAiSseParser({ onStream });
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    parser.feed(decoder.decode(value, { stream: true }));
-  }
-
-  return parser.finish();
 }

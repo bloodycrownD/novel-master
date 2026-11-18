@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { refToEnvVar } from "../../../src/infra/sksp/logic/ref-to-env.js";
-import { EnvSecretStore } from "../../../src/infra/sksp/impl/env-secret-store.js";
+import { createEnvSecretStore } from "../../../src/infra/sksp/impl/env-secret-store.js";
 
 describe("refToEnvVar", () => {
   it("maps provider apiKey refs", () => {
@@ -30,27 +30,27 @@ describe("EnvSecretStore", () => {
 
   it("returns env value when set", async () => {
     process.env[key] = "sk-test";
-    const store = new EnvSecretStore();
+    const store = createEnvSecretStore();
     assert.equal(await store.get("provider/openai/apiKey"), "sk-test");
     assert.equal(await store.has("provider/openai/apiKey"), true);
   });
 
   it("returns null when unset", async () => {
-    const store = new EnvSecretStore();
+    const store = createEnvSecretStore();
     assert.equal(await store.get("provider/openai/apiKey"), null);
     assert.equal(await store.has("provider/openai/apiKey"), false);
   });
 
   it("treats empty string as unset", async () => {
     process.env[key] = "";
-    const store = new EnvSecretStore();
+    const store = createEnvSecretStore();
     assert.equal(await store.get("provider/openai/apiKey"), null);
     assert.equal(await store.has("provider/openai/apiKey"), false);
   });
 
   it("treats whitespace-only as unset", async () => {
     process.env[key] = "   ";
-    const store = new EnvSecretStore();
+    const store = createEnvSecretStore();
     assert.equal(await store.get("provider/openai/apiKey"), null);
     assert.equal(await store.has("provider/openai/apiKey"), false);
   });

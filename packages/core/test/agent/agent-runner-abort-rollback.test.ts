@@ -12,13 +12,8 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import {
-  ChatAgentSession,
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
+import { ChatAgentSession, createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";

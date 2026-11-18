@@ -52,7 +52,6 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
-  remapPathUnderDir: jest.fn(),
   renameVfsDirectory: jest.fn(),
   renameVfsFile: jest.fn(),
   sessionCreateVfsDirectory: jest.fn(),

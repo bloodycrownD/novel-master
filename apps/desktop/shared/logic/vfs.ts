@@ -15,7 +15,6 @@ import type { VfsScope } from "@novel-master/core/vfs";
 import { coreT } from "./core-i18n.js";
 
 export type { VfsScope } from "@novel-master/core/vfs";
-export type { VfsEntryNameValidation } from "@novel-master/core/vfs";
 
 export function formatVfsErrorForUser(error: unknown, scope?: VfsScope): string {
   return coreT(vfsUserMessage(error, scope));

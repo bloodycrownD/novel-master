@@ -18,7 +18,7 @@ export type { TdbcConnection, TdbcDriver, TdbcErrorCode, SqlValue, Row, ExecuteR
 /**
  * 启动与迁移：Novel Master 运行时基础建表。
  */
-export { bootstrapNovelMaster, NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "./bootstrap/novel-master-bootstrap.js";
+export { bootstrapNovelMaster } from "./bootstrap/novel-master-bootstrap.js";
 
 /**
  * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
@@ -43,7 +43,6 @@ export { runDeferredFileCacheGc } from "./domain/session-kkv/logic/deferred-file
 export {
   DB_BACKUP_PROVIDER_TABLES,
   dumpProviderTableSnapshot,
-  scrubProviderTables,
   scrubProviderTablesInDatabase,
   restoreProviderTableSnapshot,
   validateProviderTableSnapshot,
@@ -61,7 +60,7 @@ export type { ProviderBackupTableName, ProviderTableSnapshot } from "./infra/db-
  * ——真实库前置确认门均已过）。pack 两表与 `pack-codec` 读路径是现行数据
  * 形态，继续由 content store 消费。
  */
-export { createDbMaintenanceService, runStartupMaintenanceOnce } from "./infra/db-maintenance/index.js";
+export { createDbMaintenanceService } from "./infra/db-maintenance/index.js";
 export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "./infra/db-maintenance/index.js";
 
 /**
@@ -77,7 +76,6 @@ export {
   buildLease,
   renewLease,
   DEFAULT_LEASE_SECONDS,
-  ensureTrailingSlash,
   statusKey,
   snapshotKey,
 } from "./infra/cloud-sync/index.js";
@@ -139,13 +137,10 @@ export {
   FILE_OPEN_TOOL_NAMES,
   MUTATING_FILE_TOOL_NAMES,
   isMutatingFileToolName,
-  MUTATING_VFS_TOOL_NAMES,
-  isMutatingVfsToolName,
 } from "./domain/tool/builtin/vfs-tools.js";
-export { registerBuiltinTools, registerVfsTools } from "./domain/tool/builtin/register-builtin-tools.js";
-export { isMutatingFsCommand } from "./domain/tool/logic/fs-command.js";
+export { registerBuiltinTools } from "./domain/tool/builtin/register-builtin-tools.js";
 export { toolUseMutatesWorkspace, anyToolUseMutatesWorkspace } from "./domain/tool/logic/tool-use-mutates-workspace.js";
-export { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_LINE_LENGTH, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_MATCHES } from "./domain/tool/logic/tool-output-limits.js";
+export { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_MATCHES } from "./domain/tool/logic/tool-output-limits.js";
 export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
 export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/builtin-tool-context.js";
 /**

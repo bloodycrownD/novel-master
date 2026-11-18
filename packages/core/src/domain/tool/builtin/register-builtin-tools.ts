@@ -38,10 +38,3 @@ export function registerBuiltinTools(registry: ToolRegistry<BuiltinToolContext>)
   registry.register(curlTool);
   registry.register(searchTool);
 }
-
-/**
- * @deprecated Use {@link registerBuiltinTools}.
- */
-export function registerVfsTools(registry: ToolRegistry<BuiltinToolContext>): void {
-  registerBuiltinTools(registry);
-}

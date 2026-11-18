@@ -5,6 +5,7 @@
  */
 
 import { diffArrays } from "diff";
+import { Text } from "@/common/text.js";
 import { buildUserVfsActionXml } from "./user-vfs-action-xml.js";
 
 export { buildUserVfsActionXml };
@@ -16,13 +17,13 @@ export interface UserVfsSaveMappingOptions {
 }
 
 /** edit hunk 描述（与 tool_use.input 及 action XML 同源）。 */
-export interface UserVfsEditHunk {
+interface UserVfsEditHunk {
   readonly index: number;
   readonly oldString: string;
   readonly newString: string;
 }
 
-export type UserVfsSaveMappingResult =
+type UserVfsSaveMappingResult =
   | { readonly kind: "noop" }
   | {
       readonly kind: "write";
@@ -44,17 +45,6 @@ type LineChangeRegion = {
   readonly newEnd: number;
 };
 
-function splitLines(text: string): string[] {
-  if (text === "") {
-    return [];
-  }
-  return text.split("\n");
-}
-
-function joinLines(lines: readonly string[]): string {
-  return lines.join("\n");
-}
-
 /**
  * 将用户保存映射为 `edit` 多 hunk 或 `write` fallback / no-op。
  *
@@ -70,8 +60,8 @@ export function mapUserSaveToToolUses(baseline: string | null, _saved: string, p
     return { kind: "write", path, content, reason: "new-file" };
   }
 
-  const baselineLines = splitLines(baseline);
-  const savedLines = splitLines(content);
+  const baselineLines = Text.splitLines(baseline);
+  const savedLines = Text.splitLines(content);
   // 行级 diff：基于 Myers 算法（`diff` 包的 `diffArrays`）把相邻 added/removed
   // （中间没有公共行）归并成一个变更块，最终转换成闭区间表示。
   // 纯插入侧 oldStart > oldEnd、纯删除侧 newStart > newEnd，由下方对称扩展处理。
@@ -130,7 +120,7 @@ export function mapUserSaveToToolUses(baseline: string | null, _saved: string, p
       const newStart = Math.max(0, region.newStart - radius);
       const newEnd = Math.min(savedLines.length - 1, region.newEnd + radius);
       if (oldStart > oldEnd || newStart > newEnd) continue;
-      const oldString = joinLines(baselineLines.slice(oldStart, oldEnd + 1));
+      const oldString = Text.joinLines(baselineLines.slice(oldStart, oldEnd + 1));
       if (oldString === "") continue;
       let occurrences = 0;
       for (let pos = 0; ; ) {
@@ -140,7 +130,7 @@ export function mapUserSaveToToolUses(baseline: string | null, _saved: string, p
         pos = hit + oldString.length;
       }
       if (occurrences !== 1) continue;
-      anchor = { oldString, newString: joinLines(savedLines.slice(newStart, newEnd + 1)) };
+      anchor = { oldString, newString: Text.joinLines(savedLines.slice(newStart, newEnd + 1)) };
       break;
     }
     if (anchor == null || anchor.oldString === baseline) {

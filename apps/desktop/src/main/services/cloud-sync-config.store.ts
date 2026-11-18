@@ -4,9 +4,9 @@
  * @module services/cloud-sync-config.store
  */
 import { randomUUID } from "node:crypto";
-import { ensureTrailingSlash, type CloudSyncConfigInput } from "@novel-master/core";
+import type { CloudSyncConfigInput } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
-import { Kkv } from "@novel-master/core/common";
+import { Kkv, Path } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
@@ -181,7 +181,7 @@ export function createCloudSyncConfigStore(kkv: KkvService, secretStore: SecretS
 
       const deviceId = existing.value.deviceId.trim().length > 0 ? existing.value.deviceId : randomUUID();
 
-      const normalizedPrefix = ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
+      const normalizedPrefix = Path.ensureTrailingSlash(input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX);
 
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENDPOINT, input.endpoint.trim()),

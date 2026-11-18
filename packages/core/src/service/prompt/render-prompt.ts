@@ -27,7 +27,7 @@ import { Result } from "../../errors/either.js";
 export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/model/prompt-render-context.js";
 
 /** One segment from the single assembly traversal (preview / serialize / preview turns). */
-export interface PromptAssemblySegment {
+interface PromptAssemblySegment {
   readonly id: string;
   readonly role: string;
   readonly title: string;
@@ -40,7 +40,7 @@ export interface PromptAssemblySegment {
 }
 
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
-export interface PromptPreviewSegment {
+interface PromptPreviewSegment {
   readonly id: string;
   readonly role: string;
   readonly title: string;
@@ -297,10 +297,10 @@ async function formatPromptLlmInputForCliFromLayout(layout: AgentPromptLayout, c
 // ==== Preview turns（显示层口径：行号剥离只发生在本区段，wire 成员不得引用） ====
 
 /** 工具组卡状态：`ok` 成功 / `error` 失败（显式 `ok:false` 或 legacy `Error:` 前缀）/ `lost` 悬挂未回结果。 */
-export type PromptToolGroupStatus = "ok" | "error" | "lost";
+type PromptToolGroupStatus = "ok" | "error" | "lost";
 
 /** 工具组卡的结果格数据；`null` 表示悬挂 use（丢失占位，槽位保留）。 */
-export interface PromptToolGroupResultData {
+interface PromptToolGroupResultData {
   readonly toolUseId: string;
   /** `resolveToolResultOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
   readonly ok: boolean;
@@ -344,7 +344,10 @@ export interface PromptTextCardData {
   readonly body: string;
 }
 
-/** workplace 单文件格：块内正文（**cards 已剥行号**）+ 展示档（快照条目原值）。 */
+/**
+ * nm-style: keep-public — desktop IPC handler 经 inline `import("@novel-master/core/prompt")` 类型消费；find-fake-exports 不统计 ImportTypeNode。
+ * workplace 单文件格：块内正文（**cards 已剥行号**）+ 展示档（快照条目原值）。
+ */
 export interface PromptWorkplaceFileCardData {
   /** VFS 逻辑路径（规则快照条目原值）。 */
   readonly path: string;

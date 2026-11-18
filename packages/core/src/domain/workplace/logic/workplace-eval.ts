@@ -6,7 +6,8 @@
 
 import type { DisplayState, FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule } from "../model/workplace-types.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "./default-dir-rule.js";
-import { basenameOf } from "@/domain/vfs/logic/basename.js";
+import { Path } from "@/common/path.js";
+import { Number } from "@/common/number.js";
 import { compareSmartBasenames, extractSortKey, type CompiledSmartSortRule, type SmartSortKeyCache } from "./smart-sort.js";
 
 /** File metadata used for sorting within a directory. */
@@ -27,20 +28,6 @@ export interface SortDirPathsOptions {
   readonly smartRules?: readonly CompiledSmartSortRule[];
   /** Directory path → mtime; when omitted `created`/`updated` degrade to name order (D7). */
   readonly dirMtimeByPath?: ReadonlyMap<string, number>;
-}
-
-/**
- * Indices in a sorted auto-file list that belong to the head/tail priority set.
- */
-export function computeHeadTailIndices(totalCount: number, head: number, tail: number): Set<number> {
-  const indices = new Set<number>();
-  for (let i = 0; i < head && i < totalCount; i++) {
-    indices.add(i);
-  }
-  for (let i = 0; i < tail && i < totalCount; i++) {
-    indices.add(totalCount - 1 - i);
-  }
-  return indices;
 }
 
 function compareStrings(a: string, b: string, order: SortOrder): number {
@@ -72,18 +59,18 @@ export function sortFilesForDir(files: readonly WorkplaceFileSortMeta[], dirRule
   const sortOrder: SortOrder = dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(files.map((f) => basenameOf(f.logicalPath)), opts?.smartRules ?? []);
+    smartCache = decorateSmartCache(files.map((f) => Path.basename(f.logicalPath)), opts?.smartRules ?? []);
   }
   const sorted = [...files];
   sorted.sort((a, b) => {
     switch (sortField) {
       case "name":
-        return compareStrings(basenameOf(a.logicalPath), basenameOf(b.logicalPath), sortOrder);
+        return compareStrings(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder);
       case "created":
       case "updated":
         return compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
       case "smart":
-        return compareSmartBasenames(basenameOf(a.logicalPath), basenameOf(b.logicalPath), sortOrder, smartCache);
+        return compareSmartBasenames(Path.basename(a.logicalPath), Path.basename(b.logicalPath), sortOrder, smartCache);
     }
   });
   return sorted;
@@ -105,7 +92,7 @@ export function evaluateFileDisplay(params: { readonly inclusion: InclusionMode;
   const head = params.dirRule?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount;
   const tail = params.dirRule?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount;
   const fill: FillPolicy = params.dirRule?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
-  const priority = computeHeadTailIndices(params.autoFileCount, head, tail);
+  const priority = Number.headTailIndices(params.autoFileCount, head, tail);
   if (priority.has(params.indexInSortedAutoFiles)) {
     return "full";
   }
@@ -141,7 +128,7 @@ export function sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceD
   const sortField: SortField = parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(paths.map((p) => basenameOf(p)), opts?.smartRules ?? []);
+    smartCache = decorateSmartCache(paths.map((p) => Path.basename(p)), opts?.smartRules ?? []);
   }
   const sorted = [...paths];
   sorted.sort((a, b) => {
@@ -155,15 +142,15 @@ export function sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceD
           cmp = compareNumbers(mtimeA, mtimeB, sortOrder);
         } else {
           // 缺 mtime（缺省 map / 孤儿路径）或 mtime 相等 → basename 字典序（D7 退化分支）
-          cmp = compareStrings(basenameOf(a), basenameOf(b), sortOrder);
+          cmp = compareStrings(Path.basename(a), Path.basename(b), sortOrder);
         }
         break;
       }
       case "smart":
-        cmp = compareSmartBasenames(basenameOf(a), basenameOf(b), sortOrder, smartCache);
+        cmp = compareSmartBasenames(Path.basename(a), Path.basename(b), sortOrder, smartCache);
         break;
       default:
-        cmp = compareStrings(basenameOf(a), basenameOf(b), sortOrder);
+        cmp = compareStrings(Path.basename(a), Path.basename(b), sortOrder);
     }
     if (cmp !== 0) {
       return cmp;

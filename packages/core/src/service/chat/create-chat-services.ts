@@ -23,7 +23,7 @@ import type { MessageService } from "./message.port.js";
 import type { UsageStatsService } from "./usage-stats.port.js";
 
 /** Shared chat services wired from one connection. */
-export interface ChatServiceBundle {
+interface ChatServiceBundle {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;

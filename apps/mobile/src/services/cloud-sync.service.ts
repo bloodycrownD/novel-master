@@ -3,7 +3,8 @@
  *
  * @module services/cloud-sync.service
  */
-import {CloudSyncCoordinator, DatabaseReplacedError, ensureTrailingSlash, parseCloudSyncStatus, statusKey} from '@novel-master/core';
+import {CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey} from '@novel-master/core';
+import {Path} from '@novel-master/core/common';
 import {ABORT_KEY, createAbortError, createAbortScope, isAbortLikeError} from '@novel-master/core/abort';
 import {AppError, isAppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
@@ -128,7 +129,7 @@ async function createCoordinator(runtime: MobileNovelMasterRuntime, s3Config?: S
     },
   });
   const storage = progress != null ? withCloudSyncStorageProgress(baseStorage, progress) : baseStorage;
-  const pathPrefix = ensureTrailingSlash(publicConfig.value.pathPrefix);
+  const pathPrefix = Path.ensureTrailingSlash(publicConfig.value.pathPrefix);
   const stamp = Date.now();
   const exportTempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/cloud-sync-export-${stamp}.nmbackup`;
   const importTempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/cloud-sync-import-${stamp}.nmbackup`;
@@ -236,7 +237,7 @@ export async function testCloudSyncConnection(runtime: MobileNovelMasterRuntime,
   const client = createRnS3Client(s3Config.value);
   const publicConfig = await getCloudSyncConfig(runtime);
   if (!publicConfig.ok) return Result.err(publicConfig.error);
-  const pathPrefix = ensureTrailingSlash(input?.pathPrefix?.trim() || publicConfig.value.pathPrefix);
+  const pathPrefix = Path.ensureTrailingSlash(input?.pathPrefix?.trim() || publicConfig.value.pathPrefix);
 
   const progress = createCloudSyncProgress('test');
   progress.step('start', {bucket: s3Config.value.bucket, prefix: pathPrefix});

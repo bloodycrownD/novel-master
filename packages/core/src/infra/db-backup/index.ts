@@ -11,7 +11,6 @@ export {
 } from "./provider-tables.js";
 export {
   dumpProviderTableSnapshot,
-  scrubProviderTables,
   scrubProviderTablesInDatabase,
   restoreProviderTableSnapshot,
 } from "./provider-table-snapshot.js";

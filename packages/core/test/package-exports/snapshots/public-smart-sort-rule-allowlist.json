@@ -1,9 +1,6 @@
 [
-  "BUILTIN_SMART_SORT_RULE_ID_PREFIX",
   "SMART_SORT_CAPTURE_KINDS",
-  "SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION",
   "compileSmartSortRule",
-  "createSmartSortRuleSchema",
   "createSmartSortRuleService",
   "decodeSmartSortRuleBundle",
   "encodeSmartSortRuleBundle",
@@ -12,8 +9,6 @@
   "isBuiltinSmartSortRuleId",
   "matchSmartSortPattern",
   "parsePatternInput",
-  "smartSortRuleBundleDocumentSchema",
   "splitSmartSortHighlightSegments",
-  "updateSmartSortRuleSchema",
   "validateSmartSortRuleDraft"
 ]

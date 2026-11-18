@@ -9,12 +9,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  open,
-  SCHEMA_BOOT_VERSION,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
+import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 import { textBlocks } from "@novel-master/core/chat";
 import type { Row } from "../../src/infra/tdbc/types.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";

@@ -1,34 +1,32 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { Text } from "../../src/common/text.js";
 import {
-  countOccurrences,
-  longestCommonSubstring,
   MAX_LCS_SNIPPET_CHARS,
   MIN_LCS_LENGTH,
-  truncateLcsSnippet,
 } from "../../src/domain/vfs/logic/longest-common-substring.js";
 
 describe("longestCommonSubstring", () => {
   it("T-LCS-01: finds non-empty substring for whitespace difference", () => {
     const a = "function hello() {    return 1; }";
     const b = "function hello() { return 1; }";
-    const result = longestCommonSubstring(a, b);
+    const result = Text.longestCommonSubstring(a, b);
     assert.ok(result.length >= MIN_LCS_LENGTH);
     assert.ok(b.includes(result.substring));
   });
 
   it("T-LCS-02: unrelated strings yield short substring", () => {
-    const result = longestCommonSubstring("abc", "xyz");
+    const result = Text.longestCommonSubstring("abc", "xyz");
     assert.ok(result.length < MIN_LCS_LENGTH);
   });
 
   it("T-LCS-03: countOccurrences counts multiple hits", () => {
-    assert.equal(countOccurrences("aa aa aa", "aa"), 3);
+    assert.equal(Text.countOccurrences("aa aa aa", "aa"), 3);
   });
 
-  it("T-LCS-04: truncateLcsSnippet caps length", () => {
+  it("T-LCS-04: snippet 截断按 MAX_LCS_SNIPPET_CHARS 封顶", () => {
     const long = "x".repeat(MAX_LCS_SNIPPET_CHARS + 10);
-    const truncated = truncateLcsSnippet(long);
+    const truncated = Text.truncate(long, MAX_LCS_SNIPPET_CHARS);
     assert.ok(truncated.endsWith("…"));
     assert.ok(truncated.length <= MAX_LCS_SNIPPET_CHARS + 1);
   });
@@ -40,7 +38,7 @@ describe("longestCommonSubstring 中文引号场景", () => {
     // 所以这里验证弯引号与直引号之间至少能命中一段不含引号的公共子串。
     const fileContent = `他说“你好”`;
     const oldString = `他说“你好”`;
-    const result = longestCommonSubstring(oldString, fileContent);
+    const result = Text.longestCommonSubstring(oldString, fileContent);
     assert.ok(result.length >= MIN_LCS_LENGTH);
     assert.ok(fileContent.includes(result.substring));
     // 主体「你好」应该出现在公共子串里（撇开引号差异）
@@ -100,7 +98,7 @@ describe("C2-11 大输入降级与结果等价", () => {
       global.gc();
     }
     const before = process.memoryUsage().heapUsed;
-    const result = longestCommonSubstring(a, b);
+    const result = Text.longestCommonSubstring(a, b);
     const deltaMb = (process.memoryUsage().heapUsed - before) / (1024 * 1024);
 
     assert.ok(result.length > 0, "降级后仍应给出可用的诊断片段");
@@ -113,7 +111,7 @@ describe("C2-11 大输入降级与结果等价", () => {
   it("T-LCS-DEGRADE-2: 裁到没意义时直接放弃 LCS（length=0，错误码与流程不变）", () => {
     // 一侧极长、一侧极短（3e6 格 > 2e6 上限）⇒ 按比例裁剪后短侧低于
     // LCS_DEGRADED_MIN_CHARS ⇒ 放弃诊断。降级若失效，本例会算出 LCS = "x"。
-    const result = longestCommonSubstring("x".repeat(1_000_000), "xyz");
+    const result = Text.longestCommonSubstring("x".repeat(1_000_000), "xyz");
     assert.equal(result.length, 0);
     assert.equal(result.substring, "");
   });
@@ -122,7 +120,7 @@ describe("C2-11 大输入降级与结果等价", () => {
     // endsInB 在同字符串上会堆到 O(min(a,b)) 条；旧实现的 spread 会抛
     // RangeError: Maximum call stack size exceeded。
     const same = "x".repeat(300_000);
-    const result = longestCommonSubstring(same, same);
+    const result = Text.longestCommonSubstring(same, same);
     assert.ok(result.length > 0, "不得抛 RangeError");
     assert.equal(result.substring, "x".repeat(result.length));
   });
@@ -150,7 +148,7 @@ describe("C2-11 大输入降级与结果等价", () => {
       ["tail-only", "head-only"],
     ];
     for (const [a, b] of samples) {
-      const actual = longestCommonSubstring(a, b);
+      const actual = Text.longestCommonSubstring(a, b);
       const expected = referenceLongestCommonSubstring(a, b);
       assert.equal(
         actual.length,
@@ -180,7 +178,7 @@ describe("C2-11 大输入降级与结果等价", () => {
   it("T-LCS-EQUIV-HEAVY: 1200 × 1200 同字符长串与全表 DP oracle 逐字相等", () => {
     const a = "a".repeat(1200);
     const b = "a".repeat(1200);
-    const actual = longestCommonSubstring(a, b);
+    const actual = Text.longestCommonSubstring(a, b);
     const expected = referenceLongestCommonSubstring(a, b);
     assert.equal(actual.length, expected.length);
     assert.equal(actual.substring, expected.substring);

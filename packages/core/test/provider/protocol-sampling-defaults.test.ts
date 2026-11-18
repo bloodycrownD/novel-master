@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mergeSamplingWithDefaults, maxOutputTokensFromSampling, OPENAI_SAMPLING_DEFAULTS } from "@novel-master/core/provider";
+import { mergeSamplingWithDefaults, OPENAI_SAMPLING_DEFAULTS } from "@novel-master/core/provider";
+import { maxOutputTokensFromSampling } from "../../src/domain/provider/model/protocol-sampling-defaults.js";
 
 describe("mergeSamplingWithDefaults", () => {
   it("fills openai defaults when params missing", () => {

@@ -30,8 +30,6 @@ const captureKindSchema = z.enum(SMART_SORT_CAPTURE_KINDS as [SmartSortCaptureKi
 /** Bundle 内单条规则（description 缺省 null；captureKind 缺省 smart，D13；sortOrder 即导出时的优先级顺序）。 */
 const bundleRuleSchema = z.object({ ruleId: z.string().min(1), name: z.string().min(1), pattern: z.string().min(1), flags: z.string(), captureKind: captureKindSchema.optional(), description: z.string().nullable().optional(), enabled: z.boolean(), sortOrder: z.number().int().nonnegative() }).strict();
 
-export type SmartSortRuleBundleRule = z.infer<typeof bundleRuleSchema>;
-
 /** Root bundle document（替换式导入导出，spec D10）。 */
 export const smartSortRuleBundleDocumentSchema = z.object({ schemaVersion: z.literal(SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION), rules: z.array(bundleRuleSchema) }).strict();
 

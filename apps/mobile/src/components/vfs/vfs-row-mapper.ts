@@ -1,7 +1,8 @@
 /**
  * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import {basenameOf, parentDirOrNull as parentLogicalPath, type VfsListEntry} from '@novel-master/core/vfs';
+import {parentDirOrNull as parentLogicalPath, type VfsListEntry} from '@novel-master/core/vfs';
+import {Path} from '@novel-master/core/common';
 import {displayStateLabel, inclusionModeLabel, type RuleState, type WorkplaceListRow} from '@novel-master/core/workplace';
 import {coreT} from '../../i18n/core';
 
@@ -81,7 +82,7 @@ export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
 
 /** Map a worktree row to vfs-fm subtitle + badge. */
 export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): MappedVfsRow {
-  const name = basenameOf(row.path);
+  const name = Path.basename(row.path);
   if (row.kind === 'dir') {
     const ruleEnabled = row.ruleState === 'rule_on';
     const subtitle = childFileCount != null && childFileCount > 0 ? `${childFileCount}个文件` : '';
@@ -114,7 +115,7 @@ export function mapWorktreeRow(row: WorkplaceListRow, childFileCount?: number): 
 /** Fallback row when VFS has a path not yet in worktree listing. */
 export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
   // label 为物理树合成目录行的展示名（项目名/会话名）；未填充时回退路径末段。
-  const name = entry.label ?? basenameOf(entry.path);
+  const name = entry.label ?? Path.basename(entry.path);
   if (entry.kind === 'directory') {
     return {
       path: entry.path,

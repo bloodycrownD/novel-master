@@ -24,7 +24,7 @@
 import type { StreamTokenSource } from "../session-run-state/model/session-run-state.js";
 
 /** 一次速率采样：时刻（毫秒）与该时刻的累计 token 数。 */
-export interface TokenRateSample {
+interface TokenRateSample {
   readonly tMs: number;
   readonly tokens: number;
 }

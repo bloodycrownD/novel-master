@@ -9,7 +9,6 @@ export type {
   PersistPromptBlock,
   DynamicPromptBlock,
   PersistTextPromptBlock,
-  PersistWorktreePromptBlock,
 } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
   DEFAULT_SKILLS_INDEX_PREFIX,
@@ -28,17 +27,11 @@ export {
 } from "../domain/prompt/logic/validate-agent-prompt-layout.js";
 export { normalizeAgentPromptLayoutDomain } from "../domain/prompt/logic/normalize-agent-prompt-layout.js";
 export { normalizeForLlmExport } from "../domain/prompt/logic/normalize-for-llm-export.js";
-export type {
-  LlmExportZones,
-  LlmExportZone,
-} from "../domain/prompt/logic/normalize-for-llm-export.js";
+export type { LlmExportZones } from "../domain/prompt/logic/normalize-for-llm-export.js";
 export { applyThinkingContextForLlm } from "../service/prompt/apply-thinking-context-for-llm.js";
 export type { ThinkingContextOptions } from "../service/prompt/apply-thinking-context-for-llm.js";
 export { resolvePreviewThinkingContext } from "../service/prompt/resolve-preview-thinking-context.js";
-export type {
-  ResolvePreviewThinkingContextInput,
-  ResolvedPreviewThinkingContext,
-} from "../service/prompt/resolve-preview-thinking-context.js";
+export type { ResolvePreviewThinkingContextInput } from "../service/prompt/resolve-preview-thinking-context.js";
 export {
   ALLOWED_DYNAMIC_ROOT_MACROS,
   validateDynamicMacros,
@@ -46,14 +39,10 @@ export {
 export { expandDynamicMacros } from "../domain/prompt/logic/expand-dynamic-macros.js";
 export { PromptBuilder } from "../service/prompt/render-prompt.js";
 export type {
-  PromptAssemblySegment,
   PromptAssemblyOptions,
-  PromptPreviewSegment,
   PromptPreviewTurn,
   PromptTextCardData,
   PromptToolGroupCardData,
-  PromptToolGroupResultData,
-  PromptToolGroupStatus,
   PromptTurnCardData,
   PromptWorkplaceCardData,
   PromptWorkplaceFileCardData,
@@ -63,5 +52,4 @@ export type {
   PromptRenderContext,
   PromptSkillIndexEntry,
   PromptLlmInput,
-  PromptWorkplaceFileEntry,
 } from "../domain/prompt/model/prompt-render-context.js";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isAppError } from "../../../src/errors/app-error.js";
-import { createOpenAiSseParser, parseOpenAiSseStream } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
+import { createOpenAiSseParser } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
 
 describe("openai-sse-parser", () => {
   it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
@@ -139,33 +139,6 @@ describe("openai-sse-parser", () => {
     const toolBlock = blocks.find((b) => b.type === "tool_use");
     assert.ok(toolBlock && toolBlock.type === "tool_use");
     assert.equal(toolBlock.input.path, "/tmp/x");
-  });
-
-  it("parseOpenAiSseStream reads ReadableStream body", async () => {
-    const sse = [
-      'data: {"choices":[{"delta":{"content":"Stream"}}]}',
-      "",
-      "data: [DONE]",
-      "",
-    ].join("\n");
-    const encoder = new TextEncoder();
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode(sse.slice(0, 20)));
-        controller.enqueue(encoder.encode(sse.slice(20)));
-        controller.close();
-      },
-    });
-
-    const deltas: string[] = [];
-    const { blocks } = await parseOpenAiSseStream(body, (ev) => {
-      if (ev.type === "text-delta") {
-        deltas.push(ev.text);
-      }
-    });
-
-    assert.deepEqual(deltas, ["Stream"]);
-    assert.equal((blocks[0] as { text: string }).text, "Stream");
   });
 
   it("SSE-MAL-01: only malformed lines throw on finish", () => {

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { createVfsService } from "@novel-master/core/vfs";
+import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
 
 import {
   getNovelMasterTestContext,

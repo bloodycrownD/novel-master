@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  computeHeadTailIndices,
   evaluateFileDisplay,
   sortDirPaths,
   sortFilesForDir,
 } from "@novel-master/core/workplace";
+import { Number } from "@novel-master/core/common";
 
 describe("worktree eval", () => {
   it("hide and show take priority", () => {
@@ -48,7 +48,7 @@ describe("worktree eval", () => {
   });
 
   it("head=2 tail=1 dedupes to three full slots", () => {
-    const priority = computeHeadTailIndices(5, 2, 1);
+    const priority = Number.headTailIndices(5, 2, 1);
     assert.equal(priority.size, 3);
     assert.deepEqual([...priority].sort(), [0, 1, 4]);
   });

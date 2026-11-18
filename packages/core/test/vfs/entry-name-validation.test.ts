@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService } from "@novel-master/core/vfs";
+import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { vfsUserMessage } from "../../src/domain/vfs/logic/format-vfs-error-for-user.js";
 import { tCore } from "../helpers/core-i18n.js";

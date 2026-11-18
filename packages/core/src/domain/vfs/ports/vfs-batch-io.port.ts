@@ -51,7 +51,7 @@ export interface BatchApplyReport {
 }
 
 /** plan 阶段检测到的 file/directory 类型冲突。 */
-export interface BatchIngestTypeConflict {
+interface BatchIngestTypeConflict {
   readonly logicalPath: string;
   readonly message: string;
 }
@@ -69,7 +69,7 @@ export interface BatchIngestPlan {
 }
 
 /** 导出规划中的单个文件。 */
-export interface BatchExportFileEntry {
+interface BatchExportFileEntry {
   /** 相对导出根的路径（无 leading `/`） */
   readonly relativePath: string;
   readonly content: string;

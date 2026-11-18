@@ -7,7 +7,7 @@
 import { classifyMutatingToolCall } from "@/domain/tool/logic/fs-command-classify.js";
 
 /** 单次 tool 调用描述。 */
-export interface MutatingToolCall {
+interface MutatingToolCall {
   readonly name: string;
   readonly input: unknown;
 }

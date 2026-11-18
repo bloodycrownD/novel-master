@@ -145,7 +145,7 @@ function clampSummary(raw: string): string {
 }
 
 /** 工具卡片摘要入参（RN `ToolCallView` 与 WebView `ToolCallRow` 的结构并集）。 */
-export interface ToolCallSummarySource {
+interface ToolCallSummarySource {
     readonly name?: string | null;
     readonly input?: Record<string, unknown> | null;
     readonly status?: string;

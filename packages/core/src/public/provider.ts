@@ -10,7 +10,6 @@
 export type { SecretStore } from "../infra/sksp/index.js";
 export {
   parseApplicationModelId,
-  formatApplicationModelId,
   normalizeVendorModelId,
 } from "../domain/provider/logic/application-model-id.js";
 export {
@@ -30,26 +29,18 @@ export type {
   AnthropicSamplingParams,
   GeminiSamplingParams,
 } from "../domain/provider/model/model-sampling-params.js";
-export { samplingProtocol } from "../domain/provider/model/model-sampling-params.js";
 export {
   mergeSamplingWithDefaults,
-  maxOutputTokensFromSampling,
   OPENAI_SAMPLING_DEFAULTS,
   ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
 } from "../domain/provider/model/protocol-sampling-defaults.js";
 export type { SavedModel } from "../domain/provider/model/saved-model.js";
-export {
-  savedModelDisplayName,
-  toSavedModelView,
-  type SavedModelView,
-} from "../domain/provider/model/saved-model.js";
+export { savedModelDisplayName } from "../domain/provider/model/saved-model.js";
 export type {
   SavedModelSettings,
   SavedModelSamplingSettings,
   ThinkingLevel,
-  SavedModelInternalSettings,
-  SavedModelGenerationSettings,
   SavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
 export {
@@ -60,7 +51,6 @@ export {
   applySavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
 export {
-  THINKING_LEVEL_OPTIONS,
   THINKING_LEVEL_SELECT_OPTIONS,
 } from "../domain/provider/model/thinking-level-options.js";
 export type {
@@ -70,7 +60,6 @@ export type {
   GeminiThinkingParams,
   GeminiThinkingConfig,
 } from "../domain/provider/model/model-thinking-params.js";
-export { thinkingProtocol } from "../domain/provider/model/model-thinking-params.js";
 export { resolveEffectiveMaxTokens } from "../domain/provider/logic/resolve-thinking-wire.js";
 export { thinkingLevelToModelThinkingParams } from "../domain/provider/logic/thinking-level-presets.js";
 export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
@@ -79,7 +68,6 @@ export {
   savedModelSettingsToJson,
 } from "../domain/provider/model/saved-model-settings-from-json.js";
 export {
-  TOKEN_COUNTER_MODE_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
 } from "../domain/provider/model/token-counter-mode-options.js";
 export { resolveTokenCounterModeForModel } from "../service/provider/logic/resolve-token-counter-mode-for-model.js";
@@ -111,7 +99,6 @@ export type {
 export { toolsFromRegistry } from "../infra/llm-protocol/logic/tool-definitions.js";
 export { zodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";
 export {
-  clearProtocolAdapters,
   configureLlmFetch,
   getProtocolAdapter,
 } from "../infra/llm-protocol/logic/registry.js";
@@ -119,8 +106,6 @@ export {
   createLoggingFetch,
   isLlmFetchDebugEnabled,
 } from "../infra/llm-protocol/logic/debug-fetch.js";
-export { STREAM_IDLE_TIMEOUT_MS } from "../infra/llm-protocol/logic/stream-watchdog.js";
-export { SSE_WHOLE_CALL_TIMEOUT_MS } from "../infra/llm-protocol/logic/llm-sse-transport.js";
 export type { SseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
 export { registerSseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
 export {

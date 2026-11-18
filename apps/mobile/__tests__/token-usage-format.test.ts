@@ -2,9 +2,10 @@
  * token-usage/format 纯函数单测（screens/C-4 拆分补充）。
  * 覆盖：hitRate 分母边界、formatHitRate 空态、isCustomRangeValid
  * 顺序校验（无跨度上限）、resolveRangeDays 各 RangeKind 映射、
- * toLocalDayKey 本地日键、速率与首字延迟的空态与数值分支。
+ * DateTime.localDayKey 本地日键、速率与首字延迟的空态与数值分支。
  */
 import {describe, expect, it} from '@jest/globals';
+import {DateTime} from '@novel-master/core/common';
 import {
   SUMMARY_EMPTY_TEXT,
   formatFirstTokenMs,
@@ -14,7 +15,6 @@ import {
   isCustomRangeValid,
   localDayKeyOffset,
   resolveRangeDays,
-  toLocalDayKey,
 } from '@/screens/stack/token-usage/format';
 
 describe('token-usage/format', () => {
@@ -69,8 +69,8 @@ describe('token-usage/format', () => {
     it('today = {D, D}', () => {
       const now = new Date();
       expect(resolveRangeDays('today', null, null)).toEqual({
-        fromDay: toLocalDayKey(now.getTime()),
-        toDay: toLocalDayKey(now.getTime()),
+        fromDay: DateTime.localDayKey(now.getTime()),
+        toDay: DateTime.localDayKey(now.getTime()),
       });
     });
 
@@ -78,11 +78,11 @@ describe('token-usage/format', () => {
       const now = new Date();
       expect(resolveRangeDays('last7', null, null)).toEqual({
         fromDay: localDayKeyOffset(now, -6),
-        toDay: toLocalDayKey(now.getTime()),
+        toDay: DateTime.localDayKey(now.getTime()),
       });
       expect(resolveRangeDays('last30', null, null)).toEqual({
         fromDay: localDayKeyOffset(now, -29),
-        toDay: toLocalDayKey(now.getTime()),
+        toDay: DateTime.localDayKey(now.getTime()),
       });
     });
 
@@ -96,15 +96,15 @@ describe('token-usage/format', () => {
       const now = new Date();
       expect(resolveRangeDays('custom', null, null)).toEqual({
         fromDay: localDayKeyOffset(now, -6),
-        toDay: toLocalDayKey(now.getTime()),
+        toDay: DateTime.localDayKey(now.getTime()),
       });
     });
   });
 
-  describe('toLocalDayKey', () => {
+  describe('DateTime.localDayKey', () => {
     it('本地日期补零为 yyyy-MM-dd', () => {
-      expect(toLocalDayKey(new Date(2026, 0, 5).getTime())).toBe('2026-01-05');
-      expect(toLocalDayKey(new Date(2026, 11, 31).getTime())).toBe(
+      expect(DateTime.localDayKey(new Date(2026, 0, 5).getTime())).toBe('2026-01-05');
+      expect(DateTime.localDayKey(new Date(2026, 11, 31).getTime())).toBe(
         '2026-12-31',
       );
     });

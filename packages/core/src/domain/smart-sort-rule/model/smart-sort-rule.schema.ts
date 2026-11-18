@@ -66,7 +66,7 @@ export const updateSmartSortRuleSchema = z.object({ name: z.string().min(1).opti
 export type UpdateSmartSortRuleInput = z.infer<typeof updateSmartSortRuleSchema>;
 
 /** create 解析结果（flags 已缺省 ''，description 已归一 string | null）。 */
-export interface CreateSmartSortRuleFields {
+interface CreateSmartSortRuleFields {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;

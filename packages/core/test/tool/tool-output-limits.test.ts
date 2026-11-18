@@ -5,12 +5,12 @@ import {
   capUtf8Bytes,
   capUtf8BytesFill,
   sliceLinesFromOffset,
-  sliceUtf8BytePrefix,
   TOOL_OUTPUT_MAX_BYTES,
   TOOL_OUTPUT_MAX_LINES,
   TOOL_OUTPUT_MAX_MATCHES,
   truncateLine,
 } from "../../src/domain/tool/logic/tool-output-limits.js";
+import { Text } from "../../src/common/text.js";
 
 /** 逐 code unit 检查字符串不含孤立代理（高代理必须跟低代理、低代理不得单现）。 */
 function assertNoLoneSurrogate(s: string): void {
@@ -67,15 +67,15 @@ describe("tool-output-limits", () => {
     assert.ok(line.includes("line truncated"));
   });
 
-  it("sliceUtf8BytePrefix 截到字节预算且不切半个字符（多字节与代理对）", () => {
+  it("Text.sliceUtf8Bytes 截到字节预算且不切半个字符（多字节与代理对）", () => {
     // ASCII：预算内全量、预算外精确截断。
-    assert.equal(sliceUtf8BytePrefix("abcdef", 3), "abc");
-    assert.equal(sliceUtf8BytePrefix("abcdef", 100), "abcdef");
-    assert.equal(sliceUtf8BytePrefix("abcdef", 0), "");
+    assert.equal(Text.sliceUtf8Bytes("abcdef", 3), "abc");
+    assert.equal(Text.sliceUtf8Bytes("abcdef", 100), "abcdef");
+    assert.equal(Text.sliceUtf8Bytes("abcdef", 0), "");
     // 中文 3 字节/字符：预算 7 只装 2 个整字（6B），不切第 3 个字的中间。
-    assert.equal(sliceUtf8BytePrefix("你好呀", 7), "你好");
+    assert.equal(Text.sliceUtf8Bytes("你好呀", 7), "你好");
     // 代理对（emoji 4B/字符）：不切半个代理对（预算 6 只装 1 个 emoji）。
-    assert.equal(sliceUtf8BytePrefix("\u{1F600}\u{1F601}", 6), "\u{1F600}");
+    assert.equal(Text.sliceUtf8Bytes("\u{1F600}\u{1F601}", 6), "\u{1F600}");
   });
 
   it("T-B2: 块边界（8192）恰劈在代理对中间时字节不失真、返回值无孤立代理", () => {
@@ -84,16 +84,16 @@ describe("tool-output-limits", () => {
     // 恰好装下 'a'×8191 + 完整 emoji。
     const emoji = "\u{1F600}";
     const text = "a".repeat(8191) + emoji + "b".repeat(100);
-    const out = sliceUtf8BytePrefix(text, 8191 + 4);
+    const out = Text.sliceUtf8Bytes(text, 8191 + 4);
     assert.equal(out, "a".repeat(8191) + emoji);
     assert.equal(new TextEncoder().encode(out).byteLength, 8191 + 4);
 
     // 跨块右移 1 后无重叠不遗漏：预算 +1 装下跨块边界的第一个 'b'。
-    const out2 = sliceUtf8BytePrefix(text, 8191 + 4 + 1);
+    const out2 = Text.sliceUtf8Bytes(text, 8191 + 4 + 1);
     assert.equal(out2, "a".repeat(8191) + emoji + "b");
 
     // 预算装不下 emoji（4B）时：止步于 'a'×8191，不携带半个代理。
-    const out3 = sliceUtf8BytePrefix(text, 8191 + 3);
+    const out3 = Text.sliceUtf8Bytes(text, 8191 + 3);
     assert.equal(out3, "a".repeat(8191));
 
     // 三个返回值均无孤立代理（JSON round-trip 不变），且字节 ≤ 预算。

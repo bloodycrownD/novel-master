@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  SCHEMA_BOOT_VERSION,
-} from "@novel-master/core";
+import { bootstrapNovelMaster } from "@novel-master/core";
+import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 
 import {
   getNovelMasterTestContext,

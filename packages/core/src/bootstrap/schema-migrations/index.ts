@@ -74,4 +74,4 @@ export async function runPendingSchemaMigrations(tx: TdbcConnection): Promise<vo
 }
 
 export type { SchemaMigration } from "./schema-migration.types.js";
-export { ensureSchemaMigrationsTable, isSchemaMigrationApplied, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";
+export { ensureSchemaMigrationsTable, listAppliedSchemaMigrationIds, markSchemaMigrationApplied } from "./schema-migrations-table.js";

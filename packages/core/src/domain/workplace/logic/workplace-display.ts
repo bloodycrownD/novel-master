@@ -10,17 +10,6 @@ import type { DisplayState } from "../model/workplace-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
 
 /**
- * Formats epoch ms as local `yyyy-MM-dd HH:mm:ss`.
- *
- * nm-style: keep-public — `public/workplace.ts` 仍导出该兼容别名，撤除需同步
- * public barrel（本轮只改 domain 范围）；实现已是 `common/datetime.ts` 的
- * `DateTime.localDateTime` 单源。
- */
-export function formatLocalMtime(mtimeMs: number): string {
-  return DateTime.localDateTime(mtimeMs);
-}
-
-/**
  * 与 {@link renderFileBlock} 标签内正文同形的行号正文（无外层 `<file>` / 无 mtime 属性）。
  * 供消息增量 `userAttach` / `workplaceChange` JSON `content` 使用。
  */
@@ -51,7 +40,7 @@ export function renderFileBlock(params: { readonly logicalPath: string; readonly
     display: params.display,
     content: params.content,
   });
-  const mtimeLocal = formatLocalMtime(params.mtimeMs);
+  const mtimeLocal = DateTime.localDateTime(params.mtimeMs);
   const attrs = [`path="${Xml.escapeAttr(params.logicalPath)}"`, `createdAt="${Xml.escapeAttr(mtimeLocal)}"`, `updatedAt="${Xml.escapeAttr(mtimeLocal)}"`, `updatedBy="user"`].join(" ");
   return `<file ${attrs}>\n${body}\n</file>`;
 }

@@ -16,7 +16,7 @@
  */
 
 /** One highlight segment: a slice of the tested text + whether it matched. */
-export interface SmartSortHighlightSegment {
+interface SmartSortHighlightSegment {
   readonly text: string;
   readonly matched: boolean;
 }

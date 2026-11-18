@@ -16,8 +16,6 @@
   "createMessageTranscriptEffectsService",
   "createProjectService",
   "createSessionService",
-  "createUsageStatsService",
-  "createUserVfsTurnService",
   "createUserVfsTurnServiceBundle",
   "formatMessageForCli",
   "formatStatusChipLabel",

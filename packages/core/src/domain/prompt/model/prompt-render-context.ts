@@ -16,7 +16,7 @@ export interface PromptSkillIndexEntry {
 }
 
 /** workplace 结构化文件条目（`assembleWorkplaceDisplay` 顺产，预览侧二级卡数据源）。 */
-export interface PromptWorkplaceFileEntry {
+interface PromptWorkplaceFileEntry {
   /** VFS 逻辑路径（规则快照条目原值）。 */
   readonly path: string;
   /** 展示档（与 `WorkplaceDisplayStatus` 同值：`full` / `header` / `filename`）。 */

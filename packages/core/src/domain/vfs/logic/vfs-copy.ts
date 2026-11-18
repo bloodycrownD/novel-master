@@ -4,10 +4,11 @@
  * @module domain/vfs/logic/vfs-copy
  */
 
+import { Path } from "@/common/path.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
-import { mkdirIgnoreExists, normalizeDirPath, remapPathUnderDir } from "./vfs-move.js";
+import { mkdirIgnoreExists } from "./vfs-move.js";
 
 export type CopyVfsPathOptions = {
   readonly recursive?: boolean;
@@ -32,7 +33,7 @@ export async function copyVfsPath(vfs: VfsService, from: string, to: string, opt
     return Result.err(existing.error);
   }
 
-  const oldDir = normalizeDirPath(from);
+  const oldDir = Path.stripTrailingSlash(from);
   const listed = await vfs.list(oldDir, { recursive: true });
   if (!listed.ok) return Result.err(listed.error);
   const entries = listed.value;
@@ -45,21 +46,21 @@ export async function copyVfsPath(vfs: VfsService, from: string, to: string, opt
     return Result.err(new AppError("VFS_IS_DIRECTORY", { detail: `Directory copy requires recursive: true: ${from}`, path: from }));
   }
 
-  const newDir = normalizeDirPath(to);
+  const newDir = Path.stripTrailingSlash(to);
   const dirs = entries.filter((e) => e.kind === "directory").sort((a, b) => a.path.length - b.path.length);
   const files = entries.filter((e) => e.kind === "file");
 
   const madeRoot = await mkdirIgnoreExists(vfs, newDir);
   if (!madeRoot.ok) return Result.err(madeRoot.error);
   for (const dir of dirs) {
-    const made = await mkdirIgnoreExists(vfs, remapPathUnderDir(dir.path, oldDir, newDir));
+    const made = await mkdirIgnoreExists(vfs, Path.remapUnderDir(dir.path, oldDir, newDir));
     if (!made.ok) return Result.err(made.error);
   }
 
   for (const file of files) {
     const content = await vfs.read(file.path);
     if (!content.ok) return Result.err(content.error);
-    const written = await vfs.write(remapPathUnderDir(file.path, oldDir, newDir), content.value.content);
+    const written = await vfs.write(Path.remapUnderDir(file.path, oldDir, newDir), content.value.content);
     if (!written.ok) return Result.err(written.error);
   }
   return Result.ok(undefined);

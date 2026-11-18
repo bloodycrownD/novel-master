@@ -58,7 +58,7 @@ export interface SkillToolInput {
 }
 
 /** load 输出：生效副本 SKILL.md 全文 + 附属文件清单（`domain` 是解析后的实际命中域）。 */
-export interface SkillToolLoadOutput {
+interface SkillToolLoadOutput {
   readonly action: "load";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -74,7 +74,7 @@ export interface SkillToolLoadOutput {
 }
 
 /** read 输出（`domain` 是生效副本解析后的实际命中域）。 */
-export interface SkillToolReadOutput {
+interface SkillToolReadOutput {
   readonly action: "read";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -90,7 +90,7 @@ export interface SkillToolReadOutput {
 }
 
 /** write / edit / list 输出（write/edit 带定位三元组供摘要与 meta 透传）。 */
-export interface SkillToolWriteOutput {
+interface SkillToolWriteOutput {
   readonly action: "write";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -98,7 +98,7 @@ export interface SkillToolWriteOutput {
   readonly version: number;
 }
 
-export interface SkillToolEditOutput {
+interface SkillToolEditOutput {
   readonly action: "edit";
   readonly domain: "global" | "project";
   readonly name: string;
@@ -107,7 +107,7 @@ export interface SkillToolEditOutput {
   readonly replacements: number;
 }
 
-export interface SkillToolListOutput {
+interface SkillToolListOutput {
   readonly action: "list";
   readonly entries: readonly {
     readonly name: string;
@@ -120,7 +120,7 @@ export interface SkillToolListOutput {
   readonly total: number;
 }
 
-export type SkillToolOutput = SkillToolLoadOutput | SkillToolReadOutput | SkillToolWriteOutput | SkillToolEditOutput | SkillToolListOutput;
+type SkillToolOutput = SkillToolLoadOutput | SkillToolReadOutput | SkillToolWriteOutput | SkillToolEditOutput | SkillToolListOutput;
 
 /**
  * 各 action 的必填字段表（单一事实源）。

@@ -12,7 +12,7 @@ import type { PromptLlmInput, PromptRenderContext } from "@/domain/prompt/model/
 import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
-export interface CompactionConditionModelContext {
+interface CompactionConditionModelContext {
   readonly workspaceModelId: string;
   readonly savedModelId: string;
 }

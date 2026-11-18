@@ -210,7 +210,7 @@ export type BuiltinToolContext = {
    * 运行时成本为零。
    * ⚠️ 这是**有意分期占位**（A-14，出处 `docs/Iterations/cr-fix-spec/spec.md:172`），
    * 不是缺陷。**接线前必须先修三处已知缺口**，否则闸门形同虚设甚至误杀：
-   * ① `pathStartsWithPrefix()` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）；
+   * ① `Path.hasPrefix()` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）；
    * ② `PATH_FIELDS` 漏 `glob` 的 `options.cwd` 与 `grep` 的 `options.pathPrefix`
    *   （两者都是 `vfs-tools.ts` 里对应工具 zod schema 的字段）；
    * ③ `filePath` 在 `PATH_FIELDS` 里但**无任何内置工具的 `inputSchema` 声明它**

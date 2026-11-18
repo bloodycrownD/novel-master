@@ -7,7 +7,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { __getVfsPackDecodeCountersForTests, __resetVfsPackDecodeCountersForTests, decodeFossilChainSpans, decodeZlibConcatSpans, encodeFossilChainPack, encodeZlibConcatPack, parseFossilSegmentTable, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat } from "@/domain/vfs/content-store/logic/pack-codec.js";
+import { __getVfsPackDecodeCountersForTests, __resetVfsPackDecodeCountersForTests, decodeFossilChainSpans, decodeZlibConcatSpans, parseFossilSegmentTable, VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, type VfsPackFormat } from "@/domain/vfs/content-store/logic/pack-codec.js";
+import { encodeFossilChainPack, encodeZlibConcatPack } from "../helpers/pack-fixtures.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";

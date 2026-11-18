@@ -19,7 +19,7 @@ import { CORE_MESSAGE_KEY_PATTERN, type CoreMessageDescriptor, type CoreMessageK
 import { ErrorCodes, type ErrorCodeDef, type ErrorKey, type ErrorNumber } from "./error-codes.js";
 
 /** 跨进程/日志用的序列化形状。 */
-export interface AppErrorWire {
+interface AppErrorWire {
   readonly key: ErrorKey;
   readonly code: ErrorNumber;
   readonly desc: string;

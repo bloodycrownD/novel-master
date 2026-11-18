@@ -28,6 +28,7 @@ import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 
 import {isAppError} from '@novel-master/core/vfs';
+import {Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {formatVfsErrorForUser} from '../../errors/format-error';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
@@ -35,7 +36,6 @@ import {
   createVfsDirectory,
   createVfsFile,
   deleteScopedVfsEntry,
-  remapPathUnderDir,
   renameVfsDirectory,
   renameVfsFile,
   sessionCreateVfsDirectory,
@@ -532,7 +532,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
               await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
             }
             if (currentPath === sourcePath || currentPath.startsWith(`${sourcePath}/`)) {
-              setCurrentPath(remapPathUnderDir(currentPath, sourcePath, newPath));
+              setCurrentPath(Path.remapUnderDir(currentPath, sourcePath, newPath));
             }
           } else {
             if (useUserVfsTurn) {
@@ -735,7 +735,7 @@ export const VfsFileManager = forwardRef<VfsFileManagerHandle, VfsFileManagerPro
                   await migrateWorkplaceDirRename(workplace, menuPath, newPath);
                 }
                 if (currentPath === menuPath || currentPath.startsWith(`${menuPath}/`)) {
-                  const remapped = remapPathUnderDir(currentPath, menuPath, newPath);
+                  const remapped = Path.remapUnderDir(currentPath, menuPath, newPath);
                   setCurrentPath(remapped);
                 }
               }

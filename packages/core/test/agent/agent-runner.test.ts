@@ -3,14 +3,8 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import {
-  ChatAgentSession,
-  createAgentRunner,
-  InMemoryAgentSession,
-  AppError,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
+import { ChatAgentSession, createAgentRunner, AppError, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";

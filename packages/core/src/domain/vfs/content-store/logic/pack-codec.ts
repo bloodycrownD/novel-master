@@ -9,8 +9,9 @@
  *   zlib(首成员明文全量)，段 i = zlib(createDelta(明文[i-1], 明文[i]))。读成员 k =
  *   解段表 → 解段 0 得 v0 → 沿链 applyDelta 到段 k（组内 ≤8 段，链式读放大有界）。
  *
- * 读侧（SqliteVfsContentStore 的 get/getMany member 分派）与写侧（后台打包任务）
- * 共用本模块，段表布局只有这一份实现。压缩/解压复用 zlib-codec（宿主注册的
+ * 读侧（SqliteVfsContentStore 的 get/getMany member 分派）使用本模块，段表布局
+ * 只有这一份实现；编码侧随后台打包任务退役，测试构造 pack 字节的编码夹具见
+ * `test/helpers/pack-fixtures.ts`。压缩/解压复用 zlib-codec（宿主注册的
  * zlib 加速器分派；未注册恒 fflate）。另附解压计数探针，供测试断言「pack 组整组
  * 只解压一次、fossil 组沿链复用中间结果」（见 `__getVfsPackDecodeCountersForTests`）。
  *
@@ -20,11 +21,11 @@
  * @module domain/vfs/content-store/logic/pack-codec
  */
 
-import { applyDelta, createDelta, getDeltaTargetSize } from "fossil-delta";
+import { applyDelta, getDeltaTargetSize } from "fossil-delta";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { Errors } from "../../../../common/errors.js";
-import { compressZlib, decompressZlib } from "./zlib-codec.js";
+import { decompressZlib } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */
 export const VFS_PACK_FORMAT_ZLIB_CONCAT_V1 = "zlib-concat-v1" as const;
@@ -42,12 +43,6 @@ type VfsContentError = AppError<"VFS_CONTENT_CORRUPT" | "VFS_CONTENT_UNSUPPORTED
 export interface VfsPackSpan {
   readonly offset: number;
   readonly length: number;
-}
-
-/** 编码产物：pack 流字节 + 各成员区间（pack 为明文切片区间；fossil 为段区间）。 */
-interface VfsPackEncodeResult {
-  readonly bytes: Uint8Array;
-  readonly spans: ReadonlyArray<VfsPackSpan>;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,28 +76,6 @@ export function __getVfsPackDecodeCountersForTests(): VfsPackDecodeCounters {
 // ---------------------------------------------------------------------------
 // zlib-concat-v1
 // ---------------------------------------------------------------------------
-
-/**
- * 编码 zlib-concat 组：明文顺序拼接 → 单条 zlib 流。
- *
- * @param memberPlains 各成员明文 UTF-8 字节（去重后的成员序列，重复 hash 由调用方
- *   在数据层共享同一 member 行）
- * @returns 流字节 + 各成员在解压后明文里的切片区间；空组成员返回 `VFS_CONTENT_CORRUPT`
- */
-export function encodeZlibConcatPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
-  if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "zlib-concat-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_ZLIB_CONCAT_V1, memberCount: 0 }));
-  }
-  // 拼接顺序即成员顺序，区间 offset 按各成员明文长顺序累计。
-  const concat = concatBytes(memberPlains);
-  const spans: Array<{ offset: number; length: number }> = [];
-  let cursor = 0;
-  for (const plain of memberPlains) {
-    spans.push({ offset: cursor, length: plain.byteLength });
-    cursor += plain.byteLength;
-  }
-  return Result.ok({ bytes: compressZlib(concat), spans });
-}
 
 /**
  * 解码 zlib-concat 组的若干成员：整组流只解压一次，再按区间切片明文。
@@ -145,41 +118,11 @@ interface FossilSegmentTable {
 }
 
 /**
- * 编码 fossil 链组：段 0 = zlib(首成员明文全量)，段 i = zlib(createDelta(前驱明文,
- * 当前明文))；段表（4B 段数 LE + N×4B 各段压缩长 LE）前置于段数据连排。
- *
- * @returns 流字节 + 各成员所在段的区间（spans[i] 即 member i 的 offset/length）；
- *   空组成员返回 `VFS_CONTENT_CORRUPT`
- */
-export function encodeFossilChainPack(memberPlains: ReadonlyArray<Uint8Array>): Result<VfsPackEncodeResult, VfsContentError> {
-  if (memberPlains.length === 0) {
-    return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: "fossil-chain-v1 组至少需要 1 个成员", format: VFS_PACK_FORMAT_FOSSIL_CHAIN_V1, memberCount: 0 }));
-  }
-  const segmentBytes = memberPlains.map((plain, index) => (index === 0 ? compressZlib(plain) : compressZlib(createDelta(memberPlains[index - 1]!, plain))));
-  const header = new Uint8Array(4 + 4 * segmentBytes.length);
-  const headerView = new DataView(header.buffer);
-  headerView.setUint32(0, segmentBytes.length, true);
-  const parts: Uint8Array[] = [header];
-  segmentBytes.forEach((segment, index) => {
-    headerView.setUint32(4 + 4 * index, segment.byteLength, true);
-    parts.push(segment);
-  });
-  const bytes = concatBytes(parts);
-  const spans: VfsPackSpan[] = [];
-  let cursor = header.byteLength;
-  for (const segment of segmentBytes) {
-    spans.push({ offset: cursor, length: segment.byteLength });
-    cursor += segment.byteLength;
-  }
-  return Result.ok({ bytes, spans });
-}
-
-/**
  * 解析 fossil 段表（`4B 段数（LE）+ N×4B 各段压缩长（LE）+ 段数据连排`）。
  *
  * @remarks 段表自洽性校验：段表长度区不完整、段数为 0、段长合计与流长不符
  *   （尾部残留/截断）均返回 `VFS_CONTENT_CORRUPT`，防止错位段区间静默解出脏明文。**不含「段长 > 0」**
- *   ——零长段由写侧（`encodeFossilChainPack` 每段必有内容）保证，本解析层不拦；
+ *   ——零长段由写侧（测试夹具 `encodeFossilChainPack` 每段必有内容）保证，本解析层不拦；
  *   零长段的后果见 {@link decodeFossilChainSpans} 里的 offset 索引注释。
  */
 export function parseFossilSegmentTable(packBytes: Uint8Array): Result<FossilSegmentTable, VfsContentError> {
@@ -247,7 +190,7 @@ export function decodeFossilChainSpans(packBytes: Uint8Array, spans: ReadonlyArr
   const table = tableResult.value;
   // offset → 段号索引的**唯一性前提**是「各段 length > 0」：零长段会让后一段的
   // offset 与前一段撞车，Map.set 后写覆盖前写，只保留最后一个同 offset 的段号。
-  // 该前提由写侧保证（`encodeFossilChainPack` 每段都装了一整条 zlib 流，长度
+  // 该前提由写侧保证（测试夹具 `encodeFossilChainPack` 每段都装了一整条 zlib 流，长度
   // 必 > 0），本解析层刻意不校验它（见 {@link parseFossilSegmentTable} 的
   // @remarks）。即便有坏 pack 带零长段撞车，后果**仍是响亮失败而非静默错读**：
   // 撞车时 member span 的 offset 命中的是另一个段号，随后 `segment.length !==
@@ -385,18 +328,4 @@ function assertSpanWithin(span: VfsPackSpan, limit: number, label: string): Resu
     return Result.err(new AppError("VFS_CONTENT_CORRUPT", { detail: `${label} member 区间越界: offset=${span.offset} length=${span.length} 界限=${limit}`, offset: span.offset, length: span.length, limit }));
   }
   return Result.ok(undefined);
-}
-
-function concatBytes(parts: ReadonlyArray<Uint8Array>): Uint8Array {
-  let total = 0;
-  for (const part of parts) {
-    total += part.byteLength;
-  }
-  const out = new Uint8Array(total);
-  let cursor = 0;
-  for (const part of parts) {
-    out.set(part, cursor);
-    cursor += part.byteLength;
-  }
-  return out;
 }

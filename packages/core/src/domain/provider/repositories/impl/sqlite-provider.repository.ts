@@ -9,6 +9,7 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
+import { Coerce } from "@/common/coerce.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { LlmProvider } from "../../model/provider.js";
@@ -23,12 +24,7 @@ const DELETE_SQL = "DELETE FROM llm_provider WHERE id = #{id}";
 
 /** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
 function parseJsonObject(json: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
+  return Coerce.record(json) ?? {};
 }
 
 /** 毒行（display_name 为空等违反写入侧不变量的行）转 `Result.err`，不冒异常。 */

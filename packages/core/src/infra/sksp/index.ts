@@ -10,7 +10,7 @@
  *   完整备份导出可能含密文（产品层策略见 db-backup 迭代）。
  *
  * 零 native 依赖；平台驱动通过 {@link SkspRegistry.register} 注册。
- * {@link EnvSecretStore} 供 CI/脚本使用（无 native）。
+ * {@link createEnvSecretStore} 供 CI/脚本使用（无 native）。
  *
  * CLI/Desktop 可选 `NM_SKSP_DISABLE_ENV=1` 关闭 env 层以降低信任面。
  *
@@ -26,10 +26,7 @@ export { createCompositeSecretStore } from "./impl/composite-secret-store.js";
 export type { EnvSecretStoreLike } from "./impl/composite-secret-store.js";
 export { refToEnvVar } from "./logic/ref-to-env.js";
 export { resolveSkspEnvOverride } from "./logic/env-override.js";
-export {
-  EnvSecretStore,
-  createEnvSecretStore,
-} from "./impl/env-secret-store.js";
+export { createEnvSecretStore } from "./impl/env-secret-store.js";
 export { BaseSqliteSecretStore } from "./impl/base-sqlite-secret-store.js";
 export type { SkspCryptoStrategy } from "./impl/sksp-strategy.port.js";
 export { resolveSkspNameFromPlatform } from "./logic/platform.js";

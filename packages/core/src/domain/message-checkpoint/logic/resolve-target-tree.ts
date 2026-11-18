@@ -14,7 +14,7 @@ import type { CheckpointFilePointer, MessageCheckpointRepository } from "../repo
  * 路径（deleteWithRevision）靠它寻址 revision 并复活 entry
  * （rollback-restore-deleted-entry）。
  */
-export type RollbackTargetTreeResolution = {
+type RollbackTargetTreeResolution = {
   readonly tree: Map<string, number>;
   readonly entryIdByPath: Map<string, number>;
 };

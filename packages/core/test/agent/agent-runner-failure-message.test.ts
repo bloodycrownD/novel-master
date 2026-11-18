@@ -18,12 +18,8 @@ import assert from "node:assert/strict";
 import { Result } from "../../src/errors/either.js";
 import { describe, it } from "node:test";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import {
-  createAgentRunner,
-  InMemoryAgentSession,
-  type AgentDefinition,
-  type CreateAgentRunnerDeps,
-} from "@novel-master/core/agent";
+import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import {

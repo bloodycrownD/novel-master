@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { AssertionError, assert as invariant, assertNever } from "@/common/assert.js";
+import { AssertionError, assert as invariant } from "@/common/assert.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 
 describe("common/assert（T-S25）", () => {
@@ -32,25 +32,5 @@ describe("common/assert（T-S25）", () => {
     invariant(value != null, "不应触发");
     // 编译期由 asserts 收窄；运行期只需确认没抛。
     assert.equal(value, "x");
-  });
-
-  it("assertNever 抛 AssertionError，并对 value 做 String 兜底", () => {
-    let thrown: unknown;
-    try {
-      assertNever("unexpected-value" as never);
-    } catch (error) {
-      thrown = error;
-    }
-    assert.ok(thrown instanceof AssertionError);
-    assert.match((thrown as Error).message, /unreachable: unexpected-value/);
-
-    let custom: unknown;
-    try {
-      assertNever("x" as never, "自定义穷尽提示");
-    } catch (error) {
-      custom = error;
-    }
-    assert.ok(custom instanceof AssertionError);
-    assert.equal((custom as Error).message, "[invariant] 自定义穷尽提示");
   });
 });

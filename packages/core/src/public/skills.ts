@@ -22,25 +22,17 @@ export type {
   EffectiveSkillsInput,
 } from "../domain/skills/logic/effective-skills.js";
 export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
-export type { ParsedSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
 export { withSkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
-export type { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
 export { buildNewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
-export type { SkillDocBodyVariant } from "../domain/skills/logic/build-new-skill-doc.js";
 export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
 export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {
   SkillDomain,
-  SkillFrontMatter,
-  SkillRef,
   SkillSummary,
 } from "../domain/skills/model/skill.schema.js";
 export { skillFrontMatterSchema } from "../domain/skills/model/skill.schema.js";
 export { BUILTIN_SKILL_NAMES } from "../bootstrap/skills/seed-builtin-skills.js";
 export {
   SKILL_NAME_PATTERN,
-  SKILL_NAME_PATTERN_SOURCE,
-  SKILL_RESERVED_NAME,
   validateSkillName,
-  isValidSkillName,
 } from "../domain/skills/model/skill-name.js";

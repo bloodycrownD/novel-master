@@ -8,14 +8,14 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, DatabaseReplacedError, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
 import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
 import { HeadBucketCommand, ListObjectsV2Command, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { createBusyFlag } from "@novel-master/core/common";
+import { createBusyFlag, Path } from "@novel-master/core/common";
 import { agentActivity } from "../runtime/agent-activity.js";
 import { maintenanceBusy } from "./db-maintenance-busy.js";
 import { createCloudSyncConfigStore, type CloudSyncConfigDto, type CloudSyncConfigStore, type CloudSyncLocalMeta } from "./cloud-sync-config.store.js";
@@ -42,7 +42,7 @@ export type CloudSyncLocalStatusDto = {
  * 单实例计数与旧布尔等价：`if (syncBusy.isBusy())` 守卫保证不会嵌套 acquire。
  */
 /** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
-export const syncBusy = createBusyFlag();
+export const syncBusy: ReturnType<typeof createBusyFlag> = createBusyFlag();
 
 class DesktopCloudSyncService {
   /**
@@ -107,7 +107,7 @@ class DesktopCloudSyncService {
       forcePathStyle: s3Config.forcePathStyle ?? false,
     };
     const client = new S3Client(clientConfig);
-    const pathPrefix = ensureTrailingSlash(publicConfig.value.pathPrefix);
+    const pathPrefix = Path.ensureTrailingSlash(publicConfig.value.pathPrefix);
 
     try {
       await client.send(new HeadBucketCommand({ Bucket: s3Config.bucket }));

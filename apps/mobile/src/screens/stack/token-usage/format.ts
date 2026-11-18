@@ -11,7 +11,7 @@
  *   归并项，筛该服务商下不在配置集的模型行（filter.model = null 由 core 侧解释）。
  */
 import type {UsageStatsRange} from '@novel-master/core/chat';
-import {TokenFormat} from '@novel-master/core/common';
+import {DateTime, TokenFormat} from '@novel-master/core/common';
 import {ModelKey} from '../../../utils/model-key';
 
 /** 时间范围筛选种类；custom 需经 MonthRangePickerSheet 选定区间。 */
@@ -32,17 +32,10 @@ export const SUMMARY_EMPTY_TEXT = '—';
 /** 流水页请求级分页页大小（主屏与 RequestsTab 共用，单一来源防两端分页窗口漂移）。 */
 export const REQUESTS_PAGE_SIZE = 10;
 
-export function toLocalDayKey(ms: number): string {
-  const d = new Date(ms);
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
 /** 日历日偏移的本地日 key：`new Date(y, m, d + offset)` 日历推进（DST 安全），
  * 不用固定毫秒加法（23/25 小时日会偏 1 小时）。 */
 export function localDayKeyOffset(base: Date, offsetDays: number): string {
-  return toLocalDayKey(new Date(base.getFullYear(), base.getMonth(), base.getDate() + offsetDays).getTime());
+  return DateTime.localDayKey(DateTime.addLocalDays(base, offsetDays));
 }
 
 /** 命中率（0-1），分母无 cache 数据时返回 null（展示「—」）。 */
@@ -68,7 +61,7 @@ export function isCustomRangeValid(from: Date, to: Date): boolean {
  */
 export function resolveRangeDays(kind: RangeKind, customFrom: Date | null, customTo: Date | null): UsageStatsRange {
   const now = new Date();
-  const today = toLocalDayKey(now.getTime());
+  const today = DateTime.localDayKey(now.getTime());
   if (kind === 'today') {
     return {fromDay: today, toDay: today};
   }
@@ -77,8 +70,8 @@ export function resolveRangeDays(kind: RangeKind, customFrom: Date | null, custo
   }
   if (kind === 'custom' && customFrom != null && customTo != null) {
     return {
-      fromDay: toLocalDayKey(customFrom.getTime()),
-      toDay: toLocalDayKey(customTo.getTime()),
+      fromDay: DateTime.localDayKey(customFrom.getTime()),
+      toDay: DateTime.localDayKey(customTo.getTime()),
     };
   }
   return {fromDay: localDayKeyOffset(now, -6), toDay: today};

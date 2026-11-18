@@ -9,7 +9,7 @@
  */
 
 /** 若不存在则创建 vfs_content_blob 表（含 ref_count 列，WITHOUT ROWID + 约束）. */
-export const VFS_CONTENT_BLOB_TABLE_DDL = `
+const VFS_CONTENT_BLOB_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_content_blob (
   content_hash TEXT NOT NULL PRIMARY KEY,
   encoding TEXT NOT NULL CHECK (encoding IN ('zlib', 'zlib-b64')),

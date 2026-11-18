@@ -4,11 +4,12 @@
  * @module infra/sksp/impl/env-secret-store
  */
 
+import type { EnvSecretStoreLike } from "./composite-secret-store.js";
 import { refToEnvVar } from "../logic/ref-to-env.js";
 import { resolveSkspEnvOverride } from "../logic/env-override.js";
 
 /** 从 NOVEL_MASTER_PROVIDER_*_API_KEY 环境变量读取 provider API 密钥。 */
-export class EnvSecretStore {
+class EnvSecretStore {
   async get(ref: string): Promise<string | null> {
     const name = refToEnvVar(ref);
     if (!name) {
@@ -23,7 +24,7 @@ export class EnvSecretStore {
   }
 }
 
-/** 创建 {@link EnvSecretStore} 实例。nm-style: keep-public — CLI / Desktop 经 sksp barrel 消费的工厂入口，删除需同步改 apps 调用方。 */
-export function createEnvSecretStore(): EnvSecretStore {
+/** 创建 env 只读 store 实例。nm-style: keep-public — CLI / Desktop 经 sksp barrel 消费的工厂入口，删除需同步改 apps 调用方。 */
+export function createEnvSecretStore(): EnvSecretStoreLike {
   return new EnvSecretStore();
 }

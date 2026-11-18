@@ -3,17 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import {
-  bootstrapNovelMaster,
-  dumpProviderTableSnapshot,
-  NOVEL_MASTER_SCHEMA_STATEMENTS,
-  open,
-  restoreProviderTableSnapshot,
-  scrubProviderTables,
-  scrubProviderTablesInDatabase,
-  type ProviderTableSnapshot,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot, type TdbcConnection } from "@novel-master/core";
+import { NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
+import { scrubProviderTables } from "../../src/infra/db-backup/provider-table-snapshot.js";
 import { isAppError } from "@novel-master/core/errors";
 import {
   BETTER_SQLITE3_DRIVER_NAME,

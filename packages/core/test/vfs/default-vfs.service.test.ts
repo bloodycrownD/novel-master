@@ -1,7 +1,7 @@
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createVfsService } from "@novel-master/core/vfs";
+import { createVfsService } from "../../src/service/vfs/create-vfs-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { rejectsErr, unwrap } from "../helpers/result-unwrap.js";
 

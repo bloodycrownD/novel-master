@@ -15,8 +15,3 @@ export class AssertionError extends Error {
 export function assert(cond: unknown, message: string): asserts cond {
     if (!cond) throw new AssertionError(message);
 }
-
-/** 只用于「不该走到这里」的穷尽检查。 */
-export function assertNever(value: never, message?: string): never {
-    throw new AssertionError(message ?? `unreachable: ${String(value)}`);
-}

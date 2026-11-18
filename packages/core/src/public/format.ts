@@ -9,13 +9,11 @@ export {
   SLIDING_TOKEN_RATE_WINDOW_MS,
   createTokenRateSampler,
   slidingTokenRate,
-  type TokenRateSample,
   type TokenRateSampler,
 } from "../domain/format/sliding-token-rate.js";
 export {
   parseStreamFinalRateSnapshot,
   serializeStreamFinalRateSnapshot,
-  type StreamFinalRateSnapshot,
 } from "../domain/format/stream-final-rate.js";
 /**
  * 「基线 + 增量」读值口径的两个纯函数（stream-metrics-native ①）：双端

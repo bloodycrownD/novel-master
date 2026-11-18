@@ -24,7 +24,7 @@ import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
 import type { SessionFileHead } from "../model/message-checkpoint.js";
 
 /** reconcile 需处理的路径集合。 */
-export type ReconcilePathSets = {
+type ReconcilePathSets = {
   readonly pathsNeedWrite: ReadonlySet<string>;
   readonly pathsNeedDelete: ReadonlySet<string>;
 };

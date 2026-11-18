@@ -12,7 +12,7 @@
 const FRONT_MATTER_DELIMITER = /^---\s*$/;
 
 /** Result of splitting a Markdown file into optional front matter and body. */
-export interface MarkdownFrontMatterSplit {
+interface MarkdownFrontMatterSplit {
     /** Lines between opening and closing `---` (excludes delimiters). */
     frontMatterLines: string[] | null;
     /** Markdown body after the closing delimiter, or full file when no front matter. */
@@ -24,7 +24,7 @@ export interface MarkdownFrontMatterSplit {
 }
 
 /** Simple `key: value` row from YAML-style front matter lines (display only). */
-export interface FrontMatterField {
+interface FrontMatterField {
     key: string;
     value: string;
 }

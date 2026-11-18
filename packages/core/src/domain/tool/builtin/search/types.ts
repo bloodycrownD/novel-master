@@ -26,6 +26,7 @@
  */
 
 import { Guards } from "@/common/guards.js";
+import { Number } from "@/common/number.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { findPlaintextSecrets } from "./curl-import.js";
@@ -107,10 +108,7 @@ const MAX_RESULTS_LIMIT = 20;
  * 1..20（0→5、99→20，T-A5 锁定该口径）。模板执行器与 DuckDuckGo 适配器共用。
  */
 export function normalizeMaxResults(value: number | undefined): number {
-  if (value == null || !Number.isFinite(value) || value < 1) {
-    return DEFAULT_MAX_RESULTS;
-  }
-  return Math.min(Math.floor(value), MAX_RESULTS_LIMIT);
+  return Number.clampIntOrDefault(value, {fallback: DEFAULT_MAX_RESULTS, min: 1, max: MAX_RESULTS_LIMIT});
 }
 
 /**

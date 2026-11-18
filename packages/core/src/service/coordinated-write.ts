@@ -45,7 +45,7 @@ interface WriteStep {
  * 原始失败原因放在 `cause`；回滚阶段收集到的错误通过 `rollbackErrors` 暴露给上层，
  * 这样既不掩盖第一次的根因，又不会把回滚失败悄悄吃掉。
  */
-export class CoordinatedWriteRollbackError extends Error {
+class CoordinatedWriteRollbackError extends Error {
   /** 回滚阶段（按逆序）收集到的错误，可能与 `cause` 一一对应，也可能为空。 */
   readonly rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>;
 
@@ -152,16 +152,4 @@ export class CoordinatedWrite {
     }
     return Result.ok(undefined);
   }
-}
-
-/**
- * 把一组「执行 + 回滚」对快速拼成 `CoordinatedWrite` 并立刻运行。
- *
- * 适合一次性、不需要外部继续注册的场景。需要分批注册或链式拼装时，
- * 直接用 `new CoordinatedWrite()` 即可。
- */
-export async function runCoordinatedWrite(steps: WriteStep[]): Promise<Result<void, AppError>> {
-  const write = new CoordinatedWrite();
-  for (const step of steps) write.register(step);
-  return write.run();
 }

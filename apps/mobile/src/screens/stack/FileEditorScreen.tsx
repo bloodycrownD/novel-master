@@ -5,7 +5,8 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
-import {basenameOf, type VfsService} from '@novel-master/core/vfs';
+import type {VfsService} from '@novel-master/core/vfs';
+import {Path} from '@novel-master/core/common';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
@@ -264,7 +265,7 @@ export function FileEditorScreen() {
         disabled: saving || !isDirty || previewMode || isReadOnly,
         onPress: () => handleSave().catch(() => undefined),
       }}
-      title={isDirty ? '未保存' : basenameOf(path)}
+      title={isDirty ? '未保存' : Path.basename(path)}
       titleDanger={isDirty}
       titleFontSize={14}
       titlePress={editorFocused && !previewMode ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor} : undefined}

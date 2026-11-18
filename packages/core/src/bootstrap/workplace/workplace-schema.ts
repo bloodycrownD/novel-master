@@ -9,9 +9,9 @@ export const WORKPLACE_DIR_RULE_TABLE = "workplace_dir_rule";
 /** Canonical table: file inclusion rules. */
 export const WORKPLACE_FILE_RULE_TABLE = "workplace_file_rule";
 /** Canonical index on dir rules by scope. */
-export const WORKPLACE_DIR_SCOPE_INDEX = "idx_workplace_dir_scope";
+const WORKPLACE_DIR_SCOPE_INDEX = "idx_workplace_dir_scope";
 /** Canonical index on file rules by scope. */
-export const WORKPLACE_FILE_SCOPE_INDEX = "idx_workplace_file_scope";
+const WORKPLACE_FILE_SCOPE_INDEX = "idx_workplace_file_scope";
 
 /** Idempotent DDL for workplace dir/file rules. */
 export const WORKPLACE_SCHEMA_STATEMENTS: readonly string[] = [

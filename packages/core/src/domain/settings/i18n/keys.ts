@@ -12,9 +12,7 @@
  * @module domain/settings/i18n/keys
  */
 
-import type { MessageDescriptor, MessageLike } from "@/common/i18n.js";
-
-export const SETTINGS_MESSAGE_KEYS = [
+const SETTINGS_MESSAGE_KEYS = [
   "settings.search.meta.label.bocha",
   "settings.search.meta.label.tavily",
   "settings.search.meta.label.brave",
@@ -169,5 +167,3 @@ export const SETTINGS_MESSAGE_KEYS = [
 ] as const;
 
 export type SettingsMessageKey = (typeof SETTINGS_MESSAGE_KEYS)[number];
-export type SettingsMessageDescriptor = MessageDescriptor<SettingsMessageKey>;
-export type SettingsMessageLike = MessageLike<SettingsMessageKey>;

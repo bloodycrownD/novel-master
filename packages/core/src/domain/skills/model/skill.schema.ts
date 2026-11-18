@@ -18,17 +18,6 @@ export type SkillDomain = "global" | "project";
 /** SKILL.md front matter 的严格 schema（name / description 必填）。 */
 export const skillFrontMatterSchema = z.object({ name: z.string().min(1), description: z.string().min(1) }).strict();
 
-/** 解析成功的 front matter 字段。 */
-export type SkillFrontMatter = z.infer<typeof skillFrontMatterSchema>;
-
-/** 技能定位引用（跳详情 / 卡片透传用）。 */
-export interface SkillRef {
-  readonly domain: SkillDomain;
-  /** project 域必带；global 域缺省。 */
-  readonly projectId?: string;
-  readonly name: string;
-}
-
 /**
  * 技能清单条目（listSkills / effectiveSkills 的输入形态）。
  *

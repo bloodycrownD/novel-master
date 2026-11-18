@@ -7,4 +7,3 @@ export {
   parsePatternInput,
   splitSmartSortHighlightSegments,
 } from "@novel-master/core/smart-sort-rule";
-export type { SmartSortHighlightSegment } from "@novel-master/core/smart-sort-rule";

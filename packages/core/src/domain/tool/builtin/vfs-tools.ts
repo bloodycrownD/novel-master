@@ -44,9 +44,6 @@ export const LEGACY_FILE_TOOL_HINTS: Readonly<Record<string, string>> = {
  */
 export const MUTATING_FILE_TOOL_NAMES = new Set<FileToolName>(["write", "edit", "fs"]);
 
-/** @deprecated Use {@link MUTATING_FILE_TOOL_NAMES}. */
-export const MUTATING_VFS_TOOL_NAMES = MUTATING_FILE_TOOL_NAMES;
-
 /**
  * Returns whether a tool name performs file mutations for checkpoint purposes.
  *
@@ -55,9 +52,6 @@ export const MUTATING_VFS_TOOL_NAMES = MUTATING_FILE_TOOL_NAMES;
 export function isMutatingFileToolName(name: string): boolean {
   return MUTATING_FILE_TOOL_NAMES.has(name as FileToolName);
 }
-
-/** @deprecated Use {@link isMutatingFileToolName}. */
-export const isMutatingVfsToolName = isMutatingFileToolName;
 
 /** Tools whose results can open a file in the workspace preview. */
 export const FILE_OPEN_TOOL_NAMES = new Set<FileToolName>(["read", "write", "edit"]);

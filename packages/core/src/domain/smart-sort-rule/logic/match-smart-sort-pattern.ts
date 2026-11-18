@@ -28,7 +28,8 @@
  */
 
 import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
-import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, formatSortTupleForDisplay, parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
+import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, formatSortTupleForDisplay } from "@/domain/workplace/logic/smart-sort.js";
+import { Number } from "@/common/number.js";
 import type { MessageLike } from "@/common/i18n.js";
 
 /**
@@ -52,13 +53,13 @@ export interface SmartSortPatternMatch {
 }
 
 /** Success shape: all matches in first-occurrence order. */
-export interface MatchSmartSortPatternOk {
+interface MatchSmartSortPatternOk {
   readonly ok: true;
   readonly matches: readonly SmartSortPatternMatch[];
 }
 
 /** Failure shape: regex did not compile (message from the engine). */
-export interface MatchSmartSortPatternErr {
+interface MatchSmartSortPatternErr {
   readonly ok: false;
   readonly error: string;
 }
@@ -101,7 +102,7 @@ export function matchSmartSortPattern(pattern: string, flags: string, text: stri
     } else if (captureKind === "fixed_max") {
       tuple = formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
     } else {
-      const nums = groups.map((g) => (typeof g === "string" ? parseChineseNum(g) : null)).filter((n): n is number => n !== null);
+      const nums = groups.map((g) => (typeof g === "string" ? Number.parseChineseNum(g) : null)).filter((n): n is number => n !== null);
       tuple = nums.length > 0 && nums.length === groups.length ? formatSortTupleForDisplay(nums) : null;
     }
     matches.push({

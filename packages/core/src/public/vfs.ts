@@ -1,7 +1,6 @@
 export { isVfsError } from "../errors/guards.js";
 export type { VfsEntry, VfsEntryKind } from "../domain/vfs/model/vfs-entry.js";
 export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
-export { createVfsService } from "../service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
 export { createPhysicalVfsService } from "../service/vfs/create-physical-vfs-service.js";
 export type { PhysicalVfsService } from "../service/vfs/physical-vfs.port.js";
@@ -47,7 +46,6 @@ export type {
   BatchApplyReport,
   BatchApplyOptions,
   BatchExportPlan,
-  BatchExportFileEntry,
   BatchExportSkip,
   BatchIngestWriter,
 } from "../domain/vfs/ports/vfs-batch-io.port.js";
@@ -68,16 +66,13 @@ export { SqliteVfsRevisionRepository } from "../domain/vfs/repositories/impl/sql
 export type { VfsRevisionRepository } from "../domain/vfs/repositories/vfs-revision.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
 export { isSessionVfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
-// 路径族单源：宽松父目录（root/非法 → null）与 basename（root → `/`），UI 导航/标题消费。
+// 路径族单源：宽松父目录（root/非法 → null）留在 VFS 域；basename / 去尾斜杠 /
+// 改挂目录等纯字符串原语已收敛到 `@novel-master/core/common` 的 `Path`。
 export { parentDirOrNull } from "../domain/vfs/logic/parent-dir.js";
-export { basenameOf } from "../domain/vfs/logic/basename.js";
 export {
   resolveLogicalPath,
   validateLogicalPath,
-  toPhysicalPath,
-  toLogicalPath,
   scopePhysicalPrefix,
-  projectVfsPrefix,
 } from "../domain/vfs/logic/vfs-path-mapper.js";
 export {
   createVfsFile,
@@ -86,8 +81,6 @@ export {
 } from "../domain/vfs/logic/vfs-entry-ops.js";
 export {
   moveVfsPath,
-  remapPathUnderDir,
-  normalizeDirPath,
   mkdirIgnoreExists,
   mkdirIgnoreExistingDirectory,
 } from "../domain/vfs/logic/vfs-move.js";
@@ -104,11 +97,6 @@ export {
 export { readUserVfsSaveBaseline } from "../domain/vfs/logic/read-user-vfs-save-baseline.js";
 export { vfsUserMessage } from "../domain/vfs/logic/format-vfs-error-for-user.js";
 export { validateVfsEntryName } from "../domain/vfs/logic/validate-entry-name.js";
-export type { VfsEntryNameValidation } from "../domain/vfs/logic/validate-entry-name.js";
-export type {
-  UserVfsSaveMappingOptions,
-  UserVfsEditHunk,
-  UserVfsSaveMappingResult,
-} from "../domain/vfs/logic/user-vfs-save-mapping.js";
+export type { UserVfsSaveMappingOptions } from "../domain/vfs/logic/user-vfs-save-mapping.js";
 export { actionXmlToToolUses } from "../domain/vfs/logic/action-xml-to-tool-uses.js";
 export type { DerivedToolUseInput } from "../domain/vfs/logic/action-xml-to-tool-uses.js";

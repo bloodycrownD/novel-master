@@ -18,7 +18,7 @@ export interface LlmExportZones {
   readonly dynamicCount: number;
 }
 
-export type LlmExportZone = "persist" | "chat" | "dynamic";
+type LlmExportZone = "persist" | "chat" | "dynamic";
 
 function resolveZone(index: number, total: number, zones: LlmExportZones | undefined): LlmExportZone {
   if (zones == null) {

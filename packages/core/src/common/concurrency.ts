@@ -21,7 +21,7 @@
  */
 
 /** 进程级忙碌旗：`> 0` 即忙碌；`release` 钳到 0，多释放不产生负计数。 */
-export interface BusyFlag {
+interface BusyFlag {
   /** 是否有调用方正处在互斥窗口内。 */
   isBusy(): boolean;
   /** 计数 +1（与 `release` 严格配对使用）。 */

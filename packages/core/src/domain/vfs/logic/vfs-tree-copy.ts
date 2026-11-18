@@ -16,18 +16,18 @@ import type { Interrupt, Outcome } from "@/errors/outcome.js";
 import type { VfsContentStore } from "../content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
-import { stripTrailingSlash } from "../repositories/impl/scope-prefix-helpers.js";
+import { Path } from "@/common/path.js";
 import { decrementLiveRefsUnderScope, deleteUnreferencedUnderScope } from "./revision-ref-count.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "./seed-live-head-revisions.js";
 import { isVfsPathAncestorOfExcluded, isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
 
 /** 轻量 scope 引用（只需 scopeKey 字符串）。 */
-export interface VfsCopyScope {
+interface VfsCopyScope {
   readonly scopeKey: string;
 }
 
 function relativeUnderPrefix(fullPath: string, prefix: string): string {
-  const base = stripTrailingSlash(prefix);
+  const base = Path.stripTrailingSlash(prefix);
   if (fullPath === base) {
     return "";
   }
@@ -37,7 +37,7 @@ function relativeUnderPrefix(fullPath: string, prefix: string): string {
 }
 
 function joinLogical(prefix: string, relative: string): string {
-  const base = stripTrailingSlash(prefix);
+  const base = Path.stripTrailingSlash(prefix);
   if (relative.length === 0) {
     return base;
   }
@@ -387,7 +387,7 @@ export async function releaseAndDeleteVfsPrefix(repo: VfsEntryRepository, revisi
  */
 export async function deleteVfsPrefix(repo: VfsEntryRepository, scopeKey: string, prefix: string, excludePrefixes?: readonly string[]): Promise<Result<void, AppError>> {
   const excludes = excludePrefixes ?? [];
-  const base = stripTrailingSlash(prefix);
+  const base = Path.stripTrailingSlash(prefix);
   if (excludes.length === 0) {
     // 无排除前缀时走批量快路径（一条 DELETE...LIKE 清整棵子树）。
     const deleted = await repo.deleteRecursiveIfAny(scopeKey, base);

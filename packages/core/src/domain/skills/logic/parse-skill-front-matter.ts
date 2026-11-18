@@ -8,13 +8,15 @@
  */
 
 import { splitMarkdownFrontMatter } from "@/common/front-matter.js";
+import { Coerce } from "@/common/coerce.js";
+import { Guards } from "@/common/guards.js";
 import type { MessageLike } from "@/common/i18n.js";
 import { messageParamOf } from "@/i18n/localized-message.js";
 import { parseText } from "@/infra/serialization/parse-text.js";
 import { skillFrontMatterSchema } from "../model/skill.schema.js";
 
 /** front matter 解析结果（含有效性标记与无效原因；invalidReason 供 UI 翻译）。 */
-export interface ParsedSkillFrontMatter {
+interface ParsedSkillFrontMatter {
   readonly valid: boolean;
   readonly invalidReason?: MessageLike;
   readonly name: string | null;
@@ -23,11 +25,11 @@ export interface ParsedSkillFrontMatter {
 
 /** 尽力从原始映射里提取字段（无效时也保留可展示的部分元数据）。 */
 function pickStringField(raw: unknown, key: string): string | null {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!Guards.isRecord(raw)) {
     return null;
   }
-  const value = (raw as Record<string, unknown>)[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
+  const value = Coerce.strictText(raw[key]);
+  return value != null && value.length > 0 ? value : null;
 }
 
 /**

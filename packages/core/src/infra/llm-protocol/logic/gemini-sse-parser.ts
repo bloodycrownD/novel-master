@@ -33,7 +33,7 @@ type GeminiToolUse = {
 };
 
 /** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
-export type GeminiSseParserState = SseParseDiagnostics & {
+type GeminiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -49,7 +49,7 @@ export type GeminiSseParserOptions = {
   readonly onStream?: (event: LlmStreamEvent) => void;
 };
 
-export type GeminiSseParser = {
+type GeminiSseParser = {
   readonly state: GeminiSseParserState;
   readonly feed: (chunk: string) => void;
   readonly finish: () => SseFinishResult;

@@ -15,7 +15,6 @@ import {
   createVfsDirectory,
   createVfsFile,
   readUserVfsSaveBaseline,
-  remapPathUnderDir,
 } from '@novel-master/core/vfs';
 import {Result} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -81,5 +80,3 @@ export async function sessionSaveVfsFile(runtime: MobileRuntime, sessionId: stri
   }
   return executeSessionUserVfsOp(runtime, sessionId, op);
 }
-
-export {remapPathUnderDir};

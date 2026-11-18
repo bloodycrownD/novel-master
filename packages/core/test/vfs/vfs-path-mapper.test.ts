@@ -2,8 +2,8 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveLogicalPath, toLogicalPath, toPhysicalPath, validateLogicalPath } from "@novel-master/core/vfs";
-import { scopeKey, scopePhysicalPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { resolveLogicalPath, validateLogicalPath } from "@novel-master/core/vfs";
+import { scopeKey, scopePhysicalPrefix, toLogicalPath, toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "@/domain/vfs/logic/strip-known-physical-prefixes.js";
 
 /** 解包 Result 成功分支；失败直接让测试失败。 */

@@ -31,7 +31,7 @@ type ActiveBlock =
   | { type: "tool_use"; index: number };
 
 /** 单条流的累加器（工厂闭包持有；诊断字段与白盒测试可见）。 */
-export type AnthropicSseParserState = SseParseDiagnostics & {
+type AnthropicSseParserState = SseParseDiagnostics & {
   buffer: string;
   blocks: ContentBlock[];
   active: ActiveBlock | null;
@@ -50,7 +50,7 @@ export type AnthropicSseParserOptions = {
   readonly toolNames?: AnthropicToolNameWire;
 };
 
-export type AnthropicSseParser = {
+type AnthropicSseParser = {
   readonly state: AnthropicSseParserState;
   readonly feed: (chunk: string) => void;
   readonly finish: () => SseFinishResult;

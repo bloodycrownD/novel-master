@@ -210,8 +210,3 @@ export function scopePhysicalPrefix(scope: VfsScope): string {
       return `/projects/${scope.projectId}`;
   }
 }
-
-/** Physical prefix for all vfs rows under a project (sessions + template). */
-export function projectVfsPrefix(projectId: string): string {
-  return `/projects/${projectId}`;
-}

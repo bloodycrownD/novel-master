@@ -22,7 +22,8 @@ import { deflateSync, inflateSync } from "node:zlib";
 import { unzlibSync, zlibSync } from "fflate";
 import { clearZlibCodecAccelerator, registerZlibCodecAccelerator, tryZlibDeflate, tryZlibInflate, type ZlibCodecAccelerator } from "../../src/domain/vfs/content-store/logic/zlib-accelerator.js";
 import { compressZlib, decompressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
-import { decodeFossilChainSpans, decodeZlibConcatSpans, encodeFossilChainPack, encodeZlibConcatPack } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
+import { decodeFossilChainSpans, decodeZlibConcatSpans } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
+import { encodeFossilChainPack, encodeZlibConcatPack } from "../helpers/pack-fixtures.js";
 import type { Result } from "../../src/errors/either.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 

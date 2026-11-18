@@ -133,7 +133,7 @@ describe("VfsBatchIoService", () => {
   });
 
   it("T-B10: 多选两个同名文件（不同父目录）都要进 plan", async () => {
-    // 牙齿：把锚点改回 `basenameOf(logical)` 这条立刻红（files.length === 1，
+    // 牙齿：把锚点改回 `Path.basename(logical)` 这条立刻红（files.length === 1，
     // 第二条被 seenFileRels 静默丢弃 ⇒ ZIP 少一个文件且 UI 零提示）。
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));

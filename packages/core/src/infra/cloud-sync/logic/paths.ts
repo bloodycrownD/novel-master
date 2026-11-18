@@ -1,26 +1,17 @@
 /**
  * 云同步远端对象路径规范化与键名生成。
  *
+ * 补 / 去尾斜杠的纯路径原语已收敛到 `common/path.ts` 的 `Path`（`ensureTrailingSlash` 与
+ * `stripTrailingSlash` 语义相反，两者不可互替）。
+ *
  * @module infra/cloud-sync/logic/paths
  */
 
-/**
- * 规范化路径前缀：非空时确保以 `/` 结尾。
- *
- * 与 `domain/vfs/repositories/impl/scope-prefix-helpers.ts` 的 `stripTrailingSlash`
- * **语义相反**（那边去尾斜杠），两者不可互替（nm-code-style §5.4 / §9.4 已登记的同名反义先例）。
- */
-export function ensureTrailingSlash(prefix: string): string {
-  const trimmed = prefix.trim();
-  if (trimmed.length === 0) {
-    return "";
-  }
-  return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
-}
+import { Path } from "@/common/path.js";
 
 /** 生成 status.json 对象键 */
 export function statusKey(prefix: string): string {
-  return `${ensureTrailingSlash(prefix)}status.json`;
+  return `${Path.ensureTrailingSlash(prefix)}status.json`;
 }
 
 /**
@@ -28,5 +19,5 @@ export function statusKey(prefix: string): string {
  */
 export function snapshotKey(prefix: string, rev: number): string {
   const revPart = String(rev).padStart(6, "0");
-  return `${ensureTrailingSlash(prefix)}snapshots/rev-${revPart}.nmbackup`;
+  return `${Path.ensureTrailingSlash(prefix)}snapshots/rev-${revPart}.nmbackup`;
 }

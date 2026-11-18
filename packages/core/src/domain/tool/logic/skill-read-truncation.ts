@@ -19,7 +19,7 @@
 import { capUtf8Bytes, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, truncateLine } from "./tool-output-limits.js";
 
 /** skill read 截断管线的全部派生量（content 已截断到预算内，可直接进 wire）。 */
-export interface SkillReadTruncation {
+interface SkillReadTruncation {
   /** 截断后的正文（`byteCapped.lines.join("\n")`，wire 里逐行加行号）。 */
   readonly content: string;
   readonly returnedLines: number;
@@ -82,7 +82,7 @@ export function deriveSkillReadTruncation(plain: string, offset: number, limit: 
 }
 
 /** skill load 的截断推导结果（load 无分页参数，从第 1 行起）。 */
-export interface SkillLoadTruncation {
+interface SkillLoadTruncation {
   readonly content: string;
   readonly truncated: boolean;
 }

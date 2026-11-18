@@ -19,12 +19,6 @@ export async function ensureSchemaMigrationsTable(tx: TdbcConnection): Promise<v
 )`);
 }
 
-/** 是否已 apply 指定 migration id。 */
-export async function isSchemaMigrationApplied(tx: TdbcConnection, id: string): Promise<boolean> {
-  const rows = await queryTemplate<{ id: string }>(tx, parser, `SELECT id FROM ${TABLE} WHERE id = #{id}`, { id });
-  return rows.length > 0;
-}
-
 /** 一次读出全部已 apply 的 migration id（供 runner 避免 N+1）。 */
 export async function listAppliedSchemaMigrationIds(tx: TdbcConnection): Promise<Set<string>> {
   const rows = await queryTemplate<{ id: string }>(tx, parser, `SELECT id FROM ${TABLE}`, {});

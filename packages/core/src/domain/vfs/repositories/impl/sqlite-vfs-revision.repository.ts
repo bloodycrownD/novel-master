@@ -19,7 +19,8 @@ import type { VfsRevisionAppendInput, VfsRevisionPointerMeta, VfsRevisionReposit
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
-import { escapeLike, stripTrailingSlash } from "./scope-prefix-helpers.js";
+import { escapeLike } from "./scope-prefix-helpers.js";
+import { Path } from "@/common/path.js";
 
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
@@ -210,7 +211,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysUnderScope 端口方法；唯一生产调用来自同类 deleteExceptReachable（同为端口方法），内联会在调用点复制 JOIN 扫描 SQL，且端口仍要求此方法存在。 */
   async listKeysUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number }>> {
-    const base = stripTrailingSlash(pathPrefix);
+    const base = Path.stripTrailingSlash(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql57 = "SELECT r.entry_id AS entry_id, r.version AS version\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
@@ -223,7 +224,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   /** nm-style: keep-public — 实现 VfsRevisionRepository.listKeysWithRefCountUnderScope 端口方法；内联会把 JOIN 扫描 SQL 搬进调用层。 */
   async listKeysWithRefCountUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number; refCount: number }>> {
-    const base = stripTrailingSlash(pathPrefix);
+    const base = Path.stripTrailingSlash(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     const sql58 = "SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
@@ -394,7 +395,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   /** nm-style: keep-public — 实现 VfsRevisionRepository.deleteUnreferencedUnderScope 端口方法；内联会把 COUNT + 子查询 DELETE 搬进调用层。 */
   async deleteUnreferencedUnderScope(scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<number> {
-    const base = stripTrailingSlash(pathPrefix);
+    const base = Path.stripTrailingSlash(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
     // 隔离豁免：排除前缀下的 revision 不参与 GC（NOT (path = excl OR path LIKE excl/%)）
@@ -407,7 +408,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     };
     for (let i = 0; i < excludes.length; i++) {
       const exclRaw = excludes[i]!;
-      const excl = stripTrailingSlash(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
+      const excl = Path.stripTrailingSlash(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
       bindings[`exclPath${i}`] = excl;
       bindings[`exclPattern${i}`] = `${escapeLike(excl)}/%`;
       excludeClauses.push(`(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`);
