@@ -9,10 +9,7 @@ export {
   isRollbackRevisionBackfillRequiredError,
   readRollbackRevisionBackfillMissingPaths,
 } from "../domain/message-checkpoint/logic/rollback-error-guards.js";
-export {
-  createMessageCheckpointService,
-  createMessageRollbackService,
-} from "../service/message-checkpoint/create-message-checkpoint-services.js";
+export { MessageCheckpointFactory } from "../service/message-checkpoint/message-checkpoint-factory.js";
 export type { MessageCheckpointService } from "../service/message-checkpoint/message-checkpoint.port.js";
 export type {
   MessageRollbackService,

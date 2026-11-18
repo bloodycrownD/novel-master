@@ -11,10 +11,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import {
-  createMessageRollbackService,
-  type MessageRollbackService,
-} from "@novel-master/core/message-checkpoint";
+import { MessageCheckpointFactory, type MessageRollbackService } from "@novel-master/core/message-checkpoint";
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
@@ -41,7 +38,7 @@ describe("restore-path resetHead semantics", () => {
     const project = unwrap(await ctx.projects.create(`P-W1-${suffix}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
     // 写若干 version
     await svfs.write("/file.md", "v1", { versionCheck: false });

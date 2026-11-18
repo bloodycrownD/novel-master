@@ -14,7 +14,7 @@
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
+import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
 import {
   backfillBaselineCheckpoints,
   scanBackfillGap,
@@ -114,7 +114,7 @@ describe("CS-09 空窗定位：单查询 JOIN 替代倒扫", () => {
     await ctx.sessionVfs(project.id, session.id).write("/a.md", `a-${label}`, {
       versionCheck: false,
     });
-    const checkpoints = createMessageCheckpointService(conn);
+    const checkpoints = MessageCheckpointFactory.create(conn);
     for (const i of capturedIndexes) {
       unwrap(await checkpoints.capture(session.id, project.id, ids[i]!));
     }

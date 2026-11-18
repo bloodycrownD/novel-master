@@ -34,7 +34,8 @@ import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -426,7 +427,7 @@ export class DefaultMessageService implements MessageService {
     // tail 截断核心与回滚 / 批量删共用 `truncateTailInTransaction`：删除链、backfill
     // 游标、Composer 状态条域的清理只有一份实现（读也一并留在事务内，产出写集合）。
     await this.deps.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), { projectId: session.projectId, sessionId, afterSeq: anchor.seq, sweepRevisions: false });
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);

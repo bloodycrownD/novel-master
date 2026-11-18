@@ -15,10 +15,8 @@ import {
   USER_VFS_PENDING_QUEUE_KEY,
   RULE_SNAPSHOT_CANON_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  createTruncateTailDepsFromTx,
-  truncateTailInTransaction,
-} from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { truncateTailInTransaction } from "../../src/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -68,7 +66,7 @@ describe("truncateTailInTransaction", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("3")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -120,7 +118,7 @@ describe("truncateTailInTransaction", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("2")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -173,7 +171,7 @@ describe("truncateTailInTransaction", () => {
     const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("only")));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -216,7 +214,7 @@ describe("truncateTailInTransaction", () => {
     );
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -243,7 +241,7 @@ describe("truncateTailInTransaction", () => {
     await insertOrphanRevision(ctx.conn, 999102);
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,

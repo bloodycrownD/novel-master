@@ -8,7 +8,7 @@ import { decideBackfillShortCircuit, scanBackfillGap, writeBackfillGap } from "@
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
-import { createCheckpointRepoDeps } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
@@ -32,7 +32,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     await this.deps.conn.transaction(async (tx) => {
       // listSessionFileHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
       // 避免并发 capture 读到未提交的 head（V8）。
-      const { entryRepo, checkpointRepo } = createCheckpointRepoDeps(tx);
+      const { entryRepo, checkpointRepo } = MessageCheckpointFactory.createRepoDeps(tx);
       const files = await listSessionFileHeads(entryRepo, projectId, sessionId);
       if (files.length === 0) {
         return;
@@ -80,7 +80,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
   async backfillMissingBaselines(sessionId: string, projectId: string, scope?: AbortScope): Promise<void> {
     const { conn } = this.deps;
     // 段 0（事务外，只读）：两段式短路判定。
-    const { entryRepo, checkpointRepo } = createCheckpointRepoDeps(conn);
+    const { entryRepo, checkpointRepo } = MessageCheckpointFactory.createRepoDeps(conn);
     const messageRepo = new SqliteMessageRepository(conn);
     const decision = await decideBackfillShortCircuit({ sessionKkv: new SqliteSessionKkvRepository(conn), messageRepo, checkpointRepo, sessionId });
 
@@ -112,7 +112,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
     await conn.transaction(async (tx) => {
       // 事务回调里**所有** repo 都必须用回调传入的 tx 构造；用外层 conn 会撞
       // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-      const result = await writeBackfillGap({ checkpointRepo: createCheckpointRepoDeps(tx).checkpointRepo, sessionId, scan, signal: scope?.signal });
+      const result = await writeBackfillGap({ checkpointRepo: MessageCheckpointFactory.createRepoDeps(tx).checkpointRepo, sessionId, scan, signal: scope?.signal });
       if (result.confirmedNoGap) {
         const kkv = new SqliteSessionKkvRepository(tx);
         await kkv.set(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, String(decision.count));
@@ -128,7 +128,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
    * 也不会抛错。
    */
   async release(sessionId: string, messageId: string): Promise<void> {
-    const { checkpointRepo } = createCheckpointRepoDeps(this.deps.conn);
+    const { checkpointRepo } = MessageCheckpointFactory.createRepoDeps(this.deps.conn);
     await checkpointRepo.deleteCheckpointsForMessages(sessionId, [messageId]);
   }
 }

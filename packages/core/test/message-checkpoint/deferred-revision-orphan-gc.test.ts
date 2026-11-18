@@ -16,7 +16,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { scheduleDeferredRevisionOrphanGc } from "../../src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
@@ -63,7 +63,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     );
 
     ctx.counter.clear();
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     const rollbackDone = rollback.rollbackToMessage(
       session.id,
       project.id,
@@ -143,7 +143,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     assert.equal(releases.length, 1);
 
     // 孤儿残留窗口内：回滚正常完成且语义正确。
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, anchor.id, {
       skipVfsReconcile: true,
     });

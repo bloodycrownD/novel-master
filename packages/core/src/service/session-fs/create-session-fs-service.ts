@@ -12,7 +12,7 @@ import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { decrementLiveRefsUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import type { RollbackProbe } from "@/service/message-checkpoint/message-rollback.port.js";
 import { DefaultSessionFsService } from "./impl/session-fs.service.js";
 import type { SessionFsService } from "./session-fs.port.js";
@@ -34,7 +34,7 @@ interface SessionFsServiceOptions {
 /** 为给定连接创建 {@link SessionFsService}（options 透传给回滚服务装配）。 */
 export function createSessionFsService(conn: TdbcConnection, options?: SessionFsServiceOptions): SessionFsService {
   return new DefaultSessionFsService({
-    messageRollback: createMessageRollbackService(conn, {
+    messageRollback: MessageCheckpointFactory.createRollback(conn, {
       probe: options?.probe,
       yieldFn: options?.yieldFn,
     }),

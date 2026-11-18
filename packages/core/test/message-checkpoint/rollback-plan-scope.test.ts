@@ -14,7 +14,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import {
   getNovelMasterTestContext,
@@ -49,7 +49,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
       blocks: [{ type: "text", text: "总结" }],
     }));
 
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
       skipVfsReconcile: true,
     });
@@ -82,7 +82,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
       blocks: [{ type: "text", text: "被截" }],
     }));
 
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
@@ -108,7 +108,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     }));
 
     ctx.counter.clear();
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, assistant0.id, {
       skipVfsReconcile: true,
     });

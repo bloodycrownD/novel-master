@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { isSessionFsError } from "../../src/errors/guards.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -162,7 +162,7 @@ describe("rollbackToMessage", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
     const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
     unwrap(await ctx.messages.append(session.id, "assistant", {
@@ -179,7 +179,7 @@ describe("rollbackToMessage", () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
 
     const user1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("hi")));
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));

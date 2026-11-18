@@ -26,7 +26,7 @@ import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { isSessionFsError } from "@/errors/guards.js";
 import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 import { testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -141,7 +141,7 @@ describe("C2-10 R3: 间隙改文件 ⇒ ROLLBACK_CONFLICT 且不静默", () => {
         .sessionVfs(fx.projectId, fx.sessionId)
         .write(`/gap-${attempt}.md`, `gap-${attempt}`, { versionCheck: false });
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
     await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),
@@ -188,7 +188,7 @@ describe("C2-10 R4: 间隙新增文件 ⇒ 删集合按事务内 live 树重算"
         await svfs.write("/gap-once.md", "gap", { versionCheck: false });
       }
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
     await rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId);
 
@@ -246,7 +246,7 @@ describe("C2-10 R5: 间隙换掉一条 tail 消息 ⇒ ROLLBACK_TAIL_DRIFT 且�
       ));
       injectedId = fresh.id;
     });
-    const rollback = createMessageRollbackService(conn);
+    const rollback = MessageCheckpointFactory.createRollback(conn);
 
     await rejectsErr(
       () => rollback.rollbackToMessage(fx.sessionId, fx.projectId, fx.anchorId),

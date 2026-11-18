@@ -1,7 +1,7 @@
 /**
  * T-R0（rollback-large-jank Step 1）：回滚链分段打点存在性断言。
  *
- * core 侧探针（RollbackProbe）经 createMessageRollbackService options 注入——
+ * core 侧探针（RollbackProbe）经 MessageCheckpointFactory.createRollback options 注入——
  * 这里以收集数组为探针跑一次 rewind 回滚，断言 plan 拉取（行数/字节量）与
  * 事务各子步的打点都可被探针捕获；未注入时行为零变化（既有用例回归兜底）。
  * mobile 侧 [nm-rollback] 轴的 __DEV__ 门控断言在 apps/mobile 的
@@ -12,10 +12,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import {
-  createMessageRollbackService,
-  type MessageRollbackServiceOptions,
-} from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory, type MessageRollbackServiceOptions } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { RollbackProbe } from "../../src/service/message-checkpoint/message-rollback.port.js";
 import {
   getNovelMasterTestContext,
@@ -62,7 +59,7 @@ describe("rollback chain probe (T-R0)", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("tail")));
 
     const collector = collectProbe();
-    const rollback = createMessageRollbackService(ctx.conn, collector.options);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn, collector.options);
     await rollback.rollbackToMessage(session.id, project.id, assistant1.id);
 
     const labels = collector.labels();
@@ -114,7 +111,7 @@ describe("rollback chain probe (T-R0)", () => {
     unwrap(await ctx.messages.append(session.id, "user", textBlocks("c")));
 
     // 不传 options（desktop/cli 形态）——不应抛错、行为与既有一致。
-    const rollback = createMessageRollbackService(ctx.conn);
+    const rollback = MessageCheckpointFactory.createRollback(ctx.conn);
     await rollback.rollbackToMessage(session.id, project.id, assistant1.id, {
       skipVfsReconcile: true,
     });
