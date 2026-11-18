@@ -56,7 +56,7 @@ mock.module("../../src/service/compaction-conditions/run-compaction.js", {
   },
 });
 
-const { createAgentRunner } = await import("@novel-master/core/agent");
+const { AgentServiceFactory } = await import("@novel-master/core/agent");
 // InMemoryAgentSession 只服务测试，已不在 core/agent 公开面；直接从源模块取（与其余 agent-runner 用例同款）。
 const { InMemoryAgentSession } = await import(
   "../../src/domain/agent/session/impl/in-memory-agent-session.js"
@@ -72,8 +72,8 @@ const { noopSavedModelRepository } = await import(
 );
 // RT-02 牙齿用例必须装**真实** VisibleFloorTrigger（纯 stub 的 evaluator 从不
 // list()，第二次读根本不存在 ⇒ listCalls 恒等于 stepCount，断言无牙）。
-const { createCompactionConditionEvaluator } = await import(
-  "../../src/service/compaction-conditions/create-compaction-condition-evaluator.js"
+const { CompactionFactory } = await import(
+  "../../src/service/compaction-conditions/compaction-factory.js"
 );
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -212,7 +212,7 @@ describe("AgentRunner compaction (T-AR1)", () => {
       compactionConditions,
       messages: messagesStub,
     };
-    const runner = createAgentRunner(deps);
+    const runner = AgentServiceFactory.createRunner(deps);
 
     const result = unwrap(await runner.run({
       maxSteps: 1,
@@ -275,7 +275,7 @@ class CountingAgentSession extends InMemoryAgentSession {
  * tokenRatio != null 时才 new TokenRatioConditionTrigger）。
  */
 function realVisibleFloorEvaluator(visibleFloor: number) {
-  return createCompactionConditionEvaluator({
+  return CompactionFactory.createEvaluator({
     conditionsStore: {
       getConditions: async () =>
         Result.ok({
@@ -337,7 +337,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: createMockModel(threeStepResponses()),
       savedModels: noopSavedModelRepository(),
@@ -393,7 +393,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
 
     const callsBefore = runCompactionCalls.length;
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: createMockModel(threeStepResponses()),
       savedModels: noopSavedModelRepository(),
@@ -486,7 +486,7 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
       registerBuiltinTools(registry);
 
       const callsBefore = runCompactionCalls.length;
-      const runner = createAgentRunner({
+      const runner = AgentServiceFactory.createRunner({
         session,
         modelRequests: createMockModel(singleStepResponses),
         savedModels: noopSavedModelRepository(),

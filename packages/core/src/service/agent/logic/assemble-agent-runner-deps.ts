@@ -1,5 +1,5 @@
 /**
- * createAgentRunner 依赖单点装配；对话轨 / 事件轨差异经 includeCompactionOrchestrator 表达。
+ * AgentServiceFactory.createRunner 依赖单点装配；对话轨 / 事件轨差异经 includeCompactionOrchestrator 表达。
  *
  * @module service/agent/logic/assemble-agent-runner-deps
  */
@@ -9,8 +9,8 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { assert } from "@/common/assert.js";
-import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
-import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
+import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
+import type { CreateAgentRunnerDeps } from "../agent-service-factory.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
 import type { AgentTurnRuntimePort } from "./run-agent-turn.js";
 
@@ -36,7 +36,7 @@ export interface AssembleAgentRunnerDepsInput {
   readonly includeCompactionOrchestrator: boolean;
 }
 
-/** 装配 createAgentRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
+/** 装配 AgentServiceFactory.createRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
 export function assembleAgentRunnerDeps(input: AssembleAgentRunnerDepsInput): CreateAgentRunnerDeps {
   const savedModels = input.runtime.savedModelRepo ?? input.runtime.savedModels;
   const providers = input.runtime.providerRepo ?? input.runtime.providers;

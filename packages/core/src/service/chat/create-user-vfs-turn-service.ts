@@ -14,8 +14,8 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
-import { createMessageCheckpointService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
+import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "@/service/workplace/create-workplace-service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
@@ -62,7 +62,7 @@ export function createUserVfsTurnServiceBundle(conn: TdbcConnection): UserVfsTur
     revisions: revisionRepo,
     toolRunner,
     resolveToolCtx: (sessionId: string, projectId: string): BuiltinToolContext => ({
-      vfs: createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
+      vfs: VfsServiceFactory.createScoped(conn, { kind: "session", projectId, sessionId }),
       projectId,
       sessionId,
       sessionKkv,
@@ -73,7 +73,7 @@ export function createUserVfsTurnServiceBundle(conn: TdbcConnection): UserVfsTur
       // 后续根据 agent 定义 / project 策略收紧时在此注入。
       allowedPaths: undefined,
     }),
-    messageCheckpoint: createMessageCheckpointService(conn),
+    messageCheckpoint: MessageCheckpointFactory.create(conn),
   });
 
   return {

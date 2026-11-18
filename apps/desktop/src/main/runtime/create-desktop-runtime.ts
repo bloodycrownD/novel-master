@@ -5,23 +5,23 @@
  * @module runtime/create-desktop-runtime
  */
 import { ABORT_KEY, createAbortRegistry, scopeFromController } from "@novel-master/core/abort";
-import { createAgentRegistryService, createAgentStreamRegistry, type AgentAbortRegistry } from "@novel-master/core/agent";
-import { createCompactionConditionEvaluator, createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { createProviderServices } from "@novel-master/core/provider";
+import { AgentServiceFactory, type AgentAbortRegistry } from "@novel-master/core/agent";
+import { CompactionFactory } from "@novel-master/core/compaction";
+import { ProviderServiceFactory } from "@novel-master/core/provider";
 import { createDefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
 import { createPersistentPreferences, createPersistentState, createSearchConfigStore } from "@novel-master/core";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { createSmartSortRuleService } from "@novel-master/core/smart-sort-rule";
-import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
+import { MessageCheckpointFactory } from "@novel-master/core/message-checkpoint";
 import { createSessionFsService } from "@novel-master/core/session-fs";
-import { createPhysicalVfsService, createScopedVfsService, type VfsScope } from "@novel-master/core/vfs";
+import { VfsServiceFactory, type VfsScope } from "@novel-master/core/vfs";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
 import { createSessionKkvService } from "@novel-master/core/session-kkv";
 import { createSkillsService } from "@novel-master/core/skills";
-import { createCompositeSecretStore, createEnvSecretStore, SkspRegistry } from "@novel-master/core/sksp";
+import { SkspFactory, SkspRegistry } from "@novel-master/core/sksp";
 import { getDesktopConnection } from "./connection.js";
 import { getPlatformSkspName } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
@@ -52,22 +52,22 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const skspName = getPlatformSkspName();
   if (!skspName.ok) return Result.err(skspName.error);
   const dbStore = SkspRegistry.resolve(skspName.value).createStore(conn);
-  const envStore = process.env.NM_SKSP_DISABLE_ENV === "1" ? undefined : createEnvSecretStore();
-  const secretStore = createCompositeSecretStore({
+  const envStore = process.env.NM_SKSP_DISABLE_ENV === "1" ? undefined : SkspFactory.createEnvSecretStore();
+  const secretStore = SkspFactory.createCompositeSecretStore({
     db: dbStore,
     env: envStore,
   });
   // search 工具配置：KKV `nm-search` 模块 + SKSP key ref（与 mobile 同构，core 工厂统一逻辑）
   const searchConfig = createSearchConfigStore({ kkv, secretStore });
 
-  const providerBundle = createProviderServices(conn, secretStore);
+  const providerBundle = ProviderServiceFactory.create(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({
     savedModels: providerBundle.savedModelRepo,
   });
 
   const eventBus = new SimpleEventBus();
-  const compactionConditions = createCompactionConditionsStore(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
+  const compactionConditions = CompactionFactory.createConditionsStore(conn);
+  const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   // 泛化 registry + Agent 门面（spec §二「实例拓扑」）：门面把 core 的
   // `(sessionId, AbortController)` 契约适配到 `agent:` 命名空间，scope 经
   // `scopeFromController` 取——与 run 根 scope 共用同一 WeakMap memoize 实例，
@@ -80,7 +80,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
     has: (sessionId) => abortRegistry.has(ABORT_KEY.agent(sessionId)),
   };
-  const streamRegistry = createAgentStreamRegistry();
+  const streamRegistry = AgentServiceFactory.createStreamRegistry();
 
   // 消息列表行解析让步（ic-08B 方案 B）：与 mobile 的 messageParseYield 同款
   // 机制（见 apps/mobile/src/runtime/create-mobile-runtime.ts 装配）——大会话
@@ -93,7 +93,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
-  const compactionConditionEvaluator = createCompactionConditionEvaluator({
+  const compactionConditionEvaluator = CompactionFactory.createEvaluator({
     conditionsStore: compactionConditions,
     tokenCounters,
     providerModels: providerBundle.providerModels,
@@ -135,19 +135,19 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
     usageStats,
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
-    messageCheckpoint: createMessageCheckpointService(conn),
+    messageCheckpoint: MessageCheckpointFactory.create(conn),
     sessionKkv,
-    globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
-    projectVfs: (projectId) => createScopedVfsService(conn, { kind: "project", projectId }),
+    globalVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global" }),
+    projectVfs: (projectId) => VfsServiceFactory.createScoped(conn, { kind: "project", projectId }),
     sessionVfs: (projectId, sessionId) =>
-      createScopedVfsService(conn, {
+      VfsServiceFactory.createScoped(conn, {
         kind: "session",
         projectId,
         sessionId,
       }),
-    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
-    projectMetaVfs: (projectId) => createScopedVfsService(conn, { kind: "project-meta", projectId }),
-    physicalVfs: () => createPhysicalVfsService(conn),
+    globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
+    projectMetaVfs: (projectId) => VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
+    physicalVfs: () => VfsServiceFactory.createPhysical(conn),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,

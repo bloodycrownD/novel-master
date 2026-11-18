@@ -19,11 +19,11 @@ import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
+import { VfsServiceFactory } from "../../src/service/vfs/vfs-service-factory.js";
 import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
-import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { MessageCheckpointFactory } from "../../src/service/message-checkpoint/message-checkpoint-factory.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -37,7 +37,7 @@ async function loadPendingQueueJson(conn: TdbcConnection, sessionId: string): Pr
 function makeToolCtx(conn: TdbcConnection, projectId: string, sessionId: string): BuiltinToolContext {
   const messageRepo = new SqliteMessageRepository(conn);
   return {
-    vfs: createScopedVfsService(conn, {
+    vfs: VfsServiceFactory.createScoped(conn, {
       kind: "session",
       projectId,
       sessionId,
@@ -78,7 +78,7 @@ function makeUserVfsTurnDeps(conn: TdbcConnection, overrides: Partial<UserVfsTur
     revisions: revisionRepo,
     toolRunner,
     resolveToolCtx: (sid, pid) => makeToolCtx(conn, pid, sid),
-    messageCheckpoint: createMessageCheckpointService(conn),
+    messageCheckpoint: MessageCheckpointFactory.create(conn),
     ...overrides,
   };
 }
@@ -259,7 +259,7 @@ describe("UserVfsTurnService", () => {
     const beforeOrphan = unwrap(await revisions.findByEntryAndVersion(orphanEntry.entryId, 99));
     assert.ok(beforeOrphan);
 
-    const baseVfs = createScopedVfsService(ctx.conn, scope);
+    const baseVfs = VfsServiceFactory.createScoped(ctx.conn, scope);
     const failingVfs = new Proxy(baseVfs, {
       get(target, prop, receiver) {
         if (prop === "hardDelete" || prop === "resetHeadToVersion") {

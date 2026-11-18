@@ -52,7 +52,7 @@ import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
+import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -71,7 +71,7 @@ import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.po
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
-import { createAgentRunner } from "../create-agent-runner.js";
+import { AgentServiceFactory } from "../agent-service-factory.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
 import { assembleAgentRunnerDeps } from "./assemble-agent-runner-deps.js";
@@ -894,7 +894,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       };
       // 排障插桩：toolCtx 构造完成后的对账点（与上面的「search 装配点结果」配对）。
       searchLog.info("toolCtx 构造完成", { point: "main", hasSearch: toolCtx.search != null, keys: Object.keys(toolCtx) });
-      const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: true }));
+      const runner = AgentServiceFactory.createRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: true }));
 
       // 检查点②：runner 起步前的最后一道——校验 / 名单 / 技能装配这段尾部也有
       // 秒级窗口（大会话），命中即在此收尾、不注册 streamRegistry（零清理负担）。
@@ -1332,7 +1332,7 @@ async function runChildAgent(args: {
     // 装配期 false：子 agent run 不走压缩编排（P0-2）。
     // 排障插桩：子 run 的 toolCtx 对账点。
     searchLog.info("toolCtx 构造完成", { point: "child", hasSearch: toolCtx.search != null, keys: Object.keys(toolCtx) });
-    const runner = createAgentRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: false }));
+    const runner = AgentServiceFactory.createRunner(assembleAgentRunnerDeps({ session, runtime, registry, toolCtx, includeCompactionOrchestrator: false }));
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
     // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。

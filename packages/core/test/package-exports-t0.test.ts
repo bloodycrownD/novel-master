@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService } from "@novel-master/core/kkv";
 import {
-  createAgentRegistryService,
+  AgentServiceFactory,
   resolveAgentForProject,
 } from "@novel-master/core/agent";
 import type { ResolvedAgentForProject } from "@novel-master/core/agent";
@@ -16,11 +16,11 @@ import type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
 } from "@novel-master/core/chat";
-import { createCompactionConditionsStore } from "@novel-master/core/compaction";
+import { CompactionFactory } from "@novel-master/core/compaction";
 import { PromptBuilder } from "@novel-master/core/prompt";
-import { createProviderServices } from "@novel-master/core/provider";
+import { ProviderServiceFactory } from "@novel-master/core/provider";
 import { createSessionFsService } from "@novel-master/core/session-fs";
-import { createScopedVfsService } from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
   getNovelMasterTestContext,
@@ -55,13 +55,13 @@ describe("T0 package exports (@novel-master/core entry)", () => {
 
   it("does not leak public sub-entry symbols from main entry", () => {
     const mainEntry = coreMain as Record<string, unknown>;
-    assert.equal(mainEntry.createAgentRegistryService, undefined);
+    assert.equal(mainEntry.AgentServiceFactory, undefined);
     assert.equal(mainEntry.createMessageService, undefined);
-    assert.equal(mainEntry.createCompactionConditionsStore, undefined);
+    assert.equal(mainEntry.CompactionFactory, undefined);
     assert.equal(mainEntry.PromptBuilder, undefined);
-    assert.equal(mainEntry.createProviderServices, undefined);
+    assert.equal(mainEntry.ProviderServiceFactory, undefined);
     assert.equal(mainEntry.createSessionFsService, undefined);
-    assert.equal(mainEntry.createScopedVfsService, undefined);
+    assert.equal(mainEntry.VfsServiceFactory, undefined);
     assert.equal(mainEntry.createWorkplaceService, undefined);
   });
 
@@ -75,14 +75,19 @@ describe("T0 package exports (@novel-master/core entry)", () => {
   });
 
   it("exports new public sub-entries", () => {
-    assert.equal(typeof createAgentRegistryService, "function");
+    // 六组 Factory namespace 化后，create* 函数收敛为工厂对象上的方法。
+    assert.equal(typeof AgentServiceFactory, "object");
+    assert.equal(typeof AgentServiceFactory.createRegistry, "function");
     assert.equal(typeof createMessageService, "function");
-    assert.equal(typeof createCompactionConditionsStore, "function");
+    assert.equal(typeof CompactionFactory, "object");
+    assert.equal(typeof CompactionFactory.createConditionsStore, "function");
     assert.equal(typeof PromptBuilder, "object");
     assert.equal(typeof PromptBuilder.assemble, "function");
-    assert.equal(typeof createProviderServices, "function");
+    assert.equal(typeof ProviderServiceFactory, "object");
+    assert.equal(typeof ProviderServiceFactory.create, "function");
     assert.equal(typeof createSessionFsService, "function");
-    assert.equal(typeof createScopedVfsService, "function");
+    assert.equal(typeof VfsServiceFactory, "object");
+    assert.equal(typeof VfsServiceFactory.createScoped, "function");
     assert.equal(typeof createWorkplaceService, "function");
   });
 

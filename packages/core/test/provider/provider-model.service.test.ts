@@ -9,11 +9,11 @@ import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { decode as decodeRaw } from "@novel-master/core";
-import { agentDefinitionSchema, createAgentRegistryService } from "@novel-master/core/agent";
+import { agentDefinitionSchema, AgentServiceFactory } from "@novel-master/core/agent";
 import { formatSavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
 import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
-import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderServiceFactory } from "../../src/service/provider/provider-service-factory.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import {
   savedModelContextWindowTokens,
@@ -63,7 +63,7 @@ describe("ProviderModelService fetch", () => {
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
 
     unwrap(await bundle.providerModels.fetch(BUILTIN_PROVIDER_UUID_OPENAI));
@@ -91,7 +91,7 @@ describe("ProviderModelService fetch", () => {
 
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
-    const bundle = createProviderServices(ctx.conn, secrets);
+    const bundle = ProviderServiceFactory.create(ctx.conn, secrets);
     const zhipu = unwrap(await bundle.providers.create({
       protocol: "openai",
       baseUrl: "https://example.com/v1",
@@ -119,7 +119,7 @@ describe("ProviderModelService fetch", () => {
 describe("ProviderModelService settings", () => {
   it("save claude-3-5 gets contextWindowTokens 200_000", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(
       BUILTIN_PROVIDER_UUID_OPENAI,
       "claude-3-5-sonnet",
@@ -129,14 +129,14 @@ describe("ProviderModelService settings", () => {
 
   it("save unknown model gets contextWindowTokens 128_000", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "unknown-model"));
     assert.equal(savedModelContextWindowTokens(saved.settings), 128_000);
   });
 
   it("updateSettings rejects non-positive contextWindowTokens", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
     await rejectsErr(
       () =>
@@ -149,21 +149,21 @@ describe("ProviderModelService settings", () => {
 
   it("new saved model defaults tokenCounterMode to auto", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     assert.equal(savedModelTokenCounterMode(saved.settings), "auto");
   });
 
   it("new saved model defaults thinkingLevel to high", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     assert.equal(savedModelThinkingLevel(saved.settings), "high");
   });
 
   it("updateSettings persists tokenCounterMode round-trip", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
       tokenCounterMode: "gemma",
@@ -177,7 +177,7 @@ describe("ProviderModelService settings", () => {
 
   it("getTokenCounterMode returns auto for unknown saved model id", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     assert.equal(
       unwrap(await bundle.providerModels.getTokenCounterMode(
         "00000000-0000-4000-8000-000000000000",
@@ -188,7 +188,7 @@ describe("ProviderModelService settings", () => {
 
   it("updateSettings rejects invalid tokenCounterMode", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     await rejectsErr(
       () =>
@@ -201,7 +201,7 @@ describe("ProviderModelService settings", () => {
 
   it("updateSettings 持久化 thinkingLevel 为 v2 JSON", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const updated = unwrap(await bundle.providerModels.updateSettings(saved.id, {
       thinkingLevel: "high",
@@ -218,7 +218,7 @@ describe("ProviderModelService settings", () => {
 describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
   it("同 provider+vendor 可 insert 两行且 settings 独立", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const a = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-a"));
     const b = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o", "preset-b"));
     assert.notEqual(a.id, b.id);
@@ -233,7 +233,7 @@ describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
 
   it("save 第二次同 vendor 新增行（非 upsert）", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const vendor = `gpt-4o-dup-${Date.now()}`;
     const before = (unwrap(await bundle.providerModels.savedList(BUILTIN_PROVIDER_UUID_OPENAI))).length;
     const first = unwrap(await bundle.providerModels.save(BUILTIN_PROVIDER_UUID_OPENAI, vendor));
@@ -248,7 +248,7 @@ describe("ProviderModelService multi-preset（T-SM5/T-SM6）", () => {
 describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
   it("默认 modelName=vendor 时 displayName 等于 legacy path", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     assert.equal(saved.modelName, "gpt-4o");
     assert.equal(
@@ -259,7 +259,7 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
 
   it("省略 modelName 时不改名；空字符串拒绝", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const created = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "manual-model"));
     unwrap(await bundle.providerModels.editSaved(created.id, "Label A"));
     const after = unwrap(await bundle.providerModels.editSaved(created.id));
@@ -274,7 +274,7 @@ describe("ProviderModelService editSaved（T-SM14/T-SM15）", () => {
 describe("ProviderModelService deleteSaved（T-SM8）", () => {
   it("currentModelId 引用时拒绝删除", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const state = createPersistentState(ctx.conn);
     await state.setCurrentModelId(saved.id);
@@ -286,9 +286,9 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
 
   it("agent_definition.model pin 引用时拒绝删除", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await registry.upsert(
       `agent-pin-${randomUUID()}`,
       decode(
@@ -309,7 +309,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
 
   it("chat_project.agent_config_json.model pin 引用时拒绝删除", async () => {
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const project = unwrap(await ctx.projects.create(`proj-pin-${Date.now()}`));
     unwrap(await ctx.projects.updateAgentConfig(project.id, {
@@ -334,7 +334,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     // 照抄上面 chat_project 那条的形状。会话级覆盖**只**存在 chat_session
     // （该表没有 model_id 列），形态是顶层 `{agentId, modelId}`。
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const project = unwrap(await ctx.projects.create(`proj-sess-${Date.now()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -351,7 +351,7 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
   it("chat_session.agent_config_json 为脏 JSON 时守卫不整体失败（仍能删无引用模型）", async () => {
     // 脏行必须被跳过而不是让整个守卫抛错——抛错等于守卫失效，比不扫更糟。
     const ctx = getNovelMasterTestContext();
-    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const bundle = ProviderServiceFactory.create(ctx.conn, memorySecretStore());
     const saved = unwrap(await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o"));
     const project = unwrap(await ctx.projects.create(`proj-dirty-${Date.now()}`));
     const session = unwrap(await ctx.sessions.create(project.id));

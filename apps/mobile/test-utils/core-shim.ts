@@ -14,7 +14,7 @@
 export {isVfsError} from '../../../packages/core/dist/errors/guards.js';
 export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js';
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
-export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
+export {VfsServiceFactory} from '../../../packages/core/dist/public/vfs.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 // db-backup 导入前的 SQLite 头校验（十七期下沉 core，desktop/mobile 同源）。
 export {assertSqliteBackupHeader} from '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js';
@@ -40,7 +40,7 @@ export {buildToolResultBlock, resolveToolResultOk} from '../../../packages/core/
 export {registerBuiltinTools} from '../../../packages/core/dist/domain/tool/builtin/register-builtin-tools.js';
 export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tools.js';
 export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js';
-export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
+export {AgentServiceFactory} from '../../../packages/core/dist/public/agent.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';
 export {AGENT_RUN_RESOLVE_KEYS, resolveCurrentAgentId, resolveCurrentAgentDefinition, resolveApplicationModelIdForRun} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
 export {runAgentTurn} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';

@@ -15,7 +15,8 @@ import { resolvePathsNeedDeleteInTransaction, resolveReconcilePathSets } from "@
 import { restorePathToRevision, restorePathToRevisionWithBackfill } from "@/domain/message-checkpoint/logic/restore-path.js";
 import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import { assert } from "@/common/assert.js";
-import { createCheckpointRepoDeps, createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
+import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import type { CheckpointRepoDeps } from "@/domain/message-checkpoint/model/checkpoint-repo-deps.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -30,7 +31,7 @@ import { TdbcError } from "@/infra/tdbc/index.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { createLogger } from "@/infra/log/logger.js";
 import type { MessageRollbackService, RollbackOptions, RollbackProbe } from "../message-rollback.port.js";
@@ -239,7 +240,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
               messageId: anchorMessageId,
             });
           }
-          await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+          await truncateTailInTransaction(MessageCheckpointFactory.createTruncateTailDeps(tx), {
             projectId: plan.projectId,
             sessionId: plan.sessionId,
             afterSeq: plan.truncateAfterSeq,
@@ -450,7 +451,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
    * hash 会因碰撞把好回滚打成 409（内存换正确性）。
    */
   private async computeFileTreeFingerprint(conn: TdbcConnection, projectId: string, sessionId: string): Promise<ReadonlyArray<readonly [string, number]>> {
-    const { entryRepo } = createCheckpointRepoDeps(conn);
+    const { entryRepo } = MessageCheckpointFactory.createRepoDeps(conn);
     const heads = await listSessionFileHeads(entryRepo, projectId, sessionId);
     return heads.map((head): readonly [string, number] => [head.logicalPath, head.headVersion]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }
@@ -463,8 +464,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   private async reconcileVfsPaths(tx: TdbcConnection, plan: RollbackPlan, useRevisionHeadBackfill: boolean): Promise<VfsReconcileStats> {
     const { scope, pathsNeedWrite, targetTree, checkpointEntryIdByPath, tailDerivedDeletePaths, projectId, sessionId, hasDirectTargetTree } = plan;
     const scopeKeyStr = scopeKey(scope);
-    const vfs = createScopedVfsService(tx, { kind: "session", projectId, sessionId });
-    const { entryRepo, revisionRepo } = createCheckpointRepoDeps(tx);
+    const vfs = VfsServiceFactory.createScoped(tx, { kind: "session", projectId, sessionId });
+    const { entryRepo, revisionRepo } = MessageCheckpointFactory.createRepoDeps(tx);
     const liveHeadRows = await listSessionFileHeads(entryRepo, projectId, sessionId);
     // CD-01 第 3 步：删集合在**事务内**用上面这份 live 快照重算——不新增第二次
     // live 扫描，也不复用 plan 段那次（两个 live 头来自两个不同时刻的扫描，

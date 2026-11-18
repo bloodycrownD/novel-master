@@ -19,10 +19,10 @@ import {
 } from "@novel-master/core";
 import {
   agentDefinitionSchema,
-  createAgentRegistryService,
+  AgentServiceFactory,
 } from "@novel-master/core/agent";
 import { createMessageService, textBlocks } from "@novel-master/core/chat";
-import { createScopedVfsService } from "@novel-master/core/vfs";
+import { VfsServiceFactory } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   });
   await bootstrapNovelMaster(conn);
   const state = createPersistentState(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
+  const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   await agentRegistry.upsert(
     "bench-agent",
     decode(
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
   ): Promise<void> => {
     const project = await projects.create(`bench-${label}`);
     const session = await sessions.create(project.id);
-    const vfs = createScopedVfsService(conn, {
+    const vfs = VfsServiceFactory.createScoped(conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   ): Promise<void> => {
     const project = await projects.create(`bench-${label}`);
     const session = await sessions.create(project.id);
-    const vfs = createScopedVfsService(conn, {
+    const vfs = VfsServiceFactory.createScoped(conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,

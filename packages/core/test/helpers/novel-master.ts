@@ -10,7 +10,7 @@ import {
 } from "@novel-master/core";
 import {
   agentDefinitionSchema,
-  createAgentRegistryService,
+  AgentServiceFactory,
   type AgentRegistryService,
 } from "@novel-master/core/agent";
 import { createMessageService, type MessageService, type ProjectService, type SessionService } from "@novel-master/core/chat";
@@ -21,7 +21,7 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { DefaultProjectService } from "../../src/service/chat/impl/project.service.js";
 import { DefaultSessionService } from "../../src/service/chat/impl/session.service.js";
 import {
-  createMessageCheckpointService,
+  MessageCheckpointFactory,
   type MessageCheckpointService,
 } from "@novel-master/core/message-checkpoint";
 import {
@@ -32,7 +32,7 @@ import {
   createSessionKkvService,
   type SessionKkvService,
 } from "@novel-master/core/session-kkv";
-import { createScopedVfsService, type VfsService } from "@novel-master/core/vfs";
+import { VfsServiceFactory, type VfsService } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -64,7 +64,7 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
   });
   await bootstrapNovelMaster(conn);
   const state = createPersistentState(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
+  const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   // 种子化一个默认 agent + workspace 指针，让多数调用 ctx.sessions.create() 的测试
   // 无需手动设置 workspace agent 也能跑。
   await agentRegistry.upsert(
@@ -92,19 +92,19 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     sessions: new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry }),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
-    messageCheckpoint: createMessageCheckpointService(conn),
+    messageCheckpoint: MessageCheckpointFactory.create(conn),
     sessionKkv: createSessionKkvService(conn),
-    globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
+    globalVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global" }),
     projectVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project", projectId }),
+      VfsServiceFactory.createScoped(conn, { kind: "project", projectId }),
     sessionVfs: (projectId, sessionId) =>
-      createScopedVfsService(conn, {
+      VfsServiceFactory.createScoped(conn, {
         kind: "session",
         projectId,
         sessionId,
       }),
-    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
+    globalMetaVfs: () => VfsServiceFactory.createScoped(conn, { kind: "global-meta" }),
     projectMetaVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project-meta", projectId }),
+      VfsServiceFactory.createScoped(conn, { kind: "project-meta", projectId }),
   };
 }

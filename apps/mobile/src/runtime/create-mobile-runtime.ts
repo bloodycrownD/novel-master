@@ -5,23 +5,23 @@
  */
 
 import {ABORT_KEY, createAbortRegistry, scopeFromController} from '@novel-master/core/abort';
-import {createAgentRegistryService, createAgentStreamRegistry, type AgentAbortRegistry} from '@novel-master/core/agent';
-import {createCompactionConditionEvaluator, createCompactionConditionsStore} from '@novel-master/core/compaction';
+import {AgentServiceFactory, type AgentAbortRegistry} from '@novel-master/core/agent';
+import {CompactionFactory, type CompactionConditionEvaluator} from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle} from '@novel-master/core/chat';
 import {createPersistentPreferences, createPersistentState, createSearchConfigStore} from '@novel-master/core';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 import {createDefaultTokenCounterRegistry} from '@novel-master/core/tokenizer';
-import {createProviderServices} from '@novel-master/core/provider';
+import {ProviderServiceFactory} from '@novel-master/core/provider';
 import {createSmartSortRuleService} from '@novel-master/core/smart-sort-rule';
-import {createMessageCheckpointService} from '@novel-master/core/message-checkpoint';
+import {MessageCheckpointFactory} from '@novel-master/core/message-checkpoint';
 import {createSessionFsService} from '@novel-master/core/session-fs';
-import {createPhysicalVfsService, createScopedVfsService, type VfsScope} from '@novel-master/core/vfs';
+import {VfsServiceFactory, type VfsScope} from '@novel-master/core/vfs';
 import {createWorkplaceService} from '@novel-master/core/workplace';
 import {createKkvService} from '@novel-master/core/kkv';
 import {createSessionKkvService} from '@novel-master/core/session-kkv';
 import {createSkillsService} from '@novel-master/core/skills';
-import {createCompositeSecretStore, SkspRegistry} from '@novel-master/core/sksp';
+import {SkspFactory, SkspRegistry} from '@novel-master/core/sksp';
 import {getMobileConnection} from '../db/connection';
 import {Result, AppError} from '@novel-master/core/errors';
 import {mobileSkspDriverName} from './mobile-sksp';
@@ -66,7 +66,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
   userVfsUnifiedToolTurnFlag.refresh(unifiedTurnPref.value);
 
   const smartSortRule = createSmartSortRuleService(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
+  const agentRegistry = AgentServiceFactory.createRegistry(conn, state);
   const abortRegistry = createAbortRegistry();
   // Agent 门面：把 core 的 `(sessionId, AbortController)` 契约适配到泛化 registry
   // 的 `agent:` 命名空间。scope 经 `scopeFromController` 取——与 run 根 scope 共用
@@ -78,18 +78,18 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     unregister: (sessionId, controller) => abortRegistry.unregister(ABORT_KEY.agent(sessionId), scopeFromController(controller)),
     has: sessionId => abortRegistry.has(ABORT_KEY.agent(sessionId)),
   };
-  const streamRegistry = createAgentStreamRegistry();
+  const streamRegistry = AgentServiceFactory.createStreamRegistry();
 
-  const secretStore = createCompositeSecretStore({
+  const secretStore = SkspFactory.createCompositeSecretStore({
     db: SkspRegistry.resolve(mobileSkspDriverName()).createStore(conn),
   });
-  const providerBundle = createProviderServices(conn, secretStore);
+  const providerBundle = ProviderServiceFactory.create(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});
   // search 配置依赖 kkv + secretStore，在两者之后装配。
   const searchConfig = createSearchConfigStore({kkv, secretStore});
 
   const eventBus = new SimpleEventBus();
-  const compactionConditions = createCompactionConditionsStore(conn);
+  const compactionConditions = CompactionFactory.createConditionsStore(conn);
 
   // 列表行解析让步（rollback-large-jank Step 2）：mobile 两处装配缝（runtime
   // .messages 链 + 回滚 plan 拉取链）共用 16ms 量子让步——大结果集的
@@ -104,10 +104,10 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
   const sessionKkv = createSessionKkvService(conn);
   const {userVfsTurn} = createUserVfsTurnServiceBundle(conn);
 
-  let compactionConditionEvaluator: ReturnType<typeof createCompactionConditionEvaluator> | undefined;
-  const getOrCreateEvaluator = (): ReturnType<typeof createCompactionConditionEvaluator> => {
+  let compactionConditionEvaluator: CompactionConditionEvaluator | undefined;
+  const getOrCreateEvaluator = (): CompactionConditionEvaluator => {
     if (compactionConditionEvaluator == null) {
-      compactionConditionEvaluator = createCompactionConditionEvaluator({
+      compactionConditionEvaluator = CompactionFactory.createEvaluator({
         conditionsStore: compactionConditions,
         tokenCounters,
         providerModels: providerBundle.providerModels,
@@ -115,7 +115,7 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
     }
     return compactionConditionEvaluator;
   };
-  const lazyCompactionConditionEvaluator: ReturnType<typeof createCompactionConditionEvaluator> = {
+  const lazyCompactionConditionEvaluator: CompactionConditionEvaluator = {
     shouldRequestCompaction(session, evaluation) {
       return getOrCreateEvaluator().shouldRequestCompaction(session, evaluation);
     },
@@ -151,14 +151,14 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
       yieldFn: messageParseYield,
       ...(typeof __DEV__ !== 'undefined' && __DEV__ ? {probe: mobileRollbackProbe} : {}),
     }),
-    messageCheckpoint: createMessageCheckpointService(conn),
+    messageCheckpoint: MessageCheckpointFactory.create(conn),
     sessionKkv,
-    globalVfs: () => createScopedVfsService(conn, {kind: 'global'}),
-    projectVfs: projectId => createScopedVfsService(conn, {kind: 'project', projectId}),
-    sessionVfs: (projectId, sessionId) => createScopedVfsService(conn, {kind: 'session', projectId, sessionId}),
-    globalMetaVfs: () => createScopedVfsService(conn, {kind: 'global-meta'}),
-    projectMetaVfs: projectId => createScopedVfsService(conn, {kind: 'project-meta', projectId}),
-    physicalVfs: () => createPhysicalVfsService(conn),
+    globalVfs: () => VfsServiceFactory.createScoped(conn, {kind: 'global'}),
+    projectVfs: projectId => VfsServiceFactory.createScoped(conn, {kind: 'project', projectId}),
+    sessionVfs: (projectId, sessionId) => VfsServiceFactory.createScoped(conn, {kind: 'session', projectId, sessionId}),
+    globalMetaVfs: () => VfsServiceFactory.createScoped(conn, {kind: 'global-meta'}),
+    projectMetaVfs: projectId => VfsServiceFactory.createScoped(conn, {kind: 'project-meta', projectId}),
+    physicalVfs: () => VfsServiceFactory.createPhysical(conn),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,
