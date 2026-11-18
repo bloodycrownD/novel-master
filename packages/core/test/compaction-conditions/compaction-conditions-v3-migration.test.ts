@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
-import { compactionConditionsSchema, createCompactionConditionsStore } from "@novel-master/core/compaction";
+import { compactionConditionsSchema, CompactionFactory } from "@novel-master/core/compaction";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 
@@ -11,7 +11,7 @@ describe("compaction conditions v3 migration", () => {
   it("v2 KKV read-once migrates to v4 and writes back", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
 
     await kkv.set(
       "nm-compaction-conditions",
@@ -43,7 +43,7 @@ describe("compaction conditions v3 migration", () => {
   it("v3 KKV read-once migrates to v4 and writes back", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
 
     await kkv.set(
       "nm-compaction-conditions",

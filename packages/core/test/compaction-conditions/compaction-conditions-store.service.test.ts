@@ -2,9 +2,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createCompactionConditionsStore,
-} from "@novel-master/core/compaction";
+import { CompactionFactory } from "@novel-master/core/compaction";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
@@ -14,7 +12,7 @@ const KEY = "policy";
 describe("compaction conditions store integrity", () => {
   it("S1: empty database getConditions returns null", async () => {
     const ctx = await openNovelMasterTestConnection();
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     assert.equal(unwrap(await store.getConditions()), null);
     await ctx.conn.close();
   });
@@ -22,7 +20,7 @@ describe("compaction conditions store integrity", () => {
   it("S2: corrupt JSON returns INVALID_SCHEMA", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     await kkv.set(MODULE, KEY, "{invalid json");
     const rejected = await store.getConditions();
     assert.equal(rejected.ok, false);
@@ -33,7 +31,7 @@ describe("compaction conditions store integrity", () => {
   it("S3: enabled v3 without trigger returns INVALID_SCHEMA on get", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     await kkv.set(
       MODULE,
       KEY,
@@ -48,7 +46,7 @@ describe("compaction conditions store integrity", () => {
   it("S4: disabled v3 without trigger returns enabled false", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     await kkv.set(
       MODULE,
       KEY,
@@ -61,7 +59,7 @@ describe("compaction conditions store integrity", () => {
 
   it("S5: setConditions invalid does not persist", async () => {
     const ctx = await openNovelMasterTestConnection();
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     await assert.rejects(
       () =>
         store.setConditions({ schemaVersion: 4, enabled: true }),
@@ -73,7 +71,7 @@ describe("compaction conditions store integrity", () => {
 
   it("S6: setConditions round-trip", async () => {
     const ctx = await openNovelMasterTestConnection();
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     const input = {
       schemaVersion: 4 as const,
       enabled: true,
@@ -89,7 +87,7 @@ describe("compaction conditions store integrity", () => {
   it("S7: v2 document migrates on read and writes v4", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
     await kkv.set(
       MODULE,
       KEY,

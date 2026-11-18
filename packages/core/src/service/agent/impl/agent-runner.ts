@@ -42,7 +42,7 @@ import { assembleWorkplaceDisplay, type AssembleWorkplaceDisplayDeps, type Assem
 import type { CompactionEvaluationContext } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
+import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/compaction-factory.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { AgentStreamRegistry } from "../agent-stream-registry.port.js";

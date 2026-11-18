@@ -18,7 +18,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { ChatAgentSession } from "../../src/service/agent/impl/chat-agent-session.js";
 import { runCompaction } from "../../src/service/compaction-conditions/run-compaction.js";
-import { createCompactionConditionsStore } from "../../src/service/compaction-conditions/create-compaction-conditions-store.js";
+import { CompactionFactory } from "../../src/service/compaction-conditions/compaction-factory.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { serializeSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
@@ -106,7 +106,7 @@ describe("runCompaction", () => {
   it("T-CC1: v3 文档读取时自动迁移到 v4，hideStartDepth 填 6 并写回 KKV", async () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
-    const store = createCompactionConditionsStore(ctx.conn);
+    const store = CompactionFactory.createConditionsStore(ctx.conn);
 
     await kkv.set(
       "nm-compaction-conditions",
