@@ -21,11 +21,6 @@ const VFS_SEMANTIC_BY_KIND = { tool_turn_bridge: true, user_vfs_action: true, us
 /** VFS 语义段的消息 kind 集合（不得与 plain chat 文本 merge）。 */
 export const VFS_SEMANTIC_KINDS: ReadonlySet<string> = new Set(Object.keys(VFS_SEMANTIC_BY_KIND).filter((kind) => VFS_SEMANTIC_BY_KIND[kind as KnownMessageMetadataKind]));
 
-/** 该 metadata kind 是否属于 VFS 语义段。 */
-export function isVfsSemanticKind(kind: string): boolean {
-  return VFS_SEMANTIC_KINDS.has(kind);
-}
-
 /** 写入 `ChatMessageData.raw.metadata` 的键结构。 */
 interface MessageMetadata {
   /** 消息来源：`user` 表示用户侧 synthetic。 */
