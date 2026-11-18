@@ -162,3 +162,44 @@ user:
 2. **探针 grep 有三个盲区**：不抓 `export { x } from "..."` 这类转发行（C6 自己发现 `shared/logic/common.ts` 漏了，不改会断 X11 bridge）、不抓同名遮蔽、不抓动态引用。下次要同时 grep `from "@novel-master/core/common"` 的导出行。
 3. **「同名 = 重复」是错的**。55 组同名里真正该合的只有约 10 组：11 组是 UI 组件回调（`handleSave` 9 处，各提交不同实体）、6 组是 tdbc 接口实现、约 15 组是局部闭包同名、2 组是 tokenizer 双驱动同构。跨域同名才是真信号。
 4. **测试目录要单独排一轮**。十二期 C6/C7 我写了「排除 test」，但波 4 没安排改测试，导致 desktop 3 红 + mobile 9 用例红，又开了一轮补完。
+
+---
+
+## 2026-11-17：签名审计「审—修—审」循环（十七 / 十八期 + 第 3 轮终审）
+
+### 做了什么
+
+`scripts/list-dup-signatures.mjs` 从「只查非 export」改成「全部函数 + 标 `[export]`/`[local]`」，同名组 52→105、形态组 124→253（**翻倍，因为「一处 export、一处私有」以前根本进不了视图**）。接进 `check-style` 成独立段，判据是增量（`--gate`）。
+
+**十七期 `p17-signature-audit-r1`**（`b1b93e86f`）：三路签名审计（各 13/12/13 组）+ 30 组收口，9 片并行。同名 105→66、形态 253→182。
+
+**十八期 `p18-signature-audit-r2`**（`abb21d755`）：第 2 轮三路审（各 12/12/13 组）+ 10 组修复。同名 117→65、形态 258→181，**新增 0**。签名总数 3297→3256→3200（**少 97 个，说明壳是真删掉了不是改名**）。
+
+**第 3 轮终审换了角度**（T1 导出面 / T2 悬空与单点 / T3 语义等价，全只读）：T1「dev-ready，无阻塞项，663 个 public re-export 符号在目标 src 全部真实存在」；T2「0 悬空 / 0 新单点 / 42 处 check-inline 全是已登记豁免」；T3「8 组全行为等价，0 静默回归，0 名实不符」。
+
+### 五条硬教训
+
+1. **「存量删除」在签名层看不出来，必须核函数体**。R1 组2 / R3 组1+2 都报「`createCallbackSlot` 工厂造了但 9 处旧槽位没迁，工厂成了无消费者的孤岛」——**证伪**：迁移是上一轮 `52e9f8076` 就落地了，只是外面留了 12 个一行转发壳。**派单时要写明「上一轮报告称已迁，请核实函数体」，否则只读签名的审会把「壳还在」当成「没迁」。**
+
+2. **「消费者多」是我上轮没算的成本**。我说「删 27 个 prefs 门面，`getBooleanPref("llmStream")` 与 `getLlmStreamEnabled()` 类型安全等价」——类型层对，但实测 **114 个生产调用点 / 33 个文件**，且 `setCurrentModelId` 额外做 trim + 旧路径拒绝 + UUID 校验（R2 猜的 `setAndInvalidatePromptTokenCache` **不存在**，失效在共享私有 `setPointer` 里）。**判「该不该删门面」必须同时算「类型是否等价」和「改多少调用点」。**
+
+3. **保留清单要逐条补验「差异参数是否真的被使用」**。我把 16 组登记为「双端镜像有意保留」，R1 指出 `refreshComposerStatusAfterSessionKkvCleared` 双端首参都是 `_rt` / `_runtime` 死参——**「runtime 类型不同所以不能合并」这条理由在签名层就能证伪**。修法：对每组读两端函数体，只看一个问题「`runtime` 真被用了吗」，没用就上收 core。R1 原话值得抄：**「建议收口时对保留清单逐条补验『双端差异参数是否真的被使用』，而不只看名字相同。」**
+
+4. **`dup-gate` 的差集只能按键算，不能按 sites 算**。第一版拿 `{name: [sites]}` 的 sites 全等求差集，行号一改（`format-ipc-error.ts:22` → `:26`）就把 105 组存量**全判成新增**；第二版没注意 `dup-r2.json` 的 `dupByName` 是**数组**不是对象，`Object.entries` 拿到 `0,1,2...`，差点把 233 个数组索引写进 baseline。**正确做法：只按 `name` / `shape` 键求差集。**
+
+5. **工作流的门禁正则不可信，必须自己实跑**。十七期和十八期连续两次，工作流都报 `sig=false inline=false methods=false`，实跑全是 `signatures=PASS inline=PASS methods=PASS`（`check-style` 汇总行里明明有 `signatures=PASS`，它的正则没匹配）。但也**不能一概否认**——十八期它报的 `dup=false` 是**对的**（真新增 1 组）。**判据：自报全红时逐段实跑，把「工作流报的」和「实跑到的」分开记账。**
+
+### 两处「只看签名会误判」的实证
+
+- `handleAgentAbortAlias`（`run-abort.ts:67`）：R1 判「名字即自白的转发壳」，实际函数体是 `await abortRegisteredKey(ABORT_KEY.agent(req.sessionId))`，做的是 `AgentAbortRequest{sessionId}` → `ABORT_KEY.agent` 的适配，**不能删**。
+- `DefaultVfsService` 三个 revision 方法：R2 判「显式 no-op、接口偏胖」，实际**本就返回 `Result.err(VFS_OPERATION_UNSUPPORTED)`**（`vfs.service.ts:180-199`），且「目标参数全下划线」也不准——`resetHeadToVersion` 的 scopeKey/path、`renamePath` 的 fromLogical 都进了错误 detail，只有真正不用的带下划线。
+
+### 一条语义收紧（T3 挖出来的）
+
+`update-check` 白名单并入 core 后：**desktop 新增 `html_url` 域名白名单**（`common/update-check.ts:93-100`，收紧不是放宽——我上轮把方向理解反了）；**mobile 继承了 `NOVEL_MASTER_DISABLE_UPDATE_CHECK` 短路钩子**（原本没有，RN Hermes 下 `process.env` 该键不可能置位，属惰性增量）。两处都可接受但要有意识。
+
+### 工具侧补的三处
+
+- `list-all-signatures.mjs` 头部改成「扫描 1179 文件 / 883 个含函数 / 共 3200 个签名」——原来只写 1181 文件，三路审都会以为覆盖了 1181 个有函数的文件。
+- `isParamDerived` 加**对象字面量分支**（空对象 false、shorthand 必须同名、spread/getter/method 一律判不是纯转发），补前 `createMessageCheckpointService` 的 `return new Impl({conn})` 不报、补后报 PASS_THROUGH。
+- 别名检测第一版有 1063 处假阳性（`const rt = built.value` 这种函数体内局部变量被当成模块级别名），收紧为 `ts.isPropertyAccessExpression(init) && ex === "export " && ts.isSourceFile(node.parent)` 后剩 21 处真的。
