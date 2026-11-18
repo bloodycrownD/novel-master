@@ -32,7 +32,7 @@ import {
   type PromptTokenCountResult,
   type TokenCounterKind,
   type TokenizerFamily,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 import { Result, type AppError } from "@novel-master/core/errors";
 import { PromptCountCancelledError, countPromptViaNative, isNativeTokenizerAvailable, type NativeCountRequest } from "./android-native-bridge.js";
 import { getDefaultRnEncoding, getRnEncoding, type RnEncodingName, type RnTokenEncoding } from "./impl/encoding-cache.js";

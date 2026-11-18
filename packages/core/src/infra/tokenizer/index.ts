@@ -27,6 +27,10 @@ export {
   isGpt0301TiktokenModel,
 } from "./logic/resolve-tokenizer-family.js";
 export { countTextWithIncrementalTokenizer } from "./logic/count-text-with-tokenizer.js";
+export {
+  createIncrementalTokenCounter,
+  type IncrementalTokenCounter,
+} from "./logic/incremental-token-counter.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
 export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
@@ -68,10 +72,6 @@ export {
   type ResolvedPromptTokens,
   type ResolveCurrentPromptTokensOptions,
 } from "./logic/resolve-current-prompt-tokens.js";
-// 控制流结果类型（错误通道迁移二期首批用户）：resolve 读口的弃权改沿
-// Outcome.cancelled/replaced 返回，apps 读口经 @novel-master/core/provider
-// 取这两个类型按 kind 判定，不再 catch 哨兵类。
-export type { Interrupt, Outcome } from "../../errors/outcome.js";
 export { resolvePromptTokensWithBackfill } from "./logic/resolve-prompt-tokens-with-backfill.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export { serializeToolsForTokenCount } from "./logic/serialize-tools-for-token-count.js";

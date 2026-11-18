@@ -1,7 +1,6 @@
 [
   "DEFAULT_WORKPLACE_DIR_RULE",
   "assembleWorkplaceDisplay",
-  "createTemplatePullService",
   "createWorkplaceService",
   "displayStateLabel",
   "evaluateFileDisplay",
@@ -10,7 +9,6 @@
   "inclusionModeLabel",
   "isWorkplacePathLoadedInCache",
   "joinFileBlocks",
-  "layoutHasWorkplace",
   "mapProjectWorkplacePathToSession",
   "mapSessionWorkplacePathToProject",
   "parseMarkdownFrontMatter",
@@ -24,7 +22,6 @@
   "serializeRuleSnapshot",
   "sortDirPaths",
   "sortFilesForDir",
-  "splitMarkdownFrontMatter",
   "workplaceFileTreeRootLabel",
   "workplaceRootLogicalPath"
 ]

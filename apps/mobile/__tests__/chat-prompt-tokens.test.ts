@@ -23,7 +23,7 @@ const mockSerializePromptLlmInput = jest.fn(
   (..._args: unknown[]) => 'serialized',
 );
 // 兜底路径（无模型早退 / build 失败）改走 RN 驱动的 cl100k 真分词器，不再走
-// `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/provider`，
+// `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/tokenizer`，
 // 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
 // 成可控值：既能钉住「确实没再走折算」，又不至于把整个 js-tiktoken 拉进单测。
 const mockCountTextWithDefaultEncoding = jest.fn((text: string) => 2345);
@@ -62,7 +62,10 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 // badge/label 走 `@novel-master/core/common` 取 core 真实现（不被本 mock 覆盖），
 // 因此本套件断言的标签字符串与 desktop 测试同源对拍（token-source-label T-TL4）。
-jest.mock('@novel-master/core/provider', () => ({
+// p22 public-surface-ownership：resolvePromptTokensWithBackfill / serializePromptLlmInput
+// 迁到 tokenizer 直映出口，resolveTokenCounterModeForModel 留在 provider——mock 随归属拆开。
+jest.mock('@novel-master/core/tokenizer', () => ({
+  ...jest.requireActual('@novel-master/core/tokenizer'),
   // 错误通道迁移二期：core 读口改走 Outcome（completed/failed/cancelled/replaced），
   // 不再抛弃权哨兵（PromptTokenResolveBailedError 随之退役，无需在 mock 里复刻）。
   // 桩仍按裸结果配置，这里统一包成 completed——弃权/失败用 kind 直返或 reject 表达。
@@ -73,15 +76,17 @@ jest.mock('@novel-master/core/provider', () => ({
     }
     return value;
   },
+  serializePromptLlmInput: async (...args: unknown[]) => ({
+    ok: true as const,
+    value: await mockSerializePromptLlmInput(...args),
+  }),
+}));
+jest.mock('@novel-master/core/provider', () => ({
   // 端口走 Result 通道（错误通道迁移）：桩仍按裸结果配置，出口统一包成
   // ok——被测服务的 `!counterMode.ok` / `!serialized.ok` 解包面保持原样。
   resolveTokenCounterModeForModel: async (...args: unknown[]) => ({
     ok: true as const,
     value: await mockResolveTokenCounterModeForModel(...args),
-  }),
-  serializePromptLlmInput: async (...args: unknown[]) => ({
-    ok: true as const,
-    value: await mockSerializePromptLlmInput(...args),
   }),
 }));
 

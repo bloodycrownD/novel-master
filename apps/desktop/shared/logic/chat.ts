@@ -13,21 +13,18 @@ export type {
   ComposerDraftTokenRange,
   ContentBlock,
   MessageAttachment,
-  RollbackMode,
 } from "@novel-master/core/chat";
+export type { RollbackMode } from "@novel-master/core/presentation/chat/rollback-confirm.js";
 
 export {
   ChatMessage,
   chatAnnotateDraftStore,
   chatLinkResolver,
-  summarizeToolInput,
   composerAtPath,
   attachmentXmlCodec,
-  formatStatusChipLabelFromAttachment,
   parseComposerDraftJson,
   composerChips,
   composerSendPolicy,
-  rollbackConfirm,
   skillToolRefResolver,
   resolveVfsToolFilePath,
   attachmentScanner,
@@ -35,3 +32,6 @@ export {
   USER_VFS_TURN_ACK_TEXT,
   userVfsTurnStorage,
 } from "@novel-master/core/chat";
+export { summarizeToolInput } from "@novel-master/core/presentation/chat/tool-summary.js";
+export { formatStatusChipLabelFromAttachment } from "@novel-master/core/presentation/chat/attachment-chip.js";
+export { rollbackConfirm } from "@novel-master/core/presentation/chat/rollback-confirm.js";

@@ -5,7 +5,7 @@
  */
 import { stat } from "node:fs/promises";
 import { createDbMaintenanceService } from "@novel-master/core";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Result, type Interrupt, type Outcome } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";

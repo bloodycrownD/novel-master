@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { CloudSyncConfigInput } from "@novel-master/core";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Kkv, Path } from "@novel-master/core/common";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";

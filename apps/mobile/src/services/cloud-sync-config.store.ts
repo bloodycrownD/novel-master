@@ -6,7 +6,7 @@
 import type {CloudSyncConfigInput} from '@novel-master/core';
 import {Kkv, Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
-import {type SecretStore} from '@novel-master/core/provider';
+import {type SecretStore} from '@novel-master/core/sksp';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 

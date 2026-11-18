@@ -4,11 +4,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
 
-  CHARACTER_CARD_MAX_FILE_COUNT,
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
   createCharacterCardImportService,
   type VfsService,
 } from "@novel-master/core/vfs";
+import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "../../src/domain/character-card/logic/character-card-limits.js";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 
 import { createWorkplaceService } from "@novel-master/core/workplace";

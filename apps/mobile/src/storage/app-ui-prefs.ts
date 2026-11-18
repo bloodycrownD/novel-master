@@ -4,7 +4,7 @@
  * @module storage/app-ui-prefs
  */
 
-import {isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {KkvService} from '@novel-master/core/kkv';
 import {APP_UI_DEFAULTS, APP_UI_KKV_MODULE} from './app-ui-keys';

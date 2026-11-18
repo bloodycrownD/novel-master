@@ -7,13 +7,14 @@ import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
 import {ABORT_KEY} from '@novel-master/core/abort';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {type ChatMessageData, ChatMessage, attachmentXmlCodec, rollbackConfirm} from '@novel-master/core/chat';
+import {rollbackConfirm} from '@novel-master/core/presentation/chat/rollback-confirm.js';
+import {type ChatMessageData, ChatMessage, attachmentXmlCodec} from '@novel-master/core/chat';
 
 import {formatError} from '@/errors/format-error';
 import {chatTranslator} from '@/i18n/chat';
 import {toastMessage} from '@/errors/toast-message';
 import {applyTextEditToMessage, editableTextFromMessage} from '@/components/chat/message-edit';
-import {isRollbackRevisionBackfillRequiredError, isRollbackVfsDegradableError, readRollbackRevisionBackfillMissingPaths} from '@novel-master/core/session-fs';
+import {isRollbackRevisionBackfillRequiredError, isRollbackVfsDegradableError, readRollbackRevisionBackfillMissingPaths} from '@novel-master/core/message-checkpoint';
 import {chatAnnotateDraftStore} from '@novel-master/core/chat';
 import {applyComposerStatusAttachmentsReplace, writeChatComposerDraftState} from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession, refreshComposerStatusAfterFloorOrCompaction, refreshComposerStatusAfterSessionKkvCleared} from '@/services/project-composer-status.service';

@@ -34,7 +34,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createAgentRegistryService, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
-import type { LlmChatResult } from "@novel-master/core/provider";
+import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";

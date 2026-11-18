@@ -12,7 +12,8 @@
  * - 导入直写 DB（与 zip 导入同口径），不走 userVfsTurn 之类的编辑链路约定；
  *   session scope 下 core 会顺带清该会话的提示词缓存（R5）。
  */
-import {AppError, createVfsBatchIoService, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
+import {AppError} from '@novel-master/core/errors';
+import {createVfsBatchIoService, type BatchApplyReport, type BatchIngestPlan, type VfsScope} from '@novel-master/core/vfs';
 import {Result} from '@novel-master/core/errors';
 import {exportBytesViaDocumentPicker, knownTypesForExtension, pickAndReadFileWithMeta, type PickAndReadOptions} from './document-io';
 import {blobFs} from './rn-file-io';

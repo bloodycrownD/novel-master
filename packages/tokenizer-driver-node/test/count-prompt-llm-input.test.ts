@@ -20,7 +20,7 @@ import {
   splitTextIntoChunks,
   tokenChunkCache,
   wrapSerializedPromptAsSystemMessage,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 import {
   __setNodeEncodingFactoryForTests,
   clearNodeEncodingCacheForTests,

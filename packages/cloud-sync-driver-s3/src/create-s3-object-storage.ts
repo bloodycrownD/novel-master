@@ -1,5 +1,5 @@
 import { GetObjectCommand, HeadObjectCommand, NotFound, PutObjectCommand, S3Client, type S3ClientConfig } from "@aws-sdk/client-s3";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { ObjectStoragePort } from "@novel-master/core";
 import type { S3StorageConfig } from "./s3-config.js";

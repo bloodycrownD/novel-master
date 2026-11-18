@@ -17,7 +17,7 @@ import {
   serializePromptLlmInput,
   serializeToolsForTokenCount,
   type TokenizerFamily,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 import {
   __setNodeEncodingFactoryForTests,
   countTextWithDefaultEncoding,

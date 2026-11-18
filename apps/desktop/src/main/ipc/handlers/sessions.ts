@@ -1,7 +1,7 @@
 /**
  * Session CRUD IPC handlers.
  */
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type {
   IpcResult,

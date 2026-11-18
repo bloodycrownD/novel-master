@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AppError } from "@novel-master/core/vfs";
+import { AppError } from "@novel-master/core/errors";
 import { createAbortError } from "@novel-master/core/abort";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";

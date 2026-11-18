@@ -3,7 +3,8 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
-import { createVfsZipIoService, isAppError } from "@novel-master/core/vfs";
+import { createVfsZipIoService } from "@novel-master/core/vfs";
+import { isAppError } from "@novel-master/core/errors";
 
 import { createCharacterCardImportService, type VfsService } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";

@@ -5,7 +5,6 @@
   "decodeSmartSortRuleBundle",
   "encodeSmartSortRuleBundle",
   "formatPatternInput",
-  "formatSortTupleForDisplay",
   "isBuiltinSmartSortRuleId",
   "matchSmartSortPattern",
   "parsePatternInput",

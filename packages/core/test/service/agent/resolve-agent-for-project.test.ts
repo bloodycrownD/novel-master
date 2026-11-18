@@ -6,9 +6,9 @@ import type { ZodType } from "zod";
 import {
   agentDefinitionSchema,
   createAgentRegistryService,
-  isAppError,
   resolveAgentForProject,
 } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,

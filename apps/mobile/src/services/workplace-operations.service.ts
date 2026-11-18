@@ -3,7 +3,7 @@
  */
 import {type InclusionMode, type SetDirRuleInput, type WorkplaceDirRule, type WorkplaceService, workplaceRootLogicalPath} from '@novel-master/core/workplace';
 import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
-import {AppError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/errors';
 import {Result} from '@novel-master/core/errors';
 import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
 

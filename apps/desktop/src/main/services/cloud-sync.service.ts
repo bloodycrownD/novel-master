@@ -9,7 +9,7 @@ import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
-import { AppError, isAppError } from "@novel-master/core/agent";
+import { AppError, isAppError } from "@novel-master/core/errors";
 import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";

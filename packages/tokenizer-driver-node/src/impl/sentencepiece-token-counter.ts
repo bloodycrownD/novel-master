@@ -7,10 +7,10 @@
 import { SentencePieceProcessor } from "@agnai/sentencepiece-js";
 import { type ChatMessage } from "@novel-master/core/chat";
 
-import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/provider";
+import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/tokenizer";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
-import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/provider";
+import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter } from "@novel-master/core/tokenizer";
 import { tokenizerAssetPaths } from "../logic/tokenizer-asset-paths.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
 import { countTextWithDefaultEncoding } from "./encoding-cache.js";

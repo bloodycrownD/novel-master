@@ -5,7 +5,7 @@
  * @module services/cloud-sync-progress-log
  */
 import {type ObjectStoragePort} from '@novel-master/core';
-import {isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
 import {domainOf} from '@novel-master/core/errors';
 import {mapCloudSyncProgressEvent, type CloudSyncProgressListener} from './cloud-sync-progress-ui';
 

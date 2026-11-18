@@ -37,7 +37,7 @@ import {
   type PromptTokenCountResult,
   type TokenCounterKind,
   type TokenizerFamily,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 import { Result, type AppError } from "@novel-master/core/errors";
 import { getDefaultNodeEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";

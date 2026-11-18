@@ -17,7 +17,7 @@ import { register } from "node:module";
 import { describe, it } from "node:test";
 
 import type { UsageStatsFilterDto } from "../shared/ipc-types.js";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 
 register(new URL("./usage-stats-runtime-hook.mjs", import.meta.url));

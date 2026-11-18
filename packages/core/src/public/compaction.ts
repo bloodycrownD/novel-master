@@ -1,3 +1,5 @@
+// 归属例外（check-public-ownership）：depth / compaction-conditions 是
+// compaction 的实现细节，对外语义统一是 compaction。
 export type { DepthSlice } from "../domain/depth/logic/depth-slice.js";
 export {
   matchDepth,

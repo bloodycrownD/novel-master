@@ -262,7 +262,7 @@ export function skillToolRef(tool: ToolCallView, projectId?: string): SkillToolR
 }
 
 // nm-style: keep-public — 工具卡片摘要单源在 core（`presentation/chat/tool-summary.ts`），本文件只保留入口名给 ToolCallCard。
-export {toolCallSummary} from '@novel-master/core/chat';
+export {toolCallSummary} from '@novel-master/core/presentation/chat/tool-summary.js';
 
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 // prettier-ignore

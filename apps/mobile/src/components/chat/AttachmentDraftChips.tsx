@@ -5,7 +5,8 @@
  */
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {formatStatusChipLabelFromAttachment, composerChips, type MessageAttachment} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
+import {composerChips, type MessageAttachment} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type AttachmentDraftChipsProps = {

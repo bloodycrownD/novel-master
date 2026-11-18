@@ -120,7 +120,7 @@ import {SessionStreamUnit, isSessionStreamUnitSettled, SESSION_STREAM_MESSAGES_P
 import type {SessionStreamRunSettledStatus, SessionStreamUnitMetrics, SessionStreamUnitView, SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {createRunStateWritethrough} from '@/services/run-state-writethrough';
 import type {RunStateWritethrough} from '@/services/run-state-writethrough';
-import type {IncrementalTokenCounter} from '@novel-master/core/format';
+import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
 import {createRunFinishCalibrationProbe, type RunFinishCalibrationProbe} from '@/services/run-finish-calibration-probe';
 import {getSessionViewCache, hydrateWindowFromCache, sessionViewCacheKey, setSessionViewCache, type SessionViewCache} from '@/services/chat-session-view-cache';
 import {createLruMap, type LruMap} from '@/services/scope-key-cache';

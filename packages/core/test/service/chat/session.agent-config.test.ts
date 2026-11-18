@@ -7,7 +7,7 @@ const TEST_SAVED_MODEL_A = "11111111-1111-4111-8111-111111111111";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { isAppError } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

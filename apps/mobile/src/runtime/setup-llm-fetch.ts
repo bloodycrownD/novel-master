@@ -17,7 +17,7 @@
  * @module runtime/setup-llm-fetch
  */
 
-import {configureLlmFetch, createLoggingFetch, registerSseTransport} from '@novel-master/core/provider';
+import {configureLlmFetch, createLoggingFetch, registerSseTransport} from '@novel-master/core/llm-protocol';
 import {registerNativeSseTransportWith} from '@novel-master/llm-sse-native/native';
 import {createMobileLlmFetch} from '../services/llm-native-fetch-shim';
 

@@ -10,7 +10,8 @@ import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } f
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
+import { type ModelRequestService } from "@novel-master/core/provider";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import type { MessageCheckpointService } from "../../src/service/message-checkpoint/message-checkpoint.port.js";

@@ -15,7 +15,7 @@ import {
   type BatchExportSkip,
   type VfsScope,
 } from "@novel-master/core/vfs";
-import { AppError, isAppError } from "@novel-master/core/agent";
+import { AppError, isAppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";

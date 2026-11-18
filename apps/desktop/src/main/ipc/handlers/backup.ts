@@ -10,7 +10,8 @@
  *   不可中断，**禁止 race 早 settle**（补偿链必须与底层流程同生命周期）。
  *   库已换代时 rebootstrap 无条件执行，成功即按自然终态返回。
  */
-import { ABORT_KEY, isAbortLikeError, type AbortScope } from "@novel-master/core/abort";
+import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
+import { isAbortLikeError } from "@novel-master/core/llm-protocol";
 import type { Outcome } from "@novel-master/core/errors";
 import { BrowserWindow } from "electron";
 import type { BackupExportResult, BackupImportResult, IpcResult } from "../../../../shared/ipc-types.js";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode as decodeRaw, encode } from "@novel-master/core";
 import type { ZodType } from "zod";
-import { isAppError } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { unwrap } from "../helpers/result-unwrap.js";

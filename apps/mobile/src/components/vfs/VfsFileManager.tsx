@@ -27,7 +27,7 @@ import {
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 
-import {isAppError} from '@novel-master/core/vfs';
+import {isAppError} from '@novel-master/core/errors';
 import {Path} from '@novel-master/core/common';
 import {Result, AppError} from '@novel-master/core/errors';
 import {formatVfsErrorForUser} from '../../errors/format-error';

@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { decode as decodeRaw, encode as encodeRaw, parseText as parseTextRaw, stringifyText } from "@novel-master/core";
 import type { ZodType } from "zod";
 
-import { agentDefinitionSchema, isAppError, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
+import { agentDefinitionSchema, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import { unwrap } from "../helpers/result-unwrap.js";
 
 /** decode / parseText 已改返回 Result（四期签名）：测试内统一解包——Ok 取 value，Err 抛 error（等价 `if (!r.ok) throw r.error`）。 */

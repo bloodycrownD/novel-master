@@ -14,7 +14,8 @@ import {
   type PromptSkillIndexEntry,
 } from "@novel-master/core/prompt";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { resolveAgentForProject, resolveAgentToolRegistry, type AppError } from "@novel-master/core/agent";
+import { resolveAgentForProject, resolveAgentToolRegistry } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { buildSessionPromptInputAdapter } from "./session-prompt-input.service.js";

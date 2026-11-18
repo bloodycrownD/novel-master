@@ -7,7 +7,8 @@
  * 本模块不再持有本地实现，文案统一经 core 的 `buildStreamMetricsLine`
  * （内部调用 core 的 `formatStreamElapsed`）生成。
  */
-import {buildStreamMetricsLine, type StreamTokenSource} from '@novel-master/core/format';
+import {type StreamTokenSource} from '@novel-master/core/session-run-state';
+import {buildStreamMetricsLine} from '@novel-master/core/format';
 import {coreT} from '@/i18n/core';
 
 /**

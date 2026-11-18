@@ -7,7 +7,7 @@
 import { type ChatMessage } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
-import { isGpt0301TiktokenModel } from "@novel-master/core/provider";
+import { isGpt0301TiktokenModel } from "@novel-master/core/tokenizer";
 import type { Tiktoken } from "tiktoken";
 
 /**

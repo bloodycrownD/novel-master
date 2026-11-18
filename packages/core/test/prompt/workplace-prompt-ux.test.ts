@@ -13,7 +13,7 @@ import type { ZodType } from "zod";
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return unwrap(decodeRaw(raw, schema));
 }
-import { isAppError } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, PromptBuilder, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@novel-master/core/workplace";

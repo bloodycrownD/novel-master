@@ -1,4 +1,3 @@
-export { isVfsError } from "../errors/guards.js";
 export type { VfsEntry, VfsEntryKind } from "../domain/vfs/model/vfs-entry.js";
 export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
 export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
@@ -8,14 +7,8 @@ export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.
 export { createCharacterCardImportService } from "../service/vfs/create-character-card-import-service.js";
 export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/create-character-card-import-service.js";
 export { createVfsBatchIoService } from "../service/vfs/create-vfs-batch-io-service.js";
-export { AppError, isAppError } from "../errors/app-error.js";
-export {
-  CHARACTER_CARD_MAX_INPUT_BYTES,
-  CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
-  CHARACTER_CARD_MAX_FILE_COUNT,
-} from "../domain/character-card/logic/character-card-limits.js";
-export type { MdTree } from "../domain/character-card/model/character-card.js";
+// 归属例外（check-public-ownership）：角色卡经 VFS 导入，上限常量留本门面。
+export { CHARACTER_CARD_MAX_INPUT_BYTES } from "../domain/character-card/logic/character-card-limits.js";
 export type {
   CharacterCardImportService,
   CharacterCardImportOptions,

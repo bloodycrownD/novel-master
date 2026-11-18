@@ -10,7 +10,7 @@
  * @module tokenizer-driver-node/logic/tokenizer-asset-paths
  */
 
-import type { TokenizerFamily } from "@novel-master/core/provider";
+import type { TokenizerFamily } from "@novel-master/core/tokenizer";
 
 /** Relative asset paths per tokenizer family (ST parity). */
 export function tokenizerAssetPaths(family: TokenizerFamily): {

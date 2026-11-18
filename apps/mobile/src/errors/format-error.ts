@@ -6,7 +6,7 @@
  * mobile 无该分支（T-A4 镜像门对此条豁免）。本函数只产文案字符串，不产 code。
  */
 import {TdbcError} from '@novel-master/core';
-import {isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
 import {Errors} from '@novel-master/core/common';
 import {domainOf} from '@novel-master/core/errors';
 import {vfsUserMessage} from '@novel-master/core/vfs';

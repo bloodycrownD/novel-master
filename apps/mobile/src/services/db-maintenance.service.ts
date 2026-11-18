@@ -13,7 +13,7 @@
  * @module services/db-maintenance.service
  */
 import {createDbMaintenanceService} from '@novel-master/core';
-import {AppError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/errors';
 import {ABORT_KEY, createAbortScope} from '@novel-master/core/abort';
 import {assert} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';

@@ -16,10 +16,10 @@ import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import {
   defaultSavedModelSettings,
-  type LlmChatResult,
   type ModelRequestService,
   type SavedModel,
 } from "@novel-master/core/provider";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";

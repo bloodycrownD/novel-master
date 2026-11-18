@@ -31,6 +31,7 @@ export type {
   SkillSummary,
 } from "../domain/skills/model/skill.schema.js";
 export { skillFrontMatterSchema } from "../domain/skills/model/skill.schema.js";
+// 归属例外（check-public-ownership）：skills 域概念，bootstrap 只是定义处。
 export { BUILTIN_SKILL_NAMES } from "../bootstrap/skills/seed-builtin-skills.js";
 export {
   SKILL_NAME_PATTERN,

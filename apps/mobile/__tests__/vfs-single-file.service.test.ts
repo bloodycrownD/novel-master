@@ -61,7 +61,7 @@ import {
   importVfsSingleFile,
 } from '@/services/vfs-single-file.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
 import {formatError} from '@/errors/format-error';
 
 /** 选中文件在 blob 层的 base64 载荷（btoa 只吃 Latin-1，用 ASCII 内容）。 */

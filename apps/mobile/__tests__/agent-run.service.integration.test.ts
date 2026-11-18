@@ -1,5 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
 import {userMessageOf} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';

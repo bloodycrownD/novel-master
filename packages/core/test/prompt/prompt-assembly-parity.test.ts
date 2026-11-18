@@ -5,7 +5,7 @@ import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import { PromptBuilder, type AgentPromptLayout } from "@novel-master/core/prompt";
 
-import { serializePromptLlmInput } from "@novel-master/core/provider";
+import { serializePromptLlmInput } from "@novel-master/core/tokenizer";
 
 const layout: AgentPromptLayout = {
   system: "ctx",

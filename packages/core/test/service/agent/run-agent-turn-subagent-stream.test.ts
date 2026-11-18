@@ -24,7 +24,7 @@ import {
   type AgentDefinition,
   type AgentTurnRuntimePort,
 } from "@novel-master/core/agent";
-import type { LlmChatResult } from "@novel-master/core/provider";
+import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type {
   ModelRequestService,
   ModelRequestOptions,

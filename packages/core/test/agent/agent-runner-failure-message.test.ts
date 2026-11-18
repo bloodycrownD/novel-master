@@ -34,7 +34,8 @@ import {
   ToolRegistry,
   type BuiltinToolContext,
 } from "@novel-master/core";
-import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
+import { type ModelRequestService } from "@novel-master/core/provider";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { AppError, isAppError } from "../../src/errors/app-error.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";

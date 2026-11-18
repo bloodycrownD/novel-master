@@ -157,7 +157,7 @@ import {
   readChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
 import {serializeComposerDraftJson} from '@novel-master/core/chat';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
 
 /**
  * 灌一个够 controller 跑起来的 mock runtime（草稿水化 + 发送决策）。

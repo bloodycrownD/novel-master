@@ -3,7 +3,7 @@
  *
  * @module storage/app-ui-prefs
  */
-import { isAppError, type AppError } from "@novel-master/core/agent";
+import { isAppError, type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { KkvService } from "@novel-master/core/kkv";
 

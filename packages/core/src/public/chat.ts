@@ -43,7 +43,6 @@ export {
 export { userMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
 export { promptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
 export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js";
-export { formatStatusChipLabel, formatStatusChipLabelFromAttachment } from "../presentation/chat/attachment-chip.js";
 export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
 export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
 export { attachmentScanner } from "../domain/chat/logic/attachment/attachment-scanner.js";
@@ -75,8 +74,6 @@ export {
   userVfsTurnStorage,
 } from "../domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
 export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
-export { rollbackConfirm } from "../presentation/chat/rollback-confirm.js";
-export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../presentation/chat/rollback-confirm.js";
 export type { ChatMessageDescriptor, ChatMessageKey } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
@@ -88,6 +85,8 @@ export type { ChatServicesSessionDeps } from "../service/chat/create-chat-servic
 export {
   createUserVfsTurnServiceBundle,
 } from "../service/chat/create-user-vfs-turn-service.js";
+// 归属例外（check-public-ownership）：VFS 工具卡路径解析，desktop/mobile
+// 的 transcript 消费方都在 chat 门面取（domain/tool 无独立出口）。
 export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
 export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
@@ -118,4 +117,3 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
-export { summarizeToolInput, toolCallSummary } from "../presentation/chat/tool-summary.js";

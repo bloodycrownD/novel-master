@@ -32,8 +32,8 @@
  * @module services/stream-token-estimator
  */
 
-import {createIncrementalTokenCounter, type IncrementalTokenCounter} from '@novel-master/core/format';
-import {mapVendorModelIdToTiktokenModel, resolveTokenizerFamily} from '@novel-master/core/provider';
+import {createIncrementalTokenCounter, type IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import {mapVendorModelIdToTiktokenModel, resolveTokenizerFamily} from '@novel-master/core/tokenizer';
 
 /** core Result 的线上结构（`Result` 本体尚未进 public 面，三期收口时换真类型）。 */
 type ResultWire<T> = {readonly ok: true; readonly value: T} | {readonly ok: false; readonly error: unknown};

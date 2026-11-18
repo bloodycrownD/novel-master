@@ -31,7 +31,7 @@
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {hostThemeFromTokens} from '@/webview-host/host-theme-from-tokens';

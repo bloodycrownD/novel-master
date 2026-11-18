@@ -7,7 +7,8 @@
 import { ABORT_KEY, createAbortRegistry, scopeFromController } from "@novel-master/core/abort";
 import { createAgentRegistryService, createAgentStreamRegistry, type AgentAbortRegistry } from "@novel-master/core/agent";
 import { createCompactionConditionEvaluator, createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { createDefaultTokenCounterRegistry, createProviderServices } from "@novel-master/core/provider";
+import { createProviderServices } from "@novel-master/core/provider";
+import { createDefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
 import { createPersistentPreferences, createPersistentState, createSearchConfigStore } from "@novel-master/core";
@@ -26,7 +27,7 @@ import { getPlatformSkspName } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
 import { ensureLlmFetchConfigured } from "./setup-llm-fetch.js";
 import { getDefaultNodeEncoding } from "@novel-master/tokenizer-driver-node";
-import type { AppError } from "@novel-master/core/agent";
+import type { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import type { DesktopNovelMasterRuntime } from "./types.js";
 

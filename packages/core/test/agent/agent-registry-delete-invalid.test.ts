@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-// isAppError 与 service 同源（@novel-master/core/agent barrel）：src/dist 双模块
+// isAppError 与 service 同源（@novel-master/core/errors）：src/dist 双模块
 // 实例下跨 instanceof 会漏判（见 tool-runner normalizeToolFailure 同款注释）。
-import { createAgentRegistryService, isAppError } from "@novel-master/core/agent";
+import { createAgentRegistryService } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,

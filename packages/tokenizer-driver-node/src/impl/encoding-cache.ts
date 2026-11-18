@@ -35,7 +35,7 @@
  * @module tokenizer-driver-node/impl/encoding-cache
  */
 
-import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/provider";
+import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/tokenizer";
 import { get_encoding, get_encoding_name_for_model, type Tiktoken, type TiktokenEncoding, type TiktokenModel } from "tiktoken";
 
 /**

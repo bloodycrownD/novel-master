@@ -5,7 +5,7 @@ import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.
 import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
 import { ToolRegistry, registerBuiltinTools } from "@novel-master/core";
 
-import { toolsFromRegistry } from "@novel-master/core/provider";
+import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
 
 describe("ModelRequest tools + stream (adapters)", () => {
   it("Anthropic chat sends tools in request body", async () => {

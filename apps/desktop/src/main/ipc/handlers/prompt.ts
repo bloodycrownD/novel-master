@@ -4,8 +4,8 @@
 import {
   AGENT_RUN_RESOLVE_KEYS,
   resolveAgentForProject,
-  type AppError,
 } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { savedModelDisplayName } from "@novel-master/core/provider";
 import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
 import { Result } from "@novel-master/core/errors";

@@ -19,9 +19,9 @@ import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import {
   type LlmChatRequest,
-  type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core/provider";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";

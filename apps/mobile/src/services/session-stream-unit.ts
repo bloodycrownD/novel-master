@@ -52,12 +52,10 @@ import {
   createTokenRateSampler,
   reanchorStreamTokenBase,
 } from '@novel-master/core/format';
-import type {
-  IncrementalTokenCounter,
-  StreamTokenSource,
-  TokenRateSampler,
-} from '@novel-master/core/format';
-import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
+import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import type {StreamTokenSource} from '@novel-master/core/session-run-state';
+import type {TokenRateSampler} from '@novel-master/core/format';
+import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/tokenizer';
 import {createLogger} from '@novel-master/core/log';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';

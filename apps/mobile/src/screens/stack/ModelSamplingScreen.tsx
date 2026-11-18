@@ -5,6 +5,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import {type LlmProtocolKind} from '@novel-master/core/llm-protocol';
 import {
   savedModelContextWindowTokens,
   savedModelSampling,
@@ -12,11 +13,10 @@ import {
   savedModelTokenCounterMode,
   THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
-  type LlmProtocolKind,
   type ModelSamplingParams,
   type ThinkingLevel,
-  type TokenizerOverride,
 } from '@novel-master/core/provider';
+import {type TokenizerOverride} from '@novel-master/core/tokenizer';
 import {FormField} from '@/components/form/FormField';
 import {FormSelectField} from '@/components/form/FormSelectField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';

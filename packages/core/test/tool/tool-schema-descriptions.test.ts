@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { toolsFromRegistry } from "@novel-master/core/provider";
+import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
 
 describe("toolsFromRegistry parameter descriptions", () => {
   it("edit tool schema includes property descriptions for LLM", () => {

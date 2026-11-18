@@ -12,4 +12,4 @@
 export {
   getEncoding,
   type EncodingHandle,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";

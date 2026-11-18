@@ -1,5 +1,5 @@
 import {TdbcError} from '@novel-master/core';
-import {AppError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/errors';
 import {formatError} from '@/errors/format-error';
 
 describe('formatError (T4)', () => {

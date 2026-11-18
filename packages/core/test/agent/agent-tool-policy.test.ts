@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { registerBuiltinTools, ToolRegistry, ToolRunner } from "@novel-master/core";
 
-import { AppError, isAppError, resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition, type AgentToolPolicy } from "@novel-master/core/agent";
+import { resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition, type AgentToolPolicy } from "@novel-master/core/agent";
+import { AppError, isAppError } from "@novel-master/core/errors";
 
-import { toolsFromRegistry } from "@novel-master/core/provider";
+import { toolsFromRegistry } from "@novel-master/core/llm-protocol";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { rejectsErr } from "../helpers/result-unwrap.js";
 

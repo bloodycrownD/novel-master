@@ -14,7 +14,7 @@ import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getPhysicalVfs } from "../resolve-vfs-scope.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { ipcErr } from "../ipc-result.js";
-import { isAppError } from "@novel-master/core/vfs";
+import { isAppError } from "@novel-master/core/errors";
 import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.ipc.physical");

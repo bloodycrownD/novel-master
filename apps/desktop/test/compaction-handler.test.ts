@@ -34,7 +34,7 @@ import { after, before, describe, it } from "node:test";
 import {
   promptWholeCache,
   sessionApiPromptTokenCache,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleCompactionManual } from "../src/main/ipc/handlers/compaction.js";
 import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";

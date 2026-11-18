@@ -14,8 +14,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { TokenFormat } from "../../../src/common/token-format.js";
-// public/provider 直接转出的同一个 namespace（wrapper 已删，单源直连 common）。
-import { TokenFormat as TokenFormatViaProvider } from "@novel-master/core/provider";
+// 公开子路径直出的同一个 namespace（p22 起从 @novel-master/core/common 出，单源直连）。
+import { TokenFormat as TokenFormatViaProvider } from "@novel-master/core/common";
 
 describe("formatTokenSourceBadge（T-TL1 映射表逐行）", () => {
   it("source=api → 远程 =（api ⇒ est=false 恒成立，不看其余两参）", () => {

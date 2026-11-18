@@ -2,7 +2,8 @@
  * Mobile VFS character-card import via Core service + system file UI.
  * Flow: confirmed Alert (caller) → picker png/json → importFromBytes.
  */
-import {AppError, createCharacterCardImportService, CHARACTER_CARD_MAX_INPUT_BYTES, type CharacterCardImportOptions, type VfsScope} from '@novel-master/core/vfs';
+import {AppError} from '@novel-master/core/errors';
+import {createCharacterCardImportService, CHARACTER_CARD_MAX_INPUT_BYTES, type CharacterCardImportOptions, type VfsScope} from '@novel-master/core/vfs';
 import {pickAndReadBytes, type PickAndReadOptions} from './document-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {assertCharacterCardFileName, characterCardImportPickTypes} from './character-card-document-pick';

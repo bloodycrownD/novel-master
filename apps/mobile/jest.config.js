@@ -158,6 +158,16 @@ module.exports = {
       repoRoot,
       'packages/core/dist/infra/tdbc/index.js',
     ),
+    // token 计数 / LLM 协议层直映子出口（p22 public-surface-ownership）：
+    // 同 nmtp/tdbc 口径直连 dist 真实文件。
+    '^@novel-master/core/tokenizer$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/tokenizer/index.js',
+    ),
+    '^@novel-master/core/llm-protocol$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/llm-protocol/index.js',
+    ),
     // 日志端口：同其它 core 子路径直连 dist 真实文件（RN preset 的
     // customExportConditions 不含 import，未映射的子路径在 jest-resolve 就抛）。
     '^@novel-master/core/log$': path.join(

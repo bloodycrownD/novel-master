@@ -10,7 +10,7 @@ import { statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { describe, it } from "node:test";
 
-import type { TokenizerFamily } from "@novel-master/core/provider";
+import type { TokenizerFamily } from "@novel-master/core/tokenizer";
 
 import { tokenizerAssetPaths } from "../src/logic/tokenizer-asset-paths.js";
 import { defaultTokenizerAssetsRoot } from "../src/node-tokenizer-loader.js";

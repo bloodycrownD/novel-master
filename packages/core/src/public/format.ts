@@ -22,18 +22,3 @@ export {
   composeStreamTokens,
   reanchorStreamTokenBase,
 } from "../domain/format/stream-token-anchor.js";
-/**
- * 尾窗增量 token 计数器（stream-metrics-native ②）：双端实时 token 估算的
- * 共用纯逻辑（宿主注入 encode 绑定）。声明在 infra/tokenizer/logic，经本
- * barrel 就近转出，避免新增子路径依赖。
- */
-export {
-  createIncrementalTokenCounter,
-  type IncrementalTokenCounter,
-} from "../infra/tokenizer/logic/incremental-token-counter.js";
-/**
- * 指标条 token 来源的中立类型（声明在 session-run-state 行模型，与
- * `SessionRunStateTokenSource` 同一份）：双端 hook 已消费本 barrel，就近
- * 转出，避免为一句类型新增子路径依赖。
- */
-export type { StreamTokenSource } from "../domain/session-run-state/model/session-run-state.js";

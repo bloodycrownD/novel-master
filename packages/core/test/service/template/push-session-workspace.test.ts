@@ -13,10 +13,8 @@
 import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createTemplatePullService,
-  createWorkplaceService,
-} from "@novel-master/core/workplace";
+import { createWorkplaceService } from "@novel-master/core/workplace";
+import { createTemplatePullService } from "../../../src/service/template/create-template-pull-service.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { isAppError } from "@/errors/app-error.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";

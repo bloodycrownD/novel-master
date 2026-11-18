@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 
-import { createTemplatePullService, createWorkplaceService } from "@novel-master/core/workplace";
+import { createWorkplaceService } from "@novel-master/core/workplace";
+import { createTemplatePullService } from "../../src/service/template/create-template-pull-service.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";

@@ -1,5 +1,5 @@
 import {importCharacterCard} from '@/services/vfs-character-card.service';
-import {AppError} from '@novel-master/core/vfs';
+import {AppError} from '@novel-master/core/errors';
 
 const mockImportFromBytes = jest.fn();
 const mockCreateCharacterCardImportService = jest.fn();

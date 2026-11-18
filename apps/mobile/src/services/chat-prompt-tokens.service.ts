@@ -19,7 +19,9 @@
 import {ABORT_KEY} from '@novel-master/core/abort';
 import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
 
-import {resolvePromptTokensWithBackfill, resolveTokenCounterModeForModel, serializePromptLlmInput, type CountPromptLlmInputParams, type Interrupt} from '@novel-master/core/provider';
+import {resolvePromptTokensWithBackfill, serializePromptLlmInput, type CountPromptLlmInputParams} from '@novel-master/core/tokenizer';
+import {type Interrupt} from '@novel-master/core/errors';
+import {resolveTokenCounterModeForModel} from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 // 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
 // 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。

@@ -24,7 +24,7 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {isAppError} from '@novel-master/core/vfs';
+import {isAppError} from '@novel-master/core/errors';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {
   skillDomainBadgeColor,

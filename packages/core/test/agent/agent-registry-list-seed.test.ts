@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
 import {
-  isAppError,
   agentDefinitionSchema,
   createAgentRegistryService,
 } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

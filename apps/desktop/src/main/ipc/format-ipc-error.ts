@@ -6,8 +6,8 @@
  * @module ipc/format-ipc-error
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
-import { isAbortLikeError } from "@novel-master/core/abort";
-import { isAppError } from "@novel-master/core/agent";
+import { isAbortLikeError } from "@novel-master/core/llm-protocol";
+import { isAppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { domainOf } from "@novel-master/core/errors";
 import { coreT } from "../../../shared/logic/core-i18n.js";

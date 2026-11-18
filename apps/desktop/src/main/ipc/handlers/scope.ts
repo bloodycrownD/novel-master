@@ -4,7 +4,7 @@
  * @module ipc/handlers/scope
  */
 import type { IpcResult, ScopeSetProjectRequest, ScopeSetSessionRequest, ScopeSnapshotDto } from "../../../../shared/ipc-types.js";
-import type { AppError } from "@novel-master/core/agent";
+import type { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { toIpcResult } from "../ipc-result.js";

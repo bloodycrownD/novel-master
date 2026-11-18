@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { joinFileBlocks, parseMarkdownFrontMatter, renderFileBlock, splitMarkdownFrontMatter } from "@novel-master/core/workplace";
+import { joinFileBlocks, parseMarkdownFrontMatter, renderFileBlock } from "@novel-master/core/workplace";
+import { splitMarkdownFrontMatter } from "@novel-master/core/common";
 
 describe("worktree display", () => {
   it("escapes XML in path attribute", () => {

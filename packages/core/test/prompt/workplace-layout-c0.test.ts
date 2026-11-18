@@ -10,11 +10,8 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return unwrap(decodeRaw(raw, schema));
 }
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { PromptBuilder } from "@novel-master/core/prompt";
-import {
-  assembleWorkplaceDisplay,
-  layoutHasWorkplace,
-} from "@novel-master/core/workplace";
+import { PromptBuilder, layoutHasWorkplace } from "@novel-master/core/prompt";
+import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
 import { resolveAgentDefinitionFromStorage } from "../../src/domain/agent/stored-config-validity/assess-agent-definition-wire.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {

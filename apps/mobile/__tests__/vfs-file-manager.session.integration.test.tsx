@@ -163,7 +163,7 @@ import {
   exportVfsSingleFile,
   importVfsSingleFile,
 } from '../src/services/vfs-single-file.service';
-import {AppError} from '@novel-master/core/vfs';
+import {AppError} from '@novel-master/core/errors';
 
 const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');

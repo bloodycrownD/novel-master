@@ -22,7 +22,7 @@ import {
   countWebTokenizerMessages,
   wrapSerializedPromptAsSystemMessage,
   type OpenAiStyleMessage,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
 
 import {
   countOpenAiStyleMessages as countFromNodeReexport,

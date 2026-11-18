@@ -28,13 +28,13 @@ import type {
 } from "@novel-master/core/compaction";
 import type { SimpleEventBus } from "@novel-master/core/events";
 import type {
-  SecretStore,
   ModelRequestService,
   ProviderModelService,
   ProviderService,
   ProviderServiceBundle,
-  TokenCounterRegistry,
 } from "@novel-master/core/provider";
+import type { SecretStore } from "@novel-master/core/sksp";
+import type { TokenCounterRegistry } from "@novel-master/core/tokenizer";
 import type { MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import type { SessionFsService } from "@novel-master/core/session-fs";
 import type { SmartSortRuleService } from "@novel-master/core/smart-sort-rule";

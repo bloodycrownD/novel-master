@@ -18,5 +18,5 @@ export {
   wrapSerializedPromptAsSystemMessage,
   convertMessagesForWebTokenizer,
   countWebTokenizerMessages,
-} from "@novel-master/core/provider";
-export type { OpenAiStyleMessage } from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
+export type { OpenAiStyleMessage } from "@novel-master/core/tokenizer";

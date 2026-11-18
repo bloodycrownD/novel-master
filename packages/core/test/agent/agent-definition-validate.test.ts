@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import { decode as decodeRaw } from "@novel-master/core";
 import type { ZodType } from "zod";
 
-import { agentDefinitionSchema, isAppError, validateAgentDefinition } from "@novel-master/core/agent";
-import type { AgentDefinition, ErrorKey, ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
+import { agentDefinitionSchema, validateAgentDefinition } from "@novel-master/core/agent";
+import type { AgentDefinition, ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
+import type { ErrorKey } from "@novel-master/core/errors";
 import { tCore } from "../helpers/core-i18n.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 

@@ -1,12 +1,14 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import { type AgentDefinition, type AppError, resolveAgentForProject } from "@novel-master/core/agent";
+import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Result } from "@novel-master/core/errors";
 import { promptAssembler } from "@novel-master/core/chat";
 import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay, type Interrupt } from "@novel-master/core/workplace";
+import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
+import { type Interrupt } from "@novel-master/core/errors";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 

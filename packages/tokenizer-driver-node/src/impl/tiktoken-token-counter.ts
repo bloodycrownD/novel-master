@@ -6,8 +6,8 @@
 
 import { type ChatMessage } from "@novel-master/core/chat";
 
-import { type TokenCounter } from "@novel-master/core/provider";
-import { mapVendorModelIdToTiktokenModel } from "@novel-master/core/provider";
+import { type TokenCounter } from "@novel-master/core/tokenizer";
+import { mapVendorModelIdToTiktokenModel } from "@novel-master/core/tokenizer";
 import { countOpenAiMessages } from "../logic/openai-message-token-count.js";
 import { getNodeEncodingForModel } from "./encoding-cache.js";
 

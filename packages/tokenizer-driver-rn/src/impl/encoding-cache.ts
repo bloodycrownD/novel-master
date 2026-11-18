@@ -25,7 +25,7 @@
  *
  * @module tokenizer-driver-rn/impl/encoding-cache
  */
-import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/provider";
+import { clearForTests, countTextWithIncrementalTokenizer, getEncoding, setFactoryForTests } from "@novel-master/core/tokenizer";
 import { Tiktoken } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
 import * as o200kRanksModule from "js-tiktoken/ranks/o200k_base";

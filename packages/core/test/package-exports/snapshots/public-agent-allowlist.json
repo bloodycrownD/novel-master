@@ -1,7 +1,6 @@
 [
   "AGENT_RUN_RESOLVE_KEYS",
   "AgentActivityTracker",
-  "AppError",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
   "DEFAULT_SUBAGENT_DEFINITION",
@@ -16,7 +15,6 @@
   "createAgentStreamRegistry",
   "decodeAgentYamlText",
   "encodeAgentYamlText",
-  "isAppError",
   "mapResolveError",
   "promptsDocumentSchema",
   "resolveAgentForProject",

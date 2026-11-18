@@ -21,7 +21,8 @@ import type {
   CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "@novel-master/core";
-import type { LlmChatResult, ModelRequestService } from "@novel-master/core/provider";
+import type { ModelRequestService } from "@novel-master/core/provider";
+import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type { VfsService } from "@novel-master/core/vfs";
 
 /** 捕获 runCompaction 调用参数，供断言。 */

@@ -12,7 +12,7 @@ import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import type { Outcome } from "@novel-master/core/errors";
 
 import type { IpcResult, UsageStatsBucketDto, UsageStatsQueryRequest, UsageStatsQueryResponse } from "../../../../shared/ipc-types.js";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { formatIpcError } from "../format-ipc-error.js";

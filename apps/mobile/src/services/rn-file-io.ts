@@ -7,7 +7,7 @@
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
-import {AppError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/errors';
 
 /** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
 export function localUriToFsPath(localUri: string): string {

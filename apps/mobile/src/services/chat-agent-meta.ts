@@ -7,7 +7,8 @@
  * 项目智能体已下线：会话始终独立持有 agentId（必填），
  * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
-import {AGENT_RUN_RESOLVE_KEYS, isAppError, resolveAgentForProject} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/errors';
+import {AGENT_RUN_RESOLVE_KEYS, resolveAgentForProject} from '@novel-master/core/agent';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';

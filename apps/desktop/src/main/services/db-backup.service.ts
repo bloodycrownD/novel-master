@@ -12,7 +12,7 @@ import { access, copyFile, open as openFileHandle, unlink, writeFile } from "nod
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
 import { assertSqliteBackupHeader, DatabaseReplacedError, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot, type ProviderTableSnapshot } from "@novel-master/core";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";

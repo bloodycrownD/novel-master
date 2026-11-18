@@ -6,7 +6,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
+import {splitMarkdownFrontMatter} from '@novel-master/core/common';
 import {parseFrontMatterFields, Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';

@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { bootstrapNovelMaster } from "@novel-master/core";
 import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { createTemplatePullService } from "@novel-master/core/workplace";
+import { createTemplatePullService } from "../../src/service/template/create-template-pull-service.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";

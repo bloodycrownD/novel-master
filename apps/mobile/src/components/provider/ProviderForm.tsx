@@ -3,7 +3,7 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {type LlmProtocolKind} from '@novel-master/core/provider';
+import {type LlmProtocolKind} from '@novel-master/core/llm-protocol';
 import {FormChipGroup} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';

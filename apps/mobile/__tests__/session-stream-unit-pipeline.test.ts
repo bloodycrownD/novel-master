@@ -30,11 +30,11 @@ import {
   SimpleEventBus,
 } from '@novel-master/core/events';
 import {agentActivity} from '@/runtime/agent-activity';
-import {HeuristicTokenCounter} from '@novel-master/core/provider';
+import {HeuristicTokenCounter} from '@novel-master/core/tokenizer';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
-import {createIncrementalTokenCounter} from '@novel-master/core/format';
-import type {IncrementalTokenCounter} from '@novel-master/core/format';
+import {createIncrementalTokenCounter} from '@novel-master/core/tokenizer';
+import type {IncrementalTokenCounter} from '@novel-master/core/tokenizer';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 
 /** 与单元实现同值的 ingress 合并窗口（32ms）。 */

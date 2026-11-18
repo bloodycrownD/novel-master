@@ -32,7 +32,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
-import { type AppError } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 
 import {

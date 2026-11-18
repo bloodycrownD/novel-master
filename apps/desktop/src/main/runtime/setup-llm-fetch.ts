@@ -9,7 +9,7 @@
  * fetch；mobile 端固定注册 native SSE transport + mobile fetch shim。平台底座不同，
  * 故保留双端、不收敛到 core。
  */
-import { configureLlmFetch, createLoggingFetch } from "@novel-master/core/provider";
+import { configureLlmFetch, createLoggingFetch } from "@novel-master/core/llm-protocol";
 import { createLogger } from "@novel-master/core/log";
 import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";
 

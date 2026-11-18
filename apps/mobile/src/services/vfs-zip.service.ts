@@ -7,8 +7,8 @@
  * 本模块只保留 picker / 缓存落盘。
  */
 import {types} from '@react-native-documents/picker';
+import {AppError} from '@novel-master/core/errors';
 import {
-  AppError,
   assertZipArchive,
   createVfsZipIoService,
   resolveZipDirectoryPath,

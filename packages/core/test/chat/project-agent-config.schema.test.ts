@@ -10,7 +10,8 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return r.value;
 }
 import { projectAgentConfigSchema, projectAgentModeSchema } from "../../src/domain/chat/model/project-agent-config.schema.js";
-import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
+import { agentDefinitionSchema } from "@novel-master/core/agent";
+import { isAppError } from "@novel-master/core/errors";
 import { tCore } from "../helpers/core-i18n.js";
 
 function minimalDefinitionWire() {

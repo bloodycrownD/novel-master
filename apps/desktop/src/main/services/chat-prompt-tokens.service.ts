@@ -29,18 +29,18 @@ import { app } from "electron";
 import { ChatPromptBuildBailedError } from "@novel-master/core";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
-import { type AppError } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { TokenFormat } from "@novel-master/core/common";
 
+import { resolveTokenCounterModeForModel } from "@novel-master/core/provider";
 import {
   countPromptLlmInputHeuristicOnly,
   resolvePromptTokensWithBackfill,
-  resolveTokenCounterModeForModel,
   serializePromptLlmInput,
-  type Interrupt,
   type TokenCounterRegistry,
-} from "@novel-master/core/provider";
+} from "@novel-master/core/tokenizer";
+import { type Interrupt } from "@novel-master/core/errors";
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import { createLogger } from "@novel-master/core/log";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";

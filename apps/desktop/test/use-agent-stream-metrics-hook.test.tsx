@@ -23,7 +23,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_USAGE,
 } from "@novel-master/core/events";
-import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/provider";
+import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/tokenizer";
 import type { AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 import type { UseAgentStreamCallbacks } from "@/hooks/useAgentStream";
 import { createIncrementalTokenCounter } from "@shared/logic/format";

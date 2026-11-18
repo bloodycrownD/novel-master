@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { AppError } from "@novel-master/core/vfs";
+import { AppError } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";

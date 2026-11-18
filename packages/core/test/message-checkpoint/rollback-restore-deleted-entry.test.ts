@@ -25,7 +25,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/session-fs";
+import { isRollbackRevisionBackfillRequiredError } from "@novel-master/core/message-checkpoint";
 
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {

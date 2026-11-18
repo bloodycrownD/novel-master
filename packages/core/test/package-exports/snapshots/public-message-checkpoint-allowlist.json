@@ -1,4 +1,7 @@
 [
   "createMessageCheckpointService",
-  "createMessageRollbackService"
+  "createMessageRollbackService",
+  "isRollbackRevisionBackfillRequiredError",
+  "isRollbackVfsDegradableError",
+  "readRollbackRevisionBackfillMissingPaths"
 ]

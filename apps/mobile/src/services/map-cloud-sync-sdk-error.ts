@@ -4,7 +4,7 @@
  *
  * @module services/map-cloud-sync-sdk-error
  */
-import {AppError, isAppError} from '@novel-master/core/agent';
+import {AppError, isAppError} from '@novel-master/core/errors';
 import {domainOf} from '@novel-master/core/errors';
 
 const AUTH_MESSAGE = '云存储凭据无效或权限不足';

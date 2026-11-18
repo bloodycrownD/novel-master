@@ -11,7 +11,7 @@
  * @module ipc/handlers/run-abort
  */
 import { ABORT_KEY } from "@novel-master/core/abort";
-import { AppError } from "@novel-master/core/agent";
+import { AppError } from "@novel-master/core/errors";
 import { createLogger } from "@novel-master/core/log";
 import type { AgentAbortRequest, IpcResult, RunAbortRequest, RunAbortResponse } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";

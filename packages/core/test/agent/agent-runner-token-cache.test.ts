@@ -15,12 +15,9 @@ import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-mem
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import { SimpleEventBus } from "@novel-master/core/events";
-import {
-  resolveCurrentPromptTokens,
-  sessionApiPromptTokenCache,
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core/provider";
+import { type ModelRequestService } from "@novel-master/core/provider";
+import { resolveCurrentPromptTokens, sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type VfsService } from "@novel-master/core/vfs";
 import type { MessageService } from "../../src/service/chat/message.port.js";

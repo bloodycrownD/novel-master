@@ -19,7 +19,8 @@
  */
 
 import {runCompaction} from '@novel-master/core/compaction';
-import {ABORT_KEY, createAbortScope, type Interrupt} from '@novel-master/core/abort';
+import {type Interrupt} from '@novel-master/core/errors';
+import {ABORT_KEY, createAbortScope} from '@novel-master/core/abort';
 import type {Outcome} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 

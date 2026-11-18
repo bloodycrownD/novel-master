@@ -7,10 +7,10 @@ import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-mem
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import {
-  type LlmChatResult,
   type ModelRequestOptions,
   type ModelRequestService,
 } from "@novel-master/core/provider";
+import { type LlmChatResult } from "@novel-master/core/llm-protocol";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";

@@ -1,7 +1,3 @@
 [
-  "createSessionFsService",
-  "isRollbackRevisionBackfillRequiredError",
-  "isRollbackVfsDegradableError",
-  "isSessionFsError",
-  "readRollbackRevisionBackfillMissingPaths"
+  "createSessionFsService"
 ]

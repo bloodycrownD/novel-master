@@ -18,8 +18,6 @@
   "createSessionService",
   "createUserVfsTurnServiceBundle",
   "formatMessageForCli",
-  "formatStatusChipLabel",
-  "formatStatusChipLabelFromAttachment",
   "isMessageAnnotatePath",
   "messageAttachmentSchema",
   "messageAttachmentsSchema",
@@ -31,13 +29,10 @@
   "promptPathSeen",
   "readMessageMetadata",
   "resolveVfsToolFilePath",
-  "rollbackConfirm",
   "serializeComposerDraftJson",
   "sessionAgentConfigSchema",
   "skillToolRefResolver",
-  "summarizeToolInput",
   "textBlocks",
-  "toolCallSummary",
   "userMessageFormatter",
   "userVfsTurnStorage"
 ]

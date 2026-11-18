@@ -7,7 +7,7 @@ import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
 import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
-import type {Interrupt} from '@novel-master/core/workplace';
+import type {Interrupt} from '@novel-master/core/errors';
 import {Result, AppError} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime as MobileRuntime} from '@/runtime/types';
 

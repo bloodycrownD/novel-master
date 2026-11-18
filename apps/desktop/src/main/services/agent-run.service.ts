@@ -15,7 +15,7 @@ import {
 } from "@novel-master/core/agent";
 import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
-import type { AppError } from "@novel-master/core/agent";
+import type { AppError } from "@novel-master/core/errors";
 import type { Result } from "@novel-master/core/errors";
 import { createLogger } from "@novel-master/core/log";
 import { isDesktopLlmDebug } from "../log/llm-debug-flag.js";

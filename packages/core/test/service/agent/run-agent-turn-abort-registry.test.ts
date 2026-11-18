@@ -17,7 +17,7 @@ import { describe, it } from "node:test";
 
 import { textBlocks } from "@novel-master/core/chat";
 import { createAgentRegistryService, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
-import type { LlmChatResult, LlmStreamEvent } from "@novel-master/core/provider";
+import type { LlmChatResult, LlmStreamEvent } from "@novel-master/core/llm-protocol";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import {

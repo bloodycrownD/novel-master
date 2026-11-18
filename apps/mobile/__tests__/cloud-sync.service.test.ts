@@ -1,5 +1,6 @@
 import {AppError, DatabaseReplacedError, Result} from '@novel-master/core';
-import {ABORT_KEY, createAbortError, createAbortRegistry, isAbortLikeError} from '@novel-master/core/abort';
+import {isAbortLikeError} from '@novel-master/core/llm-protocol';
+import {ABORT_KEY, createAbortError, createAbortRegistry} from '@novel-master/core/abort';
 import {
   pullCloudSync,
   pushCloudSync,

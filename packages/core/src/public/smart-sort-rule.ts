@@ -41,10 +41,8 @@ export {
   parsePatternInput,
 } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";
 export type { ParsedPatternInput } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";
+// 归属例外（check-public-ownership）：compileSmartSortRule 的返回类型，不可拆。
 export type { CompiledSmartSortRule } from "../domain/workplace/logic/smart-sort.js";
-export {
-  formatSortTupleForDisplay,
-} from "../domain/workplace/logic/smart-sort.js";
 export { createSmartSortRuleService } from "../service/smart-sort-rule/create-smart-sort-rule.service.js";
 export type { SmartSortRuleService } from "../service/smart-sort-rule/smart-sort-rule.port.js";
 export type {

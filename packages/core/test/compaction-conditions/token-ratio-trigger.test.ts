@@ -20,7 +20,7 @@ import type { SessionKkvService } from "../../src/service/session-kkv/session-kk
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 
-import { createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
+import { createDefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { Result } from "../../src/errors/either.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";

@@ -94,6 +94,14 @@
       "types": "./dist/infra/nmtp/index.d.ts",
       "import": "./dist/infra/nmtp/index.js"
     },
+    "./tokenizer": {
+      "types": "./dist/infra/tokenizer/index.d.ts",
+      "import": "./dist/infra/tokenizer/index.js"
+    },
+    "./llm-protocol": {
+      "types": "./dist/infra/llm-protocol/index.d.ts",
+      "import": "./dist/infra/llm-protocol/index.js"
+    },
     "./log": {
       "types": "./dist/infra/log/index.d.ts",
       "import": "./dist/infra/log/index.js"

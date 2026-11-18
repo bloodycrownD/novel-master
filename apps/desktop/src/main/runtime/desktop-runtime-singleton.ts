@@ -2,7 +2,7 @@
  * Main-process runtime singleton lifecycle.
  * Invariant: one open DB + service graph per app session; rebootstrap closes first.
  */
-import type { AppError } from "@novel-master/core/agent";
+import type { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { closeDesktopConnection } from "./connection.js";
 import { createDesktopNovelMasterRuntime } from "./create-desktop-runtime.js";

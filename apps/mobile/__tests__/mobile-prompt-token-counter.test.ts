@@ -546,7 +546,7 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
     mockCountPrompt.mockReset();
     nativeBridgeState.available = true;
     // L1/L2 是进程级单例：跨用例清空，避免被上方既有用例的缓存条目污染。
-    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/provider');
+    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/tokenizer');
     promptWholeCache.clearForTests();
     tokenChunkCache.clearForTests();
   });
@@ -659,7 +659,7 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
     );
     expect(second.counterKind).toBe('tiktoken');
 
-    const {splitTextIntoChunks, chunkHash16} = require('@novel-master/core/provider');
+    const {splitTextIntoChunks, chunkHash16} = require('@novel-master/core/tokenizer');
     const hashesA = splitTextIntoChunks(baseText).map((c: string) => chunkHash16(c));
     const hashesB = splitTextIntoChunks(editedText).map((c: string) => chunkHash16(c));
     expect(hashesA.length).toBe(hashesB.length);
@@ -694,7 +694,7 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     nativeBridgeState.available = true;
     mockResolveFamily = 'claude';
     // L1/L2 是进程级单例：跨用例清空，取消用例的「未写缓存」断言才成立。
-    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/provider');
+    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/tokenizer');
     promptWholeCache.clearForTests();
     tokenChunkCache.clearForTests();
   });

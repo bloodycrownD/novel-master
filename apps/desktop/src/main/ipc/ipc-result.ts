@@ -12,7 +12,7 @@
  * @module ipc/ipc-result
  */
 import type { IpcErrorPayload, IpcResult } from "../../../shared/ipc-types.js";
-import { type AppError } from "@novel-master/core/agent";
+import { type AppError } from "@novel-master/core/errors";
 import { type Result } from "@novel-master/core/errors";
 import { formatIpcError } from "./format-ipc-error.js";
 

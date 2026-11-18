@@ -5,8 +5,9 @@
  */
 import {CloudSyncCoordinator, DatabaseReplacedError, parseCloudSyncStatus, statusKey} from '@novel-master/core';
 import {Path} from '@novel-master/core/common';
-import {ABORT_KEY, createAbortError, createAbortScope, isAbortLikeError} from '@novel-master/core/abort';
-import {AppError, isAppError} from '@novel-master/core/agent';
+import {isAbortLikeError} from '@novel-master/core/llm-protocol';
+import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
+import {AppError, isAppError} from '@novel-master/core/errors';
 import {Result} from '@novel-master/core/errors';
 import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
 import {createCloudSyncProgress, withCloudSyncStorageProgress} from './cloud-sync-progress-log';

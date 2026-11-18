@@ -5,7 +5,7 @@
  * 与 Result 转码。
  */
 import { IPC_CHANNELS, type IpcChannel, type IpcResult } from "../../../../shared/ipc-types.js";
-import type { AppError } from "@novel-master/core/agent";
+import type { AppError } from "@novel-master/core/errors";
 import type { PersistentPreferences } from "@novel-master/core";
 import { Result } from "@novel-master/core/errors";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";

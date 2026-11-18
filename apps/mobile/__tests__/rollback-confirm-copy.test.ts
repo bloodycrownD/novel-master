@@ -1,5 +1,5 @@
 import {describe, expect, it} from '@jest/globals';
-import {rollbackConfirm} from '@novel-master/core/chat';
+import {rollbackConfirm} from '@novel-master/core/presentation/chat/rollback-confirm.js';
 import {chatTranslator} from '@/i18n/chat';
 
 describe('rollback-confirm-copy (mobile)', () => {

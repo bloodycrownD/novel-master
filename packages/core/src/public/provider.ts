@@ -2,12 +2,14 @@
  * LLM Provider 与模型配置的公开入口（CRUD、采样参数、协议推断）。
  *
  * tokenizer 驱动注册请使用 `@novel-master/core/nmtp`；
+ * token 计数/编码符号走 `@novel-master/core/tokenizer`，协议层符号
+ * （adapter、registry、SSE transport、isAbortLikeError）走
+ * `@novel-master/core/llm-protocol`；
  * feature flags 请使用 `@novel-master/core/feature-flags`。
  *
  * @module public/provider
  */
 
-export type { SecretStore } from "../infra/sksp/index.js";
 export {
   parseApplicationModelId,
   normalizeVendorModelId,
@@ -89,75 +91,4 @@ export type {
   ModelRequestService,
   ModelRequestOptions,
 } from "../service/provider/model-request.port.js";
-export type {
-  LlmProtocolKind,
-  LlmToolDefinition,
-  LlmStreamEvent,
-  LlmTokenUsage,
-  LlmChatResult,
-} from "../infra/llm-protocol/ports/adapter.port.js";
-export { toolsFromRegistry } from "../infra/llm-protocol/logic/tool-definitions.js";
 export { zodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";
-export {
-  configureLlmFetch,
-  getProtocolAdapter,
-} from "../infra/llm-protocol/logic/registry.js";
-export {
-  createLoggingFetch,
-  isLlmFetchDebugEnabled,
-} from "../infra/llm-protocol/logic/debug-fetch.js";
-export type { SseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
-export { registerSseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
-export {
-  createDefaultTokenCounterRegistry,
-  HeuristicTokenCounter,
-  CHARACTERS_PER_TOKEN_RATIO,
-  serializePromptLlmInput,
-  countPromptLlmInput,
-  countPromptLlmInputHeuristicOnly,
-  resolveCurrentPromptTokens,
-  resolvePromptTokensWithBackfill,
-  promptWholeCache,
-  tokenChunkCache,
-  buildCounterScope,
-  chunkHash16,
-  splitTextIntoChunks,
-  sessionApiPromptTokenCache,
-  serializeToolsForTokenCount,
-  resolveTokenizerFamily,
-  mapVendorModelIdToTiktokenModel,
-  isGpt0301TiktokenModel,
-  countTokens,
-  countTextWithIncrementalTokenizer,
-  resolveContextWindowTokens,
-  getEncoding,
-  clearForTests,
-  setFactoryForTests,
-  countOpenAiStyleMessages,
-  wrapSerializedPromptAsSystemMessage,
-  convertMessagesForWebTokenizer,
-  countWebTokenizerMessages,
-  type TokenCounter,
-  type TokenCounterRegistry,
-  type TokenCounterKind,
-  type TokenizerFamily,
-  type TokenizerOverride,
-  type CountPromptLlmInputParams,
-  type PromptTokenCountResult,
-  type ResolvedPromptTokens,
-  type PromptWholeCacheEntry,
-  type ChatTokenEncoder,
-  type ChatTokenMessage,
-  type ChatTokenCountKind,
-  type CountTokensOptions,
-  type OpenAiStyleMessage,
-  type EncodingHandle,
-} from "../infra/tokenizer/index.js";
-// 控制流结果类型（错误通道迁移二期）：resolve 读口的弃权改沿
-// Outcome.cancelled/replaced 返回，apps 读口按 kind 判定，不再 catch 哨兵类。
-export type { Interrupt, Outcome } from "../infra/tokenizer/index.js";
-// token-source-label：badge 与完整占用标签的单源在 common 的 TokenFormat
-// namespace（common/token-format.ts），这里直接转出 namespace（不经 infra 中转）。
-export { TokenFormat } from "../common/index.js";
-export type { TokenSourceBadge } from "../common/index.js";
-export { isValidTokenCounterModePref } from "../infra/tokenizer/index.js";

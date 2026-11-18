@@ -15,7 +15,9 @@ const mockCreateLoggingFetch = jest.fn();
 const mockRegisterSseTransport = jest.fn();
 const mockRegisterNativeSseTransportWith = jest.fn();
 
-jest.mock('@novel-master/core/provider', () => ({
+// p22 public-surface-ownership：这三个符号从 provider 门面迁到 llm-protocol
+// 直映出口，mock 路径随迁，否则拦截不到被测装配的真实导入。
+jest.mock('@novel-master/core/llm-protocol', () => ({
   configureLlmFetch: mockConfigureLlmFetch,
   createLoggingFetch: mockCreateLoggingFetch,
   registerSseTransport: mockRegisterSseTransport,

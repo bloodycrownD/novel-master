@@ -6,7 +6,8 @@
  *
  * @module services/vfs-zip
  */
-import { AppError, assertZipArchive, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
+import { assertZipArchive, createVfsZipIoService, resolveZipDirectoryPath, zipBaseNameFromPath, type VfsScope } from "@novel-master/core/vfs";
+import { AppError } from "@novel-master/core/errors";
 import { Result } from "@novel-master/core/errors";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";

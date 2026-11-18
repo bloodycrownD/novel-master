@@ -7,7 +7,7 @@
  * 不另抄一份以免与 core 校验口径漂移。
  */
 import type { CustomEngineDef, SearchEngineTemplate } from "@novel-master/core";
-import type { ErrorKey } from "@novel-master/core/agent";
+import type { ErrorKey } from "@novel-master/core/errors";
 
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: "nm:bootstrap/status",

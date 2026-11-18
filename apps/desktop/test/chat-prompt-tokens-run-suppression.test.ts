@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, it } from "node:test";
 import type { WebContents } from "electron";
-import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
+import { sessionApiPromptTokenCache } from "@novel-master/core/tokenizer";
 import {
   IPC_CHANNELS,
   type PromptChatTokenUpdatedPayload,

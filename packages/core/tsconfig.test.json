@@ -25,6 +25,8 @@
       "@novel-master/core/tdbc": ["./src/infra/tdbc/index.ts"],
       "@novel-master/core/sksp": ["./src/infra/sksp/index.ts"],
       "@novel-master/core/nmtp": ["./src/infra/nmtp/index.ts"],
+      "@novel-master/core/tokenizer": ["./src/infra/tokenizer/index.ts"],
+      "@novel-master/core/llm-protocol": ["./src/infra/llm-protocol/index.ts"],
       "@novel-master/core/log": ["./src/infra/log/index.ts"],
       "@novel-master/core/kkv": ["./src/public/kkv.ts"],
       "@novel-master/core/session-kkv": ["./src/public/session-kkv.ts"],
