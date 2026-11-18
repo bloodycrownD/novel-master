@@ -203,3 +203,90 @@ user:
 - `list-all-signatures.mjs` 头部改成「扫描 1179 文件 / 883 个含函数 / 共 3200 个签名」——原来只写 1181 文件，三路审都会以为覆盖了 1181 个有函数的文件。
 - `isParamDerived` 加**对象字面量分支**（空对象 false、shorthand 必须同名、spread/getter/method 一律判不是纯转发），补前 `createMessageCheckpointService` 的 `return new Impl({conn})` 不报、补后报 PASS_THROUGH。
 - 别名检测第一版有 1063 处假阳性（`const rt = built.value` 这种函数体内局部变量被当成模块级别名），收紧为 `ts.isPropertyAccessExpression(init) && ex === "export " && ts.isSourceFile(node.parent)` 后剩 21 处真的。
+
+---
+
+## 十九期：错误类五层清理（tag `p19-error-classes`，worktree HEAD `d76a209f2`）
+
+你问「`TokenizerError` 是不是还有类似的」，扫全仓 `class Xxx extends Error` 找到 **16 个**，三份 spec 只认定性了 6 个。十九期清到 **11 个**（68 文件 +371/−465），三端与 check-style 三段全绿。
+
+### 从 16 到 11 的构成
+
+```
+删  TokenizerError              → registry 改 assert（3 个构造点全在 createDriverRegistry 的工厂里）
+删  AgentTurnError              → 带 messageKey 却不在 AppError，加 AGENT_MESSAGE_EMPTY(101017)
+删  ProviderTableSnapshotError  → 14 个 descriptor 改 14 个码（新开 125 DB_BACKUP 段）
+合  DatabaseReplacedError       → 双端各一份 → 上收 core（跨包 instanceof 原来永远 false）
+合  ChatPromptBuildBailedError  → 双端各一份 → 上收 core
+留  AppError / AssertionError / SkspError / SqlTemplateError / TdbcError
+    / CoordinatedWriteRollbackError / NativeSseTransportError / NativeSseAbortError
+    / PromptCountCancelledError
+```
+
+### 六条记下来的
+
+1. **`throw createAbortError()` 是门⑦ 抓不到的第二个通道**。`check-unwrap-throw.mjs` 匹配 `throw x.error` 这个形态，载荷换成裸 `Error` 的 `throw createAbortError()` 就静默漏掉——全仓 **44 处**（排除 cli/test/dist 后 32 处），报告从未出现过。而它比 `throw x.error` 更糟：`AbortError` 是 `new Error("Request aborted")`，**信息量为零**，边界只能靠 `isAbortLikeError` 按 name 猜。**门禁按载荷形态匹配是结构性盲区，必须按「函数返回类型 + 是否在事务回调/边界白名单」判定，不能按抛的字符串。**
+
+2. **档1/档2/档3 三分才是 `throw createAbortError` 的正确处置**。档1「不可能中断」（注释自承认不注入 hooks）→ 改 `assert`；档2「已是 Outcome 通道」→ 改 `return Outcome.cancelled`；**档3「Result 通道但 kind 可能是 cancelled」只报不改**——塞进 `Result.err` 就是「控制流伪装成业务错误」，正是要消灭的东西。十九期实测 11 / 2 / 8 / 11（白名单），档3 的 8 处是 spec-2 的债：`message.service` / `session.service` 这批根本没接 `Outcome`。
+
+3. **工作流门禁自报第五次误报，这次是 `classes=0`**。我的 grep 写 `grep -v "/dist/"`，Windows 路径是 `packages\core\dist\`，反斜杠匹配不上；再加上 `\b` 在 ugrep 里报错退出 → `wc -l` 拿空输入 → 0。工作流据此打了 `p19-error-classes-partial`，实跑真值是 **11**（正好达标），我把 tag 改成了正式的。**`grep -v` 过滤路径不能写死单一分隔符，用 `grep -v "dist"` 这种宽松词更稳。**
+
+4. **L5 四片清单不互斥，第四次翻车**。L1-L4 我逐片列死了文件清单，L5 只写了「按档位处理 `packages/core/src/domain/` 下的位置」+ 一句范围提示——结果 L5d 的任务是「apps 三端」，它的报告却是「档1 共 11 处：**core 7 处** + desktop 3 处 + mobile 1 处」，越界改了 core，和 L5b/L5c 撞上。L5c 发现后**停手改为核验**（`git status` 从 51 变 66，mtime 10:07–10:10 有并发写者），没造成丢失。**教训：分片清单必须逐片列死文件，「按档位/按目录」这种描述性范围等于没边界。**
+
+5. **双端各一份 class 比双端各一份函数更糟**。`instanceof` 跨包根本不成立——desktop 的 catch 永远抓不到 mobile 那侧的实例，反之亦然。现在不炸只因为「desktop 的 cloud-sync 只走 desktop 的 db-backup」，任何跨包复用就会静默失效。上收 core 后 desktop 那个 `await import("./db-backup.service.js")` 的动态 import 也顺手去掉了。
+
+6. **收敛轮次计为 failed 节点是正常现象**。十九期 31 个节点里 `nodes_failed=7`，全是波2/波3/波5 的「typecheck 红第 N 轮」「测试红第 N 轮」——每轮一个 node，绿了就继续。**看 `nodes_failed` 不能只看数字，要配合 `status: completed` 和最终门禁一起读。**
+
+---
+
+## 函数归属审计（跨域）：签名清单的第四种用法
+
+你指出 `normalize-for-llm-export.ts` 里的 `isVfsSemanticSegment` 跨域，并问「能不能和之前一样导出签名就看出来」。答案：**能，但判据要比「参数跨域」精确得多**——`normalizeForLlmExport(messages: ChatMessageData[], ...)` 的参数本来就跨域，按那个判全仓一半函数都"跨域"。
+
+### 三条件判据
+
+```
+① 文件的域 ≠ 参数类型的域（从路径判域）
+② 函数不含本域任何专属类型（全原始类型或他域类型）
+③ 名字与文件主题无关
+```
+
+`resolveZone(...): LlmExportZone` ② 不成立（返回本域类型）→ 本域，不动。另外三个 ①②③ 全成立 → 候选。
+
+### 三路结果与共识
+
+三路各报 9-19 组，去重约 20 组。**三路都报的 1 组**：
+
+```
+fileCacheKey(status: WorkplaceDisplayStatus, path: string): string
+  domain/session-kkv/model/session-kkv-domains.ts:127
+```
+
+**和 `VFS_SEMANTIC_KINDS` 完全同构**：workplace 域的联合类型住在 session-kkv 的域常量表。三路各自给的证据还一致——file-cache 这个特性被劈成三段（payload serde 在 workplace `rule-snapshot-codec.ts`、blob 在 session-kkv、key 在 session-kkv 却绑死 workplace 类型）。
+
+**两路以上共识的另外三组**：`isDevEnvironment()` 住 abort 域、`decodeLatin1()` 住 character-card、**mobile 的 `buildNewSkillDoc` 副本已经漂移**（core 版多了 `variant` 参数，mobile 版没有——不是「可能漂移」，是已经漂移）。
+
+### 最值钱的一条（R2 独有）
+
+```
+packages/core/src/errors/guards.ts:98   readRollbackRevisionBackfillMissingPaths(error: unknown): readonly string[]
+packages/core/src/errors/guards.ts:112  isRollbackVfsDegradableError(error: unknown): boolean
+```
+
+`errors/guards.ts` 一直被我当通用层（`domainOf` / `inDomain` 在那），但它混进了两个具体域的谓词——backfill 的知识在 `domain/message-checkpoint/logic/backfill-missing-revision.ts`，vfs 降级的知识在 `domain/vfs/logic/`。**改了 checkpoint 的错误 code，这两个函数静默漏判，而改的人不会去通用 errors 层找消费者。**
+
+### 这个信号的两个盲区
+
+- **抓不到常量级**：`VFS_SEMANTIC_KINDS` 本身没被三路抓到——它在模块级 `const` 里，不在函数签名清单。要另一条信号：跨域联合类型的子集被复制进本域常量。
+- **会混进「通用工具沦陷」**：R3 的 B 部分 8 组（LCS 算法住 vfs、自然排序住 workplace、`splitLines` 住 vfs、`parseJson` 五处各写一份）不是跨域，是「通用工具没上收」，属于另一类问题，别混排。
+
+### 两个「有家不回」
+
+```
+isNonEmptyString(value: unknown): value is string   住 prompt/logic/validate-agent-prompt-layout.ts:35
+  → common/guards.ts 已存在
+yieldToEventLoop(): Promise<void>                   住 vfs/logic/vfs-import-chunk.ts:25
+  → common/concurrency.ts 已存在（createBusyFlag 在那）
+```
+
+两路独立报出 `yieldToEventLoop`。**判据不是「有没有第二份」，而是「common 里有没有它的家」**——有家不回就搬。
