@@ -1,0 +1,2571 @@
+{
+  "note": "p24 裸导出基线（p23 后）。--gate 判据：新增文件条目或既有文件新增函数名 → exit 1；减少是改善，不阻断。重建：node scripts/list-subject-clusters.mjs <repo> --update-baseline",
+  "generatedAt": "2026-11-18T19:02:57.431Z",
+  "includeTests": false,
+  "files": {
+    "apps/desktop/src/main/ipc/event-forwarder.ts": [
+      "createEventForwarder"
+    ],
+    "apps/desktop/src/main/ipc/format-ipc-error.ts": [
+      "formatIpcError"
+    ],
+    "apps/desktop/src/main/ipc/handler-registry.ts": [
+      "registerHandlersFromRegistry"
+    ],
+    "apps/desktop/src/main/ipc/handlers/agent-registry.ts": [
+      "handleAgentRegistryCreateBlank",
+      "handleAgentRegistryDelete",
+      "handleAgentRegistryGet",
+      "handleAgentRegistryList",
+      "handleAgentRegistryUpdate",
+      "handleAgentRegistryUpsert",
+      "handleAgentYamlExport",
+      "handleAgentYamlImport"
+    ],
+    "apps/desktop/src/main/ipc/handlers/agent.ts": [
+      "__testRunTrackingState",
+      "abortAgentRun",
+      "attachAgentRunLifecycleListeners",
+      "handleAgentAbort",
+      "handleAgentListPicker",
+      "handleAgentResolveCurrent",
+      "handleAgentRun",
+      "handleAgentRunIsActive",
+      "handleAgentSetCurrent",
+      "handleModelListPicker",
+      "handleModelSetCurrent",
+      "isDesktopSessionRunInFlight",
+      "onCoreRunFailed",
+      "onCoreRunFinished",
+      "onCoreRunStarted",
+      "registerTrackedRunForTests",
+      "setRunFinishedTokenStatsRefresh"
+    ],
+    "apps/desktop/src/main/ipc/handlers/app-info.ts": [
+      "__setAppInfoSeamsForTests",
+      "handleAppCheckForUpdates",
+      "handleAppGetInfo",
+      "handleAppOpenExternal"
+    ],
+    "apps/desktop/src/main/ipc/handlers/app-ui.ts": [
+      "handleAppUiGet",
+      "handleAppUiSet"
+    ],
+    "apps/desktop/src/main/ipc/handlers/backup.ts": [
+      "doBackupExport",
+      "doBackupImport",
+      "handleBackupExport",
+      "handleBackupImport"
+    ],
+    "apps/desktop/src/main/ipc/handlers/bootstrap.ts": [
+      "handleBootstrapRebootstrap",
+      "handleBootstrapStatus"
+    ],
+    "apps/desktop/src/main/ipc/handlers/cloud-sync.ts": [
+      "doCloudSyncPull",
+      "doCloudSyncPush",
+      "handleCloudSyncGetConfig",
+      "handleCloudSyncGetLocalStatus",
+      "handleCloudSyncPull",
+      "handleCloudSyncPush",
+      "handleCloudSyncSetConfig",
+      "handleCloudSyncSetEnabled",
+      "handleCloudSyncTestConnection"
+    ],
+    "apps/desktop/src/main/ipc/handlers/compaction-conditions.ts": [
+      "handleCompactionConditionsGet",
+      "handleCompactionConditionsSet"
+    ],
+    "apps/desktop/src/main/ipc/handlers/compaction.ts": [
+      "doCompactionManual",
+      "handleCompactionManual"
+    ],
+    "apps/desktop/src/main/ipc/handlers/db-maintenance.ts": [
+      "doDbMaintenance",
+      "handleDbMaintenance",
+      "handleDbStats"
+    ],
+    "apps/desktop/src/main/ipc/handlers/messages.ts": [
+      "handleMessagesAppend",
+      "handleMessagesDelete",
+      "handleMessagesEdit",
+      "handleMessagesFork",
+      "handleMessagesHide",
+      "handleMessagesHideRange",
+      "handleMessagesList",
+      "handleMessagesRollback",
+      "handleMessagesSetFloor",
+      "handleMessagesShow",
+      "handleMessagesShowRange",
+      "handleMessagesTruncateAfter"
+    ],
+    "apps/desktop/src/main/ipc/handlers/physical.ts": [
+      "handlePhysicalList",
+      "handlePhysicalRead"
+    ],
+    "apps/desktop/src/main/ipc/handlers/preferences.ts": [
+      "handlePreferencesGet",
+      "handlePreferencesSet"
+    ],
+    "apps/desktop/src/main/ipc/handlers/projects.ts": [
+      "handleProjectsCreate",
+      "handleProjectsDelete",
+      "handleProjectsList",
+      "handleProjectsRename"
+    ],
+    "apps/desktop/src/main/ipc/handlers/prompt.ts": [
+      "handlePromptAgentMeta",
+      "handlePromptChatTokenLabel",
+      "handlePromptRealPreview"
+    ],
+    "apps/desktop/src/main/ipc/handlers/provider-models.ts": [
+      "doProviderModelsFetch",
+      "handleProviderModelsDeleteSaved",
+      "handleProviderModelsEditSaved",
+      "handleProviderModelsFetch",
+      "handleProviderModelsGetSaved",
+      "handleProviderModelsResetContextWindow",
+      "handleProviderModelsSave",
+      "handleProviderModelsSavedList",
+      "handleProviderModelsSuggestList",
+      "handleProviderModelsUpdateSettings"
+    ],
+    "apps/desktop/src/main/ipc/handlers/providers.ts": [
+      "handleProvidersCreate",
+      "handleProvidersDelete",
+      "handleProvidersEdit",
+      "handleProvidersGet",
+      "handleProvidersList"
+    ],
+    "apps/desktop/src/main/ipc/handlers/run-abort.ts": [
+      "handleAgentAbortAlias",
+      "handleRunAbort"
+    ],
+    "apps/desktop/src/main/ipc/handlers/scope.ts": [
+      "handleScopeGet",
+      "handleScopeSetProject",
+      "handleScopeSetSession"
+    ],
+    "apps/desktop/src/main/ipc/handlers/search.ts": [
+      "handleSearchClearEngineKey",
+      "handleSearchCreateCustomEngine",
+      "handleSearchDeleteCustomEngine",
+      "handleSearchGetConfig",
+      "handleSearchResetPresetOverride",
+      "handleSearchSaveEngineKey",
+      "handleSearchSetEnabled",
+      "handleSearchSetEngineBaseUrl",
+      "handleSearchSetEngineOrder",
+      "handleSearchUpdateCustomEngine",
+      "handleSearchUpdatePresetOverride"
+    ],
+    "apps/desktop/src/main/ipc/handlers/sessions.ts": [
+      "handleSessionsCreate",
+      "handleSessionsDelete",
+      "handleSessionsGetComposerDraft",
+      "handleSessionsListByProject",
+      "handleSessionsProjectComposerStatus",
+      "handleSessionsPullTemplate",
+      "handleSessionsPushTemplate",
+      "handleSessionsRename",
+      "handleSessionsSetAgentBinding",
+      "handleSessionsSetComposerDraft",
+      "handleSessionsSetModelOverride"
+    ],
+    "apps/desktop/src/main/ipc/handlers/shell.ts": [
+      "handleShellMenuPopup",
+      "handleShellSetTitleBarTheme"
+    ],
+    "apps/desktop/src/main/ipc/handlers/skills.ts": [
+      "handleSkillsAssertCreateName",
+      "handleSkillsDelete",
+      "handleSkillsEffective",
+      "handleSkillsList",
+      "handleSkillsRead",
+      "handleSkillsToggle",
+      "handleSkillsUpdateInfo",
+      "handleSkillsWrite"
+    ],
+    "apps/desktop/src/main/ipc/handlers/smart-sort-rule.ts": [
+      "handleSmartSortRuleCreate",
+      "handleSmartSortRuleDelete",
+      "handleSmartSortRuleDeleteBatch",
+      "handleSmartSortRuleList",
+      "handleSmartSortRuleMatch",
+      "handleSmartSortRuleMove",
+      "handleSmartSortRuleReorder",
+      "handleSmartSortRuleResetDefaults",
+      "handleSmartSortRuleSetEnabled",
+      "handleSmartSortRuleSetEnabledBatch",
+      "handleSmartSortRuleUpdate",
+      "handleSmartSortRuleYamlExport",
+      "handleSmartSortRuleYamlImport"
+    ],
+    "apps/desktop/src/main/ipc/handlers/stored-config-health-dto.ts": [
+      "toStoredConfigHealthDto"
+    ],
+    "apps/desktop/src/main/ipc/handlers/usage-stats.ts": [
+      "doUsageStatsQuery",
+      "handleUsageStatsQuery"
+    ],
+    "apps/desktop/src/main/ipc/handlers/vfs.ts": [
+      "handleVfsBatchClearStaging",
+      "handleVfsBatchExportStage",
+      "handleVfsBatchIngestFromPaths",
+      "handleVfsCharacterCardImport",
+      "handleVfsDelete",
+      "handleVfsFileExport",
+      "handleVfsFilePick",
+      "handleVfsMkdir",
+      "handleVfsRead",
+      "handleVfsRename",
+      "handleVfsStartDrag",
+      "handleVfsWrite",
+      "handleVfsZipExport",
+      "handleVfsZipImport",
+      "handleVfsZipImportBytes",
+      "handleVfsZipPick"
+    ],
+    "apps/desktop/src/main/ipc/handlers/workplace.ts": [
+      "handleWorkplaceBuildListRows",
+      "handleWorkplaceGetDirRule",
+      "handleWorkplaceSetDirRule",
+      "handleWorkplaceSetFileRule"
+    ],
+    "apps/desktop/src/main/ipc/ipc-result.ts": [
+      "ipcErr",
+      "ipcOk",
+      "toIpcResult"
+    ],
+    "apps/desktop/src/main/ipc/resolve-vfs-scope.ts": [
+      "getPhysicalVfs",
+      "getVfsForScope",
+      "getWorkplaceForScope",
+      "resolveVfsScopeFromRequest"
+    ],
+    "apps/desktop/src/main/ipc/run-scope.ts": [
+      "outcomeIfAborted",
+      "runAbortable",
+      "runKey"
+    ],
+    "apps/desktop/src/main/log/desktop-diagnostics.ts": [
+      "createDesktopDiagnosticsSeams",
+      "exportDiagnostics",
+      "openLogsDirectory"
+    ],
+    "apps/desktop/src/main/log/desktop-log-sink.ts": [
+      "installDesktopLogSink"
+    ],
+    "apps/desktop/src/main/log/llm-debug-flag.ts": [
+      "isDesktopLlmDebug"
+    ],
+    "apps/desktop/src/main/runtime/connection.ts": [
+      "checkpointDesktopDatabase",
+      "closeDesktopConnection",
+      "getDesktopConnection"
+    ],
+    "apps/desktop/src/main/runtime/create-desktop-runtime.ts": [
+      "createDesktopNovelMasterRuntime"
+    ],
+    "apps/desktop/src/main/runtime/desktop-runtime-singleton.ts": [
+      "clearDesktopRuntimeHandle",
+      "getDesktopRuntime",
+      "getDesktopRuntimeOrThrow",
+      "rebootstrapDesktopRuntime",
+      "resetDesktopRuntimeForTest"
+    ],
+    "apps/desktop/src/main/runtime/register-platform-drivers.ts": [
+      "getPlatformSkspName",
+      "registerPlatformSkspDriver"
+    ],
+    "apps/desktop/src/main/runtime/resolve-app-icon.ts": [
+      "resolveAppIconPath"
+    ],
+    "apps/desktop/src/main/runtime/resolve-db-path.ts": [
+      "resolveDbPath"
+    ],
+    "apps/desktop/src/main/runtime/resolve-tokenizer-assets-root.ts": [
+      "resolveTokenizerAssetsRoot"
+    ],
+    "apps/desktop/src/main/runtime/setup-llm-fetch.ts": [
+      "ensureLlmFetchConfigured"
+    ],
+    "apps/desktop/src/main/services/agent-run.service.ts": [
+      "resolveCurrentAgentDefinitionOrThrow",
+      "resolveDesktopSavedModelIdOrThrow",
+      "runAgentTurnAdapter"
+    ],
+    "apps/desktop/src/main/services/agent-yaml.service.ts": [
+      "exportAgentYamlWithDialog",
+      "importAgentYamlWithDialog"
+    ],
+    "apps/desktop/src/main/services/chat-prompt-tokens.service.ts": [
+      "chatPromptTokenDebounceExecCountForTests",
+      "loadChatPromptTokenStats",
+      "loadChatPromptTokenStatsResilient",
+      "resetChatPromptTokenDebounceForTests",
+      "withRealFallbackCounter"
+    ],
+    "apps/desktop/src/main/services/cloud-sync-config.store.ts": [
+      "createCloudSyncConfigStore"
+    ],
+    "apps/desktop/src/main/services/cloud-sync.service.ts": [
+      "__setDesktopCloudSyncStorageOverrideForTest",
+      "getDesktopCloudSyncService",
+      "resetDesktopCloudSyncServiceForTest"
+    ],
+    "apps/desktop/src/main/services/db-backup.service.ts": [
+      "__setDbBackupFsOpsForTest",
+      "exportDatabaseBackup",
+      "exportDatabaseBackupToPath",
+      "importDatabaseBackup",
+      "importDatabaseBackupFromBytes",
+      "importDatabaseBackupFromPath",
+      "pickDatabaseExportPath"
+    ],
+    "apps/desktop/src/main/services/db-maintenance.service.ts": [
+      "getDbMaintenanceStats",
+      "runDbMaintenance"
+    ],
+    "apps/desktop/src/main/services/notify-composer-status-after-kkv-clear.ts": [
+      "refreshComposerStatusAfterFloorOrCompaction",
+      "refreshComposerStatusAfterSessionKkvCleared"
+    ],
+    "apps/desktop/src/main/services/project-composer-status.service.ts": [
+      "projectComposerStatusForSession"
+    ],
+    "apps/desktop/src/main/services/prompt-preview.service.ts": [
+      "buildRealPromptPreviewTurnsAdapter"
+    ],
+    "apps/desktop/src/main/services/session-prompt-input.service.ts": [
+      "buildSessionPromptInputAdapter"
+    ],
+    "apps/desktop/src/main/services/smart-sort-rule-yaml.service.ts": [
+      "exportSmartSortRuleYamlWithDialog",
+      "importSmartSortRuleYamlWithDialog"
+    ],
+    "apps/desktop/src/main/services/update-check.service.ts": [
+      "runUpdateCheck"
+    ],
+    "apps/desktop/src/main/services/user-vfs-turn-execute.service.ts": [
+      "executeSessionUserVfsOp"
+    ],
+    "apps/desktop/src/main/services/vfs-batch.service.ts": [
+      "clearVfsBatchExportStaging",
+      "collectHostPathEntries",
+      "exportVfsFileWithDialog",
+      "ingestVfsFromHostPaths",
+      "pickHostFileWithDialog",
+      "resolveDragIconForTest",
+      "stageVfsBatchExport",
+      "stagingTtlCountForTest",
+      "startDragExport"
+    ],
+    "apps/desktop/src/main/services/vfs-character-card.service.ts": [
+      "importCharacterCardWithDialog"
+    ],
+    "apps/desktop/src/main/services/vfs-zip.service.ts": [
+      "exportVfsZipWithDialog",
+      "importVfsZipBytes",
+      "importVfsZipWithDialog",
+      "pickVfsZipBytesWithDialog"
+    ],
+    "apps/desktop/src/main/services/yaml-shared.ts": [
+      "exportYamlWithDialog",
+      "importYamlWithDialog"
+    ],
+    "apps/desktop/src/main/shell-menu.ts": [
+      "buildApplicationMenu",
+      "buildMenuTemplate",
+      "configureWindowChrome",
+      "installApplicationMenu",
+      "popupShellSubmenu",
+      "syncTitleBarOverlay",
+      "titleBarOverlayOptions"
+    ],
+    "apps/desktop/src/main/storage/app-ui-prefs.ts": [
+      "createDesktopAppUiPreferences"
+    ],
+    "apps/mobile/src/components/agent/agent-editor/useAgentEditorFormState.ts": [
+      "agentDisplayNameFromWire"
+    ],
+    "apps/mobile/src/components/agent/prompt-macro-input.ts": [
+      "findWhitelistMacroRanges",
+      "insertTextAtSelection",
+      "splitPromptMacroSegments",
+      "tryAtomicMacroDelete"
+    ],
+    "apps/mobile/src/components/charts/PieChart.tsx": [
+      "pieChartColors"
+    ],
+    "apps/mobile/src/components/chat/AttachmentDraftChips.tsx": [
+      "formatAttachmentChipLabel"
+    ],
+    "apps/mobile/src/components/chat/chat-conversation-update-plan.ts": [
+      "planMessagesUpdate",
+      "planOpenSnapshot"
+    ],
+    "apps/mobile/src/components/chat/ChatConversationBridge.ts": [
+      "decodeConversationUpstream",
+      "parseConversationScrollSnapshot",
+      "readReadyCapabilities"
+    ],
+    "apps/mobile/src/components/chat/ChatStreamMetricsBarLive.tsx": [
+      "hasVisibleSettledMetrics"
+    ],
+    "apps/mobile/src/components/chat/composer-highlight.ts": [
+      "composerTokenRanges",
+      "isValidTokenRangeText",
+      "splitComposerTokenSegments"
+    ],
+    "apps/mobile/src/components/chat/composer-send-scan.ts": [
+      "scanComposerTokenRangesForSend"
+    ],
+    "apps/mobile/src/components/chat/composer-send-state.ts": [
+      "deriveComposerSendState",
+      "findLastVisibleMessage"
+    ],
+    "apps/mobile/src/components/chat/composer-token-insert.ts": [
+      "buildTokenInsertion",
+      "queryWithinConfirmedRange",
+      "statusOnlyComposerAttachments"
+    ],
+    "apps/mobile/src/components/chat/ComposerInputWebView.tsx": [
+      "themeFromTokens",
+      "toNativeSelectionEvent"
+    ],
+    "apps/mobile/src/components/chat/enrich-transcript-rows.ts": [
+      "clearRichHtmlCacheForTests",
+      "enrichTranscriptRows"
+    ],
+    "apps/mobile/src/components/chat/FileReferencePicker.tsx": [
+      "listPickerChildRows",
+      "listPickerDirectoryChildRows"
+    ],
+    "apps/mobile/src/components/chat/message-blocks.ts": [
+      "buildChatListItems",
+      "buildToolPairingContext",
+      "buildToolResultByUseId",
+      "buildTranscriptRows",
+      "buildTranscriptRowsWithContext",
+      "isDisplayableAttachment",
+      "isTurnToolExecuting",
+      "messageHasToolUse",
+      "messageIsToolResultsOnly",
+      "resolveToolResultsMessageId",
+      "selectTailTranscriptRows",
+      "skillToolRef",
+      "toolCallViewFromUse",
+      "toolUseIdsFromMessage",
+      "turnToolResultsComplete",
+      "vfsToolFilePath"
+    ],
+    "apps/mobile/src/components/chat/message-edit.ts": [
+      "applyTextEditToMessage",
+      "editableTextFromMessage"
+    ],
+    "apps/mobile/src/components/chat/native-composer/dock-style.ts": [
+      "resolveDockBottomPadding"
+    ],
+    "apps/mobile/src/components/chat/native-composer/send-button.ts": [
+      "resolveSendButtonState"
+    ],
+    "apps/mobile/src/components/chat/native-composer/token-ranges.ts": [
+      "remapTokenRanges",
+      "scanTokensToRanges",
+      "synthesizeTokenMarkdown",
+      "synthesizeTokenMarkdownFromRanges"
+    ],
+    "apps/mobile/src/components/chat/prepare-stream-tail-html.ts": [
+      "prepareStreamTailHtml"
+    ],
+    "apps/mobile/src/components/chat/snapshot-chunk-bounds.ts": [
+      "planRowChunkBounds",
+      "planSnapshotChunkBounds"
+    ],
+    "apps/mobile/src/components/chat/transcript-labels.ts": [
+      "buildTranscriptLabels"
+    ],
+    "apps/mobile/src/components/chat/transcript-stream-projection.ts": [
+      "applyStreamRowIds",
+      "buildStreamingRows",
+      "buildStreamingTranscriptRow"
+    ],
+    "apps/mobile/src/components/common/atomic-range-delete.ts": [
+      "tryAtomicRangeDelete"
+    ],
+    "apps/mobile/src/components/common/html.ts": [
+      "escapeHtml"
+    ],
+    "apps/mobile/src/components/provider/ProviderForm.tsx": [
+      "parseBodyParamsJson",
+      "providerFormToCreateInput",
+      "providerFormToEditPatch"
+    ],
+    "apps/mobile/src/components/rich-content/decode-literal-html-entities.ts": [
+      "decodeAfterSanitize"
+    ],
+    "apps/mobile/src/components/rich-content/highlight-code.ts": [
+      "normalizeFenceLang",
+      "registerHighlightLanguages",
+      "resolveHighlight"
+    ],
+    "apps/mobile/src/components/rich-content/prepare-transcript-rich-html.ts": [
+      "prepareTranscriptRichHtml"
+    ],
+    "apps/mobile/src/components/rich-content/rich-content-limits.ts": [
+      "isRichContentOverLimit",
+      "isWebViewDocumentOverLimit"
+    ],
+    "apps/mobile/src/components/rich-content/sanitize-rich-html.ts": [
+      "filterInlineStyle",
+      "sanitizeRichHtml"
+    ],
+    "apps/mobile/src/components/skills/skill-ui.ts": [
+      "skillDomainBadgeColor",
+      "skillDomainBadgeLabel"
+    ],
+    "apps/mobile/src/components/vfs/build-front-matter-document-html.ts": [
+      "buildFrontMatterDocumentHtml"
+    ],
+    "apps/mobile/src/components/vfs/file-annotate-gate.ts": [
+      "shouldEnableFileAnnotate"
+    ],
+    "apps/mobile/src/components/vfs/FileMarkdownPreview.tsx": [
+      "isMarkdownPreviewPath",
+      "pathDraftsToRecogitoMarks"
+    ],
+    "apps/mobile/src/components/vfs/vfs-direct-children-order.ts": [
+      "orderedDirectChildPaths"
+    ],
+    "apps/mobile/src/components/vfs/vfs-move-path.ts": [
+      "isBlockedMoveTarget",
+      "isSelfOrAncestorPath",
+      "resolveMoveDestination"
+    ],
+    "apps/mobile/src/components/vfs/vfs-row-mapper.ts": [
+      "countFilesInDir",
+      "dirRuleBadge",
+      "dirRuleStateFromEnabled",
+      "isDirectChild",
+      "mapVfsFilePath",
+      "mapVfsListEntry",
+      "mapWorktreeRow",
+      "patchDirRuleRow",
+      "pathWithLabels",
+      "remapDirectChildRows"
+    ],
+    "apps/mobile/src/config-forms/agent/agent-editor-state.ts": [
+      "blockTypeLabel",
+      "buildAgentDefinitionFromForm",
+      "countEffectiveFormPromptSources",
+      "countFormPromptSources",
+      "createDefaultAgentEditorPrompts",
+      "createDefaultDynamicTextBlock",
+      "createDefaultPersistTextBlock",
+      "definitionToForm",
+      "deletePersistTextBlock",
+      "formSnapshotJson",
+      "hasAnyPromptRegionEnabled",
+      "layoutFromFormInput",
+      "mapPersistTextBlocks",
+      "movePersistTextBlock",
+      "splitPersistBlocksForEditor",
+      "withWorkplaceToggle"
+    ],
+    "apps/mobile/src/config-forms/agent/agent-mode-tab.ts": [
+      "agentModeMatchesTab"
+    ],
+    "apps/mobile/src/config-forms/agent/agent-tool-catalog.ts": [
+      "buildToolsPolicyFromSelection",
+      "toolsSelectionFromDefinition"
+    ],
+    "apps/mobile/src/config-forms/agent/allocate-agent-display-name.ts": [
+      "allocateAgentDisplayName"
+    ],
+    "apps/mobile/src/db/connection.ts": [
+      "checkpointMobileDatabase",
+      "closeMobileConnection",
+      "getMobileConnection",
+      "registerMobileOpSqliteDriver"
+    ],
+    "apps/mobile/src/db/db-file-path.ts": [
+      "buildMobileDatabaseFilePathCandidates",
+      "clearMobileDatabaseFilePathCache",
+      "getMobileDatabaseFilePath",
+      "probeAndCacheMobileDatabaseFilePath",
+      "resolveMobileDatabaseFilePath"
+    ],
+    "apps/mobile/src/errors/format-error.ts": [
+      "formatError",
+      "formatVfsErrorForUser"
+    ],
+    "apps/mobile/src/errors/toast-message.ts": [
+      "toastMessage"
+    ],
+    "apps/mobile/src/hooks/useAgentStreamMetrics.ts": [
+      "buildChatStreamMetricsLine",
+      "toAgentStreamMetricsView"
+    ],
+    "apps/mobile/src/navigation/main-tab-bar-style.ts": [
+      "buildMainTabBarStyle",
+      "resolveChatTabBarStyle"
+    ],
+    "apps/mobile/src/runtime/callback-slot.ts": [
+      "createCallbackSlot"
+    ],
+    "apps/mobile/src/runtime/create-mobile-runtime.ts": [
+      "createMobileNovelMasterRuntime"
+    ],
+    "apps/mobile/src/runtime/mobile-scope.ts": [
+      "loadMobileScope",
+      "setMobileProject",
+      "setMobileSession"
+    ],
+    "apps/mobile/src/runtime/mobile-sksp.ts": [
+      "mobileSkspDriverName"
+    ],
+    "apps/mobile/src/runtime/novel-master-context.tsx": [
+      "createNotificationPrefBridge",
+      "ensureKeepAliveResidentBoot"
+    ],
+    "apps/mobile/src/runtime/reboot-waiter.ts": [
+      "armRebootWaiter",
+      "claimRebootWaiter",
+      "createRebootWaiterSlot",
+      "rebindRebootWaiterGeneration",
+      "settleRebootWaiter"
+    ],
+    "apps/mobile/src/runtime/setup-llm-fetch.ts": [
+      "ensureLlmFetchConfigured"
+    ],
+    "apps/mobile/src/screens/stack/search-engine-meta.ts": [
+      "engineHint",
+      "engineTitle"
+    ],
+    "apps/mobile/src/screens/stack/token-usage/format.ts": [
+      "formatFirstTokenMs",
+      "formatHitRate",
+      "formatTokensPerSecond",
+      "hitRate",
+      "isCustomRangeValid",
+      "localDayKeyOffset",
+      "providerModelFilterOptionKey",
+      "resolveRangeDays"
+    ],
+    "apps/mobile/src/screens/tabs/chat-tab/chat-link-nav.ts": [
+      "resolveChatLinkIntent"
+    ],
+    "apps/mobile/src/services/agent-create.ts": [
+      "createBlankAgent"
+    ],
+    "apps/mobile/src/services/agent-display-label.ts": [
+      "resolveCurrentAgentDisplayLabel"
+    ],
+    "apps/mobile/src/services/agent-finished-notification.ts": [
+      "ensureAgentNotificationPermission",
+      "getAgentNotificationPermissionStatus",
+      "isAppInForeground",
+      "navigateToChatTabFromNotification",
+      "notifyAgentRunFinished",
+      "registerAgentNotificationTapHandling",
+      "requestAgentNotificationPermissionManually",
+      "resetAgentNotificationPermissionStateForTests",
+      "resetFailedNotifyMergeStateForTests",
+      "resetKeepAliveStateForTests",
+      "setKeepAliveResidentEnabled",
+      "startAgentKeepAliveService",
+      "stopAgentKeepAliveService"
+    ],
+    "apps/mobile/src/services/agent-picker.ts": [
+      "isAgentPickerRowSelected",
+      "loadAgentPickerRows",
+      "loadSessionAgentPickerRows",
+      "selectSessionAgent",
+      "selectWorkspaceAgent"
+    ],
+    "apps/mobile/src/services/agent-run.service.ts": [
+      "runAgentTurnAdapter"
+    ],
+    "apps/mobile/src/services/agent-yaml.service.ts": [
+      "exportAgentYaml",
+      "importAgentYaml"
+    ],
+    "apps/mobile/src/services/app-toast.ts": [
+      "registerAppToastSink",
+      "showAppToast"
+    ],
+    "apps/mobile/src/services/character-card-document-pick.ts": [
+      "assertCharacterCardFileName",
+      "characterCardImportPickTypes"
+    ],
+    "apps/mobile/src/services/chat-agent-meta.ts": [
+      "isAgentDeleted",
+      "isAgentLocked",
+      "isModelLocked",
+      "loadChatAgentMeta"
+    ],
+    "apps/mobile/src/services/chat-prompt-tokens.service.ts": [
+      "__setPreciseUpgradeDelayForTests",
+      "cancelPreciseUpgrade",
+      "cancelPreciseUpgradeDelay",
+      "loadChatPromptTokenLabel",
+      "loadChatPromptTokenLabelResilient"
+    ],
+    "apps/mobile/src/services/chat-session-view-cache.ts": [
+      "clearAllSessionViewCaches",
+      "clearSessionViewCache",
+      "clearSessionViewCachesByProject",
+      "getSessionViewCache",
+      "hydrateWindowFromCache",
+      "sessionViewCacheKey",
+      "sessionViewCacheSize",
+      "setSessionViewCache"
+    ],
+    "apps/mobile/src/services/chat-transcript-scroll-cache.ts": [
+      "clearAllTranscriptScrollSnapshots",
+      "clearTranscriptScrollSnapshotsByProject",
+      "getTranscriptScrollSnapshot",
+      "normalizeScrollSnapshot",
+      "scrollCacheKey",
+      "setTranscriptScrollSnapshot",
+      "transcriptScrollSnapshotCacheSize"
+    ],
+    "apps/mobile/src/services/chat-transcript-telemetry.ts": [
+      "emitChatTranscriptTelemetry"
+    ],
+    "apps/mobile/src/services/cloud-sync-config.store.ts": [
+      "buildS3StorageConfig",
+      "generateCloudSyncDeviceId",
+      "getCloudSyncConfig",
+      "getCloudSyncLocalStatus",
+      "patchCloudSyncLocalStatus",
+      "readCloudSyncSecretKey",
+      "setCloudSyncConfig"
+    ],
+    "apps/mobile/src/services/cloud-sync-progress-log.ts": [
+      "createCloudSyncProgress",
+      "shortStorageKey",
+      "withCloudSyncStorageProgress"
+    ],
+    "apps/mobile/src/services/cloud-sync-progress-ui.ts": [
+      "initialCloudSyncProgressUi",
+      "mapCloudSyncProgressEvent"
+    ],
+    "apps/mobile/src/services/cloud-sync.service.ts": [
+      "getCloudSyncStatusView",
+      "pullCloudSync",
+      "pushCloudSync",
+      "testCloudSyncConnection"
+    ],
+    "apps/mobile/src/services/db-backup.service.ts": [
+      "exportDatabaseBackup",
+      "exportDatabaseBackupToPath",
+      "importDatabaseBackup",
+      "importDatabaseBackupFromBytes",
+      "importDatabaseBackupFromPath"
+    ],
+    "apps/mobile/src/services/db-maintenance.service.ts": [
+      "getDbMaintenanceStats",
+      "runDbMaintenance"
+    ],
+    "apps/mobile/src/services/document-io.ts": [
+      "exportBytesViaDocumentPicker",
+      "knownTypesForExtension",
+      "pickAndReadBytes",
+      "pickAndReadFileWithMeta",
+      "pickAndReadText",
+      "pickToLocalPath"
+    ],
+    "apps/mobile/src/services/document-pick.ts": [
+      "isUserCancelledPick",
+      "pickSingleDocument"
+    ],
+    "apps/mobile/src/services/fill-policy-mobile.ts": [
+      "normalizeFillPolicyForMobile"
+    ],
+    "apps/mobile/src/services/llm-native-fetch-shim.ts": [
+      "createMobileLlmFetch",
+      "createNativeRequestFetch"
+    ],
+    "apps/mobile/src/services/log-export.ts": [
+      "exportMobileLogs"
+    ],
+    "apps/mobile/src/services/log-sink.mobile.ts": [
+      "installJsCrashHandler",
+      "installMobileLogSink"
+    ],
+    "apps/mobile/src/services/manual-compaction.service.ts": [
+      "runManualCompaction"
+    ],
+    "apps/mobile/src/services/map-cloud-sync-sdk-error.ts": [
+      "mapCloudSyncSdkError"
+    ],
+    "apps/mobile/src/services/message-paging.ts": [
+      "prependOlderMessages"
+    ],
+    "apps/mobile/src/services/message-rollback.service.ts": [
+      "rollbackToMessage"
+    ],
+    "apps/mobile/src/services/model-display-label.ts": [
+      "resolveModelDisplayLabel"
+    ],
+    "apps/mobile/src/services/project-composer-status.service.ts": [
+      "projectComposerStatusForSession",
+      "refreshComposerStatusAfterFloorOrCompaction",
+      "refreshComposerStatusAfterSessionKkvCleared"
+    ],
+    "apps/mobile/src/services/prompt-preview.service.ts": [
+      "buildRealPromptPreviewTurnsAdapter"
+    ],
+    "apps/mobile/src/services/rn-file-io.ts": [
+      "blobFs",
+      "bytesToAsciiString",
+      "localUriToFsPath",
+      "toFileUri"
+    ],
+    "apps/mobile/src/services/run-finish-calibration-probe.ts": [
+      "createRunFinishCalibrationProbe"
+    ],
+    "apps/mobile/src/services/run-state-writethrough.ts": [
+      "createRunStateWritethrough"
+    ],
+    "apps/mobile/src/services/scope-key-cache.ts": [
+      "createLruMap",
+      "createScopeKeyCache"
+    ],
+    "apps/mobile/src/services/search-config.store.ts": [
+      "getSearchConfigStore"
+    ],
+    "apps/mobile/src/services/session-prompt-input.service.ts": [
+      "buildSessionPromptInputAdapter"
+    ],
+    "apps/mobile/src/services/session-stream-unit.ts": [
+      "isSessionStreamUnitSettled"
+    ],
+    "apps/mobile/src/services/session-stream-webview-adapter.ts": [
+      "createTranscriptStreamHandle"
+    ],
+    "apps/mobile/src/services/smart-sort-rule-yaml.service.ts": [
+      "exportSmartSortRuleYaml",
+      "importSmartSortRuleYaml"
+    ],
+    "apps/mobile/src/services/snapshot-complete-signal.ts": [
+      "createSnapshotCompleteSignal"
+    ],
+    "apps/mobile/src/services/snapshot-file-hash.ts": [
+      "hashSnapshotFile",
+      "sha256Hex"
+    ],
+    "apps/mobile/src/services/stream-apply-buffer.ts": [
+      "createStreamApplyBuffer"
+    ],
+    "apps/mobile/src/services/stream-token-estimator.ts": [
+      "createSessionStreamTokenEstimator",
+      "createStreamTokenEstimator",
+      "primeStreamTokenModelHint",
+      "resolveStreamTokenEncodingName",
+      "resolveStreamTokenVendorModelId"
+    ],
+    "apps/mobile/src/services/stream-wire-queue.ts": [
+      "appendWireChunk",
+      "coalesceWireQueue",
+      "wireQueueCharCount"
+    ],
+    "apps/mobile/src/services/update-check-flow.ts": [
+      "runAutoUpdateCheckFlow",
+      "snoozeUpdateCheckToday"
+    ],
+    "apps/mobile/src/services/user-vfs-turn-execute.service.ts": [
+      "executeSessionUserVfsOp",
+      "refreshComposerStatusAfterUserVfsOps"
+    ],
+    "apps/mobile/src/services/vfs-character-card.service.ts": [
+      "importCharacterCard"
+    ],
+    "apps/mobile/src/services/vfs-operations.service.ts": [
+      "deleteScopedVfsEntry",
+      "sessionCreateVfsDirectory",
+      "sessionCreateVfsFile",
+      "sessionRenameVfsFile",
+      "sessionSaveVfsFile"
+    ],
+    "apps/mobile/src/services/vfs-single-file-document-pick.ts": [
+      "vfsSingleFileImportPickTypes"
+    ],
+    "apps/mobile/src/services/vfs-single-file.service.ts": [
+      "exportVfsSingleFile",
+      "importVfsSingleFile"
+    ],
+    "apps/mobile/src/services/vfs-zip.service.ts": [
+      "exportVfsZip",
+      "importVfsZip",
+      "pickZipFileBytes"
+    ],
+    "apps/mobile/src/services/workplace-block.service.ts": [
+      "clearSessionWorkplaceKkv"
+    ],
+    "apps/mobile/src/services/workplace-operations.service.ts": [
+      "batchSetDirRulesEnabled",
+      "cycleFileInclusion",
+      "defaultDirRuleForm",
+      "dirRuleToForm",
+      "emptyDirRuleForm",
+      "migrateWorkplaceDirRename",
+      "setDirRuleEnabled",
+      "toggleDirRuleEnabled",
+      "vfsScopeRootPath"
+    ],
+    "apps/mobile/src/services/workplace-rule-delta-draft.service.ts": [
+      "refreshRuleSnapshotAfterRuleChange"
+    ],
+    "apps/mobile/src/services/yaml-document-pick.ts": [
+      "assertYamlFileName",
+      "yamlImportPickTypes"
+    ],
+    "apps/mobile/src/services/yaml-shared.ts": [
+      "exportYamlWithDialog",
+      "importYamlWithDialog"
+    ],
+    "apps/mobile/src/services/yield-quantum.ts": [
+      "createQuantumYield"
+    ],
+    "apps/mobile/src/shims/aws-rn-s3-client.ts": [
+      "createRnS3Client",
+      "createRnS3ClientConfig"
+    ],
+    "apps/mobile/src/storage/app-ui-pref-io.ts": [
+      "readBoolPref",
+      "readEnumPref",
+      "writeBoolPref"
+    ],
+    "apps/mobile/src/storage/app-ui-prefs.ts": [
+      "createAppUiPreferences"
+    ],
+    "apps/mobile/src/storage/app-version-guard.ts": [
+      "syncAppVersionForRichRender"
+    ],
+    "apps/mobile/src/storage/chat-composer-draft.ts": [
+      "applyComposerStatusAttachmentsReplace",
+      "clearChatComposerDraft",
+      "hydrateChatComposerDraftFromDb",
+      "readChatComposerDraftState",
+      "refreshComposerAnnotateChips",
+      "subscribeChatComposerDraft",
+      "writeChatComposerDraft",
+      "writeChatComposerDraftState"
+    ],
+    "apps/mobile/src/storage/chat-transcript-engine.ts": [
+      "defaultChatTranscriptEngine",
+      "readChatTranscriptEngine"
+    ],
+    "apps/mobile/src/storage/update-prefs.ts": [
+      "isSnoozed",
+      "persistFailedUpdateCheck",
+      "persistUpdateCheckResult",
+      "readDismissedVersion",
+      "readLastCheckRemoteVersion",
+      "readLastCheckStatus",
+      "readSnoozeUntil",
+      "writeDismissedVersion",
+      "writeSnoozeUntil"
+    ],
+    "apps/mobile/src/storage/vfs-markdown-preview-engine.ts": [
+      "defaultVfsMarkdownPreviewEngine",
+      "readVfsMarkdownPreviewEngine"
+    ],
+    "apps/mobile/src/theme/tokens.ts": [
+      "tokensForMode"
+    ],
+    "apps/mobile/src/update-check/app-meta.ts": [
+      "githubReleasesUrl",
+      "githubRepoUrl",
+      "licenseUrl"
+    ],
+    "apps/mobile/src/update-check/check-for-updates.ts": [
+      "checkForUpdates"
+    ],
+    "apps/mobile/src/utils/entity-icon.ts": [
+      "pickEntityIcon"
+    ],
+    "apps/mobile/src/utils/format-relative-time.ts": [
+      "formatRelativeTimeMs"
+    ],
+    "apps/mobile/src/utils/session-default-title.ts": [
+      "nextDefaultSessionTitle"
+    ],
+    "apps/mobile/src/web/chat-transcript/stream/block-split.ts": [
+      "splitStreamBlocks"
+    ],
+    "apps/mobile/src/web/chat-transcript/transcript-capabilities.ts": [
+      "transcriptCapabilitiesInclude"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/host-downtranslate.ts": [
+      "rawDowntranslate"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/boot/bind-shell-events.ts": [
+      "bindShellEvents"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/boot/boot-transcript.ts": [
+      "bindHostMessageEvents",
+      "bootTranscript",
+      "startTranscriptBoot"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts": [
+      "handleHostMessage"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/factory.ts": [
+      "createTranscriptRuntime"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts": [
+      "attachMenuNativeTextBlock",
+      "buildMenuItems",
+      "closeContextMenu",
+      "computeContextMenuWidth",
+      "detachMenuNativeTextBlock",
+      "findMessageRow",
+      "layoutContextMenu",
+      "openContextMenuFromAnchor",
+      "renderContextMenu",
+      "suppressNativeTextMenu",
+      "viewportHeight"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/mermaid.ts": [
+      "runMermaidScan",
+      "scheduleMermaidScan"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/finished-stream-row-dom.ts": [
+      "pruneFinishedStreamRowSignatures",
+      "reconcileFinishedStreamingRows",
+      "reseedStreamingRow"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/row-logic.ts": [
+      "attachmentChipLabel",
+      "attachmentSourceLabel",
+      "flagsEqual",
+      "renderRows"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/row-windowing.ts": [
+      "getRowWindowAvgSlotPx",
+      "getRowWindowRange",
+      "getRowWindowSpacerHeights",
+      "getRowWindowSpacerPxTotal",
+      "handleRowWindowScroll",
+      "measureRowWindow",
+      "notePrependHeightDelta",
+      "planRowWindowMove",
+      "resetRowWindowForSnapshot",
+      "retargetRowWindow",
+      "retargetRowWindowForPrepend"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/rows-click.ts": [
+      "onRowsClick"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts": [
+      "applyAppendTailRows",
+      "applyPrependPage",
+      "handleSnapshotPayload",
+      "invalidateSnapshotPipeline"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/render/tool-logic.ts": [
+      "readableToolResult",
+      "toolStatusClass",
+      "toolStatusLabel"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts": [
+      "clampScrollTop",
+      "emitScrollSnapshot",
+      "isNearBottom",
+      "offsetFromBottom",
+      "onScroll",
+      "requestLoadOlder",
+      "scheduleStickIfNearBottom",
+      "stickIfNearBottomNow",
+      "stickToBottom"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-checkpoint.ts": [
+      "decideStreamDelta",
+      "mergeCheckpoint"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts": [
+      "clearStreamRichUpgrade",
+      "paintStreamRichKind",
+      "renderStreamingInline",
+      "renderStreamingMarkdown",
+      "scheduleStreamRichUpgrade"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts": [
+      "appendEscapedDelta",
+      "appendStreamDeltaIncremental",
+      "applyStreamBlockCommit",
+      "applyStreamDelta",
+      "applyStreamReset",
+      "applyStreamStatus",
+      "assistantBubbleExtraClasses",
+      "currentStreamingRow",
+      "ensureStreamTextBody",
+      "findRowById",
+      "getStreamActiveTailText",
+      "getStreamThinkingBody",
+      "getStreamingPhase",
+      "requestResync",
+      "resetStreamBlockRenderState",
+      "setStreamBodyRichClass",
+      "setStreamTailPlainClass",
+      "streamRenderTarget"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/util/html-escape.ts": [
+      "escapeHtml",
+      "escapeHtmlRaw"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/util/skill-tool-ref.ts": [
+      "skillToolRef"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/runtime/util/vfs-tool-path.ts": [
+      "normalizePathForToolCard",
+      "vfsToolFilePath"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/ui/labels.ts": [
+      "resolveLabels"
+    ],
+    "apps/mobile/src/web/chat-transcript/webview/ui/render/RefTokenText.tsx": [
+      "attachedRefTokensFrom",
+      "splitRefTokenSpans"
+    ],
+    "apps/mobile/src/web/code-editor/webview/runtime/bridge.ts": [
+      "handleHostMessage"
+    ],
+    "apps/mobile/src/web/code-editor/webview/runtime/composer-tokens.ts": [
+      "composerTokenEnabled"
+    ],
+    "apps/mobile/src/web/code-editor/webview/runtime/editor.ts": [
+      "blurEditor",
+      "destroyEditor",
+      "mountEditor",
+      "setDocument"
+    ],
+    "apps/mobile/src/web/code-editor/webview/runtime/language-for-path.ts": [
+      "languageExtensionForPath"
+    ],
+    "apps/mobile/src/web/code-editor/webview/runtime/theme.ts": [
+      "applyTheme"
+    ],
+    "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts": [
+      "handleHostMessage"
+    ],
+    "apps/mobile/src/web/composer-input/webview/runtime/editor.ts": [
+      "applyDisabled",
+      "applyInit",
+      "applyMetrics",
+      "applyMode",
+      "applyPlaceholder",
+      "applySelection",
+      "applyText",
+      "applyTheme",
+      "atomicDeleteRanges",
+      "blurComposerInput",
+      "destroyComposerEditor",
+      "mountComposerEditor",
+      "renderHighlightHtml",
+      "resolveAtomicCaret",
+      "resolveAtomicDelete",
+      "resolveReportedHeight",
+      "resolveUnbounded",
+      "shouldReportChange"
+    ],
+    "apps/mobile/src/web/composer-input/webview/runtime/factory.ts": [
+      "createComposerRuntime"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/annotate-collect.ts": [
+      "bindAnnotateCollectBridge",
+      "collectAnnotateSelection",
+      "getSelectionOffsetsInElement",
+      "reportRecogitoCreateFromSelection"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/annotate-recogito-map.ts": [
+      "draftToRecogitoAnnotation",
+      "draftsToRecogitoAnnotations",
+      "recogitoAnnotationToDraftFields"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/annotate.ts": [
+      "bindAnnotateUi",
+      "clearAnnotateSelection",
+      "destroyAnnotator",
+      "refreshAnnotateAfterDocument",
+      "setAnnotateEnabled",
+      "setAnnotations"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/bridge.ts": [
+      "handleHostMessage",
+      "setDocument"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/document-model.ts": [
+      "buildDocumentBody",
+      "concatDocBodyHtml"
+    ],
+    "apps/mobile/src/web/rich-document/webview/runtime/mermaid.ts": [
+      "renderMermaidBlocks"
+    ],
+    "apps/mobile/src/web/shared/clamp-index.ts": [
+      "clampIndex"
+    ],
+    "apps/mobile/src/web/shared/code-copy.ts": [
+      "attachCodeCopyDelegation"
+    ],
+    "apps/mobile/src/web/shared/decode-entities.ts": [
+      "decodeAfterSanitize",
+      "decodeForMarkdownInput",
+      "decodeLiteralHtmlEntities"
+    ],
+    "apps/mobile/src/web/shared/host-message-channel.ts": [
+      "bindHostMessageChannel",
+      "matchHostMessage",
+      "parseHostMessage"
+    ],
+    "apps/mobile/src/web/shared/host-theme.ts": [
+      "applyHostTheme"
+    ],
+    "apps/mobile/src/web/shared/mermaid-core.ts": [
+      "createMermaidSourceCache",
+      "extractMermaidErrorMessage",
+      "inferMermaidThemeFromBg",
+      "loadMermaid",
+      "nextMermaidId",
+      "readMermaidThemeFromDocument",
+      "renderMermaidCodeBlocks",
+      "renderMermaidSvg"
+    ],
+    "apps/mobile/src/web/shared/mermaid-fullscreen/mermaid-fullscreen.ts": [
+      "attachMermaidViewerDelegation",
+      "closeMermaidViewer",
+      "mountMermaidViewerPortal",
+      "openMermaidViewer",
+      "registerMermaidViewerView"
+    ],
+    "apps/mobile/src/web/shared/mermaid-fullscreen/mermaid-viewer-gestures.ts": [
+      "clampMermaidViewerPan",
+      "clampMermaidViewerScale",
+      "computeBakedSvgSize",
+      "computeMermaidViewerPinch",
+      "rebasePanAfterBake",
+      "resolveMermaidViewerDoubleTap"
+    ],
+    "apps/mobile/src/web/shared/post.ts": [
+      "createBoundPost",
+      "post"
+    ],
+    "apps/mobile/src/web/shared/rich-content-styles.ts": [
+      "buildRichContentCssRules"
+    ],
+    "apps/mobile/src/web/shared/theme-mode.ts": [
+      "inferThemeModeFromBg",
+      "parseColorToRgb"
+    ],
+    "apps/mobile/src/web/shared/ui/TrustedHtml.tsx": [
+      "applyTrustedHtml"
+    ],
+    "apps/mobile/src/web/shared/view-slot.ts": [
+      "createViewSlot"
+    ],
+    "apps/mobile/src/webview-host/chat-transcript/anchored-menu-layout.ts": [
+      "anchoredMenuContentHeight",
+      "anchoredMenuMaxHeight",
+      "computeAnchoredMenuWidth",
+      "layoutAnchoredMenu",
+      "layoutAnchoredMenuForHeight"
+    ],
+    "apps/mobile/src/webview-host/host-theme-from-tokens.ts": [
+      "hostThemeFromTokens"
+    ],
+    "apps/mobile/src/webview-host/typed-message-bridge.ts": [
+      "createMessageBridge"
+    ],
+    "apps/mobile/src/webview-host/webview-asset-uri.ts": [
+      "getWebViewPackageDirUri",
+      "getWebViewPackageIndexUri"
+    ],
+    "apps/mobile/src/webview-host/webview-theme-inject.ts": [
+      "buildThemeInjectScript"
+    ],
+    "packages/cloud-sync-driver-s3/src/create-s3-object-storage.ts": [
+      "createS3ObjectStorage",
+      "isAliyunOssEndpoint",
+      "normalizeEtag"
+    ],
+    "packages/core/src/bootstrap/novel-master-bootstrap.ts": [
+      "assertMinimumBaseline",
+      "bootstrapNovelMaster"
+    ],
+    "packages/core/src/bootstrap/provider/seed-builtin-providers.ts": [
+      "seedBuiltinProviders"
+    ],
+    "packages/core/src/bootstrap/schema-align/align-schema-columns.ts": [
+      "alignSchemaColumns"
+    ],
+    "packages/core/src/bootstrap/schema-migrations/index.ts": [
+      "runPendingSchemaMigrations"
+    ],
+    "packages/core/src/bootstrap/schema-migrations/schema-migrations-table.ts": [
+      "ensureSchemaMigrationsTable",
+      "listAppliedSchemaMigrationIds",
+      "markSchemaMigrationApplied"
+    ],
+    "packages/core/src/bootstrap/skills/seed-builtin-skills.ts": [
+      "seedBuiltinSkills"
+    ],
+    "packages/core/src/bootstrap/smart-sort-rule/builtin-smart-sort-rules.ts": [
+      "seedBuiltinSmartSortRules"
+    ],
+    "packages/core/src/common/assert.ts": [
+      "assert"
+    ],
+    "packages/core/src/common/concurrency.ts": [
+      "createBusyFlag",
+      "yieldToEventLoop"
+    ],
+    "packages/core/src/common/front-matter.ts": [
+      "parseFrontMatterFields",
+      "splitMarkdownFrontMatter"
+    ],
+    "packages/core/src/common/i18n.ts": [
+      "createTranslator"
+    ],
+    "packages/core/src/domain/abort/logic/create-abort-error.ts": [
+      "createAbortError"
+    ],
+    "packages/core/src/domain/abort/logic/create-abort-registry.ts": [
+      "createAbortRegistry"
+    ],
+    "packages/core/src/domain/abort/logic/create-abort-scope.ts": [
+      "createAbortScope",
+      "scopeFromController",
+      "signalView"
+    ],
+    "packages/core/src/domain/agent/logic/agent-yaml-codec.ts": [
+      "decodeAgentYamlText",
+      "encodeAgentYamlText"
+    ],
+    "packages/core/src/domain/agent/logic/resolve-agent-tools.ts": [
+      "resolveAgentToolRegistry"
+    ],
+    "packages/core/src/domain/agent/logic/validate-agent-definition.ts": [
+      "validateAgentDefinition"
+    ],
+    "packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts": [
+      "validateAgentToolPolicy"
+    ],
+    "packages/core/src/domain/agent/model/agent-definition-preprocess.ts": [
+      "stripLegacyAgentWire",
+      "stripLegacyPrompts",
+      "stripLifecycleFromTextBlock"
+    ],
+    "packages/core/src/domain/agent/stored-config-validity/assess-agent-definition-wire.ts": [
+      "assessAgentDefinitionWire",
+      "resolveAgentDefinitionFromStorage"
+    ],
+    "packages/core/src/domain/agent/stored-config-validity/build-default-agent-definition.ts": [
+      "buildDefaultAgentDefinitionPreservingName"
+    ],
+    "packages/core/src/domain/agent/stored-config-validity/labels.ts": [
+      "storedConfigInvalidReason"
+    ],
+    "packages/core/src/domain/character-card/logic/character-card-to-md-tree.ts": [
+      "parseCharacterCardToMdTree"
+    ],
+    "packages/core/src/domain/chat/content/format-message-cli.ts": [
+      "formatMessageForCli"
+    ],
+    "packages/core/src/domain/chat/content/message-body-text.ts": [
+      "formatChatMessageForCliPreview",
+      "messageBodyTextFromBlocks"
+    ],
+    "packages/core/src/domain/chat/content/parse-message-content.ts": [
+      "parseMessageContent",
+      "parseMessageContentValue"
+    ],
+    "packages/core/src/domain/chat/content/text-blocks.ts": [
+      "textBlocks"
+    ],
+    "packages/core/src/domain/chat/model/annotate-draft.schema.ts": [
+      "isMessageAnnotatePath"
+    ],
+    "packages/core/src/domain/chat/model/composer-draft.schema.ts": [
+      "parseComposerDraftJson",
+      "serializeComposerDraftJson"
+    ],
+    "packages/core/src/domain/chat/model/message-attachment.schema.ts": [
+      "attachmentStorageName",
+      "parseAttachmentsJson"
+    ],
+    "packages/core/src/domain/chat/model/message-metadata.ts": [
+      "readMessageMetadata"
+    ],
+    "packages/core/src/domain/depth/logic/depth-slice.ts": [
+      "matchDepth",
+      "messageIdsInSlice",
+      "validateDepthSlice"
+    ],
+    "packages/core/src/domain/depth/logic/resolve-hide-message-range.ts": [
+      "resolveHideMessageRange"
+    ],
+    "packages/core/src/domain/format/format-stream-metrics-line.ts": [
+      "buildStreamMetricsLine",
+      "formatStreamElapsed"
+    ],
+    "packages/core/src/domain/format/sliding-token-rate.ts": [
+      "createTokenRateSampler",
+      "slidingTokenRate"
+    ],
+    "packages/core/src/domain/format/stream-final-rate.ts": [
+      "parseStreamFinalRateSnapshot",
+      "serializeStreamFinalRateSnapshot"
+    ],
+    "packages/core/src/domain/format/stream-token-anchor.ts": [
+      "composeStreamTokens",
+      "reanchorStreamTokenBase"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/backfill-baseline-checkpoints.ts": [
+      "backfillBaselineCheckpoints",
+      "createBaselineCheckpointBackfillOperation",
+      "decideBackfillShortCircuit",
+      "scanBackfillGap",
+      "writeBackfillGap"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/backfill-missing-revision.ts": [
+      "backfillMissingRevisionIfNeeded"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/deferred-revision-orphan-gc.ts": [
+      "scheduleDeferredRevisionOrphanGc"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/detect-missing-revisions.ts": [
+      "findMissingRevisionPointers"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/ensure-directory-chain.ts": [
+      "ensureDirectoryChain"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/list-session-files.ts": [
+      "listSessionFileHeads"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/resolve-reconcile-paths.ts": [
+      "resolvePathsNeedDeleteInTransaction",
+      "resolveReconcilePathSets"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/resolve-rollback-anchor.ts": [
+      "resolveRollbackAnchorMessage"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/resolve-target-tree.ts": [
+      "resolvePriorRollbackTargetTree",
+      "resolveRollbackTargetTree"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/restore-path.ts": [
+      "restorePathToRevision",
+      "restorePathToRevisionWithBackfill"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/revision-gc.ts": [
+      "sweepSessionRevisions"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/revive-deleted-entry.ts": [
+      "reviveDeletedEntryForRestore"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/rollback-error-guards.ts": [
+      "isRollbackRevisionBackfillRequiredError",
+      "isRollbackVfsDegradableError",
+      "readRollbackRevisionBackfillMissingPaths"
+    ],
+    "packages/core/src/domain/message-checkpoint/logic/truncate-tail-in-transaction.ts": [
+      "truncateTailInTransaction"
+    ],
+    "packages/core/src/domain/prompt/logic/agent-prompt-layout-wire.ts": [
+      "dynamicBlockToWire",
+      "persistBlockToWire"
+    ],
+    "packages/core/src/domain/prompt/logic/expand-dynamic-macros.ts": [
+      "expandDynamicMacros"
+    ],
+    "packages/core/src/domain/prompt/logic/normalize-agent-prompt-layout.ts": [
+      "assertNormalizeCoversAllFields",
+      "normalizeAgentPromptLayoutDomain",
+      "stripLegacyWorktreeBlocksFromPersistMap"
+    ],
+    "packages/core/src/domain/prompt/logic/normalize-for-llm-export.ts": [
+      "normalizeForLlmExport"
+    ],
+    "packages/core/src/domain/prompt/logic/validate-agent-prompt-layout.ts": [
+      "resolveWorkplaceFromWire",
+      "validateAgentPromptLayout",
+      "validateAgentPromptLayoutFromMaps"
+    ],
+    "packages/core/src/domain/prompt/logic/validate-dynamic-macros.ts": [
+      "rejectPersistMacros",
+      "validateDynamicMacros"
+    ],
+    "packages/core/src/domain/prompt/model/agent-prompt-layout.ts": [
+      "layoutHasCustomAttach",
+      "layoutHasWorkplace"
+    ],
+    "packages/core/src/domain/provider/logic/application-model-id.ts": [
+      "formatApplicationModelId",
+      "normalizeVendorModelId",
+      "parseApplicationModelId"
+    ],
+    "packages/core/src/domain/provider/logic/assert-saved-model-uuid.ts": [
+      "assertSavedModelUuid",
+      "isSavedModelUuidFormat"
+    ],
+    "packages/core/src/domain/provider/logic/builtin-providers.ts": [
+      "builtinDefaultApiKey"
+    ],
+    "packages/core/src/domain/provider/logic/find-saved-model-references.ts": [
+      "findSavedModelReferences"
+    ],
+    "packages/core/src/domain/provider/logic/format-saved-model-display-name.ts": [
+      "formatSavedModelDisplayName"
+    ],
+    "packages/core/src/domain/provider/logic/infer-llm-protocol-from-model-id.ts": [
+      "inferLlmProtocolFromApplicationModelId",
+      "inferLlmProtocolFromSavedModelId"
+    ],
+    "packages/core/src/domain/provider/logic/provider-identity-repair.ts": [
+      "createProviderIdentityRepairOperation",
+      "createProviderSecretRenameOperation"
+    ],
+    "packages/core/src/domain/provider/logic/resolve-provider-api-key.ts": [
+      "providerApiKeyIsConfigured",
+      "resolveProviderApiKey"
+    ],
+    "packages/core/src/domain/provider/logic/resolve-thinking-wire.ts": [
+      "resolveEffectiveMaxTokens"
+    ],
+    "packages/core/src/domain/provider/logic/thinking-level-presets.ts": [
+      "thinkingLevelToModelThinkingParams"
+    ],
+    "packages/core/src/domain/provider/model/default-saved-model-settings.ts": [
+      "defaultSavedModelSettings"
+    ],
+    "packages/core/src/domain/provider/model/protocol-sampling-defaults.ts": [
+      "maxOutputTokensFromSampling",
+      "mergeSamplingWithDefaults"
+    ],
+    "packages/core/src/domain/provider/model/provider.ts": [
+      "providerApiKeyRef",
+      "resolveProviderApiKeySecretRef"
+    ],
+    "packages/core/src/domain/provider/model/saved-model-preprocess.ts": [
+      "migrateLegacyThinkingShape"
+    ],
+    "packages/core/src/domain/provider/model/saved-model-settings-from-json.ts": [
+      "assertSavedModelSettingsPersistable",
+      "savedModelSettingsFromJson",
+      "savedModelSettingsToJson"
+    ],
+    "packages/core/src/domain/provider/model/saved-model-settings.ts": [
+      "applySavedModelSettingsPatch",
+      "savedModelContextWindowTokens",
+      "savedModelSampling",
+      "savedModelThinkingLevel",
+      "savedModelTokenCounterMode"
+    ],
+    "packages/core/src/domain/provider/model/saved-model.ts": [
+      "savedModelDisplayName"
+    ],
+    "packages/core/src/domain/session-kkv/logic/deferred-file-cache-gc.ts": [
+      "runDeferredFileCacheGc"
+    ],
+    "packages/core/src/domain/session-kkv/logic/file-cache-blob-codec.ts": [
+      "compressFileCacheBodyForBlob",
+      "decodeFileCacheBlobBody",
+      "hashFileCachePayload"
+    ],
+    "packages/core/src/domain/skills/logic/build-new-skill-doc.ts": [
+      "buildNewSkillDoc"
+    ],
+    "packages/core/src/domain/skills/logic/effective-skills.ts": [
+      "computeEffectiveSkills"
+    ],
+    "packages/core/src/domain/skills/logic/parse-skill-front-matter.ts": [
+      "parseSkillFrontMatter"
+    ],
+    "packages/core/src/domain/skills/logic/preview-skill-zip.ts": [
+      "previewSkillZip"
+    ],
+    "packages/core/src/domain/skills/logic/skill-paths.ts": [
+      "resolveSkillRelPathCore"
+    ],
+    "packages/core/src/domain/skills/logic/with-skill-front-matter-values.ts": [
+      "withSkillFrontMatterValues"
+    ],
+    "packages/core/src/domain/skills/model/skill-name.ts": [
+      "isValidSkillName",
+      "validateSkillName"
+    ],
+    "packages/core/src/domain/smart-sort-rule/logic/compile-smart-sort-rule.ts": [
+      "compileSmartSortRule",
+      "validateSmartSortRuleDraft"
+    ],
+    "packages/core/src/domain/smart-sort-rule/logic/match-smart-sort-pattern.ts": [
+      "matchSmartSortPattern"
+    ],
+    "packages/core/src/domain/smart-sort-rule/logic/parse-pattern-input.ts": [
+      "formatPatternInput",
+      "parsePatternInput"
+    ],
+    "packages/core/src/domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.ts": [
+      "splitSmartSortHighlightSegments"
+    ],
+    "packages/core/src/domain/smart-sort-rule/model/smart-sort-rule-io.ts": [
+      "bundleRulesToEntities",
+      "decodeSmartSortRuleBundle",
+      "encodeSmartSortRuleBundle"
+    ],
+    "packages/core/src/domain/smart-sort-rule/model/smart-sort-rule.schema.ts": [
+      "assertFlagsValid",
+      "isFlagsValid",
+      "parseCreateSmartSortRuleInput",
+      "parseUpdateSmartSortRuleInput"
+    ],
+    "packages/core/src/domain/smart-sort-rule/model/smart-sort-rule.ts": [
+      "isBuiltinSmartSortRuleId"
+    ],
+    "packages/core/src/domain/tool/builtin/overflow-sink.ts": [
+      "extensionForContentType",
+      "sinkOversizedOutput"
+    ],
+    "packages/core/src/domain/tool/builtin/register-builtin-tools.ts": [
+      "registerBuiltinTools"
+    ],
+    "packages/core/src/domain/tool/builtin/search/curl-import.ts": [
+      "findPlaintextSecrets",
+      "parseCurlCommand"
+    ],
+    "packages/core/src/domain/tool/builtin/search/engines/dispatch.ts": [
+      "dispatchSearch"
+    ],
+    "packages/core/src/domain/tool/builtin/search/engines/duckduckgo.ts": [
+      "searchWithDuckduckgo"
+    ],
+    "packages/core/src/domain/tool/builtin/search/engines/template-engine.ts": [
+      "runTemplateEngine"
+    ],
+    "packages/core/src/domain/tool/builtin/search/search-config.ts": [
+      "createSearchConfigStore",
+      "normalizeEngineBaseUrl",
+      "readSearchConfig",
+      "resolveEngineChain",
+      "searchApiKeyRef"
+    ],
+    "packages/core/src/domain/tool/builtin/search/types.ts": [
+      "engineApiErrorMessage",
+      "engineFailed",
+      "engineTimeoutError",
+      "normalizeMaxResults",
+      "redactSecret",
+      "validateSearchEngineTemplate"
+    ],
+    "packages/core/src/domain/tool/builtin/vfs-tools.ts": [
+      "createVfsTools",
+      "ensureDirRulesForNewPath",
+      "isMutatingFileToolName",
+      "normalizeAgentToolPolicyName",
+      "upsertFileCacheAfterWrite"
+    ],
+    "packages/core/src/domain/tool/logic/build-tool-result-block.ts": [
+      "buildToolResultBlock",
+      "resolveToolResultOk"
+    ],
+    "packages/core/src/domain/tool/logic/format-tool-output.ts": [
+      "formatToolErrorForLlm",
+      "formatToolOutputForLlm",
+      "formatToolResultContentForDisplay"
+    ],
+    "packages/core/src/domain/tool/logic/fs-command-classify.ts": [
+      "classifyFsCommand",
+      "classifyMutatingToolCall"
+    ],
+    "packages/core/src/domain/tool/logic/fs-command.ts": [
+      "executeFsCommand",
+      "isMutatingFsCommand",
+      "parseFsCommand"
+    ],
+    "packages/core/src/domain/tool/logic/skill-read-truncation.ts": [
+      "deriveSkillLoadTruncation",
+      "deriveSkillReadTruncation"
+    ],
+    "packages/core/src/domain/tool/logic/tool-output-limits.ts": [
+      "capMatchList",
+      "capUtf8Bytes",
+      "capUtf8BytesFill",
+      "sliceLinesFromOffset",
+      "truncateLine"
+    ],
+    "packages/core/src/domain/tool/logic/tool-path-policy.ts": [
+      "checkToolPathPolicy",
+      "extractInputPaths",
+      "findDisallowedPath",
+      "isPathAllowed",
+      "readAllowedPaths"
+    ],
+    "packages/core/src/domain/tool/logic/tool-use-mutates-workspace.ts": [
+      "anyToolUseMutatesWorkspace",
+      "toolUseMutatesWorkspace"
+    ],
+    "packages/core/src/domain/tool/logic/vfs-tool-file-path.ts": [
+      "resolveVfsToolFilePath"
+    ],
+    "packages/core/src/domain/usage/logic/build-usage-record.ts": [
+      "buildUsageRecordFromMessage"
+    ],
+    "packages/core/src/domain/vfs/content-store/logic/hash-content.ts": [
+      "hashContent"
+    ],
+    "packages/core/src/domain/vfs/content-store/logic/pack-codec.ts": [
+      "__getVfsPackDecodeCountersForTests",
+      "__resetVfsPackDecodeCountersForTests",
+      "decodeFossilChainSpans",
+      "decodePackMembers",
+      "decodeZlibConcatSpans",
+      "parseFossilSegmentTable"
+    ],
+    "packages/core/src/domain/vfs/content-store/logic/resolve-stored-content.ts": [
+      "resolveEntryPlainContent",
+      "resolveRevisionPlainContent"
+    ],
+    "packages/core/src/domain/vfs/content-store/logic/zlib-accelerator.ts": [
+      "clearZlibCodecAccelerator",
+      "registerZlibCodecAccelerator",
+      "tryZlibDeflate",
+      "tryZlibInflate"
+    ],
+    "packages/core/src/domain/vfs/content-store/logic/zlib-codec.ts": [
+      "asUint8Array",
+      "compressZlib",
+      "decodeCompressedBytes",
+      "decompressZlib",
+      "tightBytes"
+    ],
+    "packages/core/src/domain/vfs/logic/action-xml-to-tool-uses.ts": [
+      "actionXmlToToolUses"
+    ],
+    "packages/core/src/domain/vfs/logic/compute-replace-not-found-error.ts": [
+      "buildReplaceNotFoundError"
+    ],
+    "packages/core/src/domain/vfs/logic/compute-replace-result.ts": [
+      "computeReplaceResult"
+    ],
+    "packages/core/src/domain/vfs/logic/deferred-blob-gc.ts": [
+      "runDeferredBlobGc"
+    ],
+    "packages/core/src/domain/vfs/logic/ensure-parent-dirs.ts": [
+      "ensureParentDirectories"
+    ],
+    "packages/core/src/domain/vfs/logic/entry-sequence-repair.ts": [
+      "createVfsEntrySequenceRepairOperation"
+    ],
+    "packages/core/src/domain/vfs/logic/extract-mutating-paths.ts": [
+      "collectMutatingPathsFromCalls",
+      "extractMutatingPaths"
+    ],
+    "packages/core/src/domain/vfs/logic/format-vfs-error-for-llm.ts": [
+      "formatVfsErrorForLlm"
+    ],
+    "packages/core/src/domain/vfs/logic/format-vfs-error-for-user.ts": [
+      "vfsUserMessage"
+    ],
+    "packages/core/src/domain/vfs/logic/normalize-for-match.ts": [
+      "normalizeForMatch"
+    ],
+    "packages/core/src/domain/vfs/logic/parent-dir.ts": [
+      "isStorageRootParent",
+      "parentDir",
+      "parentDirOfNormalized",
+      "parentDirOrNull"
+    ],
+    "packages/core/src/domain/vfs/logic/read-user-vfs-save-baseline.ts": [
+      "readUserVfsSaveBaseline"
+    ],
+    "packages/core/src/domain/vfs/logic/restore-mutating-path-heads.ts": [
+      "captureMutatingPathHeadSnapshots",
+      "restoreMutatingPathHeads"
+    ],
+    "packages/core/src/domain/vfs/logic/revision-pair-key.ts": [
+      "revisionPairKey"
+    ],
+    "packages/core/src/domain/vfs/logic/revision-ref-count.ts": [
+      "adjustRef",
+      "decrementLiveRefsUnderScope",
+      "decrementRefsForCheckpointFiles",
+      "deleteUnreferencedUnderScope",
+      "incrementRefsForCheckpointFiles",
+      "repairRefCounts",
+      "transferLiveRef"
+    ],
+    "packages/core/src/domain/vfs/logic/seed-live-head-revisions.ts": [
+      "insertFileSeedingRevision",
+      "seedLiveHeadRevisionsUnderPrefix"
+    ],
+    "packages/core/src/domain/vfs/logic/strip-known-physical-prefixes.ts": [
+      "stripKnownPhysicalPrefixes"
+    ],
+    "packages/core/src/domain/vfs/logic/user-vfs-action-xml.ts": [
+      "buildUserVfsActionXml",
+      "parseUserVfsActionsFromText"
+    ],
+    "packages/core/src/domain/vfs/logic/user-vfs-save-mapping.ts": [
+      "buildUserVfsSaveEditActionXml",
+      "buildUserVfsSaveWriteActionXml",
+      "buildUserVfsSimpleActionXml",
+      "mapUserSaveToToolUses"
+    ],
+    "packages/core/src/domain/vfs/logic/validate-entry-name.ts": [
+      "assertValidVfsEntryName",
+      "validateVfsEntryName"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-batch-path.ts": [
+      "joinTargetLogicalPath",
+      "normalizeBatchRelativePath",
+      "relativePathUnderAnchor"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-copy.ts": [
+      "copyVfsPath"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-entry-ops.ts": [
+      "createVfsDirectory",
+      "createVfsFile",
+      "deleteVfsEntry"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-exclude-prefixes.ts": [
+      "isVfsPathAncestorOfExcluded",
+      "isVfsPathExcluded",
+      "normalizeExcludePrefix"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-grep.ts": [
+      "grepContents"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-import-chunk.ts": [
+      "chunkArray"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-move.ts": [
+      "mkdirIgnoreExistingDirectory",
+      "mkdirIgnoreExists",
+      "moveVfsPath"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-path-mapper.ts": [
+      "isSessionVfsScope",
+      "resolveLogicalPath",
+      "scopeKey",
+      "scopePhysicalPrefix",
+      "toLogicalPath",
+      "toPhysicalPath",
+      "validateLogicalPath"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-rename-primitive.ts": [
+      "renameVfsDirectory",
+      "renameVfsEntry"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-tree-copy.ts": [
+      "copyVfsTree",
+      "deleteVfsPrefix",
+      "releaseAndDeleteVfsPrefix",
+      "replaceVfsSubtree",
+      "sweepRevisionsUnderScope"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-archive.ts": [
+      "assertZipArchive"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-build.ts": [
+      "buildVfsZip"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-central-dir.ts": [
+      "parseZipCentralDirectory"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-filename-decode.ts": [
+      "decodeZipEntryName"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-parse.ts": [
+      "parseVfsZip"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-path.ts": [
+      "assertZipEntriesNotDomainRootPrefixed",
+      "logicalFromZipDirectoryEntryRelativeToDirectory",
+      "logicalFromZipEntryRelativeToDirectory",
+      "resolveZipDirectoryPath",
+      "zipBaseNameFromPath",
+      "zipDirectoryEntryNameRelativeToDirectory",
+      "zipEntryNameRelativeToDirectory"
+    ],
+    "packages/core/src/domain/vfs/logic/vfs-zip-validate.ts": [
+      "decodeUtf8Entry",
+      "validateVfsZipEntries"
+    ],
+    "packages/core/src/domain/vfs/logic/write-with-revision.ts": [
+      "nextVersionFor",
+      "writeWithRevision"
+    ],
+    "packages/core/src/domain/vfs/repositories/impl/normalize-path.ts": [
+      "normalizePath"
+    ],
+    "packages/core/src/domain/vfs/repositories/impl/scope-prefix-helpers.ts": [
+      "escapeLike"
+    ],
+    "packages/core/src/domain/workplace/logic/diff-workplace-paths.ts": [
+      "diffWorkplacePaths",
+      "isWorkplacePathLoadedInCache"
+    ],
+    "packages/core/src/domain/workplace/logic/front-matter.ts": [
+      "parseMarkdownFrontMatter"
+    ],
+    "packages/core/src/domain/workplace/logic/load-or-fill-file-cache.ts": [
+      "fillFileCacheFromVfs",
+      "loadOrFillFileCache",
+      "settlePendingFileCacheBackfills"
+    ],
+    "packages/core/src/domain/workplace/logic/rule-snapshot-codec.ts": [
+      "fileCacheKey",
+      "parseFileCachePayload",
+      "parseRuleSnapshotJson",
+      "ruleViewToSnapshotEntries",
+      "serializeFileCachePayload",
+      "serializeRuleSnapshot"
+    ],
+    "packages/core/src/domain/workplace/logic/smart-sort.ts": [
+      "compareSmartBasenames",
+      "extractSortKey",
+      "extractSortKeyDetail",
+      "formatSortTupleForDisplay"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-display.ts": [
+      "joinFileBlocks",
+      "renderFileBlock",
+      "renderFileBlockBody"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-eval.ts": [
+      "evaluateFileDisplay",
+      "sortDirPaths",
+      "sortFilesForDir"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-file-tree.ts": [
+      "renderWorkplaceFileTree",
+      "renderWorkplaceFileTreeForMacro",
+      "workplaceFileTreeRootLabel"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-labels.ts": [
+      "displayStateLabel",
+      "filetreeMacroLoadStateLabel",
+      "inclusionModeLabel",
+      "ruleStateLabel"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-materialize-engine.ts": [
+      "materializeBlockFromView"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-path-map.ts": [
+      "mapProjectWorkplacePathToSession",
+      "mapSessionWorkplacePathToProject"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-rule-engine.ts": [
+      "evaluateWorkplaceRuleView"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-scope.ts": [
+      "isWorkplaceRootPath",
+      "workplaceRootLogicalPath",
+      "workplaceScopeKey"
+    ],
+    "packages/core/src/domain/workplace/logic/workplace-tree.ts": [
+      "buildWorkplaceDirSet",
+      "directChildDirs"
+    ],
+    "packages/core/src/errors/app-error.ts": [
+      "firstDescriptorOf",
+      "isAppError",
+      "toSnakeCase"
+    ],
+    "packages/core/src/errors/guards.ts": [
+      "domainOf",
+      "inDomain"
+    ],
+    "packages/core/src/errors/outcome.ts": [
+      "andThenOutcome",
+      "interruptOf",
+      "mapOutcome",
+      "matchOutcome"
+    ],
+    "packages/core/src/i18n/catalog.ts": [
+      "parseCoreCatalog"
+    ],
+    "packages/core/src/i18n/error-message.ts": [
+      "userMessageOf"
+    ],
+    "packages/core/src/i18n/localized-message.ts": [
+      "messageParamOf",
+      "resolveLocalizedMessage"
+    ],
+    "packages/core/src/infra/cloud-sync/impl/cloud-sync-coordinator.ts": [
+      "getDefaultPushAgentMutex"
+    ],
+    "packages/core/src/infra/cloud-sync/logic/lock.ts": [
+      "buildLease",
+      "canAcquireLock",
+      "isEffectiveLock",
+      "renewLease"
+    ],
+    "packages/core/src/infra/cloud-sync/logic/paths.ts": [
+      "snapshotKey",
+      "statusKey"
+    ],
+    "packages/core/src/infra/cloud-sync/model/cloud-sync-status.ts": [
+      "parseCloudSyncStatus"
+    ],
+    "packages/core/src/infra/create-driver-registry.ts": [
+      "createDriverRegistry"
+    ],
+    "packages/core/src/infra/db-backup/export-database-backup.ts": [
+      "exportDatabaseBackupToPath"
+    ],
+    "packages/core/src/infra/db-backup/provider-table-snapshot-validate.ts": [
+      "validateProviderTableSnapshot"
+    ],
+    "packages/core/src/infra/db-backup/provider-table-snapshot.ts": [
+      "dumpProviderTableSnapshot",
+      "restoreProviderTableSnapshot",
+      "scrubProviderTables",
+      "scrubProviderTablesInDatabase"
+    ],
+    "packages/core/src/infra/db-backup/sqlite-backup-header.ts": [
+      "assertSqliteBackupHeader"
+    ],
+    "packages/core/src/infra/db-maintenance/impl/db-maintenance.service.ts": [
+      "createDbMaintenanceService",
+      "runStartupMaintenanceOnce"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/anthropic-content-mapper.ts": [
+      "anthropicContentToBlocks",
+      "blocksToAnthropicContent",
+      "chatMessagesToAnthropic"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/anthropic-sse-parser.ts": [
+      "createAnthropicSseParser"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/anthropic-tool-names.ts": [
+      "anthropicToolsNeedWireEncoding",
+      "createAnthropicToolNameWire",
+      "toAnthropicWireToolName"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/apply-thinking-to-body.ts": [
+      "applyThinkingToBody"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/debug-fetch.ts": [
+      "createLoggingFetch",
+      "isLlmFetchDebugEnabled",
+      "redactUrl"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/dispatch-sse-chunk.ts": [
+      "createSseDispatchState",
+      "dispatchSseChunk"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/gemini-content-mapper.ts": [
+      "blocksToGeminiParts",
+      "chatMessagesToGeminiContents",
+      "geminiPartsToBlocks",
+      "toolsToGeminiFunctionDeclarations"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/gemini-sse-parser.ts": [
+      "createGeminiSseParser"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/http-util.ts": [
+      "assertOk",
+      "fetchJson",
+      "joinUrl",
+      "normalizeBaseUrl"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/inline-thinking-parser.ts": [
+      "emitDirectTextDelta"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts": [
+      "postSse",
+      "registerSseTransport",
+      "resetShouldUseXhrForSseCacheForTests",
+      "setShouldUseXhrForSseOverrideForTests",
+      "setSseTransportOverrideForTests",
+      "shouldUseXhrForSse"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/openai-content-mapper.ts": [
+      "blocksToOpenAiMessageContent",
+      "chatMessagesToOpenAi",
+      "openAiChoiceToBlocks",
+      "openAiStreamAccumulatorsToBlocks",
+      "openAiStreamAccumulatorsToPartialBlocks",
+      "openAiStreamDeltaToEvents"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/openai-sse-parser.ts": [
+      "createOpenAiSseParser"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/registry.ts": [
+      "clearProtocolAdapters",
+      "configureLlmFetch",
+      "getProtocolAdapter"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/request-abort.ts": [
+      "isAbortLikeError",
+      "isRequestAborted"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts": [
+      "createSseChunkEmitter"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/sse-data-line.ts": [
+      "parseSseDataLine"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/sse-json-events.ts": [
+      "feedSseJsonEvents"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/sse-line-buffer.ts": [
+      "drainSseLines",
+      "feedSseLines"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/sse-parse-errors.ts": [
+      "assertSseParseSucceededOrThrow",
+      "isSseParseDebugEnabled",
+      "recordMalformedSseLine"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/stream-partial-blocks.ts": [
+      "buildStreamPartialBlocks"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/stream-watchdog.ts": [
+      "createStreamWatchdog"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/text-only-content.ts": [
+      "blocksToTextOnly",
+      "chatMessagesToTextOnly",
+      "isTextOnlyHistory"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/tool-arguments-parse.ts": [
+      "tryParseToolArgumentsJson"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/tool-definitions.ts": [
+      "toolsFromRegistry"
+    ],
+    "packages/core/src/infra/llm-protocol/logic/usage-parser.ts": [
+      "parseUsage"
+    ],
+    "packages/core/src/infra/log/log-file-policy.ts": [
+      "planLogFileWrite"
+    ],
+    "packages/core/src/infra/log/logger.ts": [
+      "addLogSink",
+      "createLogger",
+      "restoreDefaultLogSink",
+      "setDefaultLogSink"
+    ],
+    "packages/core/src/infra/log/sanitize-log.ts": [
+      "describeText",
+      "toLogRecord"
+    ],
+    "packages/core/src/infra/prompt-template/macro-render.ts": [
+      "renderMacro"
+    ],
+    "packages/core/src/infra/prompt-template/macro-scan.ts": [
+      "scanMacroActions"
+    ],
+    "packages/core/src/infra/prompt-template/week-cn.ts": [
+      "formatWeekCn"
+    ],
+    "packages/core/src/infra/serialization/decode.ts": [
+      "decode"
+    ],
+    "packages/core/src/infra/serialization/encode.ts": [
+      "encode"
+    ],
+    "packages/core/src/infra/serialization/parse-text.ts": [
+      "parseText"
+    ],
+    "packages/core/src/infra/serialization/stringify-text.ts": [
+      "stringifyText"
+    ],
+    "packages/core/src/infra/serialization/zod-to-json-schema.ts": [
+      "zodToJsonSchema"
+    ],
+    "packages/core/src/infra/sksp/logic/env-override.ts": [
+      "resolveSkspEnvOverride"
+    ],
+    "packages/core/src/infra/sksp/logic/platform.ts": [
+      "resolveSkspNameFromPlatform"
+    ],
+    "packages/core/src/infra/sksp/logic/ref-to-env.ts": [
+      "refToEnvVar"
+    ],
+    "packages/core/src/infra/sksp/sksp-error.ts": [
+      "assertValidRef"
+    ],
+    "packages/core/src/infra/sql-template/context-proxy.ts": [
+      "mergedContextForExpression"
+    ],
+    "packages/core/src/infra/sql-template/context.ts": [
+      "pushScope",
+      "resolvePath"
+    ],
+    "packages/core/src/infra/sql-template/expression.ts": [
+      "bindExpressionToContext",
+      "evaluateTest",
+      "normalizeExpression"
+    ],
+    "packages/core/src/infra/sql-template/parser.ts": [
+      "parseTemplateToAst"
+    ],
+    "packages/core/src/infra/sql-template/placeholder.ts": [
+      "renderBind"
+    ],
+    "packages/core/src/infra/sql-template/tags/foreach.ts": [
+      "normalizeCollection"
+    ],
+    "packages/core/src/infra/sql-template/tags/trim.ts": [
+      "applyTrimOverrides"
+    ],
+    "packages/core/src/infra/sql-template/tags/where.ts": [
+      "stripLeadingAndOr",
+      "wrapWhere"
+    ],
+    "packages/core/src/infra/tdbc/logic/normalize-bindings.ts": [
+      "normalizeBindings"
+    ],
+    "packages/core/src/infra/tdbc/logic/open.ts": [
+      "open",
+      "parseUrl"
+    ],
+    "packages/core/src/infra/tdbc/logic/template-helper.ts": [
+      "executeTemplate",
+      "queryTemplate"
+    ],
+    "packages/core/src/infra/tdbc/logic/transaction-helper.ts": [
+      "runInTransactionOrConn",
+      "unwrapOrRollback"
+    ],
+    "packages/core/src/infra/tokenizer/encoding-registry.ts": [
+      "clearForTests",
+      "getEncoding",
+      "setClockForTests",
+      "setFactoryForTests"
+    ],
+    "packages/core/src/infra/tokenizer/logic/chat-token-estimate-memo.ts": [
+      "buildChatTokenEstimateMemoKey",
+      "clearChatTokenEstimateMemo",
+      "lookupChatTokenEstimateMemo",
+      "lookupWorkplaceEstimateByFingerprint",
+      "rememberChatTokenEstimateMemo",
+      "rememberWorkplaceEstimateByFingerprint",
+      "stampMessagesForEstimateMemo"
+    ],
+    "packages/core/src/infra/tokenizer/logic/chunk-splitter.ts": [
+      "splitTextIntoChunks"
+    ],
+    "packages/core/src/infra/tokenizer/logic/count-openai-style-message.ts": [
+      "convertMessagesForWebTokenizer",
+      "countOpenAiStyleMessages",
+      "countWebTokenizerMessages",
+      "wrapSerializedPromptAsSystemMessage"
+    ],
+    "packages/core/src/infra/tokenizer/logic/count-prompt-llm-input.ts": [
+      "countPromptLlmInput",
+      "countPromptLlmInputHeuristicOnly",
+      "resolveVendorModelIdFromSaved"
+    ],
+    "packages/core/src/infra/tokenizer/logic/count-text-with-tokenizer.ts": [
+      "countTextWithIncrementalTokenizer"
+    ],
+    "packages/core/src/infra/tokenizer/logic/count-tokens.ts": [
+      "countTokens"
+    ],
+    "packages/core/src/infra/tokenizer/logic/create-default-registry.ts": [
+      "createDefaultTokenCounterRegistry"
+    ],
+    "packages/core/src/infra/tokenizer/logic/estimate-tokens-cjk-aware.ts": [
+      "estimateTokensCjkAware"
+    ],
+    "packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts": [
+      "createIncrementalTokenCounter"
+    ],
+    "packages/core/src/infra/tokenizer/logic/pick-last-prompt-usage.ts": [
+      "pickLastPromptUsage"
+    ],
+    "packages/core/src/infra/tokenizer/logic/read-token-counter-mode-pref.ts": [
+      "isValidTokenCounterModePref",
+      "parseTokenCounterModePref"
+    ],
+    "packages/core/src/infra/tokenizer/logic/resolve-context-window.ts": [
+      "resolveContextWindowTokens"
+    ],
+    "packages/core/src/infra/tokenizer/logic/resolve-current-prompt-tokens.ts": [
+      "resolveCurrentPromptTokens"
+    ],
+    "packages/core/src/infra/tokenizer/logic/resolve-prompt-tokens-with-backfill.ts": [
+      "resolvePromptTokensWithBackfill"
+    ],
+    "packages/core/src/infra/tokenizer/logic/resolve-tokenizer-family.ts": [
+      "isGpt0301TiktokenModel",
+      "mapVendorModelIdToTiktokenModel",
+      "resolveTokenizerFamily"
+    ],
+    "packages/core/src/infra/tokenizer/logic/seed-context-window-tokens.ts": [
+      "seedContextWindowTokens"
+    ],
+    "packages/core/src/infra/tokenizer/logic/serialize-tools-for-token-count.ts": [
+      "serializeToolsForTokenCount"
+    ],
+    "packages/core/src/infra/tokenizer/logic/session-api-prompt-token-store.ts": [
+      "invalidateSessionApiPromptTokenEntry",
+      "parseSessionApiPromptTokenEntry",
+      "readSessionApiPromptTokenEntry",
+      "serializeSessionApiPromptTokenEntry",
+      "writeSessionApiPromptTokenEntry"
+    ],
+    "packages/core/src/infra/tokenizer/logic/token-chunk-cache.ts": [
+      "buildCounterScope",
+      "chunkHash16",
+      "parseTokenChunkCachePayload"
+    ],
+    "packages/core/src/presentation/chat/attachment-chip.ts": [
+      "formatStatusChipLabel",
+      "formatStatusChipLabelFromAttachment"
+    ],
+    "packages/core/src/presentation/chat/tool-summary.ts": [
+      "summarizeToolInput",
+      "toolCallSummary"
+    ],
+    "packages/core/src/presentation/chat/user-vfs-turn-preview.ts": [
+      "formatUserVfsTurnPreviewBody"
+    ],
+    "packages/core/src/service/agent/impl/agent-runner.ts": [
+      "wrapStreamForBus"
+    ],
+    "packages/core/src/service/agent/logic/agent-run-shared.ts": [
+      "resolveApplicationModelIdForRun",
+      "resolveCurrentAgentDefinition",
+      "resolveCurrentAgentId",
+      "resolveWorkspaceAgentForNewSession"
+    ],
+    "packages/core/src/service/agent/logic/assemble-agent-runner-deps.ts": [
+      "assembleAgentRunnerDeps"
+    ],
+    "packages/core/src/service/agent/logic/resolve-agent-for-project.ts": [
+      "resolveAgentForProject"
+    ],
+    "packages/core/src/service/agent/logic/run-agent-turn.ts": [
+      "assembleAgentsToolContext",
+      "assembleSearchToolContext",
+      "assembleSkillsToolContext",
+      "mapResolveError",
+      "runAgentTurn"
+    ],
+    "packages/core/src/service/compaction-conditions/run-compaction.ts": [
+      "runCompaction"
+    ],
+    "packages/core/src/service/integrity-repair.ts": [
+      "runIntegrityRepair"
+    ],
+    "packages/core/src/service/kkv/create-kkv-service.ts": [
+      "createKkvService"
+    ],
+    "packages/core/src/service/persistent-preferences/create-persistent-preferences.ts": [
+      "createPersistentPreferences"
+    ],
+    "packages/core/src/service/persistent-state/create-persistent-state.ts": [
+      "createPersistentState"
+    ],
+    "packages/core/src/service/prompt/apply-thinking-context-for-llm.ts": [
+      "applyThinkingContextForLlm"
+    ],
+    "packages/core/src/service/prompt/normalize-orphan-tool-results-for-llm.ts": [
+      "normalizeOrphanToolResultsForLlm"
+    ],
+    "packages/core/src/service/prompt/prompt-preview-turns.ts": [
+      "formatToolUsePreviewJson"
+    ],
+    "packages/core/src/service/prompt/resolve-preview-thinking-context.ts": [
+      "resolvePreviewThinkingContext"
+    ],
+    "packages/core/src/service/provider/logic/resolve-token-counter-mode-for-model.ts": [
+      "resolveTokenCounterModeForModel"
+    ],
+    "packages/core/src/service/session-fs/create-session-fs-service.ts": [
+      "createSessionFsService",
+      "deleteSessionFsData"
+    ],
+    "packages/core/src/service/session-kkv/create-session-kkv-service.ts": [
+      "createSessionKkvService"
+    ],
+    "packages/core/src/service/session-kkv/logic/clear-session-prompt-caches.ts": [
+      "clearSessionPromptCaches"
+    ],
+    "packages/core/src/service/session-run-state/create-session-run-state-service.ts": [
+      "createSessionRunStateService"
+    ],
+    "packages/core/src/service/skills/create-skills-service.ts": [
+      "createSkillsService"
+    ],
+    "packages/core/src/service/smart-sort-rule/create-smart-sort-rule.service.ts": [
+      "createSmartSortRuleService"
+    ],
+    "packages/core/src/service/template/create-template-pull-service.ts": [
+      "createTemplatePullService"
+    ],
+    "packages/core/src/service/template/logic/initialize-session-workspace.ts": [
+      "initializeSessionWorkspace"
+    ],
+    "packages/core/src/service/template/logic/push-session-workspace.ts": [
+      "pushSessionWorkspace"
+    ],
+    "packages/core/src/service/vfs/build-user-vfs-turn-op.ts": [
+      "buildUserVfsCreateFileOp",
+      "buildUserVfsDeleteOp",
+      "buildUserVfsMkdirOp",
+      "buildUserVfsRenameOp",
+      "buildUserVfsSaveOp"
+    ],
+    "packages/core/src/service/vfs/glob-match.ts": [
+      "matchGlob"
+    ],
+    "packages/core/src/service/vfs/impl/import-failure.ts": [
+      "importFailure"
+    ],
+    "packages/core/src/service/vfs/logic/ensure-import-dir-rules.ts": [
+      "backfillMissingDirRules",
+      "buildDefaultDirRule",
+      "ensureImportDirRules"
+    ],
+    "packages/core/src/service/workplace/assemble-workplace-display.ts": [
+      "assembleWorkplaceDisplay"
+    ],
+    "packages/core/src/service/workplace/create-workplace-service.ts": [
+      "createWorkplaceService"
+    ],
+    "packages/core/src/service/workplace/impl/workplace-view-cache.ts": [
+      "clearAllWorkplaceViewCache",
+      "ensureWorkplaceViewEntry",
+      "getCachedWorkplaceView",
+      "publishWorkplaceView"
+    ],
+    "packages/core/src/service/workplace/refresh-rule-snapshot.ts": [
+      "refreshRuleSnapshot"
+    ],
+    "packages/llm-sse-native/src/native.ts": [
+      "createNativeSseTransport",
+      "isNativeSseAvailable",
+      "registerNativeSseTransportWith",
+      "resetNativeSseTransportForTests"
+    ],
+    "packages/llm-sse-native/src/transport.ts": [
+      "createNativeSseTransportFromBridge",
+      "flattenRequestHeaders"
+    ],
+    "packages/sksp-android/src/android-secret-store.ts": [
+      "createAndroidSecretStore"
+    ],
+    "packages/sksp-android/src/native.ts": [
+      "getSkspNativeModule"
+    ],
+    "packages/sksp-android/src/register.ts": [
+      "registerSkspAndroidDriver"
+    ],
+    "packages/sksp-linux/src/register.ts": [
+      "registerSkspLinuxDriver"
+    ],
+    "packages/sksp-linux/src/sqlite-secret-store.ts": [
+      "createLinuxSecretStore"
+    ],
+    "packages/sksp-mac/src/register.ts": [
+      "registerSkspMacDriver"
+    ],
+    "packages/sksp-mac/src/sqlite-secret-store.ts": [
+      "createMacSecretStore"
+    ],
+    "packages/sksp-windows/src/dpapi.ts": [
+      "protectUtf8",
+      "setDpapiTestPassthrough",
+      "unprotectUtf8"
+    ],
+    "packages/sksp-windows/src/register.ts": [
+      "registerSkspWindowsDriver"
+    ],
+    "packages/sksp-windows/src/sqlite-secret-store.ts": [
+      "createWindowsSecretStore"
+    ],
+    "packages/tdbc-conformance/src/nested-batch.ts": [
+      "runNestedBatchParityTests"
+    ],
+    "packages/tdbc-conformance/src/suite.ts": [
+      "runConformanceTests"
+    ],
+    "packages/tdbc-driver-better-sqlite3/src/index.ts": [
+      "registerBetterSqlite3Driver"
+    ],
+    "packages/tdbc-driver-better-sqlite3/src/row-mapper.ts": [
+      "mapRow"
+    ],
+    "packages/tdbc-driver-op-sqlite/src/bindings.ts": [
+      "normalizeOpSqliteBindings"
+    ],
+    "packages/tdbc-driver-op-sqlite/src/index.ts": [
+      "registerOpSqliteDriver"
+    ],
+    "packages/tdbc-driver-op-sqlite/src/native.ts": [
+      "registerOpSqliteDriver"
+    ],
+    "packages/tdbc-driver-op-sqlite/src/register.ts": [
+      "registerOpSqliteDriverWith"
+    ],
+    "packages/tdbc-driver-op-sqlite/src/row-mapper.ts": [
+      "rowsFromResult"
+    ],
+    "packages/tokenizer-driver-node/src/count-prompt-llm-input.ts": [
+      "countPromptLlmInput"
+    ],
+    "packages/tokenizer-driver-node/src/impl/encoding-cache.ts": [
+      "__setNodeEncodingFactoryForTests",
+      "clearNodeEncodingCacheForTests",
+      "countTextWithDefaultEncoding",
+      "getDefaultNodeEncoding",
+      "getNodeEncodingByName",
+      "getNodeEncodingForModel"
+    ],
+    "packages/tokenizer-driver-node/src/impl/sentencepiece-token-counter.ts": [
+      "countSentencePieceFamilyPrompt"
+    ],
+    "packages/tokenizer-driver-node/src/impl/web-tokenizer-counter.ts": [
+      "countWebFamilyPrompt"
+    ],
+    "packages/tokenizer-driver-node/src/logic/openai-message-token-count.ts": [
+      "countOpenAiMessages"
+    ],
+    "packages/tokenizer-driver-node/src/logic/tokenizer-asset-paths.ts": [
+      "tokenizerAssetPaths"
+    ],
+    "packages/tokenizer-driver-node/src/node-tokenizer-loader.ts": [
+      "createNodeTokenizerLoader",
+      "defaultTokenizerAssetsRoot",
+      "getNodeTokenizerLoader",
+      "setNodeTokenizerLoader"
+    ],
+    "packages/tokenizer-driver-node/src/register-for-tests.ts": [
+      "registerTokenizerNodeDriverForTests"
+    ],
+    "packages/tokenizer-driver-node/src/register.ts": [
+      "registerTokenizerNodeDriver"
+    ],
+    "packages/tokenizer-driver-rn/src/android-native-bridge.ts": [
+      "cancelCountAvailable",
+      "cancelSessionNativeCounts",
+      "countPromptCancelableAvailable",
+      "countPromptViaNative",
+      "isNativeTokenizerAvailable"
+    ],
+    "packages/tokenizer-driver-rn/src/count-prompt-llm-input.ts": [
+      "countPromptLlmInputRn"
+    ],
+    "packages/tokenizer-driver-rn/src/impl/encoding-cache.ts": [
+      "__resetRnEncodingCacheForTests",
+      "__setRnEncodingFactoryForTests",
+      "countTextWithDefaultEncoding",
+      "getDefaultRnEncoding",
+      "getRnEncoding"
+    ],
+    "packages/tokenizer-driver-rn/src/register.ts": [
+      "registerTokenizerRnDriver"
+    ]
+  }
+}
