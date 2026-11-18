@@ -61,6 +61,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 
 - **假引用**：符号的"引用"只来自测试、public allowlist、类型注释或自身模块；生产代码零 import。
 - **假公开**：符号在 `public/*.ts` / allowlist 里有名字，但 `packages/*/src`、`apps/*/src` 里没有生产 import。**allowlist 是承诺，不是引用。**
+- **假 export（引用别名）**：`export const A = B.c;` —— 整个"导出"就是把 `B.c` 换了个名字，没有任何新实现、没有参数化、没有语义增量。它不是包装层，是名字污染。
 
 判断顺序：
 
@@ -84,6 +85,46 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 先例：`parseCharacterCardToMdTree` 曾在 public allowlist、service 一处调用、测试多处直引；public 是假的，已撤导出并把解析并回 domain 单文件。
 
 `--strict` 时 `DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` 退出码 1。仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。
+
+#### 引用别名：`export const A = B.c`
+
+`find-fake-exports.mjs` **抓不到这一种**——它按标识符计数，`formatCharCount` 有 5 个调用方，所以判 `KEEP`。`check-inline` 的 `PASS_THROUGH` 只匹配 `function f() { return g(x) }`，也匹配不了 `const f = g.member`。
+
+判据：**A 与 `B.c` 是不是同一件事换名**。
+
+```ts
+// ❌ 假 export —— 零语义增量，调用方多记一个名字、仓里多一个文件
+export const formatCharCount = Number.charCount;
+// 注释自白：「本别名保留给 @novel-master/core/format 子入口与既有调用点」
+//             ↑「保留给既有调用点」= 过渡壳 = 永久壳
+
+// ✅ 该留 —— 名字表达用途/配置项语义，不是同义改写
+export const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS = ANTHROPIC_SAMPLING_DEFAULTS.max_tokens;
+
+// ✅ 该留 —— 隔离依赖方向（tokenizer driver 包不该直接 import service/prompt）
+export const serializePromptLlmInput = PromptBuilder.cliText;
+//    4 个包 + 2 端消费，名字是「token 计数 parity 契约」而非「cliText 的别名」
+```
+
+**「有消费者」不构成保留理由，要问「消费者改得动吗」。** `formatCharCount` 的 5 个调用方全是一行改（`formatCharCount(x)` → `Number.charCount(x)`），却被「有消费者」挡住了好几轮。
+
+扫描命令（`check-style` 不含此项，要单独跑）：
+
+```bash
+grep -rnE "^export const [a-zA-Z_][a-zA-Z0-9_]* *(:[^=]+)?= *[A-Z][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]* *;" --include=*.ts packages/core/src
+```
+
+删的时候连文件一起删（若整文件只有这个别名），调用方改成直接引 `B` 并调 `B.c`。
+
+#### public barrel 按归属装，不按便利装
+
+`public/<域>.ts` 的每个符号，实现文件应该属于同一域。跨域塞进来的标志是注释里出现「**避免新增子路径依赖**」「**就近转出**」——那是桶子按便利塞的自白。
+
+先例：`public/format.ts` 装着 `createIncrementalTokenCounter`（实现于 `infra/tokenizer/logic/`）和 `StreamTokenSource`（实现于 `domain/session-run-state/model/`）。
+
+**为什么这是病而不只是不好看**：读 `import { X } from "@novel-master/core/format"` 的人会以为 X 是 format 域的东西，找实现时在 `domain/format/` 里找不到；而这个 barrel 会随时间越装越杂，最后没有任何归属含义。
+
+处理：符号移到正确的 barrel（已有则加，没有则新建 `public/<域>.ts` 并在 `package.json` 的 `exports` 登记子路径），然后改所有消费方的 import 路径。**这类改动不碰任何逻辑，但会波及大量文件**——先穷举消费方清单再动手。
 
 ## 5. 通用工具与命名
 
@@ -245,6 +286,29 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 脚本是按标识符/import 计数的启发式：barrel 转发、同名遮蔽、动态引用需人工复核。**不要用脚本自动改文件**——报告只给位置，改动按本 skill 的语义判断。
 
 **已知假阳性清单**：`scripts/known-false-positives.json` 登记「报出但不该改」的条目（跨类同名 `DEAD_METHOD`、接口实现、序列化钩子、导出 API 等），命中清单的从 `FIND` 降为 `INFO`。新增条目必须附理由与判定依据；`suppressPrefixes` 里的路径整体跳过（`apps/cli/` 已停止维护）。
+
+### 8.1 exports 段的数字不是假阳性
+
+`signatures` / `inline` / `methods` 三段 PASS **不覆盖 exports 段**——它们只管「单点私有函数 / 一行 wrapper / 重复方法」，而 `FAKE_PUBLIC` / `DEAD` / `TEST_ONLY` 管的是「导出了但没人用」。
+
+所以不能写成「三段 PASS 所以 exports 的 FIND 是假阳性」。那是护身符。实测一轮清理前后：
+
+```
+基线    FAKE_PUBLIC=40  DEAD=176  TEST_ONLY=78
+清理后  FAKE_PUBLIC=1   DEAD=63   TEST_ONLY=90
+```
+
+`FAKE_PUBLIC 40` 全是 `0c/0r 0c/0r yes` —— 在 `public/*.ts` 的 re-export 名单里，但 public 面零消费。这不是假阳性，是**40 个零消费的公开承诺**。
+
+| verdict | 常被误当 | 实际要做 |
+|---|---|---|
+| `FAKE_PUBLIC` | 「public 面本来就宽，正常」 | 逐个定性：撤 public / 删实现 / 留（留要写理由） |
+| `DEAD` | 「脚本只数调用不数类型引用，都是假阳性」 | 先按形态分桶（`*Options`/`*Input` 类型位置、`*_MS`/`*_LIMIT` 测试契约、`*Schema` zod 推导、其余真死码），再逐桶定处置。**「其余」桶是真待办** |
+| `TEST_ONLY` | 「测试在用的都是契约常量」 | 分四桶：A 契约常量与类型（留）、B 测试接缝（收口 `@internal`）、C 测试便利（删或搬 `test/helpers`）、D 未接线生产组件（接线或删） |
+
+**桶间会迁移**：撤掉一批冗余 export 后，原本算 DEAD 的符号如果测试还在用，会滑进 TEST_ONLY。单看某个数字涨了没意义，要看**各桶内容**。
+
+读表还要注意列含义：`find-fake-exports.mjs` 输出 `verdict prod test public kind name location`，**第二对数字是 test 列**，不是「core 内部调用」。`FAKE_PUBLIC` 判据就是 prod===0，所以它恒为 `0c/0r`；看到 `5c/38c/81c` 时那是**测试**计数。
 
 ## 9. 对象化（最后一步）
 
