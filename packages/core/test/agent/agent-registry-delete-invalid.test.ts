@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 // isAppError 与 service 同源（@novel-master/core/errors）：src/dist 双模块
 // 实例下跨 instanceof 会漏判（见 tool-runner normalizeToolFailure 同款注释）。
-import { createAgentRegistryService } from "@novel-master/core/agent";
+import { AgentServiceFactory } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/errors";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
@@ -29,7 +29,7 @@ describe("AgentRegistryService.delete 不解码", () => {
     const ctx = getNovelMasterTestContext();
     const agentId = `broken-${testIsolationSuffix()}`;
     const repo = new SqliteAgentDefinitionRepository(ctx.conn);
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const now = Date.now();
 
     await ctx.conn.execute(
@@ -62,7 +62,7 @@ describe("AgentRegistryService.delete 不解码", () => {
 
   it("不存在的 agent 删除仍抛 AGENT_NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const missingId = `missing-${testIsolationSuffix()}`;
 
     await rejectsErr(

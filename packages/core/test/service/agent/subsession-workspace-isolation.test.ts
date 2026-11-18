@@ -33,11 +33,10 @@ import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createAgentRegistryService, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
-import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
@@ -189,7 +188,7 @@ function makeRuntime(
     readonly workplaceOverride?: AgentTurnRuntimePort["workplace"];
   }
 ): AgentTurnRuntimePort {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
@@ -253,7 +252,7 @@ function makeRuntime(
 }
 
 async function ensureDefaultAgentModel(ctx: ReturnType<typeof getNovelMasterTestContext>): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("test-default-agent", {
     name: "测试默认 Agent",
     prompts: { persist: [], dynamic: [] },
@@ -262,7 +261,7 @@ async function ensureDefaultAgentModel(ctx: ReturnType<typeof getNovelMasterTest
 }
 
 async function seedChildAgent(ctx: ReturnType<typeof getNovelMasterTestContext>, def: AgentDefinition = childAgentDef): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert(def.name, def);
 }
 
@@ -410,7 +409,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     const parent = unwrap(await ctx.sessions.create(project.id, "父-T3"));
 
     const vfsCalls: { projectId: string; sessionId: string }[] = [];
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
 
     const modelRequests = scriptedModel({
@@ -454,7 +453,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     const parentVfs = ctx.sessionVfs(project.id, parent.id);
     const parentPathsBefore = unwrap(await parentVfs.list("/", { recursive: true })).map((e) => e.path).sort();
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
 
     const modelRequests = scriptedModel({
@@ -496,7 +495,7 @@ describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写"
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const parent = unwrap(await ctx.sessions.create(project.id, "父-T5"));
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
 
     const modelRequests = scriptedModel({
@@ -552,7 +551,7 @@ describe("T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const parent = unwrap(await ctx.sessions.create(project.id, "父-T6"));
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
     const stepCommittedPayloads: {
       sessionId: string;
@@ -614,7 +613,7 @@ describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => 
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const parent = unwrap(await ctx.sessions.create(project.id, "父-T7"));
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
 
     const modelRequests = scriptedModel({
@@ -718,7 +717,7 @@ describe("T-SS-8：嵌套 / 多子 session 共享父工作区", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const parent = unwrap(await ctx.sessions.create(project.id, "父-T8-multi"));
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const childIds: string[] = [];
 
     const modelRequests = scriptedModel({

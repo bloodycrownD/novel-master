@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode as decodeRaw } from "@novel-master/core";
 import type { ZodType } from "zod";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-  resolveAgentForProject,
-} from "@novel-master/core/agent";
+import { AgentServiceFactory, agentDefinitionSchema, resolveAgentForProject } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/errors";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import {
@@ -38,7 +34,7 @@ function customDefinition(name: string): AgentDefinition {
 describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
   it("项目智能体已下线：即使 DB 存 custom 配置也忽略，走 session 分支", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     const globalDef = decode(
       {
         schemaVersion: 1,
@@ -81,7 +77,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
   it("custom 缺 definition：项目智能体已下线，resolve 不再读 custom 配置，走 session 分支", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -124,7 +120,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
   it("T-R2：项目智能体已下线，DB 残留 custom 配置被忽略，session.agentId 正常生效", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -184,7 +180,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
   it("project follow → session.agentId 取 definition，source: session", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -236,7 +232,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
   it("session.agentId 在 registry 不存在时抛 AGENT_REFERENCED_NOT_FOUND", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -278,7 +274,7 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
   it("T-R3：session.agentId 在 registry 改 definition 后，下次 resolve 拿到新 definition（引用语义）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "session-agent",
       decode(

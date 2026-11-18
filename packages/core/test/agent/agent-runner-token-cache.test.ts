@@ -10,7 +10,7 @@ import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { z } from "zod";
-import { createAgentRunner, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
@@ -178,7 +178,8 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return Result.ok(r);
+
+      return Result.ok(r);
     }),
   };
 }
@@ -223,7 +224,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -344,7 +345,7 @@ describe("AgentRunner session API prompt token cache", () => {
       run: async () => ({}) as never,
     });
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       ...runnerDeps({
         session,
         modelRequests: model,
@@ -394,7 +395,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -450,7 +451,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -493,7 +494,7 @@ describe("AgentRunner session API prompt token cache", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -580,7 +581,7 @@ describe("AgentRunner 每 step usage 回锚", () => {
       run: async () => ({}) as never,
     });
 
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -692,7 +693,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
     ]);
     const firstRegistry = new ToolRegistry();
     registerBuiltinTools(firstRegistry);
-    const firstRunner = createAgentRunner(
+    const firstRunner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: firstSession,
         modelRequests: firstModel,
@@ -742,7 +743,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
 
     const secondRegistry = new ToolRegistry();
     registerBuiltinTools(secondRegistry);
-    const secondRunner = createAgentRunner(
+    const secondRunner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: secondSession,
         modelRequests: secondModel,
@@ -831,7 +832,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         inputSchema: z.object({}),
         run: async () => ({}) as never,
       });
-      const runner = createAgentRunner(
+      const runner = AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
@@ -946,7 +947,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const evaluatedFingerprints: Array<string | undefined> = [];
 
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,

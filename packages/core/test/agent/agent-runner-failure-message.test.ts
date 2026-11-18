@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { Result } from "../../src/errors/either.js";
 import { describe, it } from "node:test";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
-import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
@@ -136,7 +136,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     const bus = new SimpleEventBus();
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
     );
 
@@ -197,7 +197,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -226,7 +226,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -262,7 +262,7 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     const bus = new SimpleEventBus();
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
     );
 
@@ -322,12 +322,13 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
         if (r == null) {
           throw new Error("第二轮网络失败");
         }
-        return Result.ok(r);
+
+        return Result.ok(r);
       },
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -362,7 +363,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     const bus = new SimpleEventBus();
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
     );
 
@@ -409,7 +410,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -449,7 +450,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -478,7 +479,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -509,7 +510,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 
@@ -543,7 +544,7 @@ describe("AgentRunner 成功但空回复落 assistant 占位消息（core/B-2）
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx() }),
     );
 

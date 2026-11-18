@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
-import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
@@ -116,7 +116,8 @@ function createMockModel(responses: LlmChatResult[]): ModelRequestService {
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return Result.ok(r);
+
+      return Result.ok(r);
     }),
   };
 }
@@ -161,7 +162,7 @@ describe("agent-runner usage passthrough (T-S2)", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -203,7 +204,7 @@ describe("agent-runner usage passthrough (T-S2)", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -252,7 +253,7 @@ describe("agent-runner usage passthrough (T-S2)", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -344,7 +345,7 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -395,7 +396,7 @@ describe("agent-runner 流中 usage 事件（T-M4）", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -432,7 +433,7 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -473,7 +474,7 @@ describe("agent-runner provider/modelName 落库（T-S3）", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     // runnerDeps 默认即 noopSavedModelRepository（findById → null）。
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,

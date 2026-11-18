@@ -15,13 +15,7 @@ import type { ZodType } from "zod";
 function decode<T>(raw: unknown, schema: ZodType<T>): T {
   return unwrap(decodeRaw(raw, schema));
 }
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-  } from "@novel-master/core/agent";
+import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import {
   createUserVfsTurnServiceBundle,
   readMessageMetadata,
@@ -71,7 +65,7 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 
 function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
-  registry: ReturnType<typeof createAgentRegistryService>,
+  registry: ReturnType<typeof AgentServiceFactory.createRegistry>,
 ): AgentTurnRuntimePort {
   const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
   return {
@@ -133,7 +127,7 @@ async function runUntilRunner(
 describe("cli-run-agent-turn parity", () => {
   it("T-R2：项目智能体已下线，agent 解析走 resolveAgentForProject（session 级）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -183,7 +177,7 @@ describe("cli-run-agent-turn parity", () => {
     userVfsUnifiedToolTurnFlag.refresh(true);
 
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
@@ -229,7 +223,7 @@ describe("cli-run-agent-turn parity", () => {
 
   it("T-R2-cont：visible 末条 user 空续跑不 append 新 user", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));

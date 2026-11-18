@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-} from "@novel-master/core/agent";
+import { AgentServiceFactory, agentDefinitionSchema } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/errors";
 import {
   getNovelMasterTestContext,
@@ -19,7 +16,7 @@ novelMasterTestFixture();
 describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
   it("空 DB 时 list 包含虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
@@ -31,7 +28,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("get(<不存在的 uuid>) 报 AGENT_NOT_FOUND（get 不合并虚拟）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await rejectsErr(
       registry.get("non-existent-uuid-xxx"),
       (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
@@ -40,7 +37,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("delete('general') 走 DB 路径报 AGENT_NOT_FOUND（虚拟不可删）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await rejectsErr(
       registry.delete("general"),
       (e: unknown) => assert.ok(isAppError(e, "AGENT_NOT_FOUND")),
@@ -49,7 +46,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("export 排除虚拟（listAgentIds 不含 general）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const ids = await registry.listAgentIds();
     // general 是虚拟的，没有 id，所以 listAgentIds 不应包含。
     assert.ok(!ids.includes("general"));
@@ -57,7 +54,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("upsert 同名 general 被拒绝（Step 6 禁止内置名重名，抛 INVALID_SCHEMA）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const dbGeneralId = `db-general-${testIsolationSuffix()}`;
     await rejectsErr(
       registry.upsert(
@@ -81,7 +78,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("T-G1: 空 DB 时 list 返回的虚拟 general 满足 mode === subagent（FR-5）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const defs = unwrap(await registry.list());
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
@@ -94,7 +91,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
 
   it("list 同时返回 DB 已有 agent + 虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const writerId = `writer-${testIsolationSuffix()}`;
     await registry.upsert(
       writerId,

@@ -18,18 +18,12 @@ import { unwrap } from "../../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-} from "@novel-master/core/agent";
+import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { LlmChatResult } from "@novel-master/core/llm-protocol";
 import type {
   ModelRequestService,
   ModelRequestOptions,
 } from "@/service/provider/model-request.port.js";
-import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import {
@@ -126,7 +120,7 @@ function makeRuntime(
     readonly preferences?: AgentTurnRuntimePort["preferences"];
   },
 ): AgentTurnRuntimePort {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
@@ -134,7 +128,7 @@ function makeRuntime(
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
-    abortRegistry: createAgentAbortRegistry(),
+    abortRegistry: AgentServiceFactory.createAbortRegistry(),
     ...(args.preferences != null ? { preferences: args.preferences } : {}),
     projects: ctx.projects,
     messages: ctx.messages,
@@ -221,7 +215,7 @@ function realEventBus(): AgentTurnRuntimePort["eventBus"] {
 async function ensureDefaultAgentModel(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("test-default-agent", {
     name: "测试默认 Agent",
     prompts: { persist: [], dynamic: [] },
@@ -233,7 +227,7 @@ async function ensureDefaultAgentModel(
 async function seedChildAgent(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
 ): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("child-worker", childAgentDef);
 }
 

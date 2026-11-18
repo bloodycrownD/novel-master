@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { Result } from "../../src/errors/either.js";
-import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
@@ -114,7 +114,7 @@ describe("AgentRunner message checkpoint", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: mutatingToolRoundModel(),
@@ -160,7 +160,7 @@ describe("AgentRunner message checkpoint", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: mutatingToolRoundModel(),

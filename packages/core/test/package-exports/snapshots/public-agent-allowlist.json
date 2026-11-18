@@ -1,6 +1,7 @@
 [
   "AGENT_RUN_RESOLVE_KEYS",
   "AgentActivityTracker",
+  "AgentServiceFactory",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
   "DEFAULT_SUBAGENT_DEFINITION",
@@ -9,10 +10,6 @@
   "RunLifecycle",
   "agentDefinitionSchema",
   "assembleAgentRunnerDeps",
-  "createAgentAbortRegistry",
-  "createAgentRegistryService",
-  "createAgentRunner",
-  "createAgentStreamRegistry",
   "decodeAgentYamlText",
   "encodeAgentYamlText",
   "mapResolveError",

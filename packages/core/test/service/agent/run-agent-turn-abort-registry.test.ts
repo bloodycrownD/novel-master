@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { textBlocks } from "@novel-master/core/chat";
-import { createAgentRegistryService, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
+import { AgentServiceFactory, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { LlmChatResult, LlmStreamEvent } from "@novel-master/core/llm-protocol";
 import type { ModelRequestService, ModelRequestOptions } from "@/service/provider/model-request.port.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -27,11 +27,9 @@ import {
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import { createAbortScope, scopeFromController } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
-import { createAgentStreamRegistry } from "@/service/agent/create-agent-stream-registry.js";
 import type { AgentStreamRegistry, AgentStreamRegistryHandle } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
@@ -57,7 +55,7 @@ function countingStreamRegistry(): {
   readonly unregisterCalls: () => number;
   readonly has: (sessionId: string) => boolean;
 } {
-  const real = createAgentStreamRegistry();
+  const real = AgentServiceFactory.createStreamRegistry();
   const registered: string[] = [];
   let unregisters = 0;
   return {
@@ -183,7 +181,7 @@ function makeRuntime(
     readonly abortRegistry: AgentAbortRegistry;
   }
 ): AgentTurnRuntimePort {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
@@ -278,7 +276,7 @@ function realEventBus(): AgentTurnRuntimePort["eventBus"] {
  * getCurrentModelId 回退 savedModelId，必须 agent def 或 session config 带 model）。
  */
 async function ensureDefaultAgentModel(ctx: ReturnType<typeof getNovelMasterTestContext>): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("test-default-agent", {
     name: "测试默认 Agent",
     prompts: { persist: [], dynamic: [] },
@@ -288,7 +286,7 @@ async function ensureDefaultAgentModel(ctx: ReturnType<typeof getNovelMasterTest
 
 /** 注册子代理 def 到 registry（mode=subagent，确保可被 task 工具调用）。 */
 async function seedChildAgent(ctx: ReturnType<typeof getNovelMasterTestContext>): Promise<void> {
-  const registry = createAgentRegistryService(ctx.conn, ctx.state);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
   await registry.upsert("child-worker", childAgentDef);
 }
 
@@ -338,7 +336,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const seenChildIds: string[] = [];
     let capturedChildSessionId: string | undefined;
 
@@ -397,7 +395,7 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
 
     // T-S24：捕获主 run 注册的 internalController，abort 后经同一 memoize 实例
     // 断言根 scope 的 reason（不是 null、不是 parent）。
-    const baseAbortRegistry = createAgentAbortRegistry();
+    const baseAbortRegistry = AgentServiceFactory.createAbortRegistry();
     let rootController: AbortController | undefined;
     const abortRegistry: AgentAbortRegistry = {
       ...baseAbortRegistry,
@@ -505,7 +503,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     const modelRequests: ModelRequestService = {
       request: async () => {
@@ -579,14 +577,14 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     // workplace 开启的默认 agent（ensureDefaultAgentModel 的定义不带 workplace
     // 块，assemble 会短路——这里就地 upsert 一份带块的）。
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert("test-default-agent", {
       name: "测试默认 Agent",
       prompts: { persist: [], dynamic: [], workplace: "【工作区】" },
       model: TEST_SAVED_MODEL_ID,
     });
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     const modelRequests: ModelRequestService = {
       request: async () => {
@@ -669,7 +667,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     let backfillCalls = 0;
     const modelRequests: ModelRequestService = {
@@ -731,7 +729,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     const modelRequests: ModelRequestService = {
       request: async () => {
@@ -823,7 +821,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     const modelRequests: ModelRequestService = {
       request: async () => {
@@ -885,7 +883,7 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     let modelCalls = 0;
     const modelRequests: ModelRequestService = {
       request: async () => {
@@ -966,7 +964,7 @@ describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout�
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
 
     // 第一次 run：model 调用窗口内 registry 已注册（门禁视角「进行中」），
     // 随后以流中断超时收敛上抛（模拟传输层 watchdog 兜底后的状态）。
@@ -1030,7 +1028,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const modelRequests: ModelRequestService = {
       request: async () => {
         throw new Error("检查点命中不该发模型请求");
@@ -1093,7 +1091,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const modelRequests: ModelRequestService = {
       request: async () => {
         throw new Error("检查点命中不该发模型请求");
@@ -1152,7 +1150,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const modelRequests: ModelRequestService = {
       request: async () => {
         throw new Error("前奏就炸了，不该走到模型");
@@ -1210,7 +1208,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const modelRequests: ModelRequestService = {
       request: async () => {
         throw new Error("模型侧炸了");
@@ -1253,7 +1251,7 @@ describe("r3-run-1/2 前奏终态 core 事件路线", () => {
     const ctx = getNovelMasterTestContext();
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const modelRequests: ModelRequestService = {
       request: async () => {
         throw new Error("不该走到模型");
@@ -1343,7 +1341,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const seenChildIds: string[] = [];
     let childSessionCreated = false;
 
@@ -1454,7 +1452,7 @@ describe("r3-run-3 子 run 前奏检查点 / abort 注册前移", () => {
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
 
-    const abortRegistry = createAgentAbortRegistry();
+    const abortRegistry = AgentServiceFactory.createAbortRegistry();
     const seenChildIds: string[] = [];
 
     let modelCalls = 0;

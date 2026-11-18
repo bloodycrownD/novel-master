@@ -15,7 +15,7 @@ import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import { createAgentRegistryService } from "@novel-master/core/agent";
+import { AgentServiceFactory } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -34,7 +34,7 @@ function makeRunner(): ToolRunner<BuiltinToolContext> {
 /** 真实链路的工具上下文：registry 接真实 SQLite 连接（非 fake）。 */
 function makeRealCtx(): BuiltinToolContext {
   const ctx = getNovelMasterTestContext();
-  const registry = createAgentRegistryService(ctx.conn);
+  const registry = AgentServiceFactory.createRegistry(ctx.conn);
   const probe = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(probe);
   return {
@@ -52,7 +52,7 @@ function makeRealCtx(): BuiltinToolContext {
 describe("agent 工具 create 端到端（真实 registry）", () => {
   it("缺 definition.name：报错文案含「definition.name 必填」且注册表无落盘", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     const idsBefore = new Set(await registry.listAgentIds());
 
     await rejectsErr(
@@ -83,7 +83,7 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
 describe("agent 工具 update patch 端到端（真实 registry）", () => {
   it("patch 只改 description：其余字段与 prompts 布局保留，get 可读回", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     // 种一个带完整字段的现状
     const agentId = "agent-patch-e2e-1";
     await registry.upsert(agentId, {
@@ -125,7 +125,7 @@ describe("agent 工具 update patch 端到端（真实 registry）", () => {
 
   it("patch 改名撞名：服务层 DUPLICATE_NAME 转译为 INVALID_ARGUMENT", async () => {
     const testCtx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(testCtx.conn);
+    const registry = AgentServiceFactory.createRegistry(testCtx.conn);
     const a = "agent-patch-e2e-a";
     const b = "agent-patch-e2e-b";
     await registry.upsert(a, { name: "dup-target" } as never);

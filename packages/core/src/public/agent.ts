@@ -25,14 +25,11 @@ export type {
   AgentRunner,
   AgentRunOptions,
 } from "../service/agent/agent.port.js";
-export { createAgentRunner } from "../service/agent/create-agent-runner.js";
-export type { CreateAgentRunnerDeps } from "../service/agent/create-agent-runner.js";
+export { AgentServiceFactory } from "../service/agent/agent-service-factory.js";
+export type { CreateAgentRunnerDeps } from "../service/agent/agent-service-factory.js";
 export type { AgentRegistryService } from "../service/agent/agent-registry.port.js";
-export { createAgentRegistryService } from "../service/agent/create-agent-registry-service.js";
 export type { AgentAbortRegistry } from "../service/agent/agent-abort-registry.port.js";
-export { createAgentAbortRegistry } from "../service/agent/create-agent-abort-registry.js";
 export type { AgentStreamRegistry } from "../service/agent/agent-stream-registry.port.js";
-export { createAgentStreamRegistry } from "../service/agent/create-agent-stream-registry.js";
 export {
   resolveCurrentAgentId,
   resolveCurrentAgentDefinition,

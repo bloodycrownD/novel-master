@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it, mock } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps, type BuiltinToolContext } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type CreateAgentRunnerDeps, type BuiltinToolContext } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
@@ -127,7 +127,7 @@ describe("AgentRunner macro turn snapshot", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       savedModels: noopSavedModelRepository(),
       sessionKkv: createMemorySessionKkv(),
       eventBus: new SimpleEventBus(),
@@ -212,7 +212,7 @@ describe("AgentRunner macro turn snapshot", () => {
       }),
     };
 
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       savedModels: noopSavedModelRepository(),
       sessionKkv: createMemorySessionKkv(),
       eventBus: new SimpleEventBus(),

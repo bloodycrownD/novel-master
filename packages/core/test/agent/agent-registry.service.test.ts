@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
-import { createAgentRegistryService, agentDefinitionSchema } from "@novel-master/core/agent";
+import { AgentServiceFactory, agentDefinitionSchema } from "@novel-master/core/agent";
 import { AppError, isAppError } from "@novel-master/core/errors";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -13,7 +13,7 @@ novelMasterTestFixture();
 describe("AgentRegistryService", () => {
   it("upsert preserves display name separate from agentId", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const def = unwrap(decode(
       {
         schemaVersion: 1,
@@ -29,7 +29,7 @@ describe("AgentRegistryService", () => {
 
   it("update 按 patch 合并：未提供的键保留、null 清除、嵌套对象深合并", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-patch-${testIsolationSuffix()}`;
     await registry.upsert(id, {
       name: "patch",
@@ -54,7 +54,7 @@ describe("AgentRegistryService", () => {
 
   it("update 对不存在的 agent 报 AGENT_NOT_FOUND 且不落盘", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-missing-${testIsolationSuffix()}`;
     await rejectsErr(
       registry.update(id, { description: "x" }),
@@ -64,7 +64,7 @@ describe("AgentRegistryService", () => {
 
   it("写入门禁：upsert 拒绝缺 name 的 definition 且不落盘（毒行防护）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const bad = {
       description: "文笔顶尖的执笔者",
       mode: "subagent",
@@ -84,7 +84,7 @@ describe("AgentRegistryService", () => {
 
   it("prompts 缺省补空布局：仅 name 的最小 create 落盘成功且可读回", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-min-${testIsolationSuffix()}`;
     await registry.upsert(id, { name: "minimal" } as unknown as AgentDefinition);
     const loaded = unwrap(await registry.get(id));
@@ -94,7 +94,7 @@ describe("AgentRegistryService", () => {
 
   it("prompts 在但 persist / dynamic 数组缺省：各自补空数组，其余字段保留", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-partial-${testIsolationSuffix()}`;
     await registry.upsert(id, {
       name: "partial",
@@ -110,7 +110,7 @@ describe("AgentRegistryService", () => {
   // 报 INVALID_SCHEMA，禁止静默洗白成畸形对象后落盘空布局。
   it("prompts 为字符串时 upsert 拒绝且不落盘（不兜底）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-bad-str-${testIsolationSuffix()}`;
     await rejectsErr(
       () =>
@@ -130,7 +130,7 @@ describe("AgentRegistryService", () => {
 
   it("prompts 为数组时 upsert 拒绝且不落盘（不兜底）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-bad-arr-${testIsolationSuffix()}`;
     await rejectsErr(
       () =>
@@ -150,7 +150,7 @@ describe("AgentRegistryService", () => {
 
   it("prompts 为数字时 upsert 拒绝且不落盘（不兜底）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const id = `agent-bad-num-${testIsolationSuffix()}`;
     await rejectsErr(
       () =>
@@ -170,7 +170,7 @@ describe("AgentRegistryService", () => {
 
   it("AG4: delete removes existing agent", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     await registry.upsert(
       "summarizer",
       unwrap(decode(
@@ -191,7 +191,7 @@ describe("AgentRegistryService", () => {
 
   it("upsert 拒绝与其他 Agent 重名的显示名", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const displayName = `写作助手-${testIsolationSuffix()}`;
     const def = unwrap(decode(
       {
@@ -212,7 +212,7 @@ describe("AgentRegistryService", () => {
 
   it("upsert 允许同一 Agent 保存原显示名", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const def = unwrap(decode(
       {
         schemaVersion: 1,
@@ -230,7 +230,7 @@ describe("AgentRegistryService", () => {
 
   it("upsert 保存前 trim 显示名并参与重名校验", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const displayName = `写作助手-${testIsolationSuffix()}`;
     await registry.upsert(
       "writer-a",
@@ -264,7 +264,7 @@ describe("AgentRegistryService", () => {
 
   it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     const def = unwrap(decode(
       {
         schemaVersion: 1,
@@ -282,7 +282,7 @@ describe("AgentRegistryService", () => {
 
   it("AG5b: delete 非当前 Agent 时保留指针", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     const def = unwrap(decode(
       {
         schemaVersion: 1,
@@ -300,7 +300,7 @@ describe("AgentRegistryService", () => {
 
   it("AG5c: 未注入 state 时 delete 不清指针", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn);
     const def = unwrap(decode(
       {
         schemaVersion: 1,

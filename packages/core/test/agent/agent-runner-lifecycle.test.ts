@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { unwrap } from "../helpers/result-unwrap.js";
 import { describe, it } from "node:test";
 import { Result } from "../../src/errors/either.js";
-import { createAgentRunner, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, type AgentDefinition, type BuiltinToolContext, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
@@ -120,7 +120,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -186,7 +186,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     const makeRunner = (session: InMemoryAgentSession) =>
-      createAgentRunner(
+      AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
@@ -259,7 +259,7 @@ describe("AgentRunner dynamic 区 once 语义", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,

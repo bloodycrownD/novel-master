@@ -4,13 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode as decodeRaw } from "@novel-master/core";
 import type { ZodType } from "zod";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-  runAgentTurn,
-  type AgentDefinition,
-  type AgentTurnRuntimePort,
-} from "@novel-master/core/agent";
+import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {
   getNovelMasterTestContext,
@@ -52,7 +46,7 @@ function mockUserVfsTurn(): UserVfsTurnService {
 
 function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
-  registry: ReturnType<typeof createAgentRegistryService>,
+  registry: ReturnType<typeof AgentServiceFactory.createRegistry>,
   overrides?: { readonly sessions?: AgentTurnRuntimePort["sessions"] },
 ): AgentTurnRuntimePort {
   return {
@@ -105,7 +99,7 @@ function makeRuntime(
 describe("runAgentTurn project agent config", () => {
   it("项目智能体已下线：custom 配置被忽略，走 session 级 agent", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     await registry.upsert(
       "global-agent",
       decode(
@@ -166,7 +160,7 @@ describe("runAgentTurn project agent config", () => {
 
   it("T-R4：scope.sessionId 透传到 resolver；session-bind 覆盖 workspace 全局", async () => {
     const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const registry = AgentServiceFactory.createRegistry(ctx.conn, ctx.state);
     // workspace 全局 agent
     await registry.upsert(
       "global-agent",

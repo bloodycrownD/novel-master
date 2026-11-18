@@ -12,7 +12,7 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { ChatAgentSession, createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
@@ -176,7 +176,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -217,7 +217,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: wrappedSession,
         modelRequests: model,
@@ -247,7 +247,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     const model = singleTextModel("x");
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -294,7 +294,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -341,7 +341,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -379,7 +379,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -434,7 +434,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -499,7 +499,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     // capture 在 abort 后抛 AbortError → 命中 outer catch
     const err = new Error("aborted");
     err.name = "AbortError";
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -549,7 +549,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     };
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,

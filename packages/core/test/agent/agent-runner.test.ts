@@ -3,7 +3,7 @@ import { Result } from "../../src/errors/either.js";
 import { unwrap, rejectsErr } from "../helpers/result-unwrap.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { ChatAgentSession, createAgentRunner, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
+import { AgentServiceFactory, ChatAgentSession, type AgentDefinition, type CreateAgentRunnerDeps } from "@novel-master/core/agent";
 import { AppError } from "@novel-master/core/errors";
 import { InMemoryAgentSession } from "../../src/domain/agent/session/impl/in-memory-agent-session.js";
 import { textBlocks } from "@novel-master/core/chat";
@@ -110,7 +110,8 @@ function createMockModel(
       if (r == null) {
         throw new Error("Unexpected extra model request");
       }
-      return Result.ok(r);
+
+      return Result.ok(r);
     }),
   };
 }
@@ -185,7 +186,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -225,7 +226,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -267,7 +268,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -322,7 +323,7 @@ describe("AgentRunner", () => {
     bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
       phases.push(p.phase);
     });
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       ...runnerDeps({
         session,
         modelRequests: model,
@@ -387,7 +388,7 @@ describe("AgentRunner", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -439,7 +440,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -492,7 +493,7 @@ describe("AgentRunner", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -558,7 +559,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -611,7 +612,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -678,7 +679,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -710,7 +711,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -766,7 +767,7 @@ describe("AgentRunner", () => {
     ]);
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -839,7 +840,7 @@ describe("AgentRunner", () => {
     ]);
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner({
+    const runner = AgentServiceFactory.createRunner({
       session,
       modelRequests: model,
       registry,
@@ -886,7 +887,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -948,7 +949,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1023,7 +1024,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1088,7 +1089,7 @@ describe("AgentRunner", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1187,7 +1188,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1254,7 +1255,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1325,7 +1326,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1393,7 +1394,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session: chatSession,
         modelRequests: model,
@@ -1447,7 +1448,7 @@ describe("AgentRunner", () => {
     ]);
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1500,7 +1501,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1564,7 +1565,7 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1607,7 +1608,7 @@ describe("AgentRunner", () => {
     ]);
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1662,7 +1663,7 @@ describe("AgentRunner", () => {
     ]);
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
+    const runner = AgentServiceFactory.createRunner(
       runnerDeps({
         session,
         modelRequests: model,
@@ -1714,7 +1715,7 @@ describe("AgentRunner", () => {
 
       const registry = new ToolRegistry();
       registerBuiltinTools(registry);
-      const runner = createAgentRunner(
+      const runner = AgentServiceFactory.createRunner(
         runnerDeps({
           session,
           modelRequests: model,
