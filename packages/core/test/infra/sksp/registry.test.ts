@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { AssertionError } from "../../../src/common/assert.js";
 import { SkspRegistry } from "../../../src/infra/sksp/logic/registry.js";
-import { SkspError } from "../../../src/infra/sksp/sksp-error.js";
 
 describe("SKSP registry", () => {
   it("resolves single registered driver", () => {
@@ -25,11 +25,11 @@ describe("SKSP registry", () => {
     SkspRegistry.clear();
   });
 
-  it("throws NOT_REGISTERED when empty", () => {
+  it("throws AssertionError when empty", () => {
     SkspRegistry.clear();
     assert.throws(
       () => SkspRegistry.resolve(),
-      (e) => e instanceof SkspError && e.code === "NOT_REGISTERED",
+      (e) => e instanceof AssertionError && e.message.includes("SKSP: no driver registered"),
     );
   });
 });

@@ -12,7 +12,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { assert } from "@/common/assert.js";
 import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -242,8 +242,8 @@ export class SkillsService implements SkillService {
     const [global, project, disabledNames] = await Promise.all([this.listSkills("global"), this.listSkills({ projectId }), this.disabledRules.listDisabledNames(`project:${projectId}`)]);
     if (global.kind === "failed") return Result.err(global.error);
     if (project.kind === "failed") return Result.err(project.error);
-    // 本方法不注入 hooks，listSkills 不会产生中断；命中说明调用链被改动，按取消边界语义上抛。
-    if (global.kind !== "completed" || project.kind !== "completed") throw createAbortError();
+    // 本方法不注入 hooks，listSkills 不会产生中断；命中说明调用链被改动（不变量破坏）。
+    assert(global.kind === "completed" && project.kind === "completed", "effectiveSkills 不注入 hooks，listSkills 不应产生中断");
     return Result.ok(computeEffectiveSkills({ global: global.value, project: project.value, disabledNames }));
   }
 

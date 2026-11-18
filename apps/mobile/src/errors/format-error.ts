@@ -1,12 +1,12 @@
 /**
  * User-visible error messages for Core domain errors (VFS, chat, provider, tools, agent).
  *
- * 分派链 9 条顺序硬写（VFS_* → PROVIDER_* → CLOUD_SYNC_* → 通配），与 desktop
+ * 分派链 8 条顺序硬写（VFS_* → PROVIDER_* → CLOUD_SYNC_* → 通配），与 desktop
  * `format-ipc-error` 逐条对齐；desktop 第 1 条 ZodError 是 desktop 独有入口，
  * mobile 无该分支（T-A4 镜像门对此条豁免）。本函数只产文案字符串，不产 code。
  */
 import {TdbcError} from '@novel-master/core';
-import {AgentTurnError, isAppError} from '@novel-master/core/agent';
+import {isAppError} from '@novel-master/core/agent';
 import {Errors} from '@novel-master/core/common';
 import {domainOf} from '@novel-master/core/errors';
 import {vfsUserMessage} from '@novel-master/core/vfs';
@@ -57,14 +57,10 @@ export function formatError(error: unknown): string {
     const inner = causeValue instanceof Error && causeValue.message ? causeValue.message : causeValue != null ? String(causeValue) : undefined;
     return inner ? `${error.message}\n${inner}` : error.message;
   }
-  // 7. AgentTurnError（infra 保留类）→ AGENT_RUN_FAILED 语义；message 直读与 desktop 同口径。
-  if (error instanceof AgentTurnError) {
-    return error.message;
-  }
-  // 8. 未知 Error。
+  // 7. 未知 Error。
   if (error instanceof Error) {
     return error.message;
   }
-  // 9. 非 Error 抛出值。
+  // 8. 非 Error 抛出值。
   return String(error);
 }

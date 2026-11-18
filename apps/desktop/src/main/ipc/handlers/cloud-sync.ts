@@ -2,6 +2,7 @@
  * 云同步 IPC 处理器：配置、测试连接、Pull/Push。
  */
 import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
+import { DatabaseReplacedError } from "@novel-master/core";
 import { AppError, type Outcome } from "@novel-master/core/errors";
 import type {
   CloudSyncConfigDto,
@@ -15,7 +16,6 @@ import type {
 import { rebootstrapDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getDesktopCloudSyncService } from "../../services/cloud-sync.service.js";
-import { DatabaseReplacedError } from "../../services/db-backup.service.js";
 import { maintenanceBusy } from "../../services/db-maintenance-busy.js";
 import { formatIpcError } from "../ipc-error.js";
 import { ipcErr, toIpcResult } from "../ipc-result.js";

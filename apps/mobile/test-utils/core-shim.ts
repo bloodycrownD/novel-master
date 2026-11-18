@@ -18,6 +18,10 @@ export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/cre
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
 // db-backup 导入前的 SQLite 头校验（十七期下沉 core，desktop/mobile 同源）。
 export {assertSqliteBackupHeader} from '../../../packages/core/dist/infra/db-backup/sqlite-backup-header.js';
+// 跨端控制流哨兵（十九期上收 core）：desktop / mobile / core 导入同一份类，
+// `instanceof` 才跨包成立。直连窄文件，不拉主 barrel（避开 yaml ESM 入口）。
+export {DatabaseReplacedError} from '../../../packages/core/dist/infra/cloud-sync/model/database-replaced-error.js';
+export {ChatPromptBuildBailedError} from '../../../packages/core/dist/service/chat/model/chat-prompt-build-bailed-error.js';
 export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 // Result 同时是值（ok/err 静态入口）与类型（Ok|Err 联合）：云同步测试按
 // coordinator 的 Result 通道造 mock 返回值（错误通道迁移四期适配）。
@@ -39,7 +43,7 @@ export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/
 export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';
 export {AGENT_RUN_RESOLVE_KEYS, resolveCurrentAgentId, resolveCurrentAgentDefinition, resolveApplicationModelIdForRun} from '../../../packages/core/dist/service/agent/logic/agent-run-shared.js';
-export {runAgentTurn, AgentTurnError} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';
+export {runAgentTurn} from '../../../packages/core/dist/service/agent/logic/run-agent-turn.js';
 export type {AgentDefinition} from '../../../packages/core/dist/domain/agent/model/agent-definition.js';
 export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/model/agent-run-result.js';
 // 搜索 curl 化（web-search-curl Step 7）：mobile 生产/测试实际引用的新导出

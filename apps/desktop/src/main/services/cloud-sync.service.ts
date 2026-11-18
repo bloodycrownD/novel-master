@@ -8,7 +8,7 @@ import { createReadStream } from "node:fs";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
+import { CloudSyncCoordinator, DatabaseReplacedError, ensureTrailingSlash, parseCloudSyncStatus, statusKey, type CloudSyncConfigInput, type ObjectStoragePort } from "@novel-master/core";
 import { AppError, isAppError } from "@novel-master/core/agent";
 import { domainOf, Result, type Interrupt } from "@novel-master/core/errors";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
@@ -270,10 +270,6 @@ class DesktopCloudSyncService {
       // 一次「以为自己记过了」的错觉。
       // 换代路径的记账由 handler 在 `rebootstrapDesktopRuntime()` 之后走
       // `recordPullSuccess()` 现场造 store 来做（见该方法 JSDoc），不依赖本支。
-      // 刻意用动态 import（与 dbSync 三个端口处理 db-backup.service.js 同款）：
-      // db-backup.service.ts 静态 import 了 desktop-runtime-singleton.js 与 electron，
-      // 本服务已经动态 import 前者，静态边会把这条链的初始化顺序搅乱。
-      const { DatabaseReplacedError } = await import("./db-backup.service.js");
       if (!(error instanceof DatabaseReplacedError)) {
         await this.configStore.recordPull(false, detail).catch(() => undefined);
       }

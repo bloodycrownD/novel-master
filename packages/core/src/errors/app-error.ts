@@ -140,6 +140,21 @@ export interface ErrorParamsMap {
   SMART_SORT_RULE_BUILTIN_PROTECTED: { readonly ruleId?: string };
   KKV_NOT_FOUND: { readonly module: string; readonly key: string };
   PREFERENCES_INVALID_VALUE: { readonly key: string; readonly expectedType: string; readonly actualValue: string };
+  // 125 DB_BACKUP：provider 三表快照校验（row_index 定位脏数据行，table 保留旧错误对象的表名）。
+  DB_BACKUP_PROVIDER_ROW_ID_MISSING: { readonly row_index: number; readonly table?: string };
+  DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID: { readonly row_index: number; readonly protocol: string; readonly table?: string };
+  DB_BACKUP_PROVIDER_ROW_BASE_URL_EMPTY: { readonly row_index: number; readonly id: string; readonly table?: string };
+  DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY: { readonly row_index: number; readonly id: string; readonly table?: string };
+  DB_BACKUP_PROVIDER_ROW_IS_BUILTIN_NOT_NUMBER: { readonly row_index: number; readonly id: string; readonly table?: string };
+  DB_BACKUP_PROVIDER_ROW_TIMESTAMP_INVALID: { readonly row_index: number; readonly id: string; readonly table?: string };
+  DB_BACKUP_SAVED_MODEL_ROW_PROVIDER_ID_EMPTY: { readonly row_index: number; readonly table?: string };
+  DB_BACKUP_SAVED_MODEL_ROW_VENDOR_MODEL_ID_EMPTY: { readonly row_index: number; readonly provider_id: string; readonly table?: string };
+  DB_BACKUP_SAVED_MODEL_ROW_SETTINGS_JSON_MISSING: { readonly row_index: number; readonly provider_id: string; readonly table?: string };
+  DB_BACKUP_DANGLING_SAVED_MODEL: { readonly row_index: number; readonly provider_id: string; readonly table?: string };
+  DB_BACKUP_SECRET_ROW_REF_MISSING: { readonly row_index: number; readonly table?: string };
+  DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING: { readonly row_index: number; readonly ref: string; readonly table?: string };
+  DB_BACKUP_SECRET_ROW_ALGO_EMPTY: { readonly row_index: number; readonly ref: string; readonly table?: string };
+  DB_BACKUP_SECRET_ROW_VERSION_NOT_NUMBER: { readonly row_index: number; readonly ref: string; readonly table?: string };
 }
 
 /** 构造参数形态：已登记 key 用表内字段，未登记 key 不收参数；`detail`/`descriptor` 全局可选。 */

@@ -2,6 +2,7 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import {type AgentDefinition, resolveAgentForProject} from '@novel-master/core/agent';
+import {ChatPromptBuildBailedError} from '@novel-master/core';
 
 import {promptAssembler, type ChatMessageData} from '@novel-master/core/chat';
 import {PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext} from '@novel-master/core/prompt';
@@ -13,25 +14,6 @@ import type {MobileNovelMasterRuntime as MobileRuntime} from '@/runtime/types';
 export interface SessionPromptScope {
   readonly projectId: string;
   readonly sessionId: string;
-}
-
-/**
- * chip 刷新的中途弃权信号（2026-09-30 回滚竞态实锤）：回滚触发的刷新与
- * run 注册（~0.6s 起跑）竞态，冻结闸（只在防抖执行时判定）拦不到「已经在跑」
- * 的这一轮——build 与发送链共享 JS 线程与单 SQLite 连接，曾把 POST
- * 派发从 +1.2s 拖到 +19.6s。**build 分段间 + build/resolve 关键边界检查**
- * （本类只覆盖 build 段与 build→resolve 之间的那道检查点；resolve 段内部的
- * 整串级重活由 core 读口负责——错误通道迁移二期起弃权沿 Outcome.cancelled/
- * replaced 返回，读口就地转抛本哨兵收口，三类弃权点在 chip 读口同款 catch
- * 里收成同一个空串哨兵）命中即抛本错误，调用方（chip 读口）捕获后按
- * 「保留旧标签」收场，不触发 fallback 重算。
- * 非 chip 消费方（预览等）不传 shouldBail，行为不变。
- */
-export class ChatPromptBuildBailedError extends Error {
-  constructor() {
-    super('chat prompt build bailed (run in flight)');
-    this.name = 'ChatPromptBuildBailedError';
-  }
 }
 
 interface BuildSessionPromptInputOptions {

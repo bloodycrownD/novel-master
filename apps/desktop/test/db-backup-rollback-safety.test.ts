@@ -25,11 +25,11 @@ import {
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
-  DatabaseReplacedError,
   __setDbBackupFsOpsForTest,
   exportDatabaseBackupToPath,
   importDatabaseBackupFromPath,
 } from "../src/main/services/db-backup.service.js";
+import { DatabaseReplacedError } from "@novel-master/core";
 import {
   getDesktopRuntime,
   rebootstrapDesktopRuntime,

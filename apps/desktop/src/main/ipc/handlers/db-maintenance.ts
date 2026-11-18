@@ -5,7 +5,7 @@
  * `VACUUM / checkpoint` 是 better-sqlite3 同步段，标为**不可中断窗口**——中止
  * 只能落在入口检查点，窗口内点击取消按自然终态 settle（T-S15 例外条款）。
  */
-import { ABORT_KEY, isAbortLikeError, type AbortScope } from "@novel-master/core/abort";
+import { ABORT_KEY, type AbortScope } from "@novel-master/core/abort";
 import type { Outcome } from "@novel-master/core/errors";
 import type { DbMaintenanceResult, DbStatsResult, IpcResult } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -38,14 +38,8 @@ export async function handleDbMaintenance(req?: DbMaintenanceRunRequest): Promis
 /**
  * 维护段：入口检查点由 `runDbMaintenance` 在**三重互斥守卫之后**执行（策略表），
  * 之后进入不可中断窗口（VACUUM / checkpoint 同步段无法中途让出）。
+ * 命中的中断由 service 直接返回 `Outcome`，本层原样交给 `runAbortable` 边界转码。
  */
 export async function doDbMaintenance(scope: AbortScope): Promise<Outcome<DbMaintenanceResult>> {
-  try {
-    const result = await runDbMaintenance({ checkpoint: () => scope.checkpoint() });
-    return result.ok ? { kind: "completed", value: result.value } : { kind: "failed", error: result.error };
-  } catch (err) {
-    // 入口检查点命中：service 抛 AbortError，这里转回控制流 Outcome。
-    if (isAbortLikeError(err)) return { kind: "cancelled", reason: scope.reason ?? "user-stop" };
-    throw err;
-  }
+  return runDbMaintenance({ checkpoint: () => scope.checkpoint() });
 }

@@ -46,12 +46,11 @@ export {
   scrubProviderTables,
   scrubProviderTablesInDatabase,
   restoreProviderTableSnapshot,
-  ProviderTableSnapshotError,
   validateProviderTableSnapshot,
   assertSqliteBackupHeader,
   exportDatabaseBackupToPath,
 } from "./infra/db-backup/index.js";
-export type { ProviderBackupTableName, ProviderTableSnapshot, ProviderTableSnapshotErrorCode } from "./infra/db-backup/index.js";
+export type { ProviderBackupTableName, ProviderTableSnapshot } from "./infra/db-backup/index.js";
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
@@ -66,10 +65,11 @@ export { createDbMaintenanceService, runStartupMaintenanceOnce } from "./infra/d
 export type { DatabaseMaintenanceResult, DbMaintenanceService, StorageStats } from "./infra/db-maintenance/index.js";
 
 /**
- * 跨端云同步：协调器、租约锁与 status schema。
+ * 跨端云同步：协调器、租约锁、status schema 与导入换代哨兵。
  */
 export {
   CloudSyncCoordinator,
+  DatabaseReplacedError,
   parseCloudSyncStatus,
   EMPTY_CLOUD_SYNC_STATUS,
   isEffectiveLock,
@@ -94,6 +94,13 @@ export type {
   PushOptions,
   PushResult,
 } from "./infra/cloud-sync/index.js";
+
+/**
+ * chat 提示装配的控制流哨兵：build 中途弃权（run in flight）时抛出，读口
+ * 捕获后保留旧标签、不触发 fallback。desktop / mobile 导入同一个类，
+ * `instanceof` 才跨包成立（spec-3 §3.6「保留（控制流）」，不进 public 面）。
+ */
+export { ChatPromptBuildBailedError } from "./service/chat/model/chat-prompt-build-bailed-error.js";
 
 /**
  * 偏好与持久状态：对 KKV 的稳定封装（非 UI 模块直连 KKV）。

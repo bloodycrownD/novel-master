@@ -1,7 +1,9 @@
 [
+  "ChatPromptBuildBailedError",
   "CloudSyncCoordinator",
   "DB_BACKUP_PROVIDER_TABLES",
   "DEFAULT_LEASE_SECONDS",
+  "DatabaseReplacedError",
   "EMPTY_CLOUD_SYNC_STATUS",
   "FILE_OPEN_TOOL_NAMES",
   "FILE_TOOL_NAMES",
@@ -20,7 +22,6 @@
   "PREF_KEY_CHAT_THINKING_CONTEXT",
   "PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN",
   "PRESET_ENGINE_TEMPLATES",
-  "ProviderTableSnapshotError",
   "SCHEMA_BOOT_VERSION",
   "SEARCH_KKV_MODULE",
   "SqlTemplateError",

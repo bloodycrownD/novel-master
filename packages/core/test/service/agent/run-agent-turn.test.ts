@@ -1,12 +1,12 @@
-import { unwrap } from "../../helpers/result-unwrap.js";
+import { rejectsErr, unwrap } from "../../helpers/result-unwrap.js";
 import { outcomeValue } from "../../helpers/outcome-value.js";
 import { Result } from "../../../src/errors/either.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { isAppError } from "@/errors/app-error.js";
 import {
-  AgentTurnError,
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
@@ -182,8 +182,8 @@ function makeRuntime(overrides: {
 }
 
 describe("runAgentTurn", () => {
-  it("rejects empty input when resume is not allowed", async () => {
-    await assert.rejects(
+  it("returns AGENT_MESSAGE_EMPTY when input is empty and resume is not allowed", async () => {
+    await rejectsErr(
       () =>
         runAgentTurn(
           makeRuntime({}),
@@ -191,9 +191,8 @@ describe("runAgentTurn", () => {
           "",
         ),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
   });
@@ -233,8 +232,8 @@ describe("runAgentTurn", () => {
     );
   });
 
-  it("rejects empty resume when last message is not user", async () => {
-    await assert.rejects(
+  it("returns AGENT_MESSAGE_EMPTY on empty resume when last message is not user", async () => {
+    await rejectsErr(
       () =>
         runAgentTurn(
           makeRuntime({
@@ -247,8 +246,7 @@ describe("runAgentTurn", () => {
           { allowResumeWithoutInput: true },
         ),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
-        return true;
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
       },
     );
   });
@@ -510,7 +508,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 抛「消息不能为空」且不 append", async () => {
+  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 返回「消息不能为空」且不 append", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
@@ -527,13 +525,12 @@ describe("runAgentTurn", () => {
         return { id: "m-cr3" };
       },
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0, "仅规则变更不得 append user");
@@ -545,7 +542,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("B-01：空输入且末条 assistant → 抛「消息不能为空」、不 append 空 user", async () => {
+  it("B-01：空输入且末条 assistant → 返回「消息不能为空」、不 append 空 user", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     const existing = [
@@ -566,12 +563,11 @@ describe("runAgentTurn", () => {
         return { id: "m-b01-bad" };
       },
     });
-    await assert.rejects(
+    await rejectsErr(
       () => runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0, "末条 assistant 不得误 append");
@@ -585,7 +581,7 @@ describe("runAgentTurn", () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("A7: workplace=false → 空输入仍抛「消息不能为空」", async () => {
+  it("A7: workplace=false → 空输入仍返回「消息不能为空」", async () => {
     userVfsUnifiedToolTurnFlag.resetForTests();
     userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
@@ -599,13 +595,12 @@ describe("runAgentTurn", () => {
         return { id: "m-a7" };
       },
     });
-    await assert.rejects(
+    await rejectsErr(
       () =>
         runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY"));
         assert.equal(renderError(err), "消息不能为空");
-        return true;
       },
     );
     assert.equal(appendCount, 0);

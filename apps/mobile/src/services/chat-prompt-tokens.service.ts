@@ -33,8 +33,8 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // 对拍 core 真实现而非 mock 行为）。
 import {TokenFormat} from '@novel-master/core/common';
 import {createLogger} from '@novel-master/core/log';
+import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {buildSessionPromptInputAdapter} from './session-prompt-input.service';
-import {ChatPromptBuildBailedError} from './session-prompt-input.service';
 import type {SessionPromptScope} from './session-prompt-input.service';
 
 /** 会话身份（可空）：延迟计时/在途取消的统一入参形态。 */

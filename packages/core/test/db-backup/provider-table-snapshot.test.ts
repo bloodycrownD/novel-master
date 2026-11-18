@@ -8,13 +8,13 @@ import {
   dumpProviderTableSnapshot,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
   open,
-  ProviderTableSnapshotError,
   restoreProviderTableSnapshot,
   scrubProviderTables,
   scrubProviderTablesInDatabase,
   type ProviderTableSnapshot,
   type TdbcConnection,
 } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/errors";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -282,9 +282,8 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => restoreProviderTableSnapshot(conn, snapshot),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderTableSnapshotError);
-          assert.equal(err.code, "INVALID_PROVIDER_ROW");
-          assert.equal(err.table, "llm_provider");
+          assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID"));
+          assert.equal(err.details?.["table"], "llm_provider");
           return true;
         },
       );
@@ -304,8 +303,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => restoreProviderTableSnapshot(conn, snapshot),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderTableSnapshotError);
-          assert.equal(err.code, "INVALID_PROVIDER_ROW");
+          assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY"));
           return true;
         },
       );
@@ -323,9 +321,8 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => restoreProviderTableSnapshot(conn, snapshot),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderTableSnapshotError);
-          assert.equal(err.code, "DANGLING_SAVED_MODEL");
-          assert.equal(err.table, "llm_saved_model");
+          assert.ok(isAppError(err, "DB_BACKUP_DANGLING_SAVED_MODEL"));
+          assert.equal(err.details?.["table"], "llm_saved_model");
           return true;
         },
       );
@@ -342,8 +339,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       await assert.rejects(
         () => restoreProviderTableSnapshot(conn, snapshot),
         (err: unknown) => {
-          assert.ok(err instanceof ProviderTableSnapshotError);
-          assert.equal(err.code, "INVALID_SECRET_ROW");
+          assert.ok(isAppError(err, "DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING"));
           return true;
         },
       );

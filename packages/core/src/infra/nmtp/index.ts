@@ -8,6 +8,4 @@
  */
 
 export type { TokenizerDriver } from "./ports/tokenizer-driver.port.js";
-export { TokenizerError } from "./nmtp-error.js";
-export type { TokenizerErrorCode } from "./nmtp-error.js";
 export { TokenizerRegistry } from "./logic/registry.js";

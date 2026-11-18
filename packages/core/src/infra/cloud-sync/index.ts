@@ -1,5 +1,5 @@
 /**
- * 跨端云同步：协调器、锁、status schema 与端口定义。
+ * 跨端云同步：协调器、锁、status schema、端口定义与导入换代哨兵。
  *
  * @module infra/cloud-sync
  */
@@ -19,6 +19,7 @@ export type {
   CloudSyncStatus,
 } from "./model/cloud-sync-status.js";
 export type { CloudSyncConfigInput } from "./model/cloud-sync-config.js";
+export { DatabaseReplacedError } from "./model/database-replaced-error.js";
 
 export {
   isEffectiveLock,

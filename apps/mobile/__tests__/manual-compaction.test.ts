@@ -6,7 +6,7 @@
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
-import {ABORT_KEY, createAbortRegistry, isAbortLikeError} from '@novel-master/core/abort';
+import {ABORT_KEY, createAbortRegistry} from '@novel-master/core/abort';
 import {runManualCompaction} from '@/services/manual-compaction.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -156,7 +156,7 @@ describe('runManualCompaction（r3-orc-1）', () => {
     expect(onFailed).toHaveBeenCalledWith(tailBoom);
   });
 
-  it('T-S16：hide 前取消 → promise 以 AbortError reject、不跑 runCompaction、只跑 onFinally', async () => {
+  it('T-S16：hide 前取消 → 返回 cancelled Outcome、不跑 runCompaction、只跑 onFinally', async () => {
     const runtime = stubRuntime();
     const sessionId = 's-cancel';
     mockGetHideStartDepth.mockImplementation(async () => {
@@ -168,12 +168,9 @@ describe('runManualCompaction（r3-orc-1）', () => {
     const onFailed = jest.fn();
     const onFinally = jest.fn();
 
-    const error = await runManualCompaction(runtime, {projectId: 'p', sessionId}, {onSucceeded, onFailed, onFinally}).then(
-      () => null,
-      (err: unknown) => err,
-    );
+    const outcome = await runManualCompaction(runtime, {projectId: 'p', sessionId}, {onSucceeded, onFailed, onFinally});
 
-    expect(isAbortLikeError(error)).toBe(true);
+    expect(outcome).toEqual({kind: 'cancelled', reason: 'user-stop'});
     expect(mockRunCompaction).not.toHaveBeenCalled();
     expect(onSucceeded).not.toHaveBeenCalled();
     // 取消不是失败：不弹「压缩失败」尾巴。
@@ -190,7 +187,8 @@ describe('runManualCompaction（r3-orc-1）', () => {
       runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId));
       return {ok: true, value: 3};
     });
-    await runManualCompaction(runtime, {projectId: 'p', sessionId}).catch(() => undefined);
+    const outcome = await runManualCompaction(runtime, {projectId: 'p', sessionId});
+    expect(outcome.kind).toBe('cancelled');
     expect(() => runtime.abortRegistry.abort(ABORT_KEY.compaction(sessionId))).not.toThrow();
   });
 

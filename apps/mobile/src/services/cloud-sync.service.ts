@@ -3,7 +3,7 @@
  *
  * @module services/cloud-sync.service
  */
-import {CloudSyncCoordinator, ensureTrailingSlash, parseCloudSyncStatus, statusKey} from '@novel-master/core';
+import {CloudSyncCoordinator, DatabaseReplacedError, ensureTrailingSlash, parseCloudSyncStatus, statusKey} from '@novel-master/core';
 import {ABORT_KEY, createAbortError, createAbortScope, isAbortLikeError} from '@novel-master/core/abort';
 import {AppError, isAppError} from '@novel-master/core/agent';
 import {Result} from '@novel-master/core/errors';
@@ -18,7 +18,7 @@ import {Buffer} from 'buffer';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {agentActivity} from '@/runtime/agent-activity';
-import {DatabaseReplacedError, exportDatabaseBackupToPath, importDatabaseBackupFromBytes, importDatabaseBackupFromPath} from './db-backup.service';
+import {exportDatabaseBackupToPath, importDatabaseBackupFromBytes, importDatabaseBackupFromPath} from './db-backup.service';
 import {maintenanceBusy} from './db-maintenance-busy';
 import {hashSnapshotFile, sha256Hex} from './snapshot-file-hash';
 import {

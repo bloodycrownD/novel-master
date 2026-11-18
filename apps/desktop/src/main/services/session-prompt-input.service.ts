@@ -2,6 +2,7 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import { type AgentDefinition, type AppError, resolveAgentForProject } from "@novel-master/core/agent";
+import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { Result } from "@novel-master/core/errors";
 import { promptAssembler } from "@novel-master/core/chat";
 import { PromptBuilder, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
@@ -12,26 +13,6 @@ import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 export interface SessionPromptScope {
   readonly projectId: string;
   readonly sessionId: string;
-}
-
-/**
- * chip 刷新的中途弃权信号（r3-dt-align 第 3 层，与 mobile 同款）：读口的
- * build 与发送链共享 main 进程的单事件循环与单 SQLite 连接，会话消息一多，
- * build 整串装配本身就是秒级重活。**build 分段间 + build/resolve 关键边界
- * 检查**（本类只覆盖 build 段内部的分段检查点；build→resolve 之间那道与
- * resolve 段内部的整串级重活由读口的边界检查点与 core 读口负责——错误通道
- * 迁移二期起 core 弃权沿 Outcome.cancelled/replaced 返回，读口就地转抛本
- * 哨兵收口，三类弃权点在读口同款 catch 里收成同一个 null 哨兵）命中即抛本
- * 错误，调用方（token 读口）捕获后按「保留旧标签」收场，**不触发 fallback
- * 重算**。
- *
- * 非读口消费方（预览 `prompt-preview.service` 等）不传 shouldBail，行为不变。
- */
-export class ChatPromptBuildBailedError extends Error {
-  constructor() {
-    super("chat prompt build bailed (run in flight)");
-    this.name = "ChatPromptBuildBailedError";
-  }
 }
 
 interface PromptBuildOptions {

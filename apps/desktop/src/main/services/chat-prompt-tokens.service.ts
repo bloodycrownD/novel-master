@@ -26,6 +26,7 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
+import { ChatPromptBuildBailedError } from "@novel-master/core";
 import type { ChatMessageData } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import { type AppError } from "@novel-master/core/agent";
@@ -47,7 +48,7 @@ import { PromptChatTokenUpdatedForwarder } from "../ipc/forward-prompt-chat-toke
 import { isDesktopSessionRunInFlight, setRunFinishedTokenStatsRefresh } from "../ipc/handlers/agent.js";
 import { getDesktopRuntimeOrThrow } from "../runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { buildSessionPromptInputAdapter, ChatPromptBuildBailedError, type SessionPromptInputBundle, type SessionPromptScope } from "./session-prompt-input.service.js";
+import { buildSessionPromptInputAdapter, type SessionPromptInputBundle, type SessionPromptScope } from "./session-prompt-input.service.js";
 
 const log = createLogger("desktop.chat-prompt-tokens");
 

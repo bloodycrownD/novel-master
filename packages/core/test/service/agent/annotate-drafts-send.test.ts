@@ -9,8 +9,8 @@ import {
   describe,
   it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import { isAppError } from "@/errors/app-error.js";
 import {
-  AgentTurnError,
   runAgentTurn,
   type AgentTurnRuntimePort,
   } from "@/service/agent/logic/run-agent-turn.js";
@@ -309,11 +309,11 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.equal(messageAttachmentSchema.safeParse(att).success, true);
   });
 
-  it("无输入且无 annotate → 仍抛消息不能为空", async () => {
+  it("无输入且无 annotate → 仍返回消息不能为空", async () => {
     userVfsUnifiedToolTurnFlag.refresh(true);
     const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
-    // runAgentTurn 的发送门仍走 throw 通道（边界校验），不适用 Result 断言。
-    await assert.rejects(
+    // 发送门是业务失败：沿 Result.err 交回（AGENT_MESSAGE_EMPTY 自带 code + messageKey）。
+    await rejectsErr(
       () =>
         runAgentTurn(
           runtime,
@@ -322,7 +322,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           { stream: false },
         ),
       (err: unknown) =>
-        err instanceof AgentTurnError && err.messageKey === "error.agent.message_empty",
+        assert.ok(isAppError(err, "AGENT_MESSAGE_EMPTY") && err.messageKey === "error.agent.message_empty"),
     );
     userVfsUnifiedToolTurnFlag.resetForTests();
   });

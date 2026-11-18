@@ -100,5 +100,5 @@ export {
   parseTokenCounterModePref,
   isValidTokenCounterModePref,
 } from "./logic/read-token-counter-mode-pref.js";
-export { TokenizerRegistry, TokenizerError } from "../nmtp/index.js";
-export type { TokenizerDriver, TokenizerErrorCode } from "../nmtp/index.js";
+export { TokenizerRegistry } from "../nmtp/index.js";
+export type { TokenizerDriver } from "../nmtp/index.js";

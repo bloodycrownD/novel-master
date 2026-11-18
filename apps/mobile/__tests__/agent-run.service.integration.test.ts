@@ -1,4 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
+import {isAppError} from '@novel-master/core/agent';
 import {userMessageOf} from '@novel-master/core/i18n';
 
 import {coreT} from '@/i18n/core';
@@ -105,15 +106,18 @@ describe('runAgentTurnAdapter integration', () => {
         append: jest.fn(async () => undefined),
       },
     });
-    // 前奏期空输入拦截走 AgentTurnError（带 messageKey 的 descriptor，
-    // Error.message 为 key 原文），经 core translator 解析后再断言用户可见中文。
-    const error = await runAgentTurnAdapter(
+    // 前奏期空输入拦截是业务失败：沿 Result.err（AppError AGENT_MESSAGE_EMPTY，
+    // 自带 code + messageKey）交回，经 core translator 解析后再断言用户可见中文。
+    const result = await runAgentTurnAdapter(
       runtime as any,
       {projectId: 'p', sessionId: 's'},
       '',
       {allowResumeWithoutInput: true},
-    ).catch((e: unknown) => e);
-    const descriptor = userMessageOf(error);
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('预期 Err（空输入必须被拦截）');
+    expect(isAppError(result.error, 'AGENT_MESSAGE_EMPTY')).toBe(true);
+    const descriptor = userMessageOf(result.error);
     expect(descriptor).not.toBeNull();
     expect(coreT(descriptor!)).toBe('消息不能为空');
   });

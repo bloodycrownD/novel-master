@@ -24,7 +24,8 @@ jest.mock('@novel-master/core/workplace', () => {
   };
 });
 
-import {buildSessionPromptInputAdapter, ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
+import {ChatPromptBuildBailedError} from '@novel-master/core';
+import {buildSessionPromptInputAdapter} from '@/services/session-prompt-input.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 function makeStubRuntime(): MobileNovelMasterRuntime {

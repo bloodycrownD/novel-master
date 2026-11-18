@@ -5,7 +5,6 @@
  * @module services/agent-run
  */
 import {
-  AgentTurnError,
   mapResolveError,
   resolveApplicationModelIdForRun,
   resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
@@ -26,12 +25,11 @@ const log = createLogger("desktop.agent-run");
 
 export type AgentRunScope = AgentTurnScope;
 
-export { AgentTurnError as AgentRunError };
-
 /**
  * resolve 链失败转码（错误通道迁移五期跨片收口）：core 的 resolve 系沿
  * `Result.err` 回传已知失败（不再 throw），转码统一走 core 的 `mapResolveError`——
- * resolve key 转 `AgentTurnError`，其余原样抛，对 desktop 消费方保持旧的 throw 契约。
+ * 失败原样抛 `AppError`（自带 key / messageKey），对 desktop 消费方保持旧的
+ * throw 契约。
  *
  * `resolveCurrentAgentId` 的转码面为空（core 该函数只可能回传 infra 读失败，
  * 不会产 resolve key），属薄壳，已删；调用点直接用 core 的 `Result` 通道。
@@ -48,7 +46,7 @@ export async function resolveCurrentAgentDefinitionOrThrow(runtime: DesktopNovel
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-/** {@link resolveCurrentAgentDefinitionOrThrow} 的模型侧同款：resolve key 转 `AgentTurnError` 抛出，其余原样抛。 */
+/** {@link resolveCurrentAgentDefinitionOrThrow} 的模型侧同款：失败原样抛 `AppError`，其余不变。 */
 export async function resolveDesktopSavedModelIdOrThrow(runtime: DesktopNovelMasterRuntime, definition: AgentDefinition, sessionId: string): Promise<{ savedModelId: string; workspaceModelId: string }> {
   return mapResolveError(() => resolveApplicationModelIdForRun(runtime, definition, sessionId));
 }

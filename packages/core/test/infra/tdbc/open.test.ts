@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
+import { AssertionError } from "@/common/assert.js";
 import { TdbcError } from "@/infra/tdbc/errors.js";
 import { open, parseUrl } from "@/infra/tdbc/logic/open.js";
 import { TdbcRegistry } from "@/infra/tdbc/logic/registry.js";
@@ -41,12 +42,12 @@ describe("parseUrl", () => {
 describe("open", () => {
   beforeEach(() => TdbcRegistry.clear());
 
-  it("throws UNKNOWN_DRIVER when none registered", async () => {
+  it("throws AssertionError when none registered", async () => {
     await assert.rejects(
       () => open("tdbc:sqlite:file::memory:"),
       (e: unknown) => {
-        assert.ok(e instanceof TdbcError);
-        assert.equal(e.code, "UNKNOWN_DRIVER");
+        assert.ok(e instanceof AssertionError);
+        assert.ok(e.message.includes("TDBC: no driver registered"));
         return true;
       },
     );

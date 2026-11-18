@@ -1,13 +1,12 @@
 /**
  * IPC error formatting — maps Core domain errors to serializable payloads.
- * `code` 的取值空间是 core 码表 key（ErrorKey）；分派链 10 条顺序硬写
+ * `code` 的取值空间是 core 码表 key（ErrorKey）；分派链 9 条顺序硬写
  * （VFS_* → PROVIDER_* → CLOUD_SYNC_* → 通配），写反会让某个前缀分支不可达。
  *
  * @module ipc/format-ipc-error
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isAbortLikeError } from "@novel-master/core/abort";
-import { AgentTurnError } from "@novel-master/core/agent";
 import { isAppError } from "@novel-master/core/agent";
 import { Errors } from "@novel-master/core/common";
 import { domainOf } from "@novel-master/core/errors";
@@ -83,14 +82,10 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
     };
   }
   // 7. TdbcError：desktop 无此入口，不设分支（镜像门豁免）。
-  // 8. AgentTurnError（infra 保留类）→ AGENT_RUN_FAILED。
-  if (err instanceof AgentTurnError) {
-    return { code: "AGENT_RUN_FAILED", message: err.message };
-  }
-  // 9. 未知 Error → INFRA_UNEXPECTED_ERROR（name 只留 message，不进 code）。
+  // 8. 未知 Error → INFRA_UNEXPECTED_ERROR（name 只留 message，不进 code）。
   if (err instanceof Error) {
     return { code: "INFRA_UNEXPECTED_ERROR", message: err.message };
   }
-  // 10. 非 Error 抛出值。
+  // 9. 非 Error 抛出值。
   return { code: "INFRA_UNEXPECTED_ERROR", message: String(err) };
 }

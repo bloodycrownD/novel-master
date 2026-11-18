@@ -15,16 +15,14 @@ import { after, before, describe, it } from "node:test";
 import { textBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
 import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/stored-config-validity";
 import { serializeRuleSnapshot } from "@novel-master/core/workplace";
+import { ChatPromptBuildBailedError } from "@novel-master/core";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import type { DesktopNovelMasterRuntime } from "../src/main/runtime/types.js";
-import {
-  buildSessionPromptInputAdapter,
-  ChatPromptBuildBailedError,
-} from "../src/main/services/session-prompt-input.service.js";
+import { buildSessionPromptInputAdapter } from "../src/main/services/session-prompt-input.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,

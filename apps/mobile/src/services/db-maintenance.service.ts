@@ -14,7 +14,8 @@
  */
 import {createDbMaintenanceService} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
-import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
+import {ABORT_KEY, createAbortScope} from '@novel-master/core/abort';
+import {assert} from '@novel-master/core/common';
 import {Result} from '@novel-master/core/errors';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {agentActivity} from '../runtime/agent-activity';
@@ -59,9 +60,9 @@ export async function runDbMaintenance(runtime: MobileNovelMasterRuntime): Promi
   const abortScope = createAbortScope();
   runtime.abortRegistry.register(ABORT_KEY.dbMaintenance('local'), abortScope);
   try {
-    if (abortScope.checkpoint() != null) {
-      throw createAbortError();
-    }
+    // 本入口没有任何取消来源（UI 不提供取消按钮，registry 也没人 abort）；
+    // 命中即不变量破坏，断言而非取消语义。
+    assert(abortScope.checkpoint() == null, 'runDbMaintenance 未接入取消来源，入口检查点不应命中');
     maintenanceBusy.acquire();
     try {
       const beforeBytes = await statDatabaseFileBytes();

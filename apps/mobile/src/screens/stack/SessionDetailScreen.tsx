@@ -15,7 +15,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, DeviceEventEmitter, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import {ABORT_KEY, isAbortLikeError} from '@novel-master/core/abort';
+import {ABORT_KEY} from '@novel-master/core/abort';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
@@ -178,16 +178,15 @@ export function SessionDetailScreen() {
               await load();
             },
           };
-          // 取消是唯一会 reject 的出口（T-S16）：AbortError 吞掉并复位在途状态、
-          // 只留「已取消压缩」提示（不是错误 toast）；其它异常兜底提示（编排内部
-          // 已自吞，这里只防御未来改动），绝不重新抛出——调用方是 void，重抛就是
-          // unhandled rejection。
+          // 取消走返回值（Outcome.cancelled/replaced）：只留「已取消压缩」提示
+          // （不是错误 toast）。编排内部已自吞业务失败与尾巴抛错，这里的 catch
+          // 只防御未来改动引入的意外异常，绝不重新抛出——调用方是 void，重抛
+          // 就是 unhandled rejection。
           void runManualCompaction(runtime, {projectId, sessionId}, compactionHooks)
+            .then(outcome => {
+              if (outcome.kind === 'cancelled' || outcome.kind === 'replaced') showToast('已取消压缩');
+            })
             .catch((error: unknown) => {
-              if (isAbortLikeError(error)) {
-                showToast('已取消压缩');
-                return;
-              }
               showToast(toastMessage('压缩失败', error));
             })
             .finally(() => {

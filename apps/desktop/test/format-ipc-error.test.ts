@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AppError } from "@novel-master/core/vfs";
 import { createAbortError } from "@novel-master/core/abort";
-import { AgentTurnError } from "@novel-master/core/agent";
 import { userMessageOf } from "@novel-master/core/i18n";
 import { coreT } from "../shared/logic/core-i18n.js";
 import { AssertionError } from "../../../packages/core/src/common/assert.js";
@@ -112,10 +111,10 @@ describe("formatIpcError", () => {
     assert.equal(payload.message, "[invariant] 穷尽分支破坏");
   });
 
-  it("maps AgentTurnError to AGENT_RUN_FAILED", () => {
-    const err = new AgentTurnError("消息不能为空");
+  it("AGENT_MESSAGE_EMPTY 透出自身 code 与中文文案（不再笼统落 AGENT_RUN_FAILED）", () => {
+    const err = new AppError("AGENT_MESSAGE_EMPTY");
     const payload = formatIpcError(err);
-    assert.equal(payload.code, "AGENT_RUN_FAILED");
+    assert.equal(payload.code, "AGENT_MESSAGE_EMPTY");
     assert.equal(payload.message, "消息不能为空");
   });
 

@@ -8,9 +8,8 @@ import {
   PRECISE_UPGRADE_START_DELAY_MS,
   type TokenLabelOptions,
 } from '@/services/chat-prompt-tokens.service';
-// jest.mock 拦截后这里拿到的是工厂里的同构类——被测服务的 instanceof 与
-// 测试里 throw 的实例同源（中途弃权用例的观测前提）。
-import {ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
+// 弃权哨兵已上收 core：与服务侧导入同一份类，instanceof 判定才成立。
+import {ChatPromptBuildBailedError} from '@novel-master/core';
 import {PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -90,22 +89,10 @@ jest.mock('@novel-master/core/prompt', () => ({
   messageBodyTextFromBlocks: () => 'hello',
 }));
 
-jest.mock('@/services/session-prompt-input.service', () => {
-  // 与真身同构的弃权错误类：被测服务按 instanceof 识别，mock 工厂必须
-  // 提供同一个类（真身类在 jest.mock 下不可达）。
-  class ChatPromptBuildBailedError extends Error {
-    constructor() {
-      super('chat prompt build bailed (run in flight)');
-      this.name = 'ChatPromptBuildBailedError';
-    }
-  }
-  return {
-    buildSessionPromptInputAdapter: (...args: unknown[]) =>
-      mockBuildSessionPromptInput(...args),
-    ChatPromptBuildBailedError,
-  };
-});
-
+jest.mock('@/services/session-prompt-input.service', () => ({
+  buildSessionPromptInputAdapter: (...args: unknown[]) =>
+    mockBuildSessionPromptInput(...args),
+}));
 
 /** 错误通道迁移四期：label 读口已知失败沿 Result 上行；测试断言面保持裸值，err 直接炸出。 */
 async function loadLabelOrThrow(...args: Parameters<typeof loadChatPromptTokenLabel>) {

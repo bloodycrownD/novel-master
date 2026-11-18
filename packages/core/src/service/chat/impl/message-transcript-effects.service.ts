@@ -6,7 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { assert } from "@/common/assert.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
@@ -65,8 +65,8 @@ export class DefaultMessageTranscriptEffectsService implements MessageTranscript
 
     const tailRead = await this.deps.messages.listBySessionTail(sessionId, { limit: 1 });
     if (tailRead.kind === "failed") return Result.err(tailRead.error);
-    // 未注入 hooks：中断分支不可达；命中按边界语义转抛 AbortError。
-    if (tailRead.kind !== "completed") throw createAbortError();
+    // 未注入 hooks：中断分支不可达，命中即不变量破坏（断言而非取消语义）。
+    assert(tailRead.kind === "completed", "setMessageFloorAtMessage 未注入 hooks，tail 读取不应产生中断");
     const tail = tailRead.value;
     const sessionMaxSeq = tail.length > 0 ? tail[0]!.seq : 0;
     const hidePrefix = anchor.seq > 1 ? { fromSeq: 1 as const, toSeq: anchor.seq - 1 } : null;

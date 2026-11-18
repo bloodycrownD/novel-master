@@ -10,7 +10,7 @@ import {
 import { messageBodyTextFromBlocks } from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import { Result } from "@novel-master/core/errors";
-import { createAbortError } from "@novel-master/core/abort";
+import { assert } from "@novel-master/core/common";
 import type {
   ChatMessageDto,
   ContentBlockDto,
@@ -78,9 +78,8 @@ export function handleMessagesList(req: MessagesListRequest): Promise<IpcResult<
     const rt = built.value;
     const messagesRead = await rt.messages.listBySession(req.sessionId);
     if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
-    // IPC handler 是边界：未注入 hooks（中断分支不可达），命中按取消语义抛
-    // AbortError，由 formatIpcError 统一映射为 IPC_ABORTED。
-    if (messagesRead.kind !== "completed") throw createAbortError();
+    // IPC handler 未注入 hooks（中断分支不可达）；命中即不变量破坏，断言收口。
+    assert(messagesRead.kind === "completed", "handleMessagesList 未注入 hooks，listBySession 不应产生中断");
     return Result.ok(messagesRead.value.map(toDto));
   });
 }

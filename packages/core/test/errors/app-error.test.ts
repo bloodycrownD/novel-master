@@ -71,6 +71,20 @@ const PARAM_FIELDS: Partial<Record<keyof ErrorParamsMap, readonly string[]>> = {
   PROMPT_UNSUPPORTED_SYNTAX: ["offset?"],
   KKV_NOT_FOUND: ["module", "key"],
   PREFERENCES_INVALID_VALUE: ["key", "expectedType", "actualValue"],
+  DB_BACKUP_PROVIDER_ROW_ID_MISSING: ["row_index", "table?"],
+  DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID: ["row_index", "protocol", "table?"],
+  DB_BACKUP_PROVIDER_ROW_BASE_URL_EMPTY: ["row_index", "id", "table?"],
+  DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY: ["row_index", "id", "table?"],
+  DB_BACKUP_PROVIDER_ROW_IS_BUILTIN_NOT_NUMBER: ["row_index", "id", "table?"],
+  DB_BACKUP_PROVIDER_ROW_TIMESTAMP_INVALID: ["row_index", "id", "table?"],
+  DB_BACKUP_SAVED_MODEL_ROW_PROVIDER_ID_EMPTY: ["row_index", "table?"],
+  DB_BACKUP_SAVED_MODEL_ROW_VENDOR_MODEL_ID_EMPTY: ["row_index", "provider_id", "table?"],
+  DB_BACKUP_SAVED_MODEL_ROW_SETTINGS_JSON_MISSING: ["row_index", "provider_id", "table?"],
+  DB_BACKUP_DANGLING_SAVED_MODEL: ["row_index", "provider_id", "table?"],
+  DB_BACKUP_SECRET_ROW_REF_MISSING: ["row_index", "table?"],
+  DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING: ["row_index", "ref", "table?"],
+  DB_BACKUP_SECRET_ROW_ALGO_EMPTY: ["row_index", "ref", "table?"],
+  DB_BACKUP_SECRET_ROW_VERSION_NOT_NUMBER: ["row_index", "ref", "table?"],
 };
 
 /** 本期（error-channel-migration 一期 Step 2）新增的 messageKey；en-US 必须全覆盖（既有缺口不在此列）。 */

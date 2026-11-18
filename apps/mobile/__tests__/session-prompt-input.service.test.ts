@@ -28,7 +28,8 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/stored-config-validity';
 
-import {buildSessionPromptInputAdapter, ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
+import {ChatPromptBuildBailedError} from '@novel-master/core';
+import {buildSessionPromptInputAdapter} from '@/services/session-prompt-input.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */

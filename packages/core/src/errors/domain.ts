@@ -38,6 +38,7 @@ export const DOMAIN_RANGES = {
   CLOUD_SYNC: [122000, 122999],
   IPC: [123000, 123999],
   CLI: [124000, 124999],
+  DB_BACKUP: [125000, 125999],
 } as const satisfies Record<string, readonly [number, number]>;
 
 /** 错误域：号段表的键名。 */

@@ -19,7 +19,7 @@
  */
 
 import {runCompaction} from '@novel-master/core/compaction';
-import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
+import {ABORT_KEY, createAbortScope, type Interrupt} from '@novel-master/core/abort';
 import type {Outcome} from '@novel-master/core/errors';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -62,12 +62,12 @@ function interruptedOutcome(hit: Interrupt): Outcome<never> {
  * `trigger` 硬写 "manual"。接自动压缩前必须先给本函数加 trigger 透传参数，
  * 不得沿用这一行——自动压缩清两域会打破回合内前缀冻结。
  *
- * 出口：业务失败与尾巴抛错仍在内部收口（不外抛）；**取消是唯一会 reject 的
- * 出口**——边界把 `Outcome.cancelled`/`replaced` 转 `createAbortError()`，
- * 让调用方的 promise 以 AbortError 原样 reject（T-S16）。取消只跑 `onFinally`
- * （清理尾巴），不触发 `onFailed`（取消不是失败）。
+ * 出口：业务失败与尾巴抛错仍在内部收口（不外抛）；取消以 `Outcome` 返回值
+ * 给出（`cancelled`/`replaced`），不再以 AbortError reject——编排内部的
+ * `Outcome.cancelled`/`replaced` 原样作为返回值透出，调用方按 kind 判断。
+ * 取消只跑 `onFinally`（清理尾巴），不触发 `onFailed`（取消不是失败）。
  */
-export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<void> {
+export async function runManualCompaction(runtime: MobileNovelMasterRuntime, scope: {readonly projectId: string; readonly sessionId: string}, hooks: ManualCompactionHooks = {}): Promise<Outcome<void>> {
   const {sessionId} = scope;
   // AbortScope 与业务参数 `scope` 撞名：按 spec 约定命名为 abortScope。
   const abortScope = createAbortScope();
@@ -119,7 +119,7 @@ export async function runManualCompaction(runtime: MobileNovelMasterRuntime, sco
     } catch {
       // 清理尾巴自身抛错不掩盖取消语义。
     }
-    throw createAbortError();
+    return work;
   }
   const ok = work?.kind === 'completed' ? work.value : false;
   const outcome: ManualCompactionOutcome = {
@@ -146,4 +146,5 @@ export async function runManualCompaction(runtime: MobileNovelMasterRuntime, sco
       }
     }
   }
+  return {kind: 'completed', value: undefined};
 }

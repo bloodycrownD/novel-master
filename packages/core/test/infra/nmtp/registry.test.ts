@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { AssertionError } from "../../../src/common/assert.js";
 import { TokenizerRegistry } from "../../../src/infra/nmtp/logic/registry.js";
-import { TokenizerError } from "../../../src/infra/nmtp/nmtp-error.js";
 import type { TokenizerDriver } from "../../../src/infra/nmtp/ports/tokenizer-driver.port.js";
 
 function stubDriver(name: string): TokenizerDriver {
@@ -21,13 +21,13 @@ function stubDriver(name: string): TokenizerDriver {
 }
 
 describe("NMTP registry", () => {
-  it("throws NOT_REGISTERED when empty", () => {
+  it("throws AssertionError when empty", () => {
     TokenizerRegistry.clear();
     assert.throws(
       () => TokenizerRegistry.resolve(),
       (e) =>
-        e instanceof TokenizerError &&
-        e.code === "NOT_REGISTERED" &&
+        e instanceof AssertionError &&
+        e.message.includes("Tokenizer: no driver registered") &&
         e.message.includes("registerTokenizerNodeDriver"),
     );
   });
@@ -39,13 +39,13 @@ describe("NMTP registry", () => {
     TokenizerRegistry.clear();
   });
 
-  it("throws MULTIPLE_DRIVERS when more than one registered", () => {
+  it("throws AssertionError when more than one registered", () => {
     TokenizerRegistry.clear();
     TokenizerRegistry.register(stubDriver("node"));
     TokenizerRegistry.register(stubDriver("rn"));
     assert.throws(
       () => TokenizerRegistry.resolve(),
-      (e) => e instanceof TokenizerError && e.code === "MULTIPLE_DRIVERS",
+      (e) => e instanceof AssertionError && e.message.includes("Tokenizer: 2 drivers registered (node, rn); specify driver name."),
     );
     TokenizerRegistry.clear();
   });
@@ -58,12 +58,12 @@ describe("NMTP registry", () => {
     TokenizerRegistry.clear();
   });
 
-  it("throws NOT_REGISTERED for missing explicit name", () => {
+  it("throws AssertionError for missing explicit name", () => {
     TokenizerRegistry.clear();
     TokenizerRegistry.register(stubDriver("node"));
     assert.throws(
       () => TokenizerRegistry.resolve("missing"),
-      (e) => e instanceof TokenizerError && e.code === "NOT_REGISTERED",
+      (e) => e instanceof AssertionError && e.message.includes("Tokenizer driver not registered: missing"),
     );
     TokenizerRegistry.clear();
   });

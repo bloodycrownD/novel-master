@@ -14,7 +14,7 @@ import { resolvePriorRollbackTargetTree, resolveRollbackTargetTree } from "@/dom
 import { resolvePathsNeedDeleteInTransaction, resolveReconcilePathSets } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
 import { restorePathToRevision, restorePathToRevisionWithBackfill } from "@/domain/message-checkpoint/logic/restore-path.js";
 import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { assert } from "@/common/assert.js";
 import { createCheckpointRepoDeps, createTruncateTailDepsFromTx, truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import type { CheckpointRepoDeps } from "@/domain/message-checkpoint/model/checkpoint-repo-deps.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -338,8 +338,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const messagesRepo = this.deps.messageRepo;
     const [messagesRead, messageCountSnapshot] = await Promise.all([messagesRepo.listBySessionFromSeq(sessionId, clicked.seq), messagesRepo.countBySession(sessionId)]);
     if (messagesRead.kind === "failed") return Result.err(messagesRead.error);
-    // plan 装配阶段未注入 hooks：中断分支不可达；命中按边界语义转抛 AbortError。
-    if (messagesRead.kind !== "completed") throw createAbortError();
+    // plan 装配阶段未注入 hooks：中断分支不可达，命中即不变量破坏（断言而非取消语义）。
+    assert(messagesRead.kind === "completed", "resolveRollbackPlan 未注入 hooks，listBySessionFromSeq 不应产生中断");
     const messagesFromClicked = messagesRead.value;
     if (this.deps.probe != null) {
       // 字节量（源消息 content JSON 尺寸）只在探针注入时统计——量测本身

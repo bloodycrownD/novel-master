@@ -19,7 +19,8 @@
  * 116 SESSION_FS / 117 PROMPT / 118 SESSION_KKV / 119 SESSION_RUN_STATE /
  * 120 USAGE / 121 WORKPLACE / 122 CLOUD_SYNC（三期 CloudSyncError 退役迁入）/
  * 123 IPC（TASK_CANCELLED / TASK_REPLACED 与 handler 直构码；控制流码 TOOL_CANCELLED 落 104 段）/
- * 124 CLI（apps/cli 子命令的用法提示与参数校验）。
+ * 124 CLI（apps/cli 子命令的用法提示与参数校验）/
+ * 125 DB_BACKUP（十九期 ProviderTableSnapshot 14 个校验原因迁入，行号与表名走 params）。
  *
  * messageKey 是该码的缺省用户文案模板（i18n 契约 key，见 i18n/keys.ts 与
  * catalog/*.yaml，三处缺一即红）：descriptor 通道优先于它，动态诊断文案走
@@ -68,6 +69,8 @@ export const ErrorCodes = {
   AGENT_NOT_CONFIGURED: {code: 101014, desc: "agent not configured", messageKey: "error.agent.not_configured"},
   AGENT_MODEL_NOT_SET: {code: 101015, desc: "agent model not set", messageKey: "error.agent.model_not_set"},
   AGENT_REFERENCED_NOT_FOUND: {code: 101016, desc: "session references a missing agent", messageKey: "error.agent.referenced_not_found"},
+  // 101 AGENT 017：turn 前置的业务失败（AgentTurnError 退役迁入，messageKey 既有；无参数）。
+  AGENT_MESSAGE_EMPTY: {code: 101017, desc: "agent turn message is empty", messageKey: "error.agent.message_empty"},
 
   // 102 VFS 001-999：vfs 路径、zip、content-store 与端口失败。
   VFS_NOT_FOUND: {code: 102001, desc: "vfs path or revision not found", messageKey: "error.vfs.not_found"},
@@ -245,6 +248,23 @@ export const ErrorCodes = {
   // params.detail 走、不配 messageKey——cli 出口按 message 的 "Usage:" 前缀判 EXIT_USAGE，
   // 配模板会把 message 换成翻译文案，断掉该既有约定。
   CLI_INVALID_ARGUMENT: {code: 124001, desc: "invalid cli argument"},
+
+  // 125 DB_BACKUP 001-999：provider 三表快照校验（十九期快照校验错误类退役迁入，
+  // 14 个构造点的 descriptor 一一对应；定位信息 row_index / table 等走 params）。
+  DB_BACKUP_PROVIDER_ROW_ID_MISSING: {code: 125001, desc: "provider row id missing", messageKey: "error.db_backup.provider_row_id_missing"},
+  DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID: {code: 125002, desc: "provider row protocol invalid", messageKey: "error.db_backup.provider_row_protocol_invalid"},
+  DB_BACKUP_PROVIDER_ROW_BASE_URL_EMPTY: {code: 125003, desc: "provider row base url empty", messageKey: "error.db_backup.provider_row_base_url_empty"},
+  DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY: {code: 125004, desc: "provider row display name empty", messageKey: "error.db_backup.provider_row_display_name_empty"},
+  DB_BACKUP_PROVIDER_ROW_IS_BUILTIN_NOT_NUMBER: {code: 125005, desc: "provider row is_builtin is not a number", messageKey: "error.db_backup.provider_row_is_builtin_not_number"},
+  DB_BACKUP_PROVIDER_ROW_TIMESTAMP_INVALID: {code: 125006, desc: "provider row timestamp missing or not a number", messageKey: "error.db_backup.provider_row_timestamp_invalid"},
+  DB_BACKUP_SAVED_MODEL_ROW_PROVIDER_ID_EMPTY: {code: 125007, desc: "saved model row provider id empty", messageKey: "error.db_backup.saved_model_row_provider_id_empty"},
+  DB_BACKUP_SAVED_MODEL_ROW_VENDOR_MODEL_ID_EMPTY: {code: 125008, desc: "saved model row vendor model id empty", messageKey: "error.db_backup.saved_model_row_vendor_model_id_empty"},
+  DB_BACKUP_SAVED_MODEL_ROW_SETTINGS_JSON_MISSING: {code: 125009, desc: "saved model row settings json missing", messageKey: "error.db_backup.saved_model_row_settings_json_missing"},
+  DB_BACKUP_DANGLING_SAVED_MODEL: {code: 125010, desc: "saved model row references a missing provider", messageKey: "error.db_backup.dangling_saved_model"},
+  DB_BACKUP_SECRET_ROW_REF_MISSING: {code: 125011, desc: "secret row ref missing", messageKey: "error.db_backup.secret_row_ref_missing"},
+  DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING: {code: 125012, desc: "secret row ciphertext missing", messageKey: "error.db_backup.secret_row_ciphertext_missing"},
+  DB_BACKUP_SECRET_ROW_ALGO_EMPTY: {code: 125013, desc: "secret row algo empty", messageKey: "error.db_backup.secret_row_algo_empty"},
+  DB_BACKUP_SECRET_ROW_VERSION_NOT_NUMBER: {code: 125014, desc: "secret row version is not a number", messageKey: "error.db_backup.secret_row_version_not_number"},
 } as const satisfies Record<string, ErrorCodeDef>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

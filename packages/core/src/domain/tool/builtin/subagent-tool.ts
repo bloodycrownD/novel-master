@@ -26,11 +26,11 @@
 
 import { z } from "zod";
 
+import { assert } from "@/common/assert.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { Tool } from "../model/tool.js";
@@ -209,8 +209,8 @@ ${callableList}
       // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
       const existingRead = await subagent.messages.listBySession(requestedSessionId);
       if (existingRead.kind === "failed") return Result.err(existingRead.error);
-      // 未注入 hooks，中断分支不可达；命中按取消边界语义上抛（tool-runner 统一收口）。
-      if (existingRead.kind !== "completed") throw createAbortError();
+      // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
+      assert(existingRead.kind === "completed", "task 续用历史读取未注入 hooks，不应产生中断");
       const existing = existingRead.value;
       if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
         return Result.err(new AppError("TOOL_FAILED", { toolName: "task", detail: `子会话 "${requestedSessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}` }));
@@ -252,7 +252,8 @@ ${callableList}
     // 的 T-SUB-TAIL3 钉成期望。
     const childMessagesRead = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
     if (childMessagesRead.kind === "failed") return Result.err(childMessagesRead.error);
-    if (childMessagesRead.kind !== "completed") throw createAbortError();
+    // 未注入 hooks，中断分支恒不可达；命中说明 MessageService 读口契约被破坏。
+    assert(childMessagesRead.kind === "completed", "task 尾读未注入 hooks，不应产生中断");
     const childMessages = childMessagesRead.value;
     let lastText: string | undefined;
     for (let i = childMessages.length - 1; i >= 0; i--) {

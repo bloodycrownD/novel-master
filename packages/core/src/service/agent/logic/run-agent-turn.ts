@@ -35,9 +35,7 @@ import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { createAbortScope } from "@/domain/abort/logic/create-abort-scope.js";
 import type { AbortScope } from "@/domain/abort/model/abort-scope.js";
-import type { MessageParams } from "@/common/i18n.js";
-import type { CoreMessageDescriptor, CoreMessageKey } from "@/i18n/keys.js";
-import { resolveLocalizedMessage } from "@/i18n/localized-message.js";
+import type { CoreMessageKey } from "@/i18n/keys.js";
 import { Result } from "@/errors/either.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 
@@ -77,7 +75,7 @@ import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
 import { assembleAgentRunnerDeps } from "./assemble-agent-runner-deps.js";
-import { AGENT_RUN_RESOLVE_KEYS, resolveApplicationModelIdForRun, type AgentRunRuntimePort } from "./agent-run-shared.js";
+import { resolveApplicationModelIdForRun, type AgentRunRuntimePort } from "./agent-run-shared.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 import { createLogger } from "@/infra/log/logger.js";
 
@@ -180,19 +178,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
    */
   readonly searchConfig?: SearchConfigStore;
-}
-
-export class AgentTurnError extends Error {
-  readonly messageKey?: CoreMessageKey;
-  readonly messageParams?: MessageParams;
-
-  constructor(message: string | CoreMessageDescriptor) {
-    const localized = resolveLocalizedMessage(message);
-    super(localized.text);
-    this.name = "AgentTurnError";
-    this.messageKey = localized.messageKey;
-    this.messageParams = localized.messageParams;
-  }
 }
 
 /** 装配期工具注册表（`BuiltinToolContext` 绑定；主 / 子装配点共用）。 */
@@ -354,21 +339,15 @@ interface RunAgentTurnOptions {
 }
 
 /**
- * resolve 链失败转码（Result 入参，五期门⑦）：已知 resolve 失败 key 转
- * `AgentTurnError`（turn 异常通道，双端按同一 key 口径归一文案）；其余原样抛，
- * 由本函数 catch（AppError → `Result.err`）收口。
+ * resolve 链失败转码（Result 入参，五期门⑦）：本函数是 Result → throw 的转码
+ * 边界——失败原样抛 `result.error`（AppError 自带 key/messageKey）。在 turn 内
+ * 抛出的由下方 catch 的 `AppError → Result.err` 收口；desktop 的 `OrThrow`
+ * 包装（mapResolveError 的直接消费方）保留 rejection 契约。
  */
 // nm-style: keep-public — desktop agent-run.service 的 resolve 包装直接消费（三端同一转码口径）。
 export async function mapResolveError<T>(fn: () => Promise<Result<T, AppError>>): Promise<T> {
   const result = await fn();
-  if (!result.ok) {
-    if (AGENT_RUN_RESOLVE_KEYS.has(result.error.key)) {
-      throw new AgentTurnError(result.error.message);
-    }
-    // 未知错误原样抛（本函数是 resolve 链 → turn 异常通道的转码边界）。
-    const failure = result.error;
-    throw failure;
-  }
+  if (!result.ok) throw result.error;
   return result.value;
 }
 
@@ -557,7 +536,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
       const hasInput = trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
 
       if (!hasInput && !allowResumeWithoutInput) {
-        throw new AgentTurnError({ key: "error.agent.message_empty" });
+        throw new AppError("AGENT_MESSAGE_EMPTY");
       }
       if (!hasInput && allowResumeWithoutInput) {
         stage = "resume-check-last-message";
@@ -576,7 +555,7 @@ export async function runAgentTurn(runtime: AgentTurnRuntimePort, scope: AgentTu
         const tail = tailRead.value;
         // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
         if (tail[tail.length - 1]?.role !== "user") {
-          throw new AgentTurnError({ key: "error.agent.message_empty" });
+          throw new AppError("AGENT_MESSAGE_EMPTY");
         }
       }
 

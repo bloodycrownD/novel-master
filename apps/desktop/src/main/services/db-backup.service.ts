@@ -11,7 +11,7 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { assertSqliteBackupHeader, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot, type ProviderTableSnapshot } from "@novel-master/core";
+import { assertSqliteBackupHeader, DatabaseReplacedError, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/agent";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
@@ -40,20 +40,6 @@ type DbImportOutcome = {
   /** 服务商三表是否已在本机恢复成功（false ⇒ 数据库已换但三表丢失，需 UI 提示）。 */
   providerTablesRestored: boolean;
 };
-
-/**
- * 库文件已换代、其后收尾步骤失败：信号随异常送达（成功路径走 {@link DbImportOutcome} 返回值）。
- *
- * 此时**不得回滚**——库已经是新快照，回滚会把用户拉回来的数据丢掉。
- */
-export class DatabaseReplacedError extends Error {
-  readonly databaseReplaced = true as const;
-
-  constructor(message: string, readonly providerTablesRestored: boolean) {
-    super(message);
-    this.name = "DatabaseReplacedError";
-  }
-}
 
 /**
  * fs 操作的可注入缝。

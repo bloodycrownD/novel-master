@@ -1,4 +1,4 @@
-import {AppError, Result} from '@novel-master/core';
+import {AppError, DatabaseReplacedError, Result} from '@novel-master/core';
 import {ABORT_KEY, createAbortError, createAbortRegistry, isAbortLikeError} from '@novel-master/core/abort';
 import {
   pullCloudSync,
@@ -75,18 +75,6 @@ jest.mock('@/services/db-backup.service', () => ({
     mockImportFromBytes(...args),
   importDatabaseBackupFromPath: (...args: unknown[]) =>
     mockImportFromPath(...args),
-  DatabaseReplacedError: class DatabaseReplacedError extends Error {
-    // 刻意不用 TS 参数属性写法：jest.mock 的模块工厂不允许引用任何 out-of-scope
-    // 变量，babel 的静态检查会把参数名当成自由变量而报错。
-    databaseReplaced: boolean;
-    providerTablesRestored: boolean;
-    constructor(message: string, providerTablesRestored: boolean) {
-      super(message);
-      this.name = 'DatabaseReplacedError';
-      this.databaseReplaced = true;
-      this.providerTablesRestored = providerTablesRestored;
-    }
-  },
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
@@ -293,9 +281,6 @@ describe('pullCloudSync', () => {
   });
 
   it('catch 分支在 pull 已换代时先重建再用新 runtime 记账', async () => {
-    const {DatabaseReplacedError} = jest.requireMock<
-      typeof import('@/services/db-backup.service')
-    >('@/services/db-backup.service');
     mockCoordinatorPull.mockRejectedValue(
       new DatabaseReplacedError('数据库已导入，但本机服务商配置恢复失败', false),
     );

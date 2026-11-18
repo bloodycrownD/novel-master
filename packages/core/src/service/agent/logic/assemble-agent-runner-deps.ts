@@ -8,7 +8,7 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { createAbortError } from "@/domain/abort/logic/create-abort-error.js";
+import { assert } from "@/common/assert.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -61,11 +61,11 @@ export function assembleAgentRunnerDeps(input: AssembleAgentRunnerDepsInput): Cr
     // 逐条解压（全量读 212ms vs 可见读 14ms，每步一发）。详见 agent-runner
     // 该依赖的使用点注释。
     // 读口改 Outcome 后在此转回数组：已知失败抛出交 runner 收口；未注入 hooks，
-    // 中断分支不可达，命中按取消边界语义抛 AbortError（runner 统一 abort 路由识别）。
+    // 中断分支不可达，命中即不变量破坏（断言而非取消语义）。
     listVisibleSessionMessages: async () => {
       const read = await input.runtime.messages.listBySession(input.toolCtx.sessionId, { includeHidden: false });
       if (read.kind === "failed") throw read.error;
-      if (read.kind !== "completed") throw createAbortError();
+      assert(read.kind === "completed", "listVisibleSessionMessages 未注入 hooks，listBySession 不应产生中断");
       return read.value;
     },
     // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。

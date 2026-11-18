@@ -12,7 +12,7 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {assertSqliteBackupHeader, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot} from '@novel-master/core';
+import {assertSqliteBackupHeader, DatabaseReplacedError, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
 import {ABORT_KEY, createAbortError, createAbortScope, type Interrupt} from '@novel-master/core/abort';
 import {Result} from '@novel-master/core/errors';
@@ -33,8 +33,8 @@ const WRITE_CHUNK_BYTES = 256 * 1024;
  * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
  *
  * 成功路径走返回值；抛错路径（覆盖已成功、收尾失败）走
- * {@link DatabaseReplacedError}——函数抛错时返回值送不到调用方，
- * 「已换代」信号必须由异常类型承载。
+ * {@link DatabaseReplacedError}（定义已上收 core，desktop / mobile 同一份）——
+ * 函数抛错时返回值送不到调用方，「已换代」信号必须由异常类型承载。
  */
 type DbImportOutcome = {
   /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
@@ -42,20 +42,6 @@ type DbImportOutcome = {
   /** 服务商三表是否已在本机恢复成功（false ⇒ 数据库已换但三表丢失，需 UI 提示）。 */
   providerTablesRestored: boolean;
 };
-
-/**
- * 库文件已换代、其后收尾步骤失败：信号随异常送达（成功路径走
- * {@link DbImportOutcome} 返回值）。此时**不得回滚**——库已经是新快照，
- * 回滚会把用户拉回来的数据丢掉。
- */
-export class DatabaseReplacedError extends Error {
-  readonly databaseReplaced = true as const;
-
-  constructor(message: string, readonly providerTablesRestored: boolean) {
-    super(message);
-    this.name = 'DatabaseReplacedError';
-  }
-}
 
 function errorDetail(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

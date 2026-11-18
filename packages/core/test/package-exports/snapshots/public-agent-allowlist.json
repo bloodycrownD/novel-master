@@ -1,7 +1,6 @@
 [
   "AGENT_RUN_RESOLVE_KEYS",
   "AgentActivityTracker",
-  "AgentTurnError",
   "AppError",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
