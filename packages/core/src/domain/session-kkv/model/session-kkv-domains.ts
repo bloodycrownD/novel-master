@@ -118,12 +118,9 @@ export const USER_VFS_PENDING_QUEUE_KEY = "queue" as const;
 /** backfill_cursor 域单键：上次确认无空窗时的消息总数（十进制字符串）。 */
 export const BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY = "lastScannedCount" as const;
 
-/** 可写入 file_cache 的展示档位（不含 hidden）。 */
-export type WorkplaceDisplayStatus = "full" | "header" | "filename";
-
 /**
- * 生成 file_cache 键：`{status}:{path}`，如 `full:/a.md`。
+ * 兼容转发：`WorkplaceDisplayStatus` 的知识属于 workplace，定义已随
+ * file_cache 键/载荷契约搬去 {@link domain/workplace/logic/rule-snapshot-codec}。
+ * 保留本行只为既有消费方（chat attachment-hydrator 等）不破导入路径。
  */
-export function fileCacheKey(status: WorkplaceDisplayStatus, path: string): string {
-  return `${status}:${path}`;
-}
+export type { WorkplaceDisplayStatus } from "@/domain/workplace/logic/rule-snapshot-codec.js";

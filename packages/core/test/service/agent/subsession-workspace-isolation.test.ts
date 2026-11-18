@@ -44,8 +44,8 @@ import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { VfsService } from "@novel-master/core/vfs";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { fileCacheKey, RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();

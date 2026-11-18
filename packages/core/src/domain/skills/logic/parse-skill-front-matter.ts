@@ -7,7 +7,7 @@
  * @module domain/skills/logic/parse-skill-front-matter
  */
 
-import { splitMarkdownFrontMatter } from "@/domain/workplace/logic/front-matter.js";
+import { splitMarkdownFrontMatter } from "@/common/front-matter.js";
 import type { MessageLike } from "@/common/i18n.js";
 import { messageParamOf } from "@/i18n/localized-message.js";
 import { parseText } from "@/infra/serialization/parse-text.js";

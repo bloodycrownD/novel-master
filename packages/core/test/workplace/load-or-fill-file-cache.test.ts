@@ -11,10 +11,8 @@ import { Result } from "../../src/errors/either.js";
 import { loadOrFillFileCache } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { VfsService } from "../../src/domain/vfs/ports/vfs-service.port.js";
-import {
-  fileCacheKey,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import {
   CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES,
   CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,

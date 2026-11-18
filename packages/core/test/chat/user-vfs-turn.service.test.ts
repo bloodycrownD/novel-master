@@ -7,8 +7,8 @@ import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core
 import { createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";

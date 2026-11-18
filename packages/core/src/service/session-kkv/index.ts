@@ -13,6 +13,4 @@ export {
   SESSION_KKV_COMPOSER_STATUS_DOMAINS,
   RULE_SNAPSHOT_CANON_KEY,
   USER_VFS_PENDING_QUEUE_KEY,
-  fileCacheKey,
-  type WorkplaceDisplayStatus,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";

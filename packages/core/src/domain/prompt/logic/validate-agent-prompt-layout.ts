@@ -7,6 +7,7 @@
  * @module domain/prompt/logic/validate-agent-prompt-layout
  */
 
+import { Guards } from "@/common/guards.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AgentPromptLayout, DynamicPromptBlock, PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
@@ -30,10 +31,6 @@ interface AgentPromptLayoutWireOptions {
   readonly skillsEnabled?: boolean;
   /** 技能索引前缀语；trim 后空视为默认（不写域字段）。 */
   readonly skillsPrefix?: string;
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 /**
@@ -91,7 +88,7 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
 
   const persist: PersistTextPromptBlock[] = [];
   for (const [name, item] of Object.entries(persistMap)) {
-    if (!isNonEmptyString(name)) {
+    if (!Guards.isNonEmptyString(name)) {
       return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { descriptor: { key: "error.prompt.invalid_layout.block_name_required" } }));
     }
     if (item == null || typeof item !== "object" || Array.isArray(item)) {
@@ -128,7 +125,7 @@ export function validateAgentPromptLayoutFromMaps(persistRaw: unknown, dynamicRa
 
   const dynamic: DynamicPromptBlock[] = [];
   for (const [name, item] of Object.entries(dynamicMap)) {
-    if (!isNonEmptyString(name)) {
+    if (!Guards.isNonEmptyString(name)) {
       return Result.err(new AppError("PROMPT_INVALID_LAYOUT", { descriptor: { key: "error.prompt.invalid_layout.block_name_required" } }));
     }
     if (item == null || typeof item !== "object" || Array.isArray(item)) {

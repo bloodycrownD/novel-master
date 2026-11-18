@@ -13,11 +13,11 @@
  * 下次重新回填。
  */
 
-import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "./rule-snapshot-codec.js";
+import { fileCacheKey, parseFileCachePayload, serializeFileCachePayload, type FileCachePayload, type WorkplaceDisplayStatus } from "./rule-snapshot-codec.js";
 
 export type LoadOrFillFileCacheDeps = {
   readonly sessionId: string;

@@ -22,6 +22,7 @@ import type { CharacterCardImportOptions, CharacterCardImportService } from "@/d
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { Encoding } from "@/common/encoding.js";
+import { yieldToEventLoop } from "@/common/concurrency.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
@@ -32,8 +33,8 @@ import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/b
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
+import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";

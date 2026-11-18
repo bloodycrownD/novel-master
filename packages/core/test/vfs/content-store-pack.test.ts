@@ -15,7 +15,8 @@ import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-ca
 import { Result } from "@/errors/either.js";
 import { AppError } from "@/errors/app-error.js";
 import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { TdbcConnection } from "@novel-master/core";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";

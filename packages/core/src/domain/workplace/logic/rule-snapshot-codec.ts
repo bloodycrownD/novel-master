@@ -1,5 +1,6 @@
 /**
- * 规则快照编解码：DisplayState ↔ session kkv `rule_snapshot` 条目（不含 hidden）。
+ * 规则快照 / 文件缓存编解码：DisplayState ↔ session kkv `rule_snapshot` 条目（不含 hidden），
+ * 以及 `file_cache` 域的键与载荷 wire 契约。
  *
  * @module domain/workplace/logic/rule-snapshot-codec
  */
@@ -7,7 +8,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { WorkplaceRuleView } from "../model/workplace-rule-view.js";
-import type { WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import type { DisplayState } from "../model/workplace-types.js";
 
 /** `rule_snapshot` / `canon` 单条条目。 */
 export type RuleSnapshotEntry = {
@@ -81,6 +82,19 @@ export type FileCachePayload = {
   readonly body: string;
   readonly mtimeMs: number;
 };
+
+/** 可写入 file_cache 的展示档位（不含 hidden）。 */
+export type WorkplaceDisplayStatus = Exclude<DisplayState, "hidden">;
+
+/**
+ * 生成 file_cache 键：`{status}:{path}`，如 `full:/a.md`。
+ *
+ * 与 {@link serializeFileCachePayload} / {@link parseFileCachePayload} 同属
+ * file_cache 域的 wire 契约：写出方与读出方共用本函数，键序不会漂移。
+ */
+export function fileCacheKey(status: WorkplaceDisplayStatus, path: string): string {
+  return `${status}:${path}`;
+}
 
 /**
  * 序列化文件缓存载荷。

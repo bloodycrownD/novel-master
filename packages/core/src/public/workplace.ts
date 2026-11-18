@@ -46,11 +46,10 @@ export {
   renderWorkplaceFileTree,
   workplaceFileTreeRootLabel,
 } from "../domain/workplace/logic/workplace-file-tree.js";
-export {
-  parseMarkdownFrontMatter,
-  splitMarkdownFrontMatter,
-  type MarkdownFrontMatterSplit,
-} from "../domain/workplace/logic/front-matter.js";
+export { parseMarkdownFrontMatter } from "../domain/workplace/logic/front-matter.js";
+// split / 类型真源已收到 common/front-matter.ts（workplace 只是历史公开路径）；
+// 这里只改转发来源，公开符号名与 allowlist 快照不变。
+export { splitMarkdownFrontMatter, type MarkdownFrontMatterSplit } from "../common/front-matter.js";
 export { createWorkplaceService } from "../service/workplace/create-workplace-service.js";
 export type {
   WorkplaceService,

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { diffWorkplacePaths } from "@/domain/workplace/logic/diff-workplace-paths.js";
-import { fileCacheKey } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 
 describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
   it("T-RD1: live 有新 path、cache 无 → 返回该 path；全命中（含 attach 已写 key）→ []", () => {

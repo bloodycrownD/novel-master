@@ -7,8 +7,8 @@ import { describe, it } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
-import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, fileCacheKey } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { parseRuleSnapshotJson } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, parseRuleSnapshotJson } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();

@@ -9,9 +9,9 @@ import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
-import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, fileCacheKey, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { RULE_SNAPSHOT_CANON_KEY, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { fillFileCacheFromVfs } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
-import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { fileCacheKey, parseFileCachePayload, type WorkplaceDisplayStatus } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { joinFileBlocks, renderFileBlock, renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import { parseRuleSnapshotJson, ruleViewToSnapshotEntries, serializeRuleSnapshot, type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";

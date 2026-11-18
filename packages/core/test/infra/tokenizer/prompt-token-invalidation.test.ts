@@ -26,7 +26,7 @@ import {
 import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createMessageTranscriptEffectsService } from "../../../src/service/chat/create-message-transcript-effects.js";
-import { clearSessionPromptCaches } from "../../../src/service/vfs/logic/clear-session-prompt-caches.js";
+import { clearSessionPromptCaches } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
 import {
   getNovelMasterTestContext,

@@ -6,7 +6,7 @@
 
 import type { AppError } from "@/errors/app-error.js";
 import type { ErrorKey } from "@/errors/error-codes.js";
-import type { VfsReplaceNotFoundDetails } from "@/errors/guards.js";
+import type { VfsReplaceNotFoundDetails } from "./compute-replace-not-found-error.js";
 import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";

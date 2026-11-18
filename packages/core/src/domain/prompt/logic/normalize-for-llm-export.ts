@@ -7,7 +7,7 @@
 import { messageBodyTextFromBlocks } from "../../chat/content/message-body-text.js";
 import { textBlocks } from "../../chat/content/text-blocks.js";
 import type { ChatMessageData } from "../../chat/model/message.js";
-import { readMessageMetadata } from "../../chat/model/message-metadata.js";
+import { isVfsSemanticKind, readMessageMetadata } from "../../chat/model/message-metadata.js";
 import type { LlmProtocolKind } from "../../../infra/llm-protocol/ports/adapter.port.js";
 
 /** 组装三区边界（相对 `buildPromptLlmInputFromLayout` 的 messages 数组）。 */
@@ -19,8 +19,6 @@ export interface LlmExportZones {
 }
 
 export type LlmExportZone = "persist" | "chat" | "dynamic";
-
-const VFS_SEMANTIC_KINDS = new Set(["user_vfs_action", "user_vfs_ack", "tool_turn_bridge"]);
 
 function resolveZone(index: number, total: number, zones: LlmExportZones | undefined): LlmExportZone {
   if (zones == null) {
@@ -44,7 +42,7 @@ function isPlainTextOnly(message: ChatMessageData): boolean {
 /** VFS 语义段：不得与 plain chat 文本 merge。 */
 function isVfsSemanticSegment(message: ChatMessageData): boolean {
   const kind = readMessageMetadata(message.raw)?.kind;
-  return kind != null && VFS_SEMANTIC_KINDS.has(kind);
+  return kind != null && isVfsSemanticKind(kind);
 }
 
 /** 带非空 attachments 的 user：禁与相邻 plain chat merge（同 VFS semantic）。 */

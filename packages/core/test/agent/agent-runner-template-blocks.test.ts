@@ -21,12 +21,12 @@ import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import {
-  fileCacheKey,
   RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {
+  fileCacheKey,
   serializeFileCachePayload,
   serializeRuleSnapshot,
 } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";

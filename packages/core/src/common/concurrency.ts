@@ -1,5 +1,5 @@
 /**
- * 跨端互斥状态原语（计数式忙碌旗）。
+ * 跨端并发原语：互斥状态（计数式忙碌旗）与事件循环让步。
  *
  * desktop 的「数据清理 / 导入导出」与 mobile 的同名维护窗口、desktop 云同步的
  * 「pull/push 进行中」标志，此前三处各写一份 `let count` / `let bool` + 一组
@@ -12,6 +12,10 @@
  * 在 rebootstrap 完成之后 release——含「库文件已替换、连接仍处重建窗口」的
  * 完整互斥。计数 >0 即 busy，多个调用方嵌套不会互相提前清位（纯布尔置位会被
  * 嵌套调用的外层复位提前解锁）。
+ *
+ * 让步原语 `yieldToEventLoop` 服务于「长循环按片让路」：每次调用排一个
+ * `setTimeout(0)` 宏任务让出当前 tick。它与 mobile 的 `createQuantumYield`
+ * 不同职责——那个按时间量子节流（窗口内同步直通），是移动端长计算的形态。
  *
  * @module common/concurrency
  */
@@ -47,4 +51,13 @@ export function createBusyFlag(): BusyFlag {
       count = 0;
     },
   };
+}
+
+/**
+ * 片与片之间的事件循环让步（排一个 `setTimeout(0)` 宏任务）。
+ *
+ * RULE：让步**只能落在片与片之间，绝不能落在事务回调内部**（事务内语句须同步执行）。
+ */
+export function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

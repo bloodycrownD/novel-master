@@ -7,7 +7,7 @@
  * @module domain/workplace/logic/diff-workplace-paths
  */
 
-import { fileCacheKey, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, type WorkplaceDisplayStatus } from "./rule-snapshot-codec.js";
 
 /** live 条目：至少含 path；status 不参与「已加载」判定。 */
 export type WorkplaceLivePath = {

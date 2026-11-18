@@ -4,12 +4,27 @@
  * @module domain/chat/model/message-metadata
  */
 
-/** synthetic 消息种类。 */
-type MessageMetadataKind =
-  | "tool_turn_bridge"
-  | "user_vfs_action"
-  | "user_vfs_ack"
-  | (string & {});
+/**
+ * 已知 synthetic 消息种类。
+ *
+ * 新增字面量必须同时在 {@link VFS_SEMANTIC_BY_KIND} 登记——本类型是
+ * `satisfies Record<KnownMessageMetadataKind, boolean>` 的键全集，漏登记会编译失败。
+ */
+type KnownMessageMetadataKind = "tool_turn_bridge" | "user_vfs_action" | "user_vfs_ack";
+
+/** synthetic 消息种类（含旧会话 / 未来版本写入的未知 kind）。 */
+type MessageMetadataKind = KnownMessageMetadataKind | (string & {});
+
+/** 已知 kind 的 VFS 语义标记：true = 不得与 plain chat 文本 merge。 */
+const VFS_SEMANTIC_BY_KIND = { tool_turn_bridge: true, user_vfs_action: true, user_vfs_ack: true } as const satisfies Record<KnownMessageMetadataKind, boolean>;
+
+/** VFS 语义段的消息 kind 集合（不得与 plain chat 文本 merge）。 */
+export const VFS_SEMANTIC_KINDS: ReadonlySet<string> = new Set(Object.keys(VFS_SEMANTIC_BY_KIND).filter((kind) => VFS_SEMANTIC_BY_KIND[kind as KnownMessageMetadataKind]));
+
+/** 该 metadata kind 是否属于 VFS 语义段。 */
+export function isVfsSemanticKind(kind: string): boolean {
+  return VFS_SEMANTIC_KINDS.has(kind);
+}
 
 /** 写入 `ChatMessageData.raw.metadata` 的键结构。 */
 interface MessageMetadata {

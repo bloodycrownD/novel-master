@@ -20,13 +20,12 @@ import {
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {
-  fileCacheKey,
   RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attachment/attach-budget.js";
-import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { fileCacheKey, serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,

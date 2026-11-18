@@ -1,53 +1,10 @@
 /**
- * Markdown front matter extraction for workplace display.
+ * Markdown front matter display formatting for workplace file blocks.
  *
  * @module domain/workplace/front-matter
  */
 
-const FRONT_MATTER_START = /^---\s*$/;
-const FRONT_MATTER_END = /^---\s*$/;
-
-/** Result of splitting a Markdown file into optional front matter and body. */
-export interface MarkdownFrontMatterSplit {
-  /** Lines between opening and closing `---` (excludes delimiters). */
-  frontMatterLines: string[] | null;
-  /** Markdown body after the closing delimiter, or full file when no front matter. */
-  body: string;
-  /** `closed` is kept for signature compatibility but is always `true` after the
-   * unclosed-as-no-front-matter change — an opening `---` without a closing one
-   * is treated as "no front matter". New code should not branch on this field. */
-  closed: boolean;
-}
-
-/**
- * Splits YAML front matter between `---` lines from the Markdown body.
- */
-export function splitMarkdownFrontMatter(content: string): MarkdownFrontMatterSplit {
-  const lines = content.split(/\r?\n/);
-  if (lines.length === 0 || !FRONT_MATTER_START.test(lines[0] ?? "")) {
-    return { frontMatterLines: null, body: content, closed: true };
-  }
-  const frontMatterLines: string[] = [];
-  let closed = false;
-  let endIndex = 1;
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    if (FRONT_MATTER_END.test(line)) {
-      closed = true;
-      endIndex = i + 1;
-      break;
-    }
-    frontMatterLines.push(line);
-  }
-  if (!closed) {
-    // Treat unclosed `---` as "no front matter" — render the original content
-    // as body. The closing delimiter is not part of the Markdown spec, so an
-    // unclosed opener should not block normal rendering.
-    return { frontMatterLines: null, body: content, closed: true };
-  }
-  const body = lines.slice(endIndex).join("\n");
-  return { frontMatterLines, body, closed: true };
-}
+import { splitMarkdownFrontMatter } from "@/common/front-matter.js";
 
 /**
  * Parses YAML front matter between `---` lines.

@@ -13,8 +13,8 @@ import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import { createLogger } from "@/infra/log/logger.js";

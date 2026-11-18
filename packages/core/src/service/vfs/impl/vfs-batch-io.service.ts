@@ -4,6 +4,7 @@
  * @module service/vfs/impl/vfs-batch-io.service
  */
 
+import { yieldToEventLoop } from "@/common/concurrency.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -12,12 +13,12 @@ import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.j
 import { joinTargetLogicalPath, normalizeBatchRelativePath, relativePathUnderAnchor } from "@/domain/vfs/logic/vfs-batch-path.js";
 import { writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { resolveLogicalPath, scopeKey, validateLogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import type {
   BatchApplyOptions,
   BatchApplyReport,

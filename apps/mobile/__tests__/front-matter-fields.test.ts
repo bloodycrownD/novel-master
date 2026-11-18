@@ -1,4 +1,4 @@
-import {parseFrontMatterFields} from '@/components/vfs/front-matter-fields';
+import {parseFrontMatterFields} from '@novel-master/core/common';
 
 describe('parseFrontMatterFields', () => {
   it('parses key value pairs', () => {

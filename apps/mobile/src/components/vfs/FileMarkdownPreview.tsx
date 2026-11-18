@@ -7,7 +7,7 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
-import {Text as CommonText} from '@novel-master/core/common';
+import {parseFrontMatterFields, Text as CommonText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -19,7 +19,6 @@ import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich
 import {isRichContentOverLimit, isWebViewDocumentOverLimit} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
-import {parseFrontMatterFields} from './front-matter-fields';
 import type {RichDocumentAnnotationMark, RichDocumentRecogitoCreatePayload} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';

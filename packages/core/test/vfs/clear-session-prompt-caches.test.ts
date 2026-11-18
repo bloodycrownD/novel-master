@@ -17,7 +17,7 @@ import {
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
-import { clearSessionPromptCaches } from "../../src/service/vfs/logic/clear-session-prompt-caches.js";
+import { clearSessionPromptCaches } from "../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { restoreDefaultLogSink, setDefaultLogSink } from "@novel-master/core/log";
 import type { LogRecord } from "@novel-master/core/log";

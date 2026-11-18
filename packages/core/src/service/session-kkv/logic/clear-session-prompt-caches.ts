@@ -5,7 +5,7 @@
  * 失效工具调用数缓存（usage_stats.toolUseCount 写哨兵——导入可能带入
  * 含 tool_use 的消息，陈旧计数不得续命）。
  *
- * @module service/vfs/logic/clear-session-prompt-caches
+ * @module service/session-kkv/logic/clear-session-prompt-caches
  */
 
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";

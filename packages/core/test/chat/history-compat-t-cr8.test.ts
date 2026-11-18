@@ -13,11 +13,11 @@ import { formatStatusChipLabelFromAttachment } from "../../src/presentation/chat
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {
-  fileCacheKey,
   RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
 import {

@@ -14,7 +14,7 @@ import { Result } from "@/errors/either.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
-import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import { clearSessionPromptCaches } from "@/service/session-kkv/logic/clear-session-prompt-caches.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { TemplatePullService } from "../template-pull.port.js";
 
