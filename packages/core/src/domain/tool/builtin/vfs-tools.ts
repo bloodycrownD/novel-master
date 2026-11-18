@@ -9,13 +9,13 @@ import { z } from "zod";
 import type { Tool } from "../model/tool.js";
 import type { VfsGrepMatch, VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
-import { executeFsCommand, parseFsCommand, type FsCommandResult } from "../logic/fs-command.js";
+import { FsCommand, type FsCommandResult } from "../logic/fs-command.js";
 import { capMatchList, capUtf8BytesFill, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES, truncateLine } from "../logic/tool-output-limits.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { fileCacheKey, serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import { createLogger } from "@/infra/log/logger.js";
 
@@ -211,7 +211,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       // 编辑器保存链路同样不做版本比对，保存即覆盖。
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
-      const resolved = resolveLogicalPath(input.path);
+      const resolved = LogicalPath.resolve(input.path);
       if (!resolved.ok) return Result.err(resolved.error);
       const logicalPath = resolved.value;
       // B-1：仅新建文件时补父链规则——编辑已有文件不得静默把存量无行目录翻成 rule_on。
@@ -321,13 +321,13 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       }),
     ]),
     async run(input, ctx) {
-      const parsed = parseFsCommand(input);
+      const parsed = FsCommand.parse(input);
       if (!parsed.ok) return Result.err(parsed.error);
-      const result = await executeFsCommand(ctx.vfs, parsed.value);
+      const result = await FsCommand.execute(ctx.vfs, parsed.value);
       if (!result.ok) return Result.err(result.error);
       // mkdir 成功后为新目录及其祖先补默认目录规则；其余子命令不碰
       if (parsed.value.kind === "mkdir") {
-        const resolved = resolveLogicalPath(parsed.value.path);
+        const resolved = LogicalPath.resolve(parsed.value.path);
         if (!resolved.ok) return Result.err(resolved.error);
         await ensureDirRulesForNewPath(ctx, resolved.value);
       }
@@ -456,7 +456,7 @@ export async function ensureDirRulesForNewPath(ctx: BuiltinToolContext, dirLogic
     return;
   }
   try {
-    // 入参已是规范化逻辑路径（write 侧经 resolveLogicalPath，mkdir 侧同样）。
+    // 入参已是规范化逻辑路径（write 侧经 LogicalPath.resolve，mkdir 侧同样）。
     const parts = dirLogicalPath.split("/").filter((p) => p !== "");
     const chain: string[] = [];
     let current = "";

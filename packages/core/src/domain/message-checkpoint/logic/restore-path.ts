@@ -15,7 +15,7 @@
 
 // legacy-port: VfsRestorePort — phase 2
 
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
@@ -69,7 +69,7 @@ export async function restorePathToRevision(deps: RestorePathDeps, params: Resto
   // checkpoint 旧 entryId 上下文提前解析：live entry 与指针不同源（删除后
   // 同路径重建）时版本空间各自独立，所有 version/hash 短路都不可信。
   const cpEntryId = resolveCheckpointEntryId(logicalPath, prefetch, checkpointEntryId);
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
 
   // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
   let entryId: number | null = null;
@@ -171,7 +171,7 @@ export async function restorePathToRevisionWithBackfill(deps: RestorePathWithBac
     return Result.ok({ backfilled: false, outcome: "skipped_same_version" });
   }
 
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
   const resolvedId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
   if (!resolvedId.ok) return Result.err(resolvedId.error);
   const entryId = resolvedId.value;

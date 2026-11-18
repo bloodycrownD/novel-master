@@ -77,7 +77,7 @@ describe("db-backup 底层函数 busy 互斥（ic-20 desktop）", () => {
     const originalQuery = conn.query.bind(conn);
     let busyAtDump: boolean | undefined;
     conn.query = (sql: string, params?: unknown) => {
-      // dumpProviderTableSnapshot 的 `SELECT * FROM <provider 表>` 是导入
+      // ProviderTableSnapshotIo.dump 的 `SELECT * FROM <provider 表>` 是导入
       // 链路的第一批查询，执行瞬间必然已过底层 acquire。
       if (
         busyAtDump === undefined &&

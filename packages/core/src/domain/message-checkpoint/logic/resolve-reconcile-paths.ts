@@ -17,7 +17,7 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { CheckpointRepoDeps } from "../model/checkpoint-repo-deps.js";
@@ -84,7 +84,7 @@ export async function resolveReconcilePathSets(deps: ResolveReconcilePathDeps, p
   const { entryRepo, revisionRepo } = deps;
   const { scope, targetTree, checkpointEntryIdByPath } = params;
   const { projectId, sessionId } = scope;
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
   const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);
   const liveHeadByPath = new Map(liveHeads.map((head) => [head.logicalPath, head.headVersion]));
   const entryIdByPath = new Map<string, number>();

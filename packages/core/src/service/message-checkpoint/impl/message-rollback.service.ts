@@ -18,7 +18,7 @@ import { assert } from "@/common/assert.js";
 import { truncateTailInTransaction } from "@/service/message-checkpoint/checkpoint-repo-wiring.js";
 import { MessageCheckpointFactory } from "@/service/message-checkpoint/message-checkpoint-factory.js";
 import type { CheckpointRepoDeps } from "@/domain/message-checkpoint/model/checkpoint-repo-deps.js";
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -29,7 +29,7 @@ import { userMessageOf } from "@/i18n/error-message.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import { unwrapOrRollback } from "@/infra/tdbc/logic/transaction-helper.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { SESSION_KKV_DOMAIN_USAGE_STATS, USAGE_STATS_TOOL_USE_COUNT_KEY } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { VfsServiceFactory } from "@/service/vfs/vfs-service-factory.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -283,7 +283,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     // 回滚成功后可见 prompt 变了：API 占用双删（进程内热层 + session KKV
     // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（删除在
     // `conn.transaction` 块外，已 await，失败只吞 warn）。
-    await invalidateSessionApiPromptTokenEntry(createSessionKkvService(this.deps.conn), sessionId);
+    await SessionApiPromptTokenEntry.invalidate(createSessionKkvService(this.deps.conn), sessionId);
     // 回滚物理删尾：工具调用数缓存一并失效（含 hidden 口径下被删的 assistant
     // 行不再计入）。写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：与读口
     // 「现算回填前复核原值」配合防陈旧回写），best-effort 同上。
@@ -463,7 +463,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
    */
   private async reconcileVfsPaths(tx: TdbcConnection, plan: RollbackPlan, useRevisionHeadBackfill: boolean): Promise<VfsReconcileStats> {
     const { scope, pathsNeedWrite, targetTree, checkpointEntryIdByPath, tailDerivedDeletePaths, projectId, sessionId, hasDirectTargetTree } = plan;
-    const scopeKeyStr = scopeKey(scope);
+    const scopeKeyStr = LogicalPath.scopeKey(scope);
     const vfs = VfsServiceFactory.createScoped(tx, { kind: "session", projectId, sessionId });
     const { entryRepo, revisionRepo } = MessageCheckpointFactory.createRepoDeps(tx);
     const liveHeadRows = await listSessionFileHeads(entryRepo, projectId, sessionId);

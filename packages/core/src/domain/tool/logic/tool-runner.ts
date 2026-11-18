@@ -9,7 +9,7 @@ import { signalView } from "@/domain/abort/logic/create-abort-scope.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { AbortReason } from "@/errors/outcome.js";
-import { classifyMutatingToolCall } from "./fs-command-classify.js";
+import { FsCommand } from "./fs-command.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
@@ -151,7 +151,7 @@ export class ToolRunner<Ctx = unknown> {
         nextIndex += 1;
         if (index >= calls.length) return;
         const call = calls[index]!;
-        const paths = classifyMutatingToolCall(call.name, call.input).paths;
+        const paths = FsCommand.classifyMutatingToolCall(call.name, call.input).paths;
         let release: (() => void) | undefined;
         if (paths != null && paths.length > 0) {
           const prevTails = paths.map((path) => pathTail.get(path) ?? Promise.resolve());

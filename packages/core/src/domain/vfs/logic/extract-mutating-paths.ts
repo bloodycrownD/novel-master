@@ -4,7 +4,7 @@
  * @module domain/vfs/logic/extract-mutating-paths
  */
 
-import { classifyMutatingToolCall } from "@/domain/tool/logic/fs-command-classify.js";
+import { FsCommand } from "@/domain/tool/logic/fs-command.js";
 
 /** 单次 tool 调用描述。 */
 interface MutatingToolCall {
@@ -16,7 +16,7 @@ interface MutatingToolCall {
  * 提取突变 tool 调用涉及的路径；非突变 tool 返回 null。
  */
 export function extractMutatingPaths(call: MutatingToolCall): readonly string[] | null {
-  return classifyMutatingToolCall(call.name, call.input).paths;
+  return FsCommand.classifyMutatingToolCall(call.name, call.input).paths;
 }
 
 /** 合并一次 op 内所有突变路径（去重、保序）。 */

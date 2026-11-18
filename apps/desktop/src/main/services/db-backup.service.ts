@@ -11,7 +11,7 @@
 import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
-import { assertSqliteBackupHeader, DatabaseReplacedError, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot, type ProviderTableSnapshot } from "@novel-master/core";
+import { assertSqliteBackupHeader, DatabaseReplacedError, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, ProviderTableSnapshotIo, type ProviderTableSnapshot } from "@novel-master/core";
 import { AppError } from "@novel-master/core/errors";
 import { Errors } from "@novel-master/core/common";
 import { Result, type Interrupt } from "@novel-master/core/errors";
@@ -138,7 +138,7 @@ async function replaceLiveDatabase(replace: (dbPath: string) => Promise<void>, p
     const restoreDbPath = resolve(resolveDbPath());
     const restoreConn = await open(`tdbc:sqlite:file:${restoreDbPath}`, { driver: "better-sqlite3" });
     try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      await ProviderTableSnapshotIo.restore(restoreConn, providerSnapshot);
     } finally {
       await restoreConn.close();
     }
@@ -203,7 +203,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
     if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();
-    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+    const providerSnapshot = await ProviderTableSnapshotIo.dump(liveConn);
 
     await replaceLiveDatabase((dbPath) => fsOps.copyFile(srcPath, dbPath), providerSnapshot);
   } finally {
@@ -226,7 +226,7 @@ export async function importDatabaseBackupFromBytes(bytes: Uint8Array): Promise<
     if (!checked.ok) return Result.err(checked.error);
 
     const liveConn = await getDesktopConnection();
-    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+    const providerSnapshot = await ProviderTableSnapshotIo.dump(liveConn);
 
     await replaceLiveDatabase((dbPath) => writeFile(dbPath, bytes), providerSnapshot);
   } finally {

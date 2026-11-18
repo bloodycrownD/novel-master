@@ -6,7 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { resolveLogicalPath } from "./vfs-path-mapper.js";
+import { LogicalPath } from "./vfs-path-mapper.js";
 
 /** 批量路径拼接的失败载荷。 */
 type VfsBatchPathError = AppError<"VFS_INVALID_PATH">;
@@ -43,7 +43,7 @@ export function normalizeBatchRelativePath(relativePath: string): string | null 
 
 /** 将相对路径拼到目标目录下，得到逻辑绝对路径。 */
 export function joinTargetLogicalPath(targetDir: string, relativePath: string): Result<string, VfsBatchPathError> {
-  const dir = resolveLogicalPath(targetDir);
+  const dir = LogicalPath.resolve(targetDir);
   if (!dir.ok) return dir;
   const rel = normalizeBatchRelativePath(relativePath);
   if (rel == null) {
@@ -59,9 +59,9 @@ export function joinTargetLogicalPath(targetDir: string, relativePath: string): 
  * nm-style: keep-public — 纯路径原语，与 normalizeBatchRelativePath / joinTargetLogicalPath 同组导出；唯一消费方 vfs-batch-io 是 IO 编排服务，内联会把路径规范化与 Result 语义搬进 service 层（撤销导出还需同步 public/vfs.ts 与 allowlist）。
  */
 export function relativePathUnderAnchor(logical: string, anchor: string): Result<string, VfsBatchPathError> {
-  const resolvedPath = resolveLogicalPath(logical);
+  const resolvedPath = LogicalPath.resolve(logical);
   if (!resolvedPath.ok) return resolvedPath;
-  const resolvedRoot = resolveLogicalPath(anchor);
+  const resolvedRoot = LogicalPath.resolve(anchor);
   if (!resolvedRoot.ok) return resolvedRoot;
   const path = resolvedPath.value;
   const root = resolvedRoot.value;

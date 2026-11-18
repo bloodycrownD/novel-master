@@ -11,13 +11,13 @@
  *    一律不是工作区路径 → null；
  * 3. 协议相对地址：`//host/path` → null；
  * 4. 剥 `#fragment`：剥完为空说明是纯锚点（webview 侧本就放行，不进本函数）；
- * 5. resolveLogicalPath 归一化（相对路径补前导 `/`、消解 `.`/`..`），
+ * 5. LogicalPath.resolve 归一化（相对路径补前导 `/`、消解 `.`/`..`），
  *    `INVALID_PATH`（如 `..` 越根、空串）→ null。
  *
  * @module domain/chat/logic/chat-link-resolver
  */
 
-import {resolveLogicalPath} from "../../vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "../../vfs/logic/vfs-path-mapper.js";
 import type {CoreMessageDescriptor} from "@/i18n/keys.js";
 
 /** scheme 起始形态：字母开头 + 字母/数字/`+`/`.`/`-` + `:`（大小写不敏感）。 */
@@ -80,7 +80,7 @@ class ChatLinkResolver {
             return null;
         }
 
-        const resolved = resolveLogicalPath(pathPart);
+        const resolved = LogicalPath.resolve(pathPart);
         if (!resolved.ok) {
             // INVALID_PATH：空段越权、`..` 越根等形态
             return null;
@@ -93,7 +93,7 @@ class ChatLinkResolver {
      * 超长路径省略显示：保留首段目录 + `...` + 文件名（对齐工作区路径中省
      * 略的视觉口径），如 `/测试/1/1/.../不存在的文件.md` → `/测试.../不存在的文件.md`。
      * 入参应为归一化绝对逻辑路径（/ 开头、无空段无尾斜杠，即
-     * resolveChatLinkTarget/resolveLogicalPath 的产出形态）；短路径（两段内或
+     * resolveChatLinkTarget/LogicalPath.resolve 的产出形态）；短路径（两段内或
      * 未超过 ELIDE_PATH_MIN_LENGTH）原样返回；文件名/首段本身超长不截断。
      * nm-style: keep-local — chatLinkNotFoundMessage 复用；测试直接锁省略规则。
      */

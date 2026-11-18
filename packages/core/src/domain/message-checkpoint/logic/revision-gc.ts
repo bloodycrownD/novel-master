@@ -11,7 +11,7 @@
  * @module domain/message-checkpoint/logic/revision-gc
  */
 
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
@@ -49,7 +49,7 @@ export async function sweepSessionRevisions(revisionRepo: VfsRevisionRepository,
     projectId,
     sessionId,
   };
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
   const scoped = await deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
   if (options?.includeGlobalOrphans === false) {
     // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。

@@ -6,7 +6,7 @@
  * 子路径，也不在 webview 构建门 B 的 core 白名单（`scripts/build-webview.mjs` 的
  * `WEBVIEW_CORE_ALLOWLIST`）；经 `@novel-master/core/chat` barrel 引入会把整条闭包
  * 拉进 bundle，故不能直接 import。**镜像纪律**：工具名集合、`vfs.` 前缀剥离、
- * `path ?? file_path` 回落、`resolveLogicalPath` 规范化（trim / 补前导 `/` /
+ * `path ?? file_path` 回落、`LogicalPath.resolve` 规范化（trim / 补前导 `/` /
  * 折叠 `.` `..` / 越根拒绝）与返回通道（解析不出返回 `undefined`）都与 core 一致。
  */
 import {VFS_FILE_TOOLS} from '../state/state';

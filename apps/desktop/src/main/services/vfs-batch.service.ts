@@ -24,7 +24,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { resolveAppIconPath } from "../runtime/resolve-app-icon.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { executeSessionUserVfsOp, isSessionVfsScope } from "./user-vfs-turn-execute.service.js";
+import { executeSessionUserVfsOp, LogicalPath } from "./user-vfs-turn-execute.service.js";
 import { createLogger } from "@novel-master/core/log";
 
 const log = createLogger("desktop.vfs-batch");
@@ -169,7 +169,7 @@ export async function ingestVfsFromHostPaths(runtime: DesktopNovelMasterRuntime,
   const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
   let report: BatchApplyReport;
 
-  if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
+  if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
     const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
     // BatchIngestWriter 适配器（core port，`domain/vfs/ports/vfs-batch-io.port.ts`）：
     // writer 端口已知失败沿 `Result.err` 回传，由 `applyBatchIngestWithWriter` 逐项聚合进

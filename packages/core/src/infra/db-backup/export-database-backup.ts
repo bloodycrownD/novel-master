@@ -12,7 +12,7 @@
 import type {Interrupt} from "@/errors/outcome.js";
 import {createAbortError} from "@/domain/abort/logic/create-abort-error.js";
 import type {TdbcConnection} from "../tdbc/ports/connection.port.js";
-import {scrubProviderTablesInDatabase} from "./provider-table-snapshot.js";
+import {ProviderTableSnapshotIo} from "./provider-table-snapshot.js";
 
 /** scrub 导出副本时 ATTACH 的别名（两端逐字一致）。 */
 const EXPORT_ATTACH_ALIAS = "export_db";
@@ -41,5 +41,5 @@ export async function exportDatabaseBackupToPath(conn: TdbcConnection, destPath:
         throw createAbortError();
     }
     await deps.copyFile(dbPath, destPath);
-    await scrubProviderTablesInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);
+    await ProviderTableSnapshotIo.scrubInDatabase(conn, destPath, EXPORT_ATTACH_ALIAS);
 }

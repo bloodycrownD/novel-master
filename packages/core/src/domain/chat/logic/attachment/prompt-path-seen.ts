@@ -4,7 +4,7 @@
  * @module domain/chat/logic/attachment/prompt-path-seen
  */
 
-import {resolveLogicalPath} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {AppError} from "@/errors/app-error.js";
 import {Result} from "@/errors/either.js";
 
@@ -22,7 +22,7 @@ export const promptPathSeen = {
     normalizeStore(path: string, options?: { readonly keepDirTrailingSlash?: boolean }): Result<string, AppError> {
         const keepSlash = options?.keepDirTrailingSlash === true;
         const isDir = this.isDirToken(path);
-        const seen = resolveLogicalPath(path);
+        const seen = LogicalPath.resolve(path);
         if (!seen.ok) return seen;
         if (keepSlash && isDir && seen.value !== "/") {
             return Result.ok(`${seen.value}/`);
@@ -35,7 +35,7 @@ export const promptPathSeen = {
         if (path.trim() === "") {
             return null;
         }
-        const seen = resolveLogicalPath(path);
+        const seen = LogicalPath.resolve(path);
         return seen.ok ? seen.value : null;
     },
 

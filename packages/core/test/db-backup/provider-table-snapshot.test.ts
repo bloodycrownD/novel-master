@@ -3,9 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { bootstrapNovelMaster, dumpProviderTableSnapshot, open, restoreProviderTableSnapshot, scrubProviderTablesInDatabase, type ProviderTableSnapshot, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, open, ProviderTableSnapshotIo, type ProviderTableSnapshot, type TdbcConnection } from "@novel-master/core";
 import { NOVEL_MASTER_SCHEMA_STATEMENTS, SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
-import { scrubProviderTables } from "../../src/infra/db-backup/provider-table-snapshot.js";
 import { isAppError } from "@novel-master/core/errors";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -170,7 +169,7 @@ describe("provider-table-snapshot", () => {
     try {
       await seedTestProviderData(conn);
       assert.ok((await countProviderRows(conn)) > 0);
-      await scrubProviderTables(conn);
+      await ProviderTableSnapshotIo.scrub(conn);
       assert.equal(await countProviderRows(conn), 0);
     } finally {
       await conn.close();
@@ -182,13 +181,13 @@ describe("provider-table-snapshot", () => {
     const target = await openMemoryDb();
     try {
       await seedTestProviderData(source);
-      const snapshot = await dumpProviderTableSnapshot(source);
+      const snapshot = await ProviderTableSnapshotIo.dump(source);
 
-      await scrubProviderTables(target);
-      await restoreProviderTableSnapshot(target, snapshot);
+      await ProviderTableSnapshotIo.scrub(target);
+      await ProviderTableSnapshotIo.restore(target, snapshot);
 
       assert.equal(
-        normalizeSnapshot(await dumpProviderTableSnapshot(target)),
+        normalizeSnapshot(await ProviderTableSnapshotIo.dump(target)),
         normalizeSnapshot(snapshot),
       );
     } finally {
@@ -214,7 +213,7 @@ describe("provider-table-snapshot", () => {
       assert.ok((await countProviderRows(exportConn)) > 0);
       await exportConn.close();
 
-      await scrubProviderTablesInDatabase(mainConn, attachPath, "export_db");
+      await ProviderTableSnapshotIo.scrubInDatabase(mainConn, attachPath, "export_db");
 
       assert.equal(await countProviderRows(mainConn), mainRowsBefore);
 
@@ -239,12 +238,12 @@ describe("provider-table-snapshot", () => {
       await execLegacySavedModelTable(source);
       await seedLegacySavedModelRows(source);
       await execBootstrapSchemaDdl(source);
-      const snapshot = await dumpProviderTableSnapshot(source);
+      const snapshot = await ProviderTableSnapshotIo.dump(source);
 
       await execLegacySavedModelTable(target);
       await execBootstrapSchemaDdl(target);
-      await scrubProviderTables(target);
-      await restoreProviderTableSnapshot(target, snapshot);
+      await ProviderTableSnapshotIo.scrub(target);
+      await ProviderTableSnapshotIo.restore(target, snapshot);
       await assert.rejects(
         bootstrapNovelMaster(target),
         (err: unknown) => {
@@ -260,7 +259,7 @@ describe("provider-table-snapshot", () => {
   });
 });
 
-describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
+describe("ProviderTableSnapshotIo.restore 校验闸门 (T-SC12)", () => {
   it("T-SC12a：非法 protocol 被拒，主库未被 scrub", async () => {
     const conn = await openMemoryDb();
     try {
@@ -272,7 +271,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
         "unknown-protocol";
 
       await assert.rejects(
-        () => restoreProviderTableSnapshot(conn, snapshot),
+        () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
           assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_PROTOCOL_INVALID"));
           assert.equal(err.details?.["table"], "llm_provider");
@@ -293,7 +292,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       (snapshot.llm_provider[0]! as Record<string, unknown>).display_name =
         "   ";
       await assert.rejects(
-        () => restoreProviderTableSnapshot(conn, snapshot),
+        () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
           assert.ok(isAppError(err, "DB_BACKUP_PROVIDER_ROW_DISPLAY_NAME_EMPTY"));
           return true;
@@ -311,7 +310,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       (snapshot.llm_saved_model[0]! as Record<string, unknown>).provider_id =
         "nonexistent-provider";
       await assert.rejects(
-        () => restoreProviderTableSnapshot(conn, snapshot),
+        () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
           assert.ok(isAppError(err, "DB_BACKUP_DANGLING_SAVED_MODEL"));
           assert.equal(err.details?.["table"], "llm_saved_model");
@@ -329,7 +328,7 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
       const snapshot = buildValidSnapshot();
       delete (snapshot.sksp_secrets[0]! as Record<string, unknown>).ciphertext;
       await assert.rejects(
-        () => restoreProviderTableSnapshot(conn, snapshot),
+        () => ProviderTableSnapshotIo.restore(conn, snapshot),
         (err: unknown) => {
           assert.ok(isAppError(err, "DB_BACKUP_SECRET_ROW_CIPHERTEXT_MISSING"));
           return true;
@@ -343,9 +342,9 @@ describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
   it("T-SC12e：合法快照仍能正常 restore", async () => {
     const conn = await openMemoryDb();
     try {
-      await scrubProviderTables(conn);
+      await ProviderTableSnapshotIo.scrub(conn);
       const snapshot = buildValidSnapshot();
-      await restoreProviderTableSnapshot(conn, snapshot);
+      await ProviderTableSnapshotIo.restore(conn, snapshot);
       assert.ok((await countProviderRows(conn)) > 0);
     } finally {
       await conn.close();

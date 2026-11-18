@@ -11,7 +11,7 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -50,7 +50,7 @@ class ForkCopySeeder {
     const checkpoints = new SqliteMessageCheckpointRepository(tx);
 
     const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
-    const targetScopeKey = scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
+    const targetScopeKey = LogicalPath.scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
 
     const heads = await listSessionFileHeads(entries, projectId, targetSessionId);
 

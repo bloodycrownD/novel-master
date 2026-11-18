@@ -7,7 +7,7 @@
  * @module domain/message-checkpoint/logic/detect-missing-revisions
  */
 
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -35,7 +35,7 @@ export type FindMissingRevisionParams = {
 export async function findMissingRevisionPointers(deps: FindMissingRevisionDeps, params: FindMissingRevisionParams): Promise<Result<string[], AppError>> {
   const { revisionRepo, entryRepo } = deps;
   const { scope, targetTree, pathsToReconcile, checkpointEntryIdByPath } = params;
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
   const pairs: Array<{
     logicalPath: string;
     entryId: number;

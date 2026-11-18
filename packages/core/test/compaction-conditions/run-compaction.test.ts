@@ -21,7 +21,7 @@ import { runCompaction } from "../../src/service/compaction-conditions/run-compa
 import { CompactionFactory } from "../../src/service/compaction-conditions/compaction-factory.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { serializeSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
@@ -85,7 +85,7 @@ async function seedPromptTokenRow(sessionId: string): Promise<void> {
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens: 1234,
       atMs: Date.now(),
     }),

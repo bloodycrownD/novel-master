@@ -7,7 +7,7 @@
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { scopeKey as vfsScopeKey, validateLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
@@ -50,7 +50,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(input.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logicalPath);
+    const allowed = LogicalPath.validate(this.scope, logicalPath);
     if (!allowed.ok) return Result.err(allowed.error);
     if (input.ruleEnabled === false && isWorkplaceRootPath(this.scope, logicalPath)) {
       return Result.err(new AppError("WORKPLACE_ROOT_RULE_LOCKED", { detail: "cannot disable rules on root directory" }));
@@ -78,7 +78,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
-    const allowed = validateLogicalPath(this.scope, normalized);
+    const allowed = LogicalPath.validate(this.scope, normalized);
     if (!allowed.ok) return Result.err(allowed.error);
     const rule = await this.deps.workplace.findDirRule(workplaceScopeKey(this.scope), normalized);
     if (!rule.ok) return Result.err(rule.error);
@@ -93,7 +93,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(input.logicalPath);
     if (!resolved.ok) return Result.err(resolved.error);
     const logicalPath = resolved.value;
-    const allowed = validateLogicalPath(this.scope, logicalPath);
+    const allowed = LogicalPath.validate(this.scope, logicalPath);
     if (!allowed.ok) return Result.err(allowed.error);
     const upserted = await this.deps.workplace.upsertFileRule({ scopeKey: workplaceScopeKey(this.scope), logicalPath, inclusionMode: input.inclusionMode });
     if (!upserted.ok) return Result.err(upserted.error);
@@ -104,7 +104,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const resolved = normalizePath(logicalPrefix);
     if (!resolved.ok) return Result.err(resolved.error);
     const normalized = resolved.value;
-    const allowed = validateLogicalPath(this.scope, normalized);
+    const allowed = LogicalPath.validate(this.scope, normalized);
     if (!allowed.ok) return Result.err(allowed.error);
     const deleted = await this.deps.workplace.deleteRulesUnderLogicalPrefix(workplaceScopeKey(this.scope), normalized);
     if (!deleted.ok) return Result.err(deleted.error);
@@ -118,9 +118,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
     if (!newResolved.ok) return Result.err(newResolved.error);
     const oldNormalized = oldResolved.value;
     const newNormalized = newResolved.value;
-    const allowedOld = validateLogicalPath(this.scope, oldNormalized);
+    const allowedOld = LogicalPath.validate(this.scope, oldNormalized);
     if (!allowedOld.ok) return Result.err(allowedOld.error);
-    const allowedNew = validateLogicalPath(this.scope, newNormalized);
+    const allowedNew = LogicalPath.validate(this.scope, newNormalized);
     if (!allowedNew.ok) return Result.err(allowedNew.error);
     const renamed = await this.deps.workplace.renameRulesUnderLogicalPrefix(workplaceScopeKey(this.scope), oldNormalized, newNormalized);
     if (!renamed.ok) return Result.err(renamed.error);
@@ -195,7 +195,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
   private async evaluateCachedView(): Promise<Result<WorkplaceViewCacheValue, AppError>> {
     const conn = this.deps.conn;
     const cacheKey = workplaceScopeKey(this.scope);
-    const vfsKey = vfsScopeKey(this.scope);
+    const vfsKey = LogicalPath.scopeKey(this.scope);
     const vfs = await this.deps.vfs.computeEntrySignature(vfsKey);
     const dirRules = await this.deps.workplace.listDirRules(cacheKey);
     const fileRules = await this.deps.workplace.listFileRules(cacheKey);
@@ -247,7 +247,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
    */
   private async loadContextMetadata(): Promise<Result<WorkplaceRuleContext, AppError>> {
     const scopeKey = workplaceScopeKey(this.scope);
-    const vfsKey = vfsScopeKey(this.scope);
+    const vfsKey = LogicalPath.scopeKey(this.scope);
     // entry_id 化后 path 列直接存逻辑路径，整个 scope 列在 "/" 前缀下
     const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(vfsKey, "/");
     // 目录行查询提前到 buildWorkplaceDirSet 之前：既要喂给 allDirs，也要

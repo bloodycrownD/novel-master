@@ -42,10 +42,7 @@ export { runDeferredFileCacheGc } from "./domain/session-kkv/logic/deferred-file
  */
 export {
   DB_BACKUP_PROVIDER_TABLES,
-  dumpProviderTableSnapshot,
-  scrubProviderTablesInDatabase,
-  restoreProviderTableSnapshot,
-  validateProviderTableSnapshot,
+  ProviderTableSnapshotIo,
   assertSqliteBackupHeader,
   exportDatabaseBackupToPath,
 } from "./infra/db-backup/index.js";

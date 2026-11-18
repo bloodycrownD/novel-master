@@ -227,7 +227,7 @@ describe("cloud-sync pull 记账与换代时序 (S-CS-01 / S-CS-16 / D5)", () =>
     // 先往本机 llm_provider 塞一行「非法」数据（display_name 为空，schema 层
     // 没有 CHECK 拦它，但 service 级校验会拒）。于是：
     //   覆盖动作成功（库已换代、库文件本身是合法 sqlite）
-    // → 恢复三表前 validateProviderTableSnapshot 抛错
+    // → 恢复三表前 ProviderTableSnapshotIo.validate 抛错
     // → coordinator 原样透传 DatabaseReplacedError。
     // 「库已换却不重建」比「记账失败」更糟，所以 catch 分支必须先换代再报错。
     const runtimeR = await getDesktopRuntime();

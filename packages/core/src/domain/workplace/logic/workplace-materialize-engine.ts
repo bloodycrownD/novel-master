@@ -4,7 +4,7 @@
  * @module domain/workplace/logic/workplace-materialize-engine
  */
 
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -17,7 +17,7 @@ import type { WorkplaceRuleView } from "../model/workplace-rule-view.js";
  * 按 DFS 文件行顺序遍历；仅对非 hidden 且 full/header 档位读取 VFS 正文。
  */
 export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: VfsEntryRepository, scope: WorkplaceScope, mtimeByPath: ReadonlyMap<string, number>): Promise<Result<string, AppError>> {
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
   const blocks: string[] = [];
   for (const row of view.rows) {
     if (row.kind !== "file") {

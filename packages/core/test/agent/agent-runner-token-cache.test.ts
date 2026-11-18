@@ -25,7 +25,7 @@ import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
 import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/index.js";
-import { invalidateSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   RULE_SNAPSHOT_CANON_KEY,
@@ -38,10 +38,7 @@ import {
   serializeFileCachePayload,
   serializeRuleSnapshot,
 } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import {
-  clearChatTokenEstimateMemo,
-  lookupWorkplaceEstimateByFingerprint,
-} from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
+import { ChatTokenEstimateMemo } from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import {
   EVENT_AGENT_STEP_COMMITTED,
@@ -869,7 +866,7 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
         }),
       );
       // 清掉上一轮可能落下的 api 值：两轮都强制走本地档，比的才是 tools 段。
-      await invalidateSessionApiPromptTokenEntry(sessionKkv, SESSION_ID);
+      await SessionApiPromptTokenEntry.invalidate(sessionKkv, SESSION_ID);
       const result = unwrap(await runner.run({
         maxSteps: 3,
         definition: minimalDefinition(),
@@ -906,12 +903,12 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
     registerNodeTokenizerDriverForTests();
     sessionApiPromptTokenCache.clearAll();
     sessionKkv = createMemorySessionKkv();
-    clearChatTokenEstimateMemo();
+    ChatTokenEstimateMemo.clear();
   });
 
   afterEach(() => {
     sessionApiPromptTokenCache.clearAll();
-    clearChatTokenEstimateMemo();
+    ChatTokenEstimateMemo.clear();
   });
 
   it("评估那次 resolve 收到的 ctx.workplaceFingerprint 非空、等于 assemble 产物、且增量分解的按指纹缓存被填充", async () => {
@@ -1015,7 +1012,7 @@ describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", (
         "指纹应逐字等于 assemble 产物（path|status|mtimeMs|bodyLength）"
       );
       assert.ok(
-        lookupWorkplaceEstimateByFingerprint(fingerprint!) != null,
+        ChatTokenEstimateMemo.lookupWorkplaceEstimateByFingerprint(fingerprint!) != null,
         "增量分解的按指纹估读缓存应被填充（证明指纹真到了 resolve，而非只到 trigger）"
       );
     }

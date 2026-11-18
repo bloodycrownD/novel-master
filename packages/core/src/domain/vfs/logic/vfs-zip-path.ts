@@ -6,7 +6,7 @@
 
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { resolveLogicalPath } from "./vfs-path-mapper.js";
+import { LogicalPath } from "./vfs-path-mapper.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
 /** ZIP entry 路径映射的失败载荷（含目标目录 → 逻辑路径透传的 `VFS_INVALID_PATH`）。 */
@@ -19,7 +19,7 @@ export function resolveZipDirectoryPath(directoryPath?: string): Result<string, 
   if (directoryPath == null || directoryPath.trim() === "") {
     return Result.ok("/");
   }
-  const resolved = resolveLogicalPath(directoryPath);
+  const resolved = LogicalPath.resolve(directoryPath);
   if (!resolved.ok) return resolved;
   return Result.ok(resolved.value);
 }
@@ -45,11 +45,11 @@ export function zipEntryNameRelativeToDirectory(logical: string, directoryPath: 
   const dirResult = resolveZipDirectoryPath(directoryPath);
   if (!dirResult.ok) return Result.err(dirResult.error);
   const dir = dirResult.value;
-  const resolved = resolveLogicalPath(logical);
+  const resolved = LogicalPath.resolve(logical);
   if (!resolved.ok) return Result.err(resolved.error);
   const path = resolved.value;
   if (dir === "/") {
-    // path 已由 resolveLogicalPath 规范化（非根、无尾斜杠），去掉 leading `/` 即 entry 名。
+    // path 已由 LogicalPath.resolve 规范化（非根、无尾斜杠），去掉 leading `/` 即 entry 名。
     return path === "/" ? Result.ok("") : Result.ok(path.slice(1));
   }
   if (path === dir) {
@@ -118,7 +118,7 @@ export function assertZipEntriesNotDomainRootPrefixed(directoryPath: string, ent
   if (dir === "/") {
     return Result.ok(undefined);
   }
-  const normalizedDir = resolveLogicalPath(dir);
+  const normalizedDir = LogicalPath.resolve(dir);
   if (!normalizedDir.ok) return Result.err(normalizedDir.error);
   const base = normalizedDir.value === "/" ? "" : normalizedDir.value.slice(normalizedDir.value.lastIndexOf("/") + 1);
   const nonEmpty = entryNames.filter((name) => name.length > 0);

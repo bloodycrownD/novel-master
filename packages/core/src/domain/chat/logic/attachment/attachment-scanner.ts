@@ -8,7 +8,7 @@
 
 import { Guards } from "@/common/guards.js";
 import { SKILL_NAME_PATTERN } from "@/domain/skills/model/skill-name.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { AppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
 import { attachmentStorageName, type MessageAttachment } from "../../model/message-attachment.schema.js";
@@ -115,7 +115,7 @@ class AttachmentScanner {
       if (typeof raw !== "string" || raw.trim() === "") {
         return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { descriptor: { key: "error.chat.attachment_path_blank" }, path: raw }));
       }
-      const resolved = resolveLogicalPath(raw);
+      const resolved = LogicalPath.resolve(raw);
       if (!resolved.ok) return Result.err(new AppError("CHAT_INVALID_ARGUMENT", { detail: resolved.error.message, path: raw }));
       const base = attachFromPath(raw, resolved.value);
       materialized.push({

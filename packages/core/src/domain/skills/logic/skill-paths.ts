@@ -9,7 +9,7 @@
  */
 
 import type { AppError } from "@/errors/app-error.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** 两域技能的逻辑根前缀。 */
 export const SKILLS_ROOT = "/meta/skills";
@@ -49,7 +49,7 @@ export function resolveSkillRelPathCore(name: string, path: string | undefined):
   // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，normalizePath
   // 的 Err（越过根）在正常技能名下不可达；仍按迁移前的透传口径携带原错误，时机不变。
   // 剩余失败只有“归一化后跑到技能目录外”。
-  const logical = resolveLogicalPath(`${dirPrefix}${raw}`);
+  const logical = LogicalPath.resolve(`${dirPrefix}${raw}`);
   if (!logical.ok) return { ok: false, reason: "cross_root", error: logical.error };
   if (!logical.value.startsWith(dirPrefix)) {
     return { ok: false, reason: "escape" };

@@ -15,7 +15,7 @@
 // legacy-port: VfsRestorePort — phase 2
 
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
@@ -51,7 +51,7 @@ export type ReviveDeletedEntryParams = Pick<RestorePathParams, "scope" | "logica
 export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps, params: ReviveDeletedEntryParams): Promise<Result<RestorePathOutcome, RestorePathError>> {
   const { vfs, entryRepo, revisionRepo, contentStore } = deps;
   const { scope, logicalPath, checkpointEntryId, version } = params;
-  const scopeKeyStr = scopeKey(scope);
+  const scopeKeyStr = LogicalPath.scopeKey(scope);
 
   const meta = await revisionRepo.findMetaByEntryAndVersion(checkpointEntryId, version);
   if (meta == null) {

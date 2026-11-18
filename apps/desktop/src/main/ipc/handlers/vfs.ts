@@ -49,10 +49,7 @@ import {
   renameVfsDirectory,
   renameVfsFile,
 } from "../../services/vfs-operations.service.js";
-import {
-  executeSessionUserVfsOp,
-  isSessionVfsScope,
-} from "../../services/user-vfs-turn-execute.service.js";
+import { executeSessionUserVfsOp, LogicalPath } from "../../services/user-vfs-turn-execute.service.js";
 import {
   clearVfsBatchExportStaging,
   exportVfsFileWithDialog,
@@ -141,7 +138,7 @@ export async function handleVfsWrite(req: VfsWriteRequest): Promise<IpcResult<vo
     const scope = scopeRes.data;
     const vfs = getVfsForScope(rt, scope);
 
-    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
+    if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       const baselineRes = await readUserVfsSaveBaseline(vfs, req.path);
       if (!baselineRes.ok) return ipcErr(formatIpcError(baselineRes.error));
       const baseline = baselineRes.value;
@@ -175,7 +172,7 @@ export async function handleVfsMkdir(req: VfsMkdirRequest): Promise<IpcResult<vo
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
 
-    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
+    if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       const exec = await executeSessionUserVfsOp(rt, scope.sessionId, buildUserVfsMkdirOp(req.path));
       if (!exec.ok) return ipcErr(formatIpcError(exec.error));
       pushWorkspaceMutated(req);
@@ -202,7 +199,7 @@ export async function handleVfsDelete(req: VfsDeleteRequest): Promise<IpcResult<
     const scope = scopeRes.data;
     const recursive = req.recursive ?? true;
 
-    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
+    if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       const exec = await executeSessionUserVfsOp(rt, scope.sessionId, buildUserVfsDeleteOp(req.path, recursive));
       if (!exec.ok) return ipcErr(formatIpcError(exec.error));
     } else {
@@ -230,7 +227,7 @@ export async function handleVfsRename(req: VfsRenameRequest): Promise<IpcResult<
     if (!scopeRes.ok) return scopeRes;
     const scope = scopeRes.data;
 
-    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
+    if (LogicalPath.isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       // kind 必须在 execute 之前判定：execute 后旧路径已消失，parent list 查不到。
       const kindRes = await findEntryKindBeforeRename(getVfsForScope(rt, scope), req.oldPath);
       if (!kindRes.ok) return ipcErr(formatIpcError(kindRes.error));

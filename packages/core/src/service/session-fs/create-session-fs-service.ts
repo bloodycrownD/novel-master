@@ -8,7 +8,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { decrementLiveRefsUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -56,7 +56,7 @@ export async function deleteSessionFsData(conn: TdbcConnection, projectId: strin
     projectId,
     sessionId,
   };
-  const sk = scopeKey(sessionScope);
+  const sk = LogicalPath.scopeKey(sessionScope);
 
   await checkpoints.deleteCheckpointsForSession(sessionId);
   await decrementLiveRefsUnderScope(revisions, entries, sk, "/");

@@ -5,7 +5,7 @@
  */
 
 import { FILE_OPEN_TOOL_NAMES, type FileToolName } from "../builtin/vfs-tools.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /**
  * 解析工具调用输入中的 VFS 文件路径，供工具卡片「打开文件」门控使用。
@@ -23,7 +23,7 @@ export function resolveVfsToolFilePath(toolName: string, input: Record<string, u
   // v1 只兜 input.path ?? input.file_path，不强加 filename（等真机日志确认后再扩展）。
   const raw = input?.path ?? input?.file_path;
   if (typeof raw !== "string") return undefined;
-  const resolved = resolveLogicalPath(raw);
+  const resolved = LogicalPath.resolve(raw);
   if (!resolved.ok) return undefined;
   return resolved.value;
 }

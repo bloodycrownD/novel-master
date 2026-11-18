@@ -11,7 +11,7 @@ import {
 import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import { serializeSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
@@ -63,7 +63,7 @@ function seedKkvEntry(
     sessionId,
     SESSION_KKV_DOMAIN_PROMPT_TOKENS,
     PROMPT_TOKENS_LAST_USAGE_KEY,
-    serializeSessionApiPromptTokenEntry({
+    SessionApiPromptTokenEntry.serialize({
       promptTokens,
       atMs: Date.now(),
       savedModelId: "openai/gpt-4o",
@@ -293,7 +293,7 @@ describe("TokenRatioConditionTrigger", () => {
       "sess-fingerprint-miss",
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY,
-      serializeSessionApiPromptTokenEntry({
+      SessionApiPromptTokenEntry.serialize({
         promptTokens: 99_999,
         atMs: Date.now(),
         savedModelId: "anthropic/claude-other",

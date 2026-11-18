@@ -32,7 +32,7 @@ import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { LongTaskHooks } from "@/domain/abort/model/abort-scope.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { createLogger } from "@/infra/log/logger.js";
@@ -138,7 +138,7 @@ export async function runCompaction(deps: RunCompactionDeps, params: RunCompacti
   // 落库值若残留，重启后会按 api 口径参与阈值判定（跳掉 heuristic 安全
   // 系数），陈旧值会放大误判，所以这里必须连 KKV 行一起清。
   // rule_snapshot / file_cache 自动压缩不清、仅 manual 清——见模块头注释。
-  await invalidateSessionApiPromptTokenEntry(deps.sessionKkv, params.sessionId);
+  await SessionApiPromptTokenEntry.invalidate(deps.sessionKkv, params.sessionId);
 
   // 手动压缩：清 workplace 两域，让下一次拼提示词时按当前工作区完整刷新
   // （新文件进清单、正文重读）。失败只吞错 + warn——file_cache 是纯加速层，

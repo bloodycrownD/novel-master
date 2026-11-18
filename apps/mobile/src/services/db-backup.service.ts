@@ -12,7 +12,7 @@
  */
 import {Platform} from 'react-native';
 import {types} from '@react-native-documents/picker';
-import {assertSqliteBackupHeader, DatabaseReplacedError, dumpProviderTableSnapshot, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, restoreProviderTableSnapshot} from '@novel-master/core';
+import {assertSqliteBackupHeader, DatabaseReplacedError, exportDatabaseBackupToPath as exportDatabaseBackupToPathCore, open, ProviderTableSnapshotIo} from '@novel-master/core';
 import {AppError} from '@novel-master/core/errors';
 import {type Interrupt} from '@novel-master/core/errors';
 import {ABORT_KEY, createAbortError, createAbortScope} from '@novel-master/core/abort';
@@ -95,7 +95,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
     const bakPath = `${dbPath}.nmbackup.bak`;
 
     const liveConn = await getMobileConnection();
-    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+    const providerSnapshot = await ProviderTableSnapshotIo.dump(liveConn);
 
     const fs = blobFs();
     const dbExists = await fs.exists(dbPath);
@@ -117,7 +117,7 @@ export async function importDatabaseBackupFromPath(srcPath: string): Promise<Res
       registerMobileOpSqliteDriver();
       const restoreConn = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       try {
-        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+        await ProviderTableSnapshotIo.restore(restoreConn, providerSnapshot);
       } finally {
         await restoreConn.close();
       }

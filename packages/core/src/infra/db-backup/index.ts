@@ -9,11 +9,6 @@ export {
   type ProviderBackupTableName,
   type ProviderTableSnapshot,
 } from "./provider-tables.js";
-export {
-  dumpProviderTableSnapshot,
-  scrubProviderTablesInDatabase,
-  restoreProviderTableSnapshot,
-} from "./provider-table-snapshot.js";
-export { validateProviderTableSnapshot } from "./provider-table-snapshot-validate.js";
+export { ProviderTableSnapshotIo } from "./provider-table-snapshot.js";
 export { assertSqliteBackupHeader } from "./sqlite-backup-header.js";
 export { exportDatabaseBackupToPath } from "./export-database-backup.js";

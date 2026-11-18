@@ -44,11 +44,11 @@ jest.mock('@novel-master/core', () => ({
   exportDatabaseBackupToPath: jest.requireActual(
     '../../../packages/core/dist/infra/db-backup/export-database-backup.js',
   ).exportDatabaseBackupToPath,
-  dumpProviderTableSnapshot: (...args: unknown[]) => mockDumpSnapshot(...args),
-  scrubProviderTablesInDatabase: (...args: unknown[]) =>
-    mockScrubInDatabase(...args),
-  restoreProviderTableSnapshot: (...args: unknown[]) =>
-    mockRestoreSnapshot(...args),
+  ProviderTableSnapshotIo: {
+    dump: (...args: unknown[]) => mockDumpSnapshot(...args),
+    scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+    restore: (...args: unknown[]) => mockRestoreSnapshot(...args),
+  },
   open: (...args: unknown[]) => mockOpen(...args),
 }));
 
@@ -57,8 +57,9 @@ jest.mock('@novel-master/core', () => ({
 jest.mock(
   '../../../packages/core/dist/infra/db-backup/provider-table-snapshot.js',
   () => ({
-    scrubProviderTablesInDatabase: (...args: unknown[]) =>
-      mockScrubInDatabase(...args),
+    ProviderTableSnapshotIo: {
+      scrubInDatabase: (...args: unknown[]) => mockScrubInDatabase(...args),
+    },
   }),
 );
 

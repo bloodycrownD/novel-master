@@ -14,7 +14,7 @@ import { fillFileCacheFromVfs } from "@/domain/workplace/logic/load-or-fill-file
 import { fileCacheKey, parseFileCachePayload, type WorkplaceDisplayStatus } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { joinFileBlocks, renderFileBlock, renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import { parseRuleSnapshotJson, ruleViewToSnapshotEntries, serializeRuleSnapshot, type RuleSnapshotEntry } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { LogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { Outcome } from "@/errors/outcome.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
@@ -111,7 +111,7 @@ export interface AssembleWorkplaceDisplayOptions extends LongTaskHooks {
  *    `visiblePaths` = 快照全部可见 path（规范化，全量语义）；
  *    `prefixPaths` = 其中 `status === "full"` 的子集（attach 去重 S0 入集口径）
  * 5. 错误通道迁移二期：`checkpoint` 命中 → `cancelled` / `replaced`（中断不
- *    伪装成错误）；`resolveLogicalPath` 失败 → `failed`（决定权交上层）。
+ *    伪装成错误）；`LogicalPath.resolve` 失败 → `failed`（决定权交上层）。
  *    其余失败仍沿 throw 冒泡（平台边界，适配层转码）。
   * 解包 throw 边界（错误通道迁移三期门⑦）：normalizePath 失败按迁移前形态上抛，由调用链端点 catch 收口。
  */
@@ -183,7 +183,7 @@ export async function assembleWorkplaceDisplay(scope: Extract<VfsScope, { kind: 
     if (stopped != null) {
       return stopped;
     }
-    const resolved = resolveLogicalPath(entry.path);
+    const resolved = LogicalPath.resolve(entry.path);
     if (!resolved.ok) {
       return { kind: "failed", error: resolved.error };
     }

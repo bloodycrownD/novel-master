@@ -7,7 +7,7 @@
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { Result } from "@/errors/either.js";
-import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { SessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
@@ -118,7 +118,7 @@ export class DefaultPersistentState implements PersistentState {
     if (!STATE_KEYS[name].invalidatesPromptTokens) return Result.ok(undefined);
     const sessionId = await this.getPointer("currentSessionId");
     if (!sessionId.ok) return Result.err(sessionId.error);
-    if (sessionId.value != null) await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId.value);
+    if (sessionId.value != null) await SessionApiPromptTokenEntry.invalidate(this.sessionKkv, sessionId.value);
     return Result.ok(undefined);
   }
 
