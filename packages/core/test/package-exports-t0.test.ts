@@ -9,7 +9,7 @@ import {
 } from "@novel-master/core/agent";
 import type { ResolvedAgentForProject } from "@novel-master/core/agent";
 import {
-  createMessageService,
+  ChatServiceFactory,
   sessionAgentConfigSchema,
 } from "@novel-master/core/chat";
 import type {
@@ -56,7 +56,7 @@ describe("T0 package exports (@novel-master/core entry)", () => {
   it("does not leak public sub-entry symbols from main entry", () => {
     const mainEntry = coreMain as Record<string, unknown>;
     assert.equal(mainEntry.AgentServiceFactory, undefined);
-    assert.equal(mainEntry.createMessageService, undefined);
+    assert.equal(mainEntry.ChatServiceFactory, undefined);
     assert.equal(mainEntry.CompactionFactory, undefined);
     assert.equal(mainEntry.PromptBuilder, undefined);
     assert.equal(mainEntry.ProviderServiceFactory, undefined);
@@ -78,7 +78,8 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     // 六组 Factory namespace 化后，create* 函数收敛为工厂对象上的方法。
     assert.equal(typeof AgentServiceFactory, "object");
     assert.equal(typeof AgentServiceFactory.createRegistry, "function");
-    assert.equal(typeof createMessageService, "function");
+    assert.equal(typeof ChatServiceFactory, "object");
+    assert.equal(typeof ChatServiceFactory.createMessage, "function");
     assert.equal(typeof CompactionFactory, "object");
     assert.equal(typeof CompactionFactory.createConditionsStore, "function");
     assert.equal(typeof PromptBuilder, "object");

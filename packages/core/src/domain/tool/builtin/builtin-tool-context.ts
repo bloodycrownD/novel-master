@@ -206,7 +206,7 @@ export type BuiltinToolContext = {
    *
    * `undefined` 表示不限制（向后兼容）——**当前三端 runtime 全部硬写 `undefined`**
    * （`run-agent-turn.ts` 的两处装配 `allowedPaths: undefined` 与
-   * `create-user-vfs-turn-service.ts` 的一处），故这道闸门在生产中恒放行、
+   * `chat-service-factory.ts` 的一处），故这道闸门在生产中恒放行、
    * 运行时成本为零。
    * ⚠️ 这是**有意分期占位**（A-14，出处 `docs/Iterations/cr-fix-spec/spec.md:172`），
    * 不是缺陷。**接线前必须先修三处已知缺口**，否则闸门形同虚设甚至误杀：

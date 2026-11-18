@@ -8,7 +8,7 @@ import { isAppError } from "../../src/errors/app-error.js";
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
-import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
+import { ChatServiceFactory } from '../../src/service/chat/chat-service-factory.js';
 import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
 import type { SessionKkvService } from '../../src/service/session-kkv/session-kkv.port.js';
@@ -67,7 +67,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
     const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
@@ -91,7 +91,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
     await sk.set(
       session.id,
@@ -139,7 +139,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     const m1 = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
@@ -174,7 +174,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     const anchor = unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
@@ -189,7 +189,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
     unwrap(await ctx.messages.append(session.id, 'user', textBlocks('1')));
@@ -211,7 +211,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u1')));
     unwrap(await ctx.messages.append(session.id, 'assistant', {
@@ -296,7 +296,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     const system = unwrap(await ctx.messages.append(
       session.id,
@@ -318,7 +318,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
 
     unwrap(await ctx.messages.append(session.id, 'user', textBlocks('u')));
     const assistant = unwrap(await ctx.messages.append(session.id, 'assistant', {
@@ -356,7 +356,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const sessionA = unwrap(await ctx.sessions.create(project.id));
     const sessionB = unwrap(await ctx.sessions.create(project.id));
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
 
     // 会话 A：user + assistant 两条（若副作用发生，前缀会被错误 hide）。

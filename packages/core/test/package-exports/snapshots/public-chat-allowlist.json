@@ -1,6 +1,7 @@
 [
   "ATTACH_PROMPT_CHAR_BUDGET",
   "ChatMessage",
+  "ChatServiceFactory",
   "USER_VFS_TURN_ACK_TEXT",
   "attachmentPath",
   "attachmentScanner",
@@ -11,10 +12,6 @@
   "composerAtPath",
   "composerChips",
   "composerSendPolicy",
-  "createChatServices",
-  "createMessageService",
-  "createMessageTranscriptEffectsService",
-  "createUserVfsTurnServiceBundle",
   "formatMessageForCli",
   "isMessageAnnotatePath",
   "messageAttachmentSchema",

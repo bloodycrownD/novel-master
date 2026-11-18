@@ -10,7 +10,7 @@
  * `allowedPaths` 任一前缀下；只要有一条越界就拒绝。`allowedPaths === undefined`
  * 表示不限制（向后兼容）。
  *
- * ⚠️ 现状：三个装配点（`run-agent-turn.ts` 的两处、`create-user-vfs-turn-service.ts`
+ * ⚠️ 现状：三个装配点（`run-agent-turn.ts` 的两处、`chat-service-factory.ts`
  * 的一处）**全部硬写 `allowedPaths: undefined`**，故本模块在生产中恒放行、
  * 运行时成本为零。这是有意分期占位（A-14），不是缺陷。
  *

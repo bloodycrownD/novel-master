@@ -17,7 +17,7 @@ function decode<T>(raw: unknown, schema: ZodType<T>): T {
 }
 import { AgentServiceFactory, agentDefinitionSchema, runAgentTurn, type AgentDefinition, type AgentTurnRuntimePort } from "@novel-master/core/agent";
 import {
-  createUserVfsTurnServiceBundle,
+  ChatServiceFactory,
   readMessageMetadata,
   textBlocks,
   } from "@novel-master/core/chat";
@@ -67,7 +67,7 @@ function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   registry: ReturnType<typeof AgentServiceFactory.createRegistry>,
 ): AgentTurnRuntimePort {
-  const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+  const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),

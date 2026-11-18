@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createSessionRunStateService } from "../../src/service/session-run-state/create-session-run-state-service.js";
-import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
+import { ChatServiceFactory } from "../../src/service/chat/chat-service-factory.js";
 import type { SessionRunState } from "../../src/domain/session-run-state/model/session-run-state.js";
 import {
   getNovelMasterTestContext,
@@ -94,7 +94,7 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
   it("置位（setMessageFloorAtMessage）后既有 run_state 行不变", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const anchor = unwrap(await ctx.messages.append(
@@ -115,7 +115,7 @@ describe("session_run_state fork/copy/置位/压缩守护（T-U8）", () => {
   it("压缩（truncateMessagesAfter）后既有 run_state 行不变", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSessionRunStateService(ctx.conn);
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const m1 = unwrap(await ctx.messages.append(session.id, "user", textBlocks("1")));

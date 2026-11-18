@@ -25,7 +25,7 @@ import {
 } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
-import { createMessageTranscriptEffectsService } from "../../../src/service/chat/create-message-transcript-effects.js";
+import { ChatServiceFactory } from "../../../src/service/chat/chat-service-factory.js";
 import { clearSessionPromptCaches } from "../../../src/service/session-kkv/logic/clear-session-prompt-caches.js";
 import type { SessionKkvService } from "../../../src/service/session-kkv/session-kkv.port.js";
 import {
@@ -248,7 +248,7 @@ describe("prompt 占用失效挂点", () => {
     unwrap(await ctx.messages.append(session.id, "assistant", textBlocks("reply")));
     await seedRow(ctx.sessionKkv, session.id);
 
-    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const effects = ChatServiceFactory.createMessageTranscriptEffects(ctx.conn);
     unwrap(await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id));
     await assertRowGone(ctx.sessionKkv, session.id);
   });

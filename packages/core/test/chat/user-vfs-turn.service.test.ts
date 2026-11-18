@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
-import { createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
+import { ChatServiceFactory } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
@@ -99,7 +99,7 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 describe("UserVfsTurnService", () => {
   it("execute 失败不写盘；成功仅写盘并停写 pending kkv（无操作日志半边）", async () => {
     const ctx = getNovelMasterTestContext();
-    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
@@ -124,7 +124,7 @@ describe("UserVfsTurnService", () => {
 
   it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
     const ctx = getNovelMasterTestContext();
-    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
 
@@ -338,7 +338,7 @@ describe("UserVfsTurnService", () => {
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
 
     unwrap(await svfs.mkdir("/55"));
     await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
@@ -348,11 +348,11 @@ describe("UserVfsTurnService", () => {
     await rejectsErr(() => svfs.list("/55"));
   });
 
-  it("T-FC1 assembly: createUserVfsTurnServiceBundle write 后有 file_cache full:{path}", async () => {
+  it("T-FC1 assembly: ChatServiceFactory.createUserVfsTurnBundle write 后有 file_cache full:{path}", async () => {
     const ctx = getNovelMasterTestContext();
     const project = unwrap(await ctx.projects.create(`P-${testIsolationSuffix()}`));
     const session = unwrap(await ctx.sessions.create(project.id));
-    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
 
     const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));

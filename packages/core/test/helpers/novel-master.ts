@@ -13,7 +13,7 @@ import {
   AgentServiceFactory,
   type AgentRegistryService,
 } from "@novel-master/core/agent";
-import { createMessageService, type MessageService, type ProjectService, type SessionService } from "@novel-master/core/chat";
+import { ChatServiceFactory, type MessageService, type ProjectService, type SessionService } from "@novel-master/core/chat";
 import { SqliteProjectRepository } from "../../src/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -90,7 +90,7 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     preferences: createPersistentPreferences(conn),
     projects: new DefaultProjectService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo }),
     sessions: new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry }),
-    messages: createMessageService(conn),
+    messages: ChatServiceFactory.createMessage(conn),
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: MessageCheckpointFactory.create(conn),
     sessionKkv: createSessionKkvService(conn),

@@ -75,14 +75,8 @@ export {
 } from "../domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
 export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
 export type { ChatMessageDescriptor, ChatMessageKey } from "../domain/chat/i18n/keys.js";
-export {
-  createChatServices,
-  createMessageService,
-} from "../service/chat/create-chat-services.js";
-export type { ChatServicesSessionDeps } from "../service/chat/create-chat-services.js";
-export {
-  createUserVfsTurnServiceBundle,
-} from "../service/chat/create-user-vfs-turn-service.js";
+export { ChatServiceFactory } from "../service/chat/chat-service-factory.js";
+export type { ChatServicesSessionDeps } from "../service/chat/chat-service-factory.js";
 // 归属例外（check-public-ownership）：VFS 工具卡路径解析，desktop/mobile
 // 的 transcript 消费方都在 chat 门面取（domain/tool 无独立出口）。
 export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
@@ -114,4 +108,3 @@ export type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
-export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";

@@ -21,7 +21,7 @@ import {
   agentDefinitionSchema,
   AgentServiceFactory,
 } from "@novel-master/core/agent";
-import { createMessageService, textBlocks } from "@novel-master/core/chat";
+import { ChatServiceFactory, textBlocks } from "@novel-master/core/chat";
 import { VfsServiceFactory } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   const vfsRepo = new SqliteVfsEntryRepository(conn);
   const projects = new DefaultProjectService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo });
   const sessions = new DefaultSessionService({ conn, projects: projectRepo, sessions: sessionRepo, messages: messageRepo, vfs: vfsRepo, state, agentRegistry });
-  const messages = createMessageService(conn);
+  const messages = ChatServiceFactory.createMessage(conn);
 
   const bench = async (
     label: string,

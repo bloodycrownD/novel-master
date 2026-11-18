@@ -8,7 +8,7 @@ import {ABORT_KEY, createAbortRegistry, scopeFromController} from '@novel-master
 import {AgentServiceFactory, type AgentAbortRegistry} from '@novel-master/core/agent';
 import {CompactionFactory, type CompactionConditionEvaluator} from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
-import {createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle} from '@novel-master/core/chat';
+import {ChatServiceFactory} from '@novel-master/core/chat';
 import {createPersistentPreferences, createPersistentState, createSearchConfigStore} from '@novel-master/core';
 import {userVfsUnifiedToolTurnFlag} from '@novel-master/core/feature-flags';
 import {createDefaultTokenCounterRegistry} from '@novel-master/core/tokenizer';
@@ -97,12 +97,12 @@ export async function createMobileNovelMasterRuntime(): Promise<Result<MobileRun
   const messageParseYield = createQuantumYield(16);
   const chatDeps = {state, agentRegistry};
   const chatOptions = {yieldFn: messageParseYield};
-  const chat = createChatServices(conn, chatDeps, chatOptions);
+  const chat = ChatServiceFactory.createBundle(conn, chatDeps, chatOptions);
   const {projects, sessions, messages, usageStats} = chat;
 
-  const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const messageTranscriptEffects = ChatServiceFactory.createMessageTranscriptEffects(conn);
   const sessionKkv = createSessionKkvService(conn);
-  const {userVfsTurn} = createUserVfsTurnServiceBundle(conn);
+  const {userVfsTurn} = ChatServiceFactory.createUserVfsTurnBundle(conn);
 
   let compactionConditionEvaluator: CompactionConditionEvaluator | undefined;
   const getOrCreateEvaluator = (): CompactionConditionEvaluator => {

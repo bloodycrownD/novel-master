@@ -10,7 +10,7 @@ import { CompactionFactory } from "@novel-master/core/compaction";
 import { ProviderServiceFactory } from "@novel-master/core/provider";
 import { createDefaultTokenCounterRegistry } from "@novel-master/core/tokenizer";
 import { SimpleEventBus } from "@novel-master/core/events";
-import { createChatServices, createMessageTranscriptEffectsService, createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
+import { ChatServiceFactory } from "@novel-master/core/chat";
 import { createPersistentPreferences, createPersistentState, createSearchConfigStore } from "@novel-master/core";
 import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { createSmartSortRuleService } from "@novel-master/core/smart-sort-rule";
@@ -87,11 +87,11 @@ export async function createDesktopNovelMasterRuntime(): Promise<Result<DesktopN
   // 下搜索/列表的全量行解压 + JSON.parse 按片让步，main 事件循环不再被单次
   // 同步 map 冻结（ic-08）。desktop 侧无 mobile 的 16ms 量子让步模块，用
   // setTimeout(0) 宏任务让步等价达成「片间交还事件循环」。
-  const chat = createChatServices(conn, { state, agentRegistry }, { yieldFn: () => new Promise((resolve) => setTimeout(resolve, 0)) });
+  const chat = ChatServiceFactory.createBundle(conn, { state, agentRegistry }, { yieldFn: () => new Promise((resolve) => setTimeout(resolve, 0)) });
   const { projects, sessions, messages, usageStats } = chat;
-  const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const messageTranscriptEffects = ChatServiceFactory.createMessageTranscriptEffects(conn);
   const sessionKkv = createSessionKkvService(conn);
-  const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
+  const { userVfsTurn } = ChatServiceFactory.createUserVfsTurnBundle(conn);
 
   const compactionConditionEvaluator = CompactionFactory.createEvaluator({
     conditionsStore: compactionConditions,

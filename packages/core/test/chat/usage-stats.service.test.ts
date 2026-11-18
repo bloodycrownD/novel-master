@@ -1456,10 +1456,10 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     // ③ 失效：service.append 落一条含 tool_use 的 assistant 行 → 缓存删 →
     // 下次读 miss 现算出新值。追加 2 个 tool_use（现算 2 + 2 = 4，异于陈旧
     // 缓存 3——值可区分，断言有牙）。
-    const { createMessageService } = await import(
-      "../../src/service/chat/create-chat-services.js"
+    const { ChatServiceFactory } = await import(
+      "../../src/service/chat/chat-service-factory.js"
     );
-    const messages = createMessageService(ctx.conn);
+    const messages = ChatServiceFactory.createMessage(ctx.conn);
     unwrap(await messages.append(session.id, "assistant", {
       blocks: [
         { type: "text", text: "more" },
@@ -1542,10 +1542,10 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
 
   it("失效矩阵：delete/updateContent/truncateAfter 失效、hide/show 不失效（cr-fix-spec-r2 s3/G-2）", async () => {
     const { ctx, session } = await seedSession();
-    const { createMessageService } = await import(
-      "../../src/service/chat/create-chat-services.js"
+    const { ChatServiceFactory } = await import(
+      "../../src/service/chat/chat-service-factory.js"
     );
-    const messages = createMessageService(ctx.conn);
+    const messages = ChatServiceFactory.createMessage(ctx.conn);
     const svc = new DefaultUsageStatsService(ctx.conn);
     const now = Date.now();
 
@@ -1804,10 +1804,10 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(before.calls, 3);
     assert.equal(before.totalTokens, 190);
 
-    const { createMessageService } = await import(
-      "../../src/service/chat/create-chat-services.js"
+    const { ChatServiceFactory } = await import(
+      "../../src/service/chat/chat-service-factory.js"
     );
-    const messages = createMessageService(ctx.conn);
+    const messages = ChatServiceFactory.createMessage(ctx.conn);
     // 删单条消息：内容消失，账本行保留。
     unwrap(await messages.delete(msg2));
     assert.deepEqual(unwrap(await svc.getSummary(filter)), before, "删单条消息后统计不变");
@@ -1818,10 +1818,10 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
 
   it("记账点写入：append 带 token 真值的 assistant 消息 → usage_record 出一行（快照列 + 与消息同 seq/时刻）", async () => {
     const { ctx, session } = await seedSession();
-    const { createMessageService } = await import(
-      "../../src/service/chat/create-chat-services.js"
+    const { ChatServiceFactory } = await import(
+      "../../src/service/chat/chat-service-factory.js"
     );
-    const messages = createMessageService(ctx.conn);
+    const messages = ChatServiceFactory.createMessage(ctx.conn);
     const appended = unwrap(await messages.append(
       session.id,
       "assistant",
